@@ -2,6 +2,7 @@
 import type { GetStaticPaths } from "astro";
 import { getCollection, render } from "astro:content";
 import Base from "../../layouts/Base.astro";
+import SectionHead from "../../components/SectionHead.astro";
 import ReleaseEntry from "../../components/ReleaseEntry.astro";
 
 // One page per release. With the collection empty this yields no paths at all,
@@ -19,13 +20,13 @@ const { Content } = await render(release);
   title={`${release.data.title} - Lumit`}
   description={release.data.description}
 >
-  <section class="pt-16 pb-24 sm:pt-20 sm:pb-32">
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
     <div class="wrap">
-      <a href="/releases" class="kicker no-underline hover:text-fg-2">All releases</a>
-      <h1 class="mt-4 text-[clamp(30px,3.8vw,42px)] leading-[1.05]">
-        {release.data.title}
-      </h1>
-      <div class="mt-8">
+      <SectionHead page kicker="Release" title={release.data.title}>
+        <Fragment slot="lede">{release.data.description}</Fragment>
+        <a href="/releases" class="go back">All releases</a>
+      </SectionHead>
+      <div class="mt-4">
         <ReleaseEntry
           id={release.id}
           versionNumber={release.data.versionNumber}
@@ -38,3 +39,17 @@ const { Content } = await render(release);
     </div>
   </section>
 </Base>
+
+<style>
+  /* This one goes back, so its arrow leads and points the other way. */
+  .back::after {
+    content: none;
+  }
+  .back::before {
+    content: "\2190";
+    transition: transform 0.2s;
+  }
+  .back:hover::before {
+    transform: translateX(-3px);
+  }
+</style>

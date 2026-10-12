@@ -68,6 +68,26 @@ fn run() -> Result<(), String> {
     });
     results.extend(measured?);
 
+    // The long-form comp's seven (docs/13 §2 B18-B24), on media of their own
+    // in the same directory.
+    let long = lumit_bench::LongHarness::new(&media_dir())?;
+    results.extend(long.all(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
+    // And the same comp's sound (docs/13 §2 B25-B29). No sound card is
+    // opened: the plan is filled and mixed as the engine's threads do it.
+    let sound = lumit_bench::SoundHarness::new(&media_dir())?;
+    results.extend(sound.all(&mut |m: Measurement| {
+        println!(
+            "{}",
+            serde_json::to_string(&m).unwrap_or_else(|_| format!("{m:?}"))
+        );
+    })?);
+
     // The three per-effect numbers (docs/13 §2 B12-B14). They need no
     // media and no comp, so they run after the six rather than beside them.
     results.extend(lumit_bench::scenarios::particulate::budgets(

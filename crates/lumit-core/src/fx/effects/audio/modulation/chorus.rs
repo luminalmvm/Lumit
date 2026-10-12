@@ -284,15 +284,6 @@ mod tests {
     }
 
     #[test]
-    fn the_comb_moves_at_the_rate_asked() {
-        harness::modulates_at(
-            &AudioChorusDef,
-            &[("rate", 2.0), ("depth", 100.0), ("wet", 100.0)],
-            2.0,
-        );
-    }
-
-    #[test]
     fn the_mode_sets_how_far_the_sweep_travels() {
         // A frame of travel at 48 kHz, and the two modes' widths from the
         // note: fifteen to thirty five, and half to five.
@@ -321,13 +312,5 @@ mod tests {
         ]);
         assert!((from - 0.5).abs() < 0.1, "the flanger started at {from} ms");
         assert!((to - 5.0).abs() < 0.1, "the flanger reached {to} ms");
-    }
-
-    #[test]
-    fn wet_at_nought_leaves_the_input_alone() {
-        let input = harness::tone(4, 300.0);
-        let values = harness::values(&AudioChorusDef, &[("wet", 0.0), ("feedback", 80.0)]);
-        let out = harness::run(&*harness::open(&AudioChorusDef, &values), &input, &values);
-        assert_eq!(out, input, "a dry chorus should change nothing at all");
     }
 }

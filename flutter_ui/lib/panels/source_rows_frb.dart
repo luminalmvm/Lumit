@@ -76,6 +76,8 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
 
     return FxSection(
       title: l10n.sourceSection,
+      // The Timeline has no rows for these, so the name is this panel's own.
+      scope: '${widget.layer.internallayerId}/source',
       open: widget.open,
       onToggle: widget.onToggle,
       rows: rows,
@@ -131,6 +133,8 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
           // them — the write takes the whole document, so anything left out is
           // deleted.
           animators: document.animators,
+          style: document.style,
+          paragraph: document.paragraph,
         ),
       );
       widget.onChanged();
@@ -438,7 +442,8 @@ class _SourceRowsFrbState extends State<SourceRowsFrb> {
         context: context,
         // A source row is not a keyable property, so its name is plain text —
         // there is no curve for the graph editor to aim at.
-        name: Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+        name: Text(t.propertyCase(label),
+            style: t.body, overflow: TextOverflow.ellipsis),
         control: control,
       );
 }

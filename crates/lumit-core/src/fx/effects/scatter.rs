@@ -23,7 +23,8 @@
 //! answer to points-stream.md §2.2's constraint: the stream is a function of
 //! the input picture, and at resolve time — when the driver walk runs — no
 //! picture exists. A points wire from Scatter into a Points sample reads the
-//! documented empty stream rather than a guess.
+//! documented empty stream rather than a guess. An effect below it in the
+//! stack does get the stream, made on the card as the op is drawn.
 
 use crate::fx::points::{self, DrawStyle, PointsStream, Projection, RenderMode};
 use crate::fx::{
@@ -202,6 +203,7 @@ impl Scatter {
         let n = self.candidate_count(w, h, px_scale);
         let mut out = PointsStream {
             projection,
+            px_scale,
             ..PointsStream::default()
         };
         let size = self.size.max(0.0);
@@ -285,6 +287,7 @@ impl Scatter {
         let all = self.candidates(w, h, px_scale, projection);
         let mut out = PointsStream {
             projection,
+            px_scale,
             ..PointsStream::default()
         };
         for i in 0..all.len() {

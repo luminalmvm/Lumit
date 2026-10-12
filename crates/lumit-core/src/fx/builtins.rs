@@ -314,6 +314,7 @@ pub fn default_param_value(kind: &ParamKind) -> Option<EffectValue> {
         // Unset: the working space for a space row, nothing for the rest  -
         // the same sanctioned no-op default a File row takes.
         ParamKind::ColourName { .. } => EffectValue::Text(String::new()),
+        ParamKind::Text { default } => EffectValue::Text(default.to_owned()),
         // A fresh layer reference is unset (docs/impl/layer-input.md): the
         // effect is a labelled no-op until the owner picks a layer, the same
         // sanctioned exception the File parameter takes to the "no no-op
@@ -597,6 +598,27 @@ pub fn point_self_layer_params_at(inst: &mut EffectInstance, layer: uuid::Uuid) 
     }
 }
 
+/// Start `inst` with Repeat edge pixels off when it lands on a Shape or Text
+/// layer.
+///
+/// Their picture is only as big as the art, so a blur or a glow held inside it
+/// is cut off at the art's edge, and on a flat shape does nothing at all. The
+/// apply site passes the layer for the reason it passes the raster. A preset
+/// and plain [`instantiate`] keep the declared default.
+pub fn spread_on_art(inst: &mut EffectInstance, kind: &crate::model::LayerKind) {
+    use crate::model::LayerKind;
+    if !matches!(kind, LayerKind::Shape { .. } | LayerKind::Text { .. }) {
+        return;
+    }
+    if let Some(slot) = inst
+        .params
+        .iter_mut()
+        .find(|p| p.id == "repeat_edge_pixels")
+    {
+        slot.value = EffectValue::Bool(false);
+    }
+}
+
 /// Whether the parameter `id` is editable given what `inst` currently holds —
 /// the greyed-row rule of [`EnabledWhen`], evaluated.
 ///
@@ -681,6 +703,10 @@ pub fn param_enabled(inst: &EffectInstance, id: &str) -> bool {
         })
 }
 
+/// The stem of the one kind of pair a fresh instance starts with chained: a
+/// `scale_x` / `scale_y`, which is a size rather than a place.
+const SCALE_PAIR: &str = "scale";
+
 pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
     let s = schema(match_name)?;
     Some(EffectInstance {
@@ -707,9 +733,15 @@ pub fn instantiate(match_name: &str) -> Option<EffectInstance> {
             .collect(),
         sample_temporally: true,
         custom_name: None,
-        // Unlinked: a fresh point's two halves move on their own, which
-        // is what every effect did before there was a chain to close.
-        linked_pairs: Vec::new(),
+        // A fresh point's two halves move on their own: it is a place. A
+        // fresh **scale** starts chained, as the layer's own Scale does,
+        // because a size dragged one axis at a time squashes the picture and
+        // that is the rarer thing to want.
+        linked_pairs: s
+            .pairs()
+            .filter(|pair| pair.stem == SCALE_PAIR)
+            .map(|pair| pair.stem.to_owned())
+            .collect(),
         // A fresh audio plugin has no memory of itself yet; it is the plugin's
         // own defaults until something saves one.
         plugin_state: None,

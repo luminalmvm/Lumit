@@ -25,6 +25,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use lumit_core::model::{Document, ProjectItem};
 use lumit_core::puppet::PuppetMesh;
 use uuid::Uuid;
 
@@ -122,10 +123,21 @@ pub fn previewing(layer: Uuid) -> Option<(f64, f64)> {
         .map(|p| (p.density, p.expansion))
 }
 
-/// Forget everything — closing a project, as the track store does.
-pub fn clear() {
-    if let Ok(mut held) = state().lock() {
-        held.ghosts.clear();
-        held.preview = None;
+/// Forget this document's wireframes, and the preview if it is on one of its
+/// layers — closing a project, as the track store does. Only its own: the
+/// store is shared by every project in the process.
+pub fn forget_document(doc: &Document) {
+    let Ok(mut held) = state().lock() else {
+        return;
+    };
+    for item in &doc.items {
+        if let ProjectItem::Composition(comp) = item {
+            for layer in &comp.layers {
+                held.ghosts.remove(&layer.id);
+                if held.preview.is_some_and(|p| p.layer == layer.id) {
+                    held.preview = None;
+                }
+            }
+        }
     }
 }

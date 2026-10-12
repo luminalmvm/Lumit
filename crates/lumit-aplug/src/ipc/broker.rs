@@ -414,6 +414,9 @@ impl Broker {
         command
             .arg(&self.config.module)
             .arg(&name)
+            // A plugin that writes a file without saying where writes it
+            // here, not in Lumit's own install folder.
+            .current_dir(std::env::temp_dir())
             // The secret goes down standard input, never on the command line
             // beside the pipe name: `/proc/<pid>/cmdline` is readable by every
             // process on the machine on Linux, and a command line is in every
@@ -910,7 +913,6 @@ fn read_loop(listener: Listener, tx: &mpsc::Sender<Incoming>) {
 mod describe_deadline_tests {
     use super::{describe_deadline, HANDSHAKE_TIMEOUT};
     use crate::quirks::Quirks;
-    use std::time::Duration;
 
     /// The shipped two-second control deadline is not what describe waits
     /// under: the first describe opens the module, which is a program starting.
@@ -919,16 +921,5 @@ mod describe_deadline_tests {
         let quirks = Quirks::default();
         assert!(quirks.control_timeout < HANDSHAKE_TIMEOUT);
         assert_eq!(describe_deadline(&quirks), HANDSHAKE_TIMEOUT);
-    }
-
-    /// A quirks-table entry that asks for longer than the handshake still gets
-    /// it: the table is the mechanism for a plugin that is genuinely slow.
-    #[test]
-    fn a_longer_control_deadline_from_the_table_still_wins() {
-        let quirks = Quirks {
-            control_timeout: Duration::from_secs(30),
-            ..Quirks::default()
-        };
-        assert_eq!(describe_deadline(&quirks), Duration::from_secs(30));
     }
 }

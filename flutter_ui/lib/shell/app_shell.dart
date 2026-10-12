@@ -5,21 +5,38 @@ import 'package:flutter/gestures.dart' show GestureBinding;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/graph_channels.dart' show keyFrame;
+import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
+import 'package:lumit_flutter/shell/flowchart_frb.dart';
+import 'package:lumit_flutter/shell/export_queue_frb.dart'
+    show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
+import 'package:lumit_flutter/shell/layer_settings_frb.dart'
+    show showLayerSettingsFrb;
+import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
+import 'package:lumit_flutter/shell/menu_layer_frb.dart';
+import 'package:lumit_flutter/shell/project_history_window.dart'
+    show saveVersionFrb;
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
+import 'package:lumit_flutter/shell/share_dialog_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart';
 import 'package:lumit_flutter/shell/status_line_frb.dart';
 import 'package:lumit_flutter/shell/tool_bar_frb.dart';
+import 'package:lumit_flutter/shell/tour_frb.dart';
+import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
+import 'package:lumit_flutter/shell/window_drop_frb.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart'
+    show CompositionReference;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show bootLog;
@@ -28,8 +45,11 @@ import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
+import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
+import 'package:lumit_flutter/theme/motion.dart';
+import 'package:lumit_flutter/theme/theme.dart' show AnimationLevel;
 import 'package:lumit_flutter/widgets/escape_ladder.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/ui_scale.dart';
@@ -62,6 +82,12 @@ class LumitAppNew extends StatelessWidget {
       locale: uiState.locale,
       localizationsDelegates: Strings.localizationsDelegates,
       supportedLocales: Strings.supportedLocales,
+      actions: {
+        ...WidgetsApp.defaultActions,
+        NextFocusIntent: _TabOnwards(),
+        PreviousFocusIntent: _TabBack(),
+        DirectionalFocusIntent: _ArrowOnwards(),
+      },
       home: ChangeNotifierProvider.value(
         value: state,
         child: ChangeNotifierProvider.value(
@@ -72,7 +98,10 @@ class LumitAppNew extends StatelessWidget {
             listenable: uiState,
             builder: (context, _) => ThemeScope(
               theme: uiState.theme,
-              animationLevel: uiState.workspace.animationLevel,
+              // The system's own "no animations" setting outranks Lumit's.
+              animationLevel: MediaQuery.disableAnimationsOf(context)
+                  ? AnimationLevel.none
+                  : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
               child: Directionality(
                 textDirection: TextDirection.ltr,
@@ -101,6 +130,32 @@ class LumitAppNew extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Whether Tab has somewhere to move on from: a control holding the focus, or
+/// a window that is up. With neither it would pick the first control in the
+/// application, the File menu, and a focused control keeps every shortcut.
+bool get _tabMovesFocus {
+  final focus = FocusManager.instance.primaryFocus;
+  return lumitModalOpen || (focus != null && focus is! FocusScopeNode);
+}
+
+class _TabOnwards extends NextFocusAction {
+  @override
+  bool isEnabled(NextFocusIntent intent) => _tabMovesFocus;
+}
+
+class _TabBack extends PreviousFocusAction {
+  @override
+  bool isEnabled(PreviousFocusIntent intent) => _tabMovesFocus;
+}
+
+/// The arrow keys move the focus on the same terms as Tab. Otherwise an arrow
+/// pressed over the Viewer, to nudge a layer, would also park the focus on a
+/// button, and every key after it would be that button's.
+class _ArrowOnwards extends DirectionalFocusAction {
+  @override
+  bool isEnabled(DirectionalFocusIntent intent) => _tabMovesFocus;
 }
 
 /// The boot splash, the welcome screen, and the shell behind them once both are
@@ -151,12 +206,20 @@ class _BootGateState extends State<BootGate> {
     super.initState();
     _welcoming = widget.welcome &&
         context.read<LumitUiState>().workspace.showWelcomeOnLaunch;
+    // Up for the whole life of the window, so this is where unsaved changes
+    // are asked about.
+    installUnsavedQuestion(context);
   }
 
   /// The engine's boot log, or empty where there is no engine to ask — a
   /// placeholder build, or a widget test with no library loaded. Read once:
   /// it is a bridge call, and it answers the same thing every time.
   late final List<String> _lines = _readBootLog();
+
+  /// How many times the window has changed hands: splash to welcome, welcome
+  /// to shell. The first of the three is simply there, and each one after it
+  /// fades up in its place (docs/15 §8).
+  int _handovers = 0;
 
   static List<String> _readBootLog() {
     try {
@@ -168,18 +231,38 @@ class _BootGateState extends State<BootGate> {
 
   @override
   Widget build(BuildContext context) {
+    // Keyed by the handover, so each window mounts afresh and plays in once.
+    // The one before it is gone at once: only what arrives is animated.
+    return Entrance.fade(
+      key: ValueKey<int>(_handovers),
+      spec: _handovers == 0
+          ? MotionSpec.still
+          : ThemeScope.of(context).motion.swap,
+      child: _window(),
+    );
+  }
+
+  Widget _window() {
     if (_booting) {
       return SplashOverlay(
         lines: _lines,
         onDone: () {
-          if (mounted) setState(() => _booting = false);
+          if (!mounted) return;
+          setState(() {
+            _booting = false;
+            _handovers++;
+          });
         },
       );
     }
     if (_welcoming) {
       return WelcomeScreenFrb(
         onDone: () {
-          if (mounted) setState(() => _welcoming = false);
+          if (!mounted) return;
+          setState(() {
+            _welcoming = false;
+            _handovers++;
+          });
         },
       );
     }
@@ -232,22 +315,81 @@ class _LumitAppViewState extends State<LumitAppView> {
       onShow: () => context.read<LumitUiState>().adoptSystemClipboard(),
       onRestart: () => context.read<LumitUiState>().adoptSystemClipboard(),
     );
-    // The first-run question, after the first frame so there is an
-    // Overlay to put it in. It asks nothing on any later launch.
+    // The first-run questions, after the first frame so there is an
+    // Overlay to put them in. They ask nothing on any later launch.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final ui = context.read<LumitUiState>();
-      // The update check follows the question rather than racing it: the
-      // setup screen is where somebody may have just switched it off.
-      maybeShowFirstRunFrb(context, ui.workspace)
-          .then((_) => ui.maybeCheckForUpdates());
+      maybeShowFirstRunFrb(context, ui.workspace, keymap: ui.keymap)
+          .then((_) {
+        // The update check follows the questions rather than racing them:
+        // the setup screen is where somebody may have just switched it off.
+        ui.maybeCheckForUpdates();
+        // And the tour follows them too, in the look just chosen. Like the
+        // questions it opens by itself once.
+        if (!mounted) return;
+        // Somebody who clicked an invite link came to join, and the tour
+        // waits for a launch that is about nothing else.
+        final app = context.read<LumitState>();
+        final invite = app.launchInvite;
+        if (invite != null) {
+          app.launchInvite = null;
+          showShareFrb(context, app, invite: invite);
+          return;
+        }
+        maybeShowTourFrb(context, app, ui);
+      });
     });
+    _share = context.read<LumitState>().share..addListener(_offerConflicts);
+    listenForOpenRequests(_openAsked);
+  }
+
+  /// A project double-clicked in Finder, or an invite link clicked in a
+  /// browser, while Lumit is running. On macOS both come to this Lumit and
+  /// are opened as File ▸ Open and the Shared project window would.
+  void _openAsked(List<String> asked) {
+    if (!mounted) return;
+    final app = context.read<LumitState>();
+    final project = projectPathFromArgs(asked);
+    if (project != null) app.openProject(project);
+    final invite = inviteFromArgs(asked);
+    if (invite != null) showShareFrb(context, app, invite: invite);
   }
 
   AppLifecycleListener? _clipboardWatch;
 
+  late final ShareState _share;
+
+  /// How many conflicts were waiting the last time the share state spoke.
+  int _held = 0;
+
+  /// Conflicts a merge has just left open their window by themselves. Not
+  /// over another window: the status line carries the count until then.
+  void _offerConflicts() {
+    final fresh = _held == 0 && _share.held > 0;
+    _held = _share.held;
+    if (fresh && mounted && !lumitModalOpen) {
+      showShareConflictsFrb(context, context.read<LumitState>());
+    }
+    // Someone has asked this computer to export for them. Asked one at a
+    // time, and each only once: answering takes it off the list.
+    if (_share.exportAsks.isNotEmpty && mounted && !_asking) {
+      _asking = true;
+      showExportAskFrb(
+              context, context.read<LumitState>(), _share.exportAsks.first)
+          .whenComplete(() {
+        _asking = false;
+        if (mounted) _offerConflicts();
+      });
+    }
+  }
+
+  /// The question about someone's export is on screen.
+  bool _asking = false;
+
   @override
   void dispose() {
+    _share.removeListener(_offerConflicts);
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);
     _escapeRelease?.call();
@@ -286,7 +428,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     return FocusScope(
       autofocus: true,
       child: Stack(children: [
-        _shell(uiState, state),
+        WindowDropFrb(child: _shell(uiState, state)),
         // Over everything while a document is being read (see OpeningOverlay):
         // the shell behind it is still the previous project and swaps in one go.
         ValueListenableBuilder<bool>(
@@ -294,21 +436,32 @@ class _LumitAppViewState extends State<LumitAppView> {
           builder: (context, opening, _) => opening
               ? ValueListenableBuilder<OpenProgress?>(
                   valueListenable: state.openProgress,
-                  // Null is the sweep: an import says nothing about how far it
-                  // has got, and opening a `.lum` says everything.
-                  builder: (context, progress, _) => OpeningOverlay(
-                    label: progress == null
-                        ? null
-                        : openPhaseLabel(progress.phase),
-                    fraction: progress?.fraction,
+                  // Null is the sweep, for a job that says nothing about how
+                  // far it has got.
+                  builder: (context, progress, _) =>
+                      ValueListenableBuilder<VoidCallback?>(
+                    valueListenable: state.openCancel,
+                    builder: (context, cancel, _) => OpeningOverlay(
+                      label: progress == null
+                          ? null
+                          : openPhaseLabel(progress.phase),
+                      fraction: progress?.fraction,
+                      onCancel: cancel,
+                      cancelLabel:
+                          state.openIsImport ? l10n.cancelImport : null,
+                    ),
                   ),
                 )
               : const SizedBox.shrink(),
         ),
         // The same card for a job working on the document that is already open
-        // — beat detection. The two never overlap: nothing can be started
+        // — beat detection, packing the project. The two never overlap: nothing can be started
         // against a document that is still being read.
-        BusyOverlay(busy: state.busy, progress: state.busyProgress),
+        BusyOverlay(
+            busy: state.busy,
+            progress: state.busyProgress,
+            cancel: state.busyCancel,
+            cancelLabel: state.busyCancelLabel),
       ]),
     );
   }
@@ -353,12 +506,18 @@ class _LumitAppViewState extends State<LumitAppView> {
   /// Which keymap context the focused panel is. Panels with no bindings of
   /// their own resolve to `Global`, which is also the fallback for every other
   /// context, so nothing is lost by the mapping being partial.
-  BridgeKeyContext _contextOf(Panel? panel) => switch (panel) {
+  BridgeKeyContext _contextOf(LumitUiState ui, Panel? panel) =>
+      switch (panel) {
         Panel.project => BridgeKeyContext.project,
-        Panel.viewer => BridgeKeyContext.viewer,
+        // A Viewer looking at a file is the Cut arrangement's source side, so
+        // I and O mark there.
+        Panel.viewer => ui.views.active?.mode == ViewMode.footage
+            ? BridgeKeyContext.cut
+            : BridgeKeyContext.viewer,
         // Both tables answer to the Timeline's keys: the razor, the split and
         // the transport come from there, and the Audio timeline is a timeline.
         Panel.timeline || Panel.audioTimeline => BridgeKeyContext.timeline,
+        Panel.cutTimeline => BridgeKeyContext.cut,
         Panel.effectControls => BridgeKeyContext.effects,
         _ => BridgeKeyContext.global,
       };
@@ -404,7 +563,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     // panel is active — the engine falls back to Global itself, so one call
     // answers both. (This handler runs wherever focus is; the active panel is
     // what the dock last fronted, which is what a user would call "where I am".)
-    var action = ui.keymap.actionFor(_contextOf(ui.activePanel), event);
+    var action = ui.keymap.actionFor(_contextOf(ui, ui.activePanel), event);
     if (action == null) {
       // The Tools context is a context no panel *is* (docs/07 §15 scopes it to
       // the toolbar, not to a pane), so it is asked for separately and only
@@ -428,6 +587,10 @@ class _LumitAppViewState extends State<LumitAppView> {
     // A tool action can also arrive from the primary lookup, if someone rebinds
     // one into a context a panel is. Same handler either way.
     if (ui.tools.handleAction(action)) return KeyEventResult.handled;
+    // A held key repeats, and these are pressed once however long it is held.
+    if (event is KeyRepeatEvent && _pressedOnce(action)) {
+      return KeyEventResult.handled;
+    }
 
     var handled = true;
     switch (action) {
@@ -439,13 +602,76 @@ class _LumitAppViewState extends State<LumitAppView> {
         state.notifyDocumentChanged();
       case 'playback.toggle':
         ui.requestTogglePlay();
-      // Shuttle is not built, and J/L have always stepped a frame here. Mapping
-      // them onto the step keeps today's keyboard exactly as it is rather than
-      // taking two keys away until a shuttle exists to give them back.
-      case 'playback.frame.prev' || 'playback.shuttle.reverse':
+      case 'playback.frame.prev':
         ui.stepFrame(-1);
-      case 'playback.frame.next' || 'playback.shuttle.forward':
+      case 'playback.frame.next':
         ui.stepFrame(1);
+      // `J` and `L` shuttle: each press is one step along the ladder. A held
+      // key is one press, or its repeats would run straight to the top.
+      case 'playback.shuttle.reverse' || 'playback.shuttle.forward':
+        if (event is KeyDownEvent) {
+          ui.shuttle(action.endsWith('forward') ? 1 : -1);
+        }
+      // `K` stops the transport the way Space does, and is left for anything
+      // else that wants it when nothing is playing.
+      case 'playback.shuttle.pause':
+        if (ui.playing.value) {
+          ui.stopPlayback();
+        } else {
+          handled = false;
+        }
+      // `,` and `.` go to the keyframe either side of the playhead, and with
+      // Ctrl to the edit point: on the selected layers, or on every layer when
+      // none is selected. Found the way a property's own arrows find theirs,
+      // by frame and never the one the playhead is on.
+      case 'keyframe.prev' ||
+            'keyframe.next' ||
+            'edit.point.prev' ||
+            'edit.point.next':
+        // The Cut timeline walks its own tracks' edit points on its own key
+        // handler, on the picked clips' tracks rather than the selected
+        // layers; the chord is taken here so nothing else answers it.
+        if (ui.activePanel == Panel.cutTimeline &&
+            action.startsWith('edit.point')) {
+          break;
+        }
+        final ids = ui.selectedLayerIds;
+        final before = action.endsWith('prev');
+        final at = ui.playheadFrame.value;
+        int? to;
+        for (final entry in ui.model.layers) {
+          if (ids.isNotEmpty && !ids.contains(entry.layer.internallayerId)) {
+            continue;
+          }
+          final frames = action.startsWith('keyframe')
+              ? [
+                  for (final key in layerKeys(
+                    entry: entry,
+                    flowParams:
+                        entry.info.flow ? entry.layer.getFlowParams() : null,
+                    volumeDb: entry.info.volumeDb,
+                  ))
+                    keyFrame(key, ui.model.fps).round(),
+                ]
+              // A cut between clips, so only a Sequence layer has any.
+              : [
+                  for (final clip in entry.layer.getClips()) ...[
+                    clip.startFrame,
+                    clip.endFrame,
+                  ],
+                ];
+          for (final frame in frames) {
+            // One outside the composition is nowhere for a playhead to stand.
+            if (frame < 0 || frame >= ui.model.durationFrames) continue;
+            if (before ? frame >= at : frame <= at) continue;
+            if (to == null || (before ? frame > to : frame < to)) to = frame;
+          }
+        }
+        if (to == null) {
+          handled = false;
+        } else {
+          ui.scrubTo(to);
+        }
       case 'playback.comp.start':
         ui.playheadFrame.value = 0;
       case 'playback.comp.end':
@@ -605,6 +831,13 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The menu bar owns the console's lists too, so the key asks for it
         // rather than assembling a second one.
         ui.requestConsole();
+      case 'comp.flowchart':
+        // Only with nothing focused, since a graph canvas holding the focus
+        // has a Tab of its own. Not on a held key either, which would reopen
+        // the chart Tab had just shut.
+        handled = event is KeyDownEvent &&
+            FocusManager.instance.primaryFocus is FocusScopeNode &&
+            openFlowchartFrb(context, ui);
       case 'palette.open':
         // The menu bar owns the palette's list of commands, so the key asks
         // for it rather than assembling a second one (docs/07 §12).
@@ -629,12 +862,14 @@ class _LumitAppViewState extends State<LumitAppView> {
           );
           state.notifyDocumentChanged();
         }
+      // Every selected layer, through the call the Edit menu and the Timeline
+      // row's own menu make.
       case 'layer.duplicate':
-        final layer = ui.selectedLayer.value;
-        if (layer == null) {
+        final layers = ui.selectedLayers.value;
+        if (layers.isEmpty) {
           handled = false;
         } else {
-          layer.duplicate();
+          duplicateLayersFrb(layers);
           state.notifyDocumentChanged();
         }
       // The light fold, beside the heavy one below it. Ctrl+G gathers
@@ -693,8 +928,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         openProjectFrb(state);
       case 'file.save.as':
         saveProjectFrb(state, ui, forcePicker: true);
+      case 'file.save.version':
+        saveVersionFrb(context, state, ui);
       case 'file.import':
-        importFootageFrb(state);
+        importFootageFrb(context, state);
       case 'file.export':
         if (comp == null) {
           handled = false;
@@ -750,19 +987,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       // menu. A comp that has never had one set reads as the whole comp, so B
       // and N always have something to move.
       case 'workarea.set.start' || 'workarea.set.end':
-        if (comp == null) {
-          handled = false;
-        } else {
-          comp.setWorkArea(
-            span: workAreaWith(
-              comp: comp,
-              current: comp.getWorkArea(),
-              wanted: ui.playheadFrame.value,
-              isStart: action == 'workarea.set.start',
-            ),
-          );
-          state.notifyDocumentChanged();
-        }
+        handled = _setWorkAreaEnd(state, ui, comp,
+            isStart: action == 'workarea.set.start');
       // Markers. `Shift+M` (or AE's numpad `*`) drops a plain cue at
       // the playhead; `Ctrl`+digit sets the numbered one and the bare digit
       // returns to it. The numbered pair is the whole point — the key that
@@ -806,6 +1032,26 @@ class _LumitAppViewState extends State<LumitAppView> {
           // says rather than being overwritten by the next frame that arrives.
           ui.scrubTo(at);
         }
+      // I and O go by where the keyboard is. In the Cut timeline they set the
+      // work area's ends at the playhead, which B and N cannot reach there;
+      // with a source view they mark the source. Nothing without one.
+      case 'cut.mark.in' || 'cut.mark.out':
+        if (ui.activePanel == Panel.cutTimeline) {
+          handled = _setWorkAreaEnd(state, ui, comp,
+              isStart: action == 'cut.mark.in');
+        } else if (ui.sourceView case final view?) {
+          ui.markSource(view, markIn: action == 'cut.mark.in');
+        }
+      // The two ways of putting the marked span down at the playhead.
+      case 'cut.insert' || 'cut.overwrite':
+        if (ui.sourceView case final view?) {
+          ui.placeSource(view, insert: action == 'cut.insert');
+        }
+      // The rest of the Cut context's keys act on the Cut timeline's own
+      // clips, which the panel answers for on its own key handler; the
+      // chord is taken here so nothing else answers it.
+      case final id when id.startsWith('cut.'):
+        handled = ui.activePanel == Panel.cutTimeline;
       case 'edit.delete.selection':
         // A panel holding a finer selection than the layer one gets the key
         // first — a selected mask row is what Delete is about, not the
@@ -819,6 +1065,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (!const {
           Panel.timeline,
           Panel.audioTimeline,
+          Panel.cutTimeline,
           Panel.viewer,
           Panel.hierarchy,
         }.contains(ui.activePanel)) {
@@ -838,6 +1085,93 @@ class _LumitAppViewState extends State<LumitAppView> {
           ui.clearSelection();
           state.notifyDocumentChanged();
         }
+      // The Animation menu's keyframe rows, pressed from the keyboard. Each
+      // is the row itself, so a key and its menu row cannot come to differ,
+      // and a row that would be greyed out leaves the key alone.
+      case 'keyframe.toggle':
+        handled = setKeyframeRow(state, ui).press();
+      // After Effects' Alt+Shift+P and its four siblings: the same command on
+      // one Transform property of the selected layers, with no row to pick.
+      case final id when id.startsWith('keyframe.toggle.'):
+        handled = toggleTransformKeys(
+            state, ui, id.substring('keyframe.toggle.'.length));
+      case 'keyframe.hold.toggle':
+        handled = toggleHoldRow(state, ui).press();
+      case 'keyframe.interpolation':
+        handled = keyframeInterpolationRow(context, state, ui).press();
+      case 'keyframe.speed':
+        handled = keyframeSpeedRow(context, state, ui).press();
+      case 'expression.add':
+        handled = addExpressionRow(context, state, ui).press();
+      // The Layer menu's rows the same way. Stepping the blend mode repeats
+      // while the key is held, and stops at either end of the list.
+      case 'layer.blend.next':
+        handled = blendStepRow(state, ui, by: 1).press();
+      case 'layer.blend.prev':
+        handled = blendStepRow(state, ui, by: -1).press();
+      case 'layer.lock.toggle':
+        handled = lockRow(state, ui).press();
+      case 'layer.unlock.all':
+        handled = unlockAllRow(state, ui).press();
+      case 'layer.order.up' ||
+            'layer.order.down' ||
+            'layer.order.top' ||
+            'layer.order.bottom':
+        handled = MenuEntry.pressAction(arrangeRows(state, ui), action);
+      case 'layer.centre':
+        handled = MenuEntry.pressAction(transformRows(state, ui), action);
+      case 'mask.feather' || 'mask.invert':
+        handled =
+            MenuEntry.pressAction(maskRows(context, state, ui), action);
+      case 'layer.settings':
+        final layer = ui.selectedLayer.value;
+        if (layer == null) {
+          handled = false;
+        } else {
+          showLayerSettingsFrb(context: context, layer: layer).then((changed) {
+            if (changed) state.notifyDocumentChanged();
+          });
+        }
+      // Up and down the stack with the selection, and along the Timeline
+      // with the layers themselves. Keyboard only, like the frame steps.
+      case 'layer.select.next':
+        handled = selectNeighbourLayer(ui, by: 1);
+      case 'layer.select.prev':
+        handled = selectNeighbourLayer(ui, by: -1);
+      case 'layer.shift.earlier':
+        handled = shiftSelectedLayers(state, ui, -1);
+      case 'layer.shift.later':
+        handled = shiftSelectedLayers(state, ui, 1);
+      case 'layer.shift.earlier10':
+        handled = shiftSelectedLayers(state, ui, -10);
+      case 'layer.shift.later10':
+        handled = shiftSelectedLayers(state, ui, 10);
+      case 'comp.trim.workarea':
+        final trim = trimCompAction(state, comp);
+        if (trim == null) {
+          handled = false;
+        } else {
+          trim();
+        }
+      case 'export.queue.open':
+        showExportQueueFrb(context: context);
+      case 'help.open':
+        openLumitHelp(state);
+      // The View menu's two switches that had no key.
+      case 'viewer.controls.toggle':
+        ui.setViewerLayerControls(!ui.viewerLayerControls);
+      case 'viewer.snap.grid.toggle':
+        ui.tools.snapToGrid = !ui.tools.snapToGrid;
+      // A panel put up or taken down, as its tick in the Window menu does.
+      case final id when id.startsWith('panel.toggle.'):
+        final panel = Panel.values
+            .where((panel) => panelToggleAction(panel) == id)
+            .firstOrNull;
+        if (panel == null) {
+          handled = false;
+        } else {
+          togglePanel(ui, panel);
+        }
       // A bound action this shell has no call for yet — the menus carry those.
       // Ignored rather than swallowed, so the key still reaches whatever else
       // wants it.
@@ -847,3 +1181,47 @@ class _LumitAppViewState extends State<LumitAppView> {
     return handled ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 }
+
+/// One end of the work area set to the playhead. The work area is the span
+/// the Viewer previews and the export writes, so this is a one-key job; a
+/// comp that has never had one set reads as the whole comp, so there is
+/// always an end to move. False with no comp to set it on.
+bool _setWorkAreaEnd(LumitState state, LumitUiState ui,
+    CompositionReference? comp,
+    {required bool isStart}) {
+  if (comp == null) return false;
+  comp.setWorkArea(
+    span: workAreaWith(
+      comp: comp,
+      current: comp.getWorkArea(),
+      wanted: ui.playheadFrame.value,
+      isStart: isStart,
+    ),
+  );
+  state.notifyDocumentChanged();
+  return true;
+}
+
+/// Whether a held key must not repeat [action]: the commands that flip
+/// something or open a window, where a second firing undoes or doubles the
+/// first.
+bool _pressedOnce(String action) =>
+    action.startsWith('keyframe.toggle') ||
+    action.startsWith('panel.toggle.') ||
+    const {
+      'keyframe.hold.toggle',
+      'keyframe.interpolation',
+      'keyframe.speed',
+      'expression.add',
+      'layer.lock.toggle',
+      'layer.unlock.all',
+      'layer.centre',
+      'layer.settings',
+      'mask.feather',
+      'mask.invert',
+      'comp.trim.workarea',
+      'export.queue.open',
+      'help.open',
+      'viewer.controls.toggle',
+      'viewer.snap.grid.toggle',
+    }.contains(action);

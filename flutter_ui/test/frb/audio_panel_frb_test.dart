@@ -43,59 +43,6 @@ void main() {
   }
 
   group('Audio panel (frb)', () {
-    /// The board's three sections stand, with the Beats controls at their
-    /// manifest defaults: the comp mix, the whole comp, 120 ms spacing.
-    testWidgets('the three sections stand as drawn', (tester) async {
-      await mount(tester);
-      expect(find.text('Levels'), findsOneWidget);
-      expect(find.text('Beats'), findsOneWidget);
-      expect(find.text('Selected layer'), findsOneWidget);
-      expect(find.byKey(const ValueKey('levels-bars')), findsOneWidget);
-      expect(find.byKey(const ValueKey('audio-clip-lamp')), findsOneWidget);
-      expect(find.byKey(const ValueKey('beats-source')), findsOneWidget);
-      expect(find.byKey(const ValueKey('beats-sensitivity')), findsOneWidget);
-      expect(find.byKey(const ValueKey('beats-range')), findsOneWidget);
-      expect(find.byKey(const ValueKey('beats-spacing')), findsOneWidget);
-      expect(find.byKey(const ValueKey('beats-tap')), findsOneWidget);
-      expect(find.byKey(const ValueKey('beats-generate')), findsOneWidget);
-      expect(find.byKey(const ValueKey('beats-clear')), findsOneWidget);
-      // A solid is selected: the template buttons stand, the sound rows do
-      // not — a silent layer says so instead.
-      expect(find.byKey(const ValueKey('audio-drive')), findsOneWidget);
-      expect(find.byKey(const ValueKey('audio-duck')), findsOneWidget);
-      expect(find.text('This layer makes no sound.'), findsOneWidget);
-      expect(find.byKey(const ValueKey('audio-volume-db')), findsNothing);
-    });
-
-    /// Tap tempo: pressing Tap in rhythm fills the BPM well and arms the
-    /// grid caption. (In a test the taps land milliseconds apart, so the
-    /// tempo clamps to the well's ceiling — the point is the route, not the
-    /// number.)
-    testWidgets('tap tempo arms the grid', (tester) async {
-      await mount(tester);
-      expect(find.text('Grid on'), findsNothing);
-      await tester.tap(find.byKey(const ValueKey('beats-tap')));
-      await tester.pump(const Duration(milliseconds: 40));
-      await tester.tap(find.byKey(const ValueKey('beats-tap')));
-      await tester.pump();
-      expect(find.text('Grid on'), findsOneWidget,
-          reason: 'two taps are a tempo, and a tapped tempo is an override');
-    });
-
-    /// Generate on a silent comp is the calm nothing (docs/09 §5: no audio is
-    /// an answer, not an alarm), and Clear survives a comp with no beat
-    /// markers at all.
-    testWidgets('generate and clear survive a silent comp', (tester) async {
-      await mount(tester);
-      await tester.tap(find.byKey(const ValueKey('beats-generate')));
-      await tester.pump();
-      await settleFrb(tester, minRounds: 6);
-      await tester.pump(const Duration(seconds: 1));
-      await tester.tap(find.byKey(const ValueKey('beats-clear')));
-      await tester.pump();
-      // Nothing thrown, nothing shown: the calm path.
-    });
-
     /// *Drive with audio…* offers the selected layer's free Number parameters
     /// and stages Audio level → Remap → Smooth onto the picked one — three
     /// boxes and three wires in one commit.

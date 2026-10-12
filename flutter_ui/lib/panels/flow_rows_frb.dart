@@ -24,6 +24,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show flowPath;
 
 /// The Flow section for [layer], or nothing when its flow switch is off.
 class FlowRowsFrb extends StatelessWidget {
@@ -71,6 +72,7 @@ class FlowRowsFrb extends StatelessWidget {
 
     return FxSection(
       title: l10n.flowSection,
+      scope: flowPath(layer.internallayerId.toString()),
       open: open,
       onToggle: onToggle,
       rows: [
@@ -294,7 +296,7 @@ class FlowRowsFrb extends StatelessWidget {
         // columns.
         fixedColumns: true,
       ),
-      name: Text(l10n.flowInputRate,
+      name: Text(t.propertyCase(l10n.flowInputRate),
           style: t.body, overflow: TextOverflow.ellipsis),
       control: FlowRateControl(
         shown: shown,
@@ -316,7 +318,8 @@ class FlowRowsFrb extends StatelessWidget {
         // Not keyable properties, so plain text names — there is no curve for
         // the graph editor to aim at. Input rate is the exception, and builds
         // its own row above.
-        name: Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+        name: Text(t.propertyCase(label),
+            style: t.body, overflow: TextOverflow.ellipsis),
         control: control,
       );
 }

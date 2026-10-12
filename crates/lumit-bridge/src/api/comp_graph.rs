@@ -34,9 +34,13 @@ use lumit_core::comp_graph::{
 };
 use lumit_core::model::{Document, EffectInstance};
 
+use crate::api::composition::CompositionReference;
 use crate::api::effect::{bridge_unit, core_unit, BridgeUnit};
 use crate::api::graph::{BridgePort, BridgePortType};
+use crate::api::planes::BridgePlaneStatus;
 use crate::api::project_item::{item_reference, ItemReference};
+use crate::api::roto::BridgeRotoStatus;
+use crate::api::BridgeError;
 
 /// Which kind of box this is, and so what the canvas draws it as.
 ///
@@ -483,5 +487,144 @@ pub(crate) fn wiring_into(wiring: BridgeCompWiring, instances: Vec<EffectInstanc
                 members: g.members,
             })
             .collect(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A box that reads a file
+// ---------------------------------------------------------------------------
+
+/// The file a Roto brush box reads, as the Viewer needs it to carry a scribble
+/// onto the picture: which frame of it is on screen, and how big its picture
+/// is, which is what says where the Read laid it in the graph's frame.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeBoxSource {
+    /// The **source** frame showing at the composition frame asked about, or
+    /// `None` where the file will not read: it is offline, or carries no
+    /// video. Footage is wired in either way, which is what the caller needs
+    /// to tell that from a box with nothing behind it.
+    pub frame: Option<i64>,
+    /// The file's own picture size, in pixels. Nought where it will not read.
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Remove background, Depth and the Roto brush as boxes
+/// (docs/impl/addons.md §6.1, docs/impl/roto.md §5).
+///
+/// # In plain terms
+///
+/// These three read a **file** and keep what they made of it beside that file.
+/// On a layer the file is the layer's own, and `fire_effect_action`,
+/// `plane_status` and the `roto_*` calls all name it through the layer. A box
+/// has no layer. Its file is the footage its picture comes from, found by
+/// following its picture socket upstream to a Read
+/// ([`CompGraph::read_behind`]), and these are the same calls with the
+/// composition and the box in the layer's place.
+impl CompositionReference {
+    /// The Fx box named `effect`, cloned out of the current snapshot.
+    #[frb(ignore)]
+    fn graph_fx(&self, effect: Uuid) -> Result<EffectInstance, BridgeError> {
+        let doc = self.document()?;
+        match self.graph_of(&doc)?.node(effect) {
+            Some(GraphNode::Fx(inst)) => Ok(inst.clone()),
+            _ => Err(BridgeError::InvalidEffect),
+        }
+    }
+
+    /// The file box `effect` reads. `NotFootage` where its picture comes from
+    /// no footage: nothing is wired in, or what is wired in is a solid, a
+    /// composition or an Input.
+    #[frb(ignore)]
+    fn box_source(&self, effect: Uuid) -> Result<crate::api::roto::Source, BridgeError> {
+        let doc = self.document()?;
+        let (_, item) = self
+            .graph_of(&doc)?
+            .read_behind(effect)
+            .ok_or(BridgeError::NotFootage)?;
+        match doc.item(item) {
+            Some(lumit_core::model::ProjectItem::Footage(_)) => Ok((self.project, item)),
+            _ => Err(BridgeError::NotFootage),
+        }
+    }
+
+    /// Press one of a box's Action parameters: `fire_effect_action` for a box.
+    ///
+    /// The boxes with an engine-side button are the planes tier's two and the
+    /// Roto brush. Anything else is refused rather than ignored, because a
+    /// button that silently does nothing is the hardest kind of fault to see.
+    #[frb(sync)]
+    pub fn fire_graph_action(&self, effect: Uuid, param: String) -> Result<(), BridgeError> {
+        let fx = self.graph_fx(effect)?;
+        if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
+            return crate::api::roto::press(self.box_source(effect), &fx, &param);
+        }
+        if lumit_core::planes::task_of(&fx).is_some() {
+            return crate::api::planes::press(self.box_source(effect), &fx, &param);
+        }
+        Err(BridgeError::InvalidParam)
+    }
+
+    /// A planes-tier box as its status row draws it: `plane_status` for a box.
+    #[frb(sync)]
+    pub fn graph_plane_status(&self, effect: Uuid) -> Result<BridgePlaneStatus, BridgeError> {
+        crate::api::planes::status_of(&self.graph_fx(effect)?)
+    }
+
+    /// A Roto brush box as its status row draws it: `roto_status` for a box.
+    #[frb(sync)]
+    pub fn graph_roto_status(&self, effect: Uuid) -> Result<BridgeRotoStatus, BridgeError> {
+        crate::api::roto::status_of(&self.graph_fx(effect)?)
+    }
+
+    /// Which frame of its file box `effect` is showing at composition frame
+    /// `frame`, and that file's picture size: `roto_source_frame` for a box.
+    ///
+    /// A Read has no start offset and no Retime, so the file's time is the
+    /// graph's own. Read on a frame change and held, never per rebuild.
+    ///
+    /// `NotFootage` where no footage is wired into the box. A file that is
+    /// wired in and will not read answers with no frame instead, so the two
+    /// can be told apart and said in different words.
+    #[frb(sync)]
+    pub fn graph_box_source(
+        &self,
+        effect: Uuid,
+        frame: i64,
+    ) -> Result<BridgeBoxSource, BridgeError> {
+        let source = self.box_source(effect)?;
+        let t = self
+            .composition()?
+            .frame_rate
+            .time_of_frame(frame)
+            .map_err(|_| BridgeError::InvalidParam)?;
+        let read = crate::api::roto::media_rate(source)
+            .and_then(|(_, _, size)| {
+                Ok((
+                    crate::api::roto::source_frame_at(source, t.0.to_f64())?,
+                    size,
+                ))
+            })
+            .ok();
+        Ok(match read {
+            Some((frame, (width, height))) => BridgeBoxSource {
+                frame: Some(frame),
+                width,
+                height,
+            },
+            None => BridgeBoxSource {
+                frame: None,
+                width: 0,
+                height: 0,
+            },
+        })
+    }
+
+    /// Solve the scribbled frame's own matte, now: `roto_solve_frame` for a
+    /// box, with the same quiet `false` where the job did not start.
+    #[frb(sync)]
+    pub fn graph_roto_solve_frame(&self, effect: Uuid, frame: i64) -> Result<bool, BridgeError> {
+        crate::api::roto::solve_frame(self.box_source(effect)?, &self.graph_fx(effect)?, frame)
     }
 }

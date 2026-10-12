@@ -93,12 +93,47 @@ pub struct CompJob {
     /// the Blend policy picks: a moment that lands on a real frame is that
     /// frame alone, and one between two is a crossfade of both, or a flow
     /// synthesis of both when [`Self::shutter_flow`] says so.
+    ///
+    /// Also the whole frames a temporal effect on a Precomp or adjustment
+    /// layer above builds this clip again at, one real frame each, so that
+    /// effect's neighbours show the footage a frame away.
     pub shutter: Vec<ShutterSample>,
     /// The layer's own Flow settings when its Retime uses Flow, so its
     /// in-between moments are synthesised the way its retime is. `None`
     /// otherwise, and the moments crossfade: flow can tear on footage it
     /// cannot measure, and it runs only where the user switched it on.
     pub shutter_flow: Option<lumit_core::retime::FlowParams>,
+    /// A Sequence layer at the other times it is asked for, where the clip
+    /// live then is not this job's file, and what this clip is fading over.
+    /// Empty for every other layer.
+    pub cuts: Vec<Cut>,
+}
+
+/// A Sequence layer at another time, across an edit point: the clip live then
+/// as a job of its own, one whole frame of it. Or at this time, inside a fade
+/// or a dissolve: the clip under this one.
+pub enum Cut {
+    /// This job's picture at this gain, crossfaded with the other clip's at
+    /// one less that or faded over nothing: a dissolve, where this job is
+    /// the incoming clip, or a fade at an end no clip overlaps
+    /// (`lumit_core::sequence::shown_at`). The two are mixed where they are
+    /// decoded (`lumit_core::pixels::dissolve_rgba`) and the result is the
+    /// layer's source, so everything downstream treats it as one clip.
+    ///
+    /// ponytail: mixed on this job's raster. A clip under it that was
+    /// decoded at another size is fitted into that raster, and a float one
+    /// of another size is left out. The upgrade is to mix every dissolve on
+    /// the card, each clip a source of its own, as one with a composition
+    /// clip in it already is (`build`'s Sequence arm).
+    Under(f64, Option<CompJob>),
+    /// A neighbour of the layer's own temporal stack, by [`CompJob::temporal`]'s
+    /// offset. Joins the decoded neighbours when it is the same size.
+    Neighbour(i32, CompJob),
+    /// The layer at a moment a temporal effect above builds it again at, by
+    /// [`CompJob::shutter`]'s offset. `None` in a gap, where it shows nothing.
+    /// Offset zero is the frame's own moment, filed as a gap when the job is
+    /// there only for a clip the layer shows at another.
+    Moment(f64, Option<CompJob>),
 }
 
 /// One sub-frame moment a covered clip is decoded at for accumulation motion
@@ -151,7 +186,8 @@ pub struct CompLayerPixels {
     /// sample's below-stack without copying a frame. A moment that failed to
     /// decode is simply absent, and that sample falls back to the frame-time
     /// pixels. Boxed so a layer with no shutter costs a pointer, not a struct.
-    pub shutter: Vec<(f64, Box<CompLayerPixels>)>,
+    /// `None` is a Sequence layer in a gap at that moment ([`Cut::Moment`]).
+    pub shutter: Vec<(f64, Option<Box<CompLayerPixels>>)>,
     /// The content name of this decode: a hash of the [`CompJob`]
     /// identity [`crate::plan::same_decode`] compares — item, path, source
     /// frame, decode width, slate, blend partner, flow settings, temporal
@@ -236,7 +272,8 @@ fn weigh(layers: &[CompLayerPixels]) -> u64 {
             let shutter: u64 = l
                 .shutter
                 .iter()
-                .map(|(_, m)| weigh(std::slice::from_ref(m)))
+                .filter_map(|(_, m)| m.as_deref())
+                .map(|m| weigh(std::slice::from_ref(m)))
                 .sum();
             rgba.saturating_add(temporal)
                 .saturating_add(flow)
@@ -263,6 +300,119 @@ impl lumit_cache::ByteSized for CachedFrame {
     }
 }
 
+/// The most decoders one decoding thread keeps open when it has a choice.
+///
+/// Sized for a cut. Three picture rows are playing, the next clip on each is
+/// opened ahead of its edit point, and the clip each row has just left is kept
+/// so a step back across the cut costs nothing: nine. Twelve leaves room for a
+/// fourth row or a nested comp before anything is closed and opened again.
+///
+/// ponytail: a count, the same for every file. A hardware decoder holds a
+/// device and surfaces on the card and a software one holds frames in memory,
+/// and neither is weighed. The upgrade is to charge each decoder to the
+/// governor and close by its pressure, if a project of very large files ever
+/// shows twelve to be too many.
+pub const MAX_OPEN_DECODERS: usize = 12;
+
+/// The open decoders one decoding thread keeps, one per footage item.
+///
+/// The render's own pool and the read-ahead thread each hold one of these, so
+/// both open a file the same way: the frame index from the sidecar cache
+/// ([`crate::media_index`]), then the decoder.
+///
+/// **It closes the one that has gone longest unused** once
+/// [`MAX_OPEN_DECODERS`] are open and another is wanted. A long cut plays
+/// through hundreds of files, and a decoder kept for each was a file handle,
+/// a codec and (decoding on the card) a device apiece, for ever. A decoder
+/// used for this frame or the one before is never closed, whatever the count:
+/// a comp showing twenty files at once keeps twenty open and none is reopened
+/// every frame. Closing one loses nothing but the time to open it again, since
+/// a decoder opened afresh hands back the same frame.
+#[derive(Default)]
+pub struct OpenDecoders {
+    /// Each decoder beside the frame it was last used for.
+    open: HashMap<Uuid, (u64, lumit_media::VideoDecoder)>,
+    /// The frame being decoded for, counted by [`Self::next_frame`].
+    frame: u64,
+}
+
+impl OpenDecoders {
+    /// How many decoders are open.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.open.len()
+    }
+
+    /// Whether none is open.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.open.is_empty()
+    }
+
+    /// Close `item`'s decoder, if one is open: its file has changed, so the
+    /// next decode opens the new one.
+    pub fn close(&mut self, item: Uuid) {
+        self.open.remove(&item);
+    }
+
+    /// The decodes that follow are for another frame of the comp. What "used
+    /// lately" means is counted in these.
+    pub fn next_frame(&mut self) {
+        self.frame += 1;
+    }
+
+    /// The decoder for `item`, opened from `source` if it is not open already.
+    pub fn open(
+        &mut self,
+        item: Uuid,
+        source: &lumit_media::MediaSource,
+    ) -> Result<&mut lumit_media::VideoDecoder, lumit_media::MediaError> {
+        if !self.open.contains_key(&item) {
+            self.make_room();
+        }
+        let frame = self.frame;
+        let slot = match self.open.entry(item) {
+            std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                // The sidecar cache first: the index the probe wrote is the
+                // index this decoder opens with, so the first frame costs a
+                // read rather than a fresh packet scan of the file.
+                let index = crate::media_index::load_or_build_index(source)?;
+                e.insert((frame, lumit_media::VideoDecoder::open(source, index)?))
+            }
+        };
+        slot.0 = frame;
+        Ok(&mut slot.1)
+    }
+
+    /// Close the decoders that have gone longest unused until there is room
+    /// under the cap, stopping at the first that was used for this frame or
+    /// the last.
+    fn make_room(&mut self) {
+        while self.open.len() >= MAX_OPEN_DECODERS {
+            // By id where two were last used together, so which one closes
+            // never depends on the map's order.
+            let oldest = self.open.iter().map(|(id, (used, _))| (*used, *id)).min();
+            match oldest {
+                Some((used, id)) if used + 1 < self.frame => self.open.remove(&id),
+                _ => break,
+            };
+        }
+    }
+
+    /// One read-ahead decode, as the render's own decode would make it. `None`
+    /// when the file will not open or the frame will not decode: the render
+    /// tries it inline and reports the error through the path that knows how.
+    pub fn decode_want(
+        &mut self,
+        want: &crate::headless::PrefetchWant,
+    ) -> Option<lumit_media::DecodedFrame> {
+        let dec = self.open(want.item, &want.source).ok()?;
+        let frame = want.frame.min(dec.frame_count().saturating_sub(1));
+        dec.frame_rgba(frame, want.target_width).ok()
+    }
+}
+
 /// The decoders, the decoded-frame cache and the flow backend one decoding
 /// context owns.
 ///
@@ -280,7 +430,12 @@ impl lumit_cache::ByteSized for CachedFrame {
 /// source frames*, not finished comp frames — those are named and cached a level
 /// up, in [`crate::cache`].
 pub struct DecodePool {
-    decoders: HashMap<Uuid, lumit_media::VideoDecoder>,
+    decoders: OpenDecoders,
+    /// The file each item was last decoded from. An item is read from one
+    /// file for nearly all of its life, but not all: it is relinked, or a
+    /// stand-in for it gives way to the original. One entry an item, and an
+    /// entry is replaced when its item's file is.
+    sources: HashMap<Uuid, std::path::PathBuf>,
     frame_cache: lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     /// Flow backend, created on the first Flow-policy frame. Uses [`Self::gpu`]
     /// — the renderer's own device — when the pool was given one, so flow runs
@@ -384,7 +539,8 @@ impl DecodePool {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            decoders: HashMap::new(),
+            decoders: OpenDecoders::default(),
+            sources: HashMap::new(),
             frame_cache: lumit_cache::ByteLru::new(DEFAULT_DECODE_CACHE_BYTES),
             flow_engine: None,
             synthesis: None,
@@ -506,14 +662,50 @@ impl DecodePool {
     }
 
     /// Drop every cached decoded frame, keeping the open decoders (Settings →
-    /// Clear cache). The decoders are cheap to keep and expensive to re-open.
+    /// Clear cache). There are few of them ([`MAX_OPEN_DECODERS`]) and each is
+    /// expensive to open again.
     pub fn clear(&mut self) {
         self.flow_cache.clear();
         self.frame_cache.clear();
     }
 
+    /// Note the file `item` is about to be decoded from. When it is not the
+    /// one it was decoded from before, the decoder open on the old file goes,
+    /// and every decoded frame with it: they are filed by item and frame, so
+    /// the old file's would be handed back as the new one's.
+    fn settle(&mut self, item: Uuid, source: &lumit_media::MediaSource, slate: bool) {
+        if slate {
+            return;
+        }
+        match self.sources.get(&item) {
+            Some(known) if *known == source.path => {}
+            known => {
+                if known.is_some() {
+                    self.decoders.close(item);
+                    self.clear();
+                }
+                self.sources.insert(item, source.path.clone());
+            }
+        }
+    }
+
+    /// [`Self::settle`] for a job and the jobs across its edit points.
+    fn settle_job(&mut self, job: &CompJob) {
+        self.settle(job.item, &job.source, job.slate);
+        for cut in &job.cuts {
+            match cut {
+                Cut::Neighbour(_, clip)
+                | Cut::Moment(_, Some(clip))
+                | Cut::Under(_, Some(clip)) => self.settle_job(clip),
+                Cut::Moment(_, None) | Cut::Under(_, None) => {}
+            }
+        }
+    }
+
     /// Decode one source frame (or synthesise the missing-footage slate).
     pub fn decode_footage(&mut self, req: &Request) -> Result<FramePixels, String> {
+        self.decoders.next_frame();
+        self.settle(req.item, &req.source, req.slate.is_some());
         decode(&mut self.decoders, &mut self.frame_cache, req)
     }
 
@@ -552,6 +744,10 @@ impl DecodePool {
         progress: &dyn Fn(usize),
     ) -> Result<CompFrame, String> {
         self.comp_decodes += 1;
+        self.decoders.next_frame();
+        for job in jobs {
+            self.settle_job(job);
+        }
         // Before a byte is decoded: a machine already at its ceiling gives up
         // the cold half of both stores first, so this frame's rasters land in
         // room that was made for them rather than on top of a cache nobody is
@@ -577,7 +773,7 @@ impl DecodePool {
 }
 
 fn decode(
-    decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
+    decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     req: &Request,
 ) -> Result<FramePixels, String> {
@@ -637,20 +833,32 @@ fn decode(
             });
         }
     }
-    let dec = match decoders.entry(req.item) {
-        std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
-        std::collections::hash_map::Entry::Vacant(e) => {
-            // The sidecar cache first (crate::media_index): the index the
-            // probe already wrote when the project opened is the index this
-            // decoder opens with, so the first preview frame of a session
-            // costs a read rather than a fresh packet scan of the file.
-            let index =
-                crate::media_index::load_or_build_index(&req.source).map_err(|e| e.to_string())?;
-            let dec =
-                lumit_media::VideoDecoder::open(&req.source, index).map_err(|e| e.to_string())?;
-            e.insert(dec)
-        }
-    };
+    // One layer of a layered image file, or an Illustrator document: the
+    // file's own reader again, since ffmpeg only ever opens the flattened
+    // picture of the one and can't open the other.
+    if let Some(out) = lumit_media::read_own(&req.source, req.target_width) {
+        let out = out.map_err(|e| e.to_string())?;
+        cache.insert(
+            cache_key,
+            CachedFrame {
+                width: out.width,
+                height: out.height,
+                rgba: out.rgba.clone(),
+                format: out.format,
+            },
+        );
+        return Ok(FramePixels {
+            width: out.width,
+            height: out.height,
+            rgba: out.rgba,
+            format: out.format,
+            frame: req.frame,
+            item: req.item,
+        });
+    }
+    let dec = decoders
+        .open(req.item, &req.source)
+        .map_err(|e| e.to_string())?;
     let frame = req.frame.min(dec.frame_count().saturating_sub(1));
     let out = dec
         .frame_rgba(frame, req.target_width)
@@ -1010,7 +1218,7 @@ fn moment_key(source_key: u128, offset: f64) -> u128 {
 /// draws many.
 #[allow(clippy::too_many_arguments)]
 fn combine_pair(
-    decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
+    decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
     synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
@@ -1143,7 +1351,7 @@ fn synthesised(
 
 #[allow(clippy::too_many_arguments)] // one worker call; bundling would hide it
 fn decode_comp(
-    decoders: &mut HashMap<Uuid, lumit_media::VideoDecoder>,
+    decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     flow_engine: &mut Option<lumit_flow::FlowEngine>,
     synthesis: &mut Option<(u64, Result<lumit_ml::Synthesis, lumit_ml::MlError>)>,
@@ -1187,7 +1395,7 @@ fn decode_comp(
         // for a plain layer, so this loop does nothing then). A neighbour
         // that fails to decode is simply dropped — a missing echo tap
         // degrades the effect, never the frame.
-        let temporal: Vec<(i32, Vec<u8>)> = job
+        let mut temporal: Vec<(i32, Vec<u8>)> = job
             .temporal
             .iter()
             .filter_map(|&(offset, frame)| {
@@ -1298,7 +1506,7 @@ fn decode_comp(
         // been, so the refusal an export must not swallow is carried out of the
         // closure rather than read off the error the moment was dropped with.
         let mut refused: Option<SynthesisRefusal> = None;
-        let shutter: Vec<(f64, Box<CompLayerPixels>)> = job
+        let mut shutter: Vec<(f64, Option<Box<CompLayerPixels>>)> = job
             .shutter
             .iter()
             .filter_map(|s| {
@@ -1332,7 +1540,7 @@ fn decode_comp(
                 .ok()?;
                 Some((
                     s.offset,
-                    Box::new(CompLayerPixels {
+                    Some(Box::new(CompLayerPixels {
                         layer: job.layer,
                         width,
                         height,
@@ -1350,7 +1558,7 @@ fn decode_comp(
                         // frame-time output.
                         source_key: moment_key(source_key, s.offset),
                         source_frame: i64::try_from(s.source_frame).unwrap_or(0),
-                    }),
+                    })),
                 ))
             })
             .collect();
@@ -1360,9 +1568,52 @@ fn decode_comp(
         if let Some(why) = &refused {
             return Err(refusal_sentence(why));
         }
+        // A Sequence layer across an edit point: the other clip is decoded as
+        // the job it is. After the flow above, which is never measured across
+        // a cut. One that fails is dropped, as any neighbour is.
+        let mut under: Option<(f64, Option<CompLayerPixels>)> = None;
+        for cut in &job.cuts {
+            let mut other = |other: &CompJob| {
+                decode_comp(
+                    decoders,
+                    cache,
+                    flow_engine,
+                    synthesis,
+                    refuse,
+                    flow_cache,
+                    gpu,
+                    comp,
+                    frame,
+                    std::slice::from_ref(other),
+                    media_epoch,
+                    &|_| {},
+                )
+                .ok()
+                .and_then(|decoded| decoded.layers.into_iter().next())
+            };
+            match cut {
+                // The stack reads its neighbours at the frame's own size.
+                Cut::Neighbour(offset, clip) => {
+                    if let Some(p) = other(clip)
+                        .filter(|p| (p.width, p.height, p.format) == (px.width, px.height, format))
+                    {
+                        temporal.push((*offset, Arc::unwrap_or_clone(p.rgba)));
+                    }
+                }
+                Cut::Moment(offset, None) => shutter.push((*offset, None)),
+                Cut::Moment(offset, Some(clip)) => {
+                    if let Some(p) = other(clip) {
+                        shutter.push((*offset, Some(Box::new(p))));
+                    }
+                }
+                Cut::Under(gain, clip) => {
+                    under = Some((*gain, clip.as_ref().and_then(&mut other)));
+                }
+            }
+        }
         // Blend / Flow policy: combine with the next source frame.
         let (width, height) = (px.width, px.height);
-        let rgba = combine_pair(
+        let mut rgba = combine_pair(
             decoders,
             cache,
             flow_engine,
@@ -1376,6 +1627,33 @@ fn decode_comp(
             job.blend,
             job.flow.as_ref(),
         )?;
+        // A fade or a dissolve, last, so it crossfades the pictures the two
+        // clips would each have shown alone. See [`Cut::Under`] for the fit.
+        if let Some((gain, below)) = under {
+            use lumit_core::pixels;
+            use lumit_media::PixelFormat::{LinearF32, Srgb8};
+            let below = below.filter(|p| p.format == format).and_then(|p| {
+                if (p.width, p.height) == (width, height) {
+                    Some(p.rgba)
+                } else if format == Srgb8 {
+                    Some(Arc::new(pixels::letterbox_resize(
+                        &p.rgba,
+                        p.width,
+                        p.height,
+                        width,
+                        height,
+                        pixels::Resample::Fast,
+                    )))
+                } else {
+                    None
+                }
+            });
+            let below = below.as_ref().map(|p| p.as_slice());
+            match format {
+                Srgb8 => pixels::dissolve_rgba(&mut rgba, below, gain),
+                LinearF32 => pixels::dissolve_f32(&mut rgba, below, gain),
+            }
+        }
         layers.push(CompLayerPixels {
             layer: job.layer,
             width,
@@ -1455,7 +1733,8 @@ mod tests {
             "and the motion measured against them"
         );
 
-        layer.shutter = vec![(0.0, Box::new(pixels(100))), (0.5, Box::new(pixels(100)))];
+        let moment = || Some(Box::new(pixels(100)));
+        layer.shutter = vec![(0.0, moment()), (0.5, moment())];
         assert_eq!(
             weigh(std::slice::from_ref(&layer)),
             300 + 120 + 200,
@@ -1503,72 +1782,12 @@ mod tests {
         );
     }
 
-    /// A pool nobody registered charges nobody, so a test — or an exporter
-    /// running without a governor — decodes exactly as it did.
-    #[test]
-    fn an_unaccounted_pool_charges_nothing() {
-        let pool = DecodePool::new();
-        let made = CompFrame {
-            comp: Uuid::nil(),
-            frame: 0,
-            media_epoch: 0,
-            layers: vec![pixels(4096)],
-            render_cost: std::time::Duration::ZERO,
-            held: None,
-        };
-        assert!(pool.charge(&made).is_none());
-        assert_eq!(pool.ram_pressure(), lumit_budget::Pressure::Easy);
-    }
-
     /// One at a time wherever the addons folder is pointed somewhere of its
     /// own or the recorded refusal is written: both are process-wide, so two
     /// overlapping tests would read each other's answers.
     fn serially() -> std::sync::MutexGuard<'static, ()> {
         static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
         SERIAL.lock().unwrap_or_else(|held| held.into_inner())
-    }
-
-    /// **One layer's refusal is one layer's answer.** A scene-linear source is
-    /// a fact about a layer's own footage, so with an EXR layer and a MOV layer
-    /// both on the model engine the sentence belongs on the EXR layer's row and
-    /// nowhere else, and the MOV layer painting must not rub it out. A machine
-    /// with no runtime is the other sort: every layer on the model engine reads
-    /// it, and any frame painted proves it stale (docs/impl/addons.md §6.3, §9).
-    #[test]
-    fn a_refusal_about_one_layer_is_not_an_answer_about_another() {
-        let _serial = serially();
-        let (exr, mov) = (Uuid::now_v7(), Uuid::now_v7());
-
-        note_synthesis(exr, Some(SynthesisRefusal::FloatSource));
-        assert_eq!(synthesis_refusal(exr), Some(SynthesisRefusal::FloatSource));
-        assert_eq!(
-            synthesis_refusal(mov),
-            None,
-            "another layer's footage is not this layer's"
-        );
-
-        // The other layer paints. That says nothing about the first one's
-        // source, so the first one's row keeps what it had.
-        note_synthesis(mov, None);
-        assert_eq!(
-            synthesis_refusal(exr),
-            Some(SynthesisRefusal::FloatSource),
-            "no silent downgrade: the row that was refused still says so"
-        );
-
-        let broke = SynthesisRefusal::Failed("would not open".into());
-        note_synthesis(mov, Some(broke.clone()));
-        assert_eq!(
-            synthesis_refusal(exr),
-            Some(broke),
-            "a pack that will not open is every layer's answer"
-        );
-        note_synthesis(exr, None);
-        assert_eq!(
-            synthesis_refusal(mov),
-            None,
-            "and a frame painted clears it"
-        );
     }
 
     /// **An export abandons the file rather than writing the built-in engine's
@@ -1611,6 +1830,7 @@ mod tests {
             channels: None,
             shutter: Vec::new(),
             shutter_flow: None,
+            cuts: Vec::new(),
         };
 
         let mut pool = DecodePool::new();
@@ -1630,95 +1850,6 @@ mod tests {
         );
 
         lumit_ml::store::with_dir(None);
-    }
-
-    /// **The decode-ahead hand-off.** A frame filed by [`DecodePool::preload`]
-    /// must be served by the render's own decode as a cache hit — proven by
-    /// requesting it against a path that does not exist, which would error if
-    /// anything tried to open a decoder. And the key is the whole contract:
-    /// a different decode width is a genuine miss, never a wrong-sized hit.
-    #[test]
-    fn a_preloaded_frame_is_served_without_touching_the_file() {
-        let mut pool = DecodePool::new();
-        let item = Uuid::now_v7();
-        pool.preload(
-            item,
-            3,
-            Some(64),
-            lumit_media::DecodedFrame {
-                width: 2,
-                height: 2,
-                rgba: vec![200u8; 16],
-                format: lumit_media::PixelFormat::Srgb8,
-            },
-        );
-
-        let hit = pool.decode_footage(&Request {
-            generation: 0,
-            item,
-            source: lumit_media::MediaSource::file("Z:/definitely/not/here/gone.mp4"),
-            frame: 3,
-            target_width: Some(64),
-            slate: None,
-            channels: None,
-        });
-        let px = hit.expect("preloaded pixels are a cache hit; the file does not exist");
-        assert_eq!((px.width, px.height, px.rgba[0]), (2, 2, 200));
-
-        // Same frame, different decode width: not this entry.
-        assert!(pool
-            .decode_footage(&Request {
-                generation: 0,
-                item,
-                source: lumit_media::MediaSource::file("Z:/definitely/not/here/gone.mp4"),
-                frame: 3,
-                target_width: None,
-                slate: None,
-                channels: None,
-            })
-            .is_err());
-    }
-
-    /// **The decoder opens from the cached frame index.** Opening a decoder
-    /// used to scan every packet of the file, ignoring the sidecar the probe
-    /// had just written — seconds of work repeated in every session, paid at
-    /// the first preview frame after a project opened.
-    ///
-    /// Proven by seeding a sidecar that is genuinely this file's (it carries
-    /// the file's fingerprint, so the cache accepts it) but cut short to ten
-    /// frames. A decoder that reads it clamps a request for frame 40 to frame
-    /// 9; one that re-scans the file sees all 120 and answers frame 40.
-    #[test]
-    fn the_decoder_opens_from_the_cached_frame_index() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = lumit_media::index::tests_support::fixture(dir.path()) else {
-            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
-            return;
-        };
-        let cache = dir.path().join("media-index");
-        let mut index = lumit_media::index::build_frame_index(&file).unwrap();
-        assert_eq!(index.frame_count(), 120, "the fixture is 120 frames");
-        index.entries.truncate(10);
-        index.save_to(&cache).unwrap();
-
-        let mut pool = DecodePool::new();
-        let px = crate::media_index::with_cache_dir(&cache, || {
-            pool.decode_footage(&Request {
-                generation: 0,
-                item: Uuid::now_v7(),
-                source: lumit_media::MediaSource::file(file.clone()),
-                frame: 40,
-                target_width: None,
-                slate: None,
-                channels: None,
-            })
-        })
-        .expect("the fixture decodes");
-
-        assert_eq!(
-            px.frame, 9,
-            "the decoder must open with the cached index, not a fresh scan"
-        );
     }
 
     /// The other half of the bargain: a sidecar written for different content
@@ -1772,314 +1903,56 @@ mod tests {
         );
     }
 
-    /// The flow cache is keyed by content — the source, the two frames,
-    /// and the settings that shape the measurement — so a second ask for the
-    /// same pair is answered rather than remeasured, and a changed setting is
-    /// a different entry rather than a stale one.
+    /// Closing a decoder to make room is only allowed to cost time. One file
+    /// under more item ids than the cap holds: the first is closed along the
+    /// way, and opened again it hands back the very frame it gave before.
     #[test]
-    fn flow_entries_are_named_by_what_produced_them() {
-        let base = lumit_flow::FlowSettings::default();
-        let same = lumit_flow::FlowSettings::default();
-        assert_eq!(flow_settings_key(&base), flow_settings_key(&same));
-
-        // Everything that changes the *field* splits the entry.
-        for changed in [
-            lumit_flow::FlowSettings { divisor: 2, ..base },
-            lumit_flow::FlowSettings {
-                iterations: 32,
-                ..base
-            },
-            lumit_flow::FlowSettings {
-                min_level_dim: 48,
-                ..base
-            },
-            lumit_flow::FlowSettings {
-                refine_iters: 3,
-                ..base
-            },
-            lumit_flow::FlowSettings {
-                smoothness: 90.0,
-                ..base
-            },
-        ] {
-            assert_ne!(
-                flow_settings_key(&base),
-                flow_settings_key(&changed),
-                "a setting that changes the measurement must change its name"
-            );
-        }
-        // The synthesis-side knobs consume the field without altering it, so
-        // splitting the cache for them would measure twice for one answer.
-        for shared in [
-            lumit_flow::FlowSettings {
-                occlusion: lumit_flow::OcclusionMode::Blend,
-                ..base
-            },
-            lumit_flow::FlowSettings {
-                fallback: lumit_flow::Fallback::Nearest,
-                ..base
-            },
-            lumit_flow::FlowSettings {
-                hud_guard: false,
-                ..base
-            },
-        ] {
-            assert_eq!(
-                flow_settings_key(&base),
-                flow_settings_key(&shared),
-                "a synthesis knob must not split the measurement cache"
-            );
-        }
-    }
-
-    /// A float source is never handed to the model, and the substitution says
-    /// so by name (docs/impl/addons.md §6.3).
-    ///
-    /// A scene-linear frame carries values above one and the model was
-    /// trained on nought to one, so painting one would mean clamping an EXR
-    /// and calling the result the user's picture. The built-in engine carries
-    /// float end to end, so it paints this one and the row reads why. Proven
-    /// with no pack installed, because the refusal has to come before the
-    /// model is even opened.
-    #[test]
-    fn a_float_source_is_refused_by_name_rather_than_clamped() {
-        let frame = |value: u8| FramePixels {
-            width: 2,
-            height: 2,
-            rgba: vec![value; 4 * 4 * 4],
-            format: lumit_media::PixelFormat::LinearF32,
-            frame: 0,
-            item: Uuid::now_v7(),
+    fn a_decoder_closed_to_make_room_reopens_on_the_same_frame() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = lumit_media::index::tests_support::fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
+            return;
         };
-        let mut door = None;
-        let refusal = synthesised(&mut door, &frame(1), &frame(2), 2, 2, 0.5, true)
-            .expect_err("a float source is never painted by the model");
-        assert_eq!(refusal, SynthesisRefusal::FloatSource);
-        assert!(door.is_none(), "and nothing opened a pack to find that out");
-    }
-
-    /// Every layer and clip that asks for a model this machine has not got is
-    /// named, and nothing else is (docs/impl/addons.md §6.3).
-    ///
-    /// This is what export start refuses on, so a layer it missed would mean
-    /// an export written with the built-in engine under the name of a model,
-    /// which docs/08 §3.1 forbids outright.
-    #[test]
-    fn a_document_that_asks_for_a_model_names_what_needs_it() {
-        let _serial = serially();
-        use lumit_core::model::{
-            BlendMode, Composition, Document, Layer, LayerKind, LinearColour, ProjectItem,
-            Switches, TransformGroup,
+        let cache = dir.path().join("media-index");
+        let want = |item: Uuid, frame: usize| crate::headless::PrefetchWant {
+            item,
+            source: lumit_media::MediaSource::file(file.clone()),
+            frame,
+            target_width: None,
         };
-        use lumit_core::retime::{FlowEngineChoice, FlowParams, Interpolation};
-        use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
+        crate::media_index::with_cache_dir(&cache, || {
+            let mut decoders = OpenDecoders::default();
+            let first = Uuid::now_v7();
+            let before = decoders.decode_want(&want(first, 7)).expect("frame 7");
 
-        let flow = |engine: FlowEngineChoice| {
-            Interpolation::Flow(FlowParams {
-                engine,
-                ..FlowParams::default()
-            })
-        };
-        let at = |n: i64| CompTime(Rational::new(n, 1).unwrap());
-        let layer = |kind: LayerKind, interpolation: Interpolation| Layer {
-            graph: Default::default(),
-            markers: Vec::new(),
-            id: Uuid::now_v7(),
-            name: "layer".into(),
-            kind,
-            in_point: at(0),
-            out_point: at(4),
-            start_offset: at(0),
-            transform: TransformGroup::default(),
-            matte: None,
-            parent: None,
-            label: 0,
-            volume_db: lumit_core::anim::Property::zero(),
-            pan: lumit_core::anim::Property::zero(),
-            audio_only: false,
-            adjustment: false,
-            retime: None,
-            interpolation,
-            parked_flow: None,
-            graph_inputs: None,
-            blend: BlendMode::Normal,
-            masks: Vec::new(),
-            paint: Vec::new(),
-            puppet: None,
-            effects: Vec::new(),
-            styles: Vec::new(),
-            switches: Switches::default(),
-            extra: serde_json::Map::new(),
-        };
-
-        let item = Uuid::now_v7();
-        let plain = layer(LayerKind::Footage { item }, flow(FlowEngineChoice::Dis));
-        let asks = layer(LayerKind::Footage { item }, flow(FlowEngineChoice::Rife));
-        let mut clip = lumit_core::sequence::Clip::new(
-            lumit_core::sequence::ClipSource::Footage(item),
-            Rational::ZERO,
-            Rational::new(1, 1).unwrap(),
-            Rational::ZERO,
-            Rational::new(1, 1).unwrap(),
-        );
-        clip.interpolation = flow(FlowEngineChoice::Rife);
-        let clip_id = clip.id;
-        let row = layer(
-            LayerKind::Sequence { clips: vec![clip] },
-            Interpolation::Nearest,
-        );
-        let (asks_id, row_id) = (asks.id, row.id);
-        let comp = Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "Needs".into(),
-            width: 64,
-            height: 64,
-            frame_rate: FrameRate::new(24, 1).unwrap(),
-            duration: Duration(Rational::new(4, 1).unwrap()),
-            background: LinearColour::BLACK,
-            work_area: None,
-            layers: vec![plain, asks, row],
-            markers: Vec::new(),
-            motion_blur: Default::default(),
-            extra: serde_json::Map::new(),
-        };
-        let comp_id = comp.id;
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(comp));
-
-        // A folder of its own with nothing in it: the machine has no pack.
-        let empty = tempfile::tempdir().unwrap();
-        lumit_ml::store::with_dir(Some(empty.path().to_path_buf()));
-        let needs = addon_needs(&doc);
-        lumit_ml::store::with_dir(None);
-
-        assert_eq!(
-            needs,
-            vec![
-                Need {
-                    comp: comp_id,
-                    layer: asks_id,
-                    clip: None
-                },
-                Need {
-                    comp: comp_id,
-                    layer: row_id,
-                    clip: Some(clip_id)
-                },
-            ],
-            "the layer and the clip that ask, and neither of the two that do not"
-        );
-
-        // A document that asks for nothing needs nothing, whatever is or is
-        // not installed.
-        assert!(addon_needs(&Document::new()).is_empty());
-
-        // And with both installed: a pack that is there is not a pack that
-        // paints, so the refusal the last frame recorded is a need too, or an
-        // export would start on a pack that has already given up once.
-        let home = tempfile::tempdir().unwrap();
-        let pack = |id: &str, kind: &str, file: &str, model: &str| {
-            let folder = home.path().join(id);
-            std::fs::create_dir_all(&folder).unwrap();
-            std::fs::write(folder.join(file), [0u8; 12]).unwrap();
-            std::fs::write(
-                folder.join(lumit_ml::store::MANIFEST_FILE),
-                format!(
-                    r#"{{"format":1,"id":"{id}","kind":"{kind}","name":"Test","version":"1",
-                       "licence":"MIT","platforms":{{"any":{{"downloads":[
-                         {{"url":"https://example.invalid/{file}",
-                           "sha256":"0000000000000000000000000000000000000000000000000000000000000001",
-                           "size":12,"unpack":"file","dest":"{file}"}}]}}}}{model}}}"#
-                ),
-            )
-            .unwrap();
-        };
-        pack("runtime", "runtime", lumit_ml::runtime::LIBRARY, "");
-        pack(
-            "rife",
-            "model",
-            "rife.onnx",
-            r#","model":{"task":"synthesis","arch":"rife","file":"rife.onnx"}"#,
-        );
-        lumit_ml::store::with_dir(Some(home.path().to_path_buf()));
-
-        assert!(
-            addon_needs(&doc).is_empty(),
-            "installed, and nothing has said it will not run"
-        );
-        note_synthesis(asks_id, Some(SynthesisRefusal::Failed("no graph".into())));
-        assert_eq!(
-            addon_needs(&doc).len(),
-            2,
-            "the pack is installed and it would not run, so the export waits"
-        );
-        note_synthesis(asks_id, None);
-        lumit_ml::store::with_dir(None);
-    }
-
-    /// A measured pair comes back from the cache instead of being measured
-    /// again — the thing that makes a scrub cheap, and what lets the retime
-    /// policy and a flow effect on one layer share a single measurement.
-    #[test]
-    fn a_measured_flow_pair_is_reused() {
-        let mut engine: Option<lumit_flow::FlowEngine> = Some(lumit_flow::FlowEngine::cpu());
-        let mut cache = lumit_cache::ByteLru::new(DEFAULT_FLOW_CACHE_BYTES);
-        let item = Uuid::now_v7();
-        let (w, h) = (32usize, 32usize);
-        let px = |shift: usize| -> Vec<u8> {
-            let mut v = vec![0u8; w * h * 4];
-            for y in 0..h {
-                for x in 0..w {
-                    let c = (((x + shift) * 7 + y * 13) % 256) as u8;
-                    let i = (y * w + x) * 4;
-                    v[i] = c;
-                    v[i + 1] = c;
-                    v[i + 2] = c;
-                    v[i + 3] = 255;
-                }
+            // A cut's worth of other files, a frame apart.
+            for _ in 0..MAX_OPEN_DECODERS + 3 {
+                decoders.next_frame();
+                decoders
+                    .decode_want(&want(Uuid::now_v7(), 3))
+                    .expect("frame 3");
             }
-            v
-        };
-        let (a, b) = (px(0), px(2));
-        let ga = lumit_flow::to_gray(&a, w, h);
-        let gb = lumit_flow::to_gray(&b, w, h);
-        let set = lumit_flow::FlowSettings::default();
-        let call = |e: &mut Option<lumit_flow::FlowEngine>,
-                    c: &mut lumit_cache::ByteLru<FlowKey, CachedFlow>| {
-            flow_for(e, c, None, item, 0, 1, &ga, &gb, &set, false)
-        };
-        let (f1, _) = call(&mut engine, &mut cache);
-        assert_eq!(cache.len(), 1, "the first ask files an entry");
-        // Drop the engine entirely: a second ask that had to measure would now
-        // have to build a new one, and could not return the identical field.
-        let mut none: Option<lumit_flow::FlowEngine> = None;
-        let (f2, _) = call(&mut none, &mut cache);
-        assert!(none.is_none(), "the second ask never touched an engine");
-        assert_eq!(f1.u, f2.u);
-        assert_eq!(f1.v, f2.v);
-        assert_eq!(f1.valid, f2.valid);
-        // The steadied pair synthesis warps along is filed beside the
-        // measurement and made from it, so it needs no engine either, and a
-        // second ask for it is a plain hit.
-        let (s1, _) = flow_for(
-            &mut none, &mut cache, None, item, 0, 1, &ga, &gb, &set, true,
-        );
-        assert!(
-            none.is_none(),
-            "the steadied pair comes from the cached measurement"
-        );
-        assert_eq!(cache.len(), 2, "the steadied pair has an entry of its own");
-        assert!(s1.valid.iter().all(|&v| v == 1));
-        let (s2, _) = flow_for(
-            &mut none, &mut cache, None, item, 0, 1, &ga, &gb, &set, true,
-        );
-        assert_eq!(cache.len(), 2);
-        assert_eq!(s1.u, s2.u);
+            assert_eq!(decoders.len(), MAX_OPEN_DECODERS, "the cap holds");
+            assert!(!decoders.open.contains_key(&first), "the oldest closed");
+
+            decoders.next_frame();
+            let after = decoders
+                .decode_want(&want(first, 7))
+                .expect("frame 7 again");
+            assert_eq!((after.width, after.height), (before.width, before.height));
+            assert!(
+                after.rgba == before.rgba,
+                "a reopened decoder showed another frame"
+            );
+
+            // One frame that needs more files than the cap keeps them all:
+            // none of them is closed to open the next.
+            let mut wide = OpenDecoders::default();
+            wide.next_frame();
+            for _ in 0..MAX_OPEN_DECODERS + 4 {
+                wide.decode_want(&want(Uuid::now_v7(), 0)).expect("frame 0");
+            }
+            assert_eq!(wide.len(), MAX_OPEN_DECODERS + 4);
+        });
     }
 }

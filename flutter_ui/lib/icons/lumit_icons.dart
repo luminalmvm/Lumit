@@ -122,10 +122,12 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6c3-3 7-3 10 0" opacity=".35"/><path d="M2 9c3 3 9 3 12 0"/></svg>';
   static const String guide =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11"/><path d="M6 1v14M1 10h14" stroke-dasharray="2 1.5"/></svg>';
+  /// The letters fx, upright and as tall as the 3D cube they stand beside in a layer row: the f's bar sits on the x's top, so the pair reads as one word.
   static const String effectsSwitch =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 3.5c-1.2 0-1.8.8-2 2L2.5 12.5M2 7.5h4"/><path d="M8.5 6.5l5 6M13.5 6.5l-5 6"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5h-.5a3 3 0 0 0-3 3v8M2.5 7h5"/><path d="M9.5 7l4.5 6.5M14 7l-4.5 6.5"/></svg>';
+  /// A ball and the two places it has just been, the further one fainter. Three short lines behind a small ring read as an equals sign and a letter O at 16px.
   static const String motionBlur =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="3"/><path d="M2 6h4M1 8h4M2 10h4" opacity=".6"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="8" r="3.5"/><path d="M6.2 5A3.5 3.5 0 0 0 6.2 11"/><path d="M3.2 5A3.5 3.5 0 0 0 3.2 11" opacity=".55"/></svg>';
   static const String flow =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h2.5c2.8 0 4.2 6 7 6H14M2 11h2.5c2.8 0 4.2-6 7-6H14"/><path d="M12.2 9.2L14 11l-1.8 1.8M12.2 3.2L14 5l-1.8 1.8"/></svg>';
   static const String threeD =
@@ -187,16 +189,21 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M3 8h3M10 8h3M3 5v6M13 5v6"/></svg>';
   static const String free =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2"/><path d="M3 11l3.5-2M10 7l3-2" stroke-dasharray="2 1.5"/></svg>';
+  /// The four the Timeline's strip draws side by side (this, Ease in out, Hold and Ease) are one value running from the bottom left to the top right, so the way it gets there is the whole of each drawing: straight, eased, held, shaped.
   static const String linear =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13L14 3"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 13.5L13.5 2.5"/></svg>';
   static const String easeIn =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13C9 13 12 10 14 3"/></svg>';
   static const String easeOut =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13C4 6 7 3 14 3"/></svg>';
+  /// Flat out of one key and flat into the next, with a steep middle. A gentler S is a bent diagonal at 16px and reads as Linear.
   static const String easeInOut =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13C8 13 8 3 14 3"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h2c5 0 3-10 8-10h2"/></svg>';
   static const String hold =
-      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h6V4h6"/></svg>';
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h6V3h6"/></svg>';
+  /// A curve that runs past its value and settles back: the shaped eases the Ease box offers by name, drawn as the one among them that no other glyph here could be.
+  static const String ease =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13h1.5c3.5 0 3-10.5 6-10.5 1.8 0 2 2 4.5 2"/></svg>';
   /// A hand-shaped curve with its tangent handle through the waist: the two dots are the handle's ends, which is what dragging a Bezier key edits. The ease family beside it draws bare curves; the handle is the whole of the difference.
   static const String bezier =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13C5 13 6 9 8 8C10 7 11 3 14 3"/><path d="M5 9.5L11 6.5"/><circle cx="5" cy="9.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="6.5" r="1.2" fill="currentColor" stroke="none"/></svg>';
@@ -211,10 +218,17 @@ abstract final class LumitIcons {
   /// A horseshoe magnet: the Timeline's snapping, in the mark every editor uses for it.
   static const String snap =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13V8a4.5 4.5 0 0 1 9 0v5h-3V8a1.5 1.5 0 0 0-3 0v5z"/></svg>';
+  /// An hourglass: how long a layer took to draw. Not a stopwatch, which is the mark that starts a property animating a few rows above it.
+  static const String renderTime =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5h8M4 13.5h8"/><path d="M5 2.5V5l3 3 3-3V2.5M5 13.5V11l3-3 3 3v2.5"/></svg>';
 
   // --- Keyframes and values ---
+  /// The square-bodied stopwatch, which Desk draws: that style is square throughout. Studio and Lantern draw Stopwatch round.
   static const String stopwatch =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="10" height="10" rx="1"/><path d="M6 2h4M8 9V6"/></svg>';
+  /// The same watch with a round body and a stem under its crown, for Studio and Lantern.
+  static const String stopwatchRound =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="5"/><path d="M6.5 1.75h3M8 2v2M8 9V6"/></svg>';
   static const String previousKey =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>';
   static const String addKey =
@@ -320,6 +334,8 @@ abstract final class LumitIcons {
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M10 3h3v3M13 10v3h-3M6 13H3v-3"/><rect x="6" y="6" width="4" height="4"/></svg>';
   static const String note =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2.5h7l3 3v8H3z"/><path d="M10 2.5v3h3"/></svg>';
+  static const String comment =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3h11v7.5H7.5L4.5 13v-2.5h-2z"/></svg>';
   static const String group =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" stroke-dasharray="2 1.5"/><rect x="5" y="5" width="6" height="6"/></svg>';
   /// The panel itself, not one of its actions: two boxes and the wire between them.
@@ -350,6 +366,29 @@ abstract final class LumitIcons {
   /// The mark every ticked menu row carries. In use draws the same check over a Project item; the two are one shape with two jobs, and naming them apart is what keeps a call site honest about which it means.
   static const String tick =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l3 3 7-7"/></svg>';
+
+  // --- Text ---
+  static const String alignLeft =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M2.5 7.5h7M2.5 11.5h9"/></svg>';
+  static const String alignCentre =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M4.5 7.5h7M3.5 11.5h9"/></svg>';
+  static const String alignRight =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M6.5 7.5h7M4.5 11.5h9"/></svg>';
+  static const String justify =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M2.5 7.5h11M2.5 11.5h11"/></svg>';
+  static const String fauxBold =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 3.5h4a2 2 0 0 1 0 4h-4zM4.5 7.5h4.5a2.5 2.5 0 0 1 0 5H4.5z"/></svg>';
+  static const String fauxItalic =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 3.5h4M4.5 12.5h4M9.5 3.5l-3 9"/></svg>';
+  static const String allCaps =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5M4.5 4.5v7M9 4.5h5M11.5 4.5v7"/></svg>';
+  /// A capital T beside a shorter one standing on the same baseline, which is what small capitals are.
+  static const String smallCaps =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h5M4.5 4.5v7M9.5 7.5h4M11.5 7.5v4"/></svg>';
+  static const String superscript =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h6M5.5 5.5v7M11 4l1.5-1v4"/></svg>';
+  static const String subscript =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h6M5.5 3.5v7M11 10l1.5-1v4"/></svg>';
 
   /// Every glyph by its chrome word — the names tooltips and
   /// the Words setting use (docs/15-DESIGN.md §5.1).
@@ -433,13 +472,16 @@ abstract final class LumitIcons {
     'Ease out': easeOut,
     'Ease in out': easeInOut,
     'Hold': hold,
+    'Ease': ease,
     'Bezier': bezier,
     'Fit': fit,
     'Normalise': normalise,
     'Zoom in': zoomIn,
     'Zoom out': zoomOut,
     'Snap': snap,
+    'Render time': renderTime,
     'Stopwatch': stopwatch,
+    'Stopwatch round': stopwatchRound,
     'Previous key': previousKey,
     'Add key': addKey,
     'Next key': nextKey,
@@ -486,6 +528,7 @@ abstract final class LumitIcons {
     'Heal': heal,
     'Frame all': frameAll,
     'Note': note,
+    'Comment': comment,
     'Group': group,
     'Nodes': nodes,
     'Export': export,
@@ -499,5 +542,15 @@ abstract final class LumitIcons {
     'Manual': manual,
     'Workspace': workspace,
     'Tick': tick,
+    'Align left': alignLeft,
+    'Align centre': alignCentre,
+    'Align right': alignRight,
+    'Justify': justify,
+    'Faux bold': fauxBold,
+    'Faux italic': fauxItalic,
+    'All caps': allCaps,
+    'Small caps': smallCaps,
+    'Superscript': superscript,
+    'Subscript': subscript,
   };
 }

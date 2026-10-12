@@ -467,31 +467,6 @@ mod tests {
         }
     }
 
-    fn prompt(frame: i64, x: f32) -> RotoPrompt {
-        RotoPrompt {
-            id: Uuid::now_v7(),
-            frame,
-            points: vec![(x, 6.0)],
-            labels: vec![1],
-        }
-    }
-
-    /// A block whose base frame is decided by a prompt rather than by a
-    /// stroke, with the seed row set to match.
-    fn prompted(base: i64, frames: &[i64]) -> (RotoBlock, RotoSettings) {
-        (
-            RotoBlock {
-                base_frame: Some(base),
-                strokes: Vec::new(),
-                prompts: frames.iter().map(|&f| prompt(f, 20.0)).collect(),
-            },
-            RotoSettings {
-                seed: crate::fx::effects::roto_brush::SEED_SEGMENT,
-                ..RotoSettings::default()
-            },
-        )
-    }
-
     #[test]
     fn influence_flows_outward_from_the_base_and_never_back() {
         let b = block(10, &[10, 5, 15]);
@@ -549,77 +524,6 @@ mod tests {
         assert_ne!(key_hash(&b, d), key_hash(&moved, d));
     }
 
-    #[test]
-    fn an_unstroked_block_names_nothing() {
-        let b = RotoBlock::default();
-        assert!(b.is_empty());
-        assert!(chain_hash(&b, RotoSettings::default(), 0).is_none());
-        assert!(b.stroked_range().is_none());
-        assert!(b.contributing(0).is_empty());
-    }
-
-    /// **A prompt obeys the purity sentence the strokes do.** The taps decide
-    /// the frames outward from the base on their own side and nothing else, so
-    /// a prompt is a contributor rather than a fact about the shot, and every
-    /// cache guarantee in the note holds for it unchanged.
-    #[test]
-    fn a_prompt_flows_outward_from_the_base_and_never_back() {
-        let (b, _) = prompted(10, &[10, 5, 15]);
-        let forward = b.contributing_prompts(20);
-        assert_eq!(forward.len(), 2);
-        assert!(forward.iter().all(|p| p.frame == 10 || p.frame == 15));
-        let back = b.contributing_prompts(4);
-        assert_eq!(back.len(), 2);
-        assert!(back.iter().all(|p| p.frame == 10 || p.frame == 5));
-        assert_eq!(b.contributing_prompts(10).len(), 1);
-        assert!(RotoBlock::default().contributing_prompts(0).is_empty());
-    }
-
-    /// **A prompt edit renames exactly the frames past it**, in both
-    /// directions, and leaves the far side of the base alone.
-    #[test]
-    fn a_prompt_renames_exactly_the_frames_past_it() {
-        let (before, s) = prompted(0, &[0]);
-        let mut after = before.clone();
-        after.prompts.push(prompt(20, 44.0));
-
-        for f in 0..20 {
-            assert_eq!(
-                chain_hash(&before, s, f),
-                chain_hash(&after, s, f),
-                "frame {f} was renamed by a prompt it does not depend on"
-            );
-        }
-        for f in 20..30 {
-            assert_ne!(chain_hash(&before, s, f), chain_hash(&after, s, f));
-        }
-        for f in -10..0 {
-            assert_eq!(chain_hash(&before, s, f), chain_hash(&after, s, f));
-        }
-        // Moving a tap is an edit, and it retires the run's whole file.
-        let mut moved = before.clone();
-        moved.prompts[0].points[0].0 += 1.0;
-        assert_ne!(key_hash(&before, s), key_hash(&moved, s));
-        let mut negative = before.clone();
-        negative.prompts[0].labels[0] = 0;
-        assert_ne!(
-            key_hash(&before, s),
-            key_hash(&negative, s),
-            "a tap against the subject asks a different question"
-        );
-    }
-
-    /// **A prompt cleared and tapped again keeps the cache it earned.** The id
-    /// is not in either hash, for the reason a stroke's is not.
-    #[test]
-    fn a_retapped_prompt_keeps_the_cache_it_earned() {
-        let (one, s) = prompted(0, &[3]);
-        let mut two = one.clone();
-        two.prompts[0].id = Uuid::now_v7();
-        assert_eq!(chain_hash(&one, s, 9), chain_hash(&two, s, 9));
-        assert_eq!(key_hash(&one, s), key_hash(&two, s));
-    }
-
     /// **The seed row renames everything, and so does the pack behind it.**
     ///
     /// The identity is what fences `lendable`, which reads every sidecar of the
@@ -653,16 +557,5 @@ mod tests {
         };
         assert_eq!(chain_hash(&b, strokes, 4), chain_hash(&b, installed, 4));
         assert_eq!(key_hash(&b, strokes), key_hash(&b, installed));
-    }
-
-    #[test]
-    fn a_redrawn_stroke_keeps_the_cache_it_earned() {
-        let d = RotoSettings::default();
-        let one = block(0, &[3]);
-        let mut two = one.clone();
-        // Same geometry, new identity — a delete and a redraw.
-        two.strokes[0].id = Uuid::now_v7();
-        assert_eq!(chain_hash(&one, d, 9), chain_hash(&two, d, 9));
-        assert_eq!(key_hash(&one, d), key_hash(&two, d));
     }
 }

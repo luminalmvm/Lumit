@@ -22,11 +22,18 @@
 // picked up: the engine refuses a row that is running, has run, or has gone,
 // in its own words, and the refusal is nothing to draw because the next poll
 // shows the list unchanged.
+//
+// **How the drag is drawn follows the Motion setting** (docs/15 §8.1). At Full
+// the row is carried and the rows it passes step aside. At Minimal and None
+// nothing moves: an accent line marks the place the row would take, the same
+// line an effect stack draws.
 
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
@@ -82,6 +89,13 @@ class _ExportQueueState extends State<_ExportQueue> {
   List<BridgeExportQueueItem> _items = const [];
   Timer? _poll;
 
+  /// A drag that is marked rather than carried: the item in hand, where the
+  /// pointer went down, and the place it is aimed at. All null between drags,
+  /// and never set while rows are carried.
+  int? _markedId;
+  double _markedFrom = 0;
+  int? _markedTo;
+
   @override
   void initState() {
     super.initState();
@@ -97,12 +111,26 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   void _refresh() {
     if (!mounted) return;
-    setState(() => _items = (widget.list ?? exportQueueList)());
+    setState(() {
+      _items = (widget.list ?? exportQueueList)();
+      // A row that started exporting while it was in hand has lost the
+      // gesture that would have ended the drag, so its mark is taken down
+      // here.
+      final marked = _items.where((i) => i.id == _markedId).firstOrNull;
+      if (_markedId != null &&
+          marked?.state is! BridgeExportQueueState_Waiting) {
+        _markedId = null;
+        _markedFrom = 0;
+        _markedTo = null;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    final carries = scope.motion.carries;
     final waiting = _items
         .where((item) => item.state is BridgeExportQueueState_Waiting)
         .length;
@@ -137,17 +165,24 @@ class _ExportQueueState extends State<_ExportQueue> {
                   child: CustomScrollView(
                     shrinkWrap: true,
                     slivers: [
-                      SliverReorderableList(
-                        itemCount: _items.length,
-                        itemBuilder: (context, index) =>
-                            _row(t, _items[index], index),
-                        // `onReorderItem` gives the place the row lands in the
-                        // list without it, which is the index the engine's own
-                        // move takes.
-                        onReorderItem: _move,
-                        proxyDecorator: (child, index, animation) =>
-                            _lifted(t, child),
-                      ),
+                      if (carries)
+                        SliverReorderableList(
+                          itemCount: _items.length,
+                          itemBuilder: (context, index) =>
+                              _row(t, _items[index], index),
+                          // `onReorderItem` gives the place the row lands in
+                          // the list without it, which is the index the
+                          // engine's own move takes.
+                          onReorderItem: _move,
+                          proxyDecorator: (child, index, animation) =>
+                              _lifted(t, child),
+                        )
+                      else
+                        SliverList.builder(
+                          itemCount: _items.length,
+                          itemBuilder: (context, index) =>
+                              _markedRow(t, _items[index], index),
+                        ),
                     ],
                   ),
                 ),
@@ -206,7 +241,7 @@ class _ExportQueueState extends State<_ExportQueue> {
   /// waiting has no listener at all, so it can be read and dropped past but
   /// never picked up.
   Widget _row(LumitTheme t, BridgeExportQueueItem item, int index) {
-    final row = _rowFace(t, item);
+    final row = _opensFolder(item, _rowFace(t, item));
     return KeyedSubtree(
       key: ValueKey<String>('export-queue-row-${item.id}'),
       child: item.state is BridgeExportQueueState_Waiting
@@ -221,6 +256,73 @@ class _ExportQueueState extends State<_ExportQueue> {
     );
   }
 
+  /// One item's row where a drag is marked and not carried: the same grip,
+  /// and the line on whichever edge the row in hand would land against.
+  Widget _markedRow(LumitTheme t, BridgeExportQueueItem item, int index) {
+    final row = _opensFolder(item, _rowFace(t, item));
+    final from = _items.indexWhere((i) => i.id == _markedId);
+    final to = _markedTo;
+    final marked = from >= 0 && to == index && to != from;
+    final below = marked && index > from;
+    final line = BorderSide(color: t.accent, width: 2);
+    return KeyedSubtree(
+      key: ValueKey<String>('export-queue-row-${item.id}'),
+      child: DecoratedBox(
+        key: marked ? const ValueKey('export-queue-drop-line') : null,
+        // Foreground, so the line sits over the row rather than under it,
+        // and always in the tree so a row is not rebuilt by being aimed at.
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: !marked
+              ? null
+              : below
+                  ? Border(bottom: line)
+                  : Border(top: line),
+        ),
+        child: item.state is BridgeExportQueueState_Waiting
+            ? GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                // From where the pointer went down, not from where the drag
+                // was recognised: the distance in between is part of how far
+                // the row has been taken.
+                dragStartBehavior: DragStartBehavior.down,
+                onVerticalDragStart: (d) => setState(() {
+                  _markedId = item.id;
+                  _markedFrom = d.localPosition.dy;
+                  _markedTo = index;
+                }),
+                onVerticalDragUpdate: (d) {
+                  final at = _items.indexWhere((i) => i.id == _markedId);
+                  if (at < 0) return;
+                  // The place whose row the pointer is past the middle of.
+                  final travel = d.localPosition.dy - _markedFrom;
+                  final next = (at + (travel / exportQueueRow).round())
+                      .clamp(0, _items.length - 1);
+                  if (next != _markedTo) setState(() => _markedTo = next);
+                },
+                onVerticalDragEnd: (_) {
+                  final at = _items.indexWhere((i) => i.id == _markedId);
+                  final next = _markedTo;
+                  _endMarked();
+                  if (at >= 0 && next != null && next != at) _move(at, next);
+                },
+                onVerticalDragCancel: _endMarked,
+                child: row,
+              )
+            : row,
+      ),
+    );
+  }
+
+  void _endMarked() {
+    if (!mounted) return;
+    setState(() {
+      _markedId = null;
+      _markedFrom = 0;
+      _markedTo = null;
+    });
+  }
+
   /// The row while it is being carried: the panel's own surface under an
   /// accent edge, rather than the Material card the default lift draws.
   Widget _lifted(LumitTheme t, Widget child) => DecoratedBox(
@@ -230,6 +332,25 @@ class _ExportQueueState extends State<_ExportQueue> {
         ),
         child: child,
       );
+
+  /// A finished row opens the folder its file is in, with a tooltip saying so.
+  /// Every other row is handed back as it is: there is no file to show yet.
+  /// The remove mark still takes its own click, being the deeper of the two.
+  Widget _opensFolder(BridgeExportQueueItem item, Widget row) =>
+      item.state is! BridgeExportQueueState_Done
+          ? row
+          : LumitTooltip(
+              message: l10n.tipOpenFolder,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  key: ValueKey<String>('export-queue-open-${item.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => revealInFolder(path: item.path),
+                  child: row,
+                ),
+              ),
+            );
 
   /// One item: what it is, where it goes, how it is getting on, and the mark
   /// that takes it off the list.
@@ -252,19 +373,7 @@ class _ExportQueueState extends State<_ExportQueue> {
               ),
             ),
             const SizedBox(width: 10),
-            Flexible(
-              flex: 2,
-              child: Text(
-                _status(item),
-                key: ValueKey<String>('export-queue-status-${item.id}'),
-                style: dialogMono(t).copyWith(
-                    color: item.state is BridgeExportQueueState_Failed
-                        ? t.warning
-                        : t.textMuted),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-              ),
-            ),
+            Flexible(flex: 2, child: _statusFace(t, item)),
             const SizedBox(width: 8),
             LumitTooltip(
               message: item.state is BridgeExportQueueState_Running
@@ -300,6 +409,20 @@ class _ExportQueueState extends State<_ExportQueue> {
           ],
         ),
       );
+
+  /// How one item is getting on. An error is longer than the column, so a
+  /// failed item shows all of it on hover.
+  Widget _statusFace(LumitTheme t, BridgeExportQueueItem item) {
+    final failed = item.state is BridgeExportQueueState_Failed;
+    final text = Text(
+      _status(item),
+      key: ValueKey<String>('export-queue-status-${item.id}'),
+      style: dialogMono(t).copyWith(color: failed ? t.warning : t.textMuted),
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.right,
+    );
+    return failed ? LumitTooltip(message: _status(item), child: text) : text;
+  }
 
   /// What one item is doing, in the engine's own words where it has any.
   String _status(BridgeExportQueueItem item) => switch (item.state) {

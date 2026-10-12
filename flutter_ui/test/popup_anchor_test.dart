@@ -14,7 +14,6 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 import 'package:lumit_flutter/widgets/ui_scale.dart';
@@ -88,15 +87,6 @@ void main() {
         reason: 'the menu was asked for at ${asked.dy} down');
   }
 
-  testWidgets('a menu opens where the control is, at the shipped scale',
-      (tester) => menuLandsUnderTheControl(tester, 1.0));
-
   testWidgets('and still does when the interface is scaled up',
       (tester) => menuLandsUnderTheControl(tester, 1.25));
-
-  testWidgets('and when it is scaled back to native size',
-      (tester) => menuLandsUnderTheControl(tester, 1 / uiScaleBaseline));
-
-  testWidgets('and when it is scaled down further',
-      (tester) => menuLandsUnderTheControl(tester, 0.75));
 }

@@ -29,8 +29,8 @@
 
 use crate::fx::points::{self, PointsStream};
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamId, Params, Port, PortType, ResolveCx, Signature,
-    Value,
+    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamId, Params, Port,
+    PortType, ResolveCx, Signature, Value,
 };
 use lumit_fx_macros::Effect;
 
@@ -42,6 +42,38 @@ pub const POINTS_PORT: &str = "points";
 /// puts it — which is what a 2D reading answers.
 const POINTS_IN: &[Port] = &[Port::new(POINTS_PORT, "Points", PortType::Points)];
 
+/// Colour is only read once the tail stops taking each point's own.
+pub const TRAIL_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "colour",
+    on: "point_colour",
+    cond: EnabledCond::BoolIs(false),
+}];
+
+/// The most pieces Smooth cuts the run between two samples into.
+const SMOOTH_PIECES: usize = 6;
+
+/// How many pieces a run is cut into for how far its curve bows away from the
+/// straight line, as a share of that line's length. It comes to about a piece
+/// for every 8 degrees the run turns. A straight run stays one piece, since
+/// every join between two soft capsules shows a little.
+const PIECES_PER_BOW: f32 = 57.0;
+
+fn apart(a: [f32; 3], b: [f32; 3]) -> f32 {
+    (a[0] - b[0]).hypot(a[1] - b[1]).hypot(a[2] - b[2])
+}
+
+/// The point `t` of the way from `b` to `c`, on the curve that also runs
+/// through `a` before them and `d` after.
+fn catmull_rom(a: [f32; 3], b: [f32; 3], c: [f32; 3], d: [f32; 3], t: f32) -> [f32; 3] {
+    std::array::from_fn(|x| {
+        let (a, b, c, d) = (a[x], b[x], c[x], d[x]);
+        0.5 * (2.0 * b
+            + (c - a) * t
+            + (2.0 * a - 5.0 * b + 4.0 * c - d) * t * t
+            + (3.0 * b - a - 3.0 * c + d) * t * t * t)
+    })
+}
+
 /// What a tail is drawn as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TrailStyle {
@@ -52,11 +84,14 @@ pub enum TrailStyle {
     /// A capsule from each sample to the one before it: a continuous ribbon,
     /// which is the same kernel with the tail somewhere other than the head.
     Segments,
+    /// Segments with the corners rounded: a curve through the samples, cut
+    /// into shorter capsules.
+    Smooth,
 }
 
 impl TrailStyle {
     /// The Choice option labels, in code order.
-    pub const OPTIONS: &'static [&'static str] = &["Dots", "Segments"];
+    pub const OPTIONS: &'static [&'static str] = &["Dots", "Segments", "Smooth"];
 
     /// The style for a stored Choice index; anything unknown is Dots, the
     /// declared default (a document from a newer build renders).
@@ -64,6 +99,7 @@ impl TrailStyle {
     pub const fn from_code(code: u32) -> Self {
         match code {
             1 => TrailStyle::Segments,
+            2 => TrailStyle::Smooth,
             _ => TrailStyle::Dots,
         }
     }
@@ -85,6 +121,7 @@ impl TrailStyle {
     // Not seeded: nothing here is a function of time under constant parameters.
     // The producer's stream is, and that is the producer's own declaration.
     seeded = false,
+    enabled_when = TRAIL_ENABLED_WHEN,
 )]
 pub struct Trail {
     /// How many places back a tail is drawn through, **including where the
@@ -116,7 +153,8 @@ pub struct Trail {
     )]
     pub back_step: f32,
 
-    /// Dots or one connected ribbon ([`TrailStyle`]).
+    /// Dots, one connected ribbon, or that ribbon with its corners rounded
+    /// ([`TrailStyle`]).
     ///
     /// The option list is [`TrailStyle::OPTIONS`] rather than a second copy of
     /// the words, so the labels and `from_code` cannot come to disagree about
@@ -152,6 +190,28 @@ pub struct Trail {
         unit = Percent
     )]
     pub fade: f32,
+
+    /// How the fade is spread along the tail. 1 fades evenly, more holds the
+    /// tail solid near the point and drops away late, and less fades it
+    /// straight away.
+    #[slider(
+        label = "Fade power",
+        min = 0.1,
+        max = 4.0,
+        default = 1.0,
+        hard_min = 0.01,
+        unit = Raw
+    )]
+    pub fade_power: f32,
+
+    /// Draw each tail in its point's own colour. Off, every tail takes Colour
+    /// and keeps only the point's opacity.
+    #[toggle(label = "Use point colour", default = true)]
+    pub point_colour: bool,
+
+    /// The colour of every tail when it is not the point's own.
+    #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
+    pub colour: [f32; 4],
 
     /// **The budget dial**, the family's row: the most **points** that
     /// may grow a tail. A stream longer than this is trimmed to its newest by
@@ -236,7 +296,25 @@ impl Trail {
             (self.back_samples.clamp(1, points::CAP_HARD as i32) as usize).min(samples.len());
         let scale = (self.scale / 100.0).max(0.0);
         let fade = (self.fade / 100.0).clamp(0.0, 1.0);
-        let segments = TrailStyle::from_code(self.style) == TrailStyle::Segments;
+        let style = TrailStyle::from_code(self.style);
+        let segments = style != TrailStyle::Dots;
+        // Smooth draws several dabs where Segments draws one, and fewer of
+        // them when that many would be more than the stream may hold.
+        let pieces = if style == TrailStyle::Smooth {
+            let room = points::CAP_HARD as usize / (heads.len() * wanted).max(1);
+            room.clamp(1, SMOOTH_PIECES)
+        } else {
+            1
+        };
+        let power = self.fade_power.max(0.0);
+        // Premultiplied, as every colour in the working space is.
+        let a = self.colour[3];
+        let flat = [
+            self.colour[0] * a,
+            self.colour[1] * a,
+            self.colour[2] * a,
+            a,
+        ];
         // The far end's own share of the point's alpha; the near end keeps all
         // of it. One sample is the near end and nothing else, so it never
         // divides by nought.
@@ -249,37 +327,87 @@ impl Trail {
             // Where each dab's capsule runs back to: the sample before this one
             // in time, which for Dots and for the far end is the dab itself.
             let older = segments.then(|| samples.get(k + 1)).flatten();
-            let dim = 1.0 - fade * (k as f32 / last).min(1.0);
-            let mut cursor = 0usize;
-            let mut older_cursor = 0usize;
-            for i in 0..heads.len() {
-                let id = heads.id[i];
-                let Some(j) = PointsStream::seek_id(past, id, &mut cursor) else {
-                    // Not alive then: the tail simply stops there.
-                    continue;
+            // Smooth also reads the sample either side of the run, to know
+            // which way the tail is bending.
+            let smooth = pieces > 1;
+            let newer = if smooth && k > 0 {
+                samples.get(k - 1)
+            } else {
+                None
+            };
+            let oldest = if smooth { samples.get(k + 2) } else { None };
+            // The pieces of one run, furthest from the point first.
+            for piece in (0..pieces).rev() {
+                let mut cursor = 0usize;
+                let mut older_cursor = 0usize;
+                let mut newer_cursor = 0usize;
+                let mut oldest_cursor = 0usize;
+                let place = |s: Option<&PointsStream>, id: u64, cursor: &mut usize| {
+                    let s = s?;
+                    PointsStream::seek_id(s, id, cursor).map(|m| s.position[m])
                 };
-                let at = past.position[j];
-                let colour = past.colour[j];
-                out.position.push(at);
-                out.speed.push(past.speed[j]);
-                out.age.push(past.age[j]);
-                out.life.push(past.life[j]);
-                out.size.push(past.size[j] * scale);
-                out.rotation.push(past.rotation[j]);
-                out.colour.push([
-                    colour[0] * dim,
-                    colour[1] * dim,
-                    colour[2] * dim,
-                    colour[3] * dim,
-                ]);
-                out.id.push(id);
-                if segments {
-                    let back = older
-                        .and_then(|o| {
-                            PointsStream::seek_id(o, id, &mut older_cursor).map(|m| o.position[m])
-                        })
-                        .unwrap_or(at);
-                    tails.push(back);
+                for i in 0..heads.len() {
+                    let id = heads.id[i];
+                    let Some(j) = PointsStream::seek_id(past, id, &mut cursor) else {
+                        // Not alive then: the tail simply stops there.
+                        continue;
+                    };
+                    let at = past.position[j];
+                    let back = place(older, id, &mut older_cursor);
+                    // The far end has nowhere to run back to, so it is one
+                    // dab however many pieces a run has.
+                    if back.is_none() && piece > 0 {
+                        continue;
+                    }
+                    // Where this dab runs from and to, and how many pieces
+                    // its run is in.
+                    let (head, tail, own) = match back {
+                        Some(back) if pieces > 1 => {
+                            let before = place(newer, id, &mut newer_cursor).unwrap_or(at);
+                            let after = place(oldest, id, &mut oldest_cursor).unwrap_or(back);
+                            let curve = |t: f32| catmull_rom(before, at, back, after, t);
+                            let straight = [0, 1, 2].map(|x| 0.5 * (at[x] + back[x]));
+                            let bow = apart(curve(0.5), straight) / apart(at, back).max(1e-6);
+                            let own = ((PIECES_PER_BOW * bow).ceil() as usize).clamp(1, pieces);
+                            if piece >= own {
+                                continue;
+                            }
+                            let t = |piece: usize| piece as f32 / own as f32;
+                            (curve(t(piece)), curve(t(piece + 1)), own)
+                        }
+                        _ => (at, back.unwrap_or(at), 1),
+                    };
+                    let along = (k as f32 + piece as f32 / own as f32) / last;
+                    let along = along.min(1.0);
+                    // A power of 1 is the even fade, left as the number it was.
+                    let dim = 1.0
+                        - fade
+                            * if power == 1.0 {
+                                along
+                            } else {
+                                along.powf(power)
+                            };
+                    let colour = if self.point_colour {
+                        past.colour[j]
+                    } else {
+                        flat.map(|c| c * past.colour[j][3])
+                    };
+                    out.position.push(head);
+                    out.speed.push(past.speed[j]);
+                    out.age.push(past.age[j]);
+                    out.life.push(past.life[j]);
+                    out.size.push(past.size[j] * scale);
+                    out.rotation.push(past.rotation[j]);
+                    out.colour.push([
+                        colour[0] * dim,
+                        colour[1] * dim,
+                        colour[2] * dim,
+                        colour[3] * dim,
+                    ]);
+                    out.id.push(id);
+                    if segments {
+                        tails.push(tail);
+                    }
                 }
             }
         }

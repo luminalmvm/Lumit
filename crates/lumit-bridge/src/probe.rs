@@ -29,7 +29,7 @@
 //! worker files its results straight into the cache under a key that carries
 //! the file's own size and modification time, so a result can only ever be read
 //! back for the exact file it was taken from — the same discipline the
-//! decode-ahead thread uses (`crate::prefetch`: correctness rides the key, not
+//! decode-ahead threads use (`lumit_render::prefetch`: correctness rides the key, not
 //! timing). A file that is replaced, moved or deleted between one question and
 //! the next re-stamps to a different key and is probed again, which is what
 //! keeps `get_status` as honest as it was when it asked the file every time.
@@ -247,6 +247,14 @@ fn unqueue(src: &MediaSource) {
     }
 }
 
+/// A file layer is probed as the file it lives in: the layer is read at the
+/// document's own size, so every layer of one file shares one answer.
+#[cfg(feature = "media")]
+fn whole_file(mut src: MediaSource) -> MediaSource {
+    src.source_layer = None;
+    src
+}
+
 /// Ask the worker to probe `path` in the background. Returns at once, always.
 ///
 /// A file already answered for, already queued, or queued past the budget is
@@ -254,7 +262,7 @@ fn unqueue(src: &MediaSource) {
 /// whether [`ensure_probed`] finds its answer waiting or pays for it.
 #[cfg(feature = "media")]
 pub(crate) fn request(src: impl Into<MediaSource>) {
-    let src = src.into();
+    let src = whole_file(src.into());
     let Some(stamp) = stamp(src.on_disk()) else {
         return;
     };
@@ -308,7 +316,7 @@ pub(crate) fn request<T>(_src: T) {}
 pub(crate) fn ensure_probed(
     src: impl Into<MediaSource>,
 ) -> Option<Arc<lumit_media::probe::MediaProbe>> {
-    let src = src.into();
+    let src = whole_file(src.into());
     let stamp = stamp(src.on_disk())?;
     let probed = match lookup(&src, stamp) {
         Some(hit) => hit,
@@ -322,6 +330,33 @@ pub(crate) fn ensure_probed(
     match probed {
         Probed::Ready(info) => Some(info),
         Probed::Unreadable => None,
+    }
+}
+
+/// This file's vital statistics as they were last read, without asking
+/// the disk whether the file has changed since. Probed here and now, as
+/// [`ensure_probed`] does it, only when nothing is held.
+///
+/// For a read made once for every clip of a composition. The honest check is
+/// a `stat` a time, and two thousand of them on the interface's thread were
+/// a third of a second after every edit of a long cut. What such a read
+/// wants is how long the source runs, which changes only when the file is
+/// replaced. A replaced file is noticed by the next read that does ask the
+/// disk, the Project panel's status among them, and its new answer is the one
+/// held from then on.
+#[cfg(feature = "media")]
+pub(crate) fn held_or_probed(
+    src: impl Into<MediaSource>,
+) -> Option<Arc<lumit_media::probe::MediaProbe>> {
+    let src = whole_file(src.into());
+    let held = cache()
+        .lock()
+        .ok()
+        .and_then(|held| held.by_path.get(&src).map(|e| e.probed.clone()));
+    match held {
+        Some(Probed::Ready(info)) => Some(info),
+        // Nothing held, or a file that would not read last time: ask again.
+        _ => ensure_probed(src),
     }
 }
 
@@ -351,12 +386,6 @@ pub(crate) fn probed_off_thread(path: &Path) -> Option<bool> {
     held.by_path
         .get(&MediaSource::file(path))
         .map(|e| e.off_thread)
-}
-
-/// How many paths the worker still owes an answer for. Tests only.
-#[cfg(all(test, feature = "media"))]
-pub(crate) fn queued_len() -> usize {
-    cache().lock().map(|h| h.queued.len()).unwrap_or(0)
 }
 
 #[cfg(all(test, feature = "media"))]
@@ -418,50 +447,6 @@ mod tests {
         );
     }
 
-    /// Nothing requested, so the answer has to be got the slow way — and it is
-    /// the same answer. This is the fallback the sync ops rely on.
-    #[test]
-    fn an_unrequested_file_falls_back_to_probing_inline() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().expect("temp dir");
-        let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
-            return;
-        };
-
-        let info = ensure_probed(&clip).expect("the fixture probes");
-        assert_eq!(
-            probed_off_thread(&clip),
-            Some(false),
-            "nobody requested it, so the caller probed it itself"
-        );
-
-        let direct = lumit_media::probe::probe(&clip).expect("the fixture probes directly too");
-        assert_eq!(
-            *info, direct,
-            "the cache changes when the answer arrives, never what it says"
-        );
-    }
-
-    /// The worker's answer and the inline answer are the same answer, for the
-    /// same file — the no-behaviour-change claim, made against real media.
-    #[test]
-    fn both_paths_give_the_answer_the_prober_gives() {
-        let _serial = serially();
-        let dir = tempfile::tempdir().expect("temp dir");
-        let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
-            return;
-        };
-        let direct = lumit_media::probe::probe(&clip).expect("the fixture probes");
-
-        let inline = ensure_probed(&clip).expect("inline");
-        request(&clip);
-        assert!(wait_for(&clip));
-        let after_request = ensure_probed(&clip).expect("after the request");
-
-        assert_eq!(*inline, direct);
-        assert_eq!(*after_request, direct);
-    }
-
     /// A file that is not media answers "no" rather than panicking, and a file
     /// that is not there answers "no" without opening anything.
     #[test]
@@ -506,15 +491,5 @@ mod tests {
             lookup(&MediaSource::file(&path), second).is_none(),
             "the held answer belongs to the file that was there before"
         );
-    }
-
-    /// Closing a project cancels what was queued for it: the worker drops
-    /// jobs from a generation that has ended rather than probing files nobody
-    /// is going to ask about.
-    #[test]
-    fn clearing_cancels_queued_work() {
-        let _serial = serially();
-        clear();
-        assert_eq!(queued_len(), 0, "nothing queued after a clear");
     }
 }

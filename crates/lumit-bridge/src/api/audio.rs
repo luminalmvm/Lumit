@@ -65,6 +65,26 @@ impl CompositionReference {
         Ok(())
     }
 
+    /// Hear `frame` without playing: one short burst of this comp's mix from
+    /// that frame on, which is what dragging the playhead with Ctrl held
+    /// sounds like.
+    ///
+    /// Call it for each frame the playhead lands on. The transport stays
+    /// stopped and the clock does not move. A burst asked for while another
+    /// is sounding takes over from it, so a steady drag is heard as one run of
+    /// sound. How long a burst lasts is the engine's to decide. During
+    /// playback it does nothing, and before the mix is loaded it asks for the
+    /// mix and is silent until that arrives.
+    #[frb(sync)]
+    pub fn audio_scrub(&self, frame: u64) -> Result<(), BridgeError> {
+        let document = self.document_snapshot()?;
+        #[cfg(feature = "media")]
+        crate::audio::scrub(self.id, frame, document);
+        #[cfg(not(feature = "media"))]
+        let _ = (frame, document);
+        Ok(())
+    }
+
     /// This comp's **mix** summarised over `[start_seconds, end_seconds)` of
     /// comp time, in `buckets` buckets - what the Timeline's Sound mix row
     /// draws: every layer through its fader, the master and the limiter, the

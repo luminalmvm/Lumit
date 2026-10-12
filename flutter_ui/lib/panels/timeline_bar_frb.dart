@@ -10,15 +10,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:uuid/uuid.dart';
+import '../l10n/strings.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
+import '../widgets/share_marks.dart';
 import 'timeline_extras_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_snap.dart';
 import 'timeline_key_block_frb.dart';
+import 'timeline_layer_drag.dart' show LayerLift;
+import 'timeline_outline_row_frb.dart' show showLayerRowMenu;
 
 /// The same on a **shut layer's** row: smaller than the keys you take hold
 /// of, because these are a summary of everything keyed inside the layer.
@@ -115,7 +120,8 @@ class SelectionMove {
 /// cannot be dragged earlier than the source's first frame, and its tail cannot
 /// be dragged past its last. Every generated kind — Solid, Text, Adjustment,
 /// Null, Camera, Sequence — has no such source, so both its ends are free and
-/// it is whatever length the user drags it to. Switching **Retime** on frees
+/// it is whatever length the user drags it to. A still image is free the same
+/// way: one frame, held for as long as the bar runs. Switching **Retime** on frees
 /// the ends too (docs/04-RETIMING.md): a retimed layer decides for itself which
 /// source moment each of its own frames shows, so its length stops being the
 /// source's business.
@@ -159,6 +165,14 @@ BarBounds barBounds({
             minIn: startOffsetFrame,
             maxOut: startOffsetFrame + sourceFrames,
           );
+
+/// A footage source's length in comp frames, for [barBounds].
+///
+/// A still answers null. Its one frame holds for as long as the bar runs, so
+/// there is nothing to run out of and both ends drag freely, the way a Solid's
+/// do.
+int? footageSourceFrames(BridgeMediaInfo info, int fpsNum, int fpsDen) =>
+    info.isStill ? null : frameOfTime(info.duration, fpsNum, fpsDen);
 
 /// How far a grab of [grab] may actually travel when the gesture has moved
 /// [delta] frames: inside the layer's source, and never far enough to turn the
@@ -573,8 +587,11 @@ class _BarState extends State<Bar> {
               child: IgnorePointer(child: ColoredBox(color: t.surface2)),
             ),
           // Lantern's selected row: accent_soft behind the bar, rounded as
-          // the outline's row is.
-          if (widget.selected && t.shape == ThemeShape.lantern)
+          // the outline's row is. Not while the layer is in hand, when the
+          // lifted card is that fill.
+          if (widget.selected &&
+              t.shape == ThemeShape.lantern &&
+              !LayerLift.of(context))
             Positioned(
               key: ValueKey<String>(
                   'tl-bar-rowfill-${widget.entry.layer.internallayerId}'),
@@ -743,6 +760,13 @@ class _BarState extends State<Bar> {
                           _keptSelection = false;
                           widget.onSelect();
                         },
+                  // The row's own menu, on the bar. A bar outside the
+                  // selection is selected first, so the menu is about it.
+                  onSecondaryTapUp: (d) {
+                    if (!widget.selected) widget.onSelect();
+                    showLayerRowMenu(
+                        widget.entry.layer.internallayerId, d.globalPosition);
+                  },
                   onHorizontalDragDown: widget.razor || held
                       ? null
                       : (d) => _downDx = d.localPosition.dx,
@@ -752,6 +776,19 @@ class _BarState extends State<Bar> {
                       // No select here: every drag begins with the down, and the
                       // down already selected.
                       : (d) {
+                          // Someone else in a shared project is changing
+                          // this layer, or one the drag would carry: it does
+                          // not begin, and the release finds nothing to write.
+                          if (heldByOthers({
+                            '${widget.entry.layer.internallayerId}',
+                            if (widget.selected)
+                              ...?widget.selectionMove
+                                  ?.call()
+                                  .layerIds
+                                  .map((id) => '$id'),
+                          })) {
+                            return;
+                          }
                           setState(() {
                             _delta = 0;
                             _deltaPx = 0;
@@ -922,11 +959,9 @@ class _BarState extends State<Bar> {
                         // the name on every bar and so did the editor, and the
                         // owner's ruling from desktop testing is that it reads
                         // as the outline's own column of names said twice.
-                        // Off by default, unchanged when on. Lantern's bar
-                        // carries its name always, at 11 semibold.
-                        if (widget.showName ||
-                            t.shape == ThemeShape.lantern ||
-                            t.shape == ThemeShape.desk)
+                        // Off by default, unchanged when on, and the same
+                        // in every style. Lantern sets it at 11 semibold.
+                        if (widget.showName)
                           Positioned(
                             left: clipEdgeWidth + 4,
                             right: 2,
@@ -1011,9 +1046,10 @@ class _BarState extends State<Bar> {
                   'tl-bar-keys-${widget.entry.layer.internallayerId}'),
               child: IgnorePointer(
                 child: CustomPaint(
-                  // Desk and Lantern draw the marks as outlined diamonds in
-                  // the secondary text colour, as their mockups do.
-                  painter: t.shape == ThemeShape.studio
+                  // Lantern draws the marks as outlined diamonds in the
+                  // secondary text colour. Desk's were the same, and too
+                  // faint on its bar to find, so it fills them as Studio does.
+                  painter: t.shape != ThemeShape.lantern
                       ? LaneKeysPainter(
                           frames: [
                             for (final k in widget.summaryKeys)
@@ -1036,6 +1072,15 @@ class _BarState extends State<Bar> {
                 ),
               ),
             ),
+          // Someone else in a shared project is changing this layer: its
+          // bar is theirs, dimmed under their name, and takes no press.
+          Positioned(
+            left: left,
+            width: width,
+            top: clipBarInsetOf(t),
+            height: clipBarHeightOf(t),
+            child: HeldVeil(names: ['${widget.entry.layer.internallayerId}']),
+          ),
           // The layer's own markers, over the bar so they take the
           // pointer ahead of it — a flag is a much smaller target than a bar,
           // and a right-click meant for one must not open the bar's menu.
@@ -1057,15 +1102,36 @@ class _BarState extends State<Bar> {
                   onTap: widget.onSelect,
                   child: MarkerFlag(
                     label: m.marker.label,
-                    fill: t.marker,
+                    fill: markerColour(t, m.marker),
                     pill: t.surface4,
                     text: markerLabelStyle(t),
                   ),
                 ),
               ),
             ),
+          // The live readout, while the button is down: where the bar's two
+          // ends have reached and how long it is now. The pill a key drag
+          // carries, over everything in the row and gone on release.
+          if (_grab != null) _dragHint(inFrame, drawIn, drawOut),
         ],
       ),
+    );
+  }
+
+  /// The `f<in>–f<out> · <frames> f` pill beside the pointer while the bar is
+  /// moved or trimmed.
+  Widget _dragHint(int restIn, int drawIn, int drawOut) {
+    final text = l10n.timelineBarDragHint(drawIn, drawOut, drawOut - drawIn);
+    // Where the pointer is: where it took hold, and how far it has gone.
+    final x = widget.axis.xOf(restIn) + _downDx + _deltaPx;
+    // Beside the pointer, or on its other side where the axis has run out.
+    // The text is 8px mono, so its width is near enough five a letter.
+    final pill = text.length * 5.0 + 8;
+    return Positioned(
+      key: const ValueKey<String>('tl-bar-drag-hint'),
+      left: x + 8 + pill > widget.axis.width ? x - 8 - pill : x + 8,
+      top: 1,
+      child: HintPill(text: text),
     );
   }
 
@@ -1193,8 +1259,8 @@ class _BarState extends State<Bar> {
 /// Which part of a bar a drag grabbed: its middle, or one of its two ends.
 enum BarGrab { move, trimIn, trimOut }
 
-/// A shut layer's keys as outlined diamonds on its bar, Desk's and Lantern's
-/// mark: 7px across, a 1px stroke, one per frame.
+/// A shut layer's keys as outlined diamonds on its bar, Lantern's mark: 7px
+/// across, a 1px stroke, one per frame.
 class OutlinedKeysPainter extends CustomPainter {
   final List<double> frames;
   final TimelineAxis axis;

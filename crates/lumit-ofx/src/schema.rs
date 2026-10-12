@@ -228,9 +228,9 @@ pub fn value_routes(plugin: &PluginDescriptor) -> Vec<ValueRoute> {
 
 /// Every parameter the plugin marks secret at describe time, by name: the
 /// rows the panel starts without. A plugin hides and shows rows from inside
-/// `instanceChanged` too, so the live set is read after each render
-/// (`Instance::secret_names`) and `OfxEffectDef::hidden_rows` follows it.
-/// The rows stay in the schema either way: a row that starts hidden
+/// `createInstance` and `instanceChanged` too, so the live set is read when
+/// it answers an edit (`Instance::settled`) and `OfxEffectDef::row_state`
+/// follows it. The rows stay in the schema either way: a row that starts hidden
 /// (spektrafilm's HDR output) has to be there to appear later.
 #[must_use]
 pub fn secret_names(plugin: &PluginDescriptor) -> BTreeSet<String> {

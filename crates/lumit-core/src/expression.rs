@@ -3,9 +3,15 @@
 //!
 //! In plain terms: instead of a number or a row of keyframes, a property can
 //! hold a line of code — `time * 90`, `layer("Sun").x` — and the answer is
-//! worked out afresh at each frame. The language is [Rhai]; the values it can
-//! see (the comp, the layers, `time`) are assembled in
-//! [`apply_context_to_scope`] and [`ExpressionContext`].
+//! worked out afresh at each frame.
+//!
+//! There are two languages ([`Language`]), and whoever writes an expression
+//! picks which it is in. [Rhai] is one line long; the values it can see (the
+//! comp, the layers, `time`) are assembled in [`apply_context_to_scope`] and
+//! [`ExpressionContext`]. JavaScript is the language After Effects
+//! expressions are written in, and [`script`] runs it, so one brought across
+//! from there keeps working as written. The choice is stored beside the text
+//! and never guessed from it.
 //!
 //! The thing worth knowing before editing this file is that **evaluation is on
 //! the hot path**. Every driven property is re-evaluated for every frame, in
@@ -16,6 +22,8 @@
 //! [Rhai]: https://rhai.rs
 
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 
 use crate::Document;
@@ -25,6 +33,9 @@ use uuid::Uuid;
 mod comp;
 mod layer;
 mod math;
+mod script;
+
+pub use script::{Language, Slot, SLOT_KEY};
 
 // What one expression is allowed to build. A property wants a number, a point,
 // a colour or a line of text, so these are far above anything a real expression
@@ -106,6 +117,16 @@ impl ExpressionContext {
 fn make_engine() -> Engine {
     let mut engine = Engine::new();
 
+    // An expression is a sum, not a program. Out of the box Rhai lets `eval`
+    // run any text as a whole script, and a script can `import` a file by its
+    // path, a network path included, and print to the console. An expression
+    // comes in with a project or an import, so none of that is left on.
+    engine.set_max_modules(0);
+    engine.set_module_resolver(rhai::module_resolvers::DummyModuleResolver::new());
+    engine.disable_symbol("eval");
+    engine.on_print(|_| {});
+    engine.on_debug(|_, _, _| {});
+
     engine.set_max_operations(MAX_EXPRESSION_OPERATIONS);
     engine.set_max_string_size(MAX_EXPRESSION_STRING_BYTES);
     engine.set_max_array_size(MAX_EXPRESSION_ARRAY_ITEMS);
@@ -165,11 +186,19 @@ fn with_engine<R>(f: impl FnOnce(&mut Engine) -> R) -> R {
 
 /// Run `expression` at `time` and hand back whatever it produced, untouched.
 /// The typed wrappers below decide what to make of it.
+///
+/// `vars` are extra numbers the expression can read by name, which is how an
+/// Expression box's inputs arrive. They go in first, so a name the context
+/// also gives (`time`) keeps the context's meaning.
 fn eval_dynamic(
     expression: &str,
     context: Option<Arc<ExpressionContext>>,
+    vars: &[(&str, f64)],
 ) -> Result<Dynamic, Box<rhai::EvalAltResult>> {
     let mut scope = Scope::new();
+    for (name, value) in vars {
+        scope.push_constant(*name, *value);
+    }
 
     if let Some(context) = context.as_ref() {
         if context.current_depth >= MAXIMUM_DEPTH {
@@ -195,8 +224,135 @@ fn eval_dynamic(
 
 const MAXIMUM_DEPTH: u32 = 100;
 
-/// Whether this text is an expression Lumit can actually run — it parses in
-/// Lumit's language, and every name in it exists.
+/// A JavaScript text read into a program, or why it does not read.
+type Read = Result<Rc<script::Program>, Rc<str>>;
+
+thread_local! {
+    /// JavaScript programs already read, by their text. A text that does not
+    /// read is remembered with why, so it is not tried again on every frame.
+    ///
+    /// Reading a text is most of the cost of running a short one, and the same
+    /// few are run for every frame, so each is read once per thread.
+    static PROGRAMS: RefCell<HashMap<String, Read>> = RefCell::new(HashMap::new());
+}
+
+/// More texts than this in one thread's cache and it is emptied: somebody is
+/// typing, and every keystroke is a new text.
+const MAX_CACHED_PROGRAMS: usize = 512;
+
+/// The JavaScript program for `expression`, read once per thread, or why the
+/// text does not read as JavaScript.
+fn program_for(expression: &str) -> Read {
+    if let Some(found) = PROGRAMS.with(|programs| programs.borrow().get(expression).cloned()) {
+        return found;
+    }
+    let program = script::compile(expression)
+        .map(Rc::new)
+        .map_err(|why| Rc::from(why.as_str()));
+    PROGRAMS.with(|programs| {
+        let mut programs = programs.borrow_mut();
+        if programs.len() >= MAX_CACHED_PROGRAMS {
+            programs.clear();
+        }
+        programs.insert(expression.to_owned(), program.clone());
+    });
+    program
+}
+
+/// Run a JavaScript expression, or say why it did not run.
+fn run_javascript(
+    expression: &str,
+    context: Option<&ExpressionContext>,
+    slot: Slot,
+    vars: &[(&str, f64)],
+) -> Result<script::Answer, String> {
+    let program = program_for(expression).map_err(|why| why.to_string())?;
+    let detached;
+    let context = match context {
+        Some(context) => context,
+        None => {
+            detached = ExpressionContext::detached();
+            &detached
+        }
+    };
+    if context.current_depth >= MAXIMUM_DEPTH {
+        return Err(
+            "expressions nest more than a hundred deep — most likely two properties refer to \
+             each other"
+                .into(),
+        );
+    }
+    script::run(&program, context, slot, vars)
+}
+
+/// A JavaScript expression's answer as the one number a property wants.
+///
+/// A list answers with the number this property is of it. An expression that
+/// fails leaves the property at the value it had before the expression, where
+/// that is known, which is what After Effects shows for a broken one.
+fn javascript_number(expression: &str, context: Option<&ExpressionContext>, slot: Slot) -> f64 {
+    let answer = match run_javascript(expression, context, slot, &[]) {
+        Ok(script::Answer::Number(n)) => Some(n),
+        Ok(script::Answer::List(list)) => list.get(usize::from(slot.axis)).copied(),
+        _ => None,
+    };
+    answer
+        .filter(|n| n.is_finite())
+        .or(slot.own())
+        .unwrap_or(-1.0)
+}
+
+/// The slot of the property on the context's layer that carries `expression`.
+///
+/// For the callers that hold an expression's text and not the property it
+/// came off: the panels, which sample a row to show its number and its curve.
+/// A point's two rows carry the same text, and the first is the one found.
+fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
+    use crate::anim::{Animation, Property};
+    use crate::model::EffectValue;
+
+    let carries = |property: &Property| {
+        matches!(&property.animation, Animation::Expression(e) if e == expression)
+            && property.extra.contains_key(SLOT_KEY)
+    };
+    let layer = context.comp.zip(context.layer).and_then(|(comp, layer)| {
+        let comp = context.document.comp(comp)?;
+        comp.layers.iter().find(|l| l.id == layer)
+    });
+    let Some(layer) = layer else {
+        return Slot::default();
+    };
+    let tr = &layer.transform;
+    let transform = [
+        &tr.anchor_x,
+        &tr.anchor_y,
+        &tr.position_x,
+        &tr.position_y,
+        &tr.scale_x,
+        &tr.scale_y,
+        &tr.rotation,
+        &tr.opacity,
+    ];
+    let params = layer.effects.iter().flat_map(|effect| {
+        effect.params.iter().flat_map(|param| {
+            let parts: Vec<&Property> = match &param.value {
+                EffectValue::Float(p) => vec![p],
+                EffectValue::Point(x, y) => vec![x, y],
+                EffectValue::Colour(c) => c.iter().collect(),
+                _ => Vec::new(),
+            };
+            parts
+        })
+    });
+    transform
+        .into_iter()
+        .chain(params)
+        .find(|property| carries(property))
+        .map_or_else(Slot::default, |property| Slot::read(&property.extra))
+}
+
+/// Whether this text is a Rhai expression Lumit can actually run — it parses,
+/// and every name in it exists.
 ///
 /// **In plain terms.** An expression imported from another application is
 /// written in *that* application's language, and pasting it here would not
@@ -212,11 +368,79 @@ const MAXIMUM_DEPTH: u32 = 100;
 /// import, where the keyframes underneath are still there to drive the
 /// property either way.
 pub fn is_runnable(expression: &str) -> bool {
-    eval_dynamic(expression, Some(Arc::new(ExpressionContext::detached()))).is_ok()
+    eval_dynamic(
+        expression,
+        Some(Arc::new(ExpressionContext::detached())),
+        &[],
+    )
+    .is_ok()
 }
 
+/// Whether this text is a JavaScript expression Lumit can run: it reads as
+/// JavaScript, and every name it uses is one Lumit provides.
+///
+/// The importer's question for an After Effects expression. There is no trial
+/// run as [`is_runnable`] has, because nearly every one reads its layer and
+/// there is none yet.
+pub fn is_javascript(expression: &str) -> bool {
+    program_for(expression).is_ok_and(|program| script::names_known(&program))
+}
+
+/// What a JavaScript expression may spend when it is run from the interface's
+/// own thread, which is what a Rhai one may spend anywhere. A render gives it
+/// twenty times this, on a thread nobody is waiting on.
+pub const INTERFACE_STEPS: u32 = MAX_EXPRESSION_OPERATIONS as u32;
+
+/// Run `work` with every JavaScript expression inside it sharing one budget of
+/// `steps`, however many it runs and however many properties they read.
+///
+/// **In plain terms.** The panels sample an expression to show its number and
+/// its curve, on the thread that draws the window. A loop that never ends
+/// would otherwise freeze it for as long as a render lets the same loop run.
+pub fn within_steps<T>(steps: u32, work: impl FnOnce() -> T) -> T {
+    script::sparingly(steps, work)
+}
+
+/// Run a Rhai expression for the one number a property wants. `-1` when it
+/// fails.
 pub fn evaluate(expression: &str, context: Option<Arc<ExpressionContext>>) -> f64 {
-    convert_result(eval_dynamic(expression, context))
+    convert_result(eval_dynamic(expression, context, &[]))
+}
+
+/// [`evaluate`] in the language named, for the callers that hold an
+/// expression's text and its language but not the property it came off: the
+/// panels, sampling a row to show its number.
+pub fn evaluate_in(
+    language: Language,
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+) -> f64 {
+    match language {
+        Language::Rhai => evaluate(expression, context),
+        Language::JavaScript => {
+            let slot = context
+                .as_deref()
+                .map_or_else(Slot::default, |context| slot_on_layer(context, expression));
+            javascript_number(expression, context.as_deref(), slot)
+        }
+    }
+}
+
+/// [`evaluate`] for a property that is in hand, whose `extra` says which
+/// language its expression is in and what the expression may know about the
+/// property: its value before the expression, and which number of a point it
+/// is ([`Slot`]).
+pub fn evaluate_property(
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+    extra: &serde_json::Map<String, serde_json::Value>,
+) -> f64 {
+    match Language::of(extra) {
+        Language::Rhai => evaluate(expression, context),
+        Language::JavaScript => {
+            javascript_number(expression, context.as_deref(), Slot::read(extra))
+        }
+    }
 }
 
 /// Evaluate an expression for its **words** rather than its number — what a
@@ -230,7 +454,7 @@ pub fn evaluate(expression: &str, context: Option<Arc<ExpressionContext>>) -> f6
 /// typed against a live preview, where a half-written expression is invalid for
 /// most of the time it takes to write it.
 pub fn evaluate_text(expression: &str, context: Option<Arc<ExpressionContext>>) -> String {
-    match eval_dynamic(expression, context) {
+    match eval_dynamic(expression, context, &[]) {
         Ok(val) => val.to_string(),
         Err(_) => String::new(),
     }
@@ -246,12 +470,30 @@ pub fn evaluate_text(expression: &str, context: Option<Arc<ExpressionContext>>) 
 /// of zeroes: the graph has nothing truthful to draw for a line that is still
 /// being typed, and a flat curve at zero would read as a real answer.
 pub fn evaluate_range(
+    language: Language,
     expression: &str,
     context: Option<&ExpressionContext>,
     start: f64,
     end: f64,
     samples: i64,
 ) -> Vec<f64> {
+    // A curve is a few hundred samples. More than a screen is wide draws
+    // nothing new, and the number comes from outside.
+    let samples = samples.clamp(0, 8192);
+    if language == Language::JavaScript {
+        if program_for(expression).is_err() {
+            return Vec::new();
+        }
+        let slot = context.map_or_else(Slot::default, |context| slot_on_layer(context, expression));
+        let delta = (end - start) / (samples as f64);
+        return (0..samples)
+            .map(|i| {
+                let mut at = context.cloned().unwrap_or_else(ExpressionContext::detached);
+                at.comp_time = start + (delta * (i as f64));
+                javascript_number(expression, Some(&at), slot)
+            })
+            .collect();
+    }
     with_engine(|engine| {
         let Ok(ast) = engine.compile_expression(expression) else {
             return Vec::new();
@@ -300,17 +542,38 @@ pub enum ExprValue {
     Colour([f32; 4]),
 }
 
-/// Run `expression` and read what it answered as a value, or say why not.
+/// Run a Rhai `expression` and read what it answered as a value, or say why
+/// not.
 ///
 /// The failing sibling of [`evaluate`]: every refusal comes back as a sentence
 /// rather than as a number that looks like an answer. Rhai's own message is
 /// kept whole - it names the line and the thing it could not find, which is
 /// what an editor needs to show.
+///
+/// `vars` are extra numbers in scope by name: an Expression box's inputs.
 pub fn evaluate_value(
     expression: &str,
     context: Option<Arc<ExpressionContext>>,
+    vars: &[(&str, f64)],
 ) -> Result<ExprValue, String> {
-    let value = eval_dynamic(expression, context).map_err(|e| e.to_string())?;
+    evaluate_value_in(Language::Rhai, expression, context, vars)
+}
+
+/// [`evaluate_value`] in the language named.
+pub fn evaluate_value_in(
+    language: Language,
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+    vars: &[(&str, f64)],
+) -> Result<ExprValue, String> {
+    if language == Language::JavaScript {
+        return match run_javascript(expression, context.as_deref(), Slot::default(), vars)? {
+            script::Answer::Number(n) => Ok(ExprValue::Number(n)),
+            script::Answer::List(list) => list_value(&list),
+            script::Answer::Text(_) => Err("a string - not a number, a point or a colour".into()),
+        };
+    }
+    let value = eval_dynamic(expression, context, vars).map_err(|e| e.to_string())?;
     if let Some(n) = as_f64(value.clone()) {
         return Ok(ExprValue::Number(n));
     }
@@ -326,29 +589,25 @@ pub fn evaluate_value(
             };
             numbers.push(n);
         }
-        return match numbers.len() {
-            2 => Ok(ExprValue::Point(numbers[0], numbers[1])),
-            3 => Ok(ExprValue::Colour([
-                numbers[0] as f32,
-                numbers[1] as f32,
-                numbers[2] as f32,
-                1.0,
-            ])),
-            4 => Ok(ExprValue::Colour([
-                numbers[0] as f32,
-                numbers[1] as f32,
-                numbers[2] as f32,
-                numbers[3] as f32,
-            ])),
-            n => Err(format!(
-                "an array of {n} numbers: two make a point, three or four a colour"
-            )),
-        };
+        return list_value(&numbers);
     }
     Err(format!(
         "a {} - not a number, a point or a colour",
         value.type_name()
     ))
+}
+
+/// A list of numbers as the value its length makes it.
+fn list_value(numbers: &[f64]) -> Result<ExprValue, String> {
+    match *numbers {
+        [x, y] => Ok(ExprValue::Point(x, y)),
+        [r, g, b] => Ok(ExprValue::Colour([r as f32, g as f32, b as f32, 1.0])),
+        [r, g, b, a] => Ok(ExprValue::Colour([r as f32, g as f32, b as f32, a as f32])),
+        _ => Err(format!(
+            "an array of {} numbers: two make a point, three or four a colour",
+            numbers.len()
+        )),
+    }
 }
 
 fn convert_result(result: Result<Dynamic, Box<rhai::EvalAltResult>>) -> f64 {
@@ -419,6 +678,8 @@ mod tests {
             path: None,
             path_offset: crate::anim::Property::zero(),
             animators: Vec::new(),
+            style: Default::default(),
+            paragraph: Default::default(),
             extra: serde_json::Map::new(),
         }
     }
@@ -435,49 +696,6 @@ mod tests {
         assert_eq!(evaluate_text("1 + 1", Some(at(0.0))), "2");
         assert_eq!(evaluate_text("time", Some(at(3.0))), "3.0");
         assert_eq!(evaluate_text("\"frame \" + 7", Some(at(0.0))), "frame 7");
-    }
-
-    /// A broken expression prints nothing rather than failing the frame.
-    #[test]
-    fn a_broken_expression_prints_nothing() {
-        assert_eq!(
-            evaluate_text("this is not an expression", Some(at(0.0))),
-            ""
-        );
-        assert_eq!(evaluate_text("no_such_variable", Some(at(0.0))), "");
-    }
-
-    /// `time` is readable with nothing but a detached context behind it.
-    ///
-    /// This is the regression test for scoping `time` to a successful comp
-    /// lookup: an expression that reads it then errors, resolves to nothing,
-    /// and keys every frame of the comp identically.
-    #[test]
-    fn time_is_readable_without_a_comp() {
-        assert_eq!(evaluate("time * 2.0", Some(at(1.5))), 3.0);
-        assert_ne!(
-            evaluate("time", Some(at(1.0))),
-            evaluate("time", Some(at(2.0)))
-        );
-    }
-
-    /// Without an expression the layer shows exactly what was typed, and the
-    /// typed words survive underneath one that is set.
-    #[test]
-    fn the_typed_words_are_kept_and_restored() {
-        assert_eq!(document(None).resolved_text(at(0.0)), "typed");
-        let driven = document(Some("time * 2"));
-        assert_eq!(driven.resolved_text(at(1.5)), "3.0");
-        assert_eq!(driven.text, "typed");
-    }
-
-    /// The same expression at the same time gives the same answer, on any
-    /// machine and any run — the determinism rule, applied to words.
-    #[test]
-    fn resolution_is_deterministic() {
-        let d = document(Some("noise(time) + time"));
-        assert_eq!(d.resolved_text(at(2.0)), d.resolved_text(at(2.0)));
-        assert_ne!(d.resolved_text(at(2.0)), d.resolved_text(at(3.0)));
     }
 
     /// A document written before expressions existed loads with none, and a
@@ -563,6 +781,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             pan: crate::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             blend: Default::default(),
@@ -703,14 +922,6 @@ mod tests {
         let _ = evaluate("layer(\"A\").x", Some(context));
     }
 
-    /// A graph curve for an expression that does not compile is no curve, not
-    /// a flat line at zero that reads as a real answer.
-    #[test]
-    fn an_uncompilable_expression_samples_to_nothing() {
-        assert!(evaluate_range("this is not (", None, 0.0, 1.0, 8).is_empty());
-        assert_eq!(evaluate_range("time", None, 0.0, 4.0, 4).len(), 4);
-    }
-
     /// **One expression cannot build something enormous.**
     ///
     /// Loops do not parse in an expression, so the danger is never a long run.
@@ -771,6 +982,323 @@ mod tests {
         }
     }
 
+    /// A layer carrying what an After Effects shake preset arrives as: a set
+    /// of controls with a keyed Amount, for expressions on other rows to read.
+    /// Its rotation holds 30 under an expression of its own.
+    fn rigged() -> (Arc<Document>, Uuid, Uuid) {
+        use crate::anim::{Animation, Keyframe, Property, SideInterp};
+        use crate::model::{EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue};
+        use crate::time::{CompTime, Rational};
+
+        let key = |seconds: i64, value: f64| Keyframe {
+            time: Rational::new(seconds, 1).unwrap(),
+            value,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let named = |id: &str, name: &str, property: Property| EffectParam {
+            id: id.into(),
+            value: EffectValue::Float(property),
+            extra: [("name".to_owned(), serde_json::json!(name))]
+                .into_iter()
+                .collect(),
+        };
+        let mut amount = Property::fixed(0.0);
+        amount.animation = Animation::Keyframed(vec![key(1, 0.0), key(2, 40.0), key(4, 0.0)]);
+
+        let mut layer = driven_layer("Rig", "0");
+        layer.transform.position_x = Property::fixed(960.0);
+        layer.transform.rotation.animation = Animation::Expression("value + 5".into());
+        Slot::new(&[30.0], 0, 1)
+            .in_language(Language::JavaScript)
+            .write(&mut layer.transform.rotation.extra);
+        layer.in_point = CompTime(Rational::new(1, 2).unwrap());
+        layer.effects.push(EffectInstance {
+            id: Uuid::now_v7(),
+            effect: EffectKey {
+                namespace: EffectNamespace::Placeholder,
+                match_name: "Pseudo/1".into(),
+                version: 0,
+                extra: serde_json::Map::new(),
+            },
+            enabled: true,
+            params: vec![
+                named("p1", "Amount", amount),
+                named("p2", "Seed", Property::fixed(3.0)),
+            ],
+            sample_temporally: true,
+            roto: None,
+            custom_name: Some("Shake".into()),
+            linked_pairs: Vec::new(),
+            plugin_state: None,
+            extra: serde_json::Map::new(),
+        });
+        let id = layer.id;
+        let (document, comp) = doc_with(vec![layer]);
+        (document, comp, id)
+    }
+
+    /// The context an expression on the rigged layer runs under at `time`.
+    fn on_rig(rig: &(Arc<Document>, Uuid, Uuid), time: f64) -> Arc<ExpressionContext> {
+        Arc::new(ExpressionContext {
+            document: rig.0.clone(),
+            comp: Some(rig.1),
+            layer: Some(rig.2),
+            comp_time: time,
+            current_depth: 0,
+            inputs: None,
+        })
+    }
+
+    /// **An After Effects expression reads what After Effects lets it read.**
+    ///
+    /// The effect and its rows by name, the keyframes under a row, the comp
+    /// and the layer. This is the whole reason the second language exists: a
+    /// rig built there has to find its controls here.
+    #[test]
+    fn an_after_effects_expression_reads_its_layer() {
+        let rig = rigged();
+        let number = |source: &str, time: f64| {
+            evaluate_in(Language::JavaScript, source, Some(on_rig(&rig, time)))
+        };
+
+        assert_eq!(number("effect(\"Shake\")(\"Amount\") / 2", 1.5), 10.0);
+        assert_eq!(
+            number(
+                "var c = effect('Shake')\n('Seed'); Math.floor(c) + effect(1)(2)",
+                0.0
+            ),
+            6.0
+        );
+        assert_eq!(
+            number("thisLayer.effect(1).param('amount').valueAtTime(2)", 0.0),
+            40.0
+        );
+        assert_eq!(
+            number(
+                "effect('Shake').name.length + (effect('Shake').active ? 1 : 0)",
+                0.0
+            ),
+            6.0
+        );
+
+        // Keyframes are counted from one and timed on the comp's clock.
+        let keys = "var p = effect('Shake')('Amount'); var last = p.key(p.numKeys); \
+                    p.numKeys * 100 + last.time * 10 + p.nearestKey(1.9).index";
+        assert_eq!(number(keys, 0.0), 342.0);
+        let rate = number("effect('Shake')('Amount').velocityAtTime(1.5)", 0.0);
+        assert!((rate - 40.0).abs() < 1e-6, "{rate}");
+
+        // A row's keys can be made to repeat past their end, or before their start.
+        let looped = |kind: &str, time: f64| {
+            number(&format!("effect('Shake')('Amount').{kind}"), time).round()
+        };
+        assert_eq!(looped("loopOut()", 3.0), 20.0);
+        assert_eq!(looped("loopOut('cycle')", 5.0), 40.0);
+        assert_eq!(looped("loopOut('pingpong')", 5.0), 20.0);
+        assert_eq!(looped("loopOut('offset')", 5.0), 40.0);
+        assert_eq!(looped("loopOut('continue')", 5.0), -20.0);
+        assert_eq!(looped("loopOut('cycle', 1)", 5.0), 20.0);
+        assert_eq!(looped("loopOutDuration('cycle', 1)", 4.5), 10.0);
+        assert_eq!(looped("loopIn('cycle')", 0.0), 20.0);
+
+        assert_eq!(
+            number("thisComp.width / 2 + thisComp.height + index", 0.0),
+            2041.0
+        );
+        assert_eq!(
+            number("Math.round((inPoint + thisComp.frameDuration) * 60)", 0.0),
+            31.0
+        );
+        assert_eq!(
+            number(
+                "thisComp.layer('Rig').transform.position[0] + thisLayer.name.length",
+                0.0
+            ),
+            963.0
+        );
+        assert_eq!(
+            number(
+                "comp('c').layer(1).position.length + thisComp.numLayers",
+                0.0
+            ),
+            3.0
+        );
+        assert_eq!(number("timeToFrames(1.5) + framesToTime(30)", 0.0), 90.5);
+        assert_eq!(number("posterizeTime(2); time", 1.7), 1.5);
+        assert_eq!(number("hasParent ? 1 : (parent == null ? 2 : 3)", 0.0), 2.0);
+    }
+
+    /// **`value` is what the property held before its expression.**
+    ///
+    /// A position is two properties here and one in After Effects, so both
+    /// carry the same text and each takes its own number of the answer. The
+    /// same slot is what `wiggle` wanders around, and what a broken expression
+    /// falls back to.
+    #[test]
+    fn value_is_what_the_property_held_before_its_expression() {
+        use crate::anim::{Animation, Property};
+
+        let rig = rigged();
+        let driven = |source: &str, slot: Slot, time: f64| {
+            let mut property = Property::fixed(0.0);
+            property.animation = Animation::Expression(source.into());
+            slot.in_language(Language::JavaScript)
+                .write(&mut property.extra);
+            property.value_at_with_context(0.0, on_rig(&rig, time))
+        };
+
+        let shaken = "value + [effect('Shake')('Amount'), 1]";
+        assert_eq!(
+            driven(shaken, Slot::new(&[960.0, 540.0], 0, 5), 2.0),
+            1000.0
+        );
+        assert_eq!(driven(shaken, Slot::new(&[960.0, 540.0], 1, 5), 2.0), 541.0);
+        assert_eq!(
+            driven(
+                "value.length > 1 ? value[1] : value",
+                Slot::new(&[7.0], 0, 0),
+                0.0
+            ),
+            7.0
+        );
+
+        // A wiggle stays within its amount, answers the same every time it
+        // is asked, moves, and is another property's on another seed.
+        let wiggle =
+            |seed: u32, time: f64| driven("wiggle(2, 30)", Slot::new(&[100.0], 0, seed), time);
+        let a = wiggle(1, 0.3);
+        assert_eq!(a, wiggle(1, 0.3));
+        assert!((a - 100.0).abs() <= 30.0, "{a}");
+        assert_ne!(a, wiggle(1, 0.8));
+        assert_ne!(a, wiggle(2, 0.3));
+        // Seeding it by hand moves it too, and both numbers of a point wander
+        // on their own.
+        assert_ne!(
+            driven(
+                "seedRandom(8, true); wiggle(2, 30)",
+                Slot::new(&[100.0], 0, 1),
+                0.3
+            ),
+            a
+        );
+        let pair = "var w = wiggle(2, 30, 2) - value; w[0] - w[1]";
+        assert_ne!(driven(pair, Slot::new(&[5.0, 5.0], 0, 1), 0.3), 0.0);
+        assert_eq!(
+            driven("wiggle(0, 0)", Slot::new(&[100.0], 0, 1), 0.3),
+            100.0
+        );
+
+        // Its own property read by name is that property before the
+        // expression, not the expression run again: the rig's rotation holds
+        // 30 under an expression of its own.
+        assert_eq!(driven("rotation + 1", Slot::new(&[30.0], 0, 1), 0.0), 31.0);
+
+        // A broken expression leaves the property where it was.
+        assert_eq!(
+            driven(
+                "value + effect('Gone')('Amount')",
+                Slot::new(&[12.0], 0, 0),
+                0.0
+            ),
+            12.0
+        );
+        // With nothing recorded there is nothing to fall back to.
+        assert_eq!(
+            driven("effect('Gone')('Amount')", Slot::default(), 0.0),
+            -1.0
+        );
+
+        // Putting an expression on a property by hand writes down what it
+        // held, an edit of the text keeps that, and taking it off forgets it.
+        let mut typed = Property::fixed(64.0);
+        typed.set_animation(Animation::Expression("64".into()));
+        assert_eq!(typed.expression_language(), Language::Rhai);
+        typed.set_expression_language(Language::JavaScript);
+        typed.set_animation(Animation::Expression("value / 2 + wiggle(0, 0)".into()));
+        assert_eq!(typed.expression_language(), Language::JavaScript);
+        assert_eq!(typed.value_at_with_context(0.0, on_rig(&rig, 0.0)), 96.0);
+        typed.set_animation(Animation::Static(1.0));
+        assert!(typed.extra.is_empty());
+
+        // A panel holds the text and not the property, and still reads the
+        // slot: the rig's rotation is 30 under `value + 5`.
+        let js = Language::JavaScript;
+        assert_eq!(evaluate_in(js, "value + 5", Some(on_rig(&rig, 0.0))), 35.0);
+        assert_eq!(
+            evaluate_range(js, "value + 5", Some(&*on_rig(&rig, 0.0)), 0.0, 1.0, 3),
+            [35.0, 35.0, 35.0]
+        );
+        // A line still being typed has no curve to draw, in either language.
+        assert!(evaluate_range(js, "value +", None, 0.0, 1.0, 3).is_empty());
+        assert!(evaluate_range(Language::Rhai, "time +", None, 0.0, 1.0, 3).is_empty());
+    }
+
+    /// **An expression is run by the language it was given, never by a guess.**
+    ///
+    /// The same five characters mean two things: Rhai divides whole numbers as
+    /// whole numbers and JavaScript does not. So the language is a choice
+    /// stored beside the text, and a property with nothing stored is Rhai,
+    /// which is every expression a project already holds.
+    #[test]
+    fn an_expression_is_run_by_the_language_it_was_given() {
+        use crate::anim::{Animation, Property};
+
+        let js = Language::JavaScript;
+        assert_eq!(evaluate("7 / 2", None), 3.0);
+        assert_eq!(evaluate_in(Language::Rhai, "7 / 2", None), 3.0);
+        assert_eq!(evaluate_in(js, "7 / 2", None), 3.5);
+
+        let mut property = Property::fixed(0.0);
+        property.set_animation(Animation::Expression("7 / 2".into()));
+        assert_eq!(property.value_at(0.0), 3.0, "nothing stored is Rhai");
+        property.set_expression_language(js);
+        assert_eq!(property.value_at(0.0), 3.5);
+        property.set_expression_language(Language::Rhai);
+        assert_eq!(property.value_at(0.0), 3.0);
+        assert_eq!(Language::from_id("something newer"), Language::Rhai);
+        assert_eq!(Language::from_id(js.id()), js);
+
+        // What the importer asks of an After Effects expression: does it read
+        // as JavaScript, with every name one Lumit has.
+        for known in [
+            "Math.sin(time)",
+            "wiggle(5, 20)",
+            "x = 7 / 2; x",
+            "[thisComp.width / 2, thisComp.height / 2]",
+            "effect(\"Shake\")(\"Seed\")",
+            "input_1 * 2",
+        ] {
+            assert!(is_javascript(known), "{known}");
+        }
+        for refused in ["nonesuch(time)", "if 2 > 1 { 9 } else { 0 }", "1 +"] {
+            assert!(!is_javascript(refused), "{refused}");
+        }
+        assert!(is_runnable("time * 90") && !is_runnable("Math.sin(time)"));
+
+        // The typed entry points answer in the language named.
+        let value = |source: &str, vars: &[(&str, f64)]| evaluate_value_in(js, source, None, vars);
+        assert_eq!(
+            value("[Math.abs(-3), 4]", &[]),
+            Ok(ExprValue::Point(3.0, 4.0))
+        );
+        assert_eq!(
+            value("input_1 + Math.PI * 0", &[("input_1", 2.0)]),
+            Ok(ExprValue::Number(2.0))
+        );
+        assert_eq!(
+            value("[Math.abs(1), 0, 0]", &[]),
+            Ok(ExprValue::Colour([1.0, 0.0, 0.0, 1.0]))
+        );
+        assert!(value("'words' + Math.PI", &[]).is_err());
+        assert!(value("Math.nothing(1)", &[]).is_err());
+        assert!(value("1 +", &[]).is_err_and(|why| why.contains("line 1")));
+        assert!(
+            evaluate_value("Math.abs(-3)", None, &[]).is_err(),
+            "Rhai has no Math"
+        );
+    }
+
     /// **A value expression says what it answered with, or why it did not.**
     ///
     /// [`evaluate`] turns every refusal into `-1`, which is the right bargain
@@ -779,7 +1307,7 @@ mod tests {
     /// answer under the old road.
     #[test]
     fn a_value_expression_answers_with_its_type_or_with_a_reason() {
-        let value = |src: &str| evaluate_value(src, None);
+        let value = |src: &str| evaluate_value(src, None, &[]);
 
         // Rhai keeps whole numbers and fractions apart, and a boolean is a
         // number here as it is everywhere else in this file.

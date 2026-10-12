@@ -15,8 +15,41 @@ import 'package:uuid/uuid.dart';
 import 'project_item.dart';
 import 'solid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `core`, `core`, `of`, `of`, `port_of`, `read_comp_graph`, `read_node`, `wiring_into`, `wiring_of`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `box_source`, `core`, `core`, `graph_fx`, `of`, `of`, `port_of`, `read_comp_graph`, `read_node`, `wiring_into`, `wiring_of`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+
+/// The file a Roto brush box reads, as the Viewer needs it to carry a scribble
+/// onto the picture: which frame of it is on screen, and how big its picture
+/// is, which is what says where the Read laid it in the graph's frame.
+class BridgeBoxSource {
+  /// The **source** frame showing at the composition frame asked about, or
+  /// `None` where the file will not read: it is offline, or carries no
+  /// video. Footage is wired in either way, which is what the caller needs
+  /// to tell that from a box with nothing behind it.
+  final PlatformInt64? frame;
+
+  /// The file's own picture size, in pixels. Nought where it will not read.
+  final int width;
+  final int height;
+
+  const BridgeBoxSource({
+    this.frame,
+    required this.width,
+    required this.height,
+  });
+
+  @override
+  int get hashCode => frame.hashCode ^ width.hashCode ^ height.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeBoxSource &&
+          runtimeType == other.runtimeType &&
+          frame == other.frame &&
+          width == other.width &&
+          height == other.height;
+}
 
 /// One wire: an output socket of one box into an input socket of another.
 class BridgeCompEdge {

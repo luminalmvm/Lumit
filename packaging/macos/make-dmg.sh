@@ -7,10 +7,9 @@
 #
 #   packaging/macos/make-dmg.sh [version]
 #
-# Needs: flutter, rust, `brew install dylibbundler create-dmg`, and an FFmpeg
-# 8 keg (see below; `brew install ffmpeg` alone is 9.x now, which
-# this refuses). create-dmg is optional - without it the image has no
-# drag-to-Applications window dressing.
+# Needs: flutter, rust, `brew install dylibbundler create-dmg ffmpeg@8` (plain
+# `ffmpeg` is 9.x now, which this refuses). create-dmg is optional - without
+# it the image has no drag-to-Applications window dressing.
 #
 # The bundling is the same move the Windows installer makes with the FFmpeg
 # DLLs: the bridge links the shared FFmpeg, so the libraries must travel with
@@ -48,9 +47,9 @@ command -v dylibbundler >/dev/null || {
 # the wrong offsets - so find 8.x on purpose rather than take whatever `ffmpeg`
 # resolves to today, which is already 9.x.
 #
-# Three places 8.x can live, in order of preference: a real ffmpeg@8 keg if
-# Homebrew ever ships one, the 8.1.2 formula extracted out of homebrew-core's
-# history (.github/actions/ffmpeg8-macos builds and links exactly this prefix),
+# Three places 8.x can live, in order of preference: Homebrew's ffmpeg@8 keg,
+# the 8.1.2 formula extracted out of homebrew-core's history
+# (.github/actions/ffmpeg8-macos builds and links exactly this prefix),
 # and the plain formula on a machine that still has 8.x installed. The test is
 # libavutil's own version - 60.x is FFmpeg 8's, and it is what will be linked,
 # unlike a formula name.
@@ -66,8 +65,7 @@ for p in "$(brew --prefix)/opt/ffmpeg@8" \
 done
 [ -n "$ffprefix" ] || {
     echo "No FFmpeg 8 keg found (looked for libavutil 60.x under ffmpeg@8," >&2
-    echo "ffmpeg@8.1.2 and ffmpeg). The route is 'brew extract --version=8.1.2" >&2
-    echo "ffmpeg <tap>' then a source build; see docs/GUIDE.md." >&2
+    echo "ffmpeg@8.1.2 and ffmpeg). Run 'brew install ffmpeg@8'; see docs/GUIDE.md." >&2
     exit 1
 }
 
@@ -100,9 +98,11 @@ cp "$root/crates/lumit-colour/vendored/"*.artefact "$app/Contents/Resources/colo
 # executables do belong. Built here rather than by the podspec, which knows how
 # to build one static library and nothing else. Before the signing loop below, so
 # they are signed like everything else in the app.
-(cd "$root" && cargo build --release -p lumit-ofx-broker -p lumit-aplug-broker)
+(cd "$root" && cargo build --release -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker)
 cp "$root/target/release/lumit-ofx-broker" "$app/Contents/MacOS/"
 cp "$root/target/release/lumit-aplug-broker" "$app/Contents/MacOS/"
+# The process an Illustrator file is read in goes with them.
+cp "$root/target/release/lumit-media-broker" "$app/Contents/MacOS/"
 
 # Every Mach-O in the app that still links a Homebrew path gets handed to
 # dylibbundler. The bridge dylib is the expected hit; the loop rather than a
@@ -231,14 +231,25 @@ done
 # nested executable: notarisation named both by path and refused the whole app
 # for a Developer ID, a timestamp and a hardened runtime each of them lacked.
 #
-# They take Broker.entitlements, NOT the app's: each one dlopens third-party
-# plugins, which the hardened runtime refuses without library validation off,
+# The plugin brokers take Broker.entitlements, NOT the app's: each one dlopens
+# third-party plugins, which the hardened runtime refuses without library validation off,
 # and that entitlement belongs to the process that needs it rather than to the
 # application. A broker holds one bundle path and a pipe; the app holds the
 # project, the media and the network. Spending the weaker containment on the
 # smaller process is the whole point of there being two of them (docs/12 §2.3).
+#
+# The media broker is the exception, and takes none. It loads no plugin: only
+# Lumit's own code and the FFmpeg libraries signed with this identity a few
+# lines up, which is all library validation asks. It is also the one broker
+# whose whole job is reading a stranger's file, so it is the last that should
+# be able to load a stranger's code.
 for broker in "$app/Contents/MacOS/"lumit-*-broker; do
     [ -e "$broker" ] || continue
+    if [ "$(basename "$broker")" = "lumit-media-broker" ]; then
+        # shellcheck disable=SC2086 # as above
+        codesign --force $signopts --sign "$identity" "$broker"
+        continue
+    fi
     # shellcheck disable=SC2086 # as above
     codesign --force $signopts --sign "$identity" \
         --entitlements "$root/flutter_ui/macos/Runner/Broker.entitlements" "$broker"

@@ -23,6 +23,7 @@ mod lens_flare;
 mod lighting;
 mod particulate;
 mod points_draw;
+mod points_field;
 mod split;
 mod stylise;
 mod temporal;
@@ -42,6 +43,7 @@ pub use lens_flare::*;
 pub use lighting::*;
 pub use particulate::*;
 pub use points_draw::*;
+pub use points_field::*;
 pub use split::*;
 pub use stylise::*;
 pub use temporal::*;
@@ -363,6 +365,9 @@ pub struct FxEngine {
     particulate_blocks: wgpu::ComputePipeline,
     particulate_scatter: wgpu::ComputePipeline,
     particulate_draw: wgpu::RenderPipeline,
+    /// Points field: the nearest point to every pixel, found by jump
+    /// flooding. Its three passes share one layout of their own.
+    points_field: points_field::PointsFieldPipelines,
     layout: wgpu::BindGroupLayout,
     /// The adjustment blend's own layout: three sampled inputs (below,
     /// processed, coverage) where every effect kernel takes two.

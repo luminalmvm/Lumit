@@ -1,0 +1,112 @@
+---
+title: Backup and history
+description: Go back to any save, on any device.
+sidebar:
+  order: 0.5
+---
+
+**Backup** stores a copy of a project each time it is saved. Each copy is a **version**, and
+a project's versions are its **history**. It is part of
+[Lumit Pro](/use/profiles/#lumit-pro).
+
+## What is backed up
+
+- The `.lum` project file, with a picture of the open composition.
+- Footage, only when the project is [packed](/use/projects/#packed-projects).
+- Between saves, the newest [autosave](/use/projects/#autosave).
+- Not a project file over 95 MB.
+
+Without a connection the save waits and is sent later.
+
+## The mark on the bottom strip
+
+Beside **Saved**, a mark shows the backup of the open project. Press it to open
+**Project history**.
+
+| Mark | Meaning |
+| --- | --- |
+| Tick | Backed up. |
+| Ring | Backing up. |
+| Loop | Waiting to back up. |
+| Warning | Not backed up. |
+| Arrow down | Another device has saved a newer version. |
+
+## Project history
+
+**File ▸ Project history…** lists the versions of the open project, newest first. **All**
+and **Named** filter the list, and **Changed** lists what changed in the chosen version.
+
+| Action | How |
+| --- | --- |
+| Open a version as a copy | **Open a copy**. It is saved beside the project file. |
+| Bring one composition back | **Bring a composition back…**, choose it, then **Bring back**. |
+| Put a version back | **Put back**. Unsaved changes are saved as a version first. |
+| Name a version | The **…** on its row: **Name this version…** |
+| Remove a name | The **…** on its row: **Remove name** |
+| Save and name in one go | **File ▸ Save a version…**, `Ctrl+Alt+S` by default. |
+| Delete a version | The **…** on its row: **Delete version…** |
+| Back up again | **Back up now** |
+| Free up storage | **Free up space…** |
+| Open a newer version from another device | **Open that version…** |
+| Keep the project out of backup | Switch off **Back up this project**. |
+
+| Key | Does |
+| --- | --- |
+| `Up`, `Down` | Chooses the version above or below. |
+| `Page Up`, `Page Down` | Chooses the version a screen above or below. |
+| `Home`, `End` | Chooses the newest or the oldest version. |
+| `Right`, `Left` | Opens or folds a row of autosaves. |
+| `Enter` | **Put back** |
+| `Esc` | Closes the window. |
+
+### Which versions are kept
+
+A version with a name is kept, and so is the newest. The others are thinned as they age.
+
+| Age | Kept |
+| --- | --- |
+| Up to 7 days | Every version. |
+| 7 to 90 days | The last version of each day. |
+| Over 90 days | The last version of each week. |
+
+Autosaves are thinned sooner.
+
+| Age | Kept |
+| --- | --- |
+| Up to 1 day | Every autosave. |
+| 1 to 7 days | The last autosave of each hour. |
+| Over 7 days | As any other version. |
+
+## Open from backup
+
+**File ▸ Open from backup…** shows every backed-up project, most recently saved first, and
+how much storage is used. Previews and footage kept online use the same storage.
+
+| Action | How |
+| --- | --- |
+| Open a project | Click its card. |
+| See another project's history | The **…** on its card: **Project history…** |
+| Rename a project in backup | The **…** on its card: **Rename…** |
+| Delete a project from backup | The **…** on its card: **Delete from backup…** The file on the device stays. |
+
+A project that is not on the device is downloaded to a folder you choose. When footage is
+missing, the bottom strip says how many files. Press the notice to relink them.
+
+## On another device
+
+Open the project from backup to carry on the same history. When another device has saved a
+newer version, the bottom strip says so, and **Open that version…** takes it.
+
+## Settings
+
+**Settings ▸ Account ▸ Back up projects when they are saved** turns backup off for the
+profile on that device. **Storage** shows how much is used.
+
+:::note
+After Lumit Pro ends, backed-up projects can still be opened. Nothing new is backed up.
+:::
+
+## Related
+
+- [Projects](/use/projects/)
+- [Profiles and accounts](/use/profiles/)

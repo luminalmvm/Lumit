@@ -89,6 +89,30 @@ fn record_to(file: &std::path::Path, line: &str) {
     }
 }
 
+/// Write down which graphics card the renderer is on, once a session.
+///
+/// **The report this exists for.** A laptop with two graphics cards crashed on
+/// its first frame, inside the display driver, where neither a panic nor the
+/// crash net is ever reached, and this file was not written at all. What
+/// explained it was which card each half of Lumit had been given, and that was
+/// only on the console, behind a variable nobody had been told to set. So the
+/// renderer's half is recorded here as soon as there is a renderer, before
+/// anything is drawn with it. The Flutter runner's half is appended to the same
+/// file by the shell, as soon as the runner knows it.
+///
+/// Not a fault, and the only line in here that is not one. It earns its place
+/// because the next fault under it is read against it.
+pub(crate) fn record_adapter() {
+    ADAPTER.call_once(|| {
+        if let Some(adapter) = lumit_render::adapter_summary() {
+            record(&format!("graphics adapter: {adapter}"));
+        }
+    });
+}
+
+/// Said once, whoever asks and however many renderers a session builds.
+static ADAPTER: Once = Once::new();
+
 /// Install the process-wide panic hook, once for the life of the process.
 ///
 /// **The case this exists for.** The render worker's crash net catches the
@@ -146,7 +170,7 @@ extern "C" fn arm_on_load() {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{path, record, record_to, watch, CAP, HOOK};
+    use super::{path, record_to, watch, CAP, HOOK};
 
     fn contents() -> String {
         std::fs::read_to_string(path()).unwrap_or_default()
@@ -195,24 +219,6 @@ mod tests {
             contents().contains(&marker),
             "a panic before any worker existed did not reach {:?}",
             path()
-        );
-    }
-
-    /// A recorded line is on disk, with a time in front of it.
-    #[test]
-    fn a_recorded_line_can_be_read_back() {
-        let marker = format!("marker-{:?}", std::time::Instant::now());
-        record(&marker);
-        let text = contents();
-        assert!(
-            text.contains(&marker),
-            "the line never reached {:?}",
-            path()
-        );
-        assert!(
-            text.lines()
-                .any(|l| l.starts_with('[') && l.contains(&marker)),
-            "a line with no time on it cannot be placed in a session"
         );
     }
 

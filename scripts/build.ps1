@@ -11,7 +11,7 @@
     itself. You need it before `flutter test`, because the Dart-side frb tests
     load the built library rather than building it.
 
-    See docs/learn/09-DOING-IT-YOURSELF.md for the whole routine.
+    See docs/GUIDE.md.
 
 .PARAMETER Release
     Build with optimisations and no debug assertions. Slower to compile, and
@@ -24,8 +24,9 @@
 
     It is not the only thing the app needs: lumit-ofx-broker and
     lumit-aplug-broker are separate executables that open one OFX bundle, or one
-    CLAP module, in a process of their own, and a full --workspace
-    build makes them. `flutter run` builds all three itself.
+    CLAP module, in a process of their own, lumit-media-broker is the one an
+    Illustrator file is read in, and a full --workspace build makes them.
+    `flutter run` builds all four itself.
 
 .EXAMPLE
     .\scripts\build.ps1

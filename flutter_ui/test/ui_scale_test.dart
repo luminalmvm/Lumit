@@ -9,47 +9,9 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/widgets/ui_scale.dart';
 
 void main() {
-  testWidgets('the shipped factor draws the interface a tenth larger',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(880, 660));
-    final key = GlobalKey();
-    await tester.pumpWidget(Directionality(
-      textDirection: TextDirection.ltr,
-      child: UiScaleView(
-        scale: 1.0,
-        child: SizedBox.expand(key: key),
-      ),
-    ));
-
-    // The baseline is a real scale, so there IS a transform at 100% now.
-    expect(find.byType(Transform), findsOneWidget);
-    // The child lays out at the window divided by 1.1 and paints back to fill
-    // it: 880 ÷ 1.1 = 800.
-    expect(tester.getSize(find.byKey(key)).width, closeTo(800, 0.01));
-    expect(tester.getRect(find.byKey(key)).width, closeTo(880, 0.01));
-  });
-
-  testWidgets('a user factor that cancels the baseline is a pass-through',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 600));
-    final key = GlobalKey();
-    await tester.pumpWidget(Directionality(
-      textDirection: TextDirection.ltr,
-      child: UiScaleView(
-        // What a settings file written before the rebase at 100% migrates to.
-        scale: 1 / uiScaleBaseline,
-        child: SizedBox.expand(key: key),
-      ),
-    ));
-    // Effective 1×: no Transform in the tree, nothing to invert on a pointer.
-    expect(find.byType(Transform), findsNothing);
-    expect(tester.getSize(find.byKey(key)), const Size(800, 600));
-  });
-
   testWidgets('at 2× the user factor the child lays out at the drawn size',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(880, 660));

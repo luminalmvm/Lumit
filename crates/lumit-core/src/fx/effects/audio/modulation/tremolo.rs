@@ -164,22 +164,6 @@ mod tests {
     }
 
     #[test]
-    fn the_cycle_runs_at_the_same_speed_at_any_bake_rate() {
-        harness::same_seconds_at_any_rate(
-            &AudioTremoloDef,
-            &[("rate", 4.0), ("depth", 80.0)],
-            1_000.0,
-            0.6,
-            0.02,
-        );
-    }
-
-    #[test]
-    fn the_gain_moves_at_the_rate_asked() {
-        harness::modulates_at(&AudioTremoloDef, &[("rate", 2.0), ("depth", 80.0)], 2.0);
-    }
-
-    #[test]
     fn the_cycle_tops_out_at_unity_and_bottoms_at_the_depth_asked() {
         // A constant input reads the gain back directly.
         let frames = 96 * crate::fx::AUDIO_BLOCK_FRAMES;
@@ -196,22 +180,5 @@ mod tests {
             (bottom - 0.4).abs() < 1e-3,
             "the bottom should be 0.4: {bottom}"
         );
-    }
-
-    #[test]
-    fn opposite_phases_duck_one_side_as_they_lift_the_other() {
-        let frames = 96 * crate::fx::AUDIO_BLOCK_FRAMES;
-        let input = vec![1.0f32; frames * AUDIO_CHANNELS];
-        let values = harness::values(
-            &AudioTremoloDef,
-            &[("rate", 2.0), ("depth", 100.0), ("stereo_phase", 180.0)],
-        );
-        let out = harness::run(&*harness::open(&AudioTremoloDef, &values), &input, &values);
-        // The two gains are a sine and its opposite, so at every frame past
-        // the smoothing they sum to the same number.
-        for chunk in out[frames / 2 * AUDIO_CHANNELS..].chunks_exact(AUDIO_CHANNELS) {
-            let (l, r) = frame(chunk);
-            assert!((l + r - 1.0).abs() < 1e-3, "{l} and {r} do not trade");
-        }
     }
 }

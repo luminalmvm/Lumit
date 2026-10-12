@@ -1,162 +1,20 @@
 ---
-import { Image } from "astro:assets";
 import Base from "../layouts/Base.astro";
 import Wordmark from "../components/Wordmark.astro";
 import HeroField from "../components/HeroField.astro";
-
-// Every picture on this page is a real capture of the application, kept in
-// src/assets/ so Astro resizes and re-encodes it at build time. To swap one,
-// overwrite the file - the name is the only thing the page knows about it.
-import heroShot from "../assets/shots/hero.png";
-import timelineShot from "../assets/shots/timeline.png";
-import nodeGraphShot from "../assets/shots/node-graph.png";
-import workspaceShot from "../assets/shots/workspace.png";
-import graphShot from "../assets/shots/graph-workspace.png";
-import nodesShot from "../assets/shots/nodes-workspace.png";
-import audioShot from "../assets/shots/audio-workspace.png";
+import HeroTimeline from "../components/HeroTimeline.astro";
+import Showcase from "../components/home/Showcase.astro";
+import Workspaces from "../components/home/Workspaces.astro";
+import Stories from "../components/home/Stories.astro";
+import Features from "../components/home/Features.astro";
+import Roadmap from "../components/home/Roadmap.astro";
+import Closing from "../components/home/Closing.astro";
 
 // The hero line arrives a word at a time. One span per word, each carrying its
 // own index; the delay is arithmetic in CSS rather than script.
 const tagline =
   "Compositing that adapts to your workflow. Built by editors, for editors. With an application that always remains responsive.";
 const words = tagline.split(" ");
-
-// The two cards under the wide one.
-const shots = [
-  {
-    src: timelineShot,
-    alt: "Lumit's timeline lanes beside the graph editor: clip bars and keyframes on one side, a property's curve on the other",
-    h: "Intuitively designed.",
-    p: "Bring your knowledge directly into Lumit. We know time matters, so you can work without interruption.",
-  },
-  {
-    src: nodeGraphShot,
-    alt: "Lumit's node graph: a layer wired through two Glows, Add grain, a LUT, Levels and Motion blur",
-    h: "Dynamic effects.",
-    p: "Effects can be driven by expressions, altered in the node graph, or simply in the effect controls. You decide.",
-  },
-];
-
-// Meet the interface: one picture at a time, chosen by name.
-const tabs = [
-  {
-    src: workspaceShot,
-    alt: "The Lumit workspace: effect controls, the viewer and scopes, the effects search open over a full timeline",
-    h: "Timeline.",
-  },
-  {
-    src: graphShot,
-    alt: "The Graph workspace: effect controls, the viewer and scopes, with a property's curve open in the timeline",
-    h: "Graph.",
-  },
-  {
-    src: nodesShot,
-    alt: "The Nodes workspace: a wired effect chain across the window, the viewer beside it",
-    h: "Nodes.",
-  },
-  {
-    src: audioShot,
-    alt: "The Audio workspace: mixer strips and levels at the left, beat detection at the right, a waveform under the timeline",
-    h: "Audio.",
-  },
-];
-
-const features = [
-  {
-    h: "Retime, two ways",
-    p: "One retime, read as a value graph or as a speed graph. With support for both After Effects and Vegas styles of retiming, and switch at any point.",
-  },
-  {
-    h: "Over 100 effects, built in",
-    p: "Glow, motion blur, camera shake, RGB split, smooth zoom, colour grading, roto brush and puppet. All GPU-rendered, each with a documentation page for details.",
-  },
-  {
-    h: "A graph editor to work in",
-    p: "Value and speed views of the same curves, with support for easing, linear holding, and ways to alter multiple keyframes at once.",
-  },
-  {
-    h: "Cuts inside a layer",
-    p: "A Sequence layer holds clips cut back-to-back on one row, each with its own retime, inside a layer, just like an NLE.",
-  },
-  {
-    h: "OFX plugin support",
-    p: "Any OFX plugin is supported: Sapphire, Twixtor, and the rest are found at start-up and sit beside built-in effects.",
-  },
-  {
-    h: "Bring your After Effects projects",
-    p: "Import After Effects projects directly across into Lumit. Keyframes carry across value for value, with support for all base effects and OFX plugins that Lumit can access.",
-  },
-  {
-    h: "Let music guide you",
-    p: "Beat detection marks the audio, cuts and retime features snap to the markers, and any parameter can be driven from a layer's sound.",
-  },
-  {
-    h: "Your work survives the crash",
-    p: "Every edit goes through an operation journal, and the project autosaves beside it. Kill Lumit mid-edit and the recovered project is offered on the next launch.",
-  },
-  {
-    h: "The interface never blocks",
-    p: "Rendering runs on the GPU, cached work is reused, and preview quality drops when a frame is late. The interface answers while an export runs.",
-  },
-  {
-    h: "Open source, GPLv3",
-    p: "The whole engine and interface, in the open. No subscription, no per-seat licence, and no plugin tax on the basics.",
-  },
-];
-
-// Three stages. The last one gets a dashed rail: past the near work the order
-// is a guess and the site should say so.
-const roadmap = [
-  {
-    label: "Completed",
-    items: [
-      "Layers, masks, mattes and blend modes",
-      "Keyframes and the graph editor",
-      "Sequence layers and the Retime system",
-      "Optical-flow frame interpolation",
-      "Beat detection and markers",
-      "Over 100 GPU effects",
-      "Presets, saved and shared",
-      "2.5D camera and 3D layers",
-      "Roto brush and Puppet",
-      "Camera and planar tracking",
-      "Text layers with animators",
-      "Shape layers and paint",
-      "Expressions",
-      "The node graph",
-      "OFX plugin hosting",
-      "After Effects import, bundle and .aep",
-      "Export queue with hardware encoding",
-      "Proxies and background caching",
-      "Autosave and crash recovery",
-      "Windows, macOS and Linux builds",
-    ],
-  },
-  {
-    label: "In progress",
-    items: [
-      "The Audio workspace",
-      "Custom shader nodes",
-      "Colour management",
-      "Tone mapping",
-      "Interface performance at 60 and 120 fps",
-    ],
-  },
-  {
-    label: "Long run",
-    dashed: true,
-    items: [
-      "Lumit's own effect format",
-      "Lights and camera depth of field",
-      "Particle simulator",
-      "Scripting",
-      "Blender scene import",
-      "Lottie export",
-      "OpenTimelineIO interchange",
-      "Render-farm and command-line export",
-    ],
-  },
-];
 ---
 
 <Base
@@ -165,9 +23,22 @@ const roadmap = [
 >
   {/* Everything below the hero starts hidden and is revealed by the script at
       the foot of this page. Without script the class is never set and the page
-      is simply the page. */}
+      is simply the page.
+
+      `hold` keeps the whole page unseen until the hero has all its parts, so
+      nothing of it shows half-made: the field says when (HeroField.astro).
+      Two seconds is as long as anyone is kept waiting for it. */}
   <script is:inline>
-    document.documentElement.classList.add("anim");
+    (function () {
+      var root = document.documentElement;
+      root.classList.add("anim", "hold");
+      document.addEventListener("hero:ready", function () {
+        root.classList.remove("hold");
+      }, { once: true });
+      setTimeout(function () {
+        if (root.classList.contains("hold")) document.dispatchEvent(new Event("hero:ready"));
+      }, 2000);
+    })();
   </script>
 
   {/* ---------- hero ---------- */}
@@ -176,7 +47,7 @@ const roadmap = [
     <section class="relative flex min-h-[clamp(420px,54vh,560px)] flex-col items-center justify-center px-5 pt-24 pb-16 text-center">
 
       <h1 class="relative mb-0 w-[min(440px,78vw)]">
-        <Wordmark />
+        <Wordmark controlled />
         <span class="sr-only">Lumit - Compositing that adapts to your workflow.</span>
       </h1>
 
@@ -210,14 +81,26 @@ const roadmap = [
       <script is:inline>
         (function () {
           var ua = navigator.userAgent;
-          var os = /Win/.test(ua)
-            ? "Windows"
-            : /Mac/.test(ua)
-              ? "macOS"
-              : /Linux|X11/.test(ua)
-                ? "Linux"
-                : null;
+          // A phone or tablet has no installer to be offered. An iPhone says
+          // "like Mac OS X", Android says "Linux", and an iPad says it is a
+          // Mac outright, so those are ruled out before the desktop names.
+          var handheld =
+            /Android|iPhone|iPad|iPod/.test(ua) ||
+            (/Mac/.test(ua) && navigator.maxTouchPoints > 1);
+          var os = handheld
+            ? null
+            : /Win/.test(ua)
+              ? "Windows"
+              : /Mac/.test(ua)
+                ? "macOS"
+                : /Linux|X11/.test(ua)
+                  ? "Linux"
+                  : null;
           document.documentElement.dataset.os = os || "";
+          if (handheld) {
+            var note = document.querySelector("[data-alt]");
+            if (note) note.textContent = "For Windows, macOS and Linux";
+          }
           if (!os) return;
           var others = {
             Windows: "Also for macOS and Linux",
@@ -234,220 +117,71 @@ const roadmap = [
       <p class="relative mt-6 text-[17px] text-fg-2" data-reveal style="--i:6">
         Let your creativity flow. Free and open-source, forever.
       </p>
+
+      {/* The hero is a composition, and this is its timeline: what is above is
+          drawn from these keyframes, and a visitor can move them. */}
+      <div class="relative mt-12 flex w-full justify-center" data-reveal style="--i:8">
+        <HeroTimeline />
+      </div>
     </section>
   </div>
 
-  {/* ---------- the product, in pictures ---------- */}
-  <section id="features" class="wrap flex flex-col gap-10 pt-24 pb-20 sm:pt-[120px]">
-    <div class="flex flex-col gap-3.5" data-reveal>
-      <p class="kicker">Welcome to Lumit</p>
-      <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1] text-fg-3">
-        <span class="text-fg">Composite the way you know.</span>
-      </h2>
-    </div>
+  {/* ---------- the page below the hero, a section to a component ---------- */}
+  <Showcase />
+  <Workspaces />
+  <Stories />
+  <Features />
+  <Roadmap />
+  <Closing />
 
-    {/* The one wide slot under the heading: the application on a real edit. A
-        clip will take this place when one is recorded. */}
-    <figure class="m-0 overflow-hidden rounded-card border border-line bg-ink-2" data-reveal style="--i:1">
-      <Image
-        class="block w-full"
-        src={heroShot}
-        alt="Lumit mid-edit: the viewer showing a graded frame, effect controls at the left, and a full timeline of layers and keyframes below"
-        widths={[720, 1200, 1800]}
-        sizes="(min-width: 1360px) 1200px, 100vw"
-        loading="eager"
-        fetchpriority="high"
-        quality={90}
-      />
-    </figure>
+  {/* ---------- a screenshot, brought forward ---------- */}
+  <dialog class="lightbox" data-lightbox aria-label="Screenshot, enlarged">
+    <div class="veil" data-veil></div>
+  </dialog>
 
-    <div class="grid gap-10 md:grid-cols-2">
-      {
-        shots.map((s, i) => (
-          <figure class="m-0 flex flex-col gap-2.5" data-reveal style={`--i:${i}`}>
-            <Image
-              class="block w-full rounded-card border border-line bg-ink-2"
-              src={s.src}
-              alt={s.alt}
-              widths={[720, 1200, 1800]}
-              sizes="(min-width: 1360px) 580px, (min-width: 768px) 46vw, 100vw"
-              loading="lazy"
-              quality={90}
-            />
-            <figcaption class="flex max-w-[620px] flex-col gap-2.5">
-              <span class="font-mono text-[18px] tracking-[-0.01em] text-fg">{s.h}</span>
-              <span class="text-[15px] leading-[1.35] text-fg-3">{s.p}</span>
-            </figcaption>
-          </figure>
-        ))
-      }
-    </div>
-
-    <div class="flex flex-col gap-3.5" data-reveal>
-      <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1] text-fg-3">
-        <span class="text-fg"> Meet the interface. </span>
-      </h2>
-    </div>
-    {/* Four names on one rule, and one picture under them - the drawing's own
-        idea, and a good one: four slots side by side had to be small to fit,
-        and the point of these is that you can see what is happening in them.
-        One is always open, so the panel is never empty and the row never reads
-        as four things you have not chosen yet. */}
-    <div data-tabs data-reveal>
-      <div
-        class="flex items-baseline border-b border-line pb-3.5"
-        role="tablist"
-        aria-label="Meet the interface"
-      >
-        {
-          tabs.map((c, i) => (
-            <>
-              {i > 0 && (
-                <span class="px-4 text-[15px] text-fg-4" aria-hidden="true">
-                  |
-                </span>
-              )}
-              <button
-                type="button"
-                role="tab"
-                id={`tab-${i}`}
-                aria-controls={`panel-${i}`}
-                aria-selected={i === 0 ? "true" : "false"}
-                tabindex={i === 0 ? 0 : -1}
-                class="tab cursor-pointer border-0 bg-transparent p-0 font-mono text-[17px] text-fg-3"
-              >
-                {c.h}
-              </button>
-            </>
-          ))
-        }
-      </div>
-      {
-        tabs.map((c, i) => (
-          <div
-            id={`panel-${i}`}
-            role="tabpanel"
-            aria-labelledby={`tab-${i}`}
-            class="mt-6 overflow-hidden rounded-card border border-line bg-ink-2"
-            hidden={i !== 0}
-          >
-            <Image
-              class="block w-full"
-              src={c.src}
-              alt={c.alt}
-              widths={[720, 1200, 1800]}
-              sizes="(min-width: 1360px) 1200px, 100vw"
-              loading="lazy"
-              quality={90}
-            />
-          </div>
-        ))
-      }
-    </div>
-  </section>
-
-  {/* ---------- why it exists ---------- */}
-  <section class="border-t border-line py-20 sm:py-24">
-    <div class="wrap">
-      <div data-reveal>
-        <p class="kicker">Why Lumit exists</p>
-        <h2 class="mt-3.5 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">
-          Editing should not be a chore.
-        </h2>
-        <p class="mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
-          Preview lag, interfaces that stop responding, and large external plugin suites
-          that slow down your device. Lumit replaces all of this in a single application,
-          with support for OFX plugins should you still require them.
-        </p>
-      </div>
-
-      <div
-        class="mt-12 grid gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-2"
-      >
-        {
-          features.map((f, i) => (
-            <div class="bg-ink-2 p-7" data-reveal style={`--i:${i % 2}`}>
-              <h3 class="font-mono text-[15px] text-fg">{f.h}</h3>
-              <p class="mt-2.5 text-[15px] leading-[1.35] text-fg-3">{f.p}</p>
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  </section>
-
-  {/* ---------- roadmap ---------- */}
-  <section id="roadmap" class="border-t border-line py-20 sm:py-24">
-    <div class="wrap">
-      <div data-reveal>
-        <p class="kicker">Roadmap</p>
-        <h2 class="mt-3.5 text-[clamp(28px,3.4vw,36px)] leading-[1.1]">What we are building.</h2>
-        <p class="mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
-          Lumit is in public beta. Here is what is built, what is being worked on now, and
-          what comes after.
-        </p>
-      </div>
-
-      <div class="roadmap mt-14">
-        {
-          roadmap.map((stage, i) => (
-            <div class:list={["stage", stage.dashed && "stage-open"]} data-reveal>
-              <span class="marker" aria-hidden="true">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <div class="head">
-                <h3 class="kicker">{stage.label}</h3>
-              </div>
-              <ul class="items">
-                {stage.items.map((item) => (
-                  <li>{item}</li>
-                ))}
-              </ul>
-            </div>
-          ))
-        }
-      </div>
-    </div>
-  </section>
-
-  {/* ---------- close ---------- */}
-  <section class="border-t border-line py-20 text-center sm:py-24">
-    <div class="wrap" data-reveal>
-      <h2 class="text-[clamp(28px,3.4vw,36px)] leading-[1.1]">Free, forever.</h2>
-      <p class="mx-auto mt-4 max-w-[620px] text-[15px] leading-[1.5] text-fg-3">
-        Open source under GPLv3, and yours to keep. Windows, Linux and macOS builds are
-        all ready now - no account, no licence key.
-      </p>
-      <div class="mt-9 flex flex-wrap justify-center gap-3">
-        <a class="btn" href="/download">Download Lumit</a>
-        <a class="btn btn-ghost" href="https://docs.lumitlab.com">Read the docs</a>
-      </div>
-    </div>
-  </section>
+  {/* What the page behind is put through while a screenshot is forward: a
+      lens blur, not a Gaussian one. Each of the four stages averages two
+      copies of the picture pushed apart along one direction, and four
+      directions 45 degrees apart leave sixteen copies on two rings - the
+      shape a point of light takes through an out-of-focus lens, where a
+      Gaussian would only make a soft dot. The small blur first fills in
+      between the copies. The script sets every distance, so the blur can
+      open up and close down. Units are CSS pixels. The two tables either
+      side are the script's too: the picture is blurred through a curve that
+      makes its bright end count for more, and comes back through the inverse. */}
+  <svg class="lens-defs" width="0" height="0" aria-hidden="true" focusable="false">
+    <filter id="lens" color-interpolation-filters="sRGB">
+      <feComponentTransfer in="SourceGraphic" result="lit">
+        <feFuncR type="table" data-lens-in></feFuncR>
+        <feFuncG type="table" data-lens-in></feFuncG>
+        <feFuncB type="table" data-lens-in></feFuncB>
+      </feComponentTransfer>
+      <feGaussianBlur in="lit" stdDeviation="0" data-lens-soft result="s"></feGaussianBlur>
+      <feOffset in="s" data-lens="1 0" result="a1"></feOffset>
+      <feOffset in="s" data-lens="-1 0" result="a2"></feOffset>
+      <feComposite in="a1" in2="a2" operator="arithmetic" k1="0" k2="0.5" k3="0.5" k4="0" result="a"></feComposite>
+      <feOffset in="a" data-lens="0 1" result="b1"></feOffset>
+      <feOffset in="a" data-lens="0 -1" result="b2"></feOffset>
+      <feComposite in="b1" in2="b2" operator="arithmetic" k1="0" k2="0.5" k3="0.5" k4="0" result="b"></feComposite>
+      <feOffset in="b" data-lens="0.7071 0.7071" result="c1"></feOffset>
+      <feOffset in="b" data-lens="-0.7071 -0.7071" result="c2"></feOffset>
+      <feComposite in="c1" in2="c2" operator="arithmetic" k1="0" k2="0.5" k3="0.5" k4="0" result="c"></feComposite>
+      <feOffset in="c" data-lens="0.7071 -0.7071" result="d1"></feOffset>
+      <feOffset in="c" data-lens="-0.7071 0.7071" result="d2"></feOffset>
+      <feComposite in="d1" in2="d2" operator="arithmetic" k1="0" k2="0.5" k3="0.5" k4="0" result="d"></feComposite>
+      <feComponentTransfer in="d">
+        <feFuncR type="table" data-lens-out></feFuncR>
+        <feFuncG type="table" data-lens-out></feFuncG>
+        <feFuncB type="table" data-lens-out></feFuncB>
+      </feComponentTransfer>
+    </filter>
+  </svg>
 </Base>
 
 <style>
-  /* Nothing marked for reveal is drawn until the script releases it - the
-     wordmark coming home for the hero, scrolling into view for the rest. --i
-     staggers the pieces of one group against each other, 70ms apart. */
-  :global(html.anim) [data-reveal] {
-    opacity: 0;
-    filter: blur(10px);
-    transform: translateY(12px);
-  }
-  :global(html.anim) [data-reveal].shown {
-    opacity: 1;
-    filter: blur(0);
-    transform: none;
-    transition:
-      opacity 500ms ease-out calc(var(--i, 0) * 70ms),
-      filter 500ms ease-out calc(var(--i, 0) * 70ms),
-      transform 500ms ease-out calc(var(--i, 0) * 70ms);
-  }
-
   /* The download button does not wait for the wordmark: it blurs in as the
-     page loads, and the rest of the hero follows the lockup home. */
-  :global(html.anim) .lead {
+     page is shown, and the rest of the hero follows the lockup home. */
+  :global(html.anim:not(.hold)) .lead {
     animation: piece-in 500ms both;
   }
   @keyframes piece-in {
@@ -458,7 +192,7 @@ const roadmap = [
     }
     to {
       opacity: 1;
-      filter: blur(0);
+      filter: none;
       transform: none;
     }
   }
@@ -492,12 +226,11 @@ const roadmap = [
     }
     to {
       opacity: 1;
-      filter: blur(0);
+      filter: none;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    :global(html.anim) [data-reveal],
     :global(html.anim) .lead,
     :global(html.anim) .words .word {
       animation: none;
@@ -507,97 +240,88 @@ const roadmap = [
     }
   }
 
-  /* The name of the panel you are looking at lifts a few pixels off the rule
-     and takes the full text colour. It is the whole indicator - no underline,
-     no box, nothing that needs a second colour - and it moves rather than
-     changes size, so the row's own width never shifts as you switch. */
-  .tab {
-    transition:
-      color 0.15s,
-      transform 0.15s;
-  }
-  .tab:hover {
-    color: var(--color-fg-2);
-  }
-  .tab[aria-selected="true"] {
-    color: var(--color-fg);
-    transform: translateY(-4px);
-  }
-
-  /* Numbered stages against a rail. Each stage carries its own rail segment so
-     the last one can go dashed: past the near work the order is a guess, and
-     the line should look like one. */
-  .stage {
-    position: relative;
-    display: grid;
-    gap: 20px;
-    padding: 0 0 44px 44px;
-    border-left: 1px solid var(--color-line-2);
-  }
-  .stage-open {
-    border-left-style: dashed;
-  }
-  .stage:last-child {
-    padding-bottom: 0;
-  }
-  .marker {
-    position: absolute;
-    left: 0;
-    top: -2px;
-    display: grid;
-    place-items: center;
-    width: 26px;
-    height: 26px;
-    margin-left: -14px;
-    border-radius: var(--radius-ctl);
-    border: 1px solid var(--color-line-2);
-    background: var(--color-ink-2);
-    color: var(--color-fg-3);
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1;
-  }
-  /* Each item is its own cell. A shared grid with hairline gaps left the empty
-     cells of a partial last row showing as a grey block, and no item count fixes
-     that while the columns are responsive. */
-  .items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  /* The screenshot brought forward. The dialog is the whole window and draws
+     nothing itself: the veil dims the page and lays the hero's grain over it,
+     the page behind is out of focus (the lens filter, set from the script),
+     and the script puts a copy of the screenshot's panel in it and moves
+     that. A dialog has a text colour of its own, which the copy must not
+     take. */
+  .lightbox {
+    color: inherit;
+    cursor: pointer;
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
     margin: 0;
     padding: 0;
-    list-style: none;
+    border: 0;
+    overflow: hidden;
+    background: none;
+    outline: none;
   }
-  .items li {
-    padding: 8px 14px;
-    border: 1px solid var(--color-line);
-    border-radius: var(--radius-ctl);
-    background: var(--color-ink);
-    color: var(--color-fg-2);
-    font-size: 14px;
-    line-height: 1.35;
-    transition:
-      color 0.15s,
-      border-color 0.15s;
+  .lightbox::backdrop {
+    background: none;
   }
-  .items li:hover {
-    color: var(--color-fg);
-    border-color: var(--color-line-2);
+  .veil {
+    position: absolute;
+    inset: 0;
+    background-color: color-mix(in srgb, var(--color-ink) 38%, transparent);
+    background-image: var(--grain, none);
+    background-size: 128px 128px;
+    opacity: 0;
+    transition: opacity 300ms ease-out;
   }
-  @media (min-width: 768px) {
-    .stage {
-      grid-template-columns: minmax(0, 210px) minmax(0, 1fr);
-      gap: 40px;
-      padding-bottom: 52px;
-    }
+  .lightbox.open .veil {
+    opacity: 1;
+  }
+  /* No `will-change` here: with it the words in the panel stay drawn at the
+     size they left the page at, and are soft once it has grown. */
+  .lightbox :global(.forward) {
+    position: absolute;
+    margin: 0;
+    box-shadow: 0 30px 90px rgb(0 0 0 / 0.55);
+    transform-origin: 0 0;
+    user-select: none;
+  }
+  /* It is forward already, so its strip does not say how to get it there. */
+  .lightbox :global(.forward .shot-bar > span:last-child) {
+    visibility: hidden;
+  }
+</style>
+
+<style is:global>
+  /* The page behind a screenshot that has come forward. Global, since the bar
+     and the footer are not this page's own elements. */
+  html.lens body > header,
+  html.lens body > main,
+  html.lens body > footer {
+    filter: url(#lens);
+  }
+  /* The page's own ground under its words while the lens is on. Without it
+     they stand on nothing, and the lens can only fade them out where it
+     should be weighing light against dark. */
+  html.lens body > main {
+    background-color: var(--color-ink);
+  }
+  /* The page held back until the hero is ready, then let in quickly. */
+  html.anim body {
+    transition: opacity 200ms ease-out;
+  }
+  html.hold body {
+    opacity: 0;
   }
 </style>
 
 <script>
-  // Point the hero button straight at the installer for the visitor's platform.
-  // Pure enhancement: the button ships pointing at /download, and every failure
-  // here leaves it be. The button's *words* are set inline in the hero instead,
-  // because changing them after this module loads would move the layout.
+  import { hero } from "../scripts/hero-state";
+
+  // Point the download buttons straight at the installer for the visitor's
+  // platform. Pure enhancement: each ships pointing at /download, and every
+  // failure here leaves it be. A button's *words* are set inline beside it
+  // instead, because changing them after this module loads would move the layout.
   //
   // No platform is "coming": release.yml builds a Windows .exe, a macOS .dmg
   // and a Linux .flatpak on every tag and every job gates the release,
@@ -610,10 +334,10 @@ const roadmap = [
   // The inline script in the hero has already worked the platform out.
   const os = document.documentElement.dataset.os;
 
-  const btn = document.querySelector<HTMLAnchorElement>("[data-dl]");
+  const btns = document.querySelectorAll<HTMLAnchorElement>("[data-dl]");
 
   type Asset = { name: string; browser_download_url: string };
-  if (os && btn && ASSET[os]) {
+  if (os && btns.length && ASSET[os]) {
     const want = ASSET[os];
     fetch("https://api.github.com/repos/luminalmvm/Lumit/releases/latest")
       .then((r) => {
@@ -622,39 +346,294 @@ const roadmap = [
       })
       .then((rel) => {
         const asset = rel.assets.find((a) => want.test(a.name));
-        if (asset) btn.href = asset.browser_download_url;
+        if (asset) for (const btn of btns) btn.href = asset.browser_download_url;
       })
       .catch(() => {
         /* the shipped /download link stands */
       });
   }
 
-  // Meet the interface: one panel open at a time, and always one. Clicking a
-  // name opens its panel; the arrow keys walk the row, which is what a tablist
-  // is expected to do and is four lines here.
-  const tabsRoot = document.querySelector<HTMLElement>("[data-tabs]");
-  if (tabsRoot) {
-    const tabs = [...tabsRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-    const panels = [...tabsRoot.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
+  // Meet the interface: four windows in a stack. A click on one behind brings
+  // it to the front with the rest in turn behind it, and only the front one's
+  // clip plays. The front one is a screenshot like any other, so its click is
+  // left to the code below.
+  const stack = document.querySelector<HTMLElement>("[data-stack]");
+  if (stack) {
+    const layers = [...stack.querySelectorAll<HTMLButtonElement>("[data-layer]")];
+    // Heard on the way down, so a window behind comes forward before the
+    // click can reach it as a screenshot to enlarge.
+    stack.addEventListener(
+      "click",
+      (e) => {
+        const picked = (e.target as Element).closest<HTMLButtonElement>("[data-layer]");
+        if (!picked || picked.hasAttribute("aria-current")) return;
+        e.stopPropagation();
+        const front = layers.indexOf(picked);
+        layers.forEach((layer, i) => {
+          const on = i === front;
+          layer.style.setProperty("--o", String((i - front + layers.length) % layers.length));
+          layer.ariaCurrent = on ? "true" : null;
+          layer.ariaLabel = on ? "Enlarge this screenshot" : `Show the ${layer.dataset.name} workspace`;
+          // A clip's first frame is its picture, so one sent back looks as
+          // it did before it played.
+          const clip = layer.querySelector("video");
+          if (!clip) return;
+          clip.pause();
+          clip.currentTime = 0;
+          if (on && !matchMedia("(prefers-reduced-motion: reduce)").matches) clip.play().catch(() => {});
+        });
+      },
+      true,
+    );
+  }
 
-    const open = (want: number, focus = false) => {
-      tabs.forEach((tab, i) => {
-        const on = i === want;
-        tab.setAttribute("aria-selected", on ? "true" : "false");
-        tab.tabIndex = on ? 0 : -1;
-        panels[i].hidden = !on;
-      });
-      if (focus) tabs[want].focus();
+  // A screenshot comes forward where it sits on the page, panel and all, with
+  // a little spring, to half as big again or what the window has room for.
+  // The page behind goes out of focus and takes the hero's grain. A click
+  // anywhere, Escape, or a scroll sends it back to its size.
+  const box = document.querySelector<HTMLDialogElement>("[data-lightbox]");
+  if (box) {
+    const root = document.documentElement;
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Out of <main>, which is one of the things the lens filter is put on.
+    document.body.append(box);
+
+    // ---- the lens ----
+    const soft = document.querySelector<SVGElement>("[data-lens-soft]")!;
+    const offsets = [...document.querySelectorAll<SVGElement>("[data-lens]")].map((el) => {
+      const [x, y] = el.dataset.lens!.split(" ").map(Number);
+      return { el, x, y };
+    });
+    const REACH = 4.5; // each stage pushes its two copies this far apart, each way
+    // Averaging the page's own values lets a bright point sink into the dark
+    // around it, where a lens leaves it standing as a ring. So the page goes
+    // through this curve first and back through its inverse after. The
+    // straight part is what keeps the dark greys apart in the eight bits a
+    // filter works in, which a plain gamma would not.
+    const light = (x: number) => 0.5 * x + 0.5 * x ** 4;
+    const unlight = (y: number) => {
+      let lo = 0;
+      let hi = 1;
+      for (let i = 0; i < 20; i++) {
+        const mid = (lo + hi) / 2;
+        if (light(mid) < y) lo = mid;
+        else hi = mid;
+      }
+      return lo;
+    };
+    // A filter drops the fraction when it turns a table into eight bits, and
+    // twice over that darkens the page's ground. Half a step up rounds it.
+    const table = (f: (x: number) => number) =>
+      Array.from({ length: 65 }, (_, i) => Math.min(1, f(i / 64) + 0.5 / 255).toFixed(4)).join(" ");
+    for (const el of document.querySelectorAll("[data-lens-in]")) el.setAttribute("tableValues", table(light));
+    for (const el of document.querySelectorAll("[data-lens-out]")) el.setAttribute("tableValues", table(unlight));
+    let lens = 0;
+    let lensRun = 0;
+    const setLens = (k: number) => {
+      lens = k;
+      soft.setAttribute("stdDeviation", (2.4 * k).toFixed(2));
+      for (const o of offsets) {
+        o.el.setAttribute("dx", (o.x * REACH * k).toFixed(2));
+        o.el.setAttribute("dy", (o.y * REACH * k).toFixed(2));
+      }
+      root.classList.toggle("lens", k > 0);
+    };
+    const focusTo = (to: number, ms: number) => {
+      const run = ++lensRun;
+      const from = lens;
+      const t0 = performance.now();
+      const step = (now: number) => {
+        if (run !== lensRun) return;
+        const x = still ? 1 : Math.min(1, (now - t0) / ms);
+        setLens(from + (to - from) * (1 - Math.pow(1 - x, 3)));
+        if (x < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
     };
 
-    tabs.forEach((tab, i) => {
-      tab.addEventListener("click", () => open(i));
-      tab.addEventListener("keydown", (e) => {
-        const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-        if (!step) return;
-        e.preventDefault();
-        open((i + step + tabs.length) % tabs.length, true);
-      });
+    // ---- the grain ----
+    // The hero field's own grain (HeroField.astro, `phash`), a screen pixel at
+    // a time whatever the screen, as a tile: white where it would add and
+    // black where it would take away, each as faint as the amount.
+    const grain = () => {
+      const n = Math.round(128 * (devicePixelRatio || 1));
+      const tile = document.createElement("canvas");
+      tile.width = tile.height = n;
+      const ctx = tile.getContext("2d");
+      if (!ctx) return;
+      const img = ctx.createImageData(n, n);
+      const fract = (v: number) => v - Math.floor(v);
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          let qx = fract(x * 0.1031);
+          let qy = fract(y * 0.1031);
+          let qz = qx;
+          const d = qx * (qy + 33.33) + qy * (qz + 33.33) + qz * (qx + 33.33);
+          qx += d;
+          qy += d;
+          qz += d;
+          const v = (fract((qx + qy) * qz) - 0.5) * 0.036 * 1.1;
+          const i = (y * n + x) * 4;
+          img.data[i] = img.data[i + 1] = img.data[i + 2] = v > 0 ? 255 : 0;
+          img.data[i + 3] = Math.round(Math.abs(v) * 255);
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      box.style.setProperty("--grain", `url(${tile.toDataURL()})`);
+    };
+    let grained = false;
+
+    // ---- the panel ----
+    // What comes forward is a copy of the screenshot's whole panel: its frame,
+    // its strip and its words. The copy is laid out at the size the panel has
+    // on the page and scaled up by `grow`, so its words grow with it.
+    type Box = { left: number; top: number; width: number; height: number };
+    let panel: HTMLElement | null = null;
+    let copy: HTMLElement | null = null;
+    let home: Box = { left: 0, top: 0, width: 1, height: 1 };
+    let grow = 1;
+    let closing = false;
+
+    // Where a box is, said as a transform of the copy's forward place.
+    const from = (r: Box, x = 1) =>
+      `translate(${((r.left - home.left) * x).toFixed(2)}px, ${((r.top - home.top) * x).toFixed(2)}px) ` +
+      `scale(${((1 + (r.width / home.width - 1) * x) * grow).toFixed(4)})`;
+    // A spring that overshoots by about a fifteenth and has settled by 640ms.
+    const spring = (time: number) => {
+      const z = 0.64;
+      const w = 13;
+      const wd = w * Math.sqrt(1 - z * z);
+      return 1 - Math.exp(-z * w * time) * (Math.cos(wd * time) + ((z * w) / wd) * Math.sin(wd * time));
+    };
+
+    const open = (shot: HTMLButtonElement) => {
+      const here = shot.closest<HTMLElement>(".shot");
+      const small = shot.querySelector("img");
+      if (!here || !small || box.open) return;
+      panel = here;
+      closing = false;
+      if (!grained) {
+        grained = true;
+        grain();
+      }
+
+      // The copy is only looked at: it cannot be clicked or tabbed to, so a
+      // click on it lands on the dialog, and the dialog says what it shows.
+      const fwd = here.cloneNode(true) as HTMLElement;
+      copy = fwd;
+      fwd.classList.add("forward");
+      fwd.removeAttribute("data-reveal");
+      fwd.inert = true;
+      box.ariaLabel = `Screenshot, enlarged: ${small.alt}`;
+      // The picture stands in for its clip, as it does on the page.
+      fwd.querySelector("[data-clip]")?.remove();
+      // The picture the page already has, then the one at the capture's size.
+      const url = shot.dataset.zoom!;
+      const pic = fwd.querySelector("img")!;
+      pic.removeAttribute("srcset");
+      pic.removeAttribute("loading");
+      pic.decoding = "sync";
+      pic.src = small.currentSrc || url;
+      const big = new Image();
+      big.onload = () => {
+        if (copy === fwd) pic.src = url;
+      };
+      big.src = url;
+
+      // Forward is a step towards the visitor: half as big again as it stands
+      // on the page, less where the window has not the room, and the picture
+      // never bigger than the capture itself. The computed size and not the
+      // box, which has the growth under the pointer in it.
+      const start = here.getBoundingClientRect();
+      const laid = getComputedStyle(here);
+      const pw = parseFloat(laid.width);
+      const ph = parseFloat(laid.height);
+      const phone = innerWidth < 640;
+      grow = Math.min(
+        1.5,
+        (innerWidth * (phone ? 0.94 : 0.8)) / pw,
+        (innerHeight * 0.9) / ph,
+        Number(shot.dataset.w) / small.offsetWidth,
+      );
+      const width = pw * grow;
+      const height = ph * grow;
+      // It grows where it is and does not travel: the corner furthest from
+      // the middle of the window stays put, so it grows towards the middle.
+      // One that sits near the middle grows evenly instead. Then it moves
+      // only as far as it takes to be wholly in the window.
+      const pad = phone ? 12 : 24;
+      const within = (at: number, size: number, room: number) =>
+        Math.max(Math.min(at, room - pad - size), Math.min(pad, (room - size) / 2));
+      // How much of the growth goes to the near side: none of it out at the
+      // left or top, all of it at the right or bottom, half in the middle.
+      const share = (at: number, size: number, room: number) =>
+        Math.min(1, Math.max(0, 0.5 + ((at + size / 2) / room - 0.5) * 4));
+      home = {
+        left: within(start.left - (width - start.width) * share(start.left, start.width, innerWidth), width, innerWidth),
+        top: within(start.top - (height - start.height) * share(start.top, start.height, innerHeight), height, innerHeight),
+        width,
+        height,
+      };
+      fwd.style.left = `${home.left}px`;
+      fwd.style.top = `${home.top}px`;
+      fwd.style.width = `${pw}px`;
+      fwd.style.height = `${ph}px`;
+      fwd.style.transform = from(home);
+      box.append(fwd);
+
+      box.showModal();
+      box.classList.add("open");
+      here.style.visibility = "hidden";
+      hero.paused = true;
+      focusTo(1, 280);
+
+      const frames: Keyframe[] = [];
+      const STEPS = 40;
+      for (let i = 0; i <= STEPS; i++) {
+        frames.push({ transform: from(start, 1 - spring((i / STEPS) * 0.64)) });
+      }
+      frames[STEPS] = { transform: from(home) };
+      fwd.animate(frames, { duration: still ? 1 : 640, easing: "linear" });
+      addEventListener("scroll", close, { passive: true, once: true });
+      addEventListener("resize", close, { once: true });
+    };
+
+    function close() {
+      const fwd = copy;
+      const here = panel;
+      if (!box!.open || closing || !fwd || !here) return;
+      closing = true;
+      removeEventListener("scroll", close);
+      removeEventListener("resize", close);
+      // From wherever it has got to, back to where the page has it now.
+      const now = fwd.getBoundingClientRect();
+      fwd.getAnimations().forEach((a) => a.cancel());
+      const back = here.getBoundingClientRect();
+      box!.classList.remove("open");
+      focusTo(0, 260);
+      const going = fwd.animate(
+        [{ transform: from(now) }, { transform: from(back) }],
+        { duration: still ? 1 : 340, easing: "cubic-bezier(0.3, 0, 0.2, 1)", fill: "forwards" },
+      );
+      going.onfinish = () => {
+        here.style.visibility = "";
+        box!.close();
+        fwd.remove();
+        copy = null;
+        setLens(0);
+        hero.paused = false;
+        closing = false;
+      };
+    }
+
+    for (const shot of document.querySelectorAll<HTMLButtonElement>("[data-zoom]")) {
+      shot.addEventListener("click", () => open(shot));
+    }
+    box.addEventListener("click", close);
+    // Escape closes a dialog at once, and this one has a way back to take.
+    box.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      close();
     });
   }
 

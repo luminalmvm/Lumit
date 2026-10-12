@@ -26,7 +26,7 @@
 //! matrix in this file's tests.
 
 use crate::decode::{CompFrame, CompJob, DecodePool};
-use crate::export::{AudioJob, ItemInfo};
+use crate::export::AudioJob;
 use crate::plan::{plan_comp_frame, Quality};
 use crate::source::{SourceProbe, SourceProbes};
 use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectItem};
@@ -35,6 +35,7 @@ use lumit_core::model::{Composition, Document, FootageItem, LayerKind, ProjectIt
 // "half size" is (it moved into lumit-gpu when the composite itself started
 // running at the preview scale; the rounding is unchanged).
 use lumit_gpu::scaled_size;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -137,17 +138,14 @@ pub struct HeadlessRenderer {
     /// composite, so it is never lent to the `Renderer` — it borrows `&self.gpu`
     /// on its own. Compiled once with the other engines.
     scope: lumit_gpu::scope::ScopeEngine,
-    /// The `ItemInfo` map the renderer reads, rebuilt each call (cheap — it only
-    /// reads `probe_cache`) so a missing item's slate matches the current comp.
-    items: HashMap<Uuid, ItemInfo>,
-    /// Probe results by footage id, kept beside the source they were read
-    /// from, so a relink or a run of stills read at a new rate probes again.
-    probe_cache: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
-    /// The same, for each item's **proxy** file — kept beside its path
-    /// rather than under the id alone, so attaching a different proxy (or the
-    /// one MAKE-PROXY has just written) re-probes instead of answering from a
-    /// stale entry about a file that is no longer the one referenced.
-    proxy_probes: HashMap<Uuid, (PathBuf, Probe)>,
+    /// What has been learnt about footage files so far, filled as frames
+    /// first ask ([`ProbeView`]). Behind a `RefCell` because naming a frame
+    /// takes `&self` and may still be the first to ask about a file. Nothing
+    /// borrows it for longer than one question.
+    probes: RefCell<Probes>,
+    /// The thread that probes the files of clips about to come into view
+    /// during playback, started the first time playback looks ahead.
+    probe_ahead: Option<ProbeAhead>,
     /// The audio-jobs walk with its has-audio probe cache, so building the
     /// export audio jobs probes each file at most once (export path only).
     audio_jobs: AudioJobsBuilder,
@@ -443,6 +441,16 @@ pub struct SharedFrameInfoLinux {
     pub drm_fourcc: u32,
     /// The DRM modifier (`DRM_FORMAT_MOD_LINEAR` = 0 on the linear-tiling path).
     pub modifier: u64,
+    /// Which card the buffer is on, as the kernel names it: the `(major, minor)`
+    /// of its render node (`/dev/dri/renderD*`). The runner compares it with
+    /// the card Flutter draws with and refuses a texture from another one,
+    /// which a laptop with two cards otherwise crashes on (see
+    /// `lumit_gpu::drm`). `None` when the driver does not say.
+    pub render_node: Option<(u32, u32)>,
+    /// The same card's primary node (`/dev/dri/card*`), for a display driver
+    /// that can only name its own primary node. The two kinds are different
+    /// files with different numbers, so each is only compared with its own.
+    pub primary_node: Option<(u32, u32)>,
 }
 
 /// The inputs one export needs beyond the document itself: the comp's audio
@@ -712,9 +720,8 @@ impl HeadlessRenderer {
             gpu,
             parts: Some(parts),
             scope,
-            items: HashMap::new(),
-            probe_cache: HashMap::new(),
-            proxy_probes: HashMap::new(),
+            probes: RefCell::default(),
+            probe_ahead: None,
             audio_jobs: AudioJobsBuilder::new(),
             pool,
             retained: None,
@@ -847,9 +854,7 @@ impl HeadlessRenderer {
     }
 
     /// Build the inputs one export of `comp_id` needs (the bridge's v0.4 export
-    /// path): the footage [`ItemInfo`] map (probed exactly as a render
-    /// probes, sharing this renderer's cache), the comp's audio jobs, and a GPU
-    /// context sharing this renderer's device. `None` when `comp_id` is unknown.
+    /// path): the comp's audio jobs. `None` when `comp_id` is unknown.
     /// The exporter (`crate::export::start`) takes these and spawns its own
     /// encode thread, so this call is cheap and holds no GPU work.
     pub fn export_inputs(&mut self, doc: &Arc<Document>, comp_id: Uuid) -> Option<ExportInputs> {
@@ -1160,13 +1165,13 @@ impl HeadlessRenderer {
 
     /// The content-hash name of this comp frame ([`crate::cache::frame_key`]),
     /// computed from **this renderer's own** probe results so the name and the
-    /// pixels can never disagree about what a source file is. `None` while some
-    /// footage is unprobed — the frame renders live and is not cached. The
-    /// Viewer's own way of looking is folded in ([`Self::named_under_view`]),
-    /// so an exposed frame is named as one rather than left nameless.
+    /// pixels can never disagree about what a source file is. The Viewer's own
+    /// way of looking is folded in ([`Self::named_under_view`]), so an exposed
+    /// frame is named as one rather than left nameless.
     ///
-    /// Takes `&mut self` because it probes anything new, exactly as a render
-    /// would; a caller that then renders pays for the probe only once.
+    /// A file this frame shows is probed here if nothing has asked about it
+    /// yet, exactly as a render would; a caller that then renders pays for the
+    /// probe only once.
     pub fn frame_key(
         &mut self,
         doc: &Arc<Document>,
@@ -1182,37 +1187,14 @@ impl HeadlessRenderer {
         // [`Self::flare_substitutions`], which counts the frames that
         // actually drew other optics than they name, and those alone are the
         // frames nobody banks.
-        let comp = doc.comp(comp_id)?;
-        self.sync_items(doc, comp);
-        crate::cache::frame_key(
-            doc,
-            comp,
-            frame as usize,
-            quality,
-            &ProbeView(&self.probe_cache, &self.proxy_probes),
-        )
-        .map(|k| self.named_under_view(k))
+        self.frame_key_presynced(doc, comp_id, frame, quality)
     }
 
-    /// Probe what comp `comp_id` can show, so a batch of
-    /// [`Self::frame_key_presynced`] calls can run against a settled probe
-    /// cache. [`Self::frame_key`] does this itself, per call — which rebuilds
-    /// the footage map every time, and a consumer naming hundreds of frames of
-    /// the SAME document (the cache bar, the playback look-ahead) was paying
-    /// that rebuild per frame. Call this once per document, then name as many
-    /// frames as needed. An unknown comp probes nothing, calmly.
-    pub fn presync_items(&mut self, doc: &Document, comp_id: Uuid) {
-        if let Some(comp) = doc.comp(comp_id) {
-            self.sync_items(doc, comp);
-        }
-    }
-
-    /// [`Self::frame_key`] against the probes already gathered — no probing, no
-    /// footage-map rebuild, and thus `&self`. Only correct after
-    /// [`Self::presync_items`] was called for this document and this comp; an
-    /// unprobed source simply makes the frame unnameable (`None`), never
-    /// wrongly named, so a caller that forgets the presync renders live rather
-    /// than mis-caching.
+    /// [`Self::frame_key`] through `&self`, for a caller that holds the
+    /// renderer shared while it names a run of frames. The name is from when
+    /// every file a comp could show was probed ahead of such a run. Files are
+    /// now probed as frames first need them, so there is nothing to do ahead
+    /// and the two calls answer alike.
     #[must_use]
     pub fn frame_key_presynced(
         &self,
@@ -1227,7 +1209,10 @@ impl HeadlessRenderer {
             comp,
             frame as usize,
             quality,
-            &ProbeView(&self.probe_cache, &self.proxy_probes),
+            &ProbeView {
+                doc,
+                probes: &self.probes,
+            },
         )
         .map(|k| self.named_under_view(k))
     }
@@ -1275,9 +1260,6 @@ impl HeadlessRenderer {
             .comp(comp_id)
             .ok_or_else(|| "headless preview: unknown composition".to_string())?;
         let (cw, ch) = (comp.width, comp.height);
-        // Fills `probe_cache` for anything new this comp can show, which
-        // `ProbeView` then reads.
-        self.sync_items(doc, comp);
         let fps = comp.frame_rate.fps().max(1.0);
         let t = frame as f64 / fps;
 
@@ -1290,7 +1272,10 @@ impl HeadlessRenderer {
         // realiser asks for. A measured frame realises every Precomp so its
         // inner rows get numbers (see `Realiser::realise_nested`), so it must
         // not skip their decodes either.
-        let probes = ProbeView(&self.probe_cache, &self.proxy_probes);
+        let probes = ProbeView {
+            doc,
+            probes: &self.probes,
+        };
         let keys = crate::cache::NestedKeys {
             doc,
             probes: &probes,
@@ -1378,6 +1363,17 @@ impl HeadlessRenderer {
             crate::colour::InputTransforms::build(doc, &self.colour, &self.gpu, &parts.colour);
         let inputs = (!built.is_empty()).then_some(built);
         let out = {
+            let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained
+                .pixels
+                .layers
+                .iter()
+                .map(|lp| (lp.layer, lp))
+                .collect();
+            // Clone to points' pictures for a stream that is only made during
+            // the render: the walk asks for them here once it has the stream.
+            let late_clones = |spec: &crate::draw::LateClones, points: usize| {
+                crate::build::late_clone_pictures(doc, spec, points, &pixels_by_layer)
+            };
             let realiser = crate::realise::Realiser {
                 ctx: self.gpu.clone_handle(),
                 engine: &parts.colour,
@@ -1395,13 +1391,8 @@ impl HeadlessRenderer {
                 colour_inputs: inputs.as_ref(),
                 colour_config: self.colour.loaded().filter(|l| l.usable()),
                 flow: Some(&parts.flow),
+                late_clones: Some(&late_clones),
             };
-            let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained
-                .pixels
-                .layers
-                .iter()
-                .map(|lp| (lp.layer, lp))
-                .collect();
             let mut visited = vec![comp_id];
             if let Some(w) = &watcher {
                 w.building();
@@ -1657,7 +1648,6 @@ impl HeadlessRenderer {
         let Some(comp) = doc.comp(comp_id) else {
             return Vec::new();
         };
-        self.sync_items(doc, comp);
         let fps = comp.frame_rate.fps().max(1.0);
         let t = frame as f64 / fps;
         let jobs = plan_comp_frame(
@@ -1665,10 +1655,26 @@ impl HeadlessRenderer {
             comp,
             t,
             quality,
-            &ProbeView(&self.probe_cache, &self.proxy_probes),
+            &ProbeView {
+                doc,
+                probes: &self.probes,
+            },
         );
         let mut wants = Vec::new();
-        for job in &jobs {
+        // A dissolve reads two files for one layer, so the clip under a job
+        // is wanted beside it. That is also what keeps the outgoing clip's
+        // stream open across the overlap, and what opens the incoming one
+        // ahead of it ([`Self::cut_wants`]).
+        fn under(job: &CompJob) -> Option<&CompJob> {
+            job.cuts.iter().find_map(|cut| match cut {
+                crate::decode::Cut::Under(_, under) => under.as_ref(),
+                _ => None,
+            })
+        }
+        for job in jobs
+            .iter()
+            .flat_map(|job| std::iter::once(job).chain(under(job)))
+        {
             if job.slate {
                 continue;
             }
@@ -1686,6 +1692,102 @@ impl HeadlessRenderer {
             }
             for &(_, neighbour) in &job.temporal {
                 want(neighbour);
+            }
+        }
+        wants
+    }
+
+    /// The decodes that make the read-ahead thread ready for the clips that
+    /// start after frame `after` and no later than `through`.
+    ///
+    /// # In plain terms
+    ///
+    /// The ordinary read-ahead posts a frame's decodes a few frames before it
+    /// is shown. That is plenty for the next frame of a file already playing
+    /// and far too late for the first frame of a file that is not: opening it
+    /// and seeking into it takes many frames' time, so every cut to a new
+    /// file played late. Playback asks this about a second ahead instead, and
+    /// the thread opens the file then.
+    ///
+    /// Each want is the source frame just **before** the one the clip opens
+    /// on. Decoding it leaves the decoder standing on the opening frame, so
+    /// when the ordinary read-ahead reaches the edit point it carries straight
+    /// on. A clip that opens on its file's first frame asks for that frame.
+    ///
+    /// A file that is already playing the frame before the edit point is left
+    /// alone: its decoder is busy where it is, and sending it ahead and back
+    /// would cost two seeks to save none.
+    ///
+    /// The files of the clips that start in the second after `through` are
+    /// probed on a thread of their own meanwhile ([`ProbeAhead`]), so that by
+    /// the time this is asked about them the answer is waiting. A probe is
+    /// several milliseconds a file, and here it would come out of a frame.
+    ///
+    /// ponytail: only this comp's own Sequence layers are looked at. An edit
+    /// point inside a nested comp still opens when the ordinary read-ahead
+    /// reaches it, as every edit point did before. The upgrade is to walk
+    /// nested comps here the way the plan does.
+    pub fn cut_wants(
+        &mut self,
+        doc: &Document,
+        comp_id: Uuid,
+        after: u64,
+        through: u64,
+        quality: Quality,
+    ) -> Vec<PrefetchWant> {
+        let Some(comp) = doc.comp(comp_id) else {
+            return Vec::new();
+        };
+        let fps = comp.frame_rate.fps().max(1.0);
+        let further = through as f64 + fps.round();
+        let mut starts: Vec<u64> = Vec::new();
+        let mut coming: Vec<&FootageItem> = Vec::new();
+        for layer in comp.layers.iter().filter(|l| !l.audio_only) {
+            let LayerKind::Sequence { clips } = &layer.kind else {
+                continue;
+            };
+            let offset = layer.start_offset.0.to_f64();
+            for clip in clips {
+                // The first comp frame at or after the clip's start. A leaf
+                // float, as every frame the plan is asked about is.
+                let first = ((clip.place_start.to_f64() + offset) * fps - 1e-6).ceil();
+                if first > after as f64 && first <= through as f64 {
+                    starts.push(first as u64);
+                } else if first > through as f64 && first <= further {
+                    // The clip's file, or every file in the composition it
+                    // plays.
+                    let items = match clip.source {
+                        lumit_core::sequence::ClipSource::Footage(item) => vec![item],
+                        lumit_core::sequence::ClipSource::Comp(nested) => {
+                            doc.comp(nested).map_or_else(Vec::new, |c| {
+                                lumit_core::model::comp_footage_items(doc, c)
+                            })
+                        }
+                    };
+                    for item in items {
+                        if let Some(ProjectItem::Footage(f)) = doc.item(item) {
+                            coming.push(f);
+                        }
+                    }
+                }
+            }
+        }
+        if let Ok(mut probes) = self.probes.try_borrow_mut() {
+            self.probe_ahead
+                .get_or_insert_with(ProbeAhead::start)
+                .turn(&mut probes, &coming);
+        }
+        starts.sort_unstable();
+        starts.dedup();
+        let mut wants = Vec::new();
+        for start in starts {
+            let playing = self.prefetch_wants(doc, comp_id, start - 1, quality);
+            for mut want in self.prefetch_wants(doc, comp_id, start, quality) {
+                if playing.iter().any(|p| p.item == want.item) {
+                    continue;
+                }
+                want.frame = want.frame.saturating_sub(1);
+                wants.push(want);
             }
         }
         wants
@@ -2505,6 +2607,8 @@ impl HeadlessRenderer {
             offset: info.offset,
             drm_fourcc: info.drm_fourcc,
             modifier: info.modifier,
+            render_node: info.device.render.map(|node| (node.major, node.minor)),
+            primary_node: info.device.primary.map(|node| (node.major, node.minor)),
         })
     }
 
@@ -2699,101 +2803,6 @@ impl HeadlessRenderer {
         #[cfg(all(target_os = "macos", feature = "shared-texture-macos"))]
         self.shared_iosurface.retain(|(v, _)| *v != view);
     }
-
-    /// Rebuild the `ItemInfo` map for what comp `comp` can show, probing any of
-    /// those items not already in `probe_cache`. Slate items are sized to the
-    /// comp's own dimensions, matching export's `item_infos`.
-    ///
-    /// **Only the comp's own footage is probed** — the items its layers name,
-    /// and transitively everything its Precomp layers and comp-sourced clips
-    /// reach ([`lumit_core::model::comp_footage_items`]). A probe opens a file
-    /// and loads or builds its frame index, so probing the whole Project panel
-    /// here made the first frame of *any* comp wait for every file in the
-    /// project, and a freshly made empty comp wait for all of them to show
-    /// nothing. The cache is keyed by item, never emptied between comps, so an
-    /// item probed for one comp is already probed when the next one needs it:
-    /// the cost is paid once per file per session, and only for files something
-    /// on screen can actually want.
-    ///
-    /// The frame-key interlock is unaffected: an item this comp shows is probed
-    /// here before [`crate::cache::frame_key`] reads the probe cache, and an
-    /// item this comp cannot show contributes nothing to its key.
-    fn sync_items(&mut self, doc: &Document, comp: &Composition) {
-        let slate = (comp.width, comp.height);
-        self.items.clear();
-        for id in lumit_core::model::comp_footage_items(doc, comp) {
-            let Some(ProjectItem::Footage(f)) = doc.item(id) else {
-                continue;
-            };
-            // The proxy, if this item has one and the project is using it. It is
-            // probed here beside the original because both answers are needed at
-            // once to decide which file is read (`source::effective_media`), and
-            // re-probed when the reference has moved on from what was cached.
-            if let Some(proxy) = doc.proxy_in_use(f.id) {
-                let path = media_path(proxy);
-                match self.proxy_probes.get(&f.id) {
-                    Some((cached, _)) if *cached == path => {}
-                    _ => {
-                        // A proxy is one file, never a numbered run: it stands
-                        // in for the whole of the original, however many files
-                        // that was.
-                        let probe = probe_item(&lumit_media::MediaSource::file(path.clone()));
-                        self.proxy_probes.insert(f.id, (path, probe));
-                    }
-                }
-            } else {
-                self.proxy_probes.remove(&f.id);
-            }
-            // Checked against the source too, path and rate, so a relinked item
-            // or a run of stills read at a new rate probes again rather than
-            // keeping an answer about the old one.
-            let src = footage_source(f);
-            match self.probe_cache.get(&f.id) {
-                Some((cached, _)) if *cached == src => {}
-                _ => {
-                    let probe = probe_item(&src);
-                    self.probe_cache.insert(f.id, (src, probe));
-                }
-            }
-            let Some((_, probe)) = self.probe_cache.get(&f.id) else {
-                continue;
-            };
-            match probe {
-                Probe::Ok { fps, frames, .. } => {
-                    self.items.insert(
-                        f.id,
-                        ItemInfo {
-                            source: footage_source(f),
-                            fps: *fps,
-                            frames: *frames,
-                            missing: None,
-                        },
-                    );
-                }
-                // A slate item carries the comp's size so its geometry matches a
-                // real layer's (the same reasoning export's `ItemInfo::missing`
-                // documents). A `Failed` file in export is simply absent from the
-                // map; here it slates instead, so an unreadable source is visibly
-                // flagged in the Viewer rather than silently dropped.
-                Probe::Slate => {
-                    self.items.insert(
-                        f.id,
-                        ItemInfo {
-                            source: footage_source(f),
-                            fps: 1.0,
-                            frames: 1,
-                            missing: Some(slate),
-                        },
-                    );
-                }
-                // Audio-only media has no picture to composite: leave it out of
-                // the map entirely, exactly as export's `item_infos` does, so
-                // `footage_rgba` answers `Ok(None)` for it and the layer draws
-                // nothing rather than the missing-footage slate.
-                Probe::NoVideo => {}
-            }
-        }
-    }
 }
 
 /// The comp audio-jobs walk WITHOUT the GPU renderer — the seam audio playback
@@ -2823,9 +2832,9 @@ pub struct AudioJobsBuilder {
     heard: Option<Uuid>,
 }
 
-/// Whether each footage **item** carries an audio stream, probed once per
+/// How many audio streams each footage **item** carries, probed once per
 /// process rather than once per [`AudioJobsBuilder`] — see
-/// [`AudioJobsBuilder::item_has_audio`], which is the only reader.
+/// [`AudioJobsBuilder::item_audio_streams`], which is the only reader.
 ///
 /// Keyed by the item rather than by its file, so two projects and two tests
 /// never answer for one another. A missing file is never stored, so relinking
@@ -2837,7 +2846,7 @@ pub struct AudioJobsBuilder {
 /// there to another. Clear this on the same signal the
 /// decoded-audio cache would need, if overwriting a track under a running Lumit
 /// ever stops adding the mute switch.
-static HAS_AUDIO: LazyLock<Mutex<HashMap<Uuid, bool>>> =
+static AUDIO_STREAMS: LazyLock<Mutex<HashMap<Uuid, u32>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// The layer's *Duck under* wire, if its graph lands one on the Layer out's
@@ -2929,6 +2938,23 @@ fn bus_chain_of(
         return None;
     }
     audio_chain_of(doc, comp, layer, offset_s, base_s)
+}
+
+/// A nested comp's own **master fader**, riding down with the Volume of the
+/// layer or clip that plays it. A master is a stage only for the comp being
+/// mixed. One comp deep it is just another gain on what that comp
+/// contributes, which is exactly what a carrier is. `None` at unity.
+///
+/// It goes last, so it sits inside the bus: the rack hears the comp at the
+/// level its own master fader sets, and the parent's insert comes after it.
+fn master_carrier(nested: &Composition, offset_s: f64) -> Option<crate::export::Carrier> {
+    (nested.master_volume_db != 0.0).then(|| crate::export::Carrier {
+        volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
+        pan: lumit_core::anim::Property::zero(),
+        offset_s,
+        fade: None,
+        chain: None,
+    })
 }
 
 /// The **clip's own** rack, or `None` where the clip has no stack or has
@@ -3115,14 +3141,15 @@ impl AudioJobsBuilder {
                 let Some(ProjectItem::Footage(f)) = doc.item(*item) else {
                     return;
                 };
-                if !self.item_has_audio(*item, &footage_path(f)) {
+                let Some(sound) = self.sound_of(*item, footage_path(f), &layer.audio_streams)
+                else {
                     return;
-                }
+                };
                 jobs.push(AudioJob {
                     item: *item,
                     layer: strip,
                     clip: None,
-                    path: footage_path(f),
+                    sound,
                     in_s,
                     out_s,
                     offset_s,
@@ -3147,28 +3174,13 @@ impl AudioJobsBuilder {
                     volume: layer.volume_db.clone(),
                     pan: layer.pan.clone(),
                     offset_s,
+                    fade: None,
                     // The layer's own rack is the **bus**: the mixer sums what
                     // arrives through this carrier and the rack hears the sum,
                     // ahead of the Volume and Pan beside it here.
                     chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
                 });
-                // The nested comp's own **master fader** rides down with
-                // the Precomp layer's Volume. A master is a stage
-                // only for the comp being mixed; one comp deep it is just
-                // another gain on what that comp contributes, which is
-                // exactly what a carrier is.
-                if nested.master_volume_db != 0.0 {
-                    inner.push(crate::export::Carrier {
-                        volume: lumit_core::anim::Property::fixed(nested.master_volume_db),
-                        pan: lumit_core::anim::Property::zero(),
-                        offset_s,
-                        // Inside the bus, so the rack hears the comp at the
-                        // level its own master fader sets: a master is a stage
-                        // on that comp's sum, and the parent's insert comes
-                        // after it.
-                        chain: None,
-                    });
-                }
+                inner.extend(master_carrier(nested, offset_s));
                 visited.push(*nested_id);
                 self.walk(
                     doc,
@@ -3183,7 +3195,8 @@ impl AudioJobsBuilder {
                 visited.pop();
             }
             LayerKind::Sequence { clips } => self.sequence_jobs(
-                doc, comp, base_s, layer, clips, strip, in_s, out_s, offset_s, carriers, jobs,
+                doc, comp, base_s, layer, clips, strip, in_s, out_s, offset_s, carriers, visited,
+                jobs,
             ),
             _ => {}
         }
@@ -3207,11 +3220,13 @@ impl AudioJobsBuilder {
     /// Either way the curve is the clip's stored shape
     /// (docs/impl/audio-timeline.md §3).
     ///
-    /// Two exclusions, both docs/09's: a **retimed** clip is silent (§7 —
-    /// retime mutes audio in v1, and a clip's map is as much a retime as a
-    /// layer's), and a clip whose source is a **composition** is silent, since
-    /// mixing a nested comp through a clip's trim is the Sequence-of-comps
-    /// case nothing yet asks for.
+    /// **A clip whose source is a composition** sounds as that comp's own
+    /// mix over the clip's span, carried the way a Precomp layer carries one:
+    /// the row's Volume, Pan and rack ride on the sum, and the clip's ramps
+    /// and level ride beside them, worked out as any clip's are.
+    ///
+    /// One exclusion, docs/09's: a **retimed** clip is silent (§7: retime
+    /// mutes audio in v1, and a clip's map is as much a retime as a layer's).
     #[allow(clippy::too_many_arguments)]
     fn sequence_jobs(
         &mut self,
@@ -3225,6 +3240,7 @@ impl AudioJobsBuilder {
         out_s: f64,
         offset_s: f64,
         carriers: &[crate::export::Carrier],
+        visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
     ) {
         // The row read left to right, so the jobs come out in the order the
@@ -3236,25 +3252,53 @@ impl AudioJobsBuilder {
                 .partial_cmp(&clips[*b].place_start)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        // Where each clip starts and ends on the comp timeline, worked out
+        // once for the row, and the latest end among the clips up to each
+        // place in the order: a walk back from a clip stops where nothing
+        // earlier reaches it.
+        let spans: Vec<(f64, f64)> = clips
+            .iter()
+            .map(|c| {
+                (
+                    offset_s + c.place_start.to_f64(),
+                    offset_s + c.place_end().to_f64(),
+                )
+            })
+            .collect();
+        let mut latest = f64::NEG_INFINITY;
+        let reach: Vec<f64> = order
+            .iter()
+            .map(|&i| {
+                latest = latest.max(spans[i].1);
+                latest
+            })
+            .collect();
+        // The row's own duck and its own rack are the same for every clip on
+        // it, so they are made once and each job holds the one.
+        let driven = driven_volume_of(doc, comp, layer, offset_s, base_s);
+        let chain = audio_chain_of(doc, comp, layer, offset_s, base_s);
 
-        for &i in &order {
+        for (at, &i) in order.iter().enumerate() {
             let clip = &clips[i];
-            let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
-                continue;
-            };
             if clip.retime.is_some() {
                 continue; // docs/09 §7: a retimed clip is silent in v1
             }
-            let Some(ProjectItem::Footage(f)) = doc.item(item) else {
-                continue;
+            // The file a footage clip sounds from. A clip whose source is a
+            // composition has none, and its comp is walked further down.
+            let file = match clip.source {
+                lumit_core::sequence::ClipSource::Footage(item) => {
+                    let Some(ProjectItem::Footage(f)) = doc.item(item) else {
+                        continue;
+                    };
+                    let Some(sound) = self.sound_of(item, footage_path(f), &clip.audio_streams)
+                    else {
+                        continue;
+                    };
+                    Some((item, sound))
+                }
+                lumit_core::sequence::ClipSource::Comp(_) => None,
             };
-            if !self.item_has_audio(item, &footage_path(f)) {
-                continue;
-            }
-            let (start_s, end_s) = (
-                offset_s + clip.place_start.to_f64(),
-                offset_s + clip.place_end().to_f64(),
-            );
+            let (start_s, end_s) = spans[i];
             // What the layer's own in/out points leave of it.
             let (clip_in, clip_out) = (start_s.max(in_s), end_s.min(out_s));
             if clip_out <= clip_in {
@@ -3268,33 +3312,49 @@ impl AudioJobsBuilder {
             // the long one being ramped down across everything the short one
             // covers.
             let span = (end_s - start_s).max(0.0);
-            // ponytail: a scan of the row's clips per end, which is nothing at
-            // the handful a row holds; sort by start and walk if a row ever
-            // carries thousands.
+            // The row is in order of start, so the neighbours that can join a
+            // clip are the few either side of it: a head join starts earlier
+            // and a tail join starts inside the clip. Each walk stops where
+            // nothing further on can reach, which is a step or two on a row
+            // that is cut and not stacked. Where more than one neighbour joins
+            // at an end the first of them as the clips are stored is the one
+            // read, which is the one a scan of the whole row finds.
             let overlap = |head: bool| -> f64 {
-                for (m, o) in clips.iter().enumerate() {
-                    if m == i {
-                        continue;
-                    }
-                    let (o_start, o_end) = (
-                        offset_s + o.place_start.to_f64(),
-                        offset_s + o.place_end().to_f64(),
-                    );
+                let mut joined: Option<usize> = None;
+                let mut see = |m: usize| {
+                    let (o_start, o_end) = spans[m];
                     let joins = if head {
                         o_start < start_s && o_end > start_s && o_end < end_s
                     } else {
                         o_end > end_s && o_start < end_s && o_start > start_s
                     };
-                    if joins {
-                        let by = if head {
-                            o_end - start_s
-                        } else {
-                            end_s - o_start
-                        };
-                        return by.clamp(0.0, span);
+                    if joins && joined.is_none_or(|j| m < j) {
+                        joined = Some(m);
+                    }
+                };
+                if head {
+                    for k in (0..at).rev() {
+                        if reach[k] <= start_s {
+                            break;
+                        }
+                        see(order[k]);
+                    }
+                } else {
+                    for &m in &order[at + 1..] {
+                        if spans[m].0 >= end_s {
+                            break;
+                        }
+                        see(m);
                     }
                 }
-                0.0
+                joined.map_or(0.0, |m| {
+                    let by = if head {
+                        spans[m].1 - start_s
+                    } else {
+                        end_s - spans[m].0
+                    };
+                    by.clamp(0.0, span)
+                })
             };
             // A stored fade is heard for its own seconds where the clip
             // overlaps nothing at that end; where it does overlap, the overlap
@@ -3320,6 +3380,62 @@ impl AudioJobsBuilder {
                 tail_shape: clip.fade_out.shape,
                 gain_db: clip.gain_db,
             };
+            // Kept for a gain with no ramp on it too. `volume_bake` reads
+            // a fade that does nothing as the constant it is, and
+            // `jobs_signature` hashes the whole of it, so neither needed a
+            // line changing for the gain.
+            let fade = (fade.is_active() || clip.gain_db != 0.0).then_some(fade);
+
+            let Some((item, sound)) = file else {
+                let lumit_core::sequence::ClipSource::Comp(nested_id) = clip.source else {
+                    continue;
+                };
+                let Some(nested) = doc
+                    .comp(nested_id)
+                    .filter(|_| !visited.contains(&nested_id))
+                else {
+                    continue;
+                };
+                let mut inner = carriers.to_vec();
+                inner.push(crate::export::Carrier {
+                    volume: layer.volume_db.clone(),
+                    pan: layer.pan.clone(),
+                    offset_s,
+                    fade,
+                    // The row's rack as a bus over the comp's sum, as a
+                    // Precomp layer's is.
+                    chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
+                });
+                // The clip's own rack is a bus inside the row's, so it
+                // hears the comp first, as a footage clip's rack hears its
+                // file ahead of the row's.
+                if let Some(rack) = clip_chain_of(doc, comp, layer, clip, start_s, base_s) {
+                    inner.push(crate::export::Carrier {
+                        volume: lumit_core::anim::Property::zero(),
+                        pan: lumit_core::anim::Property::zero(),
+                        offset_s: start_s,
+                        fade: None,
+                        chain: Some(rack),
+                    });
+                }
+                // The comp's own time 0 sits where the clip's source time 0
+                // does: the clip's start, less how far it is trimmed in.
+                let nested_s = start_s - clip.source_in.to_f64();
+                inner.extend(master_carrier(nested, nested_s));
+                visited.push(nested_id);
+                self.walk(
+                    doc,
+                    nested,
+                    nested_s,
+                    (clip_in, clip_out),
+                    &inner,
+                    Some(strip),
+                    visited,
+                    jobs,
+                );
+                visited.pop();
+                continue;
+            };
 
             jobs.push(AudioJob {
                 item,
@@ -3327,7 +3443,7 @@ impl AudioJobsBuilder {
                 // Which clip this is, so a filtered reading of the mix can ask
                 // for one clip of one row (docs/impl/audio-nodes.md §2).
                 clip: Some(clip.id),
-                path: footage_path(f),
+                sound,
                 in_s: clip_in,
                 out_s: clip_out,
                 // Where the clip's source sample 0 sits on the comp timeline:
@@ -3336,18 +3452,14 @@ impl AudioJobsBuilder {
                 volume: layer.volume_db.clone(),
                 pan: layer.pan.clone(),
                 carriers: carriers.to_vec(),
-                // Kept for a gain with no ramp on it too. `volume_bake` reads
-                // a fade that does nothing as the constant it is, and
-                // `jobs_signature` hashes the whole of it, so neither needed a
-                // line changing for the gain.
-                fade: (fade.is_active() || clip.gain_db != 0.0).then_some(fade),
+                fade,
                 // The row's own duck, riding every clip exactly as the row's
                 // Volume does — the layer's clock, not the clip's.
-                driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
+                driven: driven.clone(),
                 // And the row's own rack, on each clip. See `AudioChain`: a
                 // chain per clip is not a chain on the row's mixed output, so a
                 // tail does not cross a join.
-                chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
+                chain: chain.clone(),
                 clip_chain: clip_chain_of(doc, comp, layer, clip, start_s, base_s),
             });
         }
@@ -3429,13 +3541,20 @@ impl AudioJobsBuilder {
             LayerKind::Sequence { clips } => {
                 let mut has = false;
                 for clip in clips {
-                    let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
-                        continue;
+                    let sounds = match clip.source {
+                        lumit_core::sequence::ClipSource::Footage(item) => match doc.item(item) {
+                            Some(ProjectItem::Footage(f)) => {
+                                self.item_has_audio(item, &footage_path(f))
+                            }
+                            _ => false,
+                        },
+                        // A clip of a composition sounds as a Precomp layer
+                        // of it would.
+                        lumit_core::sequence::ClipSource::Comp(comp) => {
+                            self.kind_has_audio(doc, &LayerKind::Precomp { comp }, visited)
+                        }
                     };
-                    let Some(ProjectItem::Footage(f)) = doc.item(item) else {
-                        continue;
-                    };
-                    if self.item_has_audio(item, &footage_path(f)) {
+                    if sounds {
                         has = true;
                         break;
                     }
@@ -3448,35 +3567,60 @@ impl AudioJobsBuilder {
         }
     }
 
-    /// Whether footage `item` at `path` carries an audio stream, cached so each
+    /// What a layer or clip of footage `item` at `path` sounds, given the
+    /// streams it has chosen: the file and the chosen streams it actually
+    /// has. `None` when it has none of them, which is a silent file, or a
+    /// choice of streams that are not there.
+    fn sound_of(
+        &mut self,
+        item: Uuid,
+        path: PathBuf,
+        chosen: &lumit_core::model::AudioStreams,
+    ) -> Option<lumit_media::SoundSource> {
+        let count = self.item_audio_streams(item, &path);
+        let there: Vec<u32> = chosen
+            .places()
+            .iter()
+            .copied()
+            .filter(|place| *place < count)
+            .collect();
+        (!there.is_empty()).then(|| lumit_media::SoundSource::streams_of(path, &there))
+    }
+
+    /// Whether footage `item` at `path` carries an audio stream at all.
+    fn item_has_audio(&mut self, item: Uuid, path: &Path) -> bool {
+        self.item_audio_streams(item, path) > 0
+    }
+
+    /// How many audio streams footage `item` at `path` carries, cached so each
     /// file is probed for audio at most once across a session.
     ///
-    /// The memo is [`HAS_AUDIO`] — **per process, not per builder**: a builder
+    /// The memo is [`AUDIO_STREAMS`] — **per process, not per builder**: a builder
     /// is made afresh wherever the question is asked (the timeline asking each
     /// row for its mute switch, the audio engine preparing a plan, the Audio
     /// level driver reading the comp's mix on every frame it draws), and a
     /// probe is an FFmpeg open. Per builder, "once a session" was a sentence
     /// this comment made rather than a thing that happened.
-    fn item_has_audio(&mut self, item: Uuid, path: &Path) -> bool {
-        if let Ok(memo) = HAS_AUDIO.lock() {
-            if let Some(&has) = memo.get(&item) {
-                return has;
+    pub fn item_audio_streams(&mut self, item: Uuid, path: &Path) -> u32 {
+        if let Ok(memo) = AUDIO_STREAMS.lock() {
+            if let Some(&count) = memo.get(&item) {
+                return count;
             }
         }
         // A missing file isn't remembered, so a relinked clip is heard.
         if !path.is_file() {
-            return false;
+            return 0;
         }
         // The lock is not held across the probe: FFI, and as slow as opening a
         // file (14-ENGINEERING-RULES §5). Two threads racing one new item probe
         // it twice and agree.
-        let has = lumit_media::probe::probe(path)
-            .map(|p| p.audio.is_some())
-            .unwrap_or(false);
-        if let Ok(mut memo) = HAS_AUDIO.lock() {
-            memo.insert(item, has);
+        let count = lumit_media::probe::probe(path)
+            .map(|p| p.audio_streams().count() as u32)
+            .unwrap_or(0);
+        if let Ok(mut memo) = AUDIO_STREAMS.lock() {
+            memo.insert(item, count);
         }
-        has
+        count
     }
 }
 
@@ -3539,11 +3683,91 @@ fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
     lumit_media::MediaSource {
         path: footage_path(f),
         sequence_fps: f.sequence_fps(),
+        source_layer: f.source_layer,
     }
 }
 
 /// Probe one footage path into a [`Probe`]. A path that is not a file, an
 /// unreadable file, or one whose frame index will not build falls to
+/// Which source frames of each footage item an export of `comp_id` by `spec`
+/// reads: the frame under each one it writes, with whatever a frame blend,
+/// a temporal effect, motion blur or an edit point beside it reads as well.
+/// What tells a machine without the originals which parts of them to ask
+/// for.
+///
+/// It runs the plan the export itself runs, once for every frame it writes,
+/// so the two cannot want different frames. Gives up, with what it has, once
+/// `stop` is set. Any thread but the UI's: a long comp is a long walk.
+#[must_use]
+pub fn source_frames_used(
+    doc: &Arc<Document>,
+    comp_id: Uuid,
+    spec: &crate::export::ExportSpec,
+    stop: &std::sync::atomic::AtomicBool,
+) -> HashMap<Uuid, std::collections::BTreeSet<usize>> {
+    let mut used: HashMap<Uuid, std::collections::BTreeSet<usize>> = HashMap::new();
+    let overridden = crate::export::apply_render_overrides(doc, &spec.render_options());
+    let doc = overridden.as_ref().unwrap_or(doc);
+    let Some(comp) = doc.comp(comp_id) else {
+        return used;
+    };
+    let mut probes: HashMap<Uuid, (lumit_media::MediaSource, Probe)> = HashMap::new();
+    for id in lumit_core::model::comp_footage_items(doc, comp) {
+        if let Some(ProjectItem::Footage(f)) = doc.item(id) {
+            let src = footage_source(f);
+            let probe = probe_item(&src);
+            probes.insert(id, (src, probe));
+        }
+    }
+    // The originals as probed above, and no proxies, which is what this walk
+    // has always planned against.
+    struct Originals<'a>(&'a HashMap<Uuid, (lumit_media::MediaSource, Probe)>);
+    impl SourceProbes for Originals<'_> {
+        fn probe(&self, item: Uuid) -> SourceProbe {
+            seen(self.0.get(&item).map(|(_, p)| p))
+        }
+    }
+    fn note(job: &CompJob, used: &mut HashMap<Uuid, std::collections::BTreeSet<usize>>) {
+        for cut in &job.cuts {
+            match cut {
+                crate::decode::Cut::Neighbour(_, clip)
+                | crate::decode::Cut::Moment(_, Some(clip))
+                | crate::decode::Cut::Under(_, Some(clip)) => note(clip, used),
+                crate::decode::Cut::Moment(_, None) | crate::decode::Cut::Under(_, None) => {}
+            }
+        }
+        if job.slate {
+            return;
+        }
+        let frames = used.entry(job.item).or_default();
+        frames.insert(job.source_frame);
+        frames.extend(job.blend.map(|(ceil, _)| ceil));
+        frames.extend(job.temporal.iter().map(|(_, frame)| *frame));
+        for sample in &job.shutter {
+            frames.insert(sample.source_frame);
+            frames.extend(sample.blend.map(|(ceil, _)| ceil));
+        }
+    }
+    let fps = comp.frame_rate.fps().max(1.0);
+    let (first, end) = crate::export::frame_span(comp, spec);
+    for frame in first..end {
+        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
+        let jobs = plan_comp_frame(
+            doc,
+            comp,
+            frame as f64 / fps,
+            spec.render.quality,
+            &Originals(&probes),
+        );
+        for job in &jobs {
+            note(job, &mut used);
+        }
+    }
+    used
+}
+
 /// [`Probe::Slate`] — none of them is an error, they are the states the slate
 /// exists for. A readable file with no video stream (audio-only) is
 /// [`Probe::NoVideo`] instead: also not an error, but the opposite treatment —
@@ -3571,22 +3795,147 @@ fn probe_item(src: &lumit_media::MediaSource) -> Probe {
     }
 }
 
+/// What a renderer has learnt about footage files.
+#[derive(Default)]
+struct Probes {
+    /// Probe results by footage id, kept beside the source they were read
+    /// from, so a relink or a run of stills read at a new rate probes again.
+    originals: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
+    /// The same, for each item's **proxy** file, kept beside its path rather
+    /// than under the id alone, so attaching a different proxy (or the one
+    /// MAKE-PROXY has just written) probes again instead of answering about a
+    /// file that is no longer the one referenced.
+    proxies: HashMap<Uuid, (PathBuf, Probe)>,
+}
+
+/// A thread that probes files a little before playback reaches them
+/// ([`HeadlessRenderer::cut_wants`]).
+///
+/// Nothing waits on it. An answer that is not back when a frame asks is
+/// simply made on the spot ([`ProbeView`]), and the two are the same answer.
+struct ProbeAhead {
+    tx: std::sync::mpsc::SyncSender<(Uuid, lumit_media::MediaSource)>,
+    rx: std::sync::mpsc::Receiver<(Uuid, lumit_media::MediaSource, Probe)>,
+    /// What has been sent and not yet answered, so a file is sent once.
+    /// Emptied when it grows: an item deleted while its answer was pending
+    /// never comes off it, and the worst a second probe does is cost time.
+    asked: std::collections::HashSet<Uuid>,
+}
+
+impl ProbeAhead {
+    /// How many files may wait either side of the thread. A second of even
+    /// the fastest cutting is a handful. Past it a file is left for the
+    /// frame that first needs it.
+    const WAITING: usize = 32;
+
+    fn start() -> Self {
+        let (tx, jobs) =
+            std::sync::mpsc::sync_channel::<(Uuid, lumit_media::MediaSource)>(Self::WAITING);
+        let (done, rx) = std::sync::mpsc::sync_channel(Self::WAITING);
+        // A thread that will not start leaves every job unanswered, and
+        // every file is then probed when its frame asks, as before.
+        let _ = std::thread::Builder::new()
+            .name("lumit-probe-ahead".into())
+            .spawn(move || {
+                while let Ok((item, src)) = jobs.recv() {
+                    let probe = probe_item(&src);
+                    let _ = done.try_send((item, src, probe));
+                }
+            });
+        Self {
+            tx,
+            rx,
+            asked: std::collections::HashSet::new(),
+        }
+    }
+
+    /// File what has come back, and send what `coming` still needs.
+    fn turn(&mut self, probes: &mut Probes, coming: &[&FootageItem]) {
+        while let Ok((item, src, probe)) = self.rx.try_recv() {
+            self.asked.remove(&item);
+            probes.originals.insert(item, (src, probe));
+        }
+        if self.asked.len() > 1024 {
+            self.asked.clear();
+        }
+        for f in coming {
+            let src = footage_source(f);
+            let known = probes
+                .originals
+                .get(&f.id)
+                .is_some_and(|(cached, _)| *cached == src);
+            if !known && self.asked.insert(f.id) && self.tx.try_send((f.id, src)).is_err() {
+                self.asked.remove(&f.id);
+            }
+        }
+    }
+}
+
 /// The renderer's own probe cache, seen through the pipeline's one media
 /// question ([`SourceProbes`]), so the decode planner and the frame-key stamper
-/// read exactly what `sync_items` already resolved — no second probe, and no
-/// chance of the two disagreeing about what a file is.
-pub(crate) struct ProbeView<'a>(
-    &'a HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
-    &'a HashMap<Uuid, (PathBuf, Probe)>,
-);
+/// read one answer about a file and cannot disagree about what it is.
+///
+/// **A file is probed the first time a frame asks about it.** A probe opens
+/// the file and loads or builds its frame index. Probing everything a comp
+/// could show before its first frame made that frame wait for every file of a
+/// long cut, when it shows three of them. An answer is kept for as long as
+/// the renderer lives, so each file is still probed once.
+///
+/// Only what the planner and the stamper ask about is probed, and neither
+/// asks about a layer placed for its sound alone, so a video on an audio-only
+/// layer is never opened for its picture.
+pub(crate) struct ProbeView<'a> {
+    doc: &'a Document,
+    probes: &'a RefCell<Probes>,
+}
 
 impl SourceProbes for ProbeView<'_> {
     fn probe(&self, item: Uuid) -> SourceProbe {
-        seen(self.0.get(&item).map(|(_, p)| p))
+        let Some(ProjectItem::Footage(f)) = self.doc.item(item) else {
+            return SourceProbe::Unprobed;
+        };
+        let Ok(mut probes) = self.probes.try_borrow_mut() else {
+            return SourceProbe::Unprobed;
+        };
+        // A proxy that is no longer in use is forgotten, so one attached
+        // again later is probed again and not believed from last time.
+        if self.doc.proxy_in_use(item).is_none() {
+            probes.proxies.remove(&item);
+        }
+        // Checked against the source too, path and rate, so a relinked item
+        // or a run of stills read at a new rate probes again rather than
+        // keeping an answer about the old one.
+        let src = footage_source(f);
+        match probes.originals.get(&item) {
+            Some((cached, probe)) if *cached == src => seen(Some(probe)),
+            _ => {
+                let probe = probe_item(&src);
+                let answer = seen(Some(&probe));
+                probes.originals.insert(item, (src, probe));
+                answer
+            }
+        }
     }
 
     fn proxy_probe(&self, item: Uuid) -> SourceProbe {
-        seen(self.1.get(&item).map(|(_, p)| p))
+        let Some(proxy) = self.doc.proxy_in_use(item) else {
+            return SourceProbe::Unprobed;
+        };
+        let Ok(mut probes) = self.probes.try_borrow_mut() else {
+            return SourceProbe::Unprobed;
+        };
+        let path = media_path(proxy);
+        match probes.proxies.get(&item) {
+            Some((cached, probe)) if *cached == path => seen(Some(probe)),
+            _ => {
+                // A proxy is one file, never a numbered run: it stands in for
+                // the whole of the original, however many files that was.
+                let probe = probe_item(&lumit_media::MediaSource::file(path.clone()));
+                let answer = seen(Some(&probe));
+                probes.proxies.insert(item, (path, probe));
+                answer
+            }
+        }
     }
 }
 
@@ -3688,45 +4037,7 @@ mod tests {
         all(target_os = "macos", feature = "shared-texture-macos")
     ))]
     mod pool {
-        use super::super::{
-            shared_pool_evictions, shared_target_bytes, SHARED_TARGET_BYTES, SHARED_TARGET_POOL,
-        };
-
-        /// A small pool is left alone.
-        #[test]
-        fn a_pool_inside_both_bounds_evicts_nothing() {
-            let entries = [(0, 1920, 1080), (0, 960, 540), (1, 1920, 1080)];
-            assert!(shared_pool_evictions(&entries).is_empty());
-        }
-
-        /// One view walking through sizes, as dragging a Viewer does, is
-        /// bounded by the per-view count.
-        #[test]
-        fn one_view_keeps_only_its_last_few_sizes() {
-            let entries: Vec<(u32, u32, u32)> =
-                (0..12u32).map(|i| (0, 400 + i * 16, 300)).collect();
-            let dropped = shared_pool_evictions(&entries);
-            assert_eq!(dropped.len(), 12 - SHARED_TARGET_POOL);
-            // The oldest go, and the newest survive.
-            assert_eq!(dropped[0], 0);
-            assert!(!dropped.contains(&11));
-        }
-
-        /// The count is **per view**, so four views each holding a few sizes
-        /// are not trimmed as though they were one.
-        #[test]
-        fn the_count_is_per_view_not_per_pool() {
-            let mut entries = Vec::new();
-            for view in 0..4u32 {
-                for step in 0..SHARED_TARGET_POOL as u32 {
-                    entries.push((view, 320 + step * 8, 240));
-                }
-            }
-            assert!(
-                shared_pool_evictions(&entries).is_empty(),
-                "four views at the per-view count each were trimmed"
-            );
-        }
+        use super::super::shared_pool_evictions;
 
         /// Past the byte ceiling the oldest spares go, and the size each view
         /// is drawing at stays. A view evicted out of its current size mints a
@@ -3756,133 +4067,6 @@ mod tests {
             // And the survivor is each view's newest, not its oldest.
             assert!(dropped.contains(&0) && !dropped.contains(&1));
         }
-
-        /// **The floor beats the ceiling.** Five 4K views drawing at once are
-        /// over the byte budget with nothing spare to give up, and the rule
-        /// stops rather than blinding a view.
-        #[test]
-        fn a_pool_of_nothing_but_current_sizes_is_left_alone() {
-            let entries: Vec<(u32, u32, u32)> = (0..5u32).map(|v| (v, 3840, 2160)).collect();
-            let held: u64 = entries.iter().map(|e| shared_target_bytes(e.1, e.2)).sum();
-            assert!(
-                held > SHARED_TARGET_BYTES,
-                "the case needs to be over budget"
-            );
-            assert!(
-                shared_pool_evictions(&entries).is_empty(),
-                "a view was evicted out of the size it is drawing at"
-            );
-        }
-    }
-
-    /// **What a frame is named under, once colour is in the picture**
-    /// (docs/impl/ocio.md §5.5). Three separate sensitivities, and the third is
-    /// the one worth having: switching view must rename the *display* frames
-    /// and nothing else, so switching back finds the old ones still banked.
-    ///
-    /// This exercises `named_under_view` directly rather than through a render,
-    /// because it is a naming rule and needs no graphics card to be true.
-    #[test]
-    fn the_colour_choices_reach_the_frames_name() {
-        let Ok(mut r) = super::HeadlessRenderer::shared() else {
-            eprintln!("no adapter here");
-            return;
-        };
-        let base = 0x1234_5678_9abc_def0_1234_5678_9abc_def0_u128;
-        let plain = r.named_under_view(base);
-        assert_eq!(
-            plain, base,
-            "with no config and no view, a frame is named exactly as it was"
-        );
-
-        r.set_colour_view(Some(("sRGB".into(), "Standard".into())));
-        let one_view = r.named_under_view(base);
-        assert_ne!(one_view, plain, "a view is part of the picture");
-
-        r.set_colour_view(Some(("sRGB".into(), "Log".into())));
-        let other_view = r.named_under_view(base);
-        assert_ne!(other_view, one_view, "two views are two pictures");
-
-        // And back: the old name returns, which is what lets a flick between
-        // two views be free the second time.
-        r.set_colour_view(Some(("sRGB".into(), "Standard".into())));
-        assert_eq!(r.named_under_view(base), one_view);
-
-        // An export's output space names frames its own way, and is not the
-        // same name as any view.
-        r.set_colour_view(None);
-        r.set_colour_output(Some("out_srgb".into()));
-        let delivered = r.named_under_view(base);
-        assert_ne!(delivered, plain);
-        assert_ne!(delivered, one_view);
-
-        r.set_colour_output(None);
-        assert_eq!(
-            r.named_under_view(base),
-            plain,
-            "clearing every colour choice puts the old names back"
-        );
-    }
-
-    /// **An item's colour space renames that item's frames, and only those.**
-    /// It goes in the per-item stamp rather than in the comp's own name, so a
-    /// forty-layer comp does not throw away thirty-nine layers' worth of work
-    /// because one clip was reinterpreted (§5.5).
-    #[test]
-    fn reassigning_one_item_renames_that_items_frames() {
-        use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
-
-        let mut doc = lumit_core::model::Document::new();
-        let a = uuid::Uuid::now_v7();
-        let b = uuid::Uuid::now_v7();
-        for (id, name) in [(a, "a.mov"), (b, "b.mov")] {
-            doc.items.push(ProjectItem::Footage(FootageItem {
-                sequence: None,
-                id,
-                name: name.into(),
-                media: MediaRef {
-                    relative_path: name.into(),
-                    absolute_path: format!("/tmp/{name}"),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                },
-                colour_space: None,
-                extra: serde_json::Map::new(),
-            }));
-        }
-        // Both items probe as ordinary video of the same shape, so the only
-        // thing that can differ between their stamps is the colour space.
-        let probes: std::collections::HashMap<uuid::Uuid, crate::source::SourceProbe> = [a, b]
-            .into_iter()
-            .map(|id| {
-                (
-                    id,
-                    crate::source::SourceProbe::Video {
-                        fps: 24.0,
-                        width: 640,
-                        height: 480,
-                        frames: 100,
-                        audio: false,
-                    },
-                )
-            })
-            .collect();
-        let stamp = |doc: &lumit_core::model::Document, id: uuid::Uuid| {
-            use lumit_eval::SourceStamper;
-            crate::cache::Stamper::new(doc, &probes, Quality::default()).stamp(id, 0.0, false)
-        };
-        let before_a = stamp(&doc, a);
-        let before_b = stamp(&doc, b);
-
-        if let Some(ProjectItem::Footage(f)) = doc.items.iter_mut().find(|i| i.id() == a) {
-            f.colour_space = Some("ACEScct".into());
-        }
-        assert_ne!(
-            stamp(&doc, a),
-            before_a,
-            "the reassigned item's frames must retire"
-        );
-        assert_eq!(stamp(&doc, b), before_b, "and every other item's must not");
     }
 
     use super::*;
@@ -3892,35 +4076,6 @@ mod tests {
     };
     use lumit_core::store::DocumentStore;
     use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
-
-    /// The size a scaled preview comes back at, which is now also the size that
-    /// is copied off the graphics card. The rounding matches what the
-    /// processor-side resize did, so nothing downstream sees a different answer
-    /// than it used to.
-    #[test]
-    fn a_scaled_preview_reports_the_reduced_size() {
-        assert_eq!(scaled_size(1920, 1080, 0.5), (960, 540));
-        assert_eq!(scaled_size(1920, 1080, 1.0 / 3.0), (640, 360));
-        // Rounded, not truncated.
-        assert_eq!(scaled_size(1919, 1081, 0.5), (960, 541));
-    }
-
-    /// Full scale must stay bit-identical: it takes the untouched path, with no
-    /// resampling pass at all.
-    #[test]
-    fn full_scale_is_left_alone() {
-        assert_eq!(scaled_size(1920, 1080, 1.0), (1920, 1080));
-        // And nonsense is treated as full rather than producing a 0-wide frame.
-        assert_eq!(scaled_size(1920, 1080, 0.0), (1920, 1080));
-        assert_eq!(scaled_size(1920, 1080, f32::NAN), (1920, 1080));
-        assert_eq!(scaled_size(1920, 1080, -1.0), (1920, 1080));
-    }
-
-    /// A scale small enough to round to nothing still has to produce a frame.
-    #[test]
-    fn a_tiny_scale_still_has_a_pixel() {
-        assert_eq!(scaled_size(100, 100, 0.001), (1, 1));
-    }
 
     /// A transform that centres a `w`×`h` object over a `w`×`h` comp (anchor at
     /// the object's middle, position at the comp's middle) — a copy of the
@@ -3966,6 +4121,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4002,46 +4158,6 @@ mod tests {
         (DocumentStore::new(doc), comp_id)
     }
 
-    /// A stand-in bake: the smallest thing `warm_flare_bake` will accept, so a
-    /// test of the *naming rules* costs a channel send rather than half a
-    /// second of real optics.
-    fn stub_bake() -> lumit_gpu::fx::FlareBake {
-        std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
-            surfaces: Vec::new(),
-            ghosts: Vec::new(),
-            spreads: Vec::new(),
-            sensor_z_mm: 0.0,
-            focal_mm: 1.0,
-            native_fstop: 1.0,
-            pupil_mm: 1.0,
-            start_z_mm: 0.0,
-            energy_gain: 1.0,
-            reflectance: Vec::new(),
-            starburst: Vec::new(),
-            sb_res: 1,
-            sb_fields: 1,
-        }) as lumit_gpu::fx::FlareBake
-    }
-
-    /// [`doc_with_solid`] with a Lens flare on the layer, `edit` given the
-    /// fresh instance to set whichever rows the test is about.
-    fn doc_with_flare(
-        edit: impl FnOnce(&mut lumit_core::model::EffectInstance),
-    ) -> (DocumentStore, Uuid) {
-        let (store, comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 32, 32);
-        let mut doc = (*store.snapshot()).clone();
-        let mut flare = lumit_core::fx::instantiate("lens_flare").expect("the flare is a builtin");
-        edit(&mut flare);
-        for item in &mut doc.items {
-            if let ProjectItem::Composition(c) = item {
-                if c.id == comp_id {
-                    c.layers[0].effects.push(flare.clone());
-                }
-            }
-        }
-        (DocumentStore::new(doc), comp_id)
-    }
-
     /// A footage item in the Project panel, on no layer anywhere. Returns its
     /// id. The path is deliberately not on disk: `probe_item` answers
     /// [`Probe::Slate`] for a path that is not a file without opening anything,
@@ -4061,6 +4177,7 @@ mod tests {
                 },
                 extra: serde_json::Map::new(),
                 colour_space: None,
+                source_layer: None,
             }));
         id
     }
@@ -4069,7 +4186,7 @@ mod tests {
     /// song without a file on disk. Ids are fresh per test, so seeding one says
     /// nothing about anybody else's.
     fn seed_has_audio(item: Uuid) {
-        HAS_AUDIO.lock().unwrap().insert(item, true);
+        AUDIO_STREAMS.lock().unwrap().insert(item, 1);
     }
 
     /// Put a layer of `kind` into comp `comp` (which must exist in `doc`).
@@ -4090,6 +4207,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4200,6 +4318,7 @@ mod tests {
                 volume_db: Property::zero(),
                 pan: Property::zero(),
                 audio_only: false,
+                audio_streams: Default::default(),
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
@@ -4276,6 +4395,112 @@ mod tests {
         }
     }
 
+    /// **A blur with Repeat edge pixels off spreads past the layer's own
+    /// edges**, and one with it on stays inside them.
+    ///
+    /// The same 8×8 solid in the middle of a 32×32 comp. Held, the blur has
+    /// nothing but red to read and the layer is its own eight pixels. Let go,
+    /// the stack is given room round the layer and the red runs out into it.
+    /// Without the room the pixels past the edge are still the background,
+    /// which is what this test fails on.
+    ///
+    /// A Mirror after the blur still folds the layer about its own middle,
+    /// though the picture it is handed now starts six pixels further out.
+    #[test]
+    fn a_blur_with_repeat_edge_pixels_off_spreads_past_the_layers_edges() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let comp_with_blur = |repeat: bool, mirror: Option<f64>| {
+            let mut doc = Document::new();
+            let solid_id = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: solid_id,
+                name: "Solid".into(),
+                colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
+                width: 8,
+                height: 8,
+                extra: serde_json::Map::new(),
+            }));
+            let mut blur = lumit_core::fx::instantiate("blur").expect("blur is a builtin");
+            for p in &mut blur.params {
+                match p.id.as_str() {
+                    "radius" => {
+                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(6.0));
+                    }
+                    "repeat_edge_pixels" => {
+                        p.value = lumit_core::model::EffectValue::Bool(repeat);
+                    }
+                    _ => {}
+                }
+            }
+            let comp_id = push_comp(&mut doc, "Scene", 32, 32);
+            // Pinned at its own middle in the middle of the comp: the layer
+            // is the pixels 12..20.
+            let mut layer = matrix_layer("Solid", LayerKind::Solid { def: solid_id }, 8, 8);
+            layer.transform.position_x = Property::fixed(16.0);
+            layer.transform.position_y = Property::fixed(16.0);
+            layer.effects = vec![blur];
+            // Folded about the layer's own middle, at this angle.
+            if let Some(angle) = mirror {
+                let mut fold = lumit_core::fx::instantiate("mirror").expect("mirror is a builtin");
+                for p in &mut fold.params {
+                    let v = match p.id.as_str() {
+                        "centre_x" | "centre_y" => 4.0,
+                        "angle" => angle,
+                        _ => continue,
+                    };
+                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                }
+                layer.effects.push(fold);
+            }
+            doc.comp_mut(comp_id).unwrap().layers.push(layer);
+            (DocumentStore::new(doc), comp_id)
+        };
+        let red_at = |rgba: &[u8], x: u32, y: u32| rgba[((y * 32 + x) * 4) as usize];
+
+        let (store, comp_id) = comp_with_blur(true, None);
+        let (held, _, _) = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert!(red_at(&held, 16, 16) > 200, "held, the solid stays solid");
+        assert_eq!(red_at(&held, 10, 16), 0, "and nothing leaves the layer");
+
+        let (store, comp_id) = comp_with_blur(false, None);
+        let (spread, _, _) = r
+            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+            .expect("render");
+        assert!(
+            red_at(&spread, 10, 16) > 20,
+            "let go, the blur must reach past the layer's edge"
+        );
+        assert!(
+            red_at(&spread, 12, 16) < red_at(&held, 12, 16),
+            "and the edge itself must fall away"
+        );
+        assert_eq!(red_at(&spread, 3, 16), 0, "but no further than its Radius");
+
+        // The blurred solid is the same either side of its middle, so a fold
+        // about the middle changes nothing, whichever half it keeps. A fold
+        // about anywhere else would.
+        for angle in [0.0, 180.0] {
+            let (store, comp_id) = comp_with_blur(false, Some(angle));
+            let (folded, _, _) = r
+                .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
+                .expect("render");
+            for x in [10, 13, 18, 21] {
+                assert!(
+                    red_at(&folded, x, 16).abs_diff(red_at(&spread, x, 16)) <= 2,
+                    "the Mirror's centre moved off the layer's middle at {x}, angle {angle}"
+                );
+            }
+        }
+    }
+
     /// A full-frame red solid composites to red in the centre pixel — the GPU
     /// oracle that proves the headless seam drives the real compositor. Skips
     /// when the machine has no adapter (the lavapipe/hardware convention the
@@ -4304,72 +4529,6 @@ mod tests {
         assert!(green < 60, "green should be low, got {green}");
         assert!(blue < 60, "blue should be low, got {blue}");
         assert_eq!(alpha, 255, "the solid is opaque");
-    }
-
-    /// **The transparency grid can see through an empty comp.** The
-    /// comp's backdrop is opaque black by default, so every pixel nothing
-    /// covers used to reach the Viewer with alpha 1 and the checkerboard
-    /// behind the picture could never show — even with every layer hidden.
-    /// With the flag on, the interactive path leaves the backdrop out and
-    /// uncovered pixels arrive with zero alpha; off again, the backdrop is
-    /// back. Fails without the `transparent_background` branch in
-    /// `preview_display_texture_fmt`.
-    ///
-    /// An export stays opaque the same way it stays neutral (see
-    /// `an_export_ignores_the_viewer_view`): `export::run` builds its own
-    /// renderer, and nothing ever calls `set_transparent_background` on it.
-    #[test]
-    fn the_transparent_background_flag_uncovers_the_grid() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let mut doc = Document::new();
-        let comp_id = push_comp(&mut doc, "Empty", 8, 8);
-        let store = DocumentStore::new(doc);
-        let doc = store.snapshot();
-        let q = Quality::default();
-
-        let (rgba, w, h) = r
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("opaque render");
-        let idx = (((h / 2) * w + w / 2) * 4) as usize;
-        assert_eq!(rgba[idx + 3], 255, "born opaque: the backdrop is drawn");
-
-        r.set_transparent_background(true);
-        let (rgba, _, _) = r
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("transparent render");
-        assert_eq!(rgba[idx + 3], 0, "nothing covers this pixel, so no alpha");
-
-        r.set_transparent_background(false);
-        let (rgba, _, _) = r
-            .render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("opaque again");
-        assert_eq!(rgba[idx + 3], 255, "grid down, backdrop back");
-    }
-
-    /// `scale` below 1 downsamples the output buffer; the centre stays the solid
-    /// colour, proving the resize path is wired and does not corrupt the frame.
-    #[test]
-    fn scale_downsamples_the_output() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.0, 1.0, 0.0, 1.0]), 16, 16);
-        let doc = store.snapshot();
-        let (rgba, w, h) = r.render_rgba(&doc, comp_id, 0, 0.5).expect("render");
-        assert_eq!((w, h), (8, 8), "half scale halves each dimension");
-        assert_eq!(rgba.len(), (w * h * 4) as usize);
-        let idx = (((h / 2) * w + w / 2) * 4) as usize;
-        assert!(rgba[idx + 1] > 200, "green solid stays green after resize");
     }
 
     /// **The preview scale is real.** Under auto resolution the COMPOSITE
@@ -4434,7 +4593,6 @@ mod tests {
 
         let neutral = r.frame_key(&doc, comp_id, 0, q);
         assert!(neutral.is_some(), "a neutral view names its frames");
-        r.presync_items(&doc, comp_id);
         assert_eq!(
             r.frame_key_presynced(&doc, comp_id, 0, q),
             neutral,
@@ -4559,8 +4717,8 @@ mod tests {
     /// the missing-footage slate: it is a valid source, not a broken one. Bugs
     /// here previously conflated the two (`Probe::Slate`), which painted the
     /// colour bars over a perfectly good audio-only layer in the Flutter
-    /// Viewer. Bypasses real FFmpeg probing by seeding `probe_cache` directly
-    /// with the outcome `probe_item` would give each file, so the test needs
+    /// Viewer. Bypasses real FFmpeg probing by seeding the probe cache directly
+    /// with the outcome `probe_item` would give the file, so the test needs
     /// no media fixture. A genuinely missing file is asserted to still slate,
     /// so a regression collapsing `NoVideo` back onto `Slate` fails this test.
     #[test]
@@ -4574,44 +4732,17 @@ mod tests {
         };
         let (store, _comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 4, 4);
         let mut doc = (*store.snapshot()).clone();
-        // The comp is asked about at 64×64 below, so the slate it makes is that
-        // size; a layer per item, since only what the comp can show is probed.
         let sized = push_comp(&mut doc, "sized", 64, 64);
 
         let audio_id = push_footage_item(&mut doc, "audio.wav");
         push_layer(&mut doc, sized, LayerKind::Footage { item: audio_id });
-        r.probe_cache.insert(
+        r.probes.borrow_mut().originals.insert(
             audio_id,
             (lumit_media::MediaSource::file("audio.wav"), Probe::NoVideo),
         );
-        let comp = doc.comp(sized).expect("sized comp").clone();
-        r.sync_items(&doc, &comp);
-        assert!(
-            !r.items.contains_key(&audio_id),
-            "audio-only media must contribute no picture, not a missing slate"
-        );
-
-        // Contrast: a genuinely missing/unreadable file DOES slate.
         let missing_id = push_footage_item(&mut doc, "gone.mp4");
         push_layer(&mut doc, sized, LayerKind::Footage { item: missing_id });
-        r.probe_cache.insert(
-            missing_id,
-            (lumit_media::MediaSource::file("gone.mp4"), Probe::Slate),
-        );
-        let comp = doc.comp(sized).expect("sized comp").clone();
-        r.sync_items(&doc, &comp);
-        assert_eq!(
-            r.items.get(&missing_id).map(|i| i.missing),
-            Some(Some((64, 64))),
-            "a missing/unreadable file still slates at the comp's size"
-        );
-        // The audio-only item stays omitted across the second sync_items call.
-        assert!(!r.items.contains_key(&audio_id));
-
-        // A file that HAS a picture, placed as an Audio layer, is not
-        // probed or indexed for the picture either. Without the `audio_only`
-        // skip in `comp_footage_items` the renderer would open and frame-index
-        // a video the user placed for its sound alone.
+        // A file that HAS a picture, placed as an Audio layer.
         let video_id = push_footage_item(&mut doc, "music-video.mp4");
         push_layer(&mut doc, sized, LayerKind::Footage { item: video_id });
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(sized) {
@@ -4620,103 +4751,71 @@ mod tests {
                 .expect("the layer just pushed")
                 .audio_only = true;
         }
-        r.probe_cache.insert(
-            video_id,
-            (
-                lumit_media::MediaSource::file("music-video.mp4"),
-                Probe::Ok {
-                    fps: 25.0,
-                    frames: 125,
-                    width: 64,
-                    height: 64,
-                },
-            ),
-        );
-        let comp = doc.comp(sized).expect("sized comp").clone();
-        r.sync_items(&doc, &comp);
+        let doc = Arc::new(doc);
+
+        let view = ProbeView {
+            doc: &doc,
+            probes: &r.probes,
+        };
         assert!(
-            !r.items.contains_key(&video_id),
+            view.probe(audio_id) == SourceProbe::AudioOnly,
+            "audio-only media must contribute no picture, not a missing slate"
+        );
+        // Contrast: a genuinely missing/unreadable file DOES slate.
+        assert!(
+            view.probe(missing_id) == SourceProbe::Missing,
+            "a missing/unreadable file still slates"
+        );
+
+        // Naming a frame asks about every file the frame shows, and a layer
+        // placed for its sound alone shows none: the video behind it is never
+        // opened or frame-indexed for a picture nobody will see.
+        assert!(r
+            .frame_key(&doc, sized, 0, crate::plan::Quality::default())
+            .is_some());
+        assert!(
+            !r.probes.borrow().originals.contains_key(&video_id),
             "a video placed for its sound alone contributes no picture"
-        );
-    }
-
-    /// **Correcting a run of stills re-reads the run** (docs/07 §3.1). Stills
-    /// carry no rate, so the item's rate decides which file is showing at every
-    /// moment and how long the run lasts. The probe kept under the item's id
-    /// was taken at the old rate, so it has to go, or the decode plan and the
-    /// frame key go on naming frames at a speed the project no longer says.
-    ///
-    /// No media fixture: the path is not on disk, so the re-probe is a `stat`
-    /// that answers [`Probe::Slate`] — which is the visible proof that the
-    /// stale answer was dropped rather than handed on.
-    #[test]
-    fn a_new_sequence_rate_drops_the_probe_taken_at_the_old_one() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let mut doc = Document::new();
-        let run = push_footage_item(&mut doc, "frame[0001-0050].png");
-        if let Some(ProjectItem::Footage(f)) = doc.item_mut(run) {
-            f.sequence = Some(lumit_core::model::SequenceRef::default());
-        }
-        let comp_id = push_comp(&mut doc, "shot", 32, 32);
-        push_layer(&mut doc, comp_id, LayerKind::Footage { item: run });
-
-        // What a probe of the run at 25 would have found, filed the way
-        // `sync_items` files one.
-        let seed = Probe::Ok {
-            fps: 25.0,
-            frames: 50,
-            width: 32,
-            height: 32,
-        };
-        r.probe_cache.insert(
-            run,
-            (
-                lumit_media::MediaSource {
-                    path: PathBuf::from("frame[0001-0050].png"),
-                    sequence_fps: Some((25, 1)),
-                },
-                seed,
-            ),
-        );
-        let comp = doc.comp(comp_id).expect("the comp").clone();
-        r.sync_items(&doc, &comp);
-        assert_eq!(
-            r.items.get(&run).map(|i| i.fps),
-            Some(25.0),
-            "the rate it was probed at still stands while nothing has changed"
-        );
-
-        // The correction the Project panel's menu makes.
-        if let Some(ProjectItem::Footage(f)) = doc.item_mut(run) {
-            f.sequence = Some(lumit_core::model::SequenceRef {
-                frame_rate: FrameRate::new(50, 1).expect("a real rate"),
-                extra: serde_json::Map::new(),
-            });
-        }
-        r.sync_items(&doc, &comp);
-        assert_eq!(
-            r.items.get(&run).map(|i| i.source.sequence_fps),
-            Some(Some((50, 1))),
-            "the decode plan reads the run at the rate the project now says"
-        );
-        assert_eq!(
-            r.items.get(&run).map(|i| i.missing),
-            Some(Some((32, 32))),
-            "and the probe taken at 25 is gone rather than answering for 50"
         );
     }
 
     /// Relinking a missing clip should drop its slate in the Viewer, without
     /// reopening the project.
+    /// An export of part of a composition names the source frames under that
+    /// part and no others, which is what lets a machine without the clip ask
+    /// for those frames alone.
+    #[test]
+    fn an_export_names_the_source_frames_it_reads() {
+        let Some((_fixture_dir, clip)) = footage_fixture() else {
+            eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
+            return;
+        };
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "comp", 32, 32);
+        let item = push_footage_item(&mut doc, "clip.mp4");
+        if let Some(ProjectItem::Footage(f)) = doc.item_mut(item) {
+            f.media.absolute_path = clip.to_string_lossy().into_owned();
+        }
+        push_layer(&mut doc, comp_id, LayerKind::Footage { item });
+        let fps = doc.comp(comp_id).expect("comp").frame_rate.fps();
+        // The second half-second of the composition, of a clip two seconds
+        // long at sixty frames a second.
+        let (first, end) = ((fps * 0.5).round() as usize, fps.round() as usize);
+        let spec = crate::export::ExportSpec {
+            range: Some((first, end)),
+            ..Default::default()
+        };
+        let stop = std::sync::atomic::AtomicBool::new(false);
+        let used = source_frames_used(&Arc::new(doc), comp_id, &spec, &stop);
+        let frames = used.get(&item).expect("the clip is read");
+        let (low, high) = (*frames.first().unwrap(), *frames.last().unwrap());
+        assert!((28..=32).contains(&low), "from half a second in: {low}");
+        assert!((56..=62).contains(&high), "to a second in: {high}");
+    }
+
     #[test]
     fn a_relinked_clip_loses_its_slate() {
-        let mut r = match HeadlessRenderer::shared() {
+        let r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
                 lumit_gpu::no_adapter();
@@ -4732,97 +4831,21 @@ mod tests {
         let item = push_footage_item(&mut doc, "gone.mp4");
         push_layer(&mut doc, comp_id, LayerKind::Footage { item });
 
-        let comp = doc.comp(comp_id).expect("comp").clone();
-        r.sync_items(&doc, &comp);
-        assert!(r.items.get(&item).is_some_and(|i| i.missing.is_some()));
+        let asked = |doc: &Document| {
+            ProbeView {
+                doc,
+                probes: &r.probes,
+            }
+            .probe(item)
+        };
+        assert!(asked(&doc) == SourceProbe::Missing);
 
         if let Some(ProjectItem::Footage(f)) = doc.item_mut(item) {
             f.media.absolute_path = clip.to_string_lossy().into_owned();
         }
-        r.sync_items(&doc, &comp);
         assert!(
-            r.items.get(&item).is_some_and(|i| i.missing.is_none()),
+            matches!(asked(&doc), SourceProbe::Video { .. }),
             "the relinked file was never probed"
-        );
-    }
-
-    /// **A render probes only what its comp can show.** Probing is opening a
-    /// file and loading or building its frame index, and it used to run over
-    /// every footage item in the project before the first frame of any comp —
-    /// so a project with a full Project panel paid for all of them before the
-    /// first pixel, and a freshly made empty comp paid for all of them to show
-    /// nothing.
-    ///
-    /// `probe_cache` is the counter: an item is in it exactly once it has been
-    /// probed, and the cache is never emptied between comps, so the assertions
-    /// below read both "what did this call probe" and "what has been probed at
-    /// all". No media fixture is needed — the paths are not on disk, so each
-    /// probe is a `stat` that answers [`Probe::Slate`].
-    #[test]
-    fn a_comp_probes_its_own_footage_and_nothing_else() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let mut doc = Document::new();
-        let (shown, nested, spare) = (
-            push_footage_item(&mut doc, "shown.mp4"),
-            push_footage_item(&mut doc, "nested.mp4"),
-            push_footage_item(&mut doc, "spare.mp4"),
-        );
-        let empty = push_comp(&mut doc, "empty", 32, 32);
-        let one = push_comp(&mut doc, "one", 32, 32);
-        push_layer(&mut doc, one, LayerKind::Footage { item: shown });
-        let inner = push_comp(&mut doc, "inner", 32, 32);
-        push_layer(&mut doc, inner, LayerKind::Footage { item: nested });
-        let outer = push_comp(&mut doc, "outer", 32, 32);
-        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
-
-        let probed = |r: &HeadlessRenderer| {
-            let mut ids: Vec<Uuid> = r.probe_cache.keys().copied().collect();
-            ids.sort();
-            ids
-        };
-        let sorted = |mut ids: Vec<Uuid>| {
-            ids.sort();
-            ids
-        };
-        let doc = Arc::new(doc);
-
-        // A comp with no layers, in a project with three footage items.
-        r.presync_items(&doc, empty);
-        assert!(
-            probed(&r).is_empty(),
-            "an empty comp must open no files at all"
-        );
-
-        // One of three items, and only that one.
-        r.presync_items(&doc, one);
-        assert_eq!(probed(&r), vec![shown]);
-
-        // Footage a Precomp layer reaches is footage the comp can show, so it
-        // is probed — and the frame-key interlock depends on it, since an
-        // unprobed source makes the frame unnameable.
-        r.presync_items(&doc, outer);
-        assert_eq!(
-            probed(&r),
-            sorted(vec![shown, nested]),
-            "a second comp probes what it adds, and what was probed stays probed"
-        );
-        assert!(
-            r.frame_key(&doc, outer, 0, crate::plan::Quality::default())
-                .is_some(),
-            "everything the comp can show is probed, so its frames are nameable"
-        );
-
-        // The item on no layer anywhere is never opened, however many comps
-        // have been rendered.
-        assert!(
-            !probed(&r).contains(&spare),
-            "footage no comp shows must never be probed"
         );
     }
 
@@ -4865,101 +4888,6 @@ mod tests {
             second.handle, first.handle,
             "the handle is stable while the comp size is unchanged"
         );
-    }
-
-    /// An unknown comp id on the shared path is a calm error, never a panic.
-    #[cfg(all(windows, feature = "shared-texture"))]
-    #[test]
-    fn unknown_comp_is_an_error_on_the_shared_path() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, _comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 4, 4);
-        let doc = store.snapshot();
-        assert!(r
-            .render_to_shared(
-                &doc,
-                Uuid::now_v7(),
-                0,
-                crate::plan::Quality::default(),
-                true,
-                0
-            )
-            .is_err());
-    }
-
-    /// The audio-jobs builder needs no GPU: a comp holding a solid (no sound)
-    /// and a footage layer whose file is not on disk yields no jobs, calmly,
-    /// and the missing file is not remembered as silent.
-    #[test]
-    fn audio_jobs_builder_needs_no_gpu_and_forgets_a_missing_file() {
-        let (store, comp_id) = doc_with_solid(LinearColour([1.0, 0.0, 0.0, 1.0]), 8, 8);
-        let mut doc = (*store.snapshot()).clone();
-        // Add a footage item + an audible layer pointing at a missing file.
-        let item_id = Uuid::now_v7();
-        doc.items
-            .push(ProjectItem::Footage(lumit_core::model::FootageItem {
-                sequence: None,
-                id: item_id,
-                name: "gone.mp4".into(),
-                media: lumit_core::model::MediaRef {
-                    relative_path: "gone.mp4".into(),
-                    absolute_path: "Z:/definitely/not/here/gone.mp4".into(),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                },
-                extra: serde_json::Map::new(),
-                colour_space: None,
-            }));
-        if let Some(ProjectItem::Composition(c)) = doc
-            .items
-            .iter_mut()
-            .find(|i| matches!(i, ProjectItem::Composition(_)))
-        {
-            c.layers.push(lumit_core::model::Layer {
-                graph: Default::default(),
-                markers: Vec::new(),
-                id: Uuid::now_v7(),
-                name: "gone.mp4".into(),
-                kind: LayerKind::Footage { item: item_id },
-                in_point: CompTime(Rational::new(0, 1).unwrap()),
-                out_point: CompTime(Rational::new(5, 1).unwrap()),
-                start_offset: CompTime(Rational::new(0, 1).unwrap()),
-                transform: TransformGroup::default(),
-                matte: None,
-                parent: None,
-                label: 0,
-                volume_db: Property::zero(),
-                pan: Property::zero(),
-                audio_only: false,
-                adjustment: false,
-                retime: None,
-                interpolation: Default::default(),
-                parked_flow: None,
-                graph_inputs: None,
-                blend: Default::default(),
-                masks: Vec::new(),
-                paint: Vec::new(),
-                puppet: None,
-                effects: Vec::new(),
-                styles: Vec::new(),
-                switches: Switches::default(),
-                extra: serde_json::Map::new(),
-            });
-        }
-        let comp = doc.comp(comp_id).unwrap().clone();
-        let mut builder = AudioJobsBuilder::new();
-        assert!(builder.audio_jobs(&Arc::new(doc.clone()), &comp).is_empty());
-        assert_eq!(
-            HAS_AUDIO.lock().unwrap().get(&item_id),
-            None,
-            "a relink would stay silent if the missing file were remembered"
-        );
-        assert!(builder.audio_jobs(&Arc::new(doc.clone()), &comp).is_empty());
     }
 
     /// **Sound inside a precomp reaches the comp that holds it.** A song sits
@@ -5095,105 +5023,6 @@ mod tests {
         );
     }
 
-    /// **A strip is a row of the comp being mixed**. Two sounds
-    /// straight in the comp are two strips; two sounds arriving through one
-    /// Precomp layer are one, because that is the one row the mixer draws
-    /// and the one fader that would move them.
-    #[test]
-    fn each_sounding_row_of_the_comp_is_one_mixer_strip() {
-        let mut doc = Document::new();
-        let song = push_footage_item(&mut doc, "song.wav");
-        let voice = push_footage_item(&mut doc, "vo.wav");
-        // A precomp holding two sounds, placed once in the comp being mixed,
-        // beside a footage layer of its own.
-        let inner = push_comp(&mut doc, "beds", 32, 32);
-        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
-        push_layer(&mut doc, inner, LayerKind::Footage { item: voice });
-        let outer = push_comp(&mut doc, "edit", 32, 32);
-        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
-        push_layer(&mut doc, outer, LayerKind::Footage { item: song });
-
-        let mut builder = AudioJobsBuilder::new();
-        seed_has_audio(song);
-        seed_has_audio(voice);
-        let comp = doc.comp(outer).unwrap().clone();
-        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &comp);
-        assert_eq!(jobs.len(), 3, "three sources sound");
-
-        let (precomp_row, footage_row) = (comp.layers[0].id, comp.layers[1].id);
-        assert_eq!(
-            jobs.iter().map(|j| j.layer).collect::<Vec<_>>(),
-            vec![precomp_row, precomp_row, footage_row],
-            "both of the precomp's sounds fold onto its one row"
-        );
-        let strips: std::collections::BTreeSet<Uuid> = jobs.iter().map(|j| j.layer).collect();
-        assert_eq!(strips.len(), 2, "two rows, two strips");
-    }
-
-    /// **A row asked for by name is heard whatever the switches say.** The
-    /// Beats panel's Source picker names a layer; the mix it is picked out of
-    /// is beside the point, so a solo on the picture row and the named layer's
-    /// own audible switch are both stepped over. The comp's own mix is
-    /// unchanged: it is what the comp sounds like, solo and all.
-    #[test]
-    fn a_layer_asked_for_by_name_is_heard_through_a_solo_and_its_own_mute() {
-        let mut doc = Document::new();
-        let song = push_footage_item(&mut doc, "song.wav");
-        let voice = push_footage_item(&mut doc, "vo.wav");
-        let comp = push_comp(&mut doc, "edit", 32, 32);
-        push_layer(&mut doc, comp, LayerKind::Footage { item: song });
-        push_layer(&mut doc, comp, LayerKind::Footage { item: voice });
-        push_layer(&mut doc, comp, LayerKind::Null);
-        // The song is soloed, so the voice is out of the mix.
-        if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
-            c.layers[0].switches.solo = true;
-        }
-        seed_has_audio(song);
-        seed_has_audio(voice);
-
-        let c = doc.comp(comp).expect("comp").clone();
-        let (soloed, muted, silent) = (c.layers[0].id, c.layers[1].id, c.layers[2].id);
-        let doc = Arc::new(doc);
-        let mut builder = AudioJobsBuilder::new();
-
-        let mix = builder.audio_jobs(&doc, &c);
-        assert_eq!(
-            mix.iter().map(|j| j.layer).collect::<Vec<_>>(),
-            vec![soloed],
-            "the comp mix is what the comp sounds like: the solo stands"
-        );
-
-        let named = builder.layer_audio_jobs(&doc, &c, muted);
-        assert_eq!(
-            named.iter().map(|j| j.layer).collect::<Vec<_>>(),
-            vec![muted],
-            "the named row is heard through the solo, and nothing else with it"
-        );
-        assert_eq!(named[0].item, voice);
-
-        // Its own audible switch off, and the solo still standing: still heard.
-        let mut off = (*doc).clone();
-        if let Some(ProjectItem::Composition(c)) = off.item_mut(comp) {
-            c.layers[1].switches.audible = false;
-        }
-        let c_off = off.comp(comp).expect("comp").clone();
-        assert_eq!(
-            builder
-                .layer_audio_jobs(&Arc::new(off), &c_off, muted)
-                .len(),
-            1,
-            "a layer picked by name is heard even with its own mute on"
-        );
-
-        // A row with no sound in it has none to find, named or not.
-        assert!(builder.layer_audio_jobs(&doc, &c, silent).is_empty());
-        assert!(builder
-            .layer_audio_jobs(&doc, &c, Uuid::now_v7())
-            .is_empty());
-        // And the bypass does not linger: the next ordinary mix is ordinary.
-        assert_eq!(builder.audio_jobs(&doc, &c).len(), 1);
-    }
-
     /// **A Sequence layer sounds through its clips, and a join is a
     /// crossfade**.
     ///
@@ -5224,6 +5053,8 @@ mod tests {
             effects: Vec::new(),
             fx: true,
             gain_db: 0.0,
+            link: None,
+            audio_streams: Default::default(),
             extra: serde_json::Map::new(),
         };
         push_layer(
@@ -5287,204 +5118,58 @@ mod tests {
         );
     }
 
-    /// **A lone fade is the clip's own; an overlap overrules it** (plan 2,
-    /// docs/impl/audio-timeline.md §3).
-    ///
-    /// Two clips over one join: the first stores a fade in where it overlaps
-    /// nothing and a long fade out where it does, and only the first of those
-    /// is heard as stored - the overlap is the length of the fade across it,
-    /// whatever the seconds say. The stored shapes ride through either way.
+    /// **A clip whose source is a composition is heard.** The comp's own mix
+    /// plays over the clip's span from the clip's trim, filed under the
+    /// clip's row, and the clip's fade and level reach the bake. It used to
+    /// be skipped, so a clip turned into a composition fell silent.
     #[test]
-    fn a_lone_fade_is_its_own_seconds_and_an_overlap_is_the_overlap() {
+    fn a_composition_clip_sounds_over_its_span_through_its_fade_and_gain() {
         use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
         let r = |n: i64, d: i64| Rational::new(n, d).expect("rational");
         let mut doc = Document::new();
-        let shot = push_footage_item(&mut doc, "shot.mp4");
-        let comp = push_comp(&mut doc, "cut", 32, 32);
-        let clip = |start: Rational, dur: Rational| {
-            Clip::new(ClipSource::Footage(shot), r(0, 1), dur, start, dur)
-        };
-        // 0..2 and 1.5..3, so half a second of overlap.
-        let mut first = clip(r(0, 1), r(2, 1));
-        first.fade_in = Fade {
-            seconds: r(1, 4),
-            shape: FadeShape::Slow,
-        };
-        first.fade_out = Fade {
-            seconds: r(3, 2),
-            shape: FadeShape::Smooth,
-        };
-        let mut second = clip(r(3, 2), r(3, 2));
-        second.fade_in = Fade {
-            seconds: r(1, 10),
+        let song = push_footage_item(&mut doc, "song.wav");
+        let inner = push_comp(&mut doc, "A", 32, 32);
+        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
+        let outer = push_comp(&mut doc, "cut", 32, 32);
+        // Two seconds of A from its second 1, placed at 3 on the row, pulled
+        // down 6 dB and coming up over half a second.
+        let mut clip = Clip::new(ClipSource::Comp(inner), r(1, 1), r(3, 1), r(3, 1), r(2, 1));
+        clip.gain_db = -6.0;
+        clip.fade_in = Fade {
+            seconds: r(1, 2),
             shape: FadeShape::Linear,
         };
-        push_layer(
-            &mut doc,
-            comp,
-            LayerKind::Sequence {
-                clips: vec![first, second],
-            },
-        );
+        push_layer(&mut doc, outer, LayerKind::Sequence { clips: vec![clip] });
 
         let mut builder = AudioJobsBuilder::new();
-        seed_has_audio(shot);
-        let c = doc.comp(comp).expect("comp").clone();
-        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
-        assert_eq!(jobs.len(), 2);
-
-        let out = jobs[0].fade.expect("the first clip fades at both ends");
+        seed_has_audio(song);
+        let comp = doc.comp(outer).expect("comp").clone();
         assert!(
-            (out.head_s - 0.25).abs() < 1e-9,
-            "nothing overlaps its head, so its own seconds are heard"
+            builder.layer_has_audio(&doc, &comp.layers[0]),
+            "a row whose composition clip carries sound wears a mute switch"
         );
-        assert_eq!(out.head_shape, FadeShape::Slow);
+        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &comp);
+        assert_eq!(jobs.len(), 1, "the song inside the clip's comp is heard");
+        let job = &jobs[0];
+        assert_eq!((job.item, job.layer), (song, comp.layers[0].id));
+        assert!((job.in_s - 3.0).abs() < 1e-9, "in_s was {}", job.in_s);
+        assert!((job.out_s - 5.0).abs() < 1e-9, "out_s was {}", job.out_s);
         assert!(
-            (out.tail_s - 0.5).abs() < 1e-9,
-            "the overlap is the fade, not the second and a half stored"
-        );
-        assert_eq!(out.tail_shape, FadeShape::Smooth);
-
-        let into = jobs[1].fade.expect("the second clip fades in");
-        assert!(
-            (into.head_s - 0.5).abs() < 1e-9,
-            "the overlap overrules its tenth of a second too"
-        );
-        assert_eq!(into.head_shape, FadeShape::Linear);
-        assert_eq!(into.tail_s, 0.0, "and it stores no fade out");
-    }
-
-    /// **A clip dropped inside a longer one is not a crossfade** (plan 2): a
-    /// join is one clip's end lying inside another, and a clip in the middle
-    /// of a long one is neither. So the long clip keeps the fade out it
-    /// stores rather than being ramped down across everything the short one
-    /// covers, and the short one is heard as it is.
-    #[test]
-    fn a_clip_dropped_inside_another_gives_it_no_crossfade() {
-        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
-        let r = |n: i64, d: i64| Rational::new(n, d).expect("rational");
-        let mut doc = Document::new();
-        let shot = push_footage_item(&mut doc, "shot.mp4");
-        let comp = push_comp(&mut doc, "cut", 32, 32);
-        let clip = |start: Rational, dur: Rational| {
-            Clip::new(ClipSource::Footage(shot), r(0, 1), dur, start, dur)
-        };
-        // 0..10 with a quarter-second fade out, and 2..3 dropped inside it.
-        let mut long = clip(r(0, 1), r(10, 1));
-        long.fade_out = Fade {
-            seconds: r(1, 4),
-            shape: FadeShape::Fast,
-        };
-        let inside = clip(r(2, 1), r(1, 1));
-        push_layer(
-            &mut doc,
-            comp,
-            LayerKind::Sequence {
-                clips: vec![long, inside],
-            },
+            (job.offset_s - 2.0).abs() < 1e-9,
+            "A's second 1 is heard at 3, so its start sits at 2, got {}",
+            job.offset_s
         );
 
-        let mut builder = AudioJobsBuilder::new();
-        seed_has_audio(shot);
-        let c = doc.comp(comp).expect("comp").clone();
-        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
-        assert_eq!(jobs.len(), 2);
-
-        let outer = jobs[0].fade.expect("the long clip fades out as it stores");
-        assert!(
-            (outer.tail_s - 0.25).abs() < 1e-9,
-            "the contained clip is not a join: {}",
-            outer.tail_s
-        );
-        assert_eq!(outer.head_s, 0.0, "and nothing straddles its start");
-        assert!(
-            jobs[1].fade.is_none(),
-            "the clip inside stores no fade, so it has none"
-        );
-    }
-
-    /// **A fade is clamped to the clip it is on, and a clip shorter than its
-    /// two fades is heard as their product** (plan 2).
-    #[test]
-    fn a_fade_longer_than_its_clip_is_clamped_and_the_two_ends_multiply() {
-        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
-        let r = |n: i64, d: i64| Rational::new(n, d).expect("rational");
-        let mut doc = Document::new();
-        let shot = push_footage_item(&mut doc, "shot.mp4");
-        let comp = push_comp(&mut doc, "cut", 32, 32);
-        let mut only = Clip::new(
-            ClipSource::Footage(shot),
-            r(0, 1),
-            r(1, 1),
-            r(0, 1),
-            r(1, 1),
-        );
-        only.fade_in = Fade {
-            seconds: r(9, 1),
-            shape: FadeShape::Linear,
-        };
-        only.fade_out = Fade {
-            seconds: r(9, 1),
-            shape: FadeShape::Linear,
-        };
-        push_layer(&mut doc, comp, LayerKind::Sequence { clips: vec![only] });
-
-        let mut builder = AudioJobsBuilder::new();
-        seed_has_audio(shot);
-        let c = doc.comp(comp).expect("comp").clone();
-        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
-        let fade = jobs[0].fade.expect("both ends fade");
-        assert!((fade.head_s - 1.0).abs() < 1e-9, "clamped to the clip");
-        assert!((fade.tail_s - 1.0).abs() < 1e-9);
-        // Head and tail multiply, so the middle of a one-second clip fading
-        // linearly in and out is half of a half.
-        assert!(
-            (fade.gain_at(0.5) - 0.25).abs() < 1e-6,
-            "{}",
-            fade.gain_at(0.5)
-        );
-        assert!(fade.gain_at(0.0).abs() < 1e-6 && fade.gain_at(1.0).abs() < 1e-6);
-    }
-
-    /// **The two halves of a split play as the one clip did** (plan 2): the
-    /// razor puts no fade at the join, so the halves abut sample-exactly and
-    /// the sound is the sound it was.
-    #[test]
-    fn the_two_halves_of_a_cut_clip_sound_like_the_one_it_was() {
-        use lumit_core::sequence::{Clip, ClipSource};
-        let r = |n: i64, d: i64| Rational::new(n, d).expect("rational");
-        let mut doc = Document::new();
-        let shot = push_footage_item(&mut doc, "shot.mp4");
-        let comp = push_comp(&mut doc, "cut", 32, 32);
-        let whole = Clip::new(
-            ClipSource::Footage(shot),
-            r(0, 1),
-            r(4, 1),
-            r(0, 1),
-            r(4, 1),
-        );
-        let (left, right) = whole.cut(r(2, 1)).expect("a cut inside the clip");
-        push_layer(
-            &mut doc,
-            comp,
-            LayerKind::Sequence {
-                clips: vec![left, right],
-            },
-        );
-
-        let mut builder = AudioJobsBuilder::new();
-        seed_has_audio(shot);
-        let c = doc.comp(comp).expect("comp").clone();
-        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
-        assert_eq!(jobs.len(), 2);
-        assert!(
-            jobs.iter().all(|j| j.fade.is_none()),
-            "a butt cut gets no ramp at all"
-        );
-        // Both halves read the same file at the same offset, so the second
-        // picks up exactly where the first leaves off.
-        assert!((jobs[0].offset_s - jobs[1].offset_s).abs() < 1e-9);
-        assert!((jobs[0].out_s - jobs[1].in_s).abs() < 1e-9);
+        // A hundred points a second from the clip's start: silent at the
+        // start, half way up a quarter of a second in, then at the clip's
+        // own level.
+        let (_, envelope) = crate::export::volume_bake(job, 3 * 48_000, 2 * 48_000, 48_000);
+        let envelope = envelope.expect("a fade is an envelope");
+        let level = lumit_audio::mix::db_to_gain(-6.0);
+        for (point, want) in [(0, 0.0), (25, 0.5 * level), (50, level), (150, level)] {
+            let got = envelope.points[point][0];
+            assert!((got - want).abs() < 1e-4, "point {point}: {got} for {want}");
+        }
     }
 
     /// **A clip carries a rack of its own, and each fx switch drops one
@@ -5579,120 +5264,6 @@ mod tests {
         assert!(clip_chain.is_none() && layer_chain.is_none());
     }
 
-    /// **A Precomp layer's rack rides on the carrier**, which is what makes
-    /// the bus stage possible (docs/09 §3.1): the mixer sums everything
-    /// arriving through the layer and runs the rack over the sum.
-    ///
-    /// Only a stack that sounds is carried. A picture effect on a Precomp
-    /// layer is the ordinary case and must not put a whole nested comp
-    /// through the bus stage for nothing, and the layer's fx switch drops the
-    /// rack here exactly as it drops a layer's own.
-    #[test]
-    fn a_precomp_layers_rack_rides_on_the_carrier() {
-        let mut doc = Document::new();
-        let song = push_footage_item(&mut doc, "song.wav");
-        let inner = push_comp(&mut doc, "A", 32, 32);
-        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
-        let outer = push_comp(&mut doc, "B", 32, 32);
-        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
-
-        let mut builder = AudioJobsBuilder::new();
-        seed_has_audio(song);
-        let carrier_chain = |doc: &Document, builder: &mut AudioJobsBuilder| {
-            let c = doc.comp(outer).expect("comp").clone();
-            let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
-            assert_eq!(jobs.len(), 1);
-            assert_eq!(jobs[0].carriers.len(), 1);
-            jobs[0].carriers[0].chain.clone()
-        };
-        assert!(
-            carrier_chain(&doc, &mut builder).is_none(),
-            "a Precomp layer with no effects carries a gain and nothing more"
-        );
-
-        // A picture effect is not a rack: the nested comp stays a run per
-        // source, as it was.
-        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
-            c.layers[0].effects = vec![lumit_core::fx::instantiate("blur").expect("blur")];
-        }
-        assert!(
-            carrier_chain(&doc, &mut builder).is_none(),
-            "a blur on a Precomp layer opens no bus"
-        );
-
-        // An audio effect is.
-        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
-            c.layers[0].effects = vec![
-                lumit_core::fx::instantiate("blur").expect("blur"),
-                lumit_core::fx::instantiate("audio_limiter").expect("a limiter"),
-            ];
-        }
-        let chain = carrier_chain(&doc, &mut builder).expect("the bus chain");
-        assert_eq!(
-            chain.effects.len(),
-            2,
-            "the whole stack goes down, as a layer's own does"
-        );
-
-        // And the fx switch drops it, as it drops a layer's own rack.
-        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
-            c.layers[0].switches.fx = false;
-        }
-        assert!(
-            carrier_chain(&doc, &mut builder).is_none(),
-            "the fx switch reaches the bus too"
-        );
-    }
-
-    /// **A Precomp layer over a comp that has sound in it says it has sound.**
-    /// The timeline draws a row's mute switch only where the layer can
-    /// make a sound, and the question used to be asked of the layer's own
-    /// footage item alone — which a Precomp layer does not have. So a precomp
-    /// holding the music, the ordinary way a bed is placed, wore no mute switch
-    /// at all, even though muting it (as the walk above shows) has always
-    /// silenced the song.
-    ///
-    /// The same scene as the test above, plus the cases either side of it: a
-    /// silent precomp, a bare solid, and a comp nested two deep.
-    #[test]
-    fn a_precomp_over_a_comp_with_sound_in_it_carries_a_mute_switch() {
-        let mut doc = Document::new();
-        let song = push_footage_item(&mut doc, "song.wav");
-        let inner = push_comp(&mut doc, "A", 32, 32);
-        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
-        let middle = push_comp(&mut doc, "B", 32, 32);
-        push_layer(&mut doc, middle, LayerKind::Precomp { comp: inner });
-        let silent = push_comp(&mut doc, "silent", 32, 32);
-        let outer = push_comp(&mut doc, "C", 32, 32);
-        push_layer(&mut doc, outer, LayerKind::Precomp { comp: middle });
-        push_layer(&mut doc, outer, LayerKind::Precomp { comp: silent });
-
-        let mut builder = AudioJobsBuilder::new();
-        seed_has_audio(song);
-        let c = doc.comp(outer).unwrap().clone();
-        assert!(
-            builder.layer_has_audio(&doc, &c.layers[0]),
-            "the song is two comps down, and the switch belongs on the row"
-        );
-        assert!(
-            !builder.layer_has_audio(&doc, &c.layers[1]),
-            "a precomp with nothing in it must not claim a mute switch"
-        );
-
-        // The footage layer itself, and a layer with no source at all.
-        let a = doc.comp(inner).unwrap().clone();
-        assert!(builder.layer_has_audio(&doc, &a.layers[0]));
-        let mut mute = a.layers[0].clone();
-        mute.switches.audible = false;
-        assert!(
-            builder.layer_has_audio(&doc, &mute),
-            "muting a layer must not take its own mute switch away"
-        );
-        let mut null = a.layers[0].clone();
-        null.kind = LayerKind::Null;
-        assert!(!builder.layer_has_audio(&doc, &null));
-    }
-
     /// A node graph reading `item` through the Output, filed in `doc`. `idle`
     /// adds a second Read that nothing is wired to, which is the branch the
     /// walk must leave silent.
@@ -5785,105 +5356,6 @@ mod tests {
         assert!(!builder.audio_jobs(&Arc::new(doc.clone()), &g).is_empty());
     }
 
-    /// **A Precomp row of a node graph wears a mute switch** (§5.10). The
-    /// question is asked of the nested comp's layers, and a graph has none, so
-    /// the row over a graph holding the music drew no switch at all.
-    #[test]
-    fn a_precomp_row_of_a_node_graph_carries_a_mute_switch() {
-        let mut doc = Document::new();
-        let song = push_footage_item(&mut doc, "song.wav");
-        let graph = push_read_graph_comp(&mut doc, song, None);
-        let silent = push_comp(&mut doc, "quiet", 32, 32);
-        let outer = push_comp(&mut doc, "edit", 32, 32);
-        push_layer(&mut doc, outer, LayerKind::Precomp { comp: graph });
-        push_layer(&mut doc, outer, LayerKind::Precomp { comp: silent });
-        seed_has_audio(song);
-
-        let mut builder = AudioJobsBuilder::new();
-        let c = doc.comp(outer).unwrap().clone();
-        assert!(
-            builder.layer_has_audio(&doc, &c.layers[0]),
-            "the song is a Read box inside the graph, and the switch belongs on the row"
-        );
-        assert!(
-            !builder.layer_has_audio(&doc, &c.layers[1]),
-            "a comp with nothing in it must not claim a switch"
-        );
-    }
-
-    /// **A retimed layer is silent, and keeps its mute switch** (docs/04 §11.5,
-    /// docs/09 §7, node-graph-comp.md §5.6). Footage and Precomp alike: a map
-    /// that stretches, freezes or reverses a picture has no honest reading for
-    /// sound. The switch stays because it says what the row *is*, and one that
-    /// vanished when it was pressed could never be pressed back.
-    #[test]
-    fn a_retimed_layer_contributes_no_audio_but_keeps_its_switch() {
-        let mut doc = Document::new();
-        let song = push_footage_item(&mut doc, "song.wav");
-        let inner = push_comp(&mut doc, "A", 32, 32);
-        push_layer(&mut doc, inner, LayerKind::Footage { item: song });
-        let outer = push_comp(&mut doc, "B", 32, 32);
-        push_layer(&mut doc, outer, LayerKind::Footage { item: song });
-        push_layer(&mut doc, outer, LayerKind::Precomp { comp: inner });
-        seed_has_audio(song);
-
-        let mut builder = AudioJobsBuilder::new();
-        let plain = doc.comp(outer).unwrap().clone();
-        assert_eq!(
-            builder.audio_jobs(&Arc::new(doc.clone()), &plain).len(),
-            2,
-            "unmapped, the clip and the precomp both sound"
-        );
-
-        // A freeze on each row: one map, no sound, either kind.
-        if let Some(ProjectItem::Composition(c)) = doc.item_mut(outer) {
-            for l in &mut c.layers {
-                l.retime = Some(lumit_core::anim::Property::fixed(1.0));
-            }
-        }
-        let mapped = doc.comp(outer).unwrap().clone();
-        assert!(
-            builder
-                .audio_jobs(&Arc::new(doc.clone()), &mapped)
-                .is_empty(),
-            "a retimed footage layer and a retimed Precomp are both silent"
-        );
-        assert!(
-            builder.layer_has_audio(&doc, &mapped.layers[0])
-                && builder.layer_has_audio(&doc, &mapped.layers[1]),
-            "and both rows still wear the switch that says so"
-        );
-    }
-
-    /// **The export contract for the deferred flare bake.** A fresh
-    /// renderer bakes lens flares *inside* the frame, exactly as it always did.
-    ///
-    /// This is how "an export is never a provisional picture" is kept true. An
-    /// export builds its own renderer (`export::run`), and nobody calls
-    /// `set_deferred_flare_bakes` on it — only the Viewer's worker does — so
-    /// the promise is a property of the code's shape rather than a rule anyone
-    /// has to remember. The default being the exact one is the load-bearing
-    /// half: a path that forgets to choose gets the safe behaviour.
-    #[test]
-    fn a_fresh_renderer_bakes_flares_inside_the_frame() {
-        let r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        assert!(
-            !r.flare_bake_pending(),
-            "a renderer that has made no frames has nothing baking"
-        );
-        assert_eq!(
-            r.flare_bake_generation(),
-            0,
-            "and nothing has been queued or landed"
-        );
-    }
-
     /// **A dropped-on Lens flare puts light on the frame**.
     ///
     /// The gate the flare never had: its kernels are checked against the CPU
@@ -5933,208 +5405,6 @@ mod tests {
         assert!(
             peak > 0,
             "a flare on a black comp must light it ({w}×{h}, brightest pixel {peak})"
-        );
-    }
-
-    /// A lens baking somewhere **does not stop the rest of the project being
-    /// named**.
-    ///
-    /// The regression: `frame_key` used to answer `None` for every comp while
-    /// any bake was in flight. A keyframed f-stop asks for a slightly
-    /// different iris on every frame, so a bake was in flight for as long as
-    /// it played — and nothing anywhere in the project could be named, banked
-    /// or filled in the background. What matters is whether a frame *drew*
-    /// other optics than it names, which is counted rather than guessed at.
-    #[test]
-    fn a_baking_flare_does_not_unname_other_frames() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 8, 8);
-        let doc = store.snapshot();
-        let named = r.frame_key(&doc, comp_id, 0, Quality::default());
-        assert!(named.is_some(), "an ordinary frame of a solid names itself");
-
-        // Queue a bake by hand: the effect engine is the authority the name
-        // asks, and driving it directly keeps this a test of the *rule*
-        // rather than of how long a real bake takes on a software rasteriser.
-        r.set_deferred_flare_bakes(true);
-        let queued = {
-            let Some(parts) = r.parts.as_ref() else {
-                return;
-            };
-            parts
-                .fx_all()
-                .any(|fx| fx.warm_flare_bake(0xfeed_face, &stub_bake()))
-        };
-        if !queued {
-            return; // no bake thread on this machine
-        }
-        assert_eq!(
-            r.frame_key(&doc, comp_id, 0, Quality::default()),
-            named,
-            "a bake in flight elsewhere leaves this frame's name exactly as it was"
-        );
-        assert_eq!(
-            r.flare_substitutions(),
-            0,
-            "and nothing was stood in for, so the frame is one to keep"
-        );
-    }
-
-    /// **A keyframed aperture names, and keeps, every frame it draws.** Ten
-    /// frames of an animated f-stop, with a bake in flight the whole time:
-    /// each frame takes its own name, and no two frames share one — the
-    /// aperture is part of the picture, so it is part of the name.
-    #[test]
-    fn a_keyframed_aperture_names_every_frame() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_flare(|flare| {
-            for param in &mut flare.params {
-                if param.id == "fstop" {
-                    param.value = lumit_core::model::EffectValue::Float(ramp(2.0, 8.0, 1));
-                }
-            }
-        });
-        let doc = store.snapshot();
-        r.set_deferred_flare_bakes(true);
-        let queued = {
-            let Some(parts) = r.parts.as_ref() else {
-                return;
-            };
-            parts
-                .fx_all()
-                .any(|fx| fx.warm_flare_bake(0x0f57_09ba, &stub_bake()))
-        };
-        if !queued {
-            return; // no bake thread on this machine
-        }
-        let names: Vec<Option<u128>> = (0..10)
-            .map(|f| r.frame_key(&doc, comp_id, f, Quality::default()))
-            .collect();
-        assert!(
-            names.iter().all(Option::is_some),
-            "every frame of an animated aperture names itself: {names:?}"
-        );
-        let mut distinct: Vec<u128> = names.into_iter().flatten().collect();
-        distinct.sort_unstable();
-        distinct.dedup();
-        assert_eq!(
-            distinct.len(),
-            10,
-            "and each f-stop is a different picture under a different name"
-        );
-    }
-
-    /// **Editing a .lens file on disk renames the frames that read it.** The
-    /// bake keys on the file's CONTENT, so before this the edited
-    /// prescription rebaked and drew different optics under the old file's
-    /// name — a cached frame no edit or undo could ever clear.
-    #[test]
-    fn an_edited_lens_file_renames_frames() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let dir = tempfile::tempdir().expect("a temp dir");
-        let path = dir.path().join("mine.lens");
-        std::fs::write(
-            &path,
-            "name: one
-focal_length: 50
-",
-        )
-        .expect("write");
-        let text = path.to_string_lossy().into_owned();
-        let (store, comp_id) = doc_with_flare(|flare| {
-            for param in &mut flare.params {
-                if param.id == "lens_file" {
-                    param.value = lumit_core::model::EffectValue::File(
-                        lumit_core::model::FileParam::single(text.clone()),
-                    );
-                }
-            }
-        });
-        let doc = store.snapshot();
-        let before = r.frame_key(&doc, comp_id, 0, Quality::default());
-        assert!(before.is_some(), "a flare reading a real file names itself");
-
-        // A different prescription at the same path — a longer one, so the
-        // name moves whatever the filesystem's clock granularity is.
-        std::fs::write(
-            &path,
-            "name: two
-focal_length: 85
-surfaces:
-",
-        )
-        .expect("rewrite");
-        let after = r.frame_key(&doc, comp_id, 0, Quality::default());
-        assert!(after.is_some(), "and still names itself afterwards");
-        assert_ne!(
-            before, after,
-            "an edited prescription is a different picture and takes a different name"
-        );
-    }
-
-    /// A bake that has **finished** must read as finished from an idle
-    /// thread — with no frame render in between.
-    ///
-    /// The regression this pins: `bake_pending` used to read the in-flight
-    /// set, which only a frame render's `collect` cleared — so after the
-    /// bake thread finished, the worker's republish tick saw "still pending"
-    /// forever, never re-made the picture, and the lens on screen stayed one
-    /// change behind until the user moved the playhead. The user's words:
-    /// "if I change the lens most of the time it doesn't even update until
-    /// I switch frame."
-    #[test]
-    fn a_landed_bake_reads_as_landed_without_a_frame_render() {
-        let r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        r.set_deferred_flare_bakes(true);
-        let queued = {
-            let Some(parts) = r.parts.as_ref() else {
-                return;
-            };
-            parts
-                .fx_all()
-                .any(|fx| fx.warm_flare_bake(0xdead_beef, &stub_bake()))
-        };
-        if !queued {
-            return; // no bake thread on this machine
-        }
-        // The bake itself is trivial; give the thread a moment to run it.
-        // Polling with a deadline rather than one sleep, so the test is fast
-        // when the machine is and honest when it is loaded.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while r.flare_bake_pending() {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "a finished bake must stop reading as pending without any                  frame render — the republish tick depends on exactly this"
-            );
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        assert!(
-            r.flare_bake_generation() >= 2,
-            "queued and landed both move the generation"
         );
     }
 
@@ -6217,55 +5487,6 @@ surfaces:
         );
     }
 
-    /// **A prepared frame reports its own size on every platform.** The dims a
-    /// present path sizes its shared surface off are the texture's actual ones
-    /// — the comp size times the preview scale — and reading them must not
-    /// depend on a transport existing. It did: the texture had no reader
-    /// outside the Windows and Linux present paths, so macOS builds failed the
-    /// `-D warnings` clippy gate on a dead field.
-    #[test]
-    fn a_prepared_frame_reports_the_scaled_size() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.0, 1.0, 0.0, 1.0]), 64, 32);
-        let doc = store.snapshot();
-        let half = crate::plan::Quality {
-            auto_res: true,
-            display_scale: 0.5,
-            ..crate::plan::Quality::default()
-        };
-
-        let full = r
-            .render_prepared(
-                &doc,
-                comp_id,
-                0,
-                crate::plan::Quality::default(),
-                false,
-                false,
-            )
-            .expect("full render");
-        assert_eq!(
-            full.size(),
-            (64, 32),
-            "full quality composites at comp size"
-        );
-
-        let coarse = r
-            .render_prepared(&doc, comp_id, 0, half, false, false)
-            .expect("half render");
-        assert_eq!(
-            coarse.size(),
-            (32, 16),
-            "a coarser tier shares a genuinely smaller texture"
-        );
-    }
-
     /// **The VRAM final-frame cache.** A committed frame rendered twice is
     /// composited once — the second `render_prepared` is served from the card
     /// (the hit counter proves it). A drag's provisional render must neither
@@ -6316,86 +5537,6 @@ surfaces:
 
         r.clear_frame_textures();
         assert_eq!(r.frame_texture_stats().2, 0, "Clear cache drops all");
-    }
-
-    /// **The content-keying promise, on the VRAM tier.** An edit that cannot
-    /// change a pixel must not cost a render: the frame's name is a hash of what
-    /// is in it, so renaming a layer or moving the work area asks for exactly the
-    /// name already on the card. This is the behaviour the whole tier stack is
-    /// judged on in the hand — before it, every committed edit emptied the cache
-    /// and the bar went blank.
-    #[test]
-    fn a_picture_free_edit_still_hits_the_vram_cache() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.2, 0.4, 0.8, 1.0]), 8, 8);
-        let mut doc = (*store.snapshot()).clone();
-        let q = crate::plan::Quality::default();
-
-        r.render_prepared(
-            &std::sync::Arc::new(doc.clone()),
-            comp_id,
-            0,
-            q,
-            false,
-            true,
-        )
-        .expect("first render");
-        let hits = r.frame_texture_hits();
-
-        // Rename the layer and nudge the work area: neither is in the picture.
-        if let Some(comp) = doc.comp_mut(comp_id) {
-            comp.name = "renamed".into();
-            comp.layers[0].name = "also renamed".into();
-            comp.work_area = Some((
-                lumit_core::time::CompTime(lumit_core::time::Rational::ZERO),
-                lumit_core::time::CompTime(lumit_core::time::Rational::new(1, 2).unwrap()),
-            ));
-        }
-        r.render_prepared(
-            &std::sync::Arc::new(doc.clone()),
-            comp_id,
-            0,
-            q,
-            false,
-            true,
-        )
-        .expect("render after the picture-free edit");
-        assert_eq!(
-            r.frame_texture_hits(),
-            hits + 1,
-            "an edit that cannot change a pixel must be served from the card"
-        );
-
-        // And an edit that DOES change the picture misses, with no invalidation
-        // step anywhere: the name is simply different.
-        if let Some(comp) = doc.comp_mut(comp_id) {
-            comp.layers[0].transform.opacity = lumit_core::anim::Property::fixed(40.0);
-        }
-        r.render_prepared(
-            &std::sync::Arc::new(doc.clone()),
-            comp_id,
-            0,
-            q,
-            false,
-            true,
-        )
-        .expect("render after a real edit");
-        assert_eq!(
-            r.frame_texture_hits(),
-            hits + 1,
-            "a changed picture has a different name, so it renders"
-        );
-        assert_eq!(
-            r.frame_texture_stats().2,
-            2,
-            "and the pre-edit frame is still held, so an undo is free"
-        );
     }
 
     /// **The demotion ladder** (docs/06 §5.3, §5.1): a frame squeezed out of
@@ -6516,192 +5657,6 @@ surfaces:
         );
     }
 
-    /// **A frame reaches the tiers below even when the cache is never full.**
-    ///
-    /// The regression this pins is a hole the ladder had from the start: the
-    /// only way down was eviction, so a cache with a budget bigger than the
-    /// session ever fills wrote *nothing* to disk. The bigger the budget the
-    /// user gave it, the more certainly the disk tier stayed empty — and the
-    /// symptom was silent, a cache bar green all session and blank after a
-    /// restart.
-    ///
-    /// Here the budget is generous, nothing is ever evicted, and the frame must
-    /// still come down.
-    #[test]
-    fn a_held_frame_is_copied_down_without_being_evicted() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.0, 1.0, 0.0, 1.0]), 8, 8);
-        let doc = store.snapshot();
-        let q = crate::plan::Quality::default();
-        // Room for a hundred of these frames: this cache never evicts anything.
-        r.set_frame_texture_budget((8 * 8 * 4 + 64) * 100);
-        r.render_prepared(&doc, comp_id, 0, q, false, true)
-            .expect("bank one frame");
-        let key = r
-            .frame_key(&doc, comp_id, 0, q)
-            .expect("a solid-only comp is nameable");
-        assert!(r.has_frame_texture(key, false));
-
-        // Nothing is parked yet, thus the backup has exactly one frame to copy.
-        let none_parked = |_: u128| false;
-        assert!(
-            r.start_backup(&none_parked),
-            "a held frame that is not on disk is worth copying down"
-        );
-
-        let mut down = Vec::new();
-        for _ in 0..200 {
-            down = r.poll_demotions();
-            if !down.is_empty() {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-        assert_eq!(down.len(), 1, "the copy came down");
-        assert_eq!(down[0].key, key, "under the name it is held by");
-        assert_eq!(down[0].rgba.len(), 8 * 8 * 4, "a whole frame of bytes");
-        assert!(
-            r.has_frame_texture(key, false),
-            "and the frame is still on the card — a copy, not an eviction"
-        );
-
-        // Once it is down it is not copied again, whichever way the caller
-        // answers: the frame itself now knows it is held below.
-        assert!(
-            !r.start_backup(&none_parked),
-            "a frame already copied down is not copied twice"
-        );
-
-        // And when it is finally pushed out, it goes quietly — the pixels are
-        // downstairs already, so reading them a second time would be pure
-        // traffic.
-        r.set_frame_texture_budget(8 * 8 * 4 + 64);
-        let mut doc = (*doc).clone();
-        if let Some(comp) = doc.comp_mut(comp_id) {
-            comp.layers[0].transform.opacity = lumit_core::anim::Property::fixed(25.0);
-        }
-        r.render_prepared(
-            &std::sync::Arc::new(doc.clone()),
-            comp_id,
-            0,
-            q,
-            false,
-            true,
-        )
-        .expect("a second picture takes its place");
-        assert!(!r.has_frame_texture(key, false), "the first was evicted");
-        let mut came_down = Vec::new();
-        for _ in 0..40 {
-            came_down.extend(r.poll_demotions().into_iter().map(|d| d.key));
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-        assert!(
-            !came_down.contains(&key),
-            "a frame already backed up is not read back when it goes"
-        );
-    }
-
-    /// A promotion uses a texture that the cache has finished with, in place of
-    /// a new one — but only when nothing shows that texture any more.
-    ///
-    /// Playback goes past a promoted frame each time it comes round, and a new
-    /// texture for each of them is an allocation on the card for each frame.
-    /// The share count is the test of whether a texture is free, and it has to
-    /// be: a write into a texture that a present still shows would put the wrong
-    /// picture on the screen.
-    #[test]
-    fn a_free_texture_holds_the_next_promoted_frame() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let comp = Uuid::now_v7();
-        let bytes = vec![0u8; 8 * 8 * 4];
-        let promote = |key: u128| Promotion {
-            key,
-            bgra: false,
-            width: 8,
-            height: 8,
-            bytes: &bytes,
-            cost_ms: 4,
-            provenance: FrameProvenance {
-                comp,
-                frame: key as u64,
-                scale_q: 1000,
-                quality: Quality::default(),
-            },
-        };
-        // Room for exactly one 8×8 frame, so each promotion evicts the one
-        // before it.
-        r.set_frame_texture_budget(8 * 8 * 4 + 64);
-
-        let first = r.upload_frame_texture(promote(1)).expect("first promotion");
-        let first_texture = std::sync::Arc::as_ptr(&first.texture);
-
-        // The first frame is evicted here, but `first` is still held — as a
-        // present holds a frame it is showing. Its texture must not be written
-        // over.
-        let second = r
-            .upload_frame_texture(promote(2))
-            .expect("second promotion");
-        assert!(
-            !std::ptr::eq(std::sync::Arc::as_ptr(&second.texture), first_texture),
-            "a texture that something still shows is never written over"
-        );
-
-        // Nothing shows the first frame now, thus the next promotion takes its
-        // texture in place of making one.
-        drop(first);
-        let third = r.upload_frame_texture(promote(3)).expect("third promotion");
-        assert!(
-            std::ptr::eq(std::sync::Arc::as_ptr(&third.texture), first_texture),
-            "a free texture is used again"
-        );
-        assert_eq!(third.size(), (8, 8));
-        // And Clear cache gives the memory on the card back.
-        drop(second);
-        drop(third);
-        r.clear_frame_textures();
-        assert!(r.upload_pool.is_empty(), "a clear empties the pool as well");
-    }
-
-    /// The interactive path renders the same picture the export path does,
-    /// checked on the one comp both can build without media. A solid is enough
-    /// to catch a wrong background, colour pipeline or camera: those are the
-    /// parts the two walks each implement separately.
-    #[test]
-    fn the_preview_and_export_paths_agree_on_a_solid_comp() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.2, 0.7, 0.4, 1.0]), 32, 16);
-        let doc = store.snapshot();
-
-        let (preview, pw, ph) = r
-            .render_preview(&doc, comp_id, 0, crate::plan::Quality::default(), 1.0)
-            .expect("preview render");
-        let (export, ew, eh) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("export render");
-
-        assert_eq!((pw, ph), (ew, eh), "both paths render at the comp's size");
-        assert_eq!(
-            preview, export,
-            "the interactive and export paths must produce identical pixels"
-        );
-    }
-
     /// The comp of `the_preview_and_export_paths_agree_on_an_audio_driven_comp`
     /// and its comp-mix twin: a solid whose Brightness is driven, through a
     /// Remap, by an Audio level reading whichever of its three sources
@@ -6738,6 +5693,7 @@ surfaces:
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
         let mut music = matrix_layer("Music", LayerKind::Footage { item }, cw, ch);
         music.audio_only = true;
@@ -6884,143 +5840,6 @@ surfaces:
         }
     }
 
-    /// **An Audio level left on This comp drives from the mixer's own sum, and
-    /// does it identically every time it is asked**.
-    ///
-    /// The comp-mix half of the row above, and the same two claims: the picture
-    /// is the *same* picture twice (the mix is rebuilt from the document on
-    /// every frame, so a walk that depended on anything else would show up
-    /// here), and it is not the picture the same comp draws with the wire cut,
-    /// which is what says the mix was heard at all rather than read as silence.
-    #[test]
-    fn a_comp_mix_driven_parameter_renders_the_same_picture_twice() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let Some((doc, comp_id)) =
-            audio_driven_doc(lumit_core::fx::drivers::audio_level::SOURCE_THIS_COMP)
-        else {
-            eprintln!("no ffmpeg CLI: the comp-mix row is skipped");
-            return;
-        };
-        let mut unwired = doc.clone();
-        unwired.comp_mut(comp_id).expect("comp").layers[0]
-            .graph
-            .edges
-            .pop();
-
-        let doc = std::sync::Arc::new(doc);
-        let (first, w, h) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("first render");
-        let (again, w2, h2) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("second render");
-        assert_eq!((w, h), (w2, h2));
-        assert_eq!(
-            first, again,
-            "the comp's mix must reach the same number on every render of one frame"
-        );
-
-        let (silent, _, _) = r
-            .render_rgba(&std::sync::Arc::new(unwired), comp_id, 0, 1.0)
-            .expect("unwired render");
-        assert_ne!(
-            first, silent,
-            "the driver must actually read the comp's mix - equal pixels mean silence"
-        );
-    }
-
-    /// A Null layer draws nothing: the same comp with a Null sitting on top of
-    /// it renders byte for byte identically to the comp without one. A Null is
-    /// a transform to parent to, never a picture — and because it is invisible
-    /// there is no other way for a user to notice it started drawing.
-    #[test]
-    fn a_null_layer_draws_nothing() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (32u32, 16u32);
-        let colour = LinearColour([0.8, 0.1, 0.1, 1.0]);
-
-        let (plain, plain_comp, _) = matrix_base(cw, ch, colour);
-        let (without, w, h) = r
-            .render_rgba(&std::sync::Arc::new(plain.clone()), plain_comp, 0, 1.0)
-            .expect("render");
-
-        let (mut with_null, null_comp, _) = matrix_base(cw, ch, colour);
-        let mut null = matrix_layer("Null", LayerKind::Null, cw, ch);
-        // Off-centre, so a Null that did draw could not hide behind the base.
-        null.transform.position_x = Property::fixed(4.0);
-        null.transform.position_y = Property::fixed(4.0);
-        with_null
-            .comp_mut(null_comp)
-            .expect("comp")
-            .layers
-            .insert(0, null);
-        let (with, w2, h2) = r
-            .render_rgba(&std::sync::Arc::new(with_null.clone()), null_comp, 0, 1.0)
-            .expect("render");
-
-        assert_eq!((w, h), (w2, h2));
-        assert_eq!(without, with, "a Null layer must contribute no pixels");
-    }
-
-    /// **A layer whose Layer out is unplugged draws nothing**.
-    ///
-    /// The owner's own words for it: "having a layer display nothing because
-    /// it's not wired up is completely okay". It is the same nothing a hidden
-    /// layer draws, and this proves it pixel for pixel rather than by reading
-    /// the two lines that say so.
-    #[test]
-    fn a_layer_with_its_out_unplugged_draws_nothing() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (32u32, 16u32);
-        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
-        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
-
-        // A blue layer over a red one, so the top layer's absence is the
-        // difference between a blue frame and a red one - not a subtlety.
-        let build = |unwired: bool, visible: bool| {
-            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
-            let (_, top) = matrix_top(&mut doc, comp_id, blue);
-            let comp = doc.comp_mut(comp_id).expect("comp");
-            let l = comp.layers.iter_mut().find(|l| l.id == top).expect("top");
-            l.graph.out_unwired = unwired;
-            l.switches.visible = visible;
-            (doc, comp_id)
-        };
-        let render = |r: &mut HeadlessRenderer, unwired: bool, visible: bool| {
-            let (doc, comp_id) = build(unwired, visible);
-            r.render_rgba(&std::sync::Arc::new(doc), comp_id, 0, 1.0)
-                .expect("the comp renders")
-                .0
-        };
-
-        let drawn = render(&mut r, false, true);
-        let unplugged = render(&mut r, true, true);
-        let hidden = render(&mut r, false, false);
-
-        assert_ne!(
-            drawn, unplugged,
-            "a layer that is not wired up must stop drawing"
-        );
-        assert_eq!(
-            hidden, unplugged,
-            "and it is the same nothing the visibility switch draws"
-        );
-    }
-
     /// **Layers under a full-frame opaque solid are not rendered**, and
     /// the picture cannot tell. The same comp is rendered with the cull live
     /// and with it refused — a Null on top whose matte names the bottom layer
@@ -7098,6 +5917,7 @@ surfaces:
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 }));
                 let comp_id = push_comp(&mut doc, "Scene", cw, ch);
                 let clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -7172,6 +5992,7 @@ surfaces:
             volume_db: Property::zero(),
             pan: Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -7800,110 +6621,6 @@ surfaces:
         );
     }
 
-    /// A retimed footage layer beneath an accumulation motion blur adjustment
-    /// with Force on all layers renders the footage, whichever interpolation
-    /// the retime uses. Pinned because the manual's harness once reported a
-    /// solid black frame for exactly this stack. The smear itself is
-    /// `accumulation_samples_the_footage_between_frames` below; this one only
-    /// asks for a picture.
-    #[test]
-    fn a_retimed_layer_under_forced_accumulation_mb_is_not_black() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let Some((_fixture_dir, clip)) = footage_fixture() else {
-            eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
-            return;
-        };
-        use lumit_core::retime::Interpolation;
-        let rows: Vec<(&str, Option<Property>, Interpolation)> = vec![
-            ("no retime", None, Interpolation::Nearest),
-            (
-                "retime nearest",
-                Some(lumit_core::model::Layer::identity_retime(
-                    Rational::ZERO,
-                    Rational::new(2, 1).unwrap(),
-                )),
-                Interpolation::Nearest,
-            ),
-            (
-                "retime blend",
-                Some(lumit_core::model::Layer::identity_retime(
-                    Rational::ZERO,
-                    Rational::new(2, 1).unwrap(),
-                )),
-                Interpolation::Blend,
-            ),
-        ];
-        for (name, retime, interpolation) in rows {
-            let mut doc = Document::new();
-            let item = Uuid::now_v7();
-            doc.items
-                .push(ProjectItem::Footage(lumit_core::model::FootageItem {
-                    sequence: None,
-                    id: item,
-                    name: "fixture.mp4".into(),
-                    media: lumit_core::model::MediaRef {
-                        relative_path: "fixture.mp4".into(),
-                        absolute_path: clip.to_string_lossy().into_owned(),
-                        fingerprint: None,
-                        extra: serde_json::Map::new(),
-                    },
-                    extra: serde_json::Map::new(),
-                    colour_space: None,
-                }));
-            let comp_id = Uuid::now_v7();
-            let mut clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
-            clip_layer.retime = retime;
-            clip_layer.interpolation = interpolation;
-            let mut adjust = matrix_layer("Adjust", LayerKind::Adjustment, 320, 240);
-            let mut mb = lumit_core::fx::instantiate("accumulation_mb").expect("registered");
-            for p in &mut mb.params {
-                match p.id.as_str() {
-                    "force_all" => p.value = lumit_core::model::EffectValue::Bool(true),
-                    "samples" => {
-                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(4.0))
-                    }
-                    _ => {}
-                }
-            }
-            adjust.effects = vec![mb];
-            doc.items.push(ProjectItem::Composition(Composition {
-                graph: None,
-                master_volume_db: 0.0,
-                sound_mix: false,
-                groups: Vec::new(),
-                beat_grid: None,
-                id: comp_id,
-                name: "Scene".into(),
-                width: 320,
-                height: 240,
-                frame_rate: FrameRate::new(30, 1).unwrap(),
-                duration: Duration(Rational::new(2, 1).unwrap()),
-                background: LinearColour::BLACK,
-                work_area: None,
-                layers: vec![adjust, clip_layer],
-                markers: Vec::new(),
-                motion_blur: lumit_core::model::MotionBlur::default(),
-                extra: serde_json::Map::new(),
-            }));
-            let store = DocumentStore::new(doc);
-            let doc = store.snapshot();
-            let (rgba, _, _) = r
-                .render_rgba(&doc, comp_id, 10, 1.0)
-                .unwrap_or_else(|e| panic!("{name}: render failed: {e}"));
-            assert!(
-                rgba.chunks_exact(4)
-                    .any(|px| px[0] > 8 || px[1] > 8 || px[2] > 8),
-                "{name}: a retimed layer under Force on all layers rendered black"
-            );
-        }
-    }
-
     /// **Accumulation motion blur samples the footage between its frames**
     /// (docs/08 §3.26). A clip playing under the adjustment used to give every
     /// sample the same frame-time pixels, so the average was the plain frame
@@ -7947,6 +6664,7 @@ surfaces:
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 }));
             let comp_id = Uuid::now_v7();
             let mut clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -8111,6 +6829,7 @@ surfaces:
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 }));
             let comp_id = Uuid::now_v7();
             let mut layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -8168,6 +6887,248 @@ surfaces:
                 "{name}: the interactive and export paths must be bit-identical"
             );
         }
+    }
+
+    /// **A fade and a dissolve reach the picture.** Two flat stills on one
+    /// Sequence layer over a black comp: the first comes up from nothing over
+    /// its own second, the two overlap for a second, and the second goes
+    /// down to nothing. The middle of the overlap is the even mix of the two
+    /// pictures' light and its first frame is the outgoing clip alone.
+    /// Skips (with a note) when no ffmpeg CLI is present to write the stills.
+    #[test]
+    fn a_sequence_layer_fades_at_a_lone_end_and_dissolves_across_an_overlap() {
+        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let Some(bin) = lumit_media::index::tests_support::ffmpeg_bin() else {
+            eprintln!("skipping: no ffmpeg CLI to write the stills");
+            return;
+        };
+        let dir = tempfile::tempdir().expect("a directory");
+        let (mut doc, comp_id, _) = matrix_base(64, 64, LinearColour::BLACK);
+        let red = still_item(&mut doc, dir.path(), bin, "red.png", "color=c=red:s=64x64");
+        let blue = still_item(
+            &mut doc,
+            dir.path(),
+            bin,
+            "blue.png",
+            "color=c=blue:s=64x64",
+        );
+
+        let at = |n: i64| Rational::new(n, 1).unwrap();
+        let linear = |seconds: i64| Fade {
+            seconds: at(seconds),
+            shape: FadeShape::Linear,
+        };
+        // Red on [0, 3) and blue on [2, 5): they share [2, 3).
+        let mut first = Clip::new(ClipSource::Footage(red), at(0), at(3), at(0), at(3));
+        let mut second = Clip::new(ClipSource::Footage(blue), at(0), at(3), at(2), at(3));
+        (first.fade_in, second.fade_in, second.fade_out) = (linear(1), linear(1), linear(1));
+        if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp_id) {
+            c.layers = vec![matrix_layer(
+                "Cut",
+                LayerKind::Sequence {
+                    clips: vec![first, second],
+                },
+                64,
+                64,
+            )];
+        }
+        let doc = DocumentStore::new(doc).snapshot();
+        // The middle pixel of a frame, thirty frames to the second.
+        let mut centre = |frame: u64| -> [i32; 3] {
+            let (px, w, h) = r
+                .render_rgba(&doc, comp_id, frame, 1.0)
+                .unwrap_or_else(|e| panic!("frame {frame}: {e}"));
+            let i = ((h / 2 * w + w / 2) * 4) as usize;
+            [px[i].into(), px[i + 1].into(), px[i + 2].into()]
+        };
+        let near = |a: [i32; 3], b: [i32; 3]| a.iter().zip(b).all(|(a, b)| (a - b).abs() <= 2);
+
+        // Each clip whole, in the second it has to itself.
+        let (whole_red, whole_blue) = (centre(45), centre(105));
+        assert!(whole_red[0] > 200 && whole_blue[2] > 200, "the stills draw");
+
+        // The lone ends: nothing at all, then part of the way, on the way up
+        // and on the way down.
+        assert!(near(centre(0), [0, 0, 0]), "transparent at the start");
+        let rising = centre(15)[0];
+        assert!(rising > 20 && rising < whole_red[0] - 20, "red at {rising}");
+        let falling = centre(135)[2];
+        assert!(
+            falling > 20 && falling < whole_blue[2] - 20,
+            "blue at {falling}"
+        );
+
+        // The overlap: the outgoing clip alone on its first frame, and half
+        // the light of each in its middle.
+        assert!(near(centre(60), whole_red), "the dissolve starts on red");
+        let light = |v: i32| lumit_core::pixels::srgb_decode(v as u8);
+        let even = [0, 1, 2].map(|c| {
+            let half = (light(whole_red[c]) + light(whole_blue[c])) / 2.0;
+            i32::from(lumit_core::pixels::srgb_encode(half))
+        });
+        let middle = centre(75);
+        assert!(near(middle, even), "{middle:?} for {even:?}");
+
+        // Playback's read-ahead asks for both files inside the overlap, and
+        // opens the incoming one ahead of it and not the one playing.
+        let quality = crate::plan::Quality::default();
+        let files = |wants: Vec<PrefetchWant>| wants.iter().map(|w| w.item).collect::<Vec<_>>();
+        assert_eq!(
+            files(r.prefetch_wants(&doc, comp_id, 75, quality)),
+            [blue, red]
+        );
+        assert_eq!(files(r.cut_wants(&doc, comp_id, 30, 60, quality)), [blue]);
+    }
+
+    /// **A clip that plays a composition draws it.** A still on a Sequence
+    /// layer, and the same row with the clip pointed at a composition holding
+    /// that still as Open as composition makes one: the two rows draw the
+    /// same picture where the clip is whole, inside its fade, and in the
+    /// middle of a dissolve with a composition on one side of it or on both.
+    /// Skips (with a note) when no ffmpeg CLI is present to write the stills.
+    #[test]
+    fn a_composition_clip_draws_what_its_footage_drew_whole_fading_and_dissolving() {
+        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let Some(bin) = lumit_media::index::tests_support::ffmpeg_bin() else {
+            eprintln!("skipping: no ffmpeg CLI to write the stills");
+            return;
+        };
+        let dir = tempfile::tempdir().expect("a directory");
+        let (mut doc, base, _) = matrix_base(64, 64, LinearColour::BLACK);
+        let chart = still_item(&mut doc, dir.path(), bin, "chart.png", "testsrc=s=64x64");
+        let blue = still_item(
+            &mut doc,
+            dir.path(),
+            bin,
+            "blue.png",
+            "color=c=blue:s=64x64",
+        );
+        let template = doc.comp(base).expect("the base comp").clone();
+        let comp_of = |doc: &mut Document, layer: lumit_core::model::Layer| {
+            let mut comp = template.clone();
+            comp.id = Uuid::now_v7();
+            comp.layers = vec![layer];
+            let id = comp.id;
+            doc.items.push(ProjectItem::Composition(comp));
+            id
+        };
+        // What Open as composition makes: the footage as one layer from zero.
+        let held = |doc: &mut Document, item: Uuid| {
+            comp_of(
+                doc,
+                matrix_layer("Held", LayerKind::Footage { item }, 64, 64),
+            )
+        };
+        let (chart_comp, blue_comp) = (held(&mut doc, chart), held(&mut doc, blue));
+        let at = |n: i64| Rational::new(n, 1).unwrap();
+        // The first clip on [0, 3), coming up over its first second, and the
+        // second on [2, 5): they share [2, 3).
+        let row = |doc: &mut Document, first: ClipSource, second: ClipSource| {
+            let mut a = Clip::new(first, at(0), at(3), at(0), at(3));
+            a.fade_in = Fade {
+                seconds: at(1),
+                shape: FadeShape::Linear,
+            };
+            let mut b = Clip::new(second, at(0), at(3), at(2), at(3));
+            b.fade_in.shape = FadeShape::Linear;
+            let clips = vec![a, b];
+            comp_of(
+                doc,
+                matrix_layer("Cut", LayerKind::Sequence { clips }, 64, 64),
+            )
+        };
+        let footage = ClipSource::Footage;
+        let files = row(&mut doc, footage(chart), footage(blue));
+        let opened = row(&mut doc, ClipSource::Comp(chart_comp), footage(blue));
+        let both = row(
+            &mut doc,
+            ClipSource::Comp(chart_comp),
+            ClipSource::Comp(blue_comp),
+        );
+        let doc = DocumentStore::new(doc).snapshot();
+        let mut frame = |comp: Uuid, frame: u64| {
+            r.render_rgba(&doc, comp, frame, 1.0)
+                .unwrap_or_else(|e| panic!("frame {frame}: {e}"))
+                .0
+        };
+        // The furthest any byte of one frame is from the other's.
+        let apart = |a: &[u8], b: &[u8]| {
+            let most = a.iter().zip(b).map(|(a, b)| a.abs_diff(*b)).max();
+            most.unwrap_or(u8::MAX)
+        };
+
+        // The second the clip has to itself: the chart, and the same chart
+        // through its composition.
+        let still = frame(files, 45);
+        assert!(
+            still.chunks_exact(4).any(|px| px[..3] != still[..3]),
+            "the chart draws, and is not one flat colour"
+        );
+        let whole = apart(&frame(opened, 45), &still);
+        assert!(
+            whole <= 1,
+            "the composition's picture is {whole} off the still"
+        );
+
+        // Half way up the fade, and half way through the dissolve.
+        for (what, at_frame) in [("the fade", 15), ("the dissolve", 75)] {
+            let was = frame(files, at_frame);
+            for (which, comp) in [("one composition", opened), ("two", both)] {
+                let off = apart(&frame(comp, at_frame), &was);
+                assert!(off <= 2, "{what} with {which}: {off} off the footage");
+            }
+        }
+
+        // Read-ahead sees the footage inside a clip's composition, and opens
+        // the file in the one about to start.
+        let quality = crate::plan::Quality::default();
+        let wanted = |wants: Vec<PrefetchWant>| wants.iter().map(|w| w.item).collect::<Vec<_>>();
+        assert_eq!(wanted(r.prefetch_wants(&doc, opened, 45, quality)), [chart]);
+        assert_eq!(wanted(r.cut_wants(&doc, both, 30, 60, quality)), [blue]);
+    }
+
+    /// A still written by ffmpeg from a lavfi `source`, filed in `doc` as a
+    /// footage item.
+    fn still_item(doc: &mut Document, dir: &Path, bin: &str, name: &str, source: &str) -> Uuid {
+        let path = dir.join(name);
+        let wrote = std::process::Command::new(bin)
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", source])
+            .args(["-frames:v", "1"])
+            .arg(&path)
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(wrote, "ffmpeg wrote {name}");
+        let id = Uuid::now_v7();
+        doc.items
+            .push(ProjectItem::Footage(lumit_core::model::FootageItem {
+                sequence: None,
+                id,
+                name: name.into(),
+                media: lumit_core::model::MediaRef {
+                    relative_path: name.into(),
+                    absolute_path: path.to_string_lossy().into_owned(),
+                    fingerprint: None,
+                    extra: serde_json::Map::new(),
+                },
+                extra: serde_json::Map::new(),
+                colour_space: None,
+                source_layer: None,
+            }));
+        id
     }
 
     /// A footage fixture written into a directory of this test's own, and the
@@ -8518,94 +7479,6 @@ surfaces:
         (vec![producer, lift], graph)
     }
 
-    /// **A points wire reaches the picture**.
-    ///
-    /// The matrix row above proves the two walks agree about a points-driven
-    /// frame; this proves there is something to agree *about*. The same comp
-    /// twice — once with the sampler's distance wired into Stops, once with
-    /// that one wire cut — and the pictures must differ, because the Exposure's
-    /// own stored Stops is nought and the driven one is five.
-    ///
-    /// It is the *radius* wire that is cut rather than the stream wire, because
-    /// an unwired stream reads as [`NOTHING_NEAR`](lumit_core::fx::drivers::
-    /// points_sample::NOTHING_NEAR) — a deliberately enormous distance — and a
-    /// picture lifted by a billion stops is not one anybody wanted to compare
-    /// against.
-    #[test]
-    fn a_points_driven_exposure_changes_the_picture() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (32u32, 16u32);
-        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
-        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
-
-        let build = |wired: bool| {
-            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
-            let (_, top) = matrix_top(&mut doc, comp_id, blue);
-            let (effects, mut graph) = points_driven_exposure(cw, ch);
-            if !wired {
-                // The Stops wire only: the stream is still sampled, and the
-                // Exposure reads the nought it stores.
-                graph.edges.remove(1);
-            }
-            let comp = doc.comp_mut(comp_id).unwrap();
-            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
-            l.effects = effects;
-            l.graph = graph;
-            (DocumentStore::new(doc).snapshot(), comp_id)
-        };
-
-        let mut frame_of = |wired: bool| {
-            let (doc, comp_id) = build(wired);
-            r.render_rgba(&doc, comp_id, 7, 1.0)
-                .expect("the export path renders")
-                .0
-        };
-        // The wire's own number first, so a failure below says whether the
-        // driver went wrong or the picture did.
-        {
-            let (doc, comp_id) = build(true);
-            let comp = doc.comp(comp_id).unwrap();
-            let layer = comp
-                .layers
-                .iter()
-                .find(|l| !l.graph.edges.is_empty())
-                .unwrap();
-            let context = std::sync::Arc::new(lumit_core::expression::ExpressionContext {
-                document: doc.clone(),
-                comp: Some(comp_id),
-                layer: Some(layer.id),
-                comp_time: 7.0 / 30.0,
-                current_depth: 0,
-                inputs: None,
-            });
-            let lift_id = layer.effects[1].id;
-            let stops = lumit_core::fx::resolve_drivers(&layer.graph, 7.0 / 30.0, context, None)
-                .param(
-                    lumit_core::graph::NodeRef::Effect(lift_id),
-                    lumit_core::fx::ParamId::new("stops"),
-                )
-                .expect("the Nearest distance wire carries a number")
-                .as_f32();
-            assert!(
-                (stops - 5.0).abs() < 1e-3,
-                "the pinned field sits five pixels from the query point, not {stops}"
-            );
-        }
-
-        let driven = frame_of(true);
-        let cut = frame_of(false);
-        assert_ne!(
-            driven, cut,
-            "an exposure driven by Nearest distance must change the picture"
-        );
-    }
-
     /// A layer stamped at every point of a lattice: the effects and the wire.
     /// Grid rather than Particulate on purpose — a lattice has no clock
     /// in it, so what the test below compares is the *wire* and nothing else.
@@ -8670,59 +7543,6 @@ surfaces:
             ..LayerGraph::default()
         };
         (vec![producer, consumer], graph)
-    }
-
-    /// **A points wire reaches the picture from one stack effect to another**
-    /// — the first wire in this engine whose two ends are both ops.
-    ///
-    /// The same comp twice, with one wire cut. Wired, a lattice of stamps lands
-    /// on the frame; cut, the consumer has no stream, draws nothing and passes
-    /// its picture on — the documented calm of the family, here as a
-    /// picture rather than as a panel mark.
-    #[test]
-    fn a_cloned_layer_lands_at_every_point_of_a_wired_stream() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (32u32, 16u32);
-        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
-        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
-
-        let build = |wired: bool| {
-            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
-            let (_, top) = matrix_top(&mut doc, comp_id, blue);
-            // The layer being stamped is the one underneath, which the base
-            // comp already carries.
-            let source = doc.comp(comp_id).unwrap().layers[1].id;
-            let (effects, mut graph) = cloned_lattice(cw, ch, source);
-            if !wired {
-                graph.edges.clear();
-            }
-            let comp = doc.comp_mut(comp_id).unwrap();
-            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
-            l.effects = effects;
-            l.graph = graph;
-            (DocumentStore::new(doc).snapshot(), comp_id)
-        };
-        let mut frame_of = |wired: bool| {
-            let (doc, comp_id) = build(wired);
-            r.render_rgba(&doc, comp_id, 7, 1.0)
-                .expect("the export path renders")
-                .0
-        };
-        let stamped = frame_of(true);
-        let cut = frame_of(false);
-        assert_ne!(
-            stamped, cut,
-            "a wired stream must put the cloned layer on the frame"
-        );
-        // And twice is once: the whole path — the wire, the carriage, the
-        // instanced draw — is a function of the document.
-        assert_eq!(stamped, frame_of(true), "two renders of one frame differ");
     }
 
     /// **A trail is drawn without a frame of history being kept**.
@@ -8836,17 +7656,11 @@ surfaces:
         assert_eq!(tailed, frame_of(&wired), "two renders of one frame differ");
     }
 
-    /// **A points wire reaches Connect points and the web lands on the frame**
-    /// — the whole path the effect depends on, through the export walk:
-    /// the edge is read, the producer's stream is evaluated on the carriage, the
-    /// pairing runs, and the lines are drawn.
-    ///
-    /// A Grid rather than a Particulate producer, because a lattice is the
-    /// fixture whose pairs are decided by arithmetic rather than by dice — and
-    /// because the family's two producers must both reach a consumer through the
-    /// one seam.
+    /// Scatter's points depend on the picture, so they are read back from the
+    /// card during the walk. This checks they reach an effect further down,
+    /// through one that changes the stream on the way.
     #[test]
-    fn a_points_wire_puts_a_web_of_lines_on_the_frame() {
+    fn scatter_points_reach_the_effects_below_it() {
         let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
@@ -8854,14 +7668,11 @@ surfaces:
                 return;
             }
         };
-        let (cw, ch) = (64u32, 48u32);
-        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
-        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
-
+        let (cw, ch) = (32u32, 16u32);
         let build = |wired: bool| {
             use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
-            let (_, top) = matrix_top(&mut doc, comp_id, blue);
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
             let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
                 for p in &mut inst.params {
                     if p.id == id {
@@ -8871,86 +7682,59 @@ surfaces:
                 }
                 panic!("no parameter {id}");
             };
-
-            // The lattice sits inside the *layer's* own rectangle, which the
-            // matrix fixture makes 12 × 10 — a stream is in the layer's pixels,
-            // and a web drawn off the edge of the solid is a web nobody sees.
-            let mut producer = lumit_core::fx::instantiate("grid").unwrap();
-            for (id, v) in [
-                ("columns", 3.0),
-                ("rows", 3.0),
-                ("planes", 1.0),
-                ("spacing_x", 4.0),
-                ("spacing_y", 3.0),
-                ("position_x", 6.0),
-                ("position_y", 5.0),
-                ("size", 1.0),
-                // Emit the stream and draw nothing, so what lands on the frame
-                // is the web and only the web.
-                ("mix", 0.0),
-            ] {
-                set(&mut producer, id, v);
-            }
-            let producer_id = producer.id;
-
-            let mut consumer = lumit_core::fx::instantiate("connect_points").unwrap();
-            for (id, v) in [
-                ("max_distance", 5.0),
-                ("max_links", 4.0),
-                ("width", 1.5),
-                ("fade", 0.0),
-            ] {
-                set(&mut consumer, id, v);
-            }
-            let consumer_id = consumer.id;
-
-            let graph = LayerGraph {
-                out_unwired: false,
-                edges: if wired {
-                    vec![Edge {
-                        from: OutputRef::EffectData {
-                            effect: producer_id,
-                            port: "points".into(),
-                        },
-                        to: InputRef::Param {
-                            node: NodeRef::Effect(consumer_id),
-                            port: "points".into(),
-                        },
-                    }]
-                } else {
-                    Vec::new()
+            // Every box draws nothing of its own but the last, so a line on
+            // the frame can only have come down both wires.
+            let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+            set(&mut scatter, "density", 5000.0);
+            set(&mut scatter, "mix", 0.0);
+            let mut pick = lumit_core::fx::instantiate("pick_points").unwrap();
+            set(&mut pick, "mix", 0.0);
+            let mut connect = lumit_core::fx::instantiate("connect_points").unwrap();
+            set(&mut connect, "max_distance", 6.0);
+            let wire = |from: Uuid, to: Uuid| Edge {
+                from: OutputRef::EffectData {
+                    effect: from,
+                    port: "points".into(),
                 },
-                ..LayerGraph::default()
+                to: InputRef::Param {
+                    node: NodeRef::Effect(to),
+                    port: "points".into(),
+                },
             };
+            let mut edges = vec![wire(pick.id, connect.id)];
+            if wired {
+                edges.push(wire(scatter.id, pick.id));
+            }
             let comp = doc.comp_mut(comp_id).unwrap();
             let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
-            l.effects = vec![producer, consumer];
-            l.graph = graph;
+            l.effects = vec![scatter, pick, connect];
+            l.graph = LayerGraph {
+                edges,
+                ..LayerGraph::default()
+            };
             (DocumentStore::new(doc).snapshot(), comp_id)
         };
         let wired = build(true);
-        let cut_built = build(false);
+        let cut = build(false);
         let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
-            r.render_rgba(doc, *comp_id, 6, 1.0)
+            r.render_rgba(doc, *comp_id, 0, 1.0)
                 .expect("the export path renders")
                 .0
         };
         let webbed = frame_of(&wired);
-        let cut = frame_of(&cut_built);
-        assert_ne!(webbed, cut, "a wired stream must put lines on the frame");
+        assert_ne!(webbed, frame_of(&cut), "Scatter's points drew no lines");
         assert_eq!(webbed, frame_of(&wired), "two renders of one frame differ");
     }
 
-    /// **One layer's effect draws another layer's points** — the whole
-    /// cross-layer path, through the export walk: the tap's Points layer row is
-    /// resolved, the named layer's producer is evaluated with that layer's own
-    /// graph, and the stream reaches this layer's consumer on the carriage.
+    /// **A stamp shown at another moment is rendered at that moment.**
     ///
-    /// The two arms differ **only** in whether the tap's row names the source
-    /// layer. The source layer is in both documents and draws the same thing in
-    /// both, so nothing else about the frame can move.
+    /// The clone layer darkens over its first second and is stamped on a
+    /// lattice half a second in. With a time offset each stamp steps further
+    /// back, so the frame is not the one every stamp makes at this moment. A
+    /// render path that drew one moment everywhere would pass every other
+    /// test and fail this one.
     #[test]
-    fn a_layer_draws_the_points_of_another_layer_through_a_tap() {
+    fn a_time_offset_stamps_other_moments_of_the_clone_layer() {
         let mut r = match HeadlessRenderer::shared() {
             Ok(r) => r,
             Err(_) => {
@@ -8958,189 +7742,160 @@ surfaces:
                 return;
             }
         };
-        let (cw, ch) = (64u32, 48u32);
-        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
-        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
+        let (cw, ch) = (32u32, 16u32);
+        let build = |time_offset: u32| {
+            use lumit_core::model::EffectValue;
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let comp = doc.comp_mut(comp_id).unwrap();
+            let source = comp.layers[1].id;
+            let mut darken = lumit_core::fx::instantiate("exposure").unwrap();
+            for p in &mut darken.params {
+                if p.id == "stops" {
+                    p.value = EffectValue::Float(ramp(0.0, -6.0, 1));
+                }
+            }
+            comp.layers[1].effects = vec![darken];
+            // The top layer's own size, so the lattice sits on it.
+            let (mut effects, graph) = cloned_lattice(12, 10, source);
+            for p in &mut effects[1].params {
+                if p.id == "time_offset" {
+                    p.value = EffectValue::Choice(time_offset);
+                }
+            }
+            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
+            l.effects = effects;
+            l.graph = graph;
+            (DocumentStore::new(doc).snapshot(), comp_id)
+        };
+        let off = build(0);
+        let in_order = build(1);
+        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
+            r.render_rgba(doc, *comp_id, 15, 1.0)
+                .expect("the export path renders")
+                .0
+        };
+        let cascade = frame_of(&in_order);
+        assert_ne!(cascade, frame_of(&off), "every stamp showed one moment");
+        assert_eq!(
+            cascade,
+            frame_of(&in_order),
+            "two renders of one frame differ"
+        );
+    }
 
-        let build = |named: bool| {
+    /// **Clone pictures made inside the walk reach the stamps.**
+    ///
+    /// Scatter's points exist only once the render has made them, so with a
+    /// Clone index on the clone layer the pictures cannot be made before the
+    /// walk: there is no count to number them by. The realiser asks for them
+    /// when the stream exists. Each copy turns its hue by its own number, so
+    /// the frame is not the one Per clone off makes, where every copy is the
+    /// first of one. Nor is it the frame with the wire cut, which is what a
+    /// walk that never asked for the pictures would draw.
+    #[test]
+    fn clone_pictures_for_a_stream_made_during_the_render_are_numbered() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (32u32, 16u32);
+        let build = |per_clone: u32, wired: bool| {
             use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
-            // The base **layer**, not the solid item `matrix_base` answers with:
-            // it is the only layer in the comp until the top one goes on.
-            let base = doc.comp(comp_id).unwrap().layers[0].id;
-            let (_, top) = matrix_top(&mut doc, comp_id, blue);
-            let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
+            use lumit_core::model::EffectValue;
+            let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
+            let (_, top) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
+            let fixed = |v: f64| EffectValue::Float(Property::fixed(v));
+            let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: EffectValue| {
                 for p in &mut inst.params {
                     if p.id == id {
-                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
+                        p.value = v;
                         return;
                     }
                 }
                 panic!("no parameter {id}");
             };
-
-            // The producer lives on the **base** layer, which is comp-sized, and
-            // draws nothing of its own: the points are all it contributes.
-            let mut producer = lumit_core::fx::instantiate("grid").unwrap();
-            for (id, v) in [
-                ("columns", 3.0),
-                ("rows", 3.0),
-                ("planes", 1.0),
-                ("spacing_x", 4.0),
-                ("spacing_y", 3.0),
-                ("position_x", 6.0),
-                ("position_y", 5.0),
-                ("size", 1.0),
-                ("mix", 0.0),
-            ] {
-                set(&mut producer, id, v);
-            }
-
-            // The consumer lives on the top layer, and its only source of
-            // points is the tap.
-            let mut consumer = lumit_core::fx::instantiate("connect_points").unwrap();
-            for (id, v) in [
-                ("max_distance", 5.0),
-                ("max_links", 4.0),
-                ("width", 1.5),
-                ("fade", 0.0),
-            ] {
-                set(&mut consumer, id, v);
-            }
-            let consumer_id = consumer.id;
-
-            let mut node = lumit_core::fx::instantiate("layer_points").unwrap();
-            for p in &mut node.params {
-                if p.id == "source" {
-                    p.value = lumit_core::model::EffectValue::Layer(named.then_some(base));
-                }
-            }
-            let node_id = node.id;
-
             let comp = doc.comp_mut(comp_id).unwrap();
-            comp.layers
-                .iter_mut()
-                .find(|l| l.id == base)
-                .unwrap()
-                .effects = vec![producer];
-            let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
-            l.effects = vec![consumer];
-            l.graph = LayerGraph {
-                out_unwired: false,
-                nodes: vec![node],
-                edges: vec![Edge {
-                    from: OutputRef::Driver {
-                        node: node_id,
-                        port: "points".into(),
+
+            // The clone layer: its hue follows the copy's number.
+            let hue = lumit_core::fx::instantiate("hue_shift").unwrap();
+            let index = lumit_core::fx::instantiate("clone_index").unwrap();
+            let mut remap = lumit_core::fx::instantiate("remap").unwrap();
+            set(&mut remap, "out_high", fixed(300.0));
+            let source = &mut comp.layers[1];
+            let source_id = source.id;
+            source.graph = LayerGraph {
+                edges: vec![
+                    Edge {
+                        from: OutputRef::Driver {
+                            node: index.id,
+                            port: "normalised".into(),
+                        },
+                        to: InputRef::Param {
+                            node: NodeRef::Driver(remap.id),
+                            port: "value".into(),
+                        },
                     },
-                    to: InputRef::Param {
-                        node: NodeRef::Effect(consumer_id),
-                        port: "points".into(),
+                    Edge {
+                        from: OutputRef::Driver {
+                            node: remap.id,
+                            port: "value".into(),
+                        },
+                        to: InputRef::Param {
+                            node: NodeRef::Effect(hue.id),
+                            port: "angle".into(),
+                        },
                     },
-                }],
+                ],
+                nodes: vec![index, remap],
                 ..LayerGraph::default()
             };
-            (DocumentStore::new(doc).snapshot(), comp_id)
-        };
-        let named = build(true);
-        let unset = build(false);
-        let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
-            r.render_rgba(doc, *comp_id, 6, 1.0)
-                .expect("the export path renders")
-                .0
-        };
-        let webbed = frame_of(&named);
-        let bare = frame_of(&unset);
-        assert_ne!(
-            webbed, bare,
-            "a tap must put another layer's points on this layer's frame"
-        );
-        assert_eq!(webbed, frame_of(&named), "two renders of one frame differ");
-    }
+            source.effects = vec![hue];
 
-    /// **The Source layer reaches the rejection, and its brightness decides**
-    /// — the whole path, through the export walk: the layer reference
-    /// is resolved, the referenced layer's picture rides the carriage to the
-    /// pass, and the candidates on it stand or fall by how bright it is.
-    ///
-    /// The two arms differ **only** in whether the Source row names the white
-    /// layer. The white layer is in both documents and covered by the base in
-    /// both, so nothing else about the frame can move: with the row unset the
-    /// field is the effect's own dark blue input, which is under Threshold and
-    /// emits nothing at all.
-    #[test]
-    fn an_emit_from_image_reads_the_layer_its_source_row_names() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (64u32, 48u32);
-        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
-        let blue = LinearColour([0.1, 0.2, 0.9, 1.0]);
-
-        let build = |bound: bool| {
-            let (mut doc, comp_id, _) = matrix_base(cw, ch, red);
-            // A white layer at the very bottom of the stack, covered by the
-            // base: it is what the Source row names, and it never reaches the
-            // picture.
-            let white = Uuid::now_v7();
-            doc.items.push(ProjectItem::Solid(SolidDef {
-                id: white,
-                name: "White".into(),
-                colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
-                width: cw,
-                height: ch,
-                extra: serde_json::Map::new(),
-            }));
-            let white_layer = matrix_layer("White", LayerKind::Solid { def: white }, cw, ch);
-            let white_id = white_layer.id;
-            if let Some(comp) = doc.comp_mut(comp_id) {
-                comp.layers.push(white_layer);
-            }
-            let (_, top) = matrix_top(&mut doc, comp_id, blue);
-
-            let mut fx = lumit_core::fx::instantiate("emit_from_image").unwrap();
-            for p in &mut fx.params {
-                match p.id.as_str() {
-                    // The layer is 12 × 10, so the density has to be typed well
-                    // past its soft ceiling to put any candidates on it at all.
-                    "density" => {
-                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(5_000.0));
-                    }
-                    "threshold" => {
-                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(50.0));
-                    }
-                    "size" => {
-                        p.value = lumit_core::model::EffectValue::Float(Property::fixed(2.0));
-                    }
-                    "source" if bound => {
-                        p.value = lumit_core::model::EffectValue::Layer(Some(white_id));
-                    }
-                    _ => {}
-                }
-            }
-            let comp = doc.comp_mut(comp_id).unwrap();
+            // Scatter draws nothing of its own, so what lands is the stamps.
+            let mut scatter = lumit_core::fx::instantiate("scatter").unwrap();
+            set(&mut scatter, "density", fixed(5000.0));
+            set(&mut scatter, "mix", fixed(0.0));
+            let mut clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
+            set(
+                &mut clone,
+                "clone_layer",
+                EffectValue::Layer(Some(source_id)),
+            );
+            set(&mut clone, "per_clone", EffectValue::Choice(per_clone));
             let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
-            l.effects = vec![fx];
+            let wire = Edge {
+                from: OutputRef::EffectData {
+                    effect: scatter.id,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(clone.id),
+                    port: "points".into(),
+                },
+            };
+            l.graph = LayerGraph {
+                edges: if wired { vec![wire] } else { Vec::new() },
+                ..LayerGraph::default()
+            };
+            l.effects = vec![scatter, clone];
             (DocumentStore::new(doc).snapshot(), comp_id)
         };
-        let bound = build(true);
-        let unbound = build(false);
+        let auto = build(0, true);
+        let off = build(1, true);
+        let cut = build(0, false);
         let mut frame_of = |(doc, comp_id): &(Arc<lumit_core::Document>, Uuid)| {
-            r.render_rgba(doc, *comp_id, 6, 1.0)
+            r.render_rgba(doc, *comp_id, 0, 1.0)
                 .expect("the export path renders")
                 .0
         };
-        let lit = frame_of(&bound);
-        let dark = frame_of(&unbound);
-        assert_ne!(
-            lit, dark,
-            "a bright Source layer must emit where a dark input does not"
-        );
-        assert_eq!(lit, frame_of(&bound), "two renders of one frame differ");
+        let numbered = frame_of(&auto);
+        assert_ne!(numbered, frame_of(&off), "every copy was the first of one");
+        assert_ne!(numbered, frame_of(&cut), "nothing was stamped");
+        assert_eq!(numbered, frame_of(&auto), "two renders of one frame differ");
     }
 
     /// **The degradation rung never engages on an export walk** (PS7;
@@ -9576,196 +8331,6 @@ surfaces:
         (doc, comp_id, 0)
     }
 
-    /// An unknown comp id on the interactive path is a calm error, and it must
-    /// not disturb the pixels retained for a comp that *does* exist.
-    #[test]
-    fn an_unknown_comp_is_a_calm_error_on_the_preview_path() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([1.0, 1.0, 1.0, 1.0]), 8, 8);
-        let doc = store.snapshot();
-        let q = crate::plan::Quality::default();
-        r.render_preview(&doc, comp_id, 0, q, 1.0).expect("render");
-        let decodes = r.decoded_frames();
-
-        assert!(r.render_preview(&doc, Uuid::now_v7(), 0, q, 1.0).is_err());
-        // The good comp still re-composites from its retained pixels.
-        r.render_preview(&doc, comp_id, 0, q, 1.0)
-            .expect("still fine");
-        assert_eq!(r.decoded_frames(), decodes);
-    }
-
-    /// Not a correctness test — a stopwatch, run by hand:
-    /// `cargo test -p lumit-render --release -- --ignored --nocapture preview_cost`
-    ///
-    /// It exists because a Dart-side measurement of this cannot be trusted: the
-    /// widget-test harness settles in 20 ms slices, so anything measured through
-    /// it reports the polling granularity rather than the render.
-    #[test]
-    #[ignore = "timing, not correctness"]
-    fn preview_cost() {
-        let Ok(mut renderer) = HeadlessRenderer::shared() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.2, 0.4, 0.8, 1.0]), 1920, 1080);
-        let doc = store.snapshot();
-
-        for (label, scale) in [("full", 1.0f32), ("fit-0.42", 0.42), ("quarter", 0.25)] {
-            let quality = Quality {
-                draft: false,
-                auto_res: scale < 1.0,
-                display_scale: scale,
-                divisor: 1,
-            };
-            // Warm: the first render builds pipelines and probes.
-            let _ = renderer.render_preview(&doc, comp_id, 0, quality, scale);
-
-            let n = 30u32;
-            let started = std::time::Instant::now();
-            for frame in 0..n {
-                let out = renderer.render_preview(&doc, comp_id, u64::from(frame), quality, scale);
-                assert!(out.is_ok(), "{label} frame {frame} failed");
-            }
-            let each = started.elapsed().as_secs_f64() * 1000.0 / f64::from(n);
-            println!("PREVIEW {label:>10} scale={scale:<5} {each:>7.2} ms/frame");
-        }
-    }
-
-    /// The profiler's two promises at the seam the Viewer actually drives
-    /// (docs/13 §7.1): an unwatched render says nothing at all, and a watched
-    /// one reports progress that only ever moves forwards and ends at the
-    /// presenting stage.
-    #[test]
-    fn a_watched_render_reports_its_progress_and_an_unwatched_one_says_nothing() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                eprintln!("skipping: no GPU adapter");
-                return;
-            }
-        };
-        let seen: std::sync::Arc<std::sync::Mutex<Vec<crate::profile::FrameProgress>>> =
-            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let into = std::sync::Arc::clone(&seen);
-        r.set_progress_sink(Some(std::sync::Arc::new(move |p| {
-            if let Ok(mut seen) = into.lock() {
-                seen.push(p);
-            }
-        })));
-        let (store, comp_id) = doc_with_solid(LinearColour([1.0, 0.0, 0.0, 1.0]), 8, 8);
-        let doc = store.snapshot();
-
-        // Playback's case: a sink is installed but this frame is not watched.
-        let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
-        assert!(
-            seen.lock().expect("reports").is_empty(),
-            "an unwatched frame — every frame of playback — reports nothing"
-        );
-
-        r.watch_frames(true);
-        let _ = r.render_rgba(&doc, comp_id, 1, 1.0).expect("render");
-        r.watch_frames(false);
-        let reports = seen.lock().expect("reports");
-        assert!(!reports.is_empty(), "a watched frame describes itself");
-        assert!(
-            reports.iter().all(|p| p.frame == 1),
-            "every report names the frame it is about"
-        );
-        let mut last = -1.0_f32;
-        for report in reports.iter() {
-            assert!(
-                report.fraction >= last,
-                "progress went backwards: {last} then {}",
-                report.fraction
-            );
-            last = report.fraction;
-        }
-        assert!(matches!(
-            reports.last().map(|p| p.stage),
-            Some(crate::profile::RenderStage::Presenting)
-        ));
-    }
-
-    /// **Editing the last effect of a layer re-runs only that effect, and the
-    /// picture is byte-for-byte the cold one**.
-    ///
-    /// End to end through the draw builder: a solid's stack is named from its
-    /// colour, size and masks, so after a committed render the blur's output
-    /// is held, and a render with the exposure changed runs one kernel. The
-    /// warm picture must equal what a renderer that has never seen the comp
-    /// makes of the same document — the export path is that cold renderer.
-    #[test]
-    fn editing_the_last_effect_serves_the_held_prefix_and_matches_a_cold_render() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                eprintln!("skipping: no GPU adapter");
-                return;
-            }
-        };
-        let (store, comp_id) = doc_with_solid(LinearColour([0.8, 0.3, 0.1, 1.0]), 16, 16);
-        let layer_id = store.snapshot().comp(comp_id).expect("comp").layers[0].id;
-        let blur = lumit_core::fx::instantiate("blur").expect("blur exists");
-        let exposure = |stops: f64| {
-            let mut e = lumit_core::fx::instantiate("exposure").expect("exposure exists");
-            for p in &mut e.params {
-                if p.id == "stops" {
-                    p.value = lumit_core::model::EffectValue::Float(
-                        lumit_core::anim::Property::fixed(stops),
-                    );
-                }
-            }
-            e
-        };
-        store
-            .commit(lumit_core::Op::SetLayerEffects {
-                comp: comp_id,
-                layer: layer_id,
-                effects: vec![blur.clone(), exposure(0.0)],
-            })
-            .expect("effects on");
-
-        r.keep_effect_outputs(true);
-        let _ = r
-            .render_rgba(&store.snapshot(), comp_id, 0, 1.0)
-            .expect("render");
-        let (_, (runs, hits)) = r.effect_cache_stats();
-        assert_eq!((runs, hits), (2, 0), "a cold frame runs the whole stack");
-
-        store
-            .commit(lumit_core::Op::SetLayerEffects {
-                comp: comp_id,
-                layer: layer_id,
-                effects: vec![blur, exposure(1.0)],
-            })
-            .expect("the last effect edited");
-        let doc = store.snapshot();
-        let warm = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
-        let (_, (runs, hits)) = r.effect_cache_stats();
-        assert_eq!(
-            (runs, hits),
-            (3, 1),
-            "the blur's output was held; only the exposure ran"
-        );
-
-        let mut cold = HeadlessRenderer::new().expect("a second renderer");
-        let cold = cold.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
-        assert_eq!(warm, cold, "a warm preview is the picture an export makes");
-
-        r.clear_frame_textures();
-        assert_eq!(
-            r.effect_cache_stats().0 .2,
-            0,
-            "Clear cache empties the intermediates with the frames"
-        );
-    }
-
     /// **A precomp's frames are cached as one unit**.
     ///
     /// A nested comp is realised once and then served by its own name: a
@@ -9865,90 +8430,6 @@ surfaces:
         assert_eq!(r.effect_cache_stats().0 .2, 0, "Clear cache empties it");
     }
 
-    /// **A parent edit does not decode the footage inside a held precomp**,
-    /// and the picture it serves is the cold one. The planner skips
-    /// the nested comp's jobs on the store's word, and the realiser then finds
-    /// the texture the planner pinned — so a frame rendered with no nested
-    /// pixels in hand is still the right frame. Skips without an ffmpeg CLI to
-    /// write the fixture.
-    #[test]
-    fn a_parent_edit_does_not_decode_the_footage_inside_a_held_precomp() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let Some((_fixture_dir, clip)) = footage_fixture() else {
-            eprintln!("skipping: no ffmpeg CLI to write the footage fixture");
-            return;
-        };
-        let mut doc = Document::new();
-        let item = Uuid::now_v7();
-        doc.items
-            .push(ProjectItem::Footage(lumit_core::model::FootageItem {
-                sequence: None,
-                id: item,
-                name: "fixture.mp4".into(),
-                media: lumit_core::model::MediaRef {
-                    relative_path: "fixture.mp4".into(),
-                    absolute_path: clip.to_string_lossy().into_owned(),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                },
-                extra: serde_json::Map::new(),
-                colour_space: None,
-            }));
-        let (inner_doc, inner_id, _) = matrix_base(32, 24, LinearColour([0.0, 0.0, 0.0, 0.0]));
-        for it in inner_doc.items {
-            doc.items.push(it);
-        }
-        doc.comp_mut(inner_id).unwrap().layers =
-            vec![matrix_layer("Clip", LayerKind::Footage { item }, 32, 24)];
-        let (outer_doc, comp_id, _) = matrix_base(32, 24, LinearColour([0.2, 0.2, 0.2, 1.0]));
-        for it in outer_doc.items {
-            doc.items.push(it);
-        }
-        let pre = matrix_layer("Nested", LayerKind::Precomp { comp: inner_id }, 32, 24);
-        let pre_id = pre.id;
-        doc.comp_mut(comp_id).unwrap().layers.insert(0, pre);
-        let store = DocumentStore::new(doc);
-        let q = crate::plan::Quality::default();
-
-        r.keep_effect_outputs(true);
-        r.render_preview(&store.snapshot(), comp_id, 3, q, 1.0)
-            .expect("cold");
-        let decoded = r.retained.as_ref().map_or(0, |r| r.jobs.len());
-        assert_eq!(decoded, 1, "the nested footage is what this comp decodes");
-
-        store
-            .commit(lumit_core::Op::SetTransformProperty {
-                comp: comp_id,
-                layer: pre_id,
-                prop: lumit_core::model::TransformProp::Rotation,
-                animation: lumit_core::anim::Animation::Static(20.0),
-            })
-            .expect("rotated");
-        let doc = store.snapshot();
-        let (warm, w, h) = r.render_preview(&doc, comp_id, 3, q, 1.0).expect("warm");
-        assert_eq!(
-            r.nested_frame_counts(),
-            (1, 1),
-            "served from the pinned texture"
-        );
-        let decoded = r.retained.as_ref().map_or(0, |r| r.jobs.len());
-        assert_eq!(decoded, 0, "and the plan asked for no decode at all");
-
-        let mut cold = HeadlessRenderer::new().expect("a second renderer");
-        let (cold, cw, ch) = cold.render_preview(&doc, comp_id, 3, q, 1.0).expect("cold");
-        assert_eq!((w, h), (cw, ch));
-        assert_eq!(
-            warm, cold,
-            "the held nested frame is the picture a cold walk makes"
-        );
-    }
-
     /// A measured frame lands its milliseconds on the right rows: the layer
     /// that was drawn, and the effect instance inside it that ran. Without the
     /// ids threaded from the resolve through the draw list, this is where a
@@ -10014,87 +8495,6 @@ surfaces:
         assert!(
             layer.ms >= 0.0 && layer.effects[0].ms >= 0.0,
             "measured times are real durations"
-        );
-    }
-
-    /// **Measuring gives the batching up, deliberately.**
-    ///
-    /// A frame's passes are recorded into one command buffer and submitted at
-    /// the end, so a fence taken mid-walk would wait on a queue that has not
-    /// been handed over and time nothing real. A *measured* frame therefore
-    /// flushes at each layer and each effect before it fences — which is the
-    /// cost the stopwatch already declares (measuring waits for the card
-    /// at each layer, which is why it is opt-in and never runs during playback).
-    ///
-    /// So the property is the opposite of the unmeasured one: an unmeasured
-    /// frame's submissions do not grow with its layers, and a measured frame's
-    /// do. Asserting both together is what stops a future change from
-    /// "optimising" the flush away and silently turning the render-time column
-    /// into a measure of how long Lumit takes to *describe* a layer.
-    #[test]
-    fn a_measured_frame_hands_its_work_over_layer_by_layer() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (32u32, 16u32);
-        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.8, 0.1, 0.1, 1.0]));
-        for _ in 0..15 {
-            let (_, id) = matrix_top(&mut doc, comp_id, LinearColour([0.1, 0.2, 0.9, 1.0]));
-            // An effect apiece. The property is about work being handed over
-            // layer by layer, and a layer with nothing on it has none to hand:
-            // its picture goes straight from its upload to the composite.
-            if let Some(l) = doc
-                .comp_mut(comp_id)
-                .and_then(|c| c.layers.iter_mut().find(|l| l.id == id))
-            {
-                l.effects
-                    .push(lumit_core::fx::instantiate("exposure").expect("a built-in"));
-            }
-        }
-        let store = DocumentStore::new(doc);
-        let doc = store.snapshot();
-        // A frame is only measured when the switch is on *and* the numbers have
-        // somewhere to go, so the sink is part of turning measuring on.
-        let seen: std::sync::Arc<std::sync::Mutex<Vec<crate::profile::FrameProfile>>> =
-            std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let into = std::sync::Arc::clone(&seen);
-        r.set_profile_sink(Some(std::sync::Arc::new(move |p| {
-            if let Ok(mut got) = into.lock() {
-                got.push(p);
-            }
-        })));
-        // Warm the lazily-built pipelines first, so neither count below
-        // includes one-off setup.
-        let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
-
-        let before = r.gpu.submits_so_far();
-        let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
-        let unmeasured = r.gpu.submits_so_far() - before;
-
-        r.measure_frames(true);
-        let before = r.gpu.submits_so_far();
-        let _ = r.render_rgba(&doc, comp_id, 1, 1.0).expect("render");
-        let measured = r.gpu.submits_so_far() - before;
-        r.measure_frames(false);
-
-        assert!(
-            !seen.lock().expect("profiles").is_empty(),
-            "the frame was supposed to be measured; without that this proves nothing"
-        );
-        assert!(
-            measured > unmeasured,
-            "a measured frame must hand its work over as it goes, or its \
-             numbers are encoding time rather than GPU time \
-             (measured {measured}, unmeasured {unmeasured})"
-        );
-        assert!(
-            unmeasured <= 4,
-            "an ordinary frame is one command buffer plus its read-back, \
-             not {unmeasured}"
         );
     }
 
@@ -10219,89 +8619,6 @@ surfaces:
             "and only under the brush — the corner stays white, got {:?}",
             (cr, cg, cb)
         );
-    }
-
-    /// **An effect ON a Precomp layer must keep its px@comp parameters where
-    /// they were put when the preview renders at a reduced resolution**
-    /// (the twin of the adjustment-layer fix).
-    ///
-    /// The regression: the stack of a Precomp layer resolves against the nested
-    /// comp's full width (factor 1) but runs on the nested comp's *preview*
-    /// raster, so every px@comp parameter — a Transform's offset here, a
-    /// flare's light or a blur radius in the wild — landed further across the
-    /// picture the coarser the preview got. Preview-only drift: full resolution
-    /// was always right.
-    ///
-    /// The scene: a 32×32 precomp of solid white, offset 8 px right by a
-    /// Transform effect on the precomp layer. Eight of thirty-two is a quarter
-    /// of the frame at every resolution, so the same fractions are empty and
-    /// filled at Full and at Half.
-    #[test]
-    fn an_effect_on_a_precomp_layer_keeps_its_pixels_under_half_preview() {
-        let mut r = match HeadlessRenderer::shared() {
-            Ok(r) => r,
-            Err(_) => {
-                lumit_gpu::no_adapter();
-                return;
-            }
-        };
-        let (cw, ch) = (32u32, 32u32);
-        let white = LinearColour([1.0, 1.0, 1.0, 1.0]);
-        let (mut doc, comp_id, _) = matrix_base(cw, ch, LinearColour([0.0, 0.0, 0.0, 1.0]));
-        let (child_doc, child_id, _) = matrix_base(cw, ch, white);
-        for item in child_doc.items {
-            doc.items.push(item);
-        }
-        // The base black solid only exists to give matrix_base a comp; the
-        // precomp layer covers it entirely, so what is measured is the
-        // precomp's own white, shifted.
-        let mut nested = matrix_layer("Nested", LayerKind::Precomp { comp: child_id }, cw, ch);
-        let mut fx = lumit_core::fx::instantiate("transform").unwrap();
-        for p in &mut fx.params {
-            let v = match p.id.as_str() {
-                "position_x" => 8.0,
-                "anchor_x" | "anchor_y" | "position_y" | "rotation" => 0.0,
-                _ => continue,
-            };
-            p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
-        }
-        nested.effects.push(fx);
-        // Index 0 is the top of the stack, over the black base.
-        doc.comp_mut(comp_id).unwrap().layers.insert(0, nested);
-
-        // The white starts a quarter of the way across, at both resolutions.
-        for (label, scale) in [("full", 1.0f32), ("half", 0.5f32)] {
-            let quality = Quality {
-                auto_res: scale < 1.0,
-                display_scale: scale,
-                ..Quality::default()
-            };
-            let (rgba, w, h) = r
-                .render_preview(
-                    &std::sync::Arc::new(doc.clone()),
-                    comp_id,
-                    0,
-                    quality,
-                    scale,
-                )
-                .expect("render");
-            let at = |fx: f32| {
-                let x = ((w as f32 * fx) as u32).min(w - 1);
-                let y = h / 2;
-                let i = ((y * w + x) * 4) as usize;
-                rgba[i]
-            };
-            assert!(
-                at(0.125) < 40,
-                "{label}: the first eighth is behind the offset, got {}",
-                at(0.125)
-            );
-            assert!(
-                at(0.375) > 200,
-                "{label}: three eighths across is inside the shifted picture, got {}",
-                at(0.375)
-            );
-        }
     }
 }
 

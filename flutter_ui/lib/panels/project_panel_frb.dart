@@ -54,11 +54,14 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart' show BridgeFootageHere;
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../shell/menu_bar_frb.dart' show importFootageFrb;
 import '../state/file_dialogs.dart';
+import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'project_chrome_frb.dart';
@@ -210,6 +213,30 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     // same way the search focus is: the shell routes the chord to whichever
     // panel is focused rather than deciding what "everything" means itself.
     _boundUi!.selectAllRequest.addListener(_onSelectAllRequested);
+    _boundUi!.projectPickRequest.addListener(_onPickRequested);
+  }
+
+  /// Select an item something outside the panel has just made, and open the
+  /// folders it is filed in so the row is there to see.
+  void _onPickRequested() {
+    final item = _boundUi?.projectPickRequest.value;
+    if (!mounted || item == null) return;
+    final id = projectItemId(item);
+    bool holds(ItemReference at) {
+      if (projectItemId(at) == id) return true;
+      if (at is! ItemReference_Folder) return false;
+      final inside = at.field0.getChildren().any(holds);
+      if (inside) _closedFolders.remove(projectItemId(at));
+      return inside;
+    }
+
+    final project = Provider.of<LumitState>(context, listen: false).project;
+    (project?.getItems() ?? const <ItemReference>[]).any(holds);
+    // The rows have not been drawn with it yet, and the selection is
+    // published from what the rows hold.
+    _itemById[id] = item;
+    _select(id, SelectMode.replace);
+    _documentChanged();
   }
 
   void _onSearchRequested() {
@@ -239,6 +266,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     HardwareKeyboard.instance.removeHandler(_onKey);
     _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
     _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
+    _boundUi?.projectPickRequest.removeListener(_onPickRequested);
     _changes?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
@@ -388,6 +416,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// picture to give). Cleared — and every image disposed — with the epoch.
   final Map<String, ui.Image?> _thumbs = {};
 
+  /// Whether the rows wear those poster frames too (Settings, **Thumbnails on
+  /// footage rows**). Read once per build; the rows are handed the picture
+  /// out of [_thumbs], which the walk fills for every drawn row anyway, so
+  /// the switch costs nothing at the bridge that the card was not paying.
+  bool _thumbnails = false;
+
   /// The frames the pointer has landed on while scrubbing the card's poster
   /// frame, by frame number — and which item they are of.
   ///
@@ -454,8 +488,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   ///
   /// A fresh set each time, because a notifier holding the value it already
   /// has tells nobody anything.
-  void _publishPicks() =>
-      _rowPicks.value = Set<String>.unmodifiable(_selectedIds);
+  void _publishPicks() {
+    _rowPicks.value = Set<String>.unmodifiable(_selectedIds);
+    // And the others in a shared project, who see these rows marked.
+    Provider.of<LumitUiState>(context, listen: false)
+        .setProjectPicks(_selectedIds);
+  }
 
   /// Mirror the anchor item to the shell, where the FX console reads
   /// it. The anchor, not the set: the console acts on one thing, the way the
@@ -486,6 +524,86 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             .clamp(minProjectColumnWidth(column), 900.0);
         _columnWidths = {..._columnWidths, column: next};
       });
+
+  /// The column the list is sorted by, and which way. Null is the project's
+  /// own order, which is how the panel opens. Kept only while the panel is
+  /// up, like the column widths, and never written to the settings file.
+  ProjectColumn? _sortColumn;
+  bool _sortAscending = true;
+
+  /// What the walk last counted, for the card while nothing is picked.
+  String _summary = '';
+
+  /// A click on a heading: sort by it, or turn the sort round if it already is.
+  void _sortBy(ProjectColumn column) => setState(() {
+        _sortAscending = _sortColumn != column || !_sortAscending;
+        _sortColumn = column;
+      });
+
+  Widget _columnHeader(LumitTheme t, ProjectColumns cols) =>
+      projectColumnHeader(t, cols,
+          onResize: _resizeColumn,
+          sort: _sortColumn,
+          ascending: _sortAscending,
+          onSort: _sortBy);
+
+  /// The rows in the order the sorted column asks for. A row keeps the rows
+  /// under it, so a folder still holds its own items and only siblings swap.
+  List<_TreeRow> _sortRows(List<_TreeRow> rows, int from, int to) {
+    // Each sibling, as where it starts and where the rows under it end. A row
+    // whose folder a filter has hidden counts as a sibling where it stands.
+    final runs = <(int, int)>[];
+    for (var i = from; i < to;) {
+      var end = i + 1;
+      while (end < to && rows[end].depth > rows[i].depth) {
+        end++;
+      }
+      runs.add((i, end));
+      i = end;
+    }
+    final keys = {for (final (head, _) in runs) head: _sortKey(rows[head])};
+    final way = _sortAscending ? 1 : -1;
+    runs.sort((a, b) {
+      final order = Comparable.compare(keys[a.$1]!, keys[b.$1]!) * way;
+      // Rows that tie keep the project's own order.
+      return order != 0 ? order : a.$1 - b.$1;
+    });
+    return [
+      for (final (head, end) in runs) ...[
+        rows[head],
+        ..._sortRows(rows, head + 1, end),
+      ],
+    ];
+  }
+
+  /// What a row sorts by under the column in force: words for Name and Path,
+  /// a number for the rest, and a row with nothing to state goes first.
+  ///
+  /// ponytail: names compare letter by letter, so "Shot 10" sorts before
+  /// "Shot 2". Compare the runs of digits as numbers if that gets in the way.
+  Comparable<dynamic> _sortKey(_TreeRow row) {
+    final item = row.item;
+    final id = projectItemId(item);
+    ProjectCells cells() => _cellsFor(item, id,
+        item is ItemReference_Footage && (_missing[id] ?? false));
+    return switch (_sortColumn!) {
+      ProjectColumn.name => (_names[id] ?? '').toLowerCase(),
+      ProjectColumn.items => _childCounts[id] ?? -1,
+      ProjectColumn.size => _cellNumber(cells().size),
+      ProjectColumn.fps => _cellNumber(cells().fps),
+      ProjectColumn.duration => projectClockSeconds(cells().duration),
+      ProjectColumn.path => (cells().path ?? '').toLowerCase(),
+    };
+  }
+
+  /// A Size or fps cell as a number: the pixel count of `1920×1080`, and the
+  /// leading figure of anything else (`25`, `48 kHz`).
+  static double _cellNumber(String? cell) {
+    if (cell == null) return -1;
+    final sides = cell.split('×').map(double.tryParse).toList();
+    if (sides case [final w?, final h?]) return w * h;
+    return double.tryParse(cell.split(' ').first) ?? -1;
+  }
 
   /// The folders the user has shut, by id. Closed rather than open, so
   /// a project opens showing everything it has — which is what the panel did
@@ -551,13 +669,18 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     final state = Provider.of<LumitState>(context);
     final roots = state.project?.getItems() ?? const <ItemReference>[];
     final cols = ProjectColumns.forWidth(width, widths: _columnWidths);
+    // Listened to, so flipping the switch in Settings redraws the rows.
+    _thumbnails = Provider.of<LumitUiState>(context)
+        .workspace
+        .interface
+        .projectThumbnails;
 
     if (roots.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _searchRow(t),
-          projectColumnHeader(t, cols, onResize: _resizeColumn),
+          _columnHeader(t, cols),
           Expanded(
             child: _importOnDoubleTap(
               child: Center(
@@ -588,6 +711,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     final rows = <_TreeRow>[];
     _visibleIds.clear();
     var itemCount = 0;
+    // How many compositions, footage items, solids and folders the walk
+    // meets, for the line the card shows while nothing is picked.
+    final kinds = [0, 0, 0, 0];
 
     // A row shows when its own name matches, or an ancestor folder's did —
     // searching a folder finds what it holds (docs/07 §3.1). Missing-only is
@@ -603,6 +729,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       final id = projectItemId(item);
       _itemById[id] = item;
       itemCount++;
+      kinds[switch (item) {
+        ItemReference_Composition() => 0,
+        ItemReference_Footage() => 1,
+        ItemReference_Solid() => 2,
+        ItemReference_Folder() => 3,
+      }]++;
       // Cached like every other row fact beside it: nothing asks the engine
       // twice for an answer that only a document change can alter.
       // The name was the one that was not, and it is the dearest of them:
@@ -680,6 +812,18 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     for (final item in roots) {
       walk(item, 0, false, 0);
     }
+    _summary = l10n.projectSummary(kinds[0], kinds[1], kinds[2], kinds[3]);
+    // Sorted after the walk, off what the walk cached, so the project's own
+    // order costs nothing extra and a sorted one asks the engine no more.
+    if (_sortColumn != null) {
+      final sorted = _sortRows(rows, 0, rows.length);
+      rows
+        ..clear()
+        ..addAll(sorted);
+      _visibleIds
+        ..clear()
+        ..addAll([for (final row in rows) projectItemId(row.item)]);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -693,7 +837,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             builder: (context, _, __) => _previewCard(t),
           ),
         _searchRow(t),
-        projectColumnHeader(t, cols, onResize: _resizeColumn),
+        _columnHeader(t, cols),
         Expanded(
           // The import sits **behind** the list, and the list takes the pointer
           // only where a row actually is. That is what makes the gesture the
@@ -727,7 +871,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                     hitTestBehavior: HitTestBehavior.deferToChild,
                     itemExtent: projectRowHeight,
                     itemCount: rows.length,
-                    itemBuilder: (context, i) => _treeRow(rows[i], cols),
+                    // Every other row on screen is shaded, whatever is open,
+                    // filtered or sorted.
+                    itemBuilder: (context, i) =>
+                        _treeRow(rows[i], cols, shaded: i.isOdd),
                   ),
                 ),
               ),
@@ -750,12 +897,13 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// what it draws and nothing at the bridge. The one thing it does not take
   /// from above is whether it is picked: that arrives through [_rowPicks], so
   /// a click redraws the rows whose shading moved and leaves the rest alone.
-  Widget _treeRow(_TreeRow row, ProjectColumns cols) {
+  Widget _treeRow(_TreeRow row, ProjectColumns cols, {required bool shaded}) {
     final item = row.item;
     final id = projectItemId(item);
     final missing = item is ItemReference_Footage && (_missing[id] ?? false);
     final audio = _mediaInfo[id] != null && _mediaInfo[id]!.videoCodec == null;
-    return _PickedRow(
+    final share = Provider.of<LumitState>(context, listen: false).share;
+    Widget picked() => _PickedRow(
       key: ValueKey<String>('project-row-$id'),
       picks: _rowPicks,
       id: id,
@@ -774,11 +922,22 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
             id,
             () =>
                 item is ItemReference_Footage ? item.field0.getProxy() : null),
+        standIn: _standIns.putIfAbsent(id, () => _isStandIn(item)),
+        people: [
+          if (item case ItemReference_Composition(:final field0))
+            for (final p in share.inComp(field0))
+              (p.colour, p.name, share.lettersOf(p.name)),
+        ],
+        peopleStale: share.outOfStep,
+        holders: share.holding('item:$id'),
         selected: selected,
+        shaded: shaded,
         renaming: _renamingId == id,
         loneSelection: lone,
         columns: cols,
         cells: _cellsFor(item, id, missing),
+        thumbnails: _thumbnails,
+        thumb: _thumbnails ? _thumbs[id] : null,
         selectedFootage: () => _selectedFootage,
         onSelect: (modifier) => _select(id, modifier),
         onStartRename: () => setState(() => _renamingId = id),
@@ -800,6 +959,14 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         relinkPicker: widget.relinkPicker,
       ),
     );
+    // A composition row shows who has it open, and in a shared project any
+    // row shows who has it selected. Those rows follow the people in it, and
+    // the panel is not rebuilt for them. Outside one, only compositions do.
+    return item is ItemReference_Composition || share.active
+        ? ValueListenableBuilder<int>(
+            valueListenable: share.roster,
+            builder: (context, _, __) => picked())
+        : picked();
   }
 
   /// The search well and its colour chips, with this panel's own controller,
@@ -859,6 +1026,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     return projectPreviewCard(
       t,
       item: item,
+      summary: _summary,
       name: item == null ? '' : (_names[id!] ??= _nameOf(item)),
       nodeGraph: item != null && (_nodeGraphs[id!] ??= _isNodeGraph(item)),
       missing: item is ItemReference_Footage && (_missing[id] ?? false),
@@ -934,7 +1102,11 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       setState(() => _soundId = null);
       return;
     }
-    setState(() => _soundId = item.field0.previewAudio() ? id : null);
+    // A file with several audio streams is heard as it would be placed.
+    final arrival =
+        Provider.of<LumitUiState>(context, listen: false).streamsArrival;
+    setState(() => _soundId =
+        item.field0.previewAudio(arrival: arrival) ? id : null);
   }
 
   /// Stop a preview that is running, whatever moved on — another selection,
@@ -973,14 +1145,25 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         final path = _paths[id] ??= _pathOf(field0);
         if (missing) {
           return ProjectCells(
-              size: projectNoValue, fps: projectNoValue, path: path);
+              size: projectNoValue,
+              fps: projectNoValue,
+              duration: projectNoValue,
+              path: path);
         }
+        // Blank until the probe the preview card already asks for has
+        // answered: the length comes out of that same cache, so no row ever
+        // probes on its own account.
         final info = _mediaInfo[id];
         if (info == null) return ProjectCells(path: path);
+        final seconds = info.duration.den == 0
+            ? 0.0
+            : info.duration.num / info.duration.den;
         if (info.videoCodec == null) {
           // A sound file's cells, as the mockup writes them: the rate where a
           // picture would state its size, and the channel layout — shortened
           // to fit the FPS column — where a picture would state its rate.
+          // Its length counts milliseconds, as the card's does: sound has
+          // no frames worth counting.
           if (info.audioCodec == null) return ProjectCells(path: path);
           return ProjectCells(
             size: projectSampleRateText(info.sampleRate),
@@ -989,15 +1172,22 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
               2 => l10n.audioStereoShort,
               final n => l10n.audioChannels(n),
             },
+            duration: timecodeOfSecondsMs(seconds),
             path: path,
           );
         }
+        final fps = info.fpsDen == 0 ? 0.0 : info.fpsNum / info.fpsDen;
         return ProjectCells(
           size: '${info.width}×${info.height}',
           // A still has no rate to state. It probes with a video
           // stream of one frame, so a number *is* there — and printing it
-          // would say the picture runs when it does not.
+          // would say the picture runs when it does not. Its length is left
+          // blank for the same reason.
           fps: info.isStill ? null : projectRateText(info.fpsNum, info.fpsDen),
+          duration: info.isStill
+              ? null
+              : timecodeOfRate(
+                  (seconds * fps).round(), info.fpsNum, info.fpsDen),
           path: path,
         );
       case ItemReference_Composition(:final field0):
@@ -1006,6 +1196,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           return ProjectCells(
             size: '${s.width}×${s.height}',
             fps: projectRateText(s.fpsNum, s.fpsDen),
+            duration: timecodeOfRate(
+                field0.durationFrames().toInt(), s.fpsNum, s.fpsDen),
           );
         }();
       case ItemReference_Folder():
@@ -1203,8 +1395,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   Future<void> _import() async {
     final state = Provider.of<LumitState>(context, listen: false);
-    if (await state
-        .importFootagePaths(await (widget.importPicker ?? pickFootage)())) {
+    if (await importFootageFrb(context, state, picker: widget.importPicker) &&
+        mounted) {
       _documentChanged();
     }
   }
@@ -1224,10 +1416,26 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// An edit landed: re-probe and re-decode. Bumping the epoch is what makes a
   /// relink show the new picture rather than the cached one.
+  /// Which footage items are read from a stand-in someone sent, by id. Read
+  /// once a row and again when the document changes, which a stand-in
+  /// arriving counts as.
+  final Map<String, bool> _standIns = {};
+
+  bool _isStandIn(ItemReference item) {
+    if (item is! ItemReference_Footage) return false;
+    if (!context.read<LumitState>().share.active) return false;
+    try {
+      return item.field0.shareState().here == BridgeFootageHere.standIn;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void _documentChanged() {
     setState(() {
       _epoch++;
       _missing.clear();
+      _standIns.clear();
       _undecodable.clear();
       _mediaInfo.clear();
       _compCells.clear();

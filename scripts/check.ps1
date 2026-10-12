@@ -12,7 +12,7 @@
 
     This covers the engine only. The Flutter side is `flutter analyze` and
     `flutter test <one file>`; never the whole Flutter suite on this machine.
-    See docs/learn/09-DOING-IT-YOURSELF.md for why.
+    See docs/GUIDE.md.
 
 .PARAMETER Crate
     Test only this crate, for example lumit-core. Omit it to test the whole

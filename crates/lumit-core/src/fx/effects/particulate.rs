@@ -65,6 +65,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "height",
             "depth",
             "emitter_angle",
+            "path_from",
             "mask_path",
             "emit_rate",
             "direction",
@@ -142,6 +143,12 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "mode",
         cond: EnabledCond::ChoiceIs(2),
     },
+    // Following the shape leaves no mask to choose.
+    EnabledWhen {
+        param: "mask_path",
+        on: "path_from",
+        cond: EnabledCond::ChoiceIsNot(1),
+    },
 ];
 
 /// Particulate's controls (particulate.md §2).
@@ -208,6 +215,11 @@ pub struct Particulate {
     /// Rotates Line, Ellipse and Rectangle about Position.
     #[dial(label = "Emitter angle", default = 0.0)]
     pub emitter_angle: f32,
+
+    /// What a Mask path emitter walks: one of the layer's masks, or the paths
+    /// of the Shape layer the effect is on. `mask::effect_path_at` reads it.
+    #[choice(label = "Follow", options = ["Mask", "Shape"], default = 0)]
+    pub path_from: u32,
 
     /// Which of the layer's masks particles are born along, when Shape is Mask
     /// path. An empty polyline emits nothing — the documented no-op.

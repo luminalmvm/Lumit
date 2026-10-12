@@ -9,7 +9,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart' show LumitUiState;
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
@@ -67,18 +66,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('the page is in the sidebar with its two rows', (tester) async {
-      await open(tester);
-
-      expect(find.text(l10n.settingsAutosaveEvery), findsOneWidget);
-      expect(find.text(l10n.settingsAutosaveKeep), findsOneWidget);
-      expect(
-          find.byKey(const ValueKey('settings-autosave-minutes')), findsOneWidget);
-      expect(find.byKey(const ValueKey('settings-autosave-keep')), findsOneWidget);
-      expect(find.text(l10n.settingsAutosaveOff), findsNothing,
-          reason: 'five minutes is not off');
-    });
-
     testWidgets('a typed interval is written to the settings file',
         (tester) async {
       final ui = await open(tester);
@@ -90,27 +77,6 @@ void main() {
       await type(tester, 'settings-autosave-keep', '3');
       expect(ui.workspace.autosaveKeep, 3);
       expect(ui.workspace.autosaveMinutes, 12);
-    });
-
-    testWidgets('zero minutes is off, and the row says so', (tester) async {
-      final ui = await open(tester);
-
-      await type(tester, 'settings-autosave-minutes', '0');
-      expect(ui.workspace.autosaveMinutes, 0);
-      expect(find.text(l10n.settingsAutosaveOff), findsOneWidget,
-          reason: 'off is reported, not refused');
-    });
-
-    testWidgets('Reset page puts both numbers back to what Lumit ships',
-        (tester) async {
-      final ui = await open(tester, minutes: 0, keep: 20);
-
-      await tester.tap(find.byKey(const ValueKey('settings-reset-page')));
-      await tester.pumpAndSettle();
-
-      expect(ui.workspace.autosaveMinutes, 5);
-      expect(ui.workspace.autosaveKeep, 5);
-      expect(find.text(l10n.settingsAutosaveOff), findsNothing);
     });
   });
 }

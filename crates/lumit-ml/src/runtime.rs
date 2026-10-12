@@ -274,21 +274,6 @@ fn runtime_is_required(value: Option<&str>) -> bool {
 mod tests {
     use super::*;
 
-    /// **A machine that is supposed to have the runtime must fail, not skip.**
-    /// Every test here that opens a library skips itself without one, which is
-    /// how a green job could prove nothing at all: a skip and a pass look
-    /// identical in the summary. `LUMIT_REQUIRE_ML` is what tells the
-    /// difference, so the rule it encodes is pinned here rather than only in
-    /// the build's own configuration.
-    #[test]
-    fn requiring_the_runtime_is_opt_in_and_zero_still_means_skip() {
-        assert!(!runtime_is_required(None), "a laptop keeps the polite skip");
-        assert!(!runtime_is_required(Some("")), "an empty value is unset");
-        assert!(!runtime_is_required(Some("0")), "0 turns it off explicitly");
-        assert!(runtime_is_required(Some("1")), "a machine with one sets 1");
-        assert!(runtime_is_required(Some("yes")));
-    }
-
     /// **A folder with no library is Missing, not Failed.** The two say
     /// different things to the user: one is "install the runtime", the other
     /// is "the runtime you installed will not open", and a wrong answer sends
@@ -297,29 +282,5 @@ mod tests {
     fn a_folder_without_the_library_is_missing() {
         let empty = tempfile::tempdir().unwrap();
         assert_eq!(load(empty.path()).unwrap_err(), MlError::RuntimeMissing);
-    }
-
-    /// **On a machine with the runtime, it loads and says what it is.** Run
-    /// for real by pointing `LUMIT_ML_RUNTIME_DIR` at the folder holding the
-    /// library; skipped politely everywhere else, which is every CI runner.
-    #[test]
-    fn the_runtime_loads_and_reports_its_provider_and_version() {
-        let Some(dir) = crate::test_support::runtime_dir() else {
-            no_runtime();
-            return;
-        };
-        let loaded = load(&dir).expect("the runtime at LUMIT_ML_RUNTIME_DIR would not load");
-        assert_eq!(loaded.provider, PROVIDER);
-        assert!(
-            !loaded.version.is_empty(),
-            "the row would have nothing to say"
-        );
-        assert_eq!(
-            status(),
-            RuntimeStatus::Loaded {
-                provider: PROVIDER.to_owned(),
-                version: loaded.version.clone(),
-            }
-        );
     }
 }

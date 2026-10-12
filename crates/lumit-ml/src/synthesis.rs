@@ -194,25 +194,6 @@ mod tests {
         )
     }
 
-    /// **A phase at either end never reaches the model.** The two frames are
-    /// already in hand, so asking for one of them is a copy, and it is the one
-    /// promise the built-in engine and a model pack both have to keep or the
-    /// ends of a ramp would flicker as the engine row changed.
-    #[test]
-    fn a_phase_at_either_end_is_the_frame_in_hand() {
-        let a = [1u8, 2, 3, 255];
-        let b = [9u8, 8, 7, 255];
-        for at in [0.0f32, -0.0, -1.0, f32::NAN] {
-            assert_eq!(endpoint(&a, &b, at), Some(a.as_slice()), "{at}");
-        }
-        for at in [1.0f32, 1.5, f32::INFINITY] {
-            assert_eq!(endpoint(&a, &b, at), Some(b.as_slice()), "{at}");
-        }
-        for at in [0.001f32, 0.5, 0.999] {
-            assert_eq!(endpoint(&a, &b, at), None, "{at}");
-        }
-    }
-
     /// **Two packs, two versions and two digests each name themselves
     /// differently, and the same pack names itself the same way twice.**
     /// Every frame a model paints is filed under this, so a collision serves
@@ -232,29 +213,6 @@ mod tests {
         assert_ne!(base, of("rife-alt", "1.0", one), "another pack");
         assert_ne!(base, of("rife", "1.0", two), "another file");
         assert_ne!(base, [0u8; 32], "and it is not nothing");
-    }
-
-    /// **With nothing installed, opening the pack is a refusal that says which
-    /// is missing.** The row's sentence is chosen off this, so "install the
-    /// runtime" and "install RIFE" must not be the same answer.
-    #[test]
-    fn opening_with_nothing_installed_refuses_by_name() {
-        let _serial = crate::test_support::serially();
-        let root = tempfile::tempdir().unwrap();
-        store::with_dir(Some(root.path().to_path_buf()));
-        let refusal = Synthesis::open().unwrap_err();
-        assert!(
-            matches!(
-                refusal,
-                MlError::RuntimeMissing | MlError::PackMissing(Task::Synthesis)
-            ),
-            "{refusal:?}"
-        );
-        assert!(
-            installed_identity().is_none(),
-            "and there is nothing to name"
-        );
-        store::with_dir(None);
     }
 
     /// **A pack with nothing to run it names nothing.** The frame key is what

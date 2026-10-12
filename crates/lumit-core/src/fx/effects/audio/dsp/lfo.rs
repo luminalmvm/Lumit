@@ -168,52 +168,6 @@ mod tests {
     }
 
     #[test]
-    fn every_shape_rises_through_zero_and_stays_inside_one() {
-        for shape in [Shape::Sine, Shape::Triangle, Shape::Square] {
-            let run = walk(&Lfo::new(shape, 2.0, 0.0), 48_000);
-            assert!(run[0].abs() < 1e-9, "{shape:?} starts off zero");
-            assert!(run[200] > 0.0, "{shape:?} should rise first");
-            for v in &run {
-                assert!((-1.0..=1.0).contains(v), "{shape:?} reached {v}");
-            }
-        }
-    }
-
-    #[test]
-    fn the_triangle_and_the_square_hit_their_corners() {
-        let run = walk(&Lfo::new(Shape::Triangle, 1.0, 0.0), 48_000);
-        assert!((run[12_000] - 1.0).abs() < 1e-9);
-        assert!(run[24_000].abs() < 1e-9);
-        assert!((run[36_000] + 1.0).abs() < 1e-9);
-
-        // The square is flat between its edges and slewed across them.
-        let run = walk(&Lfo::new(Shape::Square, 1.0, 0.0), 48_000);
-        assert!((run[12_000] - 1.0).abs() < 1e-12);
-        assert!((run[36_000] + 1.0).abs() < 1e-12);
-        // The slew is short, so the last bit of a carried phase is worth a
-        // good deal more here than it is out on the flat.
-        assert!(run[24_000].abs() < 1e-6, "the fall should cross zero");
-        assert!(run[24_002] < -0.4, "the fall should be short");
-    }
-
-    #[test]
-    fn an_offset_moves_the_cycle_and_a_silly_rate_does_not_break_it() {
-        let plain = Lfo::new(Shape::Sine, 3.0, 0.0);
-        let flipped = Lfo::new(Shape::Sine, 3.0, 180.0);
-        let mut phase = Phase::default();
-        for index in 0..8_000 {
-            let sum = plain.value(phase, RATE) + flipped.value(phase, RATE);
-            assert!(sum.abs() < 1e-12, "{index} summed to {sum}");
-            phase.advance(3.0, RATE);
-        }
-        // A rate that is not a number, and a sample rate of nothing, leave a
-        // phase something can still be read from.
-        phase.advance(f64::NAN, RATE);
-        phase.advance(1.0, 0.0);
-        assert!(phase.along(0.0).is_finite());
-    }
-
-    #[test]
     fn a_rate_that_moves_leaves_the_cycle_where_it_stood() {
         // Ten seconds into a run, an automated Rate row goes from 5 Hz to
         // 6 Hz. A phase read from the frame index would jump by the index

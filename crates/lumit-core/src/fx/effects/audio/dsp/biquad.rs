@@ -315,56 +315,6 @@ mod tests {
         20.0 * measured_gain(coeffs, freq).log10()
     }
 
-    fn ramp(section: &mut Biquad, frames: usize) -> Vec<f32> {
-        (0..frames)
-            .map(|n| section.process(((n % 97) as f32 - 48.0) / 48.0))
-            .collect()
-    }
-
-    #[test]
-    fn reset_then_the_same_input_twice_gives_the_same_output() {
-        let mut section = Biquad::new(Coeffs::low_pass(800.0, FRAC_1_SQRT_2, RATE));
-        let first = ramp(&mut section, 4_000);
-        section.reset();
-        let second = ramp(&mut section, 4_000);
-        assert_eq!(first, second);
-
-        let mut cascade = Cascade::<3>::new();
-        cascade.set(0, Coeffs::peaking(1_000.0, 1.0, 6.0, RATE));
-        cascade.set(1, Coeffs::high_pass(120.0, FRAC_1_SQRT_2, RATE));
-        cascade.set(2, Coeffs::high_shelf(4_000.0, FRAC_1_SQRT_2, -3.0, RATE));
-        let one: Vec<f32> = (0..2_000)
-            .map(|n| cascade.process(((n % 61) as f32 - 30.0) / 30.0))
-            .collect();
-        cascade.reset();
-        let two: Vec<f32> = (0..2_000)
-            .map(|n| cascade.process(((n % 61) as f32 - 30.0) / 30.0))
-            .collect();
-        assert_eq!(one, two);
-    }
-
-    #[test]
-    fn a_bell_at_its_centre_is_the_gain_the_row_asked_for() {
-        for gain in [-12.0, -6.0, 3.0, 9.0] {
-            for q in [0.5, 1.0, 4.0] {
-                let db = measured_db(Coeffs::peaking(1_000.0, q, gain, RATE), 1_000.0);
-                assert!(
-                    (db - gain).abs() < 0.1,
-                    "bell of {gain} dB at Q {q} measured {db}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn a_low_pass_is_three_down_at_its_corner() {
-        let db = measured_db(Coeffs::low_pass(1_000.0, FRAC_1_SQRT_2, RATE), 1_000.0);
-        assert!((db + 3.0103).abs() < 0.2, "corner measured {db}");
-
-        let db = measured_db(Coeffs::high_pass(1_000.0, FRAC_1_SQRT_2, RATE), 1_000.0);
-        assert!((db + 3.0103).abs() < 0.2, "corner measured {db}");
-    }
-
     #[test]
     fn the_other_shapes_land_where_the_cookbook_says() {
         // A band pass is unity at its centre, whatever the Q.

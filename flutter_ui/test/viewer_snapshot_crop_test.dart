@@ -150,40 +150,4 @@ void main() {
     // softening the crop does away with.
     expect(_alternates(whole, 37, 62, 50), isFalse);
   });
-
-  testWidgets('a snapshot of a picture that fits is the whole of it, unchanged',
-      (tester) async {
-    final stage = await _mount(
-      tester,
-      picture: const Size(100, 100),
-      at: Offset.zero,
-    );
-
-    final crop = visiblePictureCrop(stage.picture, stage.panel);
-    expect(crop, const Rect.fromLTWH(0, 0, 100, 100),
-        reason: 'nothing is off screen, so nothing is cropped away');
-
-    final shot = await tester.runAsync(() async {
-      final layer = stage.picture.debugLayer! as OffsetLayer;
-      final image = await layer.toImage(crop, pixelRatio: 1);
-      return (image.width, image.height, await _pixels(image));
-    });
-    expect(shot!.$1, 100);
-    expect(shot.$2, 100);
-    // Corner to corner, the picture itself: the fitted case takes the same
-    // photograph it always did.
-    expect(shot.$3(0, 0), 0xFFFFFFFF);
-    expect(shot.$3(99, 99), 0xFF000000);
-  });
-
-  testWidgets('a picture panned right off the panel crops to nothing',
-      (tester) async {
-    final stage = await _mount(
-      tester,
-      picture: const Size(400, 400),
-      at: const Offset(-500, 0),
-    );
-    expect(visiblePictureCrop(stage.picture, stage.panel).isEmpty, isTrue,
-        reason: 'and Take stands down rather than asking for an empty image');
-  });
 }

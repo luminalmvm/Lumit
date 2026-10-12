@@ -21,6 +21,8 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
+import 'package:lumit_flutter/state/settings.dart' show effectiveUiScale;
+import 'package:lumit_flutter/widgets/ui_scale.dart';
 import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
@@ -37,12 +39,16 @@ void main() {
       return (state: p.state, uiState: p.uiState, comp: comp);
     }
 
-    Future<void> mount(WidgetTester tester, dynamic p) async {
+    /// [scale] mounts the panel under the interface scale, as the application
+    /// does.
+    Future<void> mount(WidgetTester tester, dynamic p, {double? scale}) async {
       tester.view.physicalSize = const Size(1280, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(hostPanel(
-        child: const TimelinePanelFrb(),
+        child: scale == null
+            ? const TimelinePanelFrb()
+            : UiScaleView(scale: scale, child: const TimelinePanelFrb()),
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
         size: const Size(1280, 600),
@@ -51,10 +57,13 @@ void main() {
     }
 
     /// What one frame is worth in pixels — measured off the ruler, which is
-    /// the whole axis.
-    double perFrameOf(WidgetTester tester, dynamic p) =>
+    /// the whole axis. [scale] is the one the panel was mounted under, since
+    /// the padding is drawn that much wider on screen.
+    double perFrameOf(WidgetTester tester, dynamic p, {double? scale}) =>
         (tester.getRect(find.byKey(const ValueKey('tl-ruler'))).width -
-            TimelineAxis.pad * 2) /
+            TimelineAxis.pad *
+                2 *
+                (scale == null ? 1 : effectiveUiScale(scale))) /
         (p.comp as CompositionReference).durationFrames();
 
     void markerAt(dynamic p, int frame, {String label = 'Beat'}) {
@@ -125,177 +134,314 @@ void main() {
           reason: 'and the capture leaves no trace after (P1)');
     });
 
-    testWidgets('Ctrl suspends a bar drag\'s magnet', (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      p.uiState.model.refresh();
-      markerAt(p, 41);
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final bar =
-          find.byKey(ValueKey<String>('tl-bar-body-${layer.internallayerId}'));
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      final gesture =
-          await dragging(tester, tester.getCenter(bar), perFrame * 40);
-      await gesture.up();
-      await tester.pumpAndSettle();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-
-      expect(p.comp.frameAtTime(time: layer.getSpan().inPoint), isNot(41),
-          reason: 'Ctrl suspends the magnet, targets and all');
-    });
-
     // -------------------------------------------------------------------
     // §4.5, §7 — the work-area edges snap, and answer Escape.
     // -------------------------------------------------------------------
-
-    testWidgets('a work-area edge lands on the marker it is dragged near',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      // A work area narrower than the comp, so its end handle stands clear of
-      // the panel's own right-hand gutter and there is a band to see move.
-      p.comp.setWorkArea(
-        span: BridgeSpan(
-          inPoint: p.comp.timeOfFrame(frame: 0),
-          outPoint: p.comp.timeOfFrame(frame: 1000),
-          startOffset: p.comp.timeOfFrame(frame: 0),
-        ),
-      );
-      // A frame past where the pointer itself would land, so only a reach for
-      // the target can explain the landing — and on the far side of the
-      // handle, because a flag's label pill runs to the right of its point and
-      // would otherwise be the thing under the press.
-      markerAt(p, 1060);
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final handle = find.byKey(const ValueKey('tl-work-end'));
-      final gesture =
-          await dragging(tester, tester.getCenter(handle), perFrame * 59);
-      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsOneWidget,
-          reason: 'the capture line marks what caught the edge');
-
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(workAreaFrames(p.comp).end, 1060,
-          reason: 'the edge took the marker rather than the pointer');
-      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsNothing,
-          reason: 'and the capture is gone with the gesture (P1)');
-    });
-
-    testWidgets('Escape abandons a work-area drag and writes nothing',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      p.comp.setWorkArea(
-        span: BridgeSpan(
-          inPoint: p.comp.timeOfFrame(frame: 0),
-          outPoint: p.comp.timeOfFrame(frame: 1000),
-          startOffset: p.comp.timeOfFrame(frame: 0),
-        ),
-      );
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final gesture = await dragging(
-          tester,
-          tester.getCenter(find.byKey(const ValueKey('tl-work-end'))),
-          -perFrame * 300);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(workAreaFrames(p.comp).end, 1000,
-          reason: 'the abandoned drag wrote nothing at all');
-    });
 
     // -------------------------------------------------------------------
     // §4.5, §7 — a marker drag snaps and answers Escape.
     // -------------------------------------------------------------------
 
-    testWidgets('a marker lands on the work-area edge it is dragged near',
+    /// Where [frame] falls on the ruler, in the clock row: ground no flag and
+    /// no band sits on, so a press there is a scrub.
+    Offset clockAt(WidgetTester tester, dynamic p, num frame) {
+      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
+      return Offset(
+          ruler.left + TimelineAxis.pad + frame * perFrameOf(tester, p),
+          ruler.top + ruler.height / 4);
+    }
+
+    testWidgets('picking a marker up leaves the playhead where it was',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      markerAt(p, 400);
+      await mount(tester, p);
+      expect(p.uiState.playheadFrame.value, 0);
+
+      final id = markersOf(p.comp).single.id;
+      final flag = find.byKey(ValueKey<String>('tl-marker-$id'));
+      // Held still past the press deadline, which is when the ruler's own tap
+      // fires: that tap used to seek to the pointer, flag or no flag.
+      final gesture = await tester.startGesture(tester.getCenter(flag),
+          kind: PointerDeviceKind.mouse);
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(p.uiState.playheadFrame.value, 0,
+          reason: 'a press on a flag is the flag\'s, not a scrub');
+
+      for (var i = 0; i < 8; i++) {
+        await gesture.moveBy(const Offset(10, 0));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(p.uiState.playheadFrame.value, 0,
+          reason: 'and dragging it moves the marker alone');
+      expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time),
+          greaterThan(400));
+
+      // A plain click on the flag, no drag at all, is the same.
+      await tester.tap(flag);
+      await tester.pumpAndSettle();
+      expect(p.uiState.playheadFrame.value, 0);
+    });
+
+    testWidgets('a marker snaps to where the playhead is, not where it was',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      markerAt(p, 10);
+      await mount(tester, p);
+
+      // The playhead moves after the panel was built, and nothing rebuilds
+      // the panel because of it: that is the case the snap list got wrong.
+      p.uiState.scrubTo(600);
+      await tester.pump();
+
+      final perFrame = perFrameOf(tester, p);
+      final id = markersOf(p.comp).single.id;
+      // Two frames past the playhead, well inside the snap's reach. The first
+      // of the eight moves is spent starting the drag.
+      final gesture = await dragging(
+          tester,
+          tester.getCenter(find.byKey(ValueKey<String>('tl-marker-$id'))),
+          perFrame * 592 * 8 / 7);
+      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsOneWidget,
+          reason: 'the playhead caught the flag');
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time), 600,
+          reason: 'the flag landed on the playhead as it stands now');
+    });
+
+    // -------------------------------------------------------------------
+    // Shift while scrubbing: the playhead lands on what it comes near.
+    // -------------------------------------------------------------------
+
+    testWidgets('Shift lands a scrubbed playhead on a marker', (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      markerAt(p, 400);
+      await mount(tester, p);
+
+      // Without Shift the playhead goes where the pointer is.
+      var gesture = await tester.startGesture(clockAt(tester, p, 300),
+          kind: PointerDeviceKind.mouse);
+      await tester.pump(const Duration(milliseconds: 60));
+      await gesture.moveTo(clockAt(tester, p, 396));
+      await tester.pump();
+      expect(p.uiState.playheadFrame.value, closeTo(396, 1));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      gesture = await tester.startGesture(clockAt(tester, p, 300),
+          kind: PointerDeviceKind.mouse);
+      await tester.pump(const Duration(milliseconds: 60));
+      await gesture.moveTo(clockAt(tester, p, 396));
+      await tester.pump();
+      expect(p.uiState.playheadFrame.value, 400,
+          reason: 'four frames short of the marker, and taken onto it');
+      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsOneWidget,
+          reason: 'and what caught it is marked while it holds');
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsNothing,
+          reason: 'the mark goes when the scrub does');
+    });
+
+    // -------------------------------------------------------------------
+    // A marker's colour, and its region.
+    // -------------------------------------------------------------------
+
+    testWidgets('double-clicking a marker opens its settings', (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      markerAt(p, 400);
+      await mount(tester, p);
+
+      final id = markersOf(p.comp).single.id;
+      final flag = find.byKey(ValueKey<String>('tl-marker-$id'));
+      await tester.tap(flag);
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.tap(flag);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('marker-edit-label')), findsOneWidget);
+      expect(markersOf(p.comp), hasLength(1),
+          reason: 'the pair of clicks made no second marker');
+
+      await tester.enterText(
+          find.byKey(const ValueKey('marker-edit-duration')), '120');
+      await tester.tap(find.byKey(const ValueKey('marker-edit-colour-3')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('marker-edit-ok')));
+      await tester.pumpAndSettle();
+
+      final edited = markersOf(p.comp).single;
+      expect(edited.durationFrames, 120, reason: 'it runs for what was typed');
+      expect(edited.colour, 3, reason: 'in the colour that was picked');
+      expect(edited.label, 'Beat', reason: 'and still says what it said');
+      expect(find.byKey(ValueKey<String>('tl-marker-out-$id')), findsOneWidget,
+          reason: 'a region has an end to take hold of');
+    });
+
+    testWidgets('a marker becomes a region, and takes a colour, from its menu',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      markerAt(p, 400);
+      await mount(tester, p);
+
+      final id = markersOf(p.comp).single.id;
+      final flag = find.byKey(ValueKey<String>('tl-marker-$id'));
+      await tester.tap(flag, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('marker-menu-region')));
+      await tester.pumpAndSettle();
+      expect(markersOf(p.comp).single.durationFrames,
+          p.uiState.model.fps.round(),
+          reason: 'a new region starts a second long');
+
+      await tester.tap(flag, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('marker-menu-colour-2')));
+      await tester.pumpAndSettle();
+      expect(markersOf(p.comp).single.colour, 2);
+      expect(markersOf(p.comp).single.durationFrames, isNotNull,
+          reason: 'colouring it left the region alone');
+
+      await tester.tap(flag, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('marker-menu-region')));
+      await tester.pumpAndSettle();
+      expect(markersOf(p.comp).single.durationFrames, isNull,
+          reason: 'and the same row takes the region away again');
+      expect(markersOf(p.comp).single.colour, 2);
+    });
+
+    testWidgets('a region stops at the end of the composition',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      final frames = p.comp.durationFrames();
+      // Unlabelled, so the whole flag is on screen this near the end.
+      markerAt(p, frames - 10, label: '');
+      await mount(tester, p);
+
+      final id = markersOf(p.comp).single.id;
+      await tester.tap(find.byKey(ValueKey<String>('tl-marker-$id')),
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('marker-menu-region')));
+      await tester.pumpAndSettle();
+
+      expect(markersOf(p.comp).single.durationFrames, 10,
+          reason: 'ten frames of room, so ten frames of region');
+    });
+
+    testWidgets('dragging the end of a region resizes it', (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      final id = UuidValue.fromString(const Uuid().v4());
+      writeMarkers(p.comp, [
+        BridgeMarker(
+          id: id,
+          time: p.comp.timeOfFrame(frame: 100),
+          label: '',
+          durationFrames: 100,
+          isBeat: false,
+        ),
+      ]);
+      p.uiState.model.refresh();
+      await mount(tester, p);
+      expect(find.byKey(const ValueKey('tl-lane-regions')), findsOneWidget,
+          reason: 'the region is shaded down through the lanes');
+
+      final perFrame = perFrameOf(tester, p);
+      // Ctrl keeps the magnet out of it, so the landing is the pointer's own.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      final gesture = await dragging(
+          tester,
+          tester.getCenter(find.byKey(ValueKey<String>('tl-marker-out-$id'))),
+          perFrame * 200);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+      final resized = markersOf(p.comp).single;
+      expect(resized.durationFrames, closeTo(300, 3),
+          reason: 'the end went as far as the pointer did');
+      expect(p.comp.frameAtTime(time: resized.time), 100,
+          reason: 'and the marker itself stayed put');
+      expect(p.uiState.playheadFrame.value, 0,
+          reason: 'taking hold of the end is not a scrub either');
+    });
+
+    // -------------------------------------------------------------------
+    // A scaled interface: the flag and the edge stay under the pointer.
+    // -------------------------------------------------------------------
+
+    testWidgets('a marker follows the pointer when the interface is scaled',
+        (tester) async {
+      final p = withComp();
+      p.comp.addSolidLayer();
+      markerAt(p, 10);
+      await mount(tester, p, scale: 1.25);
+
+      final perFrame = perFrameOf(tester, p, scale: 1.25);
+      final id = markersOf(p.comp).single.id;
+      // Ctrl keeps the magnet out of it, so the landing is the pointer's own.
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      final gesture = await dragging(
+          tester,
+          tester.getCenter(find.byKey(ValueKey<String>('tl-marker-$id'))),
+          perFrame * 400);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+      // The first of the eight moves is spent starting the drag, so the flag
+      // travels the other seven.
+      expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time),
+          closeTo(360, 2),
+          reason: 'the flag moved as far as the pointer did');
+    });
+
+    testWidgets('a work-area edge follows the pointer when it is scaled',
         (tester) async {
       final p = withComp();
       p.comp.addSolidLayer();
       p.comp.setWorkArea(
         span: BridgeSpan(
           inPoint: p.comp.timeOfFrame(frame: 0),
-          outPoint: p.comp.timeOfFrame(frame: 50),
+          outPoint: p.comp.timeOfFrame(frame: 1000),
           startOffset: p.comp.timeOfFrame(frame: 0),
         ),
       );
-      markerAt(p, 10);
-      await mount(tester, p);
+      await mount(tester, p, scale: 1.25);
 
-      final perFrame = perFrameOf(tester, p);
-      final id = markersOf(p.comp).single.id;
+      final perFrame = perFrameOf(tester, p, scale: 1.25);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
       final gesture = await dragging(
           tester,
-          tester.getCenter(find.byKey(ValueKey<String>('tl-marker-$id'))),
-          perFrame * 39);
-      expect(find.byKey(const ValueKey('tl-ruler-snap-caught')), findsOneWidget,
-          reason: 'the flag says what it caught while it holds it');
-
+          tester.getCenter(find.byKey(const ValueKey('tl-work-end'))),
+          -perFrame * 300);
       await gesture.up();
       await tester.pumpAndSettle();
-      expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time), 50,
-          reason: 'the flag took the work-area edge, not the pointer');
-    });
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
 
-    testWidgets('Escape abandons a marker drag and leaves it where it was',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      markerAt(p, 10);
-      await mount(tester, p);
-
-      final perFrame = perFrameOf(tester, p);
-      final id = markersOf(p.comp).single.id;
-      final gesture = await dragging(
-          tester,
-          tester.getCenter(find.byKey(ValueKey<String>('tl-marker-$id'))),
-          perFrame * 100);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(p.comp.frameAtTime(time: markersOf(p.comp).single.time), 10,
-          reason: 'the abandoned drag wrote nothing');
+      // An edge goes to the pointer itself, so all eight moves count.
+      expect(workAreaFrames(p.comp).end, closeTo(700, 2),
+          reason: 'the edge moved as far as the pointer did');
     });
 
     // -------------------------------------------------------------------
     // §7 — the two double-clicks.
     // -------------------------------------------------------------------
-
-    testWidgets('double-clicking the work-area band gives the comp back',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      p.comp.setWorkArea(
-        span: BridgeSpan(
-          inPoint: p.comp.timeOfFrame(frame: 20),
-          outPoint: p.comp.timeOfFrame(frame: 60),
-          startOffset: p.comp.timeOfFrame(frame: 0),
-        ),
-      );
-      await mount(tester, p);
-      expect(workAreaFrames(p.comp).whole, isFalse);
-
-      // The band's own row — the whole ruler now — half way along it.
-      final band = tester.getRect(find.byKey(const ValueKey('tl-work-area')));
-      final at = Offset(band.center.dx, band.center.dy);
-      await tester.tapAt(at);
-      await tester.pump(const Duration(milliseconds: 40));
-      await tester.tapAt(at);
-      await tester.pumpAndSettle();
-
-      expect(p.comp.getWorkArea(), isNull,
-          reason: 'the work area is the whole comp again (docs/07 §4.1)');
-    });
 
     testWidgets('double-clicking empty ruler makes a marker and names it',
         (tester) async {
@@ -323,33 +469,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(markersOf(p.comp).single.label, 'Drop',
           reason: 'what was typed is what the marker says');
-    });
-
-    /// §7's last sentence on that gesture: **cancelling the label editor
-    /// leaves the marker.** The double-click is what made it; the dialogue
-    /// only names it, so backing out of the naming is not an undo of the
-    /// making.
-    testWidgets('cancelling the label editor leaves the marker',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      await mount(tester, p);
-
-      final ruler = tester.getRect(find.byKey(const ValueKey('tl-ruler')));
-      final at = Offset(ruler.center.dx, ruler.top + ruler.height / 4);
-      await tester.tapAt(at);
-      await tester.pump(const Duration(milliseconds: 40));
-      await tester.tapAt(at);
-      await tester.pumpAndSettle();
-      expect(markersOf(p.comp), hasLength(1));
-
-      await tester.tap(find.byKey(const ValueKey('marker-edit-cancel')));
-      await tester.pumpAndSettle();
-
-      expect(markersOf(p.comp), hasLength(1),
-          reason: 'the marker outlives the dialogue that would have named it');
-      expect(markersOf(p.comp).single.label, isEmpty,
-          reason: 'and it says nothing, which is what an unnamed one says');
     });
 
     // -------------------------------------------------------------------

@@ -9,7 +9,9 @@ import 'effect.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
+import 'share.dart';
 import 'state.dart';
+import 'streams.dart';
 part 'footage.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `resolve_source`, `source_path`, `stored_path`
@@ -59,6 +61,11 @@ class BridgeMediaInfo {
   final int channels;
   final int sampleRate;
 
+  /// How many audio streams the file carries. The codec, channels and rate
+  /// above are the first one's, which is the one a layer sounds until it is
+  /// told another ([`FootageReference::audio_streams`] lists them all).
+  final int audioStreams;
+
   /// Whether the picture is a **still** rather than something that runs.
   /// A still probes with a video stream too — one frame of it — so
   /// the question is whether the stream lasts, and the engine
@@ -81,6 +88,7 @@ class BridgeMediaInfo {
     this.audioCodec,
     required this.channels,
     required this.sampleRate,
+    required this.audioStreams,
     required this.isStill,
   });
 
@@ -95,6 +103,7 @@ class BridgeMediaInfo {
       audioCodec.hashCode ^
       channels.hashCode ^
       sampleRate.hashCode ^
+      audioStreams.hashCode ^
       isStill.hashCode;
 
   @override
@@ -111,6 +120,7 @@ class BridgeMediaInfo {
           audioCodec == other.audioCodec &&
           channels == other.channels &&
           sampleRate == other.sampleRate &&
+          audioStreams == other.audioStreams &&
           isStill == other.isStill;
 }
 
@@ -217,6 +227,13 @@ class FootageReference {
     required this.internalid,
   });
 
+  /// Every audio stream this item's file carries, in the file's own order.
+  /// Empty for a file with no sound and for one that will not open.
+  List<BridgeAudioStream> audioStreams() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceAudioStreams(
+        that: this,
+      );
+
   /// Detach this item's proxy. The file on disk is left alone — a proxy took
   /// minutes to make, and forgetting it in the project is not a reason to
   /// delete it.
@@ -237,14 +254,6 @@ class FootageReference {
         that: this,
       );
 
-  /// Where this item's file is, as the *project* records it: the relative
-  /// path a saved project actually carries, falling back to the
-  /// absolute one only when the project has never been saved and there is
-  /// nothing to be relative to.
-  ///
-  /// Display data — the Project panel's Path column. It says where the
-  /// reference points, not whether anything is there; `get_status` is the
-  /// question about the disk, and this deliberately touches none.
   String filePath() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceFilePath(
         that: this,
@@ -265,8 +274,8 @@ class FootageReference {
   /// the result when it lands.
   ///
   /// Returns as soon as the job is *running*; ask [`proxy_poll`] how it is
-  /// getting on. A second one while the first runs is a calm refusal — two
-  /// transcodes share one disk.
+  /// getting on. One asked for while another runs waits its turn, since two
+  /// transcodes share one disk, and starts when the one before it lands.
   void makeProxy() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceMakeProxy(
         that: this,
@@ -277,10 +286,68 @@ class FootageReference {
         that: this,
       );
 
-  bool previewAudio() =>
+  /// A file fetched from Lumit's server for this footage item has been
+  /// opened into [`Self::online_room`]. The project reads the item from
+  /// it from now on, by the road a file sent by a person takes: an
+  /// original is held against the item's fingerprint first and thrown
+  /// away if it is not that file, and a stand-in is only taken where
+  /// there was nothing. What comes of it arrives as
+  /// [`BridgeShareEvent::Footage`].
+  void onlineArrived({required bool original}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceOnlineArrived(
+          that: this, original: original);
+
+  /// The file this machine can give Lumit's server for this footage item
+  /// of a project kept online: a stand-in of it, made now if there is
+  /// none yet, or with `original` the file itself. It is what
+  /// [`ProjectReference::online_seal`] is given as its source. `None`
+  /// when this machine has nothing to give, or is set not to.
+  ///
+  /// Not sync: making a stand-in is an encode, as long as the clip is.
+  /// [`online_cancel`] does not stop it.
+  Future<String?> onlineGive({required bool original}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceOnlineGive(
+          that: this, original: original);
+
+  /// Where a file fetched from Lumit's server for this footage item is to
+  /// be opened to, which is [`ProjectReference::online_open`]'s `out`: its
+  /// place in this machine's cache of sent footage, where a stand-in or an
+  /// original a person sent would go. `None` when the project is not kept
+  /// online or has no such item.
+  String? onlineRoom({required bool original}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceOnlineRoom(
+          that: this, original: original);
+
+  /// Play this file's own sound from the top — the Project panel's preview
+  /// (docs/07 §3.1). `false` when the file cannot be found on this machine,
+  /// so the panel can hush the button rather than offer a play that is silent.
+  /// [`Self::preview_audio_from`] starts part way in.
+  ///
+  /// There is no composition behind it and no layer made: the file is decoded
+  /// and heard as it is. Stopping is [`crate::api::audio::audio_stop`] and
+  /// where it has got to is [`crate::api::audio::audio_clock`] — one pair of
+  /// speakers, so one transport, and playing a comp silences a preview.
+  ///
+  /// Whether this file *has* any sound is [`Self::media_info`]'s
+  /// `audio_codec`, which the panel already holds; asking again here would be
+  /// a second probe for an answer that is on the screen.
+  ///
+  /// A build with no decoder can open nothing, so it says so and the button
+  /// never appears.
+  ///
+  /// **A file with several audio streams is heard as it would be placed.**
+  /// `arrival` is the setting *Several audio streams arrive as*: left out
+  /// or the first stream, the preview is the first stream; mixed or a layer
+  /// each, it is every stream together, which is what the layers it would
+  /// become sound like.
+  bool previewAudio({BridgeStreamsArrival? arrival}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferencePreviewAudio(
-        that: this,
-      );
+          that: this, arrival: arrival);
+
+  bool previewAudioFrom(
+          {required double startSeconds, BridgeStreamsArrival? arrival}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferencePreviewAudioFrom(
+          that: this, startSeconds: startSeconds, arrival: arrival);
 
   /// Where MAKE-PROXY would write this item's proxy: beside the original,
   /// with `_proxy` before a `.mov` extension.
@@ -346,6 +413,20 @@ class FootageReference {
           frames: frames,
           view: view);
 
+  /// Where this item's file is, as the *project* records it: the relative
+  /// path a saved project actually carries, falling back to the
+  /// absolute one only when the project has never been saved and there is
+  /// nothing to be relative to.
+  ///
+  /// Display data — the Project panel's Path column. It says where the
+  /// reference points, not whether anything is there; `get_status` is the
+  /// question about the disk, and this deliberately touches none.
+  /// Show this footage's file in the desktop's own file manager. False when
+  /// the file can't be found, or no window could be opened.
+  bool reveal() => BridgeLib.instance.api.crateApiFootageFootageReferenceReveal(
+        that: this,
+      );
+
   /// The rate this item's numbered run of stills plays at, or `None` when it
   /// is one ordinary file.
   ///
@@ -392,6 +473,21 @@ class FootageReference {
   /// row that has nothing to tick.
   void setUseProxy({required bool on_}) => BridgeLib.instance.api
       .crateApiFootageFootageReferenceSetUseProxy(that: this, on_: on_);
+
+  /// Ask the others for this footage item: a stand-in of it, or with
+  /// `original` the file itself. Does nothing when the project is not
+  /// shared. What comes of it arrives as [`BridgeShareEvent::Footage`].
+  void shareFetch({required bool original}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceShareFetch(
+          that: this, original: original);
+
+  /// Where this footage item is on this machine and who has the original,
+  /// while its project is shared. An item of a project that is not shared
+  /// reads as the original or missing, with nobody holding it.
+  BridgeFootageShare shareState() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceShareState(
+        that: this,
+      );
 
   Future<BridgeRenderedFrame?> thumbnail(
           {required int maxEdge, required PlatformInt64 frame}) =>

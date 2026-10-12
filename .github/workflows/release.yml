@@ -28,16 +28,14 @@ on:
   # on. The version cannot come from a branch name, so it is typed in. By
   # default it is a rehearsal that leaves the installers as run artefacts and
   # creates no release; with `publish` ticked it creates the GitHub release
-  # and its tag at the built commit, exactly as a tag push does, but the
-  # Discord announcement below stays for a tag push alone, so a release can
-  # go out and be announced by hand.
+  # and its tag at the built commit, exactly as a tag push does.
   workflow_dispatch:
     inputs:
       version:
         description: "Version to build, with or without the leading v"
         required: true
       publish:
-        description: "Create the GitHub release and its tag (no Discord announcement)"
+        description: "Create the GitHub release and its tag"
         type: boolean
         default: false
 
@@ -60,7 +58,7 @@ jobs:
       FFMPEG_SHA256: 0a41f31caff48e3035b48f09f5d840bd8d1863008240fc43e457f15e589cf5b3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
       - name: Install FFmpeg 8.1 (BtbN shared build)
@@ -115,7 +113,7 @@ jobs:
       FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
       - name: Install desktop + Flutter build dependencies
@@ -126,7 +124,7 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev \
             libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
             libwayland-dev mesa-vulkan-drivers libclang-18-dev \
-            clang cmake ninja-build libgtk-3-dev
+            clang cmake ninja-build libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: Install FFmpeg 8.1 (BtbN shared build)
         run: |
           url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
@@ -228,7 +226,7 @@ jobs:
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # master
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
       # Mirrors ci.yml's macOS jobs: FFmpeg 8.1.2 from a formula extracted out
@@ -338,8 +336,14 @@ jobs:
       # Gated on the secret, exactly as the macOS signing identity is: without
       # it the release still publishes, and an application with no pinned key
       # does not ask for a manifest. Setting the secret and pinning the key are
-      # the two halves of one change and should land together —
-      # docs/impl/release-signing.md has both commands.
+      # the two halves of one change and should land together. The key is
+      # Ed25519, made once on a machine that is not a runner:
+      #
+      #   openssl genpkey -algorithm ed25519 -out lumit-release-key.pem
+      #   openssl pkey -in lumit-release-key.pem -pubout -outform DER | tail -c 32 | base64 -w0
+      #
+      # The file's contents are the secret. The line the second command prints
+      # is what `updateSigningKey` pins.
       - name: Sign the release manifest
         env:
           RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
@@ -398,8 +402,8 @@ jobs:
           # comparison catches it before a release every updater refuses.
           # `updateSigningKey` is base64 of the raw 32-byte public key, which
           # is the last 32 bytes of the DER SubjectPublicKeyInfo. Skipped while
-          # the pin is empty, which is the tree as it stands (see
-          # docs/impl/release-signing.md for the two commands that set it).
+          # the pin is empty, which is the tree as it stands (the two commands
+          # that set it are in the comment above this step).
           pinned="$(sed -n "s/^const String updateSigningKey = '\(.*\)';\$/\1/p" \
             flutter_ui/lib/state/release_signature.dart)"
           derived="$(openssl pkey -in "$RUNNER_TEMP/release-key.pem" -pubout -outform DER \
@@ -441,25 +445,3 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "Lumit $tag" \
             --generate-notes $prerelease $before
-
-  announce:
-    name: Discord announcement
-    needs: publish
-    # Only a plain vX.Y.Z tag is announced. A suffixed one (v0.2.0-rc1) is a
-    # pre-release, and a dry run of the pipeline should not tell the community
-    # a release has happened.
-    if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
-    runs-on: ubuntu-latest
-    env:
-      # A step's `if` cannot read the `secrets` context, only `env`. Without the
-      # secret — on a fork, or before it is set — the release still succeeds and
-      # simply goes unannounced.
-      DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Post the release notes to Discord
-        if: env.DISCORD_RELEASE_WEBHOOK != ''
-        run: node scripts/discord-release.mjs "${GITHUB_REF_NAME#v}"
-      - name: Say why nothing was posted
-        if: env.DISCORD_RELEASE_WEBHOOK == ''
-        run: echo "::warning::DISCORD_RELEASE_WEBHOOK is not set, so this release was not announced in Discord."

@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "og": "node scripts/og.mjs"
   },
   "dependencies": {
+    "@astrojs/rss": "^4.0.19",
+    "@astrojs/sitemap": "^3.7.4",
     "@fontsource-variable/hanken-grotesk": "^5.3.0",
-    "@fontsource/geist-mono": "^5.3.0",
     "@tailwindcss/vite": "^4.1.0",
     "astro": "^5.14.0",
     "tailwindcss": "^4.1.0"

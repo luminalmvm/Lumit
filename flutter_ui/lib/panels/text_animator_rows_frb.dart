@@ -26,6 +26,7 @@ import '../state/comp_time.dart';
 import '../widgets/controls.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show animatorsPath;
 
 /// Matches the Effect controls panel's own cell width, so the values line up
 /// down the panel.
@@ -76,6 +77,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
           fill: document.fill,
           path: document.path,
           pathOffset: document.pathOffset,
+          style: document.style,
+          paragraph: document.paragraph,
           animators: animators,
         ),
       );
@@ -100,12 +103,15 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         onPressed: () {
           if (addTextAnimator(layer)) onChanged();
         },
-        child: Text(l10n.textAnimatorAdd),
+        child: Text(ThemeScope.of(context)
+            .theme
+            .propertyCase(l10n.textAnimatorAdd)),
       ),
     ));
 
     return FxSection(
       title: l10n.textAnimatorsSection,
+      scope: animatorsPath(layer.internallayerId.toString()),
       open: open,
       onToggle: onToggle,
       rows: rows,
@@ -310,7 +316,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         // columns.
         fixedColumns: true,
       ),
-      name: Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+      name: Text(t.propertyCase(label),
+          style: t.body, overflow: TextOverflow.ellipsis),
       control: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -339,7 +346,8 @@ class TextAnimatorRowsFrb extends StatelessWidget {
     final t = ThemeScope.of(context).theme;
     return fxTwoColumnRow(
       context: context,
-      name: Text(label, style: t.body, overflow: TextOverflow.ellipsis),
+      name: Text(t.propertyCase(label),
+          style: t.body, overflow: TextOverflow.ellipsis),
       control: SizedBox(width: _cellWidth + 60, child: control),
     );
   }
@@ -363,6 +371,8 @@ bool addTextAnimator(LayerReference layer) {
       fill: document.fill,
       path: document.path,
       pathOffset: document.pathOffset,
+      style: document.style,
+      paragraph: document.paragraph,
       animators: [
         ...document.animators,
         _freshAnimator(
@@ -524,6 +534,8 @@ void writeTextAnimatorScalar({
       fill: document.fill,
       path: document.path,
       pathOffset: document.pathOffset,
+      style: document.style,
+      paragraph: document.paragraph,
       animators: [
         for (var i = 0; i < document.animators.length; i++)
           if (i == index)

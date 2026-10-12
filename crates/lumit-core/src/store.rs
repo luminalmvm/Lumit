@@ -7,9 +7,11 @@
 
 use crate::model::Document;
 use crate::ops::{apply, Op, OpError};
+use crate::shared::{any_overlap, footprint, land, plan_merge, Conflict, Key};
 use arc_swap::{ArcSwap, ArcSwapOption};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
 /// One journal entry: the op as applied, its exact inverse, and what the step
@@ -30,8 +32,110 @@ pub struct JournalEntry {
     /// ops, and a name is for the list on screen.
     #[serde(skip)]
     pub name: &'static str,
+    /// The store revision this step was made at. A shared project compares it
+    /// with when someone else last changed the same part of the document.
+    #[serde(skip)]
+    pub at: u64,
 }
 
+/// Who a remote edit came from, as whoever delivered it names them.
+/// The store carries it through to the tap and reads nothing into it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemoteTag {
+    pub peer: u32,
+    pub id: u64,
+}
+
+/// What a shared store reports each time the document moves.
+pub enum Moved<'a> {
+    /// An edit made here. `id` is what the host's answer will quote, and
+    /// `was` is what the edit replaced, which the host lands it with.
+    Local { id: u64, op: &'a Op, was: &'a Op },
+    /// An edit from someone else, as it was applied, and what it replaced.
+    /// `as_sent` is false when that is not how its author sent it, so they
+    /// have to be told as well.
+    Remote {
+        tag: RemoteTag,
+        op: &'a Op,
+        was: &'a Op,
+        as_sent: bool,
+    },
+}
+
+/// Where a shared store reports to. Called in the order the document moved, which is
+/// the order every peer has to apply the same edits in.
+///
+/// **Called with the journal lock held**, because that lock is what gives the
+/// order. So it must not block and must not call back into the store: push to
+/// a bounded queue with `try_send` and return.
+pub type Tap = Arc<dyn Fn(Moved<'_>) + Send + Sync>;
+
+/// What a guest without its host has to merge later: the last document both
+/// had, and edits made here after it, each with what it replaced.
+pub type Apart = (Arc<Document>, Vec<(Op, Op)>);
+
+/// An edit made here that the host has not answered yet.
+struct Pending {
+    id: u64,
+    /// The edit as it was made, and what it replaced then.
+    op: Op,
+    was: Op,
+    /// How it sits on the document now: as applied, and the inverse of that.
+    /// Both change each time an edit from the host goes in underneath. `None`
+    /// while it does not apply at all.
+    landed: Option<(Op, Op)>,
+}
+
+/// Which end of a shared project this store is.
+enum Link {
+    /// The host. Every edit is ordered here.
+    Host,
+    /// A guest in step with its host, apart from `pending`, oldest first.
+    Guest { pending: VecDeque<Pending> },
+    /// A guest that has lost its host. `base` is the last document both had,
+    /// `since` every edit made here after it with what it replaced. `sent`
+    /// numbers the first of those: the ones the host had been sent and had
+    /// not answered, which it may have taken all the same.
+    Adrift {
+        base: Arc<Document>,
+        since: Vec<(Op, Op)>,
+        sent: Vec<u64>,
+    },
+}
+
+/// Take a guest's unanswered edits off `doc`, newest first, which leaves the
+/// host's document as far as this guest has heard it.
+fn unwind(pending: &VecDeque<Pending>, doc: &mut Document) -> Result<(), OpError> {
+    for p in pending.iter().rev() {
+        if let Some((_, inverse)) = &p.landed {
+            apply(doc, inverse)?;
+        }
+    }
+    Ok(())
+}
+
+/// Put them back on top, oldest first, each cut down to what was changed here
+/// ([`land`]). The host lands them the same way on the same document, so both
+/// ends arrive at the same one.
+fn relay(pending: &mut VecDeque<Pending>, doc: &mut Document) {
+    for p in pending.iter_mut() {
+        p.landed = land(doc, &p.op, Some(&p.was)).ok();
+    }
+}
+
+/// The state a store holds while its project is shared.
+///
+/// `touched` is keyed by part of the document, so it is bounded by the
+/// document's own size, and it is dropped with the rest when sharing ends.
+/// `since` grows by one op per edit while the host is away, as the crash
+/// journal does between saves, and is emptied by [`DocumentStore::rejoin`].
+struct Shared {
+    link: Link,
+    tap: Tap,
+    next_id: u64,
+    /// The revision at which someone else last changed each part.
+    touched: BTreeMap<Key, u64>,
+}
 /// The most undo steps kept in memory (docs/14 §5 compaction story, below).
 /// Generous enough that no real editing session reaches it, small enough that
 /// the history can never grow without bound. Editing software the owner knows
@@ -73,6 +177,50 @@ struct Journal {
     /// fold happens when this returns to zero, so a grouped gesture that calls
     /// a helper which groups on its own account still ends as one step.
     depth: usize,
+    /// Present while the project is shared.
+    shared: Option<Shared>,
+}
+
+impl Journal {
+    /// An edit made here has moved the document. A guest queues it until the
+    /// host answers, a guest without its host keeps it for the merge, and the
+    /// tap is told either way.
+    fn moved_locally(&mut self, op: &Op, inverse: &Op) {
+        let Some(shared) = self.shared.as_mut() else {
+            return;
+        };
+        shared.next_id += 1;
+        let id = shared.next_id;
+        match &mut shared.link {
+            Link::Host => {}
+            Link::Guest { pending } => pending.push_back(Pending {
+                id,
+                op: op.clone(),
+                was: inverse.clone(),
+                landed: Some((op.clone(), inverse.clone())),
+            }),
+            Link::Adrift { since, .. } => {
+                since.push((op.clone(), inverse.clone()));
+                return;
+            }
+        }
+        let was = inverse;
+        (shared.tap)(Moved::Local { id, op, was });
+    }
+    /// Whether moving the document from `before` to `after` would write over
+    /// something another person changed after revision `at`. Undo and redo
+    /// skip a step that would.
+    fn overwrites_others(&self, before: &Document, after: &Document, at: u64) -> bool {
+        let Some(shared) = self.shared.as_ref() else {
+            return false;
+        };
+        if shared.touched.is_empty() {
+            return false;
+        }
+        let keys = footprint(before, after);
+        let later = shared.touched.iter().filter(|(_, rev)| **rev > at);
+        any_overlap(&keys, later.map(|(key, _)| key))
+    }
 }
 
 /// One row of the **History** list: what the step is called, and
@@ -207,6 +355,53 @@ impl DocumentStore {
         self.current.store(Arc::new(doc));
     }
 
+    /// Point footage items at the files this machine reads them from: each
+    /// item's id and the path. For a file that has just arrived from someone
+    /// else in a shared project, where the item was missing or a stand-in.
+    ///
+    /// **Not an op**, for [`Self::set_ui_state`]'s reasons and one of its own.
+    /// Where a file is on this machine is never saved and never sent, so it
+    /// is nobody's edit: nothing to undo, nothing for a guest to be told, and
+    /// no reason for the project to read as changed.
+    pub fn place_media(&self, placed: &[(uuid::Uuid, String)]) {
+        let _journal = self.journal.lock();
+        let mut doc = Document::clone(&self.snapshot());
+        for (id, path) in placed {
+            if let Some(crate::model::ProjectItem::Footage(footage)) = doc.item_mut(*id) {
+                footage.media.absolute_path.clone_from(path);
+            }
+        }
+        self.current.store(Arc::new(doc));
+    }
+
+    /// Record what a save packed into the `.lum`, or what an unpack wrote back
+    /// out: the new packed map, and the references of the items an unpack
+    /// moved to the files it wrote.
+    ///
+    /// **Not an op**, for [`Self::set_ui_state`]'s reasons and one of its own.
+    /// The map says what the file on disk holds, and the save that wrote the
+    /// file has already happened. An undo that took an item back out of the
+    /// map would have the next save leave its bytes out of the archive, and
+    /// for footage whose original is gone those are the only copy.
+    pub fn set_packed(
+        &self,
+        packed: std::collections::BTreeMap<uuid::Uuid, crate::model::PackedMedia>,
+        moved: Vec<(uuid::Uuid, crate::model::MediaRef)>,
+    ) {
+        let _journal = self.journal.lock();
+        let mut doc = Document::clone(&self.snapshot());
+        doc.packed = packed;
+        for (id, media) in moved {
+            if let Some(slot) = doc.packed_ref_mut(id) {
+                *slot = media;
+            } else if let Some(path) = doc.packed_path_mut(id) {
+                // An effect's file: its parameter holds the one path.
+                *path = media.absolute_path;
+            }
+        }
+        self.current.store(Arc::new(doc));
+    }
+
     /// Push one finished step onto the undo stack, keeping it bounded.
     ///
     /// Compaction (docs/14 §5): the history stays at [`MAX_UNDO_DEPTH`] by
@@ -274,12 +469,14 @@ impl DocumentStore {
                 // The gesture is named after the first thing it did, which is
                 // what `Op::name` says of any batch.
                 let name = held.first().map_or("Several changes", |e| e.name);
+                let at = held.first().map_or(0, |e| e.at);
                 JournalEntry {
                     op: Op::Batch {
                         ops: held.into_iter().map(|e| e.op).collect(),
                     },
                     inverse: Op::Batch { ops: inverses },
                     name,
+                    at,
                 }
             }
         };
@@ -288,13 +485,37 @@ impl DocumentStore {
 
     /// Apply an operation, journal it, publish the new snapshot.
     pub fn commit(&self, op: Op) -> Result<Arc<Document>, OpError> {
+        self.commit_as(op, None)
+    }
+
+    /// [`Self::commit`] for an edit made against an older document, such as
+    /// one a merge held back. Only what its author changed from `was` is
+    /// written ([`land`]).
+    pub fn commit_over(&self, op: Op, was: &Op) -> Result<Arc<Document>, OpError> {
+        self.commit_as(op, Some(was))
+    }
+
+    fn commit_as(&self, op: Op, was: Option<&Op>) -> Result<Arc<Document>, OpError> {
         let mut journal = self.journal.lock();
         let mut doc = Document::clone(&self.snapshot());
-        let inverse = apply(&mut doc, &op)?;
+        let (op, inverse) = match was {
+            Some(_) => land(&mut doc, &op, was)?,
+            None => {
+                let inverse = apply(&mut doc, &op)?;
+                (op, inverse)
+            }
+        };
 
         let observed = op.clone();
         let name = op.name();
-        let entry = JournalEntry { op, inverse, name };
+        journal.moved_locally(&op, &inverse);
+        let at = self.revision() + 1;
+        let entry = JournalEntry {
+            op,
+            inverse,
+            name,
+            at,
+        };
         // Inside a group the entry waits to be folded; outside one it is the
         // step. Redo is cleared either way — the document has moved, so the
         // forward history is gone whether or not a gesture is still running.
@@ -315,17 +536,39 @@ impl DocumentStore {
     /// Undo the most recent operation. Ok(None) when there is nothing to undo.
     pub fn undo(&self) -> Result<Option<Arc<Document>>, OpError> {
         let mut journal = self.journal.lock();
-        let Some(entry) = journal.undo.pop() else {
-            return Ok(None);
+        let shared = journal.shared.is_some();
+        let before = self.snapshot();
+        let (entry, doc, applied, op) = loop {
+            let Some(entry) = journal.undo.pop() else {
+                return Ok(None);
+            };
+            let mut doc = Document::clone(&before);
+            // Applying the inverse yields the original op again — symmetry by construction.
+            // In a shared project the step is landed, so it takes back what
+            // this person changed and leaves what anyone else has changed
+            // around it since.
+            let undone = if shared {
+                land(&mut doc, &entry.inverse, Some(&entry.op))
+            } else {
+                apply(&mut doc, &entry.inverse).map(|op| (entry.inverse.clone(), op))
+            };
+            match undone {
+                // In a shared project a step can stop applying because someone
+                // else removed what it changed, or would write over what they
+                // changed since. Either is dropped and the step before it tried.
+                Err(_) if shared => {}
+                Err(e) => return Err(e),
+                Ok(_) if journal.overwrites_others(&before, &doc, entry.at) => {}
+                Ok((applied, op)) => break (entry, doc, applied, op),
+            }
         };
-        let mut doc = Document::clone(&self.snapshot());
-        // Applying the inverse yields the original op again — symmetry by construction.
-        let op = apply(&mut doc, &entry.inverse)?;
-        let observed = entry.inverse.clone();
+        let observed = applied.clone();
+        journal.moved_locally(&applied, &op);
         journal.redo.push(JournalEntry {
             op,
-            inverse: entry.inverse.clone(),
+            inverse: applied,
             name: entry.name,
+            at: self.revision() + 1,
         });
         let arc = Arc::new(doc);
         self.current.store(arc.clone());
@@ -341,16 +584,33 @@ impl DocumentStore {
     /// Redo the most recently undone operation. Ok(None) when nothing to redo.
     pub fn redo(&self) -> Result<Option<Arc<Document>>, OpError> {
         let mut journal = self.journal.lock();
-        let Some(entry) = journal.redo.pop() else {
-            return Ok(None);
+        let shared = journal.shared.is_some();
+        let before = self.snapshot();
+        // The same landing and skipping as `undo`, for the same reasons.
+        let (entry, doc, applied, inverse) = loop {
+            let Some(entry) = journal.redo.pop() else {
+                return Ok(None);
+            };
+            let mut doc = Document::clone(&before);
+            let redone = if shared {
+                land(&mut doc, &entry.op, Some(&entry.inverse))
+            } else {
+                apply(&mut doc, &entry.op).map(|inverse| (entry.op.clone(), inverse))
+            };
+            match redone {
+                Err(_) if shared => {}
+                Err(e) => return Err(e),
+                Ok(_) if journal.overwrites_others(&before, &doc, entry.at) => {}
+                Ok((applied, inverse)) => break (entry, doc, applied, inverse),
+            }
         };
-        let mut doc = Document::clone(&self.snapshot());
-        let observed = entry.op.clone();
-        let inverse = apply(&mut doc, &entry.op)?;
+        let observed = applied.clone();
+        journal.moved_locally(&applied, &inverse);
         journal.undo.push(JournalEntry {
-            op: entry.op,
+            op: applied,
             inverse,
             name: entry.name,
+            at: self.revision() + 1,
         });
         let arc = Arc::new(doc);
         self.current.store(arc.clone());
@@ -359,6 +619,360 @@ impl DocumentStore {
         self.notify(observed);
 
         Ok(Some(arc))
+    }
+    /// Start sharing this project, as the host or as a guest of one. A guest
+    /// calls this on a store that holds exactly the host's document.
+    pub fn share(&self, guest: bool, tap: Tap) {
+        let link = if guest {
+            Link::Guest {
+                pending: VecDeque::new(),
+            }
+        } else {
+            Link::Host
+        };
+        self.journal.lock().shared = Some(Shared {
+            link,
+            tap,
+            next_id: 0,
+            touched: BTreeMap::new(),
+        });
+    }
+
+    /// Run `f` on the document with no edit able to land until it returns.
+    ///
+    /// How a host seats a new guest: the guest is put on the list for every
+    /// later edit in the same moment its copy of the document is taken, so it
+    /// misses none and gets none twice. `f` runs under the journal lock, so it
+    /// has the [`Tap`]'s rules: quick, and no calling back into the store.
+    pub fn frozen<R>(&self, f: impl FnOnce(Arc<Document>) -> R) -> R {
+        let _journal = self.journal.lock();
+        f(self.snapshot())
+    }
+
+    /// Carry on as a guest that lost its host before this store was made:
+    /// one whose edits since were kept and read back. `base` is the last
+    /// document both had, `since` the edits made here after it, and the store
+    /// holds `base` with those applied. [`Self::rejoin`] takes it from there.
+    pub fn share_apart(&self, tap: Tap, base: Arc<Document>, since: Vec<(Op, Op)>) {
+        self.share_apart_sent(tap, base, since, Vec::new());
+    }
+
+    /// [`Self::share_apart`] for a copy whose first edits were sent before it
+    /// closed and never answered. `sent` numbers them as they were sent, so
+    /// [`Self::rejoin`] can tell which of them were taken all the same, and
+    /// edits made from now on are numbered after them.
+    pub fn share_apart_sent(
+        &self,
+        tap: Tap,
+        base: Arc<Document>,
+        since: Vec<(Op, Op)>,
+        sent: Vec<u64>,
+    ) {
+        self.journal.lock().shared = Some(Shared {
+            next_id: sent.iter().copied().max().unwrap_or(0),
+            link: Link::Adrift { base, since, sent },
+            tap,
+            touched: BTreeMap::new(),
+        });
+    }
+
+    /// A guest's unanswered edits as they sit on the document now, oldest
+    /// first: each one's number, and the op it lands as on the host's
+    /// document as far as this guest has heard it. `None` for one that no
+    /// longer lands. Empty for anyone else.
+    #[must_use]
+    pub fn pending(&self) -> Vec<(u64, Option<Op>)> {
+        let journal = self.journal.lock();
+        match journal.shared.as_ref().map(|shared| &shared.link) {
+            Some(Link::Guest { pending }) => {
+                let landed = |p: &Pending| p.landed.as_ref().map(|(op, _)| op.clone());
+                pending.iter().map(|p| (p.id, landed(p))).collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// The host's document as far as this guest has heard it: the one here
+    /// with this guest's unanswered edits taken off. `None` for anyone else,
+    /// and when they do not come off, which means the two have drifted
+    /// apart.
+    #[must_use]
+    pub fn heard(&self) -> Option<Document> {
+        let journal = self.journal.lock();
+        let Link::Guest { pending } = &journal.shared.as_ref()?.link else {
+            return None;
+        };
+        let mut doc = Document::clone(&self.snapshot());
+        unwind(pending, &mut doc).ok()?;
+        Some(doc)
+    }
+
+    /// What a guest without its host has to keep to merge later, with the
+    /// edits from number `from` on. `None` for anyone else.
+    #[must_use]
+    pub fn apart(&self, from: usize) -> Option<Apart> {
+        let journal = self.journal.lock();
+        match &journal.shared.as_ref()?.link {
+            Link::Adrift { base, since, .. } => {
+                Some((base.clone(), since.get(from..).unwrap_or_default().to_vec()))
+            }
+            _ => None,
+        }
+    }
+
+    /// What a save writes for a guest without its host: the document, the
+    /// revision at it, and how many of the edits [`Self::apart`] gives are in
+    /// it, taken in one moment. `None` for anyone else.
+    #[must_use]
+    pub fn saving_apart(&self) -> Option<(Arc<Document>, u64, usize)> {
+        let journal = self.journal.lock();
+        match &journal.shared.as_ref()?.link {
+            Link::Adrift { since, .. } => Some((self.snapshot(), self.revision(), since.len())),
+            _ => None,
+        }
+    }
+
+    /// How many of the edits [`Self::apart`] gives, its first ones, were made
+    /// with the host still there and were on their way to it when it was lost.
+    #[must_use]
+    pub fn in_flight(&self) -> usize {
+        let journal = self.journal.lock();
+        match journal.shared.as_ref().map(|shared| &shared.link) {
+            Some(Link::Adrift { sent, .. }) => sent.len(),
+            _ => 0,
+        }
+    }
+
+    /// How many edits made here the host has not taken: a guest's unanswered
+    /// ones, or every one made since it lost its host.
+    #[must_use]
+    pub fn unanswered(&self) -> usize {
+        let journal = self.journal.lock();
+        match journal.shared.as_ref().map(|shared| &shared.link) {
+            Some(Link::Guest { pending }) => pending.len(),
+            Some(Link::Adrift { since, .. }) => since.len(),
+            _ => 0,
+        }
+    }
+
+    /// Stop sharing. The document stays as it is, unanswered edits included.
+    pub fn unshare(&self) {
+        self.journal.lock().shared = None;
+    }
+
+    /// Apply an edit someone else made, without it becoming an undo step here.
+    ///
+    /// The host is handed a guest's edit with what it replaced there, and
+    /// lands it on the document as it stands ([`land`]). A guest is handed
+    /// the host's edits as the host applied them, with no `was`. Its document
+    /// is the host's plus its own unanswered edits, and the host ordered this
+    /// edit before those, so they are taken off, the edit applied, and they
+    /// are landed back on top.
+    ///
+    /// An error on the host means the edit is refused. On a guest it means the
+    /// two documents have drifted apart and the guest has to ask for the
+    /// host's again.
+    pub fn commit_remote(&self, op: &Op, was: Option<&Op>, tag: RemoteTag) -> Result<(), OpError> {
+        let mut journal = self.journal.lock();
+        let Some(shared) = journal.shared.as_mut() else {
+            return Ok(());
+        };
+        let snapshot = self.snapshot();
+        let mut doc = Document::clone(&snapshot);
+        let (applied, replaced, keys) = match &mut shared.link {
+            Link::Adrift { .. } => return Ok(()),
+            Link::Host => {
+                let (applied, replaced) = land(&mut doc, op, was)?;
+                (applied, replaced, footprint(&snapshot, &doc))
+            }
+            Link::Guest { pending } => {
+                unwind(pending, &mut doc)?;
+                let theirs = (!pending.is_empty()).then(|| doc.clone());
+                let replaced = apply(&mut doc, op)?;
+                let keys = footprint(theirs.as_ref().unwrap_or(&snapshot), &doc);
+                relay(pending, &mut doc);
+                (op.clone(), replaced, keys)
+            }
+        };
+        let revision = self.revision() + 1;
+        shared
+            .touched
+            .extend(keys.into_iter().map(|k| (k, revision)));
+        (shared.tap)(Moved::Remote {
+            tag,
+            op: &applied,
+            was: &replaced,
+            as_sent: applied == *op,
+        });
+        self.current.store(Arc::new(doc));
+        self.bump_revision();
+        drop(journal);
+        self.notify(applied);
+        Ok(())
+    }
+
+    /// The host applied this guest's oldest unanswered edit just as it was
+    /// sent. False when that is not how the edit sits here, which means the
+    /// two documents have drifted apart.
+    pub fn acknowledge(&self, id: u64) -> bool {
+        let mut journal = self.journal.lock();
+        let Some(Shared {
+            link: Link::Guest { pending },
+            ..
+        }) = journal.shared.as_mut()
+        else {
+            return false;
+        };
+        let as_sent = pending.front().is_some_and(|p| {
+            p.id == id
+                && p.landed
+                    .as_ref()
+                    .is_some_and(|(applied, _)| *applied == p.op)
+        });
+        if as_sent {
+            pending.pop_front();
+        }
+        as_sent
+    }
+
+    /// The host applied this guest's edit `id` as `op`, which is not how it
+    /// was sent: an insert moved to the end, or a value cut down to what this
+    /// guest changed. The host's version goes in underneath the edits made
+    /// here since. An error means the documents have drifted apart.
+    pub fn commit_answer(&self, id: u64, op: &Op) -> Result<(), OpError> {
+        let mut journal = self.journal.lock();
+        let Some(Shared {
+            link: Link::Guest { pending },
+            ..
+        }) = journal.shared.as_mut()
+        else {
+            return Ok(());
+        };
+        // It usually landed here the way it landed there.
+        let same = pending.front().is_some_and(|p| {
+            p.id == id && p.landed.as_ref().is_some_and(|(applied, _)| applied == op)
+        });
+        if same {
+            pending.pop_front();
+            return Ok(());
+        }
+        let mut doc = Document::clone(&self.snapshot());
+        unwind(pending, &mut doc)?;
+        apply(&mut doc, op)?;
+        pending.retain(|p| p.id != id);
+        relay(pending, &mut doc);
+        self.current.store(Arc::new(doc));
+        self.bump_revision();
+        drop(journal);
+        self.notify(op.clone());
+        Ok(())
+    }
+
+    /// The host refused one of this guest's edits, so it is taken back out
+    /// from under the unanswered edits made after it. An error means the
+    /// documents have drifted apart.
+    pub fn reject(&self, id: u64) -> Result<(), OpError> {
+        let mut journal = self.journal.lock();
+        let Some(Shared {
+            link: Link::Guest { pending },
+            ..
+        }) = journal.shared.as_mut()
+        else {
+            return Ok(());
+        };
+        let Some(index) = pending.iter().position(|p| p.id == id) else {
+            return Ok(());
+        };
+        let mut doc = Document::clone(&self.snapshot());
+        unwind(pending, &mut doc)?;
+        let refused = pending.remove(index).and_then(|p| p.landed);
+        relay(pending, &mut doc);
+        self.current.store(Arc::new(doc));
+        self.bump_revision();
+        drop(journal);
+        if let Some((_, inverse)) = refused {
+            self.notify(inverse);
+        }
+        Ok(())
+    }
+
+    /// This guest has lost its host. Edits go on being made and are kept, so
+    /// [`Self::rejoin`] can bring them onto whatever the host has by then.
+    pub fn cast_adrift(&self) {
+        let mut journal = self.journal.lock();
+        let Some(shared) = journal.shared.as_mut() else {
+            return;
+        };
+        let Link::Guest { pending } = &shared.link else {
+            return;
+        };
+        let mut base = Document::clone(&self.snapshot());
+        let _ = unwind(pending, &mut base);
+        let since = pending.iter().map(|p| (p.op.clone(), p.was.clone()));
+        shared.link = Link::Adrift {
+            since: since.collect(),
+            sent: pending.iter().map(|p| p.id).collect(),
+            base: Arc::new(base),
+        };
+    }
+
+    /// This guest has its host back, and `theirs` is the host's document now.
+    ///
+    /// Every edit made here since the host was lost is brought onto it
+    /// ([`plan_merge`]). The ones that touch nothing the host's side changed
+    /// are applied and sent like any other edit. The rest come back as
+    /// conflicts for the person to choose between, with the edits that no
+    /// longer apply at all, and the document as it stood here just before,
+    /// which has all of them on it. The undo history is cleared, because its
+    /// steps were made against a document that is no longer this one.
+    ///
+    /// `heard` is the last of this guest's edits the host took before it was
+    /// lost, by the host's own account, or 0 for none. The answers to those
+    /// went with the connection. They are in `theirs` already, so they are
+    /// left out here and not made a second time.
+    pub fn rejoin(&self, theirs: Document, heard: u64) -> (Vec<Conflict>, Vec<Op>, Arc<Document>) {
+        let mut journal = self.journal.lock();
+        let before = self.snapshot();
+        let Some(shared) = journal.shared.as_mut() else {
+            return (Vec::new(), Vec::new(), before);
+        };
+        let Link::Adrift { base, since, sent } = &shared.link else {
+            return (Vec::new(), Vec::new(), before);
+        };
+        let taken = sent.iter().take_while(|id| **id <= heard).count();
+        // What the host took of this guest's own before it was lost is this
+        // guest's doing, not the host's. It goes onto the base, so that only
+        // what someone else changed is held against the edits made here
+        // since. Left off, the guest's next edit to the same thing would be
+        // held back as if another person had been at it.
+        let mut own = Document::clone(base);
+        for (op, _) in since.iter().take(taken) {
+            let _ = apply(&mut own, op);
+        }
+        let merge = plan_merge(&own, theirs, since.get(taken..).unwrap_or_default());
+        let mut pending = VecDeque::with_capacity(merge.clean.len());
+        for (op, was) in merge.clean {
+            shared.next_id += 1;
+            let id = shared.next_id;
+            (shared.tap)(Moved::Local {
+                id,
+                op: &op,
+                was: &was,
+            });
+            pending.push_back(Pending {
+                id,
+                op: op.clone(),
+                was: was.clone(),
+                landed: Some((op, was)),
+            });
+        }
+        shared.link = Link::Guest { pending };
+        shared.touched.clear();
+        journal.undo.clear();
+        journal.redo.clear();
+        self.current.store(Arc::new(merge.merged));
+        self.bump_revision();
+        (merge.conflicts, merge.refused, before)
     }
 
     /// The retained undo ops, oldest first (at most [`MAX_UNDO_DEPTH`] after
@@ -458,244 +1072,6 @@ mod tests {
     use crate::time::{CompTime, Duration, FrameRate, Rational};
     use uuid::Uuid;
 
-    /// **A project's own cache location is an ordinary op**, so it undoes like
-    /// anything else and is journalled with the rest — which is what puts it in
-    /// the `.lum` and lets it travel with a copy of the project (docs/06 §5.4).
-    /// Clearing it is the same op carrying nothing, which is what makes the
-    /// round trip work in both directions.
-    #[test]
-    fn a_projects_cache_location_is_an_undoable_op() {
-        let store = DocumentStore::new(Document::new());
-        assert!(store.snapshot().cache_location.is_none());
-
-        store
-            .commit(Op::SetCacheLocation {
-                location: Some(CacheLocation::Custom {
-                    folder: "E:/scratch".into(),
-                }),
-            })
-            .unwrap();
-        assert_eq!(
-            store.snapshot().cache_location,
-            Some(CacheLocation::Custom {
-                folder: "E:/scratch".into()
-            })
-        );
-
-        store.undo().unwrap();
-        assert!(
-            store.snapshot().cache_location.is_none(),
-            "undo puts the project back to following the application"
-        );
-        store.redo().unwrap();
-        assert!(store.snapshot().cache_location.is_some());
-    }
-
-    /// **The colour shelf is one coarse, exactly invertible op** (docs/03 §8):
-    /// keeping a colour and forgetting one are both a whole-list swap, so each
-    /// is one undo step and undo puts the previous shelf back — including the
-    /// colour a remove took out.
-    #[test]
-    fn the_project_colour_shelf_undoes_and_redoes() {
-        let store = DocumentStore::new(Document::new());
-        assert!(store.snapshot().swatches.is_empty());
-
-        let red = Swatch {
-            colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
-            name: None,
-        };
-        let blue = Swatch {
-            colour: LinearColour([0.0, 0.0, 1.0, 1.0]),
-            name: Some("Sky".into()),
-        };
-
-        store
-            .commit(Op::SetProjectSwatches {
-                swatches: vec![red.clone()],
-            })
-            .unwrap();
-        store
-            .commit(Op::SetProjectSwatches {
-                swatches: vec![red.clone(), blue.clone()],
-            })
-            .unwrap();
-        assert_eq!(store.snapshot().swatches, vec![red.clone(), blue.clone()]);
-
-        // Forgetting the first one is the same op with the shorter list.
-        store
-            .commit(Op::SetProjectSwatches {
-                swatches: vec![blue.clone()],
-            })
-            .unwrap();
-        assert_eq!(store.snapshot().swatches, vec![blue.clone()]);
-
-        store.undo().unwrap();
-        assert_eq!(
-            store.snapshot().swatches,
-            vec![red.clone(), blue.clone()],
-            "undo brings the forgotten colour back in its place"
-        );
-        store.undo().unwrap();
-        assert_eq!(store.snapshot().swatches, vec![red.clone()]);
-        store.redo().unwrap();
-        assert_eq!(store.snapshot().swatches, vec![red, blue]);
-    }
-
-    /// **Both colour ops undo like anything else** (docs/impl/ocio.md
-    /// §3.1). The project's config and one item's colour space are ordinary
-    /// document changes: they change what every comp looks like, so they are
-    /// journalled, saved and reversible, and clearing either is the same op
-    /// carrying nothing — which is what makes the round trip work both ways.
-    #[test]
-    fn the_two_colour_ops_are_undoable_like_any_other() {
-        let mut doc = Document::new();
-        let id = Uuid::now_v7();
-        doc.items.push(crate::model::ProjectItem::Footage(
-            crate::model::FootageItem {
-                sequence: None,
-                id,
-                name: "shot.mov".into(),
-                media: crate::model::MediaRef {
-                    relative_path: "shot.mov".into(),
-                    absolute_path: "/tmp/shot.mov".into(),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                },
-                colour_space: None,
-                extra: serde_json::Map::new(),
-            },
-        ));
-        let store = DocumentStore::new(doc);
-        assert!(store.snapshot().colour.config.is_none());
-
-        store
-            .commit(Op::SetColourConfig {
-                config: Some(Box::new(crate::model::MediaRef {
-                    relative_path: "ocio/config.ocio".into(),
-                    absolute_path: "/tmp/ocio/config.ocio".into(),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                })),
-            })
-            .unwrap();
-        store
-            .commit(Op::SetFootageColourSpace {
-                id,
-                space: Some("ACEScct".into()),
-            })
-            .unwrap();
-
-        let snap = store.snapshot();
-        assert_eq!(
-            snap.colour
-                .config
-                .as_ref()
-                .map(|c| c.relative_path.as_str()),
-            Some("ocio/config.ocio")
-        );
-        let space = |d: &Document| match d.item(id) {
-            Some(crate::model::ProjectItem::Footage(f)) => f.colour_space.clone(),
-            _ => None,
-        };
-        assert_eq!(space(&snap).as_deref(), Some("ACEScct"));
-
-        store.undo().unwrap();
-        assert_eq!(space(&store.snapshot()), None);
-        store.undo().unwrap();
-        assert!(
-            store.snapshot().colour.config.is_none(),
-            "undo puts the project back to the built-in family"
-        );
-        store.redo().unwrap();
-        store.redo().unwrap();
-        assert!(store.snapshot().colour.config.is_some());
-        assert_eq!(space(&store.snapshot()).as_deref(), Some("ACEScct"));
-    }
-
-    /// An assignment on an item that is not there refuses rather than being
-    /// silently dropped — the same answer `SetMediaRef` gives.
-    #[test]
-    fn assigning_a_colour_space_to_nothing_refuses() {
-        let store = DocumentStore::new(Document::new());
-        let err = store.commit(Op::SetFootageColourSpace {
-            id: Uuid::now_v7(),
-            space: Some("ACEScct".into()),
-        });
-        assert!(
-            matches!(err, Err(crate::ops::OpError::UnknownItem)),
-            "{err:?}"
-        );
-    }
-
-    /// **The rate of a run of stills is the item's own, and setting it is one
-    /// undo step** (docs/07 §3.1). Stills carry no rate, so an imported run
-    /// plays at 25 until somebody says otherwise; undo puts the old rate back
-    /// exactly, and an item that is one file has no rate to set.
-    #[test]
-    fn a_sequence_takes_a_new_rate_and_gives_the_old_one_back() {
-        let mut doc = Document::new();
-        let run = Uuid::now_v7();
-        let still = Uuid::now_v7();
-        let item = |id: Uuid, name: &str, sequence| {
-            crate::model::ProjectItem::Footage(crate::model::FootageItem {
-                id,
-                name: name.into(),
-                media: crate::model::MediaRef {
-                    relative_path: name.into(),
-                    absolute_path: format!("/tmp/{name}"),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                },
-                colour_space: None,
-                sequence,
-                extra: serde_json::Map::new(),
-            })
-        };
-        doc.items.push(item(
-            run,
-            "frame[0001-0050].png",
-            Some(crate::model::SequenceRef::default()),
-        ));
-        doc.items.push(item(still, "shot.mov", None));
-        let store = DocumentStore::new(doc);
-
-        let rate = |d: &Document| match d.item(run) {
-            Some(crate::model::ProjectItem::Footage(f)) => f.sequence_fps(),
-            _ => None,
-        };
-        assert_eq!(rate(&store.snapshot()), Some((25, 1)), "the import default");
-
-        let ntsc = crate::time::FrameRate::new(24000, 1001).expect("a real rate");
-        store
-            .commit(Op::SetSequenceRate {
-                id: run,
-                frame_rate: ntsc,
-            })
-            .expect("a run takes a rate");
-        assert_eq!(
-            rate(&store.snapshot()),
-            Some((24000, 1001)),
-            "the exact pair, not a rounding of it"
-        );
-
-        store.undo().expect("one step");
-        assert_eq!(rate(&store.snapshot()), Some((25, 1)), "undo puts it back");
-        store.redo().expect("and forward again");
-        assert_eq!(rate(&store.snapshot()), Some((24000, 1001)));
-
-        // One file has no rate of its own to correct, and neither has nothing.
-        for id in [still, Uuid::now_v7()] {
-            let err = store.commit(Op::SetSequenceRate {
-                id,
-                frame_rate: ntsc,
-            });
-            assert!(
-                matches!(err, Err(crate::ops::OpError::UnknownItem)),
-                "{err:?}"
-            );
-        }
-    }
-
     /// **The arrangement is carried, not edited**. Moving a panel is not
     /// work done to the project, so recording it must not put a step on the undo
     /// stack — Ctrl-Z after a save would otherwise rearrange the window — and
@@ -727,30 +1103,6 @@ mod tests {
         assert!(store.snapshot().cache_location.is_none());
     }
 
-    fn folder_named(doc: &Document, id: Uuid) -> String {
-        doc.folder(id).expect("the folder exists").name.clone()
-    }
-
-    /// The Project panel's Folder button: one op batch, one undo step,
-    /// and with no parent named the folder lands at the panel root.
-    #[test]
-    fn making_a_folder_is_one_undoable_step() {
-        let store = DocumentStore::new(Document::new());
-        let (id, ops) = crate::ops::new_folder_ops(&store.snapshot(), "Renders", None);
-        store.commit(Op::Batch { ops }).unwrap();
-
-        assert_eq!(folder_named(&store.snapshot(), id), "Renders");
-        assert!(
-            store.snapshot().root_items().contains(&id),
-            "with no parent it sits at the panel root"
-        );
-
-        store.undo().unwrap();
-        assert!(store.snapshot().folder(id).is_none(), "one step, not two");
-        store.redo().unwrap();
-        assert_eq!(folder_named(&store.snapshot(), id), "Renders");
-    }
-
     /// A parent files the new folder inside it, and the whole thing is still
     /// one undo step — the folder and its filing arrive and leave together.
     #[test]
@@ -774,18 +1126,6 @@ mod tests {
             store.snapshot().folder(outer).unwrap().children.is_empty(),
             "undoing takes the filing back with the folder"
         );
-    }
-
-    /// A parent that has since been deleted is not an error: the folder lands
-    /// at the root, which is where the panel would have drawn it anyway.
-    #[test]
-    fn an_unknown_parent_leaves_the_new_folder_at_the_root() {
-        let store = DocumentStore::new(Document::new());
-        let (id, ops) =
-            crate::ops::new_folder_ops(&store.snapshot(), "Renders", Some(Uuid::now_v7()));
-        assert_eq!(ops.len(), 1, "nothing to file it into");
-        store.commit(Op::Batch { ops }).unwrap();
-        assert!(store.snapshot().root_items().contains(&id));
     }
 
     /// A solid at the panel root, to have something that is not a folder to
@@ -859,23 +1199,6 @@ mod tests {
         assert!(store.snapshot().root_items().contains(&item));
     }
 
-    /// Filing something where it already sits changes nothing, so there is
-    /// nothing to commit — a dropped item that never moved must not leave an
-    /// undo step behind.
-    #[test]
-    fn filing_an_item_where_it_already_is_composes_no_ops() {
-        let store = DocumentStore::new(Document::new());
-        let footage = make_folder(&store, "Footage");
-        let item = loose_item(&store);
-        let ops = crate::ops::move_to_folder_ops(&store.snapshot(), item, footage).unwrap();
-        store.commit(Op::Batch { ops }).unwrap();
-
-        assert_eq!(
-            crate::ops::move_to_folder_ops(&store.snapshot(), item, footage),
-            Some(Vec::new())
-        );
-    }
-
     /// The three refusals: an unknown folder, a folder into itself, and a
     /// folder into its own descendant — that last one would take the whole
     /// branch off the panel root with nothing left to drag it back by.
@@ -917,132 +1240,6 @@ mod tests {
         );
     }
 
-    /// A blank name takes the next unused "Folder N", counting past the names
-    /// already taken rather than off the number of folders — so renaming one
-    /// away cannot make the next press of the button collide with a name in use.
-    #[test]
-    fn a_blank_folder_name_takes_the_next_unused_number() {
-        let store = DocumentStore::new(Document::new());
-        for expected in ["Folder 1", "Folder 2", "Folder 3"] {
-            let (id, ops) = crate::ops::new_folder_ops(&store.snapshot(), "   ", None);
-            store.commit(Op::Batch { ops }).unwrap();
-            assert_eq!(folder_named(&store.snapshot(), id), expected);
-        }
-
-        let first = store.snapshot().root_items()[0];
-        store
-            .commit(Op::RenameItem {
-                id: first,
-                name: "Renders".into(),
-            })
-            .unwrap();
-        let (id, ops) = crate::ops::new_folder_ops(&store.snapshot(), "", None);
-        store.commit(Op::Batch { ops }).unwrap();
-        assert_eq!(
-            folder_named(&store.snapshot(), id),
-            "Folder 1",
-            "the default fills the gap a rename left rather than colliding"
-        );
-    }
-
-    /// **An item's colour tag is an ordinary op**: undoable, journalled
-    /// and saved with the project like a layer's label. Untagged is the absence
-    /// of an entry rather than an entry saying zero, so tagging an item and
-    /// untagging it again leaves the document exactly as it was found — which
-    /// is what keeps a project nobody has tagged free of a line for it.
-    #[test]
-    fn a_project_items_colour_tag_is_an_undoable_op() {
-        let store = DocumentStore::new(Document::new());
-        let folder = Folder {
-            id: Uuid::now_v7(),
-            name: "Renders".into(),
-            children: Vec::new(),
-            extra: serde_json::Map::new(),
-        };
-        let id = folder.id;
-        store
-            .commit(Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Folder(folder)),
-            })
-            .unwrap();
-        assert_eq!(store.snapshot().item_label(id), 0, "untagged to start");
-
-        store.commit(Op::SetItemLabel { id, label: 4 }).unwrap();
-        assert_eq!(store.snapshot().item_label(id), 4);
-
-        store.commit(Op::SetItemLabel { id, label: 0 }).unwrap();
-        assert_eq!(store.snapshot().item_label(id), 0);
-        assert!(
-            store.snapshot().item_labels.is_empty(),
-            "untagging removes the entry rather than storing a zero"
-        );
-
-        store.undo().unwrap();
-        assert_eq!(store.snapshot().item_label(id), 4, "undo brings it back");
-        store.undo().unwrap();
-        assert_eq!(store.snapshot().item_label(id), 0);
-        store.redo().unwrap();
-        assert_eq!(store.snapshot().item_label(id), 4);
-    }
-
-    /// A tag on an item that does not exist would sit in the map for ever, so
-    /// the op refuses rather than recording it.
-    #[test]
-    fn tagging_an_unknown_item_is_refused() {
-        let store = DocumentStore::new(Document::new());
-        assert_eq!(
-            store.commit(Op::SetItemLabel {
-                id: Uuid::now_v7(),
-                label: 3
-            }),
-            Err(crate::ops::OpError::UnknownItem)
-        );
-        assert!(store.snapshot().item_labels.is_empty());
-    }
-
-    /// The tag survives the item being deleted and undeleted: `RemoveItem`'s
-    /// inverse puts the item back, and it comes back wearing its colour.
-    #[test]
-    fn a_tag_survives_delete_and_undo() {
-        let store = DocumentStore::new(Document::new());
-        let folder = Folder {
-            id: Uuid::now_v7(),
-            name: "Renders".into(),
-            children: Vec::new(),
-            extra: serde_json::Map::new(),
-        };
-        let id = folder.id;
-        store
-            .commit(Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Folder(folder)),
-            })
-            .unwrap();
-        store.commit(Op::SetItemLabel { id, label: 7 }).unwrap();
-        store.commit(Op::RemoveItem { id }).unwrap();
-        store.undo().unwrap();
-        assert_eq!(store.snapshot().item_label(id), 7);
-    }
-
-    /// Old projects have no tags at all, and reading one back must not fail on
-    /// a field it has never heard of (docs/10 §1.1's serde-default rule). An
-    /// untagged document also writes no line for them.
-    #[test]
-    fn a_project_without_tags_loads_untagged_and_writes_no_line() {
-        let store = DocumentStore::new(Document::new());
-        assert!(
-            !json(&store.snapshot()).contains("item_labels"),
-            "an untagged project gains no line for tags"
-        );
-
-        let mut older: serde_json::Value = serde_json::from_str(&json(&store.snapshot())).unwrap();
-        older.as_object_mut().unwrap().remove("item_labels");
-        let doc: Document = serde_json::from_value(older).unwrap();
-        assert!(doc.item_labels.is_empty());
-        assert_eq!(doc.item_label(Uuid::now_v7()), 0);
-    }
-
     /// **Attaching, switching and detaching a proxy are ordinary undoable
     /// edits**: one step each, each its own inverse, and detaching
     /// leaves the document exactly as it was found so a project whose proxies
@@ -1068,6 +1265,7 @@ mod tests {
                     },
                     extra: serde_json::Map::new(),
                     colour_space: None,
+                    source_layer: None,
                 })),
             })
             .unwrap();
@@ -1169,50 +1367,6 @@ mod tests {
         assert!(store.snapshot().proxy(id).is_some());
     }
 
-    /// A proxy on an item that is not footage, or on nothing at all, would sit
-    /// in the map for ever unread — and a *use proxy* switch with no proxy
-    /// under it is a control the panel is not drawing. Both refuse.
-    #[test]
-    fn proxy_ops_refuse_what_they_cannot_mean() {
-        let store = DocumentStore::new(Document::new());
-        let folder = Folder {
-            id: Uuid::now_v7(),
-            name: "Renders".into(),
-            children: Vec::new(),
-            extra: serde_json::Map::new(),
-        };
-        let folder_id = folder.id;
-        store
-            .commit(Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Folder(folder)),
-            })
-            .unwrap();
-
-        assert_eq!(
-            store.commit(Op::SetItemProxy {
-                id: folder_id,
-                proxy: None
-            }),
-            Err(crate::ops::OpError::UnknownItem)
-        );
-        assert_eq!(
-            store.commit(Op::SetItemProxy {
-                id: Uuid::now_v7(),
-                proxy: None
-            }),
-            Err(crate::ops::OpError::UnknownItem)
-        );
-        assert_eq!(
-            store.commit(Op::SetItemUseProxy {
-                id: folder_id,
-                use_proxy: true
-            }),
-            Err(crate::ops::OpError::UnknownItem)
-        );
-        assert!(store.snapshot().proxies.is_empty());
-    }
-
     fn t(n: i64, d: i64) -> CompTime {
         CompTime(Rational::new(n, d).unwrap())
     }
@@ -1256,6 +1410,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             pan: crate::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -1292,6 +1447,7 @@ mod tests {
                 extra: serde_json::Map::new(),
             },
             colour_space: None,
+            source_layer: None,
         };
         let layer = test_layer(footage.id);
         let layer_id = layer.id;
@@ -1350,24 +1506,6 @@ mod tests {
         assert_eq!(json(&store.snapshot()), final_json, "redo-all == final");
     }
 
-    /// The change observer is optional: the egui shell never sets one and reads
-    /// snapshots directly, so `commit`/`undo`/`redo` must all be no-ops on that
-    /// front. Fails without the fix — `undo` and `redo` each had a `todo!()`
-    /// where the "no observer" arm belongs, so the first undo of the session
-    /// panicked (and `todo` is denied workspace-wide, docs/14 §4).
-    #[test]
-    fn undo_and_redo_do_not_panic_without_a_change_observer() {
-        let store = DocumentStore::new(Document::new());
-        let (ops, _) = scripted_ops(&store.snapshot());
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-
-        // Nothing registered a callback, so both directions must simply work.
-        assert!(store.undo().unwrap().is_some(), "undo with no observer");
-        assert!(store.redo().unwrap().is_some(), "redo with no observer");
-    }
-
     /// The observer sees every op that moved the document, in order, and an
     /// undo reports the *inverse* — the op actually applied — not the op being
     /// undone. It is also called with the journal lock released, so a callback
@@ -1396,51 +1534,6 @@ mod tests {
             committed + 1,
             "undo notifies as well as commit"
         );
-    }
-
-    /// **An observer can be attached to a store that is already shared.**
-    ///
-    /// The setter used to take `&mut self`, so the observer had to be
-    /// registered before the store went into its `Arc` — an ordering rule that
-    /// no type enforced and every caller had to remember, and one that the
-    /// natural shape of the thing fights: an observer usually wants to talk
-    /// about the object that *owns* the store, which does not exist yet at
-    /// that point. (`Arc::new_cyclic` is the workaround the test below still
-    /// uses for its own reason; it should not be the only way in.)
-    #[test]
-    fn an_observer_attaches_to_a_store_that_is_already_shared() {
-        let store = Arc::new(DocumentStore::new(Document::new()));
-        // Shared first, and shared *widely* — a second handle, as a frontend
-        // would hold.
-        let elsewhere = Arc::clone(&store);
-
-        let seen = Arc::new(Mutex::new(0usize));
-        let count = Arc::clone(&seen);
-        elsewhere.set_callback(Arc::new(move |_| {
-            *count.lock() += 1;
-        }));
-
-        let (ops, _) = scripted_ops(&store.snapshot());
-        let committed = ops.len();
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-        assert_eq!(
-            *seen.lock(),
-            committed,
-            "an observer registered through a shared handle still hears every op"
-        );
-
-        // And registering a second one replaces the first: there is one
-        // observer, not a list.
-        let later = Arc::new(Mutex::new(0usize));
-        let count = Arc::clone(&later);
-        store.set_callback(Arc::new(move |_| {
-            *count.lock() += 1;
-        }));
-        store.undo().unwrap();
-        assert_eq!(*later.lock(), 1, "the new observer hears it");
-        assert_eq!(*seen.lock(), committed, "and the old one does not");
     }
 
     /// An observer that reads back into the store must not deadlock.
@@ -1538,21 +1631,6 @@ mod tests {
     }
 
     #[test]
-    fn journal_replay_reproduces_final_state() {
-        let initial = Document::new();
-        let mut replayed = initial.clone();
-        let store = DocumentStore::new(initial);
-        let (ops, _) = scripted_ops(&store.snapshot());
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-        for op in store.journal_ops() {
-            crate::ops::apply(&mut replayed, &op).unwrap();
-        }
-        assert_eq!(json(&replayed), json(&store.snapshot()));
-    }
-
-    #[test]
     fn snapshots_are_isolated_from_later_edits() {
         let store = DocumentStore::new(Document::new());
         let before = store.snapshot();
@@ -1643,138 +1721,6 @@ mod tests {
             .unwrap();
         assert!(!layer.transform.opacity.is_animated());
         assert_eq!(layer.transform.opacity.value_at(1.0), 100.0);
-    }
-
-    /// A store holding the scripted footage layer and a camera beside it.
-    fn store_with_camera() -> (DocumentStore, Uuid, Uuid, Uuid) {
-        let store = DocumentStore::new(Document::new());
-        let (ops, comp_id) = scripted_ops(&store.snapshot());
-        let mut footage_id = None;
-        for op in &ops {
-            if let Op::AddLayer { layer, .. } = op {
-                footage_id = Some(layer.id);
-            }
-        }
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-        let mut camera = test_layer(Uuid::now_v7());
-        camera.kind = LayerKind::Camera {
-            zoom: crate::anim::Property::fixed(1000.0),
-            options: Box::default(),
-            solve_link: None,
-            correction_base: None,
-        };
-        let camera_id = camera.id;
-        store
-            .commit(Op::AddLayer {
-                comp: comp_id,
-                index: 0,
-                layer: Box::new(camera),
-            })
-            .unwrap();
-        (store, comp_id, camera_id, footage_id.unwrap())
-    }
-
-    /// A camera channel is an ordinary transform op (docs/impl/camera.md §1):
-    /// it writes through the kind, undoes exactly, and is refused on a layer
-    /// that has no such channel without moving anything.
-    #[test]
-    fn a_camera_channel_op_round_trips_and_is_refused_elsewhere() {
-        use crate::anim::Animation;
-        let (store, comp_id, camera_id, footage_id) = store_with_camera();
-        let zoom = |doc: &Document| {
-            doc.comp(comp_id)
-                .unwrap()
-                .layers
-                .iter()
-                .find(|l| l.id == camera_id)
-                .unwrap()
-                .prop(TransformProp::Zoom)
-                .unwrap()
-                .value_at(0.0)
-        };
-
-        store
-            .commit(Op::SetTransformProperty {
-                comp: comp_id,
-                layer: camera_id,
-                prop: TransformProp::Zoom,
-                animation: Animation::Static(2400.0),
-            })
-            .unwrap();
-        assert_eq!(zoom(&store.snapshot()), 2400.0);
-        store.undo().unwrap();
-        assert_eq!(
-            zoom(&store.snapshot()),
-            1000.0,
-            "undo puts back exactly what was there"
-        );
-
-        let before = json(&store.snapshot());
-        assert_eq!(
-            store.commit(Op::SetTransformProperty {
-                comp: comp_id,
-                layer: footage_id,
-                prop: TransformProp::Zoom,
-                animation: Animation::Static(5.0),
-            }),
-            Err(crate::ops::OpError::PropNotOnLayer)
-        );
-        assert_eq!(
-            json(&store.snapshot()),
-            before,
-            "a refused op leaves the document alone"
-        );
-    }
-
-    /// The settings dialog's one op (docs/impl/camera.md §9): the four land
-    /// together and its inverse puts back the four it replaced.
-    #[test]
-    fn a_camera_settings_op_applies_and_inverts() {
-        let (store, comp_id, camera_id, footage_id) = store_with_camera();
-        let read = |doc: &Document| {
-            let l = doc
-                .comp(comp_id)
-                .unwrap()
-                .layers
-                .iter()
-                .find(|l| l.id == camera_id)
-                .unwrap();
-            match &l.kind {
-                LayerKind::Camera { options, .. } => options.settings(),
-                _ => panic!("it is a camera"),
-            }
-        };
-        let before = read(&store.snapshot());
-        assert_eq!(before, CameraOptions::default().settings());
-
-        let settings = CameraSettings {
-            two_node: true,
-            depth_of_field: true,
-            lock_to_zoom: true,
-            film_size_mm: 24.0,
-        };
-        store
-            .commit(Op::SetCameraSettings {
-                comp: comp_id,
-                layer: camera_id,
-                settings,
-            })
-            .unwrap();
-        assert_eq!(read(&store.snapshot()), settings);
-        store.undo().unwrap();
-        assert_eq!(read(&store.snapshot()), before);
-
-        // A layer with no camera options has no settings to replace.
-        assert_eq!(
-            store.commit(Op::SetCameraSettings {
-                comp: comp_id,
-                layer: footage_id,
-                settings,
-            }),
-            Err(crate::ops::OpError::PropNotOnLayer)
-        );
     }
 
     #[test]
@@ -1869,6 +1815,7 @@ mod tests {
                     volume_db: crate::anim::Property::zero(),
                     pan: crate::anim::Property::zero(),
                     audio_only: false,
+                    audio_streams: Default::default(),
                     adjustment: false,
                     retime: None,
                     interpolation: Default::default(),
@@ -1909,218 +1856,6 @@ mod tests {
         assert_eq!(n(&store.snapshot()), 2);
         store.undo().unwrap();
         assert_eq!(n(&store.snapshot()), 1);
-    }
-
-    /// **The one kind flip**: a solid becomes an adjustment and an
-    /// adjustment becomes a solid, each flip is one undo step, and the undone
-    /// flip hands the solid back the `def` it always had rather than a fresh
-    /// one. Every other kind is refused with the document untouched.
-    ///
-    /// The adjustment switch is now a flag rather than this flip, and the only
-    /// edit that still reaches here is normalising a layer *born* an
-    /// adjustment when its switch goes off — it has no picture to give back,
-    /// so it is handed a solid. The op is otherwise unchanged, and so is this.
-    #[test]
-    fn layer_kind_op_flips_solid_and_adjustment_and_refuses_everything_else() {
-        let store = DocumentStore::new(Document::new());
-        let (ops, comp_id) = scripted_ops(&store.snapshot());
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-        let footage_id = store.snapshot().comp(comp_id).unwrap().layers[0].id;
-
-        let def = Uuid::now_v7();
-        let mut solid = test_layer(Uuid::now_v7());
-        solid.kind = LayerKind::Solid { def };
-        let solid_id = solid.id;
-        store
-            .commit(Op::AddLayer {
-                comp: comp_id,
-                index: 0,
-                layer: Box::new(solid),
-            })
-            .unwrap();
-
-        let kind = |id: Uuid| {
-            store
-                .snapshot()
-                .comp(comp_id)
-                .unwrap()
-                .layers
-                .iter()
-                .find(|l| l.id == id)
-                .unwrap()
-                .kind
-                .clone()
-        };
-        let flip = |id: Uuid, kind: LayerKind| Op::SetLayerKind {
-            comp: comp_id,
-            layer: id,
-            kind: Box::new(kind),
-        };
-
-        // Solid → Adjustment, and one undo back to the same asset.
-        store.commit(flip(solid_id, LayerKind::Adjustment)).unwrap();
-        assert_eq!(kind(solid_id), LayerKind::Adjustment);
-        store.undo().unwrap();
-        assert_eq!(
-            kind(solid_id),
-            LayerKind::Solid { def },
-            "undo restores the solid's own def, not a new one"
-        );
-
-        // And the other way: an adjustment made into a solid.
-        store.commit(flip(solid_id, LayerKind::Adjustment)).unwrap();
-        let other = Uuid::now_v7();
-        store
-            .commit(flip(solid_id, LayerKind::Solid { def: other }))
-            .unwrap();
-        assert_eq!(kind(solid_id), LayerKind::Solid { def: other });
-
-        // Refused from either side, and nothing is written when it is.
-        assert_eq!(
-            store.commit(flip(footage_id, LayerKind::Adjustment)),
-            Err(crate::ops::OpError::KindNotConvertible),
-            "a footage layer does not become an effect container"
-        );
-        assert!(matches!(kind(footage_id), LayerKind::Footage { .. }));
-        assert_eq!(
-            store.commit(flip(solid_id, LayerKind::Null)),
-            Err(crate::ops::OpError::KindNotConvertible),
-            "and a solid does not become a null on the way past"
-        );
-        assert_eq!(kind(solid_id), LayerKind::Solid { def: other });
-    }
-
-    /// **The adjustment switch**: it goes on and off on a layer with a
-    /// source of its own, one undo step each way, and the layer keeps
-    /// everything while it is on — which is the whole reason it is a flag and
-    /// not the kind flip above. Refused on the kinds with no picture to set
-    /// aside, with the document untouched.
-    #[test]
-    fn the_adjustment_switch_round_trips_on_a_layer_with_a_source() {
-        let store = DocumentStore::new(Document::new());
-        let (ops, comp_id) = scripted_ops(&store.snapshot());
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-        let layer = |id: Uuid| {
-            store
-                .snapshot()
-                .comp(comp_id)
-                .unwrap()
-                .layers
-                .iter()
-                .find(|l| l.id == id)
-                .unwrap()
-                .clone()
-        };
-        let set = |id: Uuid, on: bool| Op::SetLayerAdjustment {
-            comp: comp_id,
-            layer: id,
-            adjustment: on,
-        };
-
-        let footage_id = store.snapshot().comp(comp_id).unwrap().layers[0].id;
-        let before = layer(footage_id);
-        assert!(!before.is_adjustment(), "layers start as themselves");
-
-        store.commit(set(footage_id, true)).unwrap();
-        let on = layer(footage_id);
-        assert!(on.is_adjustment());
-        assert_eq!(
-            on.kind, before.kind,
-            "the source is still there while the switch is on"
-        );
-
-        store.undo().unwrap();
-        assert_eq!(
-            layer(footage_id),
-            before,
-            "off again is the layer exactly as it was, not a rebuilt one"
-        );
-
-        // No picture to set aside: refused, and nothing written.
-        let mut camera = test_layer(Uuid::now_v7());
-        camera.kind = LayerKind::Camera {
-            zoom: crate::anim::Property::zero(),
-            solve_link: None,
-            correction_base: None,
-            options: Default::default(),
-        };
-        let camera_id = camera.id;
-        store
-            .commit(Op::AddLayer {
-                comp: comp_id,
-                index: 0,
-                layer: Box::new(camera),
-            })
-            .unwrap();
-        assert_eq!(
-            store.commit(set(camera_id, true)),
-            Err(crate::ops::OpError::KindNotConvertible),
-            "a camera has no picture to set aside"
-        );
-        assert!(!layer(camera_id).adjustment);
-    }
-
-    /// The frame-interpolation policy round-trips through undo, and it is a
-    /// layer's own setting rather than part of its retime: the layer
-    /// here is never retimed at all, and still has a policy — which is the
-    /// case that used to be unrepresentable, because the only home for it was
-    /// inside a retime the layer did not have.
-    #[test]
-    fn interpolation_round_trips_and_needs_no_retime() {
-        use crate::retime::Interpolation;
-        let store = DocumentStore::new(Document::new());
-        let (ops, comp_id) = scripted_ops(&store.snapshot());
-        let mut layer_id = None;
-        for op in &ops {
-            if let Op::AddLayer { layer, .. } = op {
-                layer_id = Some(layer.id);
-            }
-        }
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-        let layer_id = layer_id.unwrap();
-
-        let layer_of = |doc: &Document| {
-            doc.comp(comp_id)
-                .unwrap()
-                .layers
-                .iter()
-                .find(|l| l.id == layer_id)
-                .unwrap()
-                .clone()
-        };
-        assert_eq!(
-            layer_of(&store.snapshot()).interpolation,
-            Interpolation::Nearest
-        );
-        assert!(
-            layer_of(&store.snapshot()).retime.is_none(),
-            "this layer is deliberately un-retimed"
-        );
-
-        store
-            .commit(Op::SetLayerInterpolation {
-                comp: comp_id,
-                layer: layer_id,
-                interpolation: Interpolation::Blend,
-                parked_flow: None,
-            })
-            .unwrap();
-        assert_eq!(
-            layer_of(&store.snapshot()).interpolation,
-            Interpolation::Blend
-        );
-
-        store.undo().unwrap();
-        assert_eq!(
-            layer_of(&store.snapshot()).interpolation,
-            Interpolation::Nearest
-        );
     }
 
     /// The Retime *property* round-trips through undo, and it is what
@@ -2220,6 +1955,7 @@ mod tests {
                     volume_db: crate::anim::Property::zero(),
                     pan: crate::anim::Property::zero(),
                     audio_only: false,
+                    audio_streams: Default::default(),
                     adjustment: false,
                     retime: None,
                     interpolation: Default::default(),
@@ -2549,69 +2285,6 @@ mod tests {
             .is_err());
     }
 
-    /// The mix mark (docs/impl/audio-timeline.md §2) is comp state on the
-    /// master fader's pattern: one op, exactly invertible both ways, refused
-    /// on a comp that is not there. And a comp that has never been mixed
-    /// writes no key at all, so an old project re-saves byte-identical.
-    #[test]
-    fn the_sound_mix_mark_round_trips_and_is_skipped_while_false() {
-        let store = DocumentStore::new(Document::new());
-        let comp = test_comp();
-        let comp_id = comp.id;
-        store
-            .commit(Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Composition(comp.clone())),
-            })
-            .unwrap();
-
-        let mark = |s: &DocumentStore| s.snapshot().comp(comp_id).unwrap().sound_mix;
-        assert!(!mark(&store), "a comp opens unmixed");
-        store
-            .commit(Op::SetSoundMix {
-                comp: comp_id,
-                on: true,
-            })
-            .unwrap();
-        assert!(mark(&store));
-        store
-            .commit(Op::SetSoundMix {
-                comp: comp_id,
-                on: false,
-            })
-            .unwrap();
-        assert!(!mark(&store));
-
-        // Both inverses put back exactly what was there: false → true first,
-        // then true → false.
-        store.undo().unwrap();
-        assert!(mark(&store));
-        store.undo().unwrap();
-        assert!(!mark(&store));
-
-        assert_eq!(
-            store.commit(Op::SetSoundMix {
-                comp: Uuid::now_v7(),
-                on: true,
-            }),
-            Err(crate::ops::OpError::UnknownComp)
-        );
-
-        let text = serde_json::to_string(&comp).unwrap();
-        assert!(
-            !text.contains("sound_mix"),
-            "an unmixed comp writes no key at all"
-        );
-        let back: Composition = serde_json::from_str(&text).unwrap();
-        assert!(!back.sound_mix);
-
-        let mut mixed = comp;
-        mixed.sound_mix = true;
-        let text = serde_json::to_string(&mixed).unwrap();
-        let back: Composition = serde_json::from_str(&text).unwrap();
-        assert!(back.sound_mix, "the mark survives a save and load");
-    }
-
     /// The asset-organisation ops behave: a batch is one undo step and
     /// all-or-nothing; folder children, auto-folder slots, comp settings and
     /// solid defs all round-trip exactly.
@@ -2741,67 +2414,6 @@ mod tests {
     }
 
     #[test]
-    fn matte_op_round_trips_and_targets_any_layer() {
-        use crate::model::{LayerInputSource, MatteChannel, MatteRef};
-        let store = DocumentStore::new(Document::new());
-        let (ops, comp_id) = scripted_ops(&store.snapshot());
-        let mut layer_id = None;
-        for op in &ops {
-            if let Op::AddLayer { layer, .. } = op {
-                layer_id = Some(layer.id);
-            }
-        }
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-        let layer_id = layer_id.unwrap();
-        // A second layer to serve as the matte source.
-        let matte_layer = test_layer(Uuid::now_v7());
-        let matte_id = matte_layer.id;
-        store
-            .commit(Op::AddLayer {
-                comp: comp_id,
-                index: 0,
-                layer: Box::new(matte_layer),
-            })
-            .unwrap();
-
-        let matte = MatteRef {
-            layer: matte_id,
-            channel: MatteChannel::Luma,
-            inverted: true,
-            source: LayerInputSource::None,
-        };
-        store
-            .commit(Op::SetLayerMatte {
-                comp: comp_id,
-                layer: layer_id,
-                matte: Some(matte),
-            })
-            .unwrap();
-        let doc = store.snapshot();
-        let l = doc
-            .comp(comp_id)
-            .unwrap()
-            .layers
-            .iter()
-            .find(|l| l.id == layer_id)
-            .unwrap();
-        assert_eq!(l.matte, Some(matte));
-
-        store.undo().unwrap();
-        let doc = store.snapshot();
-        let l = doc
-            .comp(comp_id)
-            .unwrap()
-            .layers
-            .iter()
-            .find(|l| l.id == layer_id)
-            .unwrap();
-        assert_eq!(l.matte, None, "undo clears the matte exactly");
-    }
-
-    #[test]
     fn layers_saved_before_transforms_existed_still_load() {
         // A pre-transform Layer JSON (as slice-3 Lumit wrote it).
         let old = r#"{
@@ -2816,68 +2428,6 @@ mod tests {
         let layer: crate::model::Layer = serde_json::from_str(old).unwrap();
         assert_eq!(layer.transform.opacity.value_at(0.0), 100.0);
         assert_eq!(layer.transform.scale_x.value_at(0.0), 100.0);
-    }
-
-    /// **The guide switch is one undo step, and an older project has none**. A
-    /// layer saved before the switch existed loads with it off, so every
-    /// existing project delivers exactly what it delivered before; a guide
-    /// layer saved now says so on the way back in.
-    #[test]
-    fn the_guide_switch_commits_undoes_and_round_trips() {
-        let (store, comp, layer) = doc_with_layer();
-        let guide_of = |s: &DocumentStore| {
-            s.snapshot()
-                .comp(comp)
-                .expect("the comp is there")
-                .layers
-                .iter()
-                .find(|l| l.id == layer)
-                .expect("the layer is there")
-                .switches
-                .guide
-        };
-        assert!(!guide_of(&store), "a new layer is not a guide layer");
-        store
-            .commit(Op::SetLayerGuide {
-                comp,
-                layer,
-                guide: true,
-            })
-            .expect("the guide switch commits");
-        assert!(guide_of(&store));
-        store.undo().expect("one click, one undo step");
-        assert!(!guide_of(&store));
-
-        // A locked layer refuses it: what a guide layer delivers is the work,
-        // not the Timeline's housekeeping.
-        lock(&store, comp, layer, true);
-        assert_eq!(
-            store.commit(Op::SetLayerGuide {
-                comp,
-                layer,
-                guide: true,
-            }),
-            Err(OpError::LayerLocked)
-        );
-
-        // Old JSON has no `guide` key at all.
-        let old = r#"{
-            "id": "018f0e9a-0000-7000-8000-000000000001",
-            "name": "clip.mp4",
-            "kind": { "Footage": { "item": "018f0e9a-0000-7000-8000-000000000002" } },
-            "in_point": [0, 1],
-            "out_point": [10, 1],
-            "start_offset": [0, 1],
-            "switches": { "visible": true, "audible": true, "locked": false }
-        }"#;
-        let old: crate::model::Layer = serde_json::from_str(old).unwrap();
-        assert!(!old.switches.guide, "an old project has no guide layers");
-
-        let mut marked = old.clone();
-        marked.switches.guide = true;
-        let text = serde_json::to_string(&marked).unwrap();
-        let back: crate::model::Layer = serde_json::from_str(&text).unwrap();
-        assert!(back.switches.guide, "the switch survives a save and load");
     }
 
     #[test]
@@ -2921,74 +2471,6 @@ mod tests {
 
         assert!(store.commit(Op::RemoveItem { id: Uuid::now_v7() }).is_err());
         assert_eq!(store.revision(), r3, "a refused op moves nothing");
-    }
-
-    /// The whole-graph commit is exactly invertible — one undo puts back the
-    /// drivers *and* the wires, exactly as one undo puts back the whole effect
-    /// stack.
-    #[test]
-    fn set_layer_graph_undoes_nodes_and_edges_together() {
-        use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-        let (store, comp, layer) = doc_with_layer();
-
-        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
-        let blur_id = blur.id;
-        store
-            .commit(Op::SetLayerEffects {
-                comp,
-                layer,
-                effects: vec![blur],
-            })
-            .expect("the stack goes in");
-
-        let wiggle = crate::fx::instantiate("wiggle").expect("the catalogue knows it");
-        let wiggle_id = wiggle.id;
-        let wired = LayerGraph {
-            out_unwired: false,
-            nodes: vec![wiggle],
-            edges: vec![Edge {
-                from: OutputRef::Driver {
-                    node: wiggle_id,
-                    port: "value".into(),
-                },
-                to: InputRef::Param {
-                    node: NodeRef::Effect(blur_id),
-                    port: "radius".into(),
-                },
-            }],
-            layout: vec![(NodeRef::Driver(wiggle_id), [40.0, 12.0])],
-            exposed: vec![NodeRef::Effect(blur_id)],
-            groups: Vec::new(),
-        };
-        store
-            .commit(Op::SetLayerGraph {
-                comp,
-                layer,
-                graph: Box::new(wired.clone()),
-            })
-            .expect("a well-formed graph is accepted");
-
-        let read = |store: &DocumentStore| -> LayerGraph {
-            store
-                .snapshot()
-                .comp(comp)
-                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
-                .expect("the layer")
-                .graph
-                .clone()
-        };
-        assert_eq!(read(&store), wired);
-
-        assert!(
-            store.undo().expect("undo applies").is_some(),
-            "one gesture, one undo step"
-        );
-        assert!(
-            read(&store).is_empty(),
-            "the undo must take the wires with the nodes"
-        );
-        assert!(store.redo().expect("redo applies").is_some());
-        assert_eq!(read(&store), wired, "and the redo brings both back");
     }
 
     /// Taking a **wired** effect out of the stack takes its wires with it, in
@@ -3093,199 +2575,6 @@ mod tests {
         assert_eq!(read(&store), wired, "the undo brings the wires back");
     }
 
-    /// A **points** wire heals the two ways a stack edit can break one — the
-    /// producer removed, and the producer dragged below its consumer — and each
-    /// heal rides the same single-undo-step inverse a driver's does.
-    ///
-    /// The reorder is the new one. A stack-to-stack points wire must flow down
-    /// the stack, so a reorder can break a wire without removing anything at
-    /// all; and a reorder is a stack edit, which cannot be refused on the
-    /// wiring's behalf. Left in place the document would hold a graph its own
-    /// validator refuses, and the next wire anybody drew would be refused for
-    /// it — which is the state this test exists to prove unreachable.
-    ///
-    /// Driven through [`crate::ops::apply`] on a plain document rather than
-    /// through the store, because the effect that *declares* a Points input
-    /// arrives with the points family: until it does, no `EffectData` edge is
-    /// one `SetLayerGraph` would accept, so it could not be committed and the
-    /// undo could not put it back. The prune, the inverse's shape and the
-    /// healed graph's soundness are what is under test, and all three are here.
-    #[test]
-    fn a_points_wire_heals_on_a_removal_and_on_an_inverting_reorder() {
-        use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-        let particulate = crate::fx::instantiate("particulate").expect("the catalogue knows it");
-        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
-        let (producer, consumer) = (particulate.id, blur.id);
-
-        let wired = LayerGraph {
-            out_unwired: false,
-            edges: vec![Edge {
-                from: OutputRef::EffectData {
-                    effect: producer,
-                    port: "points".into(),
-                },
-                to: InputRef::Param {
-                    node: NodeRef::Effect(consumer),
-                    port: "points_in".into(),
-                },
-            }],
-            layout: vec![(NodeRef::Effect(producer), [40.0, 12.0])],
-            ..LayerGraph::default()
-        };
-        let down = vec![particulate.clone(), blur.clone()];
-
-        // A document holding that stack, in wired order, with the wire on it.
-        let seeded = || {
-            let comp = test_comp();
-            let (comp_id, mut doc) = (comp.id, Document::new());
-            crate::ops::apply(
-                &mut doc,
-                &Op::AddItem {
-                    index: 0,
-                    item: Box::new(ProjectItem::Composition(comp)),
-                },
-            )
-            .expect("the comp goes in");
-            let mut layer = test_layer(Uuid::now_v7());
-            let layer_id = layer.id;
-            layer.effects = down.clone();
-            layer.graph = wired.clone();
-            crate::ops::apply(
-                &mut doc,
-                &Op::AddLayer {
-                    comp: comp_id,
-                    index: 0,
-                    layer: Box::new(layer),
-                },
-            )
-            .expect("the layer goes in");
-            (doc, comp_id, layer_id)
-        };
-        let read = |doc: &Document, comp: Uuid, layer: Uuid| -> LayerGraph {
-            doc.comp(comp)
-                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
-                .expect("the layer")
-                .graph
-                .clone()
-        };
-
-        // Each stack edit, and what the wire should do about it.
-        let cases: [(Vec<crate::model::EffectInstance>, &str); 3] = [
-            (
-                vec![blur.clone()],
-                "a removed producer takes its data wires with it",
-            ),
-            (
-                vec![blur.clone(), particulate.clone()],
-                "a reorder that inverts the wire drops it, removing nothing",
-            ),
-            (
-                down.clone(),
-                "and the producer still above its consumer keeps it",
-            ),
-        ];
-        for (effects, why) in cases {
-            let healed = effects != down;
-            let (mut doc, comp, layer) = seeded();
-            let inverse = crate::ops::apply(
-                &mut doc,
-                &Op::SetLayerEffects {
-                    comp,
-                    layer,
-                    effects: effects.clone(),
-                },
-            )
-            .expect("a stack edit is never refused on the wiring's behalf");
-
-            let after = read(&doc, comp, layer);
-            assert_eq!(after.edges.is_empty(), healed, "{why}");
-            if healed {
-                after
-                    .validate(&effects)
-                    .expect("what is left must be a graph the engine accepts");
-            }
-
-            // One undo step either way: a heal folds the graph's restoration
-            // into the stack's own inverse, stack first so the wires have
-            // their boxes back by the time the graph is validated.
-            match (&inverse, healed) {
-                (Op::Batch { ops }, true) => {
-                    assert!(
-                        matches!(ops.as_slice(), [Op::SetLayerEffects { .. }, Op::SetLayerGraph { graph, .. }] if **graph == wired),
-                        "the inverse restores the stack and then the whole graph"
-                    );
-                }
-                (Op::SetLayerEffects { .. }, false) => {}
-                _ => panic!("{why}: unexpected inverse {inverse:?}"),
-            }
-        }
-    }
-
-    /// §1.5: a graph that breaks a rule is refused, and the document it was
-    /// offered to is left exactly as it was — an edit that half-applied would
-    /// undo to a state that was never on screen.
-    #[test]
-    fn a_refused_graph_leaves_the_document_alone() {
-        use crate::graph::{Edge, GraphError, InputRef, LayerGraph, NodeRef, OutputRef};
-        let (store, comp, layer) = doc_with_layer();
-        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
-        let blur_id = blur.id;
-        store
-            .commit(Op::SetLayerEffects {
-                comp,
-                layer,
-                effects: vec![blur],
-            })
-            .expect("the stack goes in");
-
-        // A wire whose source is a node this graph does not carry.
-        let broken = LayerGraph {
-            out_unwired: false,
-            edges: vec![Edge {
-                from: OutputRef::Driver {
-                    node: Uuid::now_v7(),
-                    port: "value".into(),
-                },
-                to: InputRef::Param {
-                    node: NodeRef::Effect(blur_id),
-                    port: "radius".into(),
-                },
-            }],
-            ..LayerGraph::default()
-        };
-        assert_eq!(
-            store.commit(Op::SetLayerGraph {
-                comp,
-                layer,
-                graph: Box::new(broken),
-            }),
-            Err(crate::ops::OpError::InvalidGraph(GraphError::UnknownNode))
-        );
-        assert!(
-            store
-                .snapshot()
-                .comp(comp)
-                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
-                .expect("the layer")
-                .graph
-                .is_empty(),
-            "a refused commit changes nothing"
-        );
-        // Nothing went on the journal either: one undo walks back past the
-        // refusal to the stack commit before it.
-        store.undo().expect("undo applies");
-        assert!(
-            store
-                .snapshot()
-                .comp(comp)
-                .and_then(|c| c.layers.iter().find(|l| l.id == layer))
-                .expect("the layer")
-                .effects
-                .is_empty(),
-            "the one undo must land on the stack commit, not on the refusal"
-        );
-    }
-
     /// A comp holding one layer, and its ids — the setting every lock test
     /// needs before it can lock anything.
     fn doc_with_layer() -> (DocumentStore, Uuid, Uuid) {
@@ -3310,54 +2599,6 @@ mod tests {
         (store, comp_id, layer_id)
     }
 
-    /// **Giving a marker a span is an ordinary undoable edit**
-    /// (docs/15-DESIGN.md §12A.1). `SetCompMarkers` replaces the whole list, so
-    /// the duration needs no op of its own — but "needs no code" and "works"
-    /// are different claims, and only this one is checkable. Undo must put the
-    /// marker back as the moment it was, not merely put a marker back.
-    #[test]
-    fn a_markers_span_is_set_and_undone_like_any_other_edit() {
-        use crate::markers::Marker;
-        let (store, comp, _) = doc_with_layer();
-        let at = crate::time::Rational::new(2, 1).expect("2s");
-        let span = crate::time::Rational::new(3, 2).expect("1.5s");
-
-        let moment = Marker::user(Uuid::now_v7(), at);
-        store
-            .commit(Op::SetCompMarkers {
-                comp,
-                markers: vec![moment.clone()],
-            })
-            .expect("a marker goes on the ruler");
-
-        let stretched = Marker {
-            duration: Some(span),
-            ..moment.clone()
-        };
-        store
-            .commit(Op::SetCompMarkers {
-                comp,
-                markers: vec![stretched.clone()],
-            })
-            .expect("and grows a span");
-        let markers = |store: &DocumentStore| {
-            store
-                .snapshot()
-                .comp(comp)
-                .expect("the comp is there")
-                .markers
-                .clone()
-        };
-        assert_eq!(markers(&store), vec![stretched]);
-
-        store.undo().expect("the span is undoable");
-        assert_eq!(
-            markers(&store),
-            vec![moment],
-            "undo puts the moment back, not a marker with a stale span"
-        );
-    }
-
     fn lock(store: &DocumentStore, comp: Uuid, layer: Uuid, locked: bool) {
         store
             .commit(Op::SetLayerLocked {
@@ -3366,42 +2607,6 @@ mod tests {
                 locked,
             })
             .expect("the lock switch is never itself refused");
-    }
-
-    /// **A locked layer refuses the edits the interface used to let through.**
-    /// The Timeline guarded the *gestures* — the bar, the razor, rename,
-    /// reorder, delete — while the fold-out's transform, effect and volume rows
-    /// went on editing the layer, so the switch did not mean what it says. The
-    /// guard is in the op applier, so it covers every caller.
-    #[test]
-    fn a_locked_layer_refuses_an_edit_to_what_it_is() {
-        let (store, comp, layer) = doc_with_layer();
-        // Unlocked, the edit lands.
-        store
-            .commit(Op::RenameLayer {
-                comp,
-                layer,
-                name: "Before".into(),
-            })
-            .expect("an unlocked layer renames");
-
-        lock(&store, comp, layer, true);
-        let revision = store.revision();
-
-        let refused = store.commit(Op::RenameLayer {
-            comp,
-            layer,
-            name: "After".into(),
-        });
-        assert_eq!(refused, Err(OpError::LayerLocked));
-        assert_eq!(
-            store.revision(),
-            revision,
-            "a refused op moves nothing, so nothing to undo is left behind"
-        );
-        let doc = store.snapshot();
-        let l = &doc.comp(comp).expect("comp").layers[0];
-        assert_eq!(l.name, "Before", "the layer kept what it had");
     }
 
     /// The row families the backlog named — transform, effect and volume — plus
@@ -3487,31 +2692,6 @@ mod tests {
             .expect("an unlocked layer edits again");
     }
 
-    /// A batch is one undo step, so it is all or nothing: a member that names a
-    /// locked layer refuses the whole batch and leaves the document as it was.
-    #[test]
-    fn a_batch_touching_a_locked_layer_is_refused_whole() {
-        let (store, comp, layer) = doc_with_layer();
-        lock(&store, comp, layer, true);
-        let revision = store.revision();
-
-        let refused = store.commit(Op::Batch {
-            ops: vec![
-                Op::SetWorkArea {
-                    comp,
-                    work_area: None,
-                },
-                Op::RenameLayer {
-                    comp,
-                    layer,
-                    name: "Sneaked in".into(),
-                },
-            ],
-        });
-        assert_eq!(refused, Err(OpError::LayerLocked));
-        assert_eq!(store.revision(), revision, "the batch left nothing behind");
-    }
-
     /// **Undo still works across a lock**, which is the property that makes the
     /// guard safe to put in the applier at all: an edit can only have been made
     /// while the layer was unlocked, so walking backwards always meets the
@@ -3573,61 +2753,6 @@ mod tests {
             "and it puts the whole gesture back"
         );
         assert!(!store.can_undo(), "there is nothing under it");
-    }
-
-    /// The document does not wait for the group to close: each op applies as it
-    /// is committed, so a read taken between two members of a gesture sees the
-    /// world as it is. Only the journal waits.
-    #[test]
-    fn a_group_applies_each_op_as_it_is_committed() {
-        let store = DocumentStore::new(Document::new());
-        let (ops, comp) = scripted_ops(&store.snapshot());
-
-        store.begin_undo_group();
-        for op in ops {
-            store.commit(op).unwrap();
-            assert!(
-                store.revision() > 0,
-                "every commit publishes its own snapshot"
-            );
-        }
-        assert!(
-            store.snapshot().comp(comp).is_some(),
-            "the comp is there before the group closes"
-        );
-        store.end_undo_group();
-    }
-
-    /// A group of one is pushed as itself: a `Batch` of one undoes identically
-    /// and reads worse in the journal, and the redo of it must still work.
-    #[test]
-    fn a_group_of_one_is_not_wrapped_in_a_batch() {
-        let store = DocumentStore::new(Document::new());
-        let (mut ops, _) = scripted_ops(&store.snapshot());
-        ops.truncate(1);
-
-        store.begin_undo_group();
-        for op in ops {
-            store.commit(op).unwrap();
-        }
-        store.end_undo_group();
-
-        assert!(
-            !matches!(store.journal_ops().as_slice(), [Op::Batch { .. }]),
-            "one op stays one op"
-        );
-        assert!(store.undo().unwrap().is_some());
-        assert!(store.redo().unwrap().is_some(), "and redoes");
-    }
-
-    /// An empty group leaves the history alone — a gesture that turned out to
-    /// change nothing is not an undo step.
-    #[test]
-    fn an_empty_group_records_nothing() {
-        let store = DocumentStore::new(Document::new());
-        store.begin_undo_group();
-        store.end_undo_group();
-        assert!(!store.can_undo(), "nothing was committed, nothing recorded");
     }
 
     /// Nesting: a helper that groups on its own account inside a caller that
@@ -3710,32 +2835,6 @@ mod tests {
         let listed = store.history();
         assert_eq!(listed.len(), expected.len());
         assert_eq!(listed.last().map(|e| e.name), Some("Set anti-aliasing"));
-    }
-
-    /// A step keeps its name across an undo, even where undoing re-derives the
-    /// forward op as a batch — the whole reason the name is pinned at commit.
-    #[test]
-    fn a_step_keeps_its_name_through_undo_and_redo() {
-        let store = DocumentStore::new(Document::new());
-        let mut comp = test_comp();
-        comp.work_area = Some((t(1, 1), t(3, 1)));
-        let comp_id = comp.id;
-        store
-            .commit(Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Composition(comp)),
-            })
-            .unwrap();
-        store
-            .commit(Op::TrimCompToWorkArea { comp: comp_id })
-            .unwrap();
-
-        let named = |s: &DocumentStore| s.history().last().map(|e| e.name);
-        assert_eq!(named(&store), Some("Trim comp to work area"));
-        store.undo().unwrap();
-        assert_eq!(named(&store), Some("Trim comp to work area"));
-        store.redo().unwrap();
-        assert_eq!(named(&store), Some("Trim comp to work area"));
     }
 
     /// Jumping lands on exactly the document that stood at that point on the
@@ -3832,85 +2931,6 @@ mod tests {
             store.snapshot().comp(comp_id).unwrap().duration,
             Duration(Rational::new(10, 1).unwrap())
         );
-    }
-
-    /// **A locked layer rides the reshape** rather than
-    /// refusing it: the lock comes off and goes back on inside the same batch,
-    /// so the whole comp moves together and the switch is where it was when the
-    /// step ends. Without this the lock guard would refuse a member of
-    /// the batch and take the whole command down with it.
-    #[test]
-    fn a_locked_layer_moves_with_the_comp_and_stays_locked() {
-        let store = DocumentStore::new(Document::new());
-        let mut comp = test_comp();
-        let comp_id = comp.id;
-        let mut locked = test_layer(Uuid::now_v7());
-        locked.switches.locked = true;
-        locked.transform.position_x = crate::anim::Property::fixed(960.0);
-        let locked_id = locked.id;
-        comp.layers = vec![locked];
-        comp.work_area = Some((t(2, 1), t(12, 1)));
-        store
-            .commit(Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Composition(comp)),
-            })
-            .unwrap();
-        let before = json(&store.snapshot());
-
-        store
-            .commit(Op::TrimCompToWorkArea { comp: comp_id })
-            .unwrap();
-        store
-            .commit(Op::CropCompToRegion {
-                comp: comp_id,
-                x: 200.0,
-                y: 0.0,
-                width: 640,
-                height: 480,
-            })
-            .unwrap();
-
-        let doc = store.snapshot();
-        let l = doc
-            .comp(comp_id)
-            .unwrap()
-            .layers
-            .iter()
-            .find(|l| l.id == locked_id)
-            .cloned()
-            .unwrap();
-        assert_eq!(l.in_point, t(-2, 1), "the trim moved it");
-        assert_eq!(
-            l.transform.position_x.value_at(0.0),
-            760.0,
-            "so did the crop"
-        );
-        assert!(l.switches.locked, "and it is locked again at the end");
-
-        store.undo().unwrap();
-        store.undo().unwrap();
-        assert_eq!(json(&store.snapshot()), before, "two undos, both exact");
-    }
-
-    /// A comp with no work area is already its own work area, so there
-    /// is nothing to trim to and nothing changes.
-    #[test]
-    fn trimming_a_comp_with_no_work_area_changes_nothing() {
-        let store = DocumentStore::new(Document::new());
-        let comp = test_comp();
-        let comp_id = comp.id;
-        store
-            .commit(Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Composition(comp)),
-            })
-            .unwrap();
-        let before = json(&store.snapshot());
-        store
-            .commit(Op::TrimCompToWorkArea { comp: comp_id })
-            .unwrap();
-        assert_eq!(json(&store.snapshot()), before);
     }
 
     /// **Crop comp to the region of interest**: the frame becomes the
@@ -4043,115 +3063,6 @@ mod tests {
         let _ = GraphNode::Output { id: Uuid::now_v7() };
     }
 
-    /// The values a Precomp layer hands the graph it places (§5.3): one op,
-    /// one undo step, and refused on a node graph by the guard every layer op
-    /// meets.
-    #[test]
-    fn setting_a_layers_graph_inputs_undoes_and_is_refused_on_a_node_graph() {
-        let (store, comp_id, layer_id) = doc_with_layer();
-        let inputs = crate::fx::instantiate("node_graph").expect("the catalogue knows it");
-        let inputs_of = |store: &DocumentStore| {
-            store
-                .snapshot()
-                .comp(comp_id)
-                .and_then(|c| c.layers.iter().find(|l| l.id == layer_id).cloned())
-                .expect("the layer")
-                .graph_inputs
-        };
-        assert_eq!(inputs_of(&store), None, "nothing typed yet");
-
-        store
-            .commit(Op::SetLayerGraphInputs {
-                comp: comp_id,
-                layer: layer_id,
-                inputs: Some(Box::new(inputs.clone())),
-            })
-            .expect("the instance goes on");
-        assert_eq!(inputs_of(&store), Some(inputs));
-
-        store.undo().expect("one step back");
-        assert_eq!(inputs_of(&store), None, "undo restores what was there");
-
-        let (graph_store, graph_comp, _) = doc_with_node_graph();
-        assert_eq!(
-            graph_store.commit(Op::SetLayerGraphInputs {
-                comp: graph_comp,
-                layer: Uuid::now_v7(),
-                inputs: None,
-            }),
-            Err(crate::ops::OpError::CompIsNodeGraph),
-            "a node graph has no layers to hand values to"
-        );
-    }
-
-    /// The whole-graph commit: one op, one undo step, and a refused graph
-    /// leaves the document untouched.
-    #[test]
-    fn setting_a_comp_graph_is_one_undo_step_and_a_bad_one_is_refused() {
-        use crate::comp_graph::{CompGraph, GraphEdge, GraphGroup, GraphNode};
-        use crate::graph::{GraphError, INPUT_PORT, OUTPUT_PORT};
-
-        let (store, comp_id, seed) = doc_with_node_graph();
-        let out_id = seed.output_id().expect("the seeded Output");
-
-        let blur = crate::fx::instantiate("blur").expect("the catalogue knows it");
-        let blur_id = blur.id;
-        let wired = CompGraph {
-            nodes: vec![GraphNode::Fx(blur), GraphNode::Output { id: out_id }],
-            edges: vec![GraphEdge {
-                from: blur_id,
-                from_port: OUTPUT_PORT.id.to_owned(),
-                to: out_id,
-                to_port: INPUT_PORT.id.to_owned(),
-            }],
-            layout: vec![(blur_id, [40.0, 12.0])],
-            exposed: vec![blur_id],
-            groups: vec![GraphGroup {
-                name: "The blur".into(),
-                colour: 1,
-                members: vec![blur_id],
-            }],
-        };
-        store
-            .commit(Op::SetCompGraph {
-                comp: comp_id,
-                graph: Box::new(wired.clone()),
-            })
-            .expect("a well-formed graph is accepted");
-        assert_eq!(graph_of(&store, comp_id), wired);
-        assert_eq!(
-            store.history().last().map(|e| e.name),
-            Some("Edit node graph")
-        );
-
-        assert!(store.undo().expect("undo applies").is_some());
-        assert_eq!(
-            graph_of(&store, comp_id),
-            seed,
-            "one gesture, one undo step"
-        );
-        assert!(store.redo().expect("redo applies").is_some());
-        assert_eq!(
-            graph_of(&store, comp_id),
-            wired,
-            "and the redo brings it back"
-        );
-
-        // A wire to a socket that is not there is refused before anything is
-        // swapped, and its own sentence crosses as `InvalidGraph`.
-        let mut broken = wired.clone();
-        broken.edges[0].to_port = "no_such_socket".into();
-        let before = json(&store.snapshot());
-        assert_eq!(
-            store.commit(Op::SetCompGraph {
-                comp: comp_id,
-                graph: Box::new(broken),
-            }),
-            Err(crate::ops::OpError::InvalidGraph(GraphError::UnknownPort))
-        );
-        assert_eq!(json(&store.snapshot()), before, "nothing was swapped");
-    }
-
     /// **Undo symmetry over a scripted run of graph edits** (§7 test 12): every
     /// step walked back leaves the document byte for byte as it started.
     ///
@@ -4240,5 +3151,380 @@ mod tests {
             "every step walked back leaves the document as it began"
         );
         let _: CompGraph = graph;
+    }
+
+    /// What a tap was told.
+    enum Heard {
+        /// An edit made at this end: its number, the edit, and what it replaced.
+        Local(u64, Op, Box<Op>),
+        /// Someone else's as it was applied, and whether that is how it was sent.
+        Remote(RemoteTag, Op, bool),
+    }
+
+    /// One end of a shared project: a store, and what its tap was told.
+    struct End {
+        store: DocumentStore,
+        heard: Arc<Mutex<Vec<Heard>>>,
+    }
+
+    fn end(doc: &Document, guest: bool) -> End {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let store = DocumentStore::new(doc.clone());
+        let sink = heard.clone();
+        store.share(
+            guest,
+            Arc::new(move |moved| {
+                sink.lock().push(match moved {
+                    Moved::Local { id, op, was } => {
+                        Heard::Local(id, op.clone(), Box::new(was.clone()))
+                    }
+                    Moved::Remote {
+                        tag, op, as_sent, ..
+                    } => Heard::Remote(tag, op.clone(), as_sent),
+                });
+            }),
+        );
+        End { store, heard }
+    }
+
+    /// What the host sends one guest.
+    enum Wire {
+        Applied(RemoteTag, Box<Op>),
+        Accepted(u64),
+        Rejected(u64),
+    }
+
+    /// Carry edits the way sharing does: the host's own first, then each
+    /// guest's in the order given, every one answered to every guest.
+    fn deliver(host: &End, guests: &[&End], order: &[usize]) {
+        let mut wires: Vec<Vec<Wire>> = guests.iter().map(|_| Vec::new()).collect();
+        let broadcast = |wires: &mut Vec<Vec<Wire>>| {
+            for heard in host.heard.lock().drain(..) {
+                let (tag, op, as_sent) = match heard {
+                    Heard::Local(id, op, _) => (RemoteTag { peer: 0, id }, op, false),
+                    Heard::Remote(tag, op, as_sent) => (tag, op, as_sent),
+                };
+                for (g, wire) in wires.iter_mut().enumerate() {
+                    // Its author is not sent an edit back that went in as sent.
+                    wire.push(if as_sent && tag.peer == g as u32 + 1 {
+                        Wire::Accepted(tag.id)
+                    } else {
+                        Wire::Applied(tag, Box::new(op.clone()))
+                    });
+                }
+            }
+        };
+        broadcast(&mut wires);
+        for &g in order {
+            let sent: Vec<_> = guests[g].heard.lock().drain(..).collect();
+            for heard in sent {
+                let Heard::Local(id, op, was) = heard else {
+                    continue;
+                };
+                let tag = RemoteTag {
+                    peer: g as u32 + 1,
+                    id,
+                };
+                match host.store.commit_remote(&op, Some(&was), tag) {
+                    Ok(()) => broadcast(&mut wires),
+                    Err(_) => wires[g].push(Wire::Rejected(id)),
+                }
+            }
+        }
+        for (g, wire) in wires.into_iter().enumerate() {
+            let guest = &guests[g].store;
+            for message in wire {
+                match message {
+                    Wire::Applied(tag, op) if tag.peer == g as u32 + 1 => {
+                        guest.commit_answer(tag.id, &op).unwrap();
+                    }
+                    Wire::Applied(tag, op) => guest.commit_remote(&op, None, tag).unwrap(),
+                    Wire::Accepted(id) => assert!(guest.acknowledge(id), "in step with the host"),
+                    Wire::Rejected(id) => guest.reject(id).unwrap(),
+                }
+            }
+            guests[g].heard.lock().clear();
+        }
+    }
+
+    fn rename(id: Uuid, name: &str) -> Op {
+        Op::RenameItem {
+            id,
+            name: name.into(),
+        }
+    }
+
+    fn name_of(store: &DocumentStore, id: Uuid) -> Option<String> {
+        match store.snapshot().item(id)? {
+            ProjectItem::Solid(s) => Some(s.name.clone()),
+            _ => None,
+        }
+    }
+
+    /// Two solids to edit, in a document every end starts from.
+    fn two_solids() -> (Document, Uuid, Uuid) {
+        let seed = DocumentStore::new(Document::new());
+        let (x, y) = (loose_item(&seed), loose_item(&seed));
+        (Document::clone(&seed.snapshot()), x, y)
+    }
+
+    /// The whole point of the host ordering edits: three people edit the same
+    /// things at once, and whichever guest's edits arrive first, everyone ends
+    /// on the same document. One run has a rename refused because the item was
+    /// deleted, and an insert moved because the list got shorter.
+    #[test]
+    fn a_shared_project_converges_whichever_order_edits_arrive_in() {
+        for order in [[0, 1], [1, 0]] {
+            let (doc, x, y) = two_solids();
+            let host = end(&doc, false);
+            let (a, b) = (end(&doc, true), end(&doc, true));
+
+            a.store.commit(rename(x, "a first")).unwrap();
+            let added = loose_item(&a.store);
+            a.store.commit(rename(x, "a second")).unwrap();
+            b.store.commit(Op::RemoveItem { id: x }).unwrap();
+            b.store.commit(rename(y, "b")).unwrap();
+            host.store.commit(rename(y, "host")).unwrap();
+
+            deliver(&host, &[&a, &b], &order);
+
+            let settled = host.store.snapshot();
+            assert_eq!(*a.store.snapshot(), *settled, "guest a, order {order:?}");
+            assert_eq!(*b.store.snapshot(), *settled, "guest b, order {order:?}");
+            assert!(settled.item(added).is_some(), "the new item survives");
+            assert_eq!(name_of(&host.store, y).as_deref(), Some("b"));
+        }
+    }
+
+    /// Undo in a shared project is each person's own. A step someone else has
+    /// since written over is skipped rather than taking their change away, and
+    /// the step before it is undone instead.
+    #[test]
+    fn undo_leaves_what_someone_else_has_since_changed() {
+        let (doc, x, y) = two_solids();
+        let host = end(&doc, false);
+        host.store.commit(rename(y, "mine")).unwrap();
+        host.store.commit(rename(x, "mine")).unwrap();
+        let tag = RemoteTag { peer: 1, id: 1 };
+        let theirs = rename(x, "theirs");
+        host.store.commit_remote(&theirs, None, tag).unwrap();
+
+        host.store.undo().unwrap();
+
+        assert_eq!(name_of(&host.store, x).as_deref(), Some("theirs"));
+        assert_eq!(name_of(&host.store, y).as_deref(), Some("White solid"));
+        assert!(!host.store.can_undo());
+    }
+
+    /// Edits made while the host was away come back onto the host's document.
+    /// The ones that touch nothing the host's side changed are applied and
+    /// sent. The one that does is held back with the host's version in place.
+    #[test]
+    fn edits_made_apart_are_merged_and_a_collision_is_held_back() {
+        let (doc, x, y) = two_solids();
+        let guest = end(&doc, true);
+        guest.store.cast_adrift();
+        guest.store.commit(rename(x, "mine")).unwrap();
+        guest.store.commit(rename(y, "mine")).unwrap();
+        let added = loose_item(&guest.store);
+        assert!(guest.heard.lock().is_empty(), "nothing is sent while away");
+
+        let mut theirs = doc.clone();
+        apply(&mut theirs, &rename(x, "theirs")).unwrap();
+        let (conflicts, refused, _) = guest.store.rejoin(theirs, 0);
+
+        assert!(refused.is_empty());
+        assert_eq!(conflicts.len(), 1);
+        let held: Vec<&Op> = conflicts[0].ops.iter().map(|(op, _)| op).collect();
+        assert_eq!(held, vec![&rename(x, "mine")]);
+        assert_eq!(name_of(&guest.store, x).as_deref(), Some("theirs"));
+        assert_eq!(name_of(&guest.store, y).as_deref(), Some("mine"));
+        assert!(guest.store.snapshot().item(added).is_some());
+        assert_eq!(guest.heard.lock().len(), 2, "the clean edits are sent");
+    }
+
+    /// A batch that stops landing part-way leaves the document as it was:
+    /// what landed of it is taken back, however batches sit inside it. A
+    /// guest lands every unanswered edit again whenever someone else's goes
+    /// in underneath, and one that no longer lands must leave nothing behind
+    /// for the next to land on.
+    #[test]
+    fn a_batch_that_stops_landing_part_way_leaves_nothing_behind() {
+        let (doc, x, y) = two_solids();
+        let inner = vec![rename(y, "of it"), rename(Uuid::now_v7(), "nothing")];
+        let ops = vec![rename(x, "half"), Op::Batch { ops: inner }];
+        let mut landed = doc.clone();
+        assert!(land(&mut landed, &Op::Batch { ops }, None).is_err());
+        assert_eq!(json(&landed), json(&doc));
+    }
+
+    /// Two people who file things into one folder both keep theirs, whatever
+    /// else either did to its list: the edit lands cut down to what its
+    /// author changed. Every solid and every imported file goes into a
+    /// folder with the others of its kind, so this is how most unanswered
+    /// edits land once someone else has made one of their own.
+    #[test]
+    fn a_folders_children_merge_by_what_each_person_changed() {
+        let seed = DocumentStore::new(Document::new());
+        let folder = make_folder(&seed, "Solids");
+        let [a, b, c, m, t] = std::array::from_fn(|_| Uuid::now_v7());
+        let set = |children: &[Uuid]| Op::SetFolderChildren {
+            folder,
+            children: children.to_vec(),
+        };
+        // What the list was where the edit was made, what the edit made it,
+        // what it is here now, and what it has to come to.
+        let cases: [[&[Uuid]; 4]; 3] = [
+            // Both filed something.
+            [&[a, b], &[a, b, m], &[a, b, t], &[a, b, m, t]],
+            // One took something out, and the other filed something.
+            [&[a, b, c], &[a, c], &[a, b, c, t], &[a, c, t]],
+            // One put them in another order and filed something, and the
+            // other took one out and filed another.
+            [&[a, b, c], &[c, a, b, m], &[a, c, t], &[c, t, a, m]],
+        ];
+        for [was, mine, now, merged] in cases {
+            let mut doc = Document::clone(&seed.snapshot());
+            apply(&mut doc, &set(now)).unwrap();
+            land(&mut doc, &set(mine), Some(&set(was))).unwrap();
+            assert_eq!(doc.folder(folder).unwrap().children, merged);
+        }
+    }
+
+    /// The host took one of this guest's edits before it was lost, and never
+    /// got to answer it. That edit is the guest's own doing: what the guest
+    /// went on to do to the same thing is not held back as if someone else
+    /// had been at it. When someone else has, it still is.
+    #[test]
+    fn an_edit_the_host_took_is_not_held_against_the_guest_that_made_it() {
+        let (doc, x, y) = two_solids();
+        for theirs_too in [false, true] {
+            let guest = end(&doc, true);
+            // Sent and not answered when the host is lost. Then more is
+            // done to the same item, and to another.
+            guest.store.commit(rename(x, "first")).unwrap();
+            guest.store.cast_adrift();
+            guest.store.commit(rename(x, "second")).unwrap();
+            guest.store.commit(rename(y, "mine")).unwrap();
+
+            // The host had taken the first, which was the guest's edit 1.
+            let mut theirs = doc.clone();
+            apply(&mut theirs, &rename(x, "first")).unwrap();
+            if theirs_too {
+                apply(&mut theirs, &rename(x, "theirs")).unwrap();
+            }
+            let (conflicts, refused, _) = guest.store.rejoin(theirs, 1);
+
+            assert!(refused.is_empty());
+            let name = name_of(&guest.store, x);
+            if theirs_too {
+                assert_eq!(conflicts.len(), 1, "someone else changed it since");
+                assert_eq!(name.as_deref(), Some("theirs"));
+            } else {
+                assert!(conflicts.is_empty(), "nobody else touched it");
+                assert_eq!(name.as_deref(), Some("second"));
+            }
+            assert_eq!(name_of(&guest.store, y).as_deref(), Some("mine"));
+        }
+    }
+
+    /// An edit made on top of a held one is held with it. Deleting an item
+    /// the host's side renamed and then undoing the delete comes to nothing,
+    /// so the undo is not judged on the host's document, where the item was
+    /// never gone. Keeping mine puts my item back, and does not take it out.
+    #[test]
+    fn an_edit_made_on_top_of_a_held_one_is_held_with_it() {
+        let (doc, x, _) = two_solids();
+        let guest = end(&doc, true);
+        guest.store.cast_adrift();
+        guest.store.commit(Op::RemoveItem { id: x }).unwrap();
+        guest.store.undo().unwrap();
+
+        let mut theirs = doc.clone();
+        apply(&mut theirs, &rename(x, "theirs")).unwrap();
+        let (conflicts, refused, _) = guest.store.rejoin(theirs, 0);
+
+        assert_eq!((conflicts.len(), refused.len()), (1, 0));
+        assert_eq!(conflicts[0].ops.len(), 2, "the delete and its undo");
+        assert_eq!(name_of(&guest.store, x).as_deref(), Some("theirs"));
+        for (op, was) in &conflicts[0].ops {
+            guest.store.commit_over(op.clone(), was).unwrap();
+        }
+        assert_eq!(name_of(&guest.store, x).as_deref(), Some("White solid"));
+    }
+
+    /// An op writes a layer's whole effect stack, and here two people each
+    /// change a different effect on one layer. Both changes stand: at the
+    /// same moment, through an undo, and when one was made while the host was
+    /// away. Only the same parameter changed by both is a collision.
+    #[test]
+    fn two_people_can_change_different_effects_on_one_layer() {
+        use crate::anim::Property;
+        let (seed, comp, layer) = doc_with_layer();
+        let blur = || crate::fx::instantiate("blur").expect("the catalogue knows it");
+        let stack = vec![blur(), blur()];
+        let (first, second) = (stack[0].id, stack[1].id);
+        let write = |store: &DocumentStore, effects: Vec<EffectInstance>| {
+            let op = Op::SetLayerEffects {
+                comp,
+                layer,
+                effects,
+            };
+            store.commit(op).unwrap();
+        };
+        write(&seed, stack.clone());
+        let doc = Document::clone(&seed.snapshot());
+
+        let read = |store: &DocumentStore| -> Vec<EffectInstance> {
+            let doc = store.snapshot();
+            let layers = &doc.comp(comp).unwrap().layers;
+            layers
+                .iter()
+                .find(|l| l.id == layer)
+                .unwrap()
+                .effects
+                .clone()
+        };
+        let with = |mut effects: Vec<EffectInstance>, effect: Uuid, radius: f64| {
+            let on = effects.iter_mut().find(|e| e.id == effect).unwrap();
+            let param = on.params.iter_mut().find(|p| p.id == "radius").unwrap();
+            param.value = EffectValue::Float(Property::fixed(radius));
+            effects
+        };
+        let set = |store: &DocumentStore, effect: Uuid, radius: f64| {
+            write(store, with(read(store), effect, radius));
+        };
+
+        let (host, guest) = (end(&doc, false), end(&doc, true));
+        set(&host.store, first, 3.0);
+        set(&guest.store, second, 7.0);
+        deliver(&host, &[&guest], &[0]);
+        let both = with(with(stack.clone(), first, 3.0), second, 7.0);
+        assert_eq!(read(&host.store), both);
+        assert_eq!(read(&guest.store), both);
+
+        guest.store.undo().unwrap();
+        deliver(&host, &[&guest], &[0]);
+        let hosts = with(stack.clone(), first, 3.0);
+        assert_eq!(read(&host.store), hosts, "undo takes back the guest's own");
+        assert_eq!(read(&guest.store), hosts);
+
+        let away = end(&doc, true);
+        away.store.cast_adrift();
+        set(&away.store, second, 7.0);
+        set(&away.store, first, 5.0);
+        let theirs = Document::clone(&host.store.snapshot());
+        let (conflicts, refused, _) = away.store.rejoin(theirs, 0);
+        assert_eq!((conflicts.len(), refused.len()), (1, 0));
+        assert_eq!(
+            read(&away.store),
+            both,
+            "the host's stands where both changed"
+        );
+
+        let (op, was) = conflicts[0].ops[0].clone();
+        away.store.commit_over(op, &was).unwrap();
+        let mine = with(with(stack, first, 5.0), second, 7.0);
+        assert_eq!(read(&away.store), mine, "keeping mine leaves the rest");
     }
 }

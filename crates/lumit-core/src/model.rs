@@ -149,6 +149,86 @@ impl Default for SequenceRef {
     }
 }
 
+/// The most audio streams one layer or clip names. A file with more than a
+/// handful is rare, and a list read from a project file is not trusted to be
+/// short.
+pub const MAX_AUDIO_STREAMS: usize = 32;
+
+/// Which of its file's audio streams a layer or a clip sounds
+/// (docs/01-GLOSSARY.md: Audio stream).
+///
+/// # In plain terms
+///
+/// A recording can carry several sounds side by side: a screen capture with
+/// the game on one stream and the microphone on another. A layer of such a
+/// file sounds the first stream unless it is told otherwise, which is what
+/// every layer did before one could choose. Told otherwise it sounds the
+/// streams listed here, mixed: one of them, for a stream on a row of its own,
+/// or several, for streams put back together.
+///
+/// A stream is named by its place among the file's audio streams, counted
+/// from nought in the file's own order. The list is kept ascending with no
+/// stream twice, and the first stream alone is kept as the empty list. So a
+/// layer that never chose writes nothing to the project file, and two layers
+/// sounding the same streams compare equal. A place the file has not got is
+/// silence.
+// ponytail: places, so a file re-recorded with its streams in another order
+// re-points them. A stream has no id that survives a re-encode; match on the
+// stream's title if that ever bites.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(from = "Vec<u32>", into = "Vec<u32>")]
+pub struct AudioStreams(Vec<u32>);
+
+impl AudioStreams {
+    /// These streams, mixed. None is the first stream.
+    #[must_use]
+    pub fn of(places: &[u32]) -> Self {
+        let mut places = places.to_vec();
+        places.sort_unstable();
+        places.dedup();
+        places.truncate(MAX_AUDIO_STREAMS);
+        if places == [0] {
+            places.clear();
+        }
+        Self(places)
+    }
+
+    /// The stream at `place` and no other.
+    #[must_use]
+    pub fn only(place: u32) -> Self {
+        Self::of(&[place])
+    }
+
+    /// Whether this is the file's first stream and nothing else: the state
+    /// that is left out of the project file.
+    #[must_use]
+    pub fn is_first(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The places sounded, ascending. Never empty.
+    #[must_use]
+    pub fn places(&self) -> &[u32] {
+        if self.0.is_empty() {
+            &[0]
+        } else {
+            &self.0
+        }
+    }
+}
+
+impl From<Vec<u32>> for AudioStreams {
+    fn from(places: Vec<u32>) -> Self {
+        Self::of(&places)
+    }
+}
+
+impl From<AudioStreams> for Vec<u32> {
+    fn from(streams: AudioStreams) -> Self {
+        streams.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FootageItem {
     pub id: Uuid,
@@ -177,6 +257,14 @@ pub struct FootageItem {
     /// project written before sequences existed round-trips byte for byte.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sequence: Option<SequenceRef>,
+    /// Set when this item reads one layer of a layered image file (a
+    /// Photoshop document) rather than the file's flattened picture: the
+    /// layer's place in the file's own list, bottom first
+    /// (docs/01-GLOSSARY.md: File layer).
+    // ponytail: an index, so reordering the layers in Photoshop re-points
+    // it. The file's own layer ids are the upgrade.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_layer: Option<u32>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -227,6 +315,55 @@ pub struct ProxyRef {
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// One footage item's file carried inside the `.lum` (docs/01-GLOSSARY.md:
+/// Packed project). A proxy and the colour config are carried the same way.
+///
+/// The reference in [`FootageItem::media`] stays what it was. This sits beside
+/// it and says the file's bytes are also in the archive, so the project still
+/// opens when the file on disk has gone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackedMedia {
+    /// The archive entry of the file the item's reference names:
+    /// `media/<folder>/<file name>`. An image sequence's other files sit in
+    /// the same folder under their own names.
+    pub entry: String,
+    /// The fingerprint of the bytes that were packed. A file on disk that
+    /// still matches it is read in place; one that does not, or is not there,
+    /// is read from the copy the archive carries.
+    pub fingerprint: Fingerprint,
+    /// For a file an effect reads: the path its parameter held before an open
+    /// pointed it at the copy read out of the archive. A save writes this back,
+    /// so a file never keeps a path inside one machine's cache.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original: Option<String>,
+    /// Unknown fields from newer Lumit versions, preserved on load/save
+    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// The id a second file is packed under in [`Document::packed`]: a footage
+/// item's proxy from the item's id, and the colour config from the document's.
+///
+/// It is the owner's id marked as a custom one (a version 8 UUID), which no
+/// item's id is, so it never meets one. A Lumit from before these were packed
+/// finds no item under it and opens the project without that file.
+#[must_use]
+pub fn packed_id(owner: Uuid) -> Uuid {
+    uuid::Builder::from_custom_bytes(*owner.as_bytes()).into_uuid()
+}
+
+/// The id the `n`th file of an effect's parameter is packed under in
+/// [`Document::packed`]. A custom id as [`packed_id`]'s is, hashed from all
+/// three, so it meets no item's id and two parameters never share one.
+#[must_use]
+pub fn packed_file_id(effect: Uuid, param: &str, n: usize) -> Uuid {
+    let hash = blake3::hash(format!("{effect}/{param}/{n}").as_bytes());
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&hash.as_bytes()[..16]);
+    uuid::Builder::from_custom_bytes(bytes).into_uuid()
 }
 
 /// A shared solid definition (docs/03-DATA-MODEL.md §2): solids are assets,
@@ -1109,6 +1246,8 @@ pub enum EffectValue {
     /// A name rather than an index into the config's list, because a config
     /// edited on disk reorders its lists and a moved config must not silently
     /// retarget a row. Static, exactly as [`EffectValue::File`] is.
+    ///
+    /// Also what a text row holds: the text as typed.
     Text(String),
 }
 
@@ -1418,6 +1557,11 @@ pub(crate) fn default_true() -> bool {
 /// project writes no line for it, so older files round-trip unchanged.
 pub(crate) fn is_true(b: &bool) -> bool {
     *b
+}
+
+/// The same for a field whose default is `false`.
+pub(crate) fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// `skip_serializing_if` for a number whose default is zero, the twin of
@@ -1979,6 +2123,52 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
 }
 
 impl Composition {
+    /// Every effect instance this composition holds, wherever it sits: on a
+    /// layer's stack, among its styles, in its graph, on a clip, on a group's
+    /// header, or as a box of the composition's own node graph.
+    pub fn effects(&self) -> impl Iterator<Item = &EffectInstance> {
+        let boxes = self.graph.iter().flat_map(|graph| &graph.nodes);
+        let boxes = boxes.filter_map(|node| match node {
+            crate::comp_graph::GraphNode::Fx(inst) => Some(inst),
+            _ => None,
+        });
+        let headers = self.groups.iter().flat_map(|group| &group.effects);
+        let layers = self.layers.iter().flat_map(|layer| {
+            let clips = match &layer.kind {
+                LayerKind::Sequence { clips } => clips.as_slice(),
+                _ => &[],
+            };
+            (layer.effects.iter())
+                .chain(&layer.styles)
+                .chain(&layer.graph_inputs)
+                .chain(&layer.graph.nodes)
+                .chain(clips.iter().flat_map(|clip| &clip.effects))
+        });
+        boxes.chain(headers).chain(layers)
+    }
+
+    /// [`Self::effects`], to change them.
+    pub fn effects_mut(&mut self) -> impl Iterator<Item = &mut EffectInstance> {
+        let boxes = self.graph.iter_mut().flat_map(|graph| &mut graph.nodes);
+        let boxes = boxes.filter_map(|node| match node {
+            crate::comp_graph::GraphNode::Fx(inst) => Some(inst),
+            _ => None,
+        });
+        let headers = self.groups.iter_mut().flat_map(|group| &mut group.effects);
+        let layers = self.layers.iter_mut().flat_map(|layer| {
+            let clips = match &mut layer.kind {
+                LayerKind::Sequence { clips } => clips.as_mut_slice(),
+                _ => &mut [],
+            };
+            (layer.effects.iter_mut())
+                .chain(&mut layer.styles)
+                .chain(&mut layer.graph_inputs)
+                .chain(&mut layer.graph.nodes)
+                .chain(clips.iter_mut().flat_map(|clip| &mut clip.effects))
+        });
+        boxes.chain(headers).chain(layers)
+    }
+
     /// The topmost visible Camera layer whose span contains `t` — the one that
     /// is *active*. None → the comp renders flat (3D switches ignored).
     ///
@@ -2099,8 +2289,24 @@ pub struct TextDocument {
     /// bytes it always drew.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub animators: Vec<crate::text::TextAnimator>,
+    /// The font, spacing, scale and outline of the letters. Absent from the
+    /// file until something is styled. Boxed, so a text layer stays about the
+    /// size of the other kinds.
+    #[serde(default, skip_serializing_if = "style_is_default")]
+    pub style: Box<crate::text::TextStyle>,
+    /// Alignment, indents and the room between lines. Absent the same way.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::text::ParagraphStyle::is_default"
+    )]
+    pub paragraph: crate::text::ParagraphStyle,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[allow(clippy::borrowed_box)] // serde hands the field over as it is stored
+fn style_is_default(style: &Box<crate::text::TextStyle>) -> bool {
+    style.is_default()
 }
 
 impl TextDocument {
@@ -2346,6 +2552,13 @@ pub struct Layer {
     /// skips a hidden one, and why the audio path does not look at it at all.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub audio_only: bool,
+    /// Which of its file's audio streams this layer sounds, for a Footage
+    /// layer of a file with more than one. The first unless it has been
+    /// told otherwise, and left out of the file until then. A Sequence layer
+    /// keeps one on each clip instead ([`crate::sequence::Clip::audio_streams`])
+    /// and no other kind reads it.
+    #[serde(default, skip_serializing_if = "AudioStreams::is_first")]
+    pub audio_streams: AudioStreams,
     /// This layer is acting as an **adjustment layer**: its own picture
     /// is set aside and its effect stack runs on the composite of everything
     /// beneath it instead.
@@ -2766,6 +2979,47 @@ fn descend_into_comp(doc: &Document, id: Uuid, found: &mut Vec<Uuid>, walked: &m
     collect_comp_footage(doc, nested, found, walked);
 }
 
+/// A composition's neighbours in the nesting, one step each way
+/// ([`Document::comp_flow`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CompFlow {
+    /// The comps that place this one.
+    pub used_by: Vec<CompLink>,
+    /// The comps this one places.
+    pub uses: Vec<CompLink>,
+}
+
+/// One neighbour in a [`CompFlow`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompLink {
+    pub id: Uuid,
+    /// Whether the nesting carries on past this comp, away from the centre.
+    pub more: bool,
+}
+
+/// Whether `comp` places project item `id`: one comp's contribution to
+/// [`Document::item_is_used`].
+///
+/// A node graph places its items in Read boxes rather than layers, and a node
+/// graph is placed by the effect that applies it as much as by a layer, so
+/// this asks every list and a graph cannot under-report.
+fn comp_places(comp: &Composition, id: Uuid) -> bool {
+    comp.layers
+        .iter()
+        .any(|l| layer_names_item(l, id) || effects_apply_graph(&l.effects, id))
+        || comp
+            .groups
+            .iter()
+            .any(|g| effects_apply_graph(&g.effects, id))
+        || comp.graph.as_ref().is_some_and(|g| {
+            g.read_names_item(id)
+                || g.nodes.iter().any(|n| {
+                    matches!(n, crate::comp_graph::GraphNode::Fx(inst)
+                        if applies_graph(inst, id))
+                })
+        })
+}
+
 /// Whether `layer` names project item `id` as its source — one layer's
 /// contribution to [`Document::item_is_used`].
 ///
@@ -2904,6 +3158,25 @@ pub struct Document {
     /// otherwise — see `lumit_render::export::RenderOptions::use_proxies`.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub use_proxies: bool,
+    /// The footage items whose files the `.lum` carries, by item id
+    /// ([`PackedMedia`]).
+    ///
+    /// A map beside the items for the reason `proxies` gives. It says what the
+    /// file on disk holds, so it is written by a save and an unpack rather
+    /// than by an op: see `DocumentStore::set_packed`. An entry whose item has
+    /// been deleted stays here so undoing the delete brings it back packed,
+    /// and is left out of the file.
+    ///
+    /// A proxy and the colour config are carried the same way, under the ids
+    /// [`packed_id`] gives them, and a file an effect reads under
+    /// [`packed_file_id`]'s. [`Document::packed_path`] says which file an id
+    /// stands for.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub packed: std::collections::BTreeMap<Uuid, PackedMedia>,
+    /// Pack every footage item on every save, the ones imported since the
+    /// last pack included. Off packs only when asked.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub auto_pack: bool,
     /// How hard the renderer works at the edges of transformed layers
     /// (docs/impl/anti-aliasing.md).
     ///
@@ -3259,6 +3532,8 @@ impl Document {
             item_labels: std::collections::BTreeMap::new(),
             proxies: std::collections::BTreeMap::new(),
             use_proxies: true,
+            packed: std::collections::BTreeMap::new(),
+            auto_pack: false,
             anti_aliasing: AntiAliasing::default(),
             colour_depth: ColourDepth::default(),
             cache_location: None,
@@ -3340,6 +3615,117 @@ impl Document {
         p.enabled.then_some(&p.media)
     }
 
+    /// The reference a packed id stands for ([`Document::packed`]): a footage
+    /// item's own, its proxy's, or the colour config's. `None` when nothing
+    /// live is behind the id, such as a deleted item or the proxy of one.
+    #[must_use]
+    pub fn packed_ref(&self, id: Uuid) -> Option<&MediaRef> {
+        if id == packed_id(self.id) {
+            return self.colour.config.as_ref();
+        }
+        let proxy_of = self.packed_proxy_owner(id);
+        match (self.item(proxy_of.unwrap_or(id))?, proxy_of) {
+            (ProjectItem::Footage(_), Some(item)) => self.proxies.get(&item).map(|p| &p.media),
+            (ProjectItem::Footage(f), None) => Some(&f.media),
+            _ => None,
+        }
+    }
+
+    /// [`Self::packed_ref`], to point the reference somewhere else.
+    pub fn packed_ref_mut(&mut self, id: Uuid) -> Option<&mut MediaRef> {
+        if id == packed_id(self.id) {
+            return self.colour.config.as_mut();
+        }
+        let proxy_of = self.packed_proxy_owner(id);
+        let ProjectItem::Footage(_) = self.item(proxy_of.unwrap_or(id))? else {
+            return None;
+        };
+        match proxy_of {
+            Some(item) => self.proxies.get_mut(&item).map(|p| &mut p.media),
+            None => match self.item_mut(id)? {
+                ProjectItem::Footage(f) => Some(&mut f.media),
+                _ => None,
+            },
+        }
+    }
+
+    /// The footage item whose proxy is packed under `id`, if it is one's.
+    fn packed_proxy_owner(&self, id: Uuid) -> Option<Uuid> {
+        self.proxies
+            .keys()
+            .copied()
+            .find(|item| packed_id(*item) == id)
+    }
+
+    /// Every file an effect's parameter names, such as a LUT's `.cube`, with
+    /// the id it is packed under ([`packed_file_id`]).
+    pub fn effect_files(&self) -> impl Iterator<Item = (Uuid, &str)> {
+        self.comps().flat_map(Composition::effects).flat_map(|fx| {
+            fx.params.iter().flat_map(move |param| {
+                let paths = match &param.value {
+                    EffectValue::File(file) => file.paths.as_slice(),
+                    _ => &[],
+                };
+                let id = move |n| packed_file_id(fx.id, &param.id, n);
+                (paths.iter().enumerate()).map(move |(n, path)| (id(n), path.as_str()))
+            })
+        })
+    }
+
+    /// [`Self::effect_files`], to point each path somewhere else.
+    pub fn effect_file_paths_mut(&mut self) -> impl Iterator<Item = &mut String> {
+        let comps = self.items.iter_mut().filter_map(|item| match item {
+            ProjectItem::Composition(c) => Some(c),
+            _ => None,
+        });
+        comps
+            .flat_map(Composition::effects_mut)
+            .flat_map(|fx| fx.params.iter_mut())
+            .filter_map(|param| match &mut param.value {
+                EffectValue::File(file) => Some(file.paths.iter_mut()),
+                _ => None,
+            })
+            .flatten()
+    }
+
+    /// Where the file behind a packed id is read from: the path
+    /// [`Self::packed_ref`]'s reference was found at, or the one an effect's
+    /// parameter holds. `None` when nothing live is behind the id.
+    #[must_use]
+    pub fn packed_path(&self, id: Uuid) -> Option<&str> {
+        match self.packed_ref(id) {
+            Some(reference) => Some(&reference.absolute_path),
+            None => self
+                .effect_files()
+                .find(|file| file.0 == id)
+                .map(|file| file.1),
+        }
+    }
+
+    /// [`Self::packed_path`], to read the file from somewhere else. An effect's
+    /// parameter has only the one path, so for that this is also what a save
+    /// writes.
+    pub fn packed_path_mut(&mut self, id: Uuid) -> Option<&mut String> {
+        if self.packed_ref(id).is_some() {
+            return self.packed_ref_mut(id).map(|r| &mut r.absolute_path);
+        }
+        let comps = self.items.iter_mut().filter_map(|item| match item {
+            ProjectItem::Composition(c) => Some(c),
+            _ => None,
+        });
+        comps.flat_map(Composition::effects_mut).find_map(|fx| {
+            let effect = fx.id;
+            fx.params.iter_mut().find_map(|param| {
+                let EffectValue::File(file) = &mut param.value else {
+                    return None;
+                };
+                let n =
+                    (0..file.paths.len()).find(|n| packed_file_id(effect, &param.id, *n) == id)?;
+                file.paths.get_mut(n)
+            })
+        })
+    }
+
     /// Whether any composition places `id` as a layer — the Project panel's
     /// `in use` badge (docs/07 §3.1, docs/15 §12A.3a).
     ///
@@ -3370,26 +3756,53 @@ impl Document {
     /// a cache would be machinery bought with nothing.
     #[must_use]
     pub fn item_is_used(&self, id: Uuid) -> bool {
-        self.items.iter().any(|item| match item {
-            // A node graph places its items in Read boxes rather than layers,
-            // and a node graph is placed by the effect that applies it as
-            // much as by a layer, so the badge asks every list and a graph
-            // cannot under-report.
-            ProjectItem::Composition(c) => {
-                c.layers
-                    .iter()
-                    .any(|l| layer_names_item(l, id) || effects_apply_graph(&l.effects, id))
-                    || c.groups.iter().any(|g| effects_apply_graph(&g.effects, id))
-                    || c.graph.as_ref().is_some_and(|g| {
-                        g.read_names_item(id)
-                            || g.nodes.iter().any(|n| {
-                                matches!(n, crate::comp_graph::GraphNode::Fx(inst)
-                                    if applies_graph(inst, id))
-                            })
-                    })
-            }
-            _ => false,
+        self.comps().any(|c| comp_places(c, id))
+    }
+
+    /// Every composition, in project order.
+    fn comps(&self) -> impl Iterator<Item = &Composition> {
+        self.items.iter().filter_map(|item| match item {
+            ProjectItem::Composition(c) => Some(c),
+            _ => None,
         })
+    }
+
+    /// The compositions either side of `id` in the nesting: the ones that
+    /// place it and the ones it places, each in project order. The flowchart
+    /// draws this.
+    ///
+    /// Placing is the `in use` badge's rule ([`Self::item_is_used`]), so the
+    /// two cannot disagree about whether a comp is nested anywhere. One step
+    /// each way, which is also what keeps a nesting cycle from mattering. A
+    /// comp is never its own neighbour, and an `id` that is not a comp has
+    /// none.
+    #[must_use]
+    pub fn comp_flow(&self, id: Uuid) -> CompFlow {
+        let Some(centre) = self.comp(id) else {
+            return CompFlow::default();
+        };
+        let others = || self.comps().filter(move |c| c.id != id);
+        let link = |c: &Composition, upstream: bool| CompLink {
+            id: c.id,
+            more: self.comps().any(|other| {
+                other.id != c.id
+                    && if upstream {
+                        comp_places(other, c.id)
+                    } else {
+                        comp_places(c, other.id)
+                    }
+            }),
+        };
+        CompFlow {
+            used_by: others()
+                .filter(|c| comp_places(c, id))
+                .map(|c| link(c, true))
+                .collect(),
+            uses: others()
+                .filter(|c| comp_places(centre, c.id))
+                .map(|c| link(c, false))
+                .collect(),
+        }
     }
 
     /// Ids that sit at the Project panel root: every item not referenced as
@@ -3437,19 +3850,6 @@ mod tests {
     }
 
     #[test]
-    fn a_shaped_retime_map_is_not() {
-        let mut map =
-            Layer::identity_retime(Rational::new(0, 1).unwrap(), Rational::new(4, 1).unwrap());
-        // Half speed: the layer's four seconds show the source's first two.
-        if let crate::anim::Animation::Keyframed(keys) = &mut map.animation {
-            if let Some(last) = keys.last_mut() {
-                last.value = 2.0;
-            }
-        }
-        assert!(!Layer::is_identity_retime(&map));
-    }
-
-    #[test]
     fn an_eased_map_that_happens_to_end_where_it_started_is_not_identity() {
         // The values read back their own times, but the curve between them
         // does not: an eased pair is a ramp, not an identity.
@@ -3461,12 +3861,6 @@ mod tests {
             }
         }
         assert!(!Layer::is_identity_retime(&map));
-    }
-
-    #[test]
-    fn a_frozen_frame_is_a_retime_however_it_is_written() {
-        let frozen = Property::fixed(1.5);
-        assert!(!Layer::is_identity_retime(&frozen));
     }
 
     /// A Precomp layer sitting at 2..6 s on the outer ruler, whose four
@@ -3495,6 +3889,7 @@ mod tests {
             volume_db: Property::zero(),
             pan: Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: Some(map),
             interpolation: Default::default(),
@@ -3517,25 +3912,6 @@ mod tests {
     #[test]
     fn entering_a_precomp_maps_the_playhead_through_the_retime() {
         assert!((half_speed_precomp().entry_time(4.0, 10.0) - 1.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn entering_a_precomp_from_before_its_span_lands_on_its_start() {
-        assert_eq!(half_speed_precomp().entry_time(1.0, 10.0), 0.0);
-    }
-
-    #[test]
-    fn entering_a_precomp_from_after_its_span_lands_on_its_end() {
-        assert_eq!(half_speed_precomp().entry_time(7.0, 10.0), 10.0);
-        // The out point is exclusive, so the first moment off the end is the end.
-        assert_eq!(half_speed_precomp().entry_time(6.0, 10.0), 10.0);
-    }
-
-    /// A map may reach past the nested comp (overrun, glossary §4); the
-    /// playhead may not.
-    #[test]
-    fn entering_a_precomp_never_lands_outside_the_nested_comp() {
-        assert_eq!(half_speed_precomp().entry_time(4.0, 0.5), 0.5);
     }
 
     /// `BlendMode::ALL` must list every variant exactly once (the layer
@@ -3588,18 +3964,6 @@ mod tests {
             BlendMode::NAMES,
             "NAMES must be ALL's names, in order"
         );
-    }
-
-    #[test]
-    fn effect_instance_sample_temporally_defaults_true() {
-        // An effect saved before the temporal-rerender flag existed loads with
-        // it on (docs/10 §1.1 forward compat), so old projects behave as before.
-        let e = crate::fx::instantiate("blur").unwrap();
-        assert!(e.sample_temporally);
-        let mut v = serde_json::to_value(&e).unwrap();
-        v.as_object_mut().unwrap().remove("sample_temporally");
-        let back: EffectInstance = serde_json::from_value(v).unwrap();
-        assert!(back.sample_temporally);
     }
 
     #[test]
@@ -3676,41 +4040,6 @@ mod tests {
     }
 
     #[test]
-    fn layer_input_source_maps_each_option_to_its_sampling() {
-        // The render paths (draws.rs / export.rs) branch on these two
-        // predicates to choose masks and effects, so pin the mapping here — each
-        // option selects the intended sampling.
-        use LayerInputSource::*;
-        // None: raw source only (no masks, no effects).
-        assert!(!None.applies_masks());
-        assert!(!None.folds_effects());
-        // Masks: source + masks, no effects.
-        assert!(Masks.applies_masks());
-        assert!(!Masks.folds_effects());
-        // Effects and masks: source + masks + effects.
-        assert!(EffectsAndMasks.applies_masks());
-        assert!(EffectsAndMasks.folds_effects());
-
-        // The Choice index round-trips, and the cache-key byte is distinct per
-        // mode (so switching modes retires stale frames).
-        for m in [None, Masks, EffectsAndMasks] {
-            assert_eq!(LayerInputSource::from_choice(m.to_choice()), m);
-            assert_eq!(m.key_byte() as u32, m.to_choice());
-        }
-        assert_eq!(
-            [
-                None.key_byte(),
-                Masks.key_byte(),
-                EffectsAndMasks.key_byte()
-            ],
-            [0, 1, 2]
-        );
-        // The default is Effects and masks: a new
-        // matte/depth input samples the most complete source unless narrowed.
-        assert_eq!(LayerInputSource::default(), EffectsAndMasks);
-    }
-
-    #[test]
     fn file_param_steps_by_its_hold_keyed_index() {
         use crate::anim::{Animation, Keyframe, SideInterp};
 
@@ -3752,27 +4081,6 @@ mod tests {
         assert_eq!(frac(0.6).path_at(0.0), Some("b.cube"));
         assert_eq!(frac(9.0).path_at(0.0), Some("b.cube")); // clamp above
         assert_eq!(frac(-3.0).path_at(0.0), Some("a.cube")); // clamp below
-    }
-
-    #[test]
-    fn motion_blur_defaults_and_forward_compat() {
-        // The AE-style defaults: off, half-frame shutter centred on the frame.
-        let mb = MotionBlur::default();
-        assert!(!mb.enabled);
-        assert_eq!(mb.shutter_angle, 180.0);
-        assert_eq!(mb.shutter_phase, -90.0);
-        assert_eq!(mb.samples, 16);
-        // A comp saved before motion blur existed (no `motion_blur` key) loads
-        // with the default rather than failing (docs/10 §1.1 forward compat).
-        // Build a real comp, strip the key, and confirm it re-loads defaulted.
-        let mut v = serde_json::to_value(comp_with_cameras()).unwrap();
-        v.as_object_mut().unwrap().remove("motion_blur");
-        let comp: Composition = serde_json::from_value(v).unwrap();
-        assert_eq!(comp.motion_blur, MotionBlur::default());
-        // And a layer without the `motion_blur` switch defaults it off.
-        assert!(!Switches::default().motion_blur);
-        // Same forward-compat rule for shy: absent means off.
-        assert!(!Switches::default().shy);
     }
 
     #[test]
@@ -3840,150 +4148,6 @@ mod tests {
             ..MotionBlur::default()
         };
         assert_eq!(at_cap.sample_offsets().len(), 256);
-    }
-
-    #[test]
-    fn file_param_serde_round_trips() {
-        let fp = FileParam::single("C:/luts/teal-orange.cube");
-        let json = serde_json::to_string(&fp).unwrap();
-        assert_eq!(fp, serde_json::from_str::<FileParam>(&json).unwrap());
-
-        // And wrapped in an EffectValue (the shape projects save/load).
-        let ev = EffectValue::File(fp);
-        let ev_json = serde_json::to_string(&ev).unwrap();
-        assert_eq!(ev, serde_json::from_str::<EffectValue>(&ev_json).unwrap());
-    }
-
-    /// Flow tuning parked while the policy is Nearest is document state: it
-    /// survives a save/load, and a project saved before the field existed still
-    /// loads (the key is simply absent).
-    #[test]
-    fn parked_flow_round_trips_and_old_projects_still_load() {
-        let mut layer = comp_with_cameras().layers.remove(0);
-        let params = crate::retime::FlowParams {
-            smoothness: 80.0,
-            detail: crate::retime::VectorDetail::Ultra,
-            ..Default::default()
-        };
-        layer.interpolation = crate::retime::Interpolation::Nearest;
-        layer.parked_flow = Some(Box::new(params.clone()));
-
-        let json = serde_json::to_string(&layer).unwrap();
-        let back: Layer = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.parked_flow.as_deref(), Some(&params));
-        assert_eq!(back, layer);
-
-        // An old project has no `parked_flow` key at all — which is also what
-        // a layer that never parked anything writes.
-        layer.parked_flow = None;
-        let old = serde_json::to_string(&layer).unwrap();
-        assert!(
-            !old.contains("parked_flow"),
-            "nothing parked, nothing saved"
-        );
-        assert_eq!(serde_json::from_str::<Layer>(&old).unwrap(), layer);
-    }
-
-    /// The values a Precomp layer hands the graph it places are document state
-    /// (docs/impl/node-graph-comp.md §5.3): they survive a save and a load, and
-    /// a project saved before the field existed loads with none.
-    #[test]
-    fn graph_inputs_round_trip_and_older_files_open_without_them() {
-        let mut layer = comp_with_cameras().layers.remove(0);
-
-        // Nothing typed: no key at all, which is what every project written
-        // before the field wrote.
-        let old = serde_json::to_string(&layer).unwrap();
-        assert!(
-            !old.contains("graph_inputs"),
-            "nothing typed, nothing saved"
-        );
-        let back: Layer = serde_json::from_str(&old).unwrap();
-        assert_eq!(back, layer);
-        assert!(back.graph_inputs.is_none());
-
-        let inst = crate::fx::instantiate("node_graph").expect("the catalogue knows it");
-        layer.graph_inputs = Some(inst.clone());
-        let json = serde_json::to_string(&layer).unwrap();
-        let back: Layer = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.graph_inputs.as_ref(), Some(&inst));
-        assert_eq!(back, layer);
-    }
-
-    /// **A line on a path round-trips, and a straight one writes what it always
-    /// wrote**. The two new fields are absent from the file
-    /// until they are used, so every `.lum` ever saved opens here unchanged —
-    /// and, just as importantly, every frame those projects have banked keeps
-    /// its name.
-    #[test]
-    fn text_on_a_path_round_trips_and_a_straight_line_writes_no_key() {
-        let mask = crate::mask::Mask::ellipse(60.0, 40.0, 30.0, 18.0);
-        let mut document = TextDocument {
-            text: "Lumit".into(),
-            expression: None,
-            size: 48.0,
-            fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            path: None,
-            path_offset: crate::anim::Property::zero(),
-            animators: Vec::new(),
-            extra: serde_json::Map::new(),
-        };
-
-        let straight = serde_json::to_string(&document).unwrap();
-        assert!(
-            !straight.contains("path"),
-            "a straight line wrote a path key: {straight}"
-        );
-        assert_eq!(
-            serde_json::from_str::<TextDocument>(&straight).unwrap(),
-            document
-        );
-
-        document.path = Some(mask.id);
-        document.path_offset = crate::anim::Property::fixed(37.5);
-        let json = serde_json::to_string(&document).unwrap();
-        assert_eq!(
-            serde_json::from_str::<TextDocument>(&json).unwrap(),
-            document
-        );
-        // The offset writes as a bare number while it is still, the way every
-        // other still property in the document does.
-        assert!(json.contains("\"path_offset\":37.5"), "{json}");
-    }
-
-    /// **A layer with no animators writes no animators key**:
-    /// the whole per-letter model is absent from the file until somebody adds
-    /// one, so every `.lum` saved before it existed opens byte-identical and
-    /// every frame those projects have banked keeps its name.
-    #[test]
-    fn text_animators_are_absent_until_there_are_some() {
-        let mut document = TextDocument {
-            text: "Lumit".into(),
-            expression: None,
-            size: 48.0,
-            fill: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            path: None,
-            path_offset: crate::anim::Property::zero(),
-            animators: Vec::new(),
-            extra: serde_json::Map::new(),
-        };
-        let plain = serde_json::to_string(&document).unwrap();
-        assert!(!plain.contains("animators"), "{plain}");
-
-        let mut animator = crate::text::TextAnimator::new("Cascade");
-        animator.selector.end = crate::anim::Property::fixed(30.0);
-        animator.selector.basis = crate::text::SelectorBasis::Words;
-        animator.position_y = crate::anim::Property::fixed(-60.0);
-        document.animators.push(animator);
-        let json = serde_json::to_string(&document).unwrap();
-        assert_eq!(
-            serde_json::from_str::<TextDocument>(&json).unwrap(),
-            document
-        );
-        // The numbers write as bare numbers while they are still, and the
-        // untouched ones are simply not there.
-        assert!(json.contains("\"position_y\":-60.0"), "{json}");
-        assert!(!json.contains("scale_x"), "{json}");
     }
 
     /// **The adjustment switch survives a save/load, and an old file is
@@ -4090,6 +4254,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             pan: crate::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4214,6 +4379,8 @@ mod tests {
                 path: None,
                 path_offset: crate::anim::Property::zero(),
                 animators: Vec::new(),
+                style: Default::default(),
+                paragraph: Default::default(),
                 extra: serde_json::Map::new(),
             },
         };
@@ -4238,110 +4405,6 @@ mod tests {
         );
     }
 
-    /// A placed **node graph** forces the intermediate (docs/impl/
-    /// node-graph-comp.md §5.9): a graph draw needs its own raster for the
-    /// clipping a collapse would skip.
-    #[test]
-    fn a_placed_node_graph_forces_the_intermediate() {
-        let mut inner = comp_with_cameras();
-        inner.layers.clear();
-        inner.graph = Some(crate::comp_graph::CompGraph::new_with_output());
-        let nested_id = inner.id;
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(inner.clone()));
-
-        let comp = comp_with_cameras();
-        let mut pre = comp.layers[0].clone();
-        pre.id = Uuid::now_v7();
-        pre.kind = LayerKind::Precomp { comp: nested_id };
-        pre.switches.visible = true;
-        pre.switches.collapse = true;
-        pre.blend = BlendMode::Normal;
-        pre.masks.clear();
-        pre.transform = TransformGroup::default();
-        assert_eq!(
-            collapse_state(&doc, &comp, &pre, 1.0),
-            CollapseState::Forced
-        );
-
-        // The same comp with layers instead of a graph collapses as ever.
-        let mut layers = Document::new();
-        inner.graph = None;
-        layers.items.push(ProjectItem::Composition(inner));
-        assert_eq!(
-            collapse_state(&layers, &comp, &pre, 1.0),
-            CollapseState::Active
-        );
-    }
-
-    /// An inner adjustment layer with a live effect stack forces the
-    /// intermediate — its effects apply to the composite beneath it within
-    /// its own comp, and splicing would hand it the parent stack instead.
-    /// A bypassed stack (fx switch off, or every effect disabled) collapses
-    /// normally.
-    #[test]
-    fn an_inner_live_adjustment_layer_forces_the_intermediate() {
-        let mut inner_comp = comp_with_cameras();
-        let mut adj = inner_comp.layers[0].clone();
-        adj.id = Uuid::now_v7();
-        adj.kind = LayerKind::Adjustment;
-        adj.switches.visible = true;
-        adj.effects
-            .push(crate::fx::instantiate("saturation").unwrap());
-        inner_comp.layers.push(adj);
-        let nested_id = inner_comp.id;
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(inner_comp));
-
-        let comp = comp_with_cameras();
-        let mut pre = comp.layers[0].clone();
-        pre.id = Uuid::now_v7();
-        pre.kind = LayerKind::Precomp { comp: nested_id };
-        pre.switches.visible = true;
-        pre.switches.collapse = true;
-        pre.blend = BlendMode::Normal;
-        pre.masks.clear();
-        pre.transform = TransformGroup::default();
-        assert_eq!(
-            collapse_state(&doc, &comp, &pre, 1.0),
-            CollapseState::Forced
-        );
-
-        // Bypass the stack both ways: each restores Active.
-        let with = |edit: &dyn Fn(&mut Layer)| {
-            let mut doc = Document::new();
-            let mut inner_comp = comp_with_cameras();
-            let mut adj = inner_comp.layers[0].clone();
-            adj.id = Uuid::now_v7();
-            adj.kind = LayerKind::Adjustment;
-            adj.switches.visible = true;
-            adj.effects
-                .push(crate::fx::instantiate("saturation").unwrap());
-            edit(&mut adj);
-            let nested_id = inner_comp.id;
-            inner_comp.layers.push(adj);
-            doc.items.push(ProjectItem::Composition(inner_comp));
-            let mut pre = pre.clone();
-            pre.kind = LayerKind::Precomp { comp: nested_id };
-            collapse_state(&doc, &comp, &pre, 1.0)
-        };
-        assert_eq!(
-            with(&|l| l.switches.fx = false),
-            CollapseState::Active,
-            "fx switch off must not force"
-        );
-        assert_eq!(
-            with(&|l| l.effects[0].enabled = false),
-            CollapseState::Active,
-            "a fully disabled stack must not force"
-        );
-        assert_eq!(
-            with(&|l| l.switches.visible = false),
-            CollapseState::Active,
-            "a hidden adjustment layer must not force"
-        );
-    }
-
     /// The topmost visible in-span camera wins; hidden and out-of-span ones
     /// never do; no camera at all → None (flat comp).
     #[test]
@@ -4361,48 +4424,6 @@ mod tests {
         let mut flat = comp_with_cameras();
         flat.layers.clear();
         assert!(flat.camera_pose(1.0).is_none());
-    }
-
-    /// The seven camera channels (docs/impl/camera.md §1) live in the kind, so
-    /// they answer on a Camera layer and nowhere else. Everything the new rows
-    /// get for nothing rests on this one lookup.
-    #[test]
-    fn layer_prop_answers_the_camera_channels_only_on_a_camera() {
-        use TransformProp as P;
-        let mut camera = comp_with_cameras().layers.remove(2);
-        let mut solid = camera.clone();
-        solid.kind = LayerKind::Solid {
-            def: Uuid::now_v7(),
-        };
-
-        for prop in [
-            P::PoiX,
-            P::PoiY,
-            P::PoiZ,
-            P::Zoom,
-            P::FocusDistance,
-            P::Aperture,
-            P::BlurLevel,
-        ] {
-            assert!(prop.is_camera_channel(), "{prop:?}");
-            assert!(camera.prop(prop).is_some(), "{prop:?} is on a camera");
-            assert!(solid.prop(prop).is_none(), "{prop:?} is not on a solid");
-        }
-        // Zoom is the kind's own property, not a copy of something else.
-        assert_eq!(camera.prop(P::Zoom).map(|p| p.value_at(0.0)), Some(1200.0));
-        // The eleven transform channels answer on both, as they always did.
-        assert!(camera.prop(P::Opacity).is_some());
-        assert!(solid.prop(P::Opacity).is_some());
-        // And a write goes to the slot the read came from.
-        camera
-            .prop_mut(P::BlurLevel)
-            .expect("a camera has one")
-            .animation = crate::anim::Animation::Static(40.0);
-        assert_eq!(
-            camera.prop(P::BlurLevel).map(|p| p.value_at(0.0)),
-            Some(40.0)
-        );
-        assert!(solid.prop_mut(P::Zoom).is_none());
     }
 
     /// A two-node camera's forward points at its point of interest, and the
@@ -4456,25 +4477,6 @@ mod tests {
                 blur_level: 60.0,
             })
         );
-    }
-
-    #[test]
-    fn parent_chain_walks_up_and_cycles_are_detected() {
-        let mut comp = comp_with_cameras();
-        let (a, b, c) = (comp.layers[0].id, comp.layers[1].id, comp.layers[2].id);
-        // No parents yet: empty chains, but a self-parent is still a cycle.
-        assert!(layer_parent_chain(&comp, c).is_empty());
-        assert!(parenting_would_cycle(&comp, a, a));
-        // Build a <- b <- c (b parented to a, c parented to b).
-        comp.layers[1].parent = Some(a);
-        comp.layers[2].parent = Some(b);
-        assert_eq!(layer_parent_chain(&comp, b), vec![a]);
-        assert_eq!(layer_parent_chain(&comp, c), vec![b, a]);
-        // a may not adopt b or c (they descend from a) — that would loop.
-        assert!(parenting_would_cycle(&comp, a, b));
-        assert!(parenting_would_cycle(&comp, a, c));
-        // But c re-parenting straight to a is fine (still a DAG upward).
-        assert!(!parenting_would_cycle(&comp, c, a));
     }
 
     #[test]
@@ -4568,6 +4570,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             pan: crate::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4721,124 +4724,6 @@ mod tests {
         );
     }
 
-    /// **A Node graph effect opens files through whatever holds it**
-    /// (docs/impl/node-graph-comp.md §2.1): a layer's stack and a live group's
-    /// header alike, since the header's stack runs on the members' composite
-    /// and the graph's Read boxes are on screen through it.
-    #[test]
-    fn the_footage_walk_follows_a_node_graph_effect_on_a_layer_and_a_header() {
-        let item = Uuid::now_v7();
-        let mut doc = Document::new();
-        // A Read box asks the document what its item is, so this one is here
-        // rather than being an id on its own.
-        doc.items.push(ProjectItem::Footage(FootageItem {
-            sequence: None,
-            id: item,
-            name: "plate.mp4".into(),
-            media: MediaRef {
-                relative_path: "plate.mp4".into(),
-                absolute_path: String::new(),
-                fingerprint: None,
-                extra: serde_json::Map::new(),
-            },
-            extra: serde_json::Map::new(),
-            colour_space: None,
-        }));
-
-        let mut graph = bare_comp("graph");
-        let graph_id = graph.id;
-        graph.graph = Some(crate::comp_graph::CompGraph {
-            nodes: vec![
-                crate::comp_graph::GraphNode::Read {
-                    id: Uuid::now_v7(),
-                    item,
-                    custom_name: None,
-                },
-                crate::comp_graph::GraphNode::Output { id: Uuid::now_v7() },
-            ],
-            edges: Vec::new(),
-            layout: Vec::new(),
-            exposed: Vec::new(),
-            groups: Vec::new(),
-        });
-        let mut inst = crate::fx::instantiate("node_graph").expect("the effect exists");
-        crate::fx::effects::node_graph::bind(
-            &mut inst,
-            graph_id,
-            graph.graph.as_ref().expect("a node graph"),
-        );
-
-        let mut host = bare_comp("host");
-        let mut hosted = bare_layer(LayerKind::Null);
-        hosted.effects = vec![inst.clone()];
-        host.layers.push(hosted);
-        let host_id = host.id;
-
-        let mut grouped = bare_comp("grouped");
-        let member = bare_layer(LayerKind::Null);
-        let member_id = member.id;
-        grouped.layers.push(member);
-        grouped.groups = vec![crate::group::LayerGroup {
-            id: Uuid::now_v7(),
-            name: "band".into(),
-            label: 0,
-            members: vec![member_id],
-            effects: vec![inst],
-        }];
-        let grouped_id = grouped.id;
-
-        for comp in [graph, host, grouped] {
-            doc.items.push(ProjectItem::Composition(comp));
-        }
-
-        assert_eq!(
-            comp_footage_items(&doc, doc.comp(host_id).unwrap()),
-            vec![item],
-            "a graph on a layer's stack names the files its Read boxes read"
-        );
-        assert_eq!(
-            comp_footage_items(&doc, doc.comp(grouped_id).unwrap()),
-            vec![item],
-            "and so does one on a group's header"
-        );
-    }
-
-    #[test]
-    fn solo_op_round_trips_and_any_solo_reports() {
-        use crate::ops::{apply, Op};
-        let mut comp = comp_with_cameras();
-        let a = comp.layers[0].id;
-        assert!(!any_solo(&comp), "nothing soloed to start");
-        comp.layers[0].switches.solo = true;
-        assert!(any_solo(&comp));
-        comp.layers[0].switches.solo = false;
-
-        let comp_id = comp.id;
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(comp));
-        let inv = apply(
-            &mut doc,
-            &Op::SetLayerSolo {
-                comp: comp_id,
-                layer: a,
-                solo: true,
-            },
-        )
-        .unwrap();
-        assert!(doc.comp(comp_id).unwrap().layers[0].switches.solo);
-        assert!(any_solo(doc.comp(comp_id).unwrap()));
-        assert_eq!(
-            inv,
-            Op::SetLayerSolo {
-                comp: comp_id,
-                layer: a,
-                solo: false
-            }
-        );
-        apply(&mut doc, &inv).unwrap();
-        assert!(!doc.comp(comp_id).unwrap().layers[0].switches.solo);
-    }
-
     fn bare_footage(name: &str, relative: &str, absolute: &str) -> FootageItem {
         FootageItem {
             sequence: None,
@@ -4852,23 +4737,8 @@ mod tests {
             },
             colour_space: None,
             extra: serde_json::Map::new(),
+            source_layer: None,
         }
-    }
-
-    /// The Path column shows the path the saved project actually carries
-    /// (the absolute one is never written), and falls back to the
-    /// absolute one only when there is no relative path to show — an imported
-    /// file in a project that has never been saved.
-    #[test]
-    fn a_media_reference_shows_its_relative_path_and_falls_back_to_the_absolute() {
-        let both = bare_footage("a.mp4", "footage/a.mp4", "D:/shoot/a.mp4");
-        assert_eq!(both.media.display_path(), "footage/a.mp4");
-
-        let unsaved = bare_footage("a.mp4", "", "D:/shoot/a.mp4");
-        assert_eq!(unsaved.media.display_path(), "D:/shoot/a.mp4");
-
-        let neither = bare_footage("a.mp4", "", "");
-        assert_eq!(neither.media.display_path(), "");
     }
 
     /// The `in use` badge: footage, a solid and a nested composition all count
@@ -4928,61 +4798,71 @@ mod tests {
         assert!(!doc.item_is_used(Uuid::now_v7()), "an id nobody knows");
     }
 
-    /// A Sequence layer's clips place items too — each clip names its own
-    /// footage or composition, and the badge must see them.
+    /// The flowchart's question: one step each way from a comp, each
+    /// neighbour once, with a mark where the nesting carries on.
     #[test]
-    fn a_sequence_clip_counts_as_placing_its_source() {
-        let footage = bare_footage("a.mp4", "a.mp4", "");
-        let item = footage.id;
-        let mut source = bare_comp("Source");
-        let source_id = source.id;
-        source.layers.push(bare_layer(LayerKind::Adjustment));
+    fn a_comps_flow_is_what_places_it_and_what_it_places() {
+        let clip = |comp: Uuid| LayerKind::Sequence {
+            clips: vec![crate::sequence::Clip::new(
+                crate::sequence::ClipSource::Comp(comp),
+                Rational::new(0, 1).unwrap(),
+                Rational::new(1, 1).unwrap(),
+                Rational::new(0, 1).unwrap(),
+                Rational::new(1, 1).unwrap(),
+            )],
+        };
+        let leaf = bare_comp("leaf");
+        let mut deep = bare_comp("deep");
+        deep.layers
+            .push(bare_layer(LayerKind::Precomp { comp: leaf.id }));
+        let cut = bare_comp("cut");
+        let mut centre = bare_comp("centre");
+        // Placed twice, listed once. A clip places a comp as a layer does. A
+        // comp that has gone, and the comp itself, are nobody's neighbour.
+        for kind in [
+            LayerKind::Precomp { comp: deep.id },
+            LayerKind::Precomp { comp: deep.id },
+            clip(cut.id),
+            LayerKind::Precomp {
+                comp: Uuid::now_v7(),
+            },
+            LayerKind::Precomp { comp: centre.id },
+        ] {
+            centre.layers.push(bare_layer(kind));
+        }
+        let mut shot = bare_comp("shot");
+        shot.layers
+            .push(bare_layer(LayerKind::Precomp { comp: centre.id }));
+        let mut film = bare_comp("film");
+        film.layers
+            .push(bare_layer(LayerKind::Precomp { comp: shot.id }));
+        let mut reel = bare_comp("reel");
+        reel.layers.push(bare_layer(clip(centre.id)));
+        let aside = bare_comp("aside");
 
-        let mut cut = bare_comp("Cut");
-        cut.layers.push(bare_layer(LayerKind::Sequence {
-            clips: vec![
-                crate::sequence::Clip::new(
-                    crate::sequence::ClipSource::Footage(item),
-                    Rational::new(0, 1).unwrap(),
-                    Rational::new(1, 1).unwrap(),
-                    Rational::new(0, 1).unwrap(),
-                    Rational::new(1, 1).unwrap(),
-                ),
-                crate::sequence::Clip::new(
-                    crate::sequence::ClipSource::Comp(source_id),
-                    Rational::new(1, 1).unwrap(),
-                    Rational::new(1, 1).unwrap(),
-                    Rational::new(0, 1).unwrap(),
-                    Rational::new(1, 1).unwrap(),
-                ),
-            ],
-        }));
-
+        let ids = (centre.id, shot.id, reel.id, deep.id, cut.id, leaf.id);
+        let (centre_id, shot_id, reel_id, deep_id, cut_id, leaf_id) = ids;
         let mut doc = Document::new();
-        doc.items.push(ProjectItem::Footage(footage));
-        doc.items.push(ProjectItem::Composition(source));
-        doc.items.push(ProjectItem::Composition(cut));
+        for comp in [leaf, deep, cut, centre, shot, film, reel, aside] {
+            doc.items.push(ProjectItem::Composition(comp));
+        }
 
-        assert!(doc.item_is_used(item));
-        assert!(doc.item_is_used(source_id));
-    }
-
-    /// A hidden layer, or one the playhead is never inside, still *places* the
-    /// asset: the badge says what the project contains, not what is on screen.
-    #[test]
-    fn a_hidden_layer_still_uses_its_item() {
-        let footage = bare_footage("a.mp4", "a.mp4", "");
-        let item = footage.id;
-        let mut comp = bare_comp("Comp 1");
-        let mut layer = bare_layer(LayerKind::Footage { item });
-        layer.switches.visible = false;
-        comp.layers.push(layer);
-
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Footage(footage));
-        doc.items.push(ProjectItem::Composition(comp));
-
-        assert!(doc.item_is_used(item));
+        let link = |id, more| CompLink { id, more };
+        assert_eq!(
+            doc.comp_flow(centre_id),
+            CompFlow {
+                used_by: vec![link(shot_id, true), link(reel_id, false)],
+                uses: vec![link(deep_id, true), link(cut_id, false)],
+            }
+        );
+        assert_eq!(
+            doc.comp_flow(leaf_id),
+            CompFlow {
+                used_by: vec![link(deep_id, true)],
+                uses: Vec::new(),
+            }
+        );
+        assert_eq!(doc.comp_flow(Uuid::now_v7()), CompFlow::default());
     }
 
     /// The measurement behind [`Document::item_is_used`] having no cache: a
@@ -5047,26 +4927,6 @@ mod tests {
             group.axis_modes.get(TransformPair::Position),
             AxisMode::Combined
         );
-    }
-
-    /// And a default one writes nothing, so a project that never separated
-    /// anything is byte-identical to the one the old build wrote.
-    #[test]
-    fn default_axis_modes_are_not_written_and_separated_ones_round_trip() {
-        let plain = TransformGroup::default();
-        let text = serde_json::to_string(&plain).unwrap();
-        assert!(
-            !text.contains("axis_modes"),
-            "the default is absence, not a field: {text}"
-        );
-
-        let mut separated = TransformGroup::default();
-        separated
-            .axis_modes
-            .set(TransformPair::Position, AxisMode::Separated);
-        let back: TransformGroup =
-            serde_json::from_str(&serde_json::to_string(&separated).unwrap()).unwrap();
-        assert_eq!(back, separated);
     }
 
     /// An unknown key from a newer build survives a load and save beside the
@@ -5145,22 +5005,6 @@ mod tests {
                 expected[1]
             );
         }
-    }
-
-    /// A static axis is left static: a constant needs no keys to stay constant.
-    #[test]
-    fn recombining_leaves_a_static_axis_alone() {
-        use crate::anim::{Animation, Keyframe, SideInterp};
-        let mut group = TransformGroup::default();
-        group.scale_x.animation = Animation::Keyframed(vec![Keyframe {
-            time: Rational::new(2, 1).unwrap(),
-            value: 50.0,
-            interp_in: SideInterp::Linear,
-            interp_out: SideInterp::Linear,
-        }]);
-        let unified = group.unified_axes(TransformPair::Scale);
-        assert!(unified.is_empty(), "nothing to merge onto a constant");
-        assert!(!group.scale_y.is_animated());
     }
 
     /// The anti-aliasing budget bites only above 4K, and only as far as it

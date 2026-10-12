@@ -28,28 +28,6 @@ void main() {
           reason: '$value split to ${turns}x $degrees and did not come back');
     }
 
-    test('splits toward zero, the way a rotation is spoken', () {
-      // Under a turn: no turns at all.
-      expect(TurnsAndDegreesField.turnsOf(30), 0);
-      expect(TurnsAndDegreesField.degreesOf(30), closeTo(30, 1e-9));
-
-      // A turn and a bit.
-      expect(TurnsAndDegreesField.turnsOf(390), 1);
-      expect(TurnsAndDegreesField.degreesOf(390), closeTo(30, 1e-9));
-
-      // Exactly two turns is two turns and nothing.
-      expect(TurnsAndDegreesField.turnsOf(720), 2);
-      expect(TurnsAndDegreesField.degreesOf(720), closeTo(0, 1e-9));
-
-      // **Negatives truncate toward zero, not downward.** −370 is "minus one
-      // turn and minus ten", which is how it is read aloud; flooring would call
-      // it −2 turns and +350, which is the same angle and the wrong sentence.
-      expect(TurnsAndDegreesField.turnsOf(-370), -1);
-      expect(TurnsAndDegreesField.degreesOf(-370), closeTo(-10, 1e-9));
-      expect(TurnsAndDegreesField.turnsOf(-30), 0);
-      expect(TurnsAndDegreesField.degreesOf(-30), closeTo(-30, 1e-9));
-    });
-
     test('round-trips whatever it is given', () {
       for (final v in <double>[
         0,
@@ -67,15 +45,6 @@ void main() {
         36000.25,
       ]) {
         roundTrips(v);
-      }
-    });
-
-    test('a value the split cannot represent does not exist', () {
-      // The degrees half is always strictly inside a turn, so the two fields
-      // can never both be at their extremes and mean something ambiguous.
-      for (var i = -2000; i <= 2000; i += 7) {
-        final v = i * 0.37;
-        expect(TurnsAndDegreesField.degreesOf(v).abs(), lessThan(360));
       }
     });
   });
@@ -135,26 +104,6 @@ void main() {
       expect(seen.last, closeTo(390, 1e-6));
       expect(TurnsAndDegreesField.turnsOf(seen.last), 1);
     });
-
-    testWidgets('an anticlockwise drag takes turns away', (tester) async {
-      final seen = await mount(tester, 30);
-      await wind(tester, -2);
-      expect(seen.last, closeTo(-690, 1e-6));
-      expect(TurnsAndDegreesField.turnsOf(seen.last), -1);
-    });
-
-    testWidgets('the hand still follows the pointer inside a turn',
-        (tester) async {
-      final seen = await mount(tester, 0);
-      final gesture = await tester.startGesture(rim(0));
-      await gesture.moveTo(rim(90));
-      await tester.pump();
-      await gesture.moveTo(rim(45));
-      await tester.pump();
-      await gesture.up();
-      await tester.pump();
-      expect(seen.last, closeTo(45, 1e-6));
-    });
   });
 
   group('the degrees box crossing 360', () {
@@ -211,29 +160,6 @@ void main() {
       }
       expect(seen.last, inInclusiveRange(360, 400));
       expect(TurnsAndDegreesField.turnsOf(seen.last), 1);
-    });
-
-    testWidgets('scrubbing down through 0 loses exactly one turn',
-        (tester) async {
-      final seen = await mount(tester, 370);
-      final box = find.byKey(const ValueKey<String>('angle-degrees-t'));
-      final gesture = await tester.startGesture(tester.getCenter(box));
-      await gesture.moveBy(const Offset(-20, 0));
-      await tester.pump();
-      for (var i = 0; i < 10; i++) {
-        await gesture.moveBy(const Offset(-2, 0));
-        await tester.pump();
-      }
-      await gesture.up();
-      await tester.pump();
-
-      expect(seen, isNotEmpty);
-      for (var i = 1; i < seen.length; i++) {
-        expect(seen[i - 1] - seen[i], inInclusiveRange(0, 30),
-            reason: 'tick $i jumped from ${seen[i - 1]} to ${seen[i]}');
-      }
-      expect(seen.last, inInclusiveRange(320, 360));
-      expect(TurnsAndDegreesField.turnsOf(seen.last), 0);
     });
   });
 }

@@ -4,8 +4,11 @@
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:lumit_flutter/main.dart' show projectPathFromArgs;
+import 'package:lumit_flutter/main.dart'
+    show listenForOpenRequests, projectPathFromArgs, takeOpenRequests;
 
 void main() {
   late Directory tmp;
@@ -19,31 +22,51 @@ void main() {
 
   tearDown(() => tmp.deleteSync(recursive: true));
 
-  test('an existing .lum on the line is found', () {
-    expect(projectPathFromArgs([real]), real);
-  });
-
   test('flags and stray tokens around it are ignored', () {
     expect(projectPathFromArgs(['--verbose', real, 'other']), real);
+    // A Linux desktop hands the same document over as a file: address.
+    expect(projectPathFromArgs([Uri.file(real).toString()]), real);
   });
 
-  test('extension match is case-insensitive', () {
-    final upper = '${tmp.path}${Platform.pathSeparator}SHOT.LUM';
-    File(upper).writeAsStringSync('');
-    expect(projectPathFromArgs([upper]), upper);
-  });
+  // macOS names the document in an event instead, and so with an invite
+  // link. The runner keeps each until it is taken (`OpenRequests` in
+  // AppDelegate.swift, which this stands in for) and says when one has come.
+  testWidgets('what macOS asks to open is taken at start-up, and as it comes',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    const channel = MethodChannel('lumit/open');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    var waiting = [real];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'take');
+      final taken = waiting;
+      waiting = [];
+      return taken;
+    });
+    try {
+      // Started by a double-click: read as the argument it is elsewhere.
+      expect(projectPathFromArgs(await takeOpenRequests()), real);
+      expect(await takeOpenRequests(), isEmpty, reason: 'taken once');
 
-  test('a .lum that does not exist is not a project', () {
-    expect(projectPathFromArgs(['${tmp.path}/missing.lum']), isNull);
-  });
-
-  test('a non-.lum file that exists is not a project', () {
-    final other = '${tmp.path}${Platform.pathSeparator}notes.txt';
-    File(other).writeAsStringSync('');
-    expect(projectPathFromArgs([other]), isNull);
-  });
-
-  test('an empty line opens nothing', () {
-    expect(projectPathFromArgs([]), isNull);
+      // Then one that came before anything was listening, and one after.
+      waiting = ['lumit://join/early'];
+      final asked = <List<String>>[];
+      listenForOpenRequests(asked.add);
+      await tester.pump();
+      expect(asked, [
+        ['lumit://join/early']
+      ]);
+      waiting = ['lumit://join/late'];
+      await messenger.handlePlatformMessage(
+          channel.name,
+          channel.codec.encodeMethodCall(const MethodCall('open')),
+          (_) {});
+      await tester.pump();
+      expect(asked.last, ['lumit://join/late']);
+    } finally {
+      channel.setMethodCallHandler(null);
+      messenger.setMockMethodCallHandler(channel, null);
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

@@ -20,6 +20,7 @@ import 'dart:math' as math;
 import 'dart:ui' show Rect, Size;
 
 import 'package:flutter/foundation.dart';
+import 'package:lumit_flutter/src/rust/api/assets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -37,32 +38,62 @@ import 'package:uuid/uuid.dart';
 /// the same square.
 const Size nullLayerBounds = Size(100, 100);
 
-/// How wide a line of text is, roughly, in layer pixels.
+/// Where [document]'s lines sit inside its layer. This is the engine's own
+/// layout, asked of the bridge and remembered.
 ///
-/// **This is the engine's own estimate**, mirrored here on purpose: the bridge
-/// anchors a text layer at half of `characters × size × 0.5`, and the caret and
-/// the box are placed by the same sum. None of them is the true advance width
-/// of the glyphs — that is known only to the rasteriser — but all of them being
-/// wrong the same way is what keeps the caret, the box and the picture from
-/// disagreeing about where the line ends.
-double estimatedTextWidth(String text, double size) =>
-    text.runes.length * size * 0.5;
+/// The box round the words, the caret between two letters and the letter a
+/// click lands on are all read off the layout the rasteriser sets the block
+/// with (`lumit_text::layout`), so none of them can drift from the picture.
+/// Typing asks once per keystroke and painting asks every frame, so the
+/// answers are held, and dropped wholesale once there are enough of them.
+///
+/// [text] is measured in place of the document's own words when given, which
+/// is how a line still being typed is measured.
+BridgeTextBlock measuredText(BridgeTextDocument document, {String? text}) {
+  final key = (
+    text ?? document.text,
+    document.size,
+    document.style,
+    document.paragraph,
+    textIsAnimated(document),
+  );
+  final held = _blocks[key];
+  if (held != null) return held;
+  if (_blocks.length >= _maxHeldBlocks) _blocks.clear();
+  return _blocks[key] = measureText(
+    text: key.$1,
+    size: key.$2,
+    style: key.$3,
+    paragraph: key.$4,
+    animated: key.$5,
+  );
+}
 
-/// A text layer's box, in layer pixels.
+final Map<(String, double, BridgeTextStyle, BridgeParagraphStyle, bool),
+    BridgeTextBlock> _blocks = {};
+const int _maxHeldBlocks = 512;
+
+/// A text layer's box, in layer pixels: exactly the raster the engine draws
+/// the block into, so the wireframe hugs the words.
 ///
-/// **The height is the point size and nothing more.** It used to be the whole
-/// composition — text had no measured bounds on this frontend, and the comp was
-/// the fallback — so a click with the Type tool put a box the size of the frame
-/// round a line of 12-pixel text, and the wireframe said nothing about where the
-/// words were.
-///
-/// An empty line still gets a box: one character's worth of width, so a layer
-/// waiting to be typed into is visible and the box says what size it will be
-/// set at rather than vanishing.
-Size textLayerBounds(String text, double size) => Size(
-      text.isEmpty ? size * 0.5 : estimatedTextWidth(text, size),
-      size,
-    );
+/// Empty text still gets a box, half a size wide and as tall as a line of
+/// capitals, since the engine draws it as one transparent pixel. A layer
+/// waiting to be typed into is then visible and says what size it will be
+/// set at. With a box width it is as wide as the box the words will wrap to.
+Size textLayerBounds(BridgeTextDocument document) {
+  final block = measuredText(document);
+  if (document.text.isEmpty) {
+    return Size(document.paragraph.boxWidth ?? document.size * 0.5,
+        block.lines.first.baseline);
+  }
+  return Size(block.width, block.height);
+}
+
+/// Whether the engine draws [document] into the bigger box animators get:
+/// a straight line with at least one animator (a line on a path keeps the
+/// path's own box either way).
+bool textIsAnimated(BridgeTextDocument document) =>
+    document.animators.isNotEmpty && document.path == null;
 
 /// The box a shape layer's art fills, in the **art's** own coordinates, or null
 /// when there is no art.
@@ -294,13 +325,12 @@ class LayerBoundsCache extends ChangeNotifier {
       return art ?? _compSize(compSize);
     }
 
-    // Text measures its own line: the point size tall, and as wide as
-    // the engine's estimate of the glyphs makes it.
+    // Text measures its own line, exactly as the engine lays it out.
     if (entry.info.kind == BridgeLayerKind.text) {
       try {
         final document = entry.layer.getText();
         if (document != null) {
-          return textLayerBounds(document.text, document.size);
+          return textLayerBounds(document);
         }
       } catch (_) {
         // The layer went away between the model being read and this call.

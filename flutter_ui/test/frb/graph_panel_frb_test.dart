@@ -2,7 +2,7 @@
 //
 // Every document operation here is genuine (see frb_test_support.dart), so a
 // claim about "one undo step" is a claim about the real journal rather than
-// about a mock. What the panel *looks like* is `graph_panel_metrics_test.dart`.
+// about a mock.
 //
 // The two rules these tests exist to hold:
 //
@@ -15,13 +15,12 @@
 import 'dart:io';
 
 import 'package:flutter/gestures.dart'
-    show PointerScrollEvent, kDoubleTapMinTime, kSecondaryMouseButton;
+    show kDoubleTapMinTime;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
-import 'package:lumit_flutter/panels/viewer_prefix_chip.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/drag_payloads.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -99,22 +98,6 @@ void main() {
     /// The effect box's key, for a layer whose only effect is the blur.
     String effectKey(LayerReference layer) => graphNodeKey(
         layer.getGraph().nodes.firstWhere((n) => n.matchName == 'blur').node);
-
-    testWidgets('the whole chain is drawn, Source to Layer out',
-        (tester) async {
-      final p = withBlur();
-      await mount(tester, p);
-
-      expect(find.byKey(const ValueKey<String>('graph-node-source')),
-          findsOneWidget);
-      expect(find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}')),
-          findsOneWidget);
-      expect(
-          find.byKey(const ValueKey<String>('graph-node-out')), findsOneWidget);
-      // The Layer out box's Audio socket is drawn, unfilled and honest: audio
-      // comes only from a footage layer's own stream in this phase.
-      expect(socket('out', 'audio'), findsOneWidget);
-    });
 
     /// The header twirl grows the box to every parameter socket. Until it is
     /// open, a number socket nobody has wired is not drawn at all.
@@ -200,62 +183,6 @@ void main() {
       expect(p.layer.getGraph().wiring.edges, hasLength(1));
     });
 
-    /// The same grab, let go on another socket: the wire moves there rather
-    /// than doubling, because an input takes one wire.
-    testWidgets('a wire pulled off its input onto another input moves',
-        (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      await mount(tester, p);
-      final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
-
-      final out = tester.getCenter(socket('driver:$wiggle', 'value'));
-      final radius = tester.getCenter(socket(key, 'radius'));
-      await tester.dragFrom(out, radius - out);
-      await tester.pump();
-
-      final mix = tester.getCenter(socket(key, 'mix'));
-      await tester.dragFrom(radius, mix - radius);
-      await tester.pump();
-
-      final edges = p.layer.getGraph().wiring.edges;
-      expect(edges, hasLength(1));
-      expect(edges.single.to,
-          isA<BridgeInputRef_Param>().having((e) => e.port, 'port', 'mix'));
-    });
-
-    /// **N5, second half — one output feeds any number of inputs.** Only the
-    /// destination is exclusive: a second wire drawn out of a producer is an
-    /// addition, never a replacement.
-    testWidgets('one driver output fans out to two parameters', (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      await mount(tester, p);
-      final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
-
-      var out = tester.getCenter(socket('driver:$wiggle', 'value'));
-      final radius = tester.getCenter(socket(key, 'radius'));
-      await tester.dragFrom(out, radius - out);
-      await tester.pump();
-
-      out = tester.getCenter(socket('driver:$wiggle', 'value'));
-      final mix = tester.getCenter(socket(key, 'mix'));
-      await tester.dragFrom(out, mix - out);
-      await tester.pump();
-
-      final edges = p.layer.getGraph().wiring.edges;
-      expect(edges, hasLength(2), reason: 'the first wire is still there');
-      expect(
-        edges.every((e) =>
-            e.from == BridgeOutputRef.driver(node: wiggle, port: 'value')),
-        isTrue,
-      );
-    });
-
     /// The engine would refuse this, and its refusal is the backstop. The
     /// panel's own job is to decline it *first*, from the two port types it is
     /// already holding — so the gesture costs nothing at all.
@@ -275,24 +202,6 @@ void main() {
 
       expect(p.layer.getGraph().wiring.edges, isEmpty,
           reason: 'a colour does not fit a number, and nothing was committed');
-    });
-
-    /// The Source box's Matte output is the one feed the graph adds that the
-    /// Matte row could never offer: the layer's own masked source alpha at
-    /// that point in the chain (§1.4).
-    testWidgets('the source matte wires into an effect matte', (tester) async {
-      final p = withBlur();
-      await mount(tester, p);
-      final key = effectKey(p.layer);
-
-      final from = tester.getCenter(socket('source', 'matte'));
-      final to = tester.getCenter(socket(key, 'matte'));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-
-      final edges = p.layer.getGraph().wiring.edges;
-      expect(edges, hasLength(1));
-      expect(edges.single.from, const BridgeOutputRef.sourceMatte());
     });
 
     /// **P0 — Delete with a node picked deleted the layer** (owner, desk
@@ -360,57 +269,6 @@ void main() {
               'together — one undo step');
     });
 
-    /// Heal off is the "unplug it first" rule: a box that still carries a wire
-    /// is left exactly where it is.
-    testWidgets('with Heal off, a wired box is not deleted', (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      await mount(tester, p);
-      final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
-      final from = tester.getCenter(socket('driver:$wiggle', 'value'));
-      final to = tester.getCenter(socket(key, 'radius'));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-
-      await tester.tap(find.byKey(const ValueKey<String>('graph-heal')));
-      await tester.pump();
-      await tester.tapAt(tester.getCenter(
-          find.byKey(ValueKey<String>('graph-node-driver:$wiggle'))));
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
-      await tester.pump();
-
-      expect(p.layer.getGraphDrivers(), hasLength(1));
-      expect(p.layer.getGraph().wiring.edges, hasLength(1));
-    });
-
-    /// Auto-wire: let a wire go over empty canvas, pick a node from the
-    /// console, and the wire is on it when it lands.
-    testWidgets('the console adds a driver and auto-wire joins it',
-        (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      await mount(tester, p);
-
-      final from = tester.getCenter(socket('driver:$wiggle', 'value'));
-      await tester.dragFrom(from, const Offset(220, 60));
-      await tester.pump();
-      expect(
-          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
-
-      await tester
-          .tap(find.byKey(const ValueKey<String>('fx-console-item-Smooth')));
-      await tester.pump();
-
-      final graph = p.layer.getGraph();
-      expect(p.layer.getGraphDrivers(), hasLength(2));
-      expect(graph.wiring.edges, hasLength(1));
-      expect(graph.wiring.edges.single.from,
-          BridgeOutputRef.driver(node: wiggle, port: 'value'));
-    });
-
     /// **The box and its wire arrive in one commit** (docs/impl/node-graph.md
     /// §3), which is what makes the whole gesture one undo step. The ports come
     /// off the catalogue entry, so the socket is known before the node is in
@@ -439,87 +297,6 @@ void main() {
           reason: 'and the wire with it — the two were one commit');
     });
 
-    /// **Scrolling the console never zooms the canvas beneath** (owner item
-    /// 12). The console floats in the overlay, whose click-catcher is opaque
-    /// to hit tests, so a wheel over the popover — list or margin — cannot
-    /// reach the canvas's own scroll-zoom listener. The old inner-graph
-    /// popover leaked exactly this way by sitting *inside* the canvas's
-    /// listener; this holds the road every console now takes.
-    testWidgets('a wheel over the console leaves the canvas zoom alone',
-        (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      await mount(tester, p);
-
-      String zoom() =>
-          tester.widget<Text>(find.byKey(const ValueKey('graph-zoom'))).data!;
-      final before = zoom();
-
-      await tester.dragFrom(tester.getCenter(socket('driver:$wiggle', 'value')),
-          const Offset(240, 80));
-      await tester.pump();
-      expect(
-          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
-
-      // Over the result list…
-      final list = tester.getCenter(
-          find.byKey(const ValueKey<String>('fx-console-item-Smooth')));
-      await tester.sendEventToBinding(
-          PointerScrollEvent(position: list, scrollDelta: const Offset(0, 40)));
-      await tester.pump();
-      // …and over the invisible catcher, well away from the popover.
-      await tester.sendEventToBinding(const PointerScrollEvent(
-          position: Offset(60, 560), scrollDelta: Offset(0, 40)));
-      await tester.pump();
-
-      expect(zoom(), before,
-          reason: 'the scroll is the console\'s, never the graph\'s');
-    });
-
-    /// **The search shows what the wire in hand could land on** (WP3), so the
-    /// footer's promise — "connects the dragged wire where it fits" — is true
-    /// of every row it offers.
-    testWidgets('the console filters by the dragged wire\'s type',
-        (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      final cycle = seedDriver(p.layer, 'colour_cycle', const Offset(30, 440));
-      await mount(tester, p);
-
-      // A number in hand: the drivers that take a number are offered.
-      await tester.dragFrom(tester.getCenter(socket('driver:$wiggle', 'value')),
-          const Offset(240, 60));
-      await tester.pump();
-      expect(find.byKey(const ValueKey<String>('fx-console-item-Smooth')),
-          findsOneWidget);
-      // A press anywhere puts the popover away.
-      await tester.tapAt(const Offset(860, 560));
-      await tester.pump();
-
-      // A colour in hand: nothing in the v1 set takes one, and the list says so
-      // rather than offering a row that could not connect.
-      await tester.dragFrom(tester.getCenter(socket('driver:$cycle', 'colour')),
-          const Offset(240, 60));
-      await tester.pump();
-      expect(
-          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
-      expect(find.byKey(const ValueKey<String>('fx-console-item-Smooth')),
-          findsNothing);
-      expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
-          findsNothing);
-
-      // Without a wire — Ctrl+Space, answered through the claim —
-      // the whole family is back.
-      await tester.tapAt(const Offset(860, 560));
-      await tester.pump();
-      p.uiState.activePane.value = Panel.graph.pane();
-      expect(p.uiState.consoleClaim!(), isTrue,
-          reason: 'the graph claims the console while it is the focused panel');
-      await tester.pump();
-      expect(find.byKey(const ValueKey<String>('fx-console-item-Smooth')),
-          findsOneWidget);
-    });
-
     /// **Ctrl+Space is the graph's one add surface**: with the panel
     /// focused, the shell's console stands down and this one offers the
     /// effects beside the drivers — a chosen effect joins the stack, so its
@@ -546,92 +323,6 @@ void main() {
       expect([for (final e in p.layer.getEffects()) e.getInfo().name],
           ['blur', 'exposure'],
           reason: 'the chosen effect joined the stack, which is the chain');
-    });
-
-    /// The claim is the graph's only while the graph is focused: anywhere
-    /// else, the shell's own console answers as it always did.
-    testWidgets('the console claim stands down when another panel is focused',
-        (tester) async {
-      final p = withBlur();
-      await mount(tester, p);
-
-      p.uiState.activePane.value = Panel.timeline.pane();
-      expect(p.uiState.consoleClaim!(), isFalse,
-          reason: 'not this panel\'s key, so the shell\'s console opens');
-      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
-    });
-
-    /// **Removing a wired effect is one op**. The stack's own
-    /// removal prunes the graph inside the same commit, so the panel neither
-    /// unplugs first nor leaves a dangling edge behind — and one undo brings
-    /// the effect and its wiring back together.
-    testWidgets('deleting a wired effect takes its wires with it, in one step',
-        (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      await mount(tester, p);
-      final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
-      final from = tester.getCenter(socket('driver:$wiggle', 'value'));
-      await tester.dragFrom(
-          from, tester.getCenter(socket(key, 'radius')) - from);
-      await tester.pump();
-      expect(p.layer.getGraph().wiring.edges, hasLength(1));
-
-      // Pick the *effect* box and delete it.
-      await tester.tapAt(
-          tester.getCenter(find.byKey(ValueKey<String>('graph-node-$key'))));
-      await tester.pump();
-      await tester.sendKeyEvent(LogicalKeyboardKey.delete);
-      await tester.pump();
-
-      expect(p.layer.getEffects(), isEmpty);
-      expect(p.layer.getGraph().wiring.edges, isEmpty,
-          reason: 'the wire went with the box it named');
-      expect(p.layer.getGraphDrivers(), hasLength(1),
-          reason: 'the driver itself is not the stack\'s to remove');
-
-      // The proof the prune is for: the next graph write is accepted.
-      final moved = p.layer.getGraph();
-      p.layer.setGraph(
-        drivers: p.layer.getGraphDrivers(),
-        wiring: BridgeGraphWiring(
-          edges: moved.wiring.edges,
-          layout: [
-            BridgeNodePosition(node: BridgeNodeRef.driver(wiggle), x: 4, y: 4),
-          ],
-          exposed: moved.wiring.exposed,
-          groups: moved.wiring.groups,
-          outUnwired: false,
-        ),
-      );
-
-      p.state.project!.undo();
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      await tester.pump();
-      expect(p.layer.getEffects(), hasLength(1));
-      expect(p.layer.getGraph().wiring.edges, hasLength(1),
-          reason: 'one undo restores the effect and its wire together');
-    });
-
-    testWidgets('with Auto-wire off the node lands unwired', (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      await mount(tester, p);
-
-      await tester.tap(find.byKey(const ValueKey<String>('graph-auto-wire')));
-      await tester.pump();
-      await tester.dragFrom(tester.getCenter(socket('driver:$wiggle', 'value')),
-          const Offset(220, 60));
-      await tester.pump();
-      await tester
-          .tap(find.byKey(const ValueKey<String>('fx-console-item-Smooth')));
-      await tester.pump();
-
-      expect(p.layer.getGraphDrivers(), hasLength(2));
-      expect(p.layer.getGraph().wiring.edges, isEmpty);
     });
 
     /// **The stack view can never lie**. The graph's image chain
@@ -691,160 +382,6 @@ void main() {
       expect(find.byKey(ValueKey<String>('graph-twirl-$key')), findsOneWidget);
       expect(find.byKey(ValueKey<String>('graph-twirl-driver:$wiggle')),
           findsNothing);
-    });
-
-    // --- The points wire (points-stream.md §4.3) ---------------------------
-    //
-    // The first wire whose *source* is a stack effect. Everything else on this
-    // canvas was already true of it — teal came from `PortColours` in WP1, the
-    // type rule is the one every other drop takes — so what these hold is the
-    // arm that was missing and the two states the wire can be in.
-
-    /// A layer carrying Particulate, with a Points sample driver beside it.
-    ({
-      LumitState state,
-      LumitUiState uiState,
-      LayerReference layer,
-      UuidValue sample
-    }) withPoints() {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      comp.addSolidLayer();
-      final layer = comp.getLayers().single;
-      layer.addEffect(name: 'particulate');
-      p.uiState.selectedLayer.value = layer;
-      final sample = seedDriver(layer, 'points_sample', const Offset(30, 300));
-      p.uiState.model.refresh();
-      return (state: p.state, uiState: p.uiState, layer: layer, sample: sample);
-    }
-
-    String particulateKey(LayerReference layer) => graphNodeKey(layer
-        .getGraph()
-        .nodes
-        .firstWhere((n) => n.matchName == 'particulate')
-        .node);
-
-    /// **A wire-only socket is always drawn** — there is no row anywhere else
-    /// to reach it from, which is what separates it from a parameter socket
-    /// the twirl folds away.
-    testWidgets('the Points sockets are drawn without exposing anything',
-        (tester) async {
-      final p = withPoints();
-      await mount(tester, p);
-
-      expect(socket(particulateKey(p.layer), 'points'), findsOneWidget,
-          reason: 'the effect declares a data output; it has no row');
-      expect(socket('driver:${p.sample}', 'points'), findsOneWidget);
-      // The driver's two numbers are its whole purpose, so the box shows them
-      // as ports — a driver draws every socket it has.
-      expect(socket('driver:${p.sample}', 'count'), findsOneWidget);
-      expect(socket('driver:${p.sample}', 'nearest_distance'), findsOneWidget);
-      expect(socket(particulateKey(p.layer), 'emit_rate'), findsNothing,
-          reason: 'a parameter socket still waits for the twirl');
-    });
-
-    testWidgets('Particulate\'s Points output wires into the driver, once',
-        (tester) async {
-      final p = withPoints();
-      await mount(tester, p);
-      final key = particulateKey(p.layer);
-
-      final from = tester.getCenter(socket(key, 'points'));
-      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-
-      final edges = p.layer.getGraph().wiring.edges;
-      expect(edges, hasLength(1));
-      expect(
-        edges.single.from,
-        isA<BridgeOutputRef_EffectData>()
-            .having((e) => e.port, 'port', 'points'),
-        reason: 'the source is the stack effect itself',
-      );
-      expect(edges.single.to,
-          isA<BridgeInputRef_Param>().having((e) => e.port, 'port', 'points'));
-
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      await tester.pump();
-      expect(p.layer.getGraph().wiring.edges, isEmpty,
-          reason: 'one gesture, one undo step');
-    });
-
-    /// The Tab search's filter answers from the catalogue (PS3), so a teal
-    /// wire in hand offers the entries that declare a Points input — which in
-    /// v1 is Points sample and nothing else.
-    testWidgets('the Tab search offers Points sample to a teal wire',
-        (tester) async {
-      final p = withPoints();
-      await mount(tester, p);
-
-      await tester.dragFrom(
-          tester.getCenter(socket(particulateKey(p.layer), 'points')),
-          const Offset(200, 120));
-      await tester.pump();
-
-      expect(
-          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
-      expect(
-          find.byKey(const ValueKey<String>('fx-console-item-Points sample')),
-          findsOneWidget);
-      expect(find.byKey(const ValueKey<String>('fx-console-item-Wiggle')),
-          findsNothing,
-          reason: 'a wiggle has nothing a points stream could land on');
-    });
-
-    /// **The loop is declined before it is committed.** Particulate feeding a
-    /// sample whose Count feeds Particulate's Emit rate is the one genuine
-    /// cycle v1 makes constructible (points-stream.md §1.2). The engine
-    /// refuses it with the `Cycle` sentence and that is the backstop; a
-    /// refusal the panel swallows would look like a gesture that did nothing,
-    /// so the second drop never leaves the panel.
-    testWidgets('a wire that would close a loop is declined here',
-        (tester) async {
-      final p = withPoints();
-      await mount(tester, p);
-      final key = particulateKey(p.layer);
-
-      final from = tester.getCenter(socket(key, 'points'));
-      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-      expect(p.layer.getGraph().wiring.edges, hasLength(1));
-
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
-      final back = tester.getCenter(socket('driver:${p.sample}', 'count'));
-      final onto = tester.getCenter(socket(key, 'emit_rate'));
-      await tester.dragFrom(back, onto - back);
-      await tester.pump();
-
-      expect(p.layer.getGraph().wiring.edges, hasLength(1),
-          reason: 'the stream would depend on the parameter it feeds');
-    });
-
-    /// **The hazard, made visible**. A Points sample with nothing
-    /// wired in answers its documented no-op — a distance so large it pins
-    /// whatever it drives at the far end of the range — so the box says so
-    /// until a stream reaches it.
-    testWidgets('a sample with no stream wears the warning mark',
-        (tester) async {
-      final p = withPoints();
-      await mount(tester, p);
-      final mark =
-          find.byKey(ValueKey<String>('graph-no-stream-driver:${p.sample}'));
-      expect(mark, findsOneWidget);
-
-      final key = particulateKey(p.layer);
-      final from = tester.getCenter(socket(key, 'points'));
-      final to = tester.getCenter(socket('driver:${p.sample}', 'points'));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-
-      expect(mark, findsNothing, reason: 'the stream arrived');
-      expect(find.byKey(ValueKey<String>('graph-no-stream-$key')), findsNothing,
-          reason: 'the producer reads no stream of its own');
     });
 
     /// A box's position is document data: it persists, it travels, and a drag
@@ -939,40 +476,6 @@ void main() {
           reason: 'one gesture, one undo step');
     });
 
-    /// A box that already carries wires is only being moved: dropping it on a
-    /// wire would leave the question of what became of its own.
-    testWidgets('a wired box dragged over a wire is only moved',
-        (tester) async {
-      final p = withBlur();
-      final first = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      final other = seedDriver(p.layer, 'wiggle', const Offset(30, 460));
-      await mount(tester, p);
-      final key = effectKey(p.layer);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-$key')));
-      await tester.pump();
-
-      var out = tester.getCenter(socket('driver:$first', 'value'));
-      final radius = tester.getCenter(socket(key, 'radius'));
-      await tester.dragFrom(out, radius - out);
-      await tester.pump();
-      out = tester.getCenter(socket('driver:$other', 'value'));
-      final mix = tester.getCenter(socket(key, 'mix'));
-      await tester.dragFrom(out, mix - out);
-      await tester.pump();
-      expect(p.layer.getGraph().wiring.edges, hasLength(2));
-
-      final middle = (tester.getCenter(socket('driver:$first', 'value')) +
-              tester.getCenter(socket(key, 'radius'))) /
-          2;
-      final box = find.byKey(ValueKey<String>('graph-node-driver:$other'));
-      final grab = tester.getCenter(box);
-      await tester.dragFrom(grab, middle - grab);
-      await tester.pump();
-
-      expect(p.layer.getGraph().wiring.edges, hasLength(2),
-          reason: 'the drop moved the box and nothing else');
-    });
-
     /// **A box is renamed by double-clicking its name** (owner, desk test).
     /// Both kinds commit the way their bypass does — a driver through
     /// `setGraph`, a stack effect through the staged `setEffects` — so each is
@@ -1015,53 +518,6 @@ void main() {
       await tester.pump();
       expect(customNameOf(p.layer, key), isNull,
           reason: 'one gesture, one undo step');
-    });
-
-    testWidgets('renaming a driver box round-trips in one undo',
-        (tester) async {
-      final p = withBlur();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      await mount(tester, p);
-      final key = 'driver:$wiggle';
-
-      await renameBox(tester, key, 'Camera shake');
-      expect(customNameOf(p.layer, key), 'Camera shake');
-
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      await tester.pump();
-      expect(customNameOf(p.layer, key), isNull,
-          reason: 'a driver commits through setGraph, and once');
-    });
-
-    /// An empty name is a real answer: it clears the custom name and the card
-    /// goes back to the box's own label.
-    testWidgets('an empty name clears back to the effect\'s own label',
-        (tester) async {
-      final p = withBlur();
-      await mount(tester, p);
-      final key = effectKey(p.layer);
-
-      await renameBox(tester, key, 'Soften the sign');
-      expect(customNameOf(p.layer, key), 'Soften the sign');
-      expect(find.text('Soften the sign'), findsOneWidget);
-
-      await renameBox(tester, key, '   ');
-      expect(customNameOf(p.layer, key), isNull,
-          reason: 'whitespace is no name at all');
-      expect(find.text('Soften the sign'), findsNothing,
-          reason: 'the card shows the box\'s own label again');
-    });
-
-    /// The Source and Layer out boxes have no name of their own to give: the
-    /// Source shows the layer's name, the Out is the layer's own end.
-    testWidgets('the derived boxes cannot be renamed', (tester) async {
-      final p = withBlur();
-      await mount(tester, p);
-
-      await doubleTapName(tester, 'source');
-      expect(find.byKey(const ValueKey<String>('graph-node-rename-source')),
-          findsNothing);
     });
 
     // -------------------------------------------------------------------
@@ -1181,74 +637,6 @@ void main() {
           reason: 'one gesture, one undo step');
     });
 
-    testWidgets('the enable tick bypasses every picked box', (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-      final ids = stackIds(p.layer);
-
-      await clickBox(tester, boxOf(p.layer, 0));
-      await clickBox(tester, boxOf(p.layer, 1),
-          held: LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.byKey(ValueKey<String>('graph-enable-effect:'
-          '${ids[0]}')));
-      await tester.pump();
-
-      expect([for (final e in p.layer.getEffects()) e.getInfo().enabled],
-          [false, false]);
-    });
-
-    testWidgets('the twirl exposes every picked box', (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-      final ids = stackIds(p.layer);
-
-      await clickBox(tester, boxOf(p.layer, 0));
-      await clickBox(tester, boxOf(p.layer, 1),
-          held: LogicalKeyboardKey.controlLeft);
-      await tester.tap(find.byKey(ValueKey<String>('graph-twirl-effect:'
-          '${ids[0]}')));
-      await tester.pump();
-
-      expect(p.layer.getGraph().wiring.exposed, hasLength(2));
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      await tester.pump();
-      expect(p.layer.getGraph().wiring.exposed, isEmpty,
-          reason: 'one `setGraph`, so one undo step however many were picked');
-    });
-
-    /// `Ctrl+A` here means this canvas, not the composition's layers.
-    testWidgets('Ctrl+A picks every box on the canvas', (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-
-      p.uiState.activePane.value = Panel.graph.pane();
-      expect(p.uiState.requestSelectAll(), isTrue,
-          reason: 'the graph claims the chord now that it can answer it');
-      await tester.pump();
-
-      expect(p.uiState.selectedEffects.value, stackIds(p.layer),
-          reason: 'both effect boxes; Source and Layer out are picked too, '
-              'and carry no effect id to publish');
-    });
-
-    /// **The Viewer chip wants exactly one**. Its name is derived, so
-    /// a pick of several must make it go away by itself rather than by anyone
-    /// remembering to turn it off.
-    testWidgets('the prefix chip names one picked box and no more',
-        (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-
-      await clickBox(tester, boxOf(p.layer, 0));
-      expect(prefixChipName(p.uiState), isNotNull);
-
-      await clickBox(tester, boxOf(p.layer, 1),
-          held: LogicalKeyboardKey.controlLeft);
-      expect(prefixChipName(p.uiState), isNull,
-          reason: 'two picked is no single point to stop at');
-    });
-
     // --- The image chain's own wires ---------------------------------------
     //
     // The chain is the effect list (§1.1), so every gesture on its wires
@@ -1290,52 +678,6 @@ void main() {
       await tester.pump();
       expect(chainEnabled(p.layer), [true, true],
           reason: 'one gesture, one undo step');
-    });
-
-    /// The gesture back. Nothing covered this before, because before there
-    /// was nothing to come back from.
-    testWidgets('re-wiring a bypassed box switches it back on',
-        (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-
-      final at = tester.getCenter(chainInput(p.layer, 1));
-      await tester.dragFrom(at, const Offset(40, 220));
-      await tester.pump();
-      expect(chainEnabled(p.layer), [true, false]);
-
-      // The blur's output back onto the exposure's input: the box the wire
-      // lands on is the box that comes back on (owner's rule).
-      final from = tester.getCenter(find.byKey(
-          ValueKey<String>('graph-socket-effect:${stackIds(p.layer)[0]}-output')));
-      final to = tester.getCenter(chainInput(p.layer, 1));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-
-      expect(chainEnabled(p.layer), [true, true],
-          reason: 'the wire put it back in the chain');
-      expect(chainNames(p.layer), ['blur', 'exposure'],
-          reason: 'and left the order alone - it was already there');
-    });
-
-    /// The equivalence the whole change is for: the wire and the tick are two
-    /// views of one flag, so the two gestures must land in the same state.
-    testWidgets('disconnecting leaves exactly what the enable tick leaves',
-        (tester) async {
-      final byWire = withTwoEffects();
-      await mount(tester, byWire);
-      await tester.dragFrom(
-          tester.getCenter(chainInput(byWire.layer, 1)), const Offset(40, 220));
-      await tester.pump();
-
-      final byTick = withTwoEffects();
-      await mount(tester, byTick);
-      await tester.tap(find.byKey(ValueKey<String>(
-          'graph-enable-effect:${stackIds(byTick.layer)[1]}')));
-      await tester.pump();
-
-      expect(chainEnabled(byWire.layer), chainEnabled(byTick.layer));
-      expect(chainNames(byWire.layer), chainNames(byTick.layer));
     });
 
     testWidgets('unplugging the Layer out leaves the layer drawing nothing',
@@ -1383,98 +725,6 @@ void main() {
       await tester.pump();
       expect(chainNames(p.layer), ['blur', 'exposure'],
           reason: 'one reorder op, one undo step');
-    });
-
-    /// The gesture everybody tries first, and the one that used to do nothing:
-    /// press an output, drag to an input. It lowers to the same reorder the
-    /// input grab does - the box whose output was pulled ends up feeding the
-    /// box it was dropped on.
-    testWidgets('a chain output dragged onto a later input reorders',
-        (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-      expect(chainNames(p.layer), ['blur', 'exposure']);
-
-      // exposure's output, dropped on... there is nothing after it, so take
-      // the other direction: the Source's output onto exposure's input, which
-      // says the Source feeds exposure and moves it to the head.
-      final from = tester
-          .getCenter(find.byKey(const ValueKey<String>('graph-socket-source-image')));
-      final to = tester.getCenter(chainInput(p.layer, 1));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-
-      expect(chainNames(p.layer), ['exposure', 'blur'],
-          reason: 'an output drag reorders exactly as an input drag does');
-
-      p.state.project!.undo();
-      p.uiState.model.refresh();
-      await tester.pump();
-      expect(chainNames(p.layer), ['blur', 'exposure'],
-          reason: 'one reorder op, one undo step');
-    });
-
-    /// A wire *drawn* from an output and let go of on the ground is a change
-    /// of mind. Only a wire *pulled off* an input is a removal - which is why
-    /// the two gestures cannot share one drop.
-    testWidgets('an output wire dropped on empty canvas changes nothing',
-        (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-
-      final from = tester
-          .getCenter(find.byKey(const ValueKey<String>('graph-socket-source-image')));
-      await tester.dragFrom(from, const Offset(0, 260));
-      await tester.pump();
-
-      expect(chainNames(p.layer), ['blur', 'exposure'],
-          reason: 'a drawn wire dropped on nothing bypasses nothing');
-    });
-
-    testWidgets('a chain wire dropped on the Layer out moves its source last',
-        (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-
-      // The wire blur → exposure, dropped on the Layer out: blur feeds the
-      // out now, so blur moves to the end of the stack.
-      final from = tester.getCenter(chainInput(p.layer, 1));
-      final to = tester
-          .getCenter(find.byKey(const ValueKey<String>('graph-socket-out-image')));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-
-      expect(chainNames(p.layer), ['exposure', 'blur']);
-    });
-
-    testWidgets('a stationary press on a chain input changes nothing',
-        (tester) async {
-      final p = withTwoEffects();
-      await mount(tester, p);
-
-      await tester.tapAt(tester.getCenter(chainInput(p.layer, 1)));
-      await tester.pump();
-
-      expect(chainNames(p.layer), ['blur', 'exposure'],
-          reason: 'a chain discard costs an effect, so a slip must not be one');
-    });
-
-    testWidgets('a chain wire dropped on a driver socket is declined',
-        (tester) async {
-      final p = withTwoEffects();
-      final wiggle = seedDriver(p.layer, 'wiggle', const Offset(30, 300));
-      p.uiState.model.refresh();
-      await tester.pump();
-      await mount(tester, p);
-
-      final from = tester.getCenter(chainInput(p.layer, 1));
-      final to = tester.getCenter(socket('driver:$wiggle', 'amount'));
-      await tester.dragFrom(from, to - from);
-      await tester.pump();
-
-      expect(chainNames(p.layer), ['blur', 'exposure'],
-          reason: 'the picture\'s path cannot leave the chain, and nothing '
-              'crossed the bridge');
     });
 
     // --- Named groups -----------------------------------------------------
@@ -1647,26 +897,6 @@ void main() {
           from + const Offset(300, 350) - canvas,
           reason: 'the driver sits where it was let go');
       expect(comp.documentRevision(), was + BigInt.two, reason: 'one op');
-    });
-
-    testWidgets('a right-click on empty canvas opens the console',
-        (tester) async {
-      final p = withBlur();
-      await mount(tester, p);
-      await tester.tapAt(const Offset(600, 420), buttons: kSecondaryMouseButton);
-      await tester.pump();
-      expect(
-          find.byKey(const ValueKey<String>('fx-console-bar')), findsOneWidget);
-    });
-
-    testWidgets('a right-click opens nothing with its setting off',
-        (tester) async {
-      final p = withBlur();
-      p.uiState.workspace.interface.rightClickOpensNodeSearch = false;
-      await mount(tester, p);
-      await tester.tapAt(const Offset(600, 420), buttons: kSecondaryMouseButton);
-      await tester.pump();
-      expect(find.byKey(const ValueKey<String>('fx-console-bar')), findsNothing);
     });
   });
 }

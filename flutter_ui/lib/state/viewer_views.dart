@@ -110,6 +110,13 @@ class ViewerSurface {
   /// content, and a view opens at its start.
   int sourceFrame = 0;
 
+  /// The In and Out marks on a footage view, in the item's own frames: the
+  /// stretch that Insert and Overwrite place. Out is the last frame kept.
+  /// Null is unmarked, which reads as the item's own end. Not written down,
+  /// for [sourceFrame]'s reason.
+  int? sourceIn;
+  int? sourceOut;
+
   // --- How this view is looking at it ------------------------------------
 
   /// Null means "fit", which is a rule rather than a number and has to be
@@ -404,8 +411,18 @@ class ViewerViews extends ChangeNotifier {
   /// **Null when every view is locked and no layout has room**, which is the
   /// caller's cue to open another Viewer panel — the only answer that still
   /// shows what was opened, and what After Effects does.
-  ViewerSurface? viewForOpening(PaneId? anyViewerPane) {
+  ///
+  /// [prefer] names the kind of view the item belongs in. With a footage view
+  /// beside a composition view, footage goes to the one and a composition to
+  /// the other, whichever of them is active: loading a clip into the source
+  /// side must not turn the cut's own picture into that clip.
+  ViewerSurface? viewForOpening(PaneId? anyViewerPane, {ViewMode? prefer}) {
     final current = active;
+    if (prefer != null && current?.mode != prefer) {
+      for (final v in views) {
+        if (!v.locked && v.mode == prefer) return v;
+      }
+    }
     if (current != null && !current.locked) return current;
     for (final v in views) {
       if (!v.locked) return v;

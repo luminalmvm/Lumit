@@ -1,0 +1,95 @@
+---
+title: Bake points
+description: "Writes the points wired into it to disk and hands the written points on."
+---
+
+import Compare from "../../../../components/Compare.astro";
+
+Bake points is a **Generate** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+<Compare label="Bake points" category="generate" slug="bake-points" />
+
+{/* END GENERATED */}
+
+## What it does
+
+Reads the stream on its **Points** socket and hands it on from its own Points socket, drawn
+as discs. Press **Bake** and the stream is written to disk for every frame of the layer.
+**Mode** says which is handed on afterwards, the baked stream or the live one.
+
+A baked stream can be read anywhere a stream can.
+[Points sample](/effects/drivers/points-sample/) and
+[Layer points](/effects/drivers/layer-points/) read it even where they cannot read the live
+one: the points of [Scatter](/effects/generate/scatter/),
+[Emit from image](/effects/generate/emit-from-image/) and
+[Text to points](/effects/generate/text-to-points/), and those of a
+[Vary points](/effects/generate/vary-points/) or
+[Pick points](/effects/generate/pick-points/) that reads a picture.
+
+A bake records what it was made from: the effects above it on the layer and their keyframes,
+the wires and drivers that feed them, the layer's masks, its text or its source, every
+layer those effects name, and the composition's size, frame rate and length. After a change
+to any of these the bake is stale, and **Auto** hands on the live stream until it is baked
+again. Moving the layer keeps a bake.
+
+The bake is kept in Lumit's cache on this machine and not in the project file. On another
+machine it has to be baked again.
+
+:::note[What a bake does not hold]
+- A change to a media file on disk, to a composition nested deeper than the layer's own
+  source, to the clips of a Sequence layer, to the source of a layer the effects name, to a
+  layer an expression reads, or to what an adjustment layer sees beneath it does not make a
+  bake stale.
+- A bake holds up to 20,000 frames, 100,000 points in a frame and 160 MB over all its
+  frames. Past any of these it stops early, and the frames after it are not baked.
+- Baked points hold still within a frame, and accumulation motion blur does not smear them.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mode** | Dropdown | Auto · Read · Bypass | Auto | - |
+| **Bake** | Button | - | - | - |
+| **Cancel** | Button | - | - | - |
+| **Feather** | Slider | 0 to 100 | 100 | Per cent |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Point** groups **Feather**.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mode**: which stream is handed on. **Auto** is the bake while it matches what it was
+  made from, and the live stream otherwise. **Read** is the bake whatever has changed since,
+  and no points on a frame that is not baked. **Bypass** is always the live stream.
+- **Bake**: write the stream to disk for every frame of the layer. It replaces the bake
+  before.
+- **Cancel**: stop a bake that is running. The bake before it is kept.
+- **Feather**: how soft the edge of a drawn disc is.
+- **Mix**: how much of the drawing lands on the picture. At nought the points are still
+  handed on.
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
+
+## Related
+
+- [Scatter](/effects/generate/scatter/)
+- [Emit from image](/effects/generate/emit-from-image/)
+- [Points sample](/effects/drivers/points-sample/)
+- [Layer points](/effects/drivers/layer-points/)
+- [The node graph](/use/nodes/)
+- [Generate](/effects/#generate)
+- [Effects](/use/effects/)

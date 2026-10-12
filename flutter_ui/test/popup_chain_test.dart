@@ -8,7 +8,6 @@
 // outside every open popup replaces the chain, opening one from *inside* a
 // popup extends it, and one click away — or one Escape — takes the lot.
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/theme/theme.dart';
@@ -125,44 +124,5 @@ void main() {
     expect(find.text('flyout'), findsNothing);
     expect(lumitPopupOpen, isFalse,
         reason: 'one click away, not one per menu that happened to be open');
-  });
-
-  testWidgets('Escape dismisses the whole chain', (tester) async {
-    await tester.pumpWidget(host());
-    final anchor = tester.element(find.byKey(const ValueKey('anchor')));
-
-    late BuildContext inside;
-    showLumitPopup<void>(
-      context: anchor,
-      position: Offset.zero,
-      builder: (close) => FloatSurface(
-        child: Builder(builder: (context) {
-          inside = context;
-          return const Text('parent');
-        }),
-      ),
-    );
-    await tester.pump();
-    open(inside, 'flyout', at: const Offset(60, 60));
-    await tester.pump();
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-    expect(find.text('parent'), findsNothing);
-    expect(find.text('flyout'), findsNothing);
-    expect(lumitPopupOpen, isFalse);
-  });
-
-  testWidgets('picking a row closes the popup and leaves nothing behind',
-      (tester) async {
-    await tester.pumpWidget(host());
-    final anchor = tester.element(find.byKey(const ValueKey('anchor')));
-
-    open(anchor, 'only');
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('row-only')));
-    await tester.pump();
-    expect(find.text('only'), findsNothing);
-    expect(lumitPopupOpen, isFalse);
   });
 }

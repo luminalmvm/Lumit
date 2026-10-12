@@ -8,6 +8,8 @@
 //! source. Runs on its own thread with its own decoders; progress
 //! streams back; cancel is checked every frame.
 
+use lumit_audio::mix::MixPlan;
+use lumit_audio::stream::Source;
 use lumit_core::model::{Document, LayerKind, ProjectItem};
 pub use lumit_core::pixels::{px_tile, solid_rgba, srgb_decode, srgb_encode};
 use lumit_core::retime::Interpolation;
@@ -84,7 +86,10 @@ pub struct AudioJob {
     /// (docs/impl/audio-nodes.md §2); the mixer sums the jobs it is handed
     /// whatever clips they came from.
     pub clip: Option<uuid::Uuid>,
-    pub path: PathBuf,
+    /// The file the sound is read from, and which of its audio streams: the
+    /// first for nearly every layer, another or several mixed for a layer or
+    /// clip that has chosen (`lumit_core::model::AudioStreams`).
+    pub sound: lumit_media::SoundSource,
     pub in_s: f64,
     pub out_s: f64,
     pub offset_s: f64,
@@ -252,10 +257,12 @@ impl PartialEq for AudioChain {
 /// a block at a time into a lookahead ring on a chain worker
 /// (docs/impl/audio-plugins.md §3). The ring exists to keep the realtime
 /// callback off another process; a span already rendered keeps it off even more
-/// firmly, and the plan holds whole decoded buffers anyway, so the ring would
-/// buy nothing today and cost a thread, a seek pre-roll and a second answer to
-/// "which block is this". When the plan streams instead of holding buffers, the
-/// ring is the upgrade and this function is the block loop it wraps.
+/// firmly. The plan streams its files now ([`lumit_audio::stream`]) and a
+/// racked clip is the one thing in it that is still held whole: its processed
+/// span stays in memory for as long as the plan does, outside the block
+/// budget, and [`RackBakes`] keeps it from being made again on every edit.
+/// The ring is the upgrade, with this function as the block loop it wraps,
+/// when a cut carries enough racked sound for that memory to matter.
 #[must_use]
 pub fn chain_bake(
     chain: &AudioChain,
@@ -539,12 +546,16 @@ impl ClipFade {
 
 /// One enclosing Precomp layer's contribution to a job's gain: its Volume,
 /// its Pan, and the outer-comp time where its layer time 0 sits (each
-/// property is sampled in its own layer time).
+/// property is sampled in its own layer time). A Sequence clip whose source
+/// is a composition is a carrier too, with the row's Volume and Pan.
 #[derive(Clone, PartialEq)]
 pub struct Carrier {
     pub volume: lumit_core::anim::Property,
     pub pan: lumit_core::anim::Property,
     pub offset_s: f64,
+    /// The ramps and the level of the Sequence clip a nested comp plays
+    /// through, on everything the comp sounds. `None` for a Precomp layer.
+    pub fade: Option<ClipFade>,
     /// The Precomp layer's own **rack**, where it holds anything that sounds:
     /// the bus chain (docs/09 §3.1). Everything arriving through this
     /// carrier is summed first and run through it, and this carrier's Volume
@@ -612,6 +623,9 @@ fn gain_bake(
         }
         for c in carriers {
             g *= lumit_audio::mix::db_to_gain(c.volume.value_at(t - c.offset_s));
+            if let Some(fade) = &c.fade {
+                g *= fade.gain_at(t);
+            }
             let cp = lumit_audio::mix::pan_gains(c.pan.value_at(t - c.offset_s));
             lr[0] *= cp[0];
             lr[1] *= cp[1];
@@ -625,9 +639,9 @@ fn gain_bake(
             // A driven Volume follows the sound, which moves whether or not any
             // keyframe does — always an envelope, never a constant.
             || job.driven.is_some()
-    }) || carriers
-        .iter()
-        .any(|c| c.volume.is_animated() || c.pan.is_animated());
+    }) || carriers.iter().any(|c| {
+        c.volume.is_animated() || c.pan.is_animated() || c.fade.is_some_and(|f| f.is_active())
+    });
     if !animated {
         return (gain_at(0.0), None);
     }
@@ -653,6 +667,14 @@ pub struct PlacedJob<'a> {
     pub samples: &'a [f32],
 }
 
+/// Whether a job's sound arrives through a Precomp layer carrying a rack, and
+/// so has to be in hand to be summed. Every other job is placed by its
+/// numbers alone.
+#[must_use]
+pub fn in_a_bus(job: &AudioJob) -> bool {
+    bus_at(job, 0).is_some()
+}
+
 /// Whose sound one [`MixRun`] is.
 pub enum RunOf {
     /// One job's own, at this index of what the stage was handed: the caller
@@ -665,6 +687,11 @@ pub enum RunOf {
 
 /// One run for the mixer to place, with the gain still to ride on it.
 pub struct MixRun {
+    /// Which of the jobs handed to [`bus_runs`] this run stands where: the
+    /// job itself, or the first job of the bus. Runs are summed in the order
+    /// of the jobs, and a mixer that stages only its buses puts each one back
+    /// in line by this.
+    pub first: usize,
     /// The mixer strip this run meters onto. A bus meters on the Precomp
     /// layer's own strip, which is the row the board draws it as.
     pub layer: Uuid,
@@ -735,6 +762,7 @@ fn runs_at(
                 rate,
             );
             out.push(MixRun {
+                first: i,
                 layer: job.layer,
                 start_frame: placed[i].start_frame,
                 of: RunOf::Job(i),
@@ -810,6 +838,7 @@ fn runs_at(
             rate,
         );
         out.push(MixRun {
+            first: i,
             layer: job.layer,
             start_frame,
             of: RunOf::Bus(samples),
@@ -1867,6 +1896,34 @@ fn has_guide_layer(doc: &Document) -> bool {
 /// nothing. The copy is thrown away when the export finishes and never
 /// reaches the project (docs/06 §7.2: baking is invisible).
 pub fn apply_render_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Document>> {
+    apply_overrides(doc, opts)
+}
+
+/// The composition frames an export of `comp` by `spec` writes, first and
+/// one past the last: the dialogue's own range when it set one, else the
+/// work area, else the whole comp (docs/01-GLOSSARY.md).
+#[must_use]
+pub fn frame_span(comp: &lumit_core::model::Composition, spec: &ExportSpec) -> (usize, usize) {
+    let fps = comp.frame_rate.fps().max(1.0);
+    let comp_frames = (comp.duration.0.to_f64() * fps).round().max(1.0) as usize;
+    match spec.range {
+        Some((a, b)) => {
+            let s = a.min(comp_frames.saturating_sub(1));
+            let e = b.clamp(s + 1, comp_frames);
+            (s, e)
+        }
+        None => match comp.work_area {
+            Some((a, b)) => {
+                let s = ((a.0.to_f64() * fps).round() as usize).min(comp_frames.saturating_sub(1));
+                let e = ((b.0.to_f64() * fps).round() as usize).clamp(s + 1, comp_frames);
+                (s, e)
+            }
+            None => (0, comp_frames),
+        },
+    }
+}
+
+fn apply_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Document>> {
     // Guide layers leave the delivery the same way: not by a second
     // flag threaded through every walk, but by leaving this snapshot — so the
     // draw builder, the decode planner, the occlusion cull and the frame key
@@ -2439,15 +2496,25 @@ pub fn start(
     let cancel = Arc::new(AtomicBool::new(false));
     let flag = cancel.clone();
     std::thread::spawn(move || {
-        let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag);
+        let opened = AtomicBool::new(false);
+        let result = run(&doc, comp_id, &audio, &out_path, &spec, &tx, &flag, &opened);
+        // No half files, but only a file this export began. One that failed
+        // before it opened anything has written nothing, and an image
+        // sequence never writes to the name it was given, so whatever is
+        // there under that name was there before and is somebody's.
+        let unfinished = || {
+            if opened.load(Ordering::Relaxed) {
+                let _ = std::fs::remove_file(&out_path);
+            }
+        };
         let _ = match result {
             Ok(()) if flag.load(Ordering::Relaxed) => {
-                let _ = std::fs::remove_file(&out_path); // no half files
+                unfinished();
                 tx.send(ExportEvent::Failed("cancelled".into()))
             }
             Ok(()) => tx.send(ExportEvent::Done(out_path)),
             Err(e) => {
-                let _ = std::fs::remove_file(&out_path);
+                unfinished();
                 tx.send(ExportEvent::Failed(e))
             }
         };
@@ -2472,12 +2539,15 @@ pub fn mixdown_at(jobs: &[AudioJob], rate: u32, duration_s: f64, master_gain: f3
     mixdown_counting(jobs, rate, duration_s, master_gain, &mut |_| {})
 }
 
-/// As [`mixdown_at`], counting the sources off as each one is decoded.
+/// As [`mixdown_at`], counting the jobs off as each one is summed.
 ///
-/// Decoding is where a mixdown spends its seconds: one whole file per audible
-/// source. `on_decoded` is handed how many of `jobs` are done, which is the
-/// only honest division of the work there is to report, and it is called for a
-/// source that would not decode as well as for one that did.
+/// Decoding is where a mixdown spends its seconds. Each job reads only the
+/// stretch of its file it places, through the pool the mixer plays from
+/// ([`lumit_audio::stream`]), is added to the sum and let go: a cut of two
+/// thousand clips holds the sum and one clip at a time, where it used to hold
+/// two thousand whole files. `on_decoded` is handed how many of `jobs` are
+/// done, and it is called for a source that would not decode as well as for
+/// one that did.
 pub fn mixdown_counting(
     jobs: &[AudioJob],
     rate: u32,
@@ -2485,114 +2555,366 @@ pub fn mixdown_counting(
     master_gain: f32,
     on_decoded: &mut dyn FnMut(usize),
 ) -> Vec<f32> {
-    let decoded: Vec<(lumit_media::AudioBuffer, &AudioJob)> = jobs
+    let pool = lumit_audio::stream::pool();
+    let sourced: Vec<(Arc<Source>, &AudioJob)> = jobs
         .iter()
-        .enumerate()
-        .filter_map(|(index, job)| {
-            let one = lumit_media::audio::decode_all(&job.path, rate)
-                .ok()
-                .map(|buf| (buf, job));
-            on_decoded(index + 1);
-            one
-        })
+        .map(|job| (pool.source(&job.sound, rate), job))
         .collect();
-    let borrowed: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
-        decoded.iter().map(|(b, j)| (b, *j)).collect();
-    mix_decoded(&borrowed, rate, duration_s, master_gain)
+    mix_sources(&sourced, rate, duration_s, master_gain, on_decoded)
 }
 
-/// As [`mixdown`], but over already-decoded buffers — the preview path's
-/// fast re-mix (docs/09 §2 lazy-decode direction): a solo/mute/trim edit
-/// re-sums cached buffers in seconds instead of re-decoding whole files.
+/// As [`mixdown`], but over buffers already in memory.
 pub fn mixdown_prepared(
     decoded: &[(std::sync::Arc<lumit_media::AudioBuffer>, AudioJob)],
     rate: u32,
     duration_s: f64,
     master_gain: f32,
 ) -> Vec<f32> {
-    let borrowed: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
-        decoded.iter().map(|(b, j)| (b.as_ref(), j)).collect();
-    mix_decoded(&borrowed, rate, duration_s, master_gain)
+    let sourced: Vec<(Arc<Source>, &AudioJob)> = decoded
+        .iter()
+        .map(|(b, j)| (Source::whole(Arc::clone(b)), j))
+        .collect();
+    mix_sources(&sourced, rate, duration_s, master_gain, &mut |_| {})
 }
 
-/// The shared placement + sum over decoded buffers (each already at `rate`).
-fn mix_decoded(
-    decoded: &[(&lumit_media::AudioBuffer, &AudioJob)],
+/// Where a job lands: [`lumit_audio::mix::place_on_timeline`] over its
+/// source. `wait` finds a file's exact length first, which an export always
+/// does and the live plan does for a job whose samples it is about to read;
+/// without it a file whose length nobody has found yet is placed as if it
+/// ran on, and reads as silence past its end, which mixes to the same sound.
+fn place(source: &Source, job: &AudioJob, rate: u32, wait: bool) -> Option<(i64, usize, usize)> {
+    let frames = if wait {
+        source.frames_exactly()
+    } else {
+        // Long enough that no clip is cut short by it, short enough that
+        // adding to it cannot overflow.
+        source.frames().unwrap_or(usize::MAX / 4)
+    };
+    lumit_audio::mix::place_on_timeline(job.in_s, job.out_s, job.offset_s, frames, rate)
+}
+
+/// **The buses of a mix**, each with the index of the job it stands in line
+/// at: every job arriving through a Precomp layer that carries a rack, read,
+/// run through its own racks, summed and run through the layer's
+/// ([`bus_runs`]). These are the jobs that have to be in memory together,
+/// because a rack hears a sum.
+fn buses(sourced: &[(Arc<Source>, &AudioJob)], rate: u32, offline: bool) -> Vec<(usize, MixRun)> {
+    /// One member of some bus, read and its own racks run.
+    struct Member<'a> {
+        index: usize,
+        job: &'a AudioJob,
+        start_frame: i64,
+        samples: Vec<f32>,
+    }
+    let members: Vec<Member<'_>> = sourced
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, job))| in_a_bus(job))
+        .filter_map(|(index, (source, job))| {
+            let (start_frame, src_start, len) = place(source, job, rate, true)?;
+            let dry = source.read(src_start, len, offline);
+            Some(match job_bake(job, &dry, start_frame, rate, offline) {
+                Some((wet, latency)) => Member {
+                    index,
+                    job,
+                    start_frame: start_frame - i64::from(latency),
+                    samples: wet,
+                },
+                None => Member {
+                    index,
+                    job,
+                    start_frame,
+                    samples: dry,
+                },
+            })
+        })
+        .collect();
+    if members.is_empty() {
+        return Vec::new();
+    }
+    let staged: Vec<PlacedJob<'_>> = members
+        .iter()
+        .map(|m| PlacedJob {
+            job: m.job,
+            start_frame: m.start_frame,
+            samples: &m.samples,
+        })
+        .collect();
+    bus_runs(&staged, rate, offline)
+        .into_iter()
+        .map(|run| (members[run.first].index, run))
+        .collect()
+}
+
+/// The shared placement and sum over sources (each at `rate`), the way an
+/// export wants it: every sample the one a decode of the whole file holds,
+/// every rack run offline, and nothing held longer than it takes to add it.
+///
+/// The runs are added in the order of the jobs, a bus where its first job
+/// stands, which is the order the live plan plays them in: the two sum the
+/// same numbers in the same order.
+fn mix_sources(
+    sourced: &[(Arc<Source>, &AudioJob)],
     rate: u32,
     duration_s: f64,
     master_gain: f32,
+    on_done: &mut dyn FnMut(usize),
 ) -> Vec<f32> {
     let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
-    // The insert chain runs first, and its output has to outlive the borrowed
-    // placements below — so the two passes rather than one: process, then place
-    // over whichever buffer each job ended up with.
-    /// One job, placed, with the chain already run over it where it had one.
-    struct Placed<'a> {
-        start_frame: i64,
-        job: &'a AudioJob,
-        dry: &'a [f32],
-        wet: Option<Vec<f32>>,
-    }
-
-    let placed: Vec<Placed<'_>> = decoded
-        .iter()
-        .filter_map(|(buf, job)| {
-            let (start_frame, src_start, len) = lumit_audio::mix::place_on_timeline(
-                job.in_s,
-                job.out_s,
-                job.offset_s,
-                buf.samples.len() / 2,
-                rate,
-            )?;
-            let dry: &[f32] = &buf.samples[src_start * 2..(src_start + len) * 2];
-            // The export runs the chains **offline** (docs/impl/audio-plugins.md
-            // §3): no deadline, and the plugin may take its slower path.
-            match job_bake(job, dry, start_frame, rate, true) {
-                // Latency compensation: the processed run is the placed span
-                // plus the chain's own delay, put down that many frames earlier
-                // so the wet sound lands where the dry did. Its length is the
-                // run's own, not the span's, which is what lets a tail ring on
-                // past the out point.
-                Some((samples, latency)) => Some(Placed {
-                    start_frame: start_frame - i64::from(latency),
-                    job,
-                    dry,
-                    wet: Some(samples),
-                }),
-                None => Some(Placed {
-                    start_frame,
-                    job,
-                    dry,
-                    wet: None,
-                }),
-            }
-        })
-        .collect();
-    // Then the bus stage: a Precomp layer carrying a rack sums what arrives
+    let mut out = vec![0.0f32; total_frames * 2];
+    // The bus stage first: a Precomp layer carrying a rack sums what arrives
     // through it and the rack hears the sum, which is the one thing no amount
     // of per-job arithmetic can do.
-    let staged: Vec<PlacedJob<'_>> = placed
+    let mut buses = buses(sourced, rate, true).into_iter().peekable();
+    for (index, (source, job)) in sourced.iter().enumerate() {
+        if in_a_bus(job) {
+            if let Some((_, run)) = buses.next_if(|(at, _)| *at == index) {
+                if let RunOf::Bus(samples) = &run.of {
+                    lumit_audio::mix::add_placed(
+                        &mut out,
+                        &lumit_audio::mix::PlacedAudio {
+                            start_frame: run.start_frame,
+                            samples,
+                            gain: run.gain,
+                            envelope: run.envelope,
+                        },
+                    );
+                }
+            }
+        } else if let Some((start_frame, src_start, len)) = place(source, job, rate, true) {
+            let dry = source.read(src_start, len, true);
+            // The export runs the chains **offline** (docs/impl/audio-plugins.md
+            // §3): no deadline, and the plugin may take its slower path.
+            //
+            // Latency compensation: the processed run is the placed span plus
+            // the chain's own delay, put down that many frames earlier so the
+            // wet sound lands where the dry did. Its length is the run's own,
+            // not the span's, which is what lets a tail ring on past the out
+            // point.
+            let (samples, start_frame) = match job_bake(job, &dry, start_frame, rate, true) {
+                Some((wet, latency)) => (wet, start_frame - i64::from(latency)),
+                None => (dry, start_frame),
+            };
+            let (gain, envelope) = volume_bake(job, start_frame, samples.len() / 2, rate);
+            lumit_audio::mix::add_placed(
+                &mut out,
+                &lumit_audio::mix::PlacedAudio {
+                    start_frame,
+                    samples: &samples,
+                    gain,
+                    envelope,
+                },
+            );
+        }
+        on_done(index + 1);
+    }
+    for s in &mut out {
+        *s = (*s * master_gain).clamp(
+            -lumit_audio::mix::MASTER_CEILING,
+            lumit_audio::mix::MASTER_CEILING,
+        );
+    }
+    out
+}
+
+/// What the racks made of each job the last time a plan was built, so the next
+/// build runs only the racks an edit changed.
+///
+/// # In plain terms
+///
+/// A rack on a clip is run over the clip's whole span when the plan is built,
+/// and the plan is built again after every edit. Without this a cut with a
+/// rack on two hundred clips ran two hundred racks for every trim anywhere.
+/// A bake depends only on the stretch of file it was given, where that sits
+/// on the timeline, and the racks themselves, so a job that matches the last
+/// build on all three is handed the same sound back.
+///
+/// Holds what the last plan held and no more: a build takes what it can use
+/// and leaves behind only what it used.
+#[derive(Default)]
+pub struct RackBakes {
+    held: Vec<(BakeKey, Baked)>,
+    /// Whatever else the racks' answers depend on that the keys cannot see:
+    /// the caller's own stamp, and a changed one empties the lot.
+    stamp: u64,
+}
+
+/// What a job's racks came to: the processed sound and the latency it is
+/// placed early by, or `None` where neither rack opened anything as audio.
+type Baked = Option<(Arc<Source>, u32)>;
+
+#[derive(PartialEq)]
+struct BakeKey {
+    item: Uuid,
+    /// Which of the item's audio streams went through the racks: two rows
+    /// split from one recording share an item, a span and a rack, and
+    /// differ in this alone.
+    streams: Vec<u32>,
+    rate: u32,
+    start_frame: i64,
+    src_start: usize,
+    len: usize,
+    clip_chain: Option<Arc<AudioChain>>,
+    chain: Option<Arc<AudioChain>>,
+}
+
+impl RackBakes {
+    /// Forget every bake unless `stamp` is the one they were made under. The
+    /// caller folds in what a rack's sound depends on beyond the job itself,
+    /// which today is the list of plugins switched off for now.
+    pub fn stamped(&mut self, stamp: u64) {
+        if self.stamp != stamp {
+            self.held.clear();
+            self.stamp = stamp;
+        }
+    }
+
+    /// How many bytes of processed sound the bakes hold.
+    #[must_use]
+    pub fn bytes(&self) -> usize {
+        self.held
+            .iter()
+            .filter_map(|(_, baked)| baked.as_ref())
+            .map(|(source, _)| source.frames().unwrap_or(0) * 2 * std::mem::size_of::<f32>())
+            .sum()
+    }
+}
+
+/// Place the jobs on the comp strip as a live [`MixPlan`], and say which
+/// mixer strip each of its meter slots belongs to.
+///
+/// The same placement, racks, bus stage and Volume bake the export mixes with
+/// ([`mixdown_counting`]), in the same order, so playback sounds like the
+/// file. Two things are said differently. The racks run in realtime and not
+/// offline. And a job with no rack on it reads nothing here: it names its
+/// source and the stretch it plays, and the blocks are decoded as the
+/// playhead nears them. A job whose source `source_of` does not know
+/// contributes nothing.
+///
+/// `bakes` carries each racked job's processed sound from one build to the
+/// next ([`RackBakes`]).
+pub fn live_plan(
+    jobs: &[AudioJob],
+    source_of: &dyn Fn(&AudioJob) -> Option<Arc<Source>>,
+    rate: u32,
+    duration_s: f64,
+    master_db: f64,
+    bakes: &mut RackBakes,
+) -> (Arc<MixPlan>, Vec<Uuid>) {
+    let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
+    let sourced: Vec<(Arc<Source>, &AudioJob)> = jobs
         .iter()
-        .map(|p| PlacedJob {
-            job: p.job,
-            start_frame: p.start_frame,
-            samples: p.wet.as_deref().unwrap_or(p.dry),
-        })
+        .filter_map(|job| Some((source_of(job).filter(|s| s.rate() == rate)?, job)))
         .collect();
-    let runs = bus_runs(&staged, rate, true);
-    let placements: Vec<lumit_audio::mix::PlacedAudio> = runs
-        .iter()
-        .map(|run| lumit_audio::mix::PlacedAudio {
-            start_frame: run.start_frame,
-            samples: match &run.of {
-                RunOf::Job(i) => staged[*i].samples,
-                RunOf::Bus(samples) => samples,
-            },
-            gain: run.gain,
-            envelope: run.envelope.clone(),
-        })
-        .collect();
-    lumit_audio::mix::mix_stereo_at(&placements, total_frames, master_gain)
+    // Meter slots in first-sounding order, one per strip: several jobs from
+    // one Precomp layer share its slot, and past the bank's size the extras
+    // play unmetered rather than being dropped.
+    let mut strips: Vec<Uuid> = Vec::new();
+    let mut slot_of = |layer: Uuid| {
+        let slot = match strips.iter().position(|s| *s == layer) {
+            Some(at) => at,
+            None => {
+                strips.push(layer);
+                strips.len() - 1
+            }
+        };
+        u8::try_from(slot)
+            .ok()
+            .filter(|s| usize::from(*s) < lumit_audio::meter::MAX_STRIPS)
+            .unwrap_or(lumit_audio::mix::NO_METER)
+    };
+    let mut kept: Vec<(BakeKey, Baked)> = Vec::new();
+    let mut clips = Vec::with_capacity(sourced.len());
+    let mut buses = buses(&sourced, rate, false).into_iter().peekable();
+    for (index, (source, job)) in sourced.iter().enumerate() {
+        if in_a_bus(job) {
+            // The bus stage: everything arriving through a Precomp layer that
+            // carries a rack was summed and run through it, and comes back as
+            // one run of its own on that layer's strip (docs/09 §3.1).
+            if let Some((_, run)) = buses.next_if(|(at, _)| *at == index) {
+                if let RunOf::Bus(samples) = run.of {
+                    let frames = samples.len() / 2;
+                    clips.push(lumit_audio::mix::PlacedClip {
+                        source: Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
+                        start_frame: run.start_frame,
+                        src_start: 0,
+                        len: frames,
+                        gain: run.gain,
+                        envelope: run.envelope.map(Arc::new),
+                        meter: slot_of(run.layer),
+                    });
+                }
+            }
+            continue;
+        }
+        let racked = job.chain.is_some() || job.clip_chain.is_some();
+        let Some((start_frame, src_start, len)) = place(source, job, rate, racked) else {
+            continue;
+        };
+        // The clip's insert chain and then the layer's, ahead of Volume and
+        // Pan. The processed span **replaces** the file in the plan, so the
+        // realtime callback plays finished sound and never waits on a
+        // plugin's process; a job whose stacks open nothing keeps its file
+        // and reads it in blocks like any other.
+        let baked: Baked = if racked {
+            let key = BakeKey {
+                item: job.item,
+                streams: job.sound.streams().to_vec(),
+                rate,
+                start_frame,
+                src_start,
+                len,
+                clip_chain: job.clip_chain.clone(),
+                chain: job.chain.clone(),
+            };
+            let baked = match bakes.held.iter().position(|(k, _)| *k == key) {
+                Some(at) => bakes.held.swap_remove(at).1,
+                None => {
+                    let dry = source.read(src_start, len, false);
+                    job_bake(job, &dry, start_frame, rate, false).map(|(samples, latency)| {
+                        (
+                            Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
+                            latency,
+                        )
+                    })
+                }
+            };
+            kept.push((key, baked.clone()));
+            baked
+        } else {
+            None
+        };
+        let (source, start_frame, src_start, len) = match baked {
+            // Placed the chain's summed latency earlier, so the wet lands
+            // where the dry did, and as long as the run came back, so a tail
+            // rings on past the out point.
+            Some((wet, latency)) => {
+                let frames = wet.frames().unwrap_or(0);
+                (wet, start_frame - i64::from(latency), 0, frames)
+            }
+            None => (Arc::clone(source), start_frame, src_start, len),
+        };
+        let (gain, envelope) = volume_bake(job, start_frame, len, rate);
+        clips.push(lumit_audio::mix::PlacedClip {
+            source,
+            start_frame,
+            src_start,
+            len,
+            gain,
+            envelope: envelope.map(Arc::new),
+            meter: slot_of(job.layer),
+        });
+    }
+    bakes.held = kept;
+    strips.truncate(lumit_audio::meter::MAX_STRIPS);
+    (
+        Arc::new(MixPlan {
+            clips,
+            total_frames,
+            master_gain: lumit_audio::mix::db_to_gain(master_db),
+        }),
+        strips,
+    )
 }
 
 /// How many audio samples (per channel) belong before the end of video
@@ -2605,6 +2927,7 @@ pub fn audio_samples_through(frame_count: usize, fps: f64, rate: u32) -> usize {
     ((frame_count as f64 / fps) * f64::from(rate)).round() as usize
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run(
     doc: &Arc<Document>,
     comp_id: Uuid,
@@ -2613,6 +2936,9 @@ fn run(
     spec: &ExportSpec,
     tx: &Sender<ExportEvent>,
     cancel: &AtomicBool,
+    // Raised just before the output file is opened, which is the first moment
+    // there is anything of this export's at `out_path`.
+    opened: &AtomicBool,
 ) -> Result<(), String> {
     // The render settings that change the document do it on this export's own
     // throwaway snapshot, never on the project (docs/06 §7.2).
@@ -2620,24 +2946,7 @@ fn run(
     let doc = overridden.as_ref().unwrap_or(doc);
     let comp = doc.comp(comp_id).ok_or("composition missing")?;
     let fps = comp.frame_rate.fps().max(1.0);
-    let comp_frames = (comp.duration.0.to_f64() * fps).round().max(1.0) as usize;
-    // The range: the dialogue's own when it set one, else the work area, else
-    // the whole comp (docs/01-GLOSSARY.md).
-    let (first, end) = match spec.range {
-        Some((a, b)) => {
-            let s = a.min(comp_frames.saturating_sub(1));
-            let e = b.clamp(s + 1, comp_frames);
-            (s, e)
-        }
-        None => match comp.work_area {
-            Some((a, b)) => {
-                let s = ((a.0.to_f64() * fps).round() as usize).min(comp_frames.saturating_sub(1));
-                let e = ((b.0.to_f64() * fps).round() as usize).clamp(s + 1, comp_frames);
-                (s, e)
-            }
-            None => (0, comp_frames),
-        },
-    };
+    let (first, end) = frame_span(comp, spec);
     // The output rate. A rate other than the comp's resamples by nearest comp
     // frame over the same wall-clock span, so a 60 fps comp exported at 30
     // shows every other frame and lasts exactly as long.
@@ -2691,6 +3000,7 @@ fn run(
     // Sound with no picture needs no compositor and no graphics card at all:
     // the mix is already made, and there is nothing to render.
     if let ExportFormat::Audio(format) = spec.format {
+        opened.store(true, Ordering::Relaxed);
         return run_audio_only(
             out_path,
             format,
@@ -2757,6 +3067,7 @@ fn run(
                 Some((target, peak)) => (Some(target), peak),
                 None => (None, None),
             };
+            opened.store(true, Ordering::Relaxed);
             let encoder = lumit_media::Encoder::open(
                 out_path,
                 Some(&lumit_media::encode::VideoSettings {
@@ -3073,6 +3384,7 @@ pub fn item_infos(
                     source: lumit_media::MediaSource {
                         path: PathBuf::from(&f.media.absolute_path),
                         sequence_fps: f.sequence_fps(),
+                        source_layer: f.source_layer,
                     },
                     fps,
                     frames,
@@ -3090,6 +3402,7 @@ pub fn item_infos(
                     source: lumit_media::MediaSource {
                         path: PathBuf::from(&f.media.absolute_path),
                         sequence_fps: f.sequence_fps(),
+                        source_layer: f.source_layer,
                     },
                     fps: 1.0,
                     frames: 1,
@@ -3156,6 +3469,7 @@ mod tests {
                 volume_db: lumit_core::anim::Property::zero(),
                 pan: lumit_core::anim::Property::zero(),
                 audio_only: false,
+                audio_streams: Default::default(),
                 adjustment: false,
                 retime: None,
                 interpolation: Default::default(),
@@ -3222,7 +3536,16 @@ mod tests {
     ) -> Option<Result<(), String>> {
         let (tx, _rx) = channel();
         let cancel = AtomicBool::new(false);
-        match run(doc, comp, &[], path, spec, &tx, &cancel) {
+        match run(
+            doc,
+            comp,
+            &[],
+            path,
+            spec,
+            &tx,
+            &cancel,
+            &AtomicBool::new(false),
+        ) {
             Err(e) if e.starts_with("export renderer:") => {
                 lumit_gpu::no_adapter();
                 None
@@ -3270,49 +3593,6 @@ mod tests {
         );
     }
 
-    /// A different output rate keeps the wall-clock span: one second of a
-    /// 30 fps comp at 10 fps is ten frames, not thirty.
-    #[test]
-    fn an_fps_override_resamples_over_the_same_span() {
-        let (doc, comp) = solid_doc(32, 16);
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("slow.png");
-        let mut sp = spec(
-            ExportFormat::Images(lumit_media::encode::ImageFormat::Png),
-            32,
-            16,
-        );
-        sp.range = Some((0, 30));
-        sp.fps = Some(10.0);
-        let Some(result) = run_now(&doc, comp, &path, &sp) else {
-            return;
-        };
-        result.expect("export runs");
-        assert!(lumit_media::encode::sequence_frame_path(&path, 10).exists());
-        assert!(
-            !lumit_media::encode::sequence_frame_path(&path, 11).exists(),
-            "one second at 10 fps is ten frames"
-        );
-    }
-
-    /// The mp4 path takes the same range and rate machinery and writes a real
-    /// file — the smoke that the Sink split did not orphan the video half.
-    #[test]
-    fn a_ranged_mp4_export_still_writes_a_file() {
-        let (doc, comp) = solid_doc(32, 16);
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("out.mp4");
-        let mut sp = spec(ExportFormat::Video(VideoCodec::H264), 32, 16);
-        sp.range = Some((0, 15));
-        sp.fps = Some(15.0);
-        let Some(result) = run_now(&doc, comp, &path, &sp) else {
-            return;
-        };
-        result.expect("export runs");
-        let len = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-        assert!(len > 0, "the mp4 has bytes in it");
-    }
-
     /// Volume baking (docs/09 §6): a static Volume is exactly its constant
     /// gain; a keyframed fade becomes a control-rate envelope sampled in
     /// layer time (comp time − start offset), falling to true zero at the
@@ -3325,7 +3605,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 10.0,
             offset_s,
@@ -3379,6 +3659,7 @@ mod tests {
             volume: Property::fixed(-6.0),
             pan: Property::zero(),
             offset_s: 0.0,
+            fade: None,
             chain: None,
         }];
         let (g, env) = volume_bake(&carried, 0, 48_000, 48_000);
@@ -3393,6 +3674,7 @@ mod tests {
             volume: fade,
             pan: Property::zero(),
             offset_s: 0.0,
+            fade: None,
             chain: None,
         }];
         let (_, env) = volume_bake(&fading_carrier, 0, 48_000, 48_000);
@@ -3414,6 +3696,7 @@ mod tests {
             volume: Property::zero(),
             pan: Property::fixed(lumit_audio::mix::PAN_FULL),
             offset_s: 0.0,
+            fade: None,
             chain: None,
         }];
         let (g, _) = volume_bake(&opposed, 0, 48_000, 48_000);
@@ -3481,53 +3764,6 @@ mod tests {
         assert_eq!(ClipFade::default().gain_at(5.0), 1.0);
     }
 
-    /// **A clip's own gain sits under its fade** (docs/impl/audio-timeline.md
-    /// §2, plan 18): the ramp rises to the gain line, not past it to unity,
-    /// which is what the line drawn across the box promises. The knee is the
-    /// fader's own, so a clip dragged to the foot of the box is silence and
-    /// not a whisper.
-    #[test]
-    fn a_clips_gain_multiplies_under_its_fade() {
-        // Half amplitude, to the precision dB is written in.
-        const HALF_DB: f64 = -6.020_599_913_279_624;
-
-        let flat = ClipFade {
-            start_s: 0.0,
-            head_s: 0.0,
-            end_s: 2.0,
-            tail_s: 0.0,
-            gain_db: HALF_DB,
-            ..Default::default()
-        };
-        assert!(
-            (flat.gain_at(1.0) - 0.5).abs() < 1e-6,
-            "a clip with no ramp is simply at its gain"
-        );
-
-        // A straight one-second ramp in, so the arithmetic is readable: half
-        // way up the ramp is half of half.
-        let ramped = ClipFade {
-            head_s: 1.0,
-            head_shape: lumit_core::sequence::FadeShape::Linear,
-            ..flat
-        };
-        assert_eq!(ramped.gain_at(0.0), 0.0, "still silent at the head");
-        assert!(
-            (ramped.gain_at(0.5) - 0.25).abs() < 1e-6,
-            "half way up a straight ramp to a half"
-        );
-        assert!(
-            (ramped.gain_at(1.0) - 0.5).abs() < 1e-6,
-            "and the ramp tops out at the gain line, not at unity"
-        );
-
-        let silent = ClipFade {
-            gain_db: -100.0,
-            ..flat
-        };
-        assert_eq!(silent.gain_at(1.0), 0.0, "at the knee, exactly nothing");
-    }
-
     /// **Preview and export hear the same mix**, with a pan sweep and
     /// a clip crossfade ramp on it — the two later additions to the gain
     /// stage.
@@ -3565,7 +3801,7 @@ mod tests {
             item: uuid::Uuid::nil(),
             layer: uuid::Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,
@@ -3603,10 +3839,10 @@ mod tests {
         );
         let plan = lumit_audio::mix::MixPlan {
             clips: vec![lumit_audio::mix::PlacedClip {
-                buffer: Arc::new(lumit_media::AudioBuffer {
+                source: Source::whole(Arc::new(lumit_media::AudioBuffer {
                     rate,
                     samples: samples.clone(),
-                }),
+                })),
                 start_frame: 0,
                 src_start: 0,
                 len: frames,
@@ -3642,57 +3878,6 @@ mod tests {
         );
     }
 
-    /// The delivery-preset table is spec (docs/06 §7.5): frame, codec, and
-    /// bitrates are pinned here so a stray edit can't silently change what
-    /// "YouTube 1080p60" means.
-    #[test]
-    fn preset_table_matches_the_spec() {
-        let p = ExportPreset::Youtube1080p60.params().unwrap();
-        assert_eq!(p.size, (1920, 1080));
-        assert_eq!(p.codec, VideoCodec::H264);
-        assert_eq!(p.target_bps, 16_000_000);
-        assert_eq!(p.peak_bps, 24_000_000);
-
-        let p = ExportPreset::Youtube4k60.params().unwrap();
-        assert_eq!(p.size, (3840, 2160));
-        assert_eq!(p.codec, VideoCodec::Hevc);
-        assert_eq!(p.target_bps, 45_000_000);
-        assert_eq!(p.peak_bps, 60_000_000);
-
-        let p = ExportPreset::Vertical1080p60.params().unwrap();
-        assert_eq!(p.size, (1080, 1920));
-        assert_eq!(p.codec, VideoCodec::H264);
-        assert_eq!(p.target_bps, 16_000_000);
-        assert_eq!(p.peak_bps, 24_000_000);
-
-        assert!(ExportPreset::Custom.params().is_none());
-        assert_eq!(PRESET_AUDIO_BPS, 320_000);
-        assert_eq!(EXPORT_AUDIO_RATE, 48_000);
-    }
-
-    #[test]
-    fn every_preset_has_a_label_and_file_name() {
-        for preset in ExportPreset::ALL {
-            assert!(!preset.label().is_empty());
-            assert!(preset.default_file_name().ends_with(".mp4"));
-        }
-    }
-
-    /// `ExportPreset::default()` must be Custom, so a fresh Settings →
-    /// Export default-preset field reproduces today's implicit behaviour
-    /// (every generic "Export…" action stamping Custom) until the user
-    /// changes it. Also proves the type round-trips through JSON, which
-    /// `ExportSettings` (settings.rs) relies on to persist the pick.
-    #[test]
-    fn export_preset_defaults_to_custom_and_round_trips_through_json() {
-        assert_eq!(ExportPreset::default(), ExportPreset::Custom);
-        for preset in ExportPreset::ALL {
-            let json = serde_json::to_string(&preset).unwrap();
-            let back: ExportPreset = serde_json::from_str(&json).unwrap();
-            assert_eq!(back, preset);
-        }
-    }
-
     /// The A/V interleave rule: cumulative rounding never drifts, and the
     /// total after all frames equals the whole soundtrack.
     #[test]
@@ -3715,77 +3900,6 @@ mod tests {
         }
         // Degenerate input answers zero, never panics.
         assert_eq!(audio_samples_through(100, 0.0, rate), 0);
-    }
-
-    /// A silent comp exports video-only; the padding rule keeps sound and
-    /// picture the same length when there is audio.
-    #[test]
-    fn mixdown_of_no_jobs_is_silence_of_the_right_length() {
-        let mix = mixdown(&[], 48_000, 2.0);
-        assert_eq!(mix.len(), 96_000 * 2);
-        assert!(mix.iter().all(|s| *s == 0.0));
-    }
-
-    /// **Every source is counted off, decoded or not.** Beat detection draws
-    /// its progress bar from this count, and a file the decoder would not read
-    /// still cost the time it took to try: a count that skipped it would leave
-    /// the bar short of the end for the rest of the run.
-    #[test]
-    fn a_counting_mixdown_counts_every_source() {
-        let job = |name: &str| AudioJob {
-            item: uuid::Uuid::nil(),
-            layer: uuid::Uuid::nil(),
-            clip: None,
-            path: PathBuf::from(name),
-            in_s: 0.0,
-            out_s: 1.0,
-            offset_s: 0.0,
-            volume: lumit_core::anim::Property::zero(),
-            pan: lumit_core::anim::Property::zero(),
-            carriers: Vec::new(),
-            fade: None,
-            driven: None,
-            chain: None,
-            clip_chain: None,
-        };
-        let jobs = [job("nothing-here.wav"), job("nor-here.wav")];
-        let mut counted: Vec<usize> = Vec::new();
-        let mix = mixdown_counting(&jobs, 48_000, 1.0, 1.0, &mut |done| counted.push(done));
-        assert_eq!(counted, vec![1, 2], "one report per source, in order");
-        assert_eq!(mix.len(), 48_000 * 2, "and the mix itself is unchanged");
-    }
-
-    /// The capability table is the one place a format's limits are written
-    /// down. It is spec (docs/06 §7.4), so it is pinned here rather than
-    /// discovered by an export that fails halfway.
-    #[test]
-    fn the_capability_table_says_what_each_format_can_carry() {
-        use lumit_media::encode::ImageFormat;
-
-        let mp4 = ExportFormat::Video(VideoCodec::H264).caps();
-        assert!(mp4.video && mp4.audio && mp4.metadata);
-        assert!(!mp4.alpha, "4:2:0 H.264 has no alpha channel");
-        assert_eq!(mp4.depths, [BitDepth::Eight]);
-        assert!(mp4.bit_rate);
-
-        let png = ExportFormat::Images(ImageFormat::Png).caps();
-        assert!(png.video && png.alpha);
-        assert!(!png.audio, "a folder of stills has nowhere to put sound");
-        assert!(!png.bit_rate, "lossless has no bitrate to choose");
-        assert!(!png.metadata, "the image2 muxer has no container to tag");
-        assert_eq!(png.depths, [BitDepth::Eight, BitDepth::Sixteen]);
-        assert_eq!(ExportFormat::Images(ImageFormat::Tiff).caps(), png);
-
-        let m4a = ExportFormat::Audio(AudioFormat::M4a).caps();
-        assert!(!m4a.video && m4a.audio && m4a.metadata);
-        assert!(m4a.bit_rate, "AAC has a bitrate");
-        let wav = ExportFormat::Audio(AudioFormat::Wav).caps();
-        assert!(!wav.bit_rate, "PCM is exactly what it is");
-
-        // Extensions match the formats, so a filename and its contents agree.
-        assert_eq!(ExportFormat::Video(VideoCodec::Hevc).extension(), "mp4");
-        assert_eq!(ExportFormat::Images(ImageFormat::Tiff).extension(), "tiff");
-        assert_eq!(ExportFormat::Audio(AudioFormat::Wav).extension(), "wav");
     }
 
     /// A setting the chosen format cannot honour is refused before a frame is
@@ -3893,40 +4007,6 @@ mod tests {
         );
     }
 
-    /// Known values through each transfer curve, against the published
-    /// formulae worked by hand.
-    #[test]
-    fn each_transfer_curve_matches_its_standard() {
-        // Nothing is ever moved off the ends: black is black and white is
-        // white in every space, which is what makes a space swap safe.
-        for t in [
-            Transfer::Linear,
-            Transfer::Srgb,
-            Transfer::Bt709,
-            Transfer::Bt2020,
-        ] {
-            assert!(t.encode(0.0).abs() < 1e-12, "{t:?} moved black");
-            assert!((t.encode(1.0) - 1.0).abs() < 1e-9, "{t:?} moved white");
-        }
-        // Mid grey, 0.2 linear light, through each curve:
-        //   linear  = 0.2
-        //   sRGB    = 1.055·0.2^(1/2.4) − 0.055        = 0.4845
-        //   BT.709  = 1.099·0.2^0.45 − 0.099           = 0.4337
-        //   BT.2020 = 1.09930·0.2^0.45 − 0.09930       = 0.4335
-        assert!((Transfer::Linear.encode(0.2) - 0.2).abs() < 1e-12);
-        assert!((Transfer::Srgb.encode(0.2) - 0.484_529).abs() < 1e-5);
-        assert!((Transfer::Bt709.encode(0.2) - 0.433_674).abs() < 1e-5);
-        assert!((Transfer::Bt2020.encode(0.2) - 0.433_521).abs() < 1e-5);
-        // Below each knee the curve is a straight 4.5× (12.92× for sRGB).
-        assert!((Transfer::Srgb.encode(0.002) - 0.025_84).abs() < 1e-9);
-        assert!((Transfer::Bt709.encode(0.01) - 0.045).abs() < 1e-9);
-        assert!((Transfer::Bt2020.encode(0.01) - 0.045).abs() < 1e-9);
-        // Out of range clamps rather than producing a NaN from a negative
-        // fractional power.
-        assert_eq!(Transfer::Bt709.encode(-0.5), 0.0);
-        assert!((Transfer::Srgb.encode(2.0) - 1.0).abs() < 1e-12);
-    }
-
     /// A whole space transform, end to end, against values worked by hand.
     #[test]
     fn each_colour_space_transforms_known_values() {
@@ -3990,110 +4070,6 @@ mod tests {
         assert_eq!(r2020.apply([0.3, 0.6, 0.9]), r2020.apply([0.3, 0.6, 0.9]));
     }
 
-    /// The transform reaches the written bytes through the pack stage, and
-    /// only through it: with no space named, the packed frame is untouched.
-    #[test]
-    fn the_pack_stage_applies_the_colour_transform() {
-        // One opaque mid grey.
-        let src: Vec<u8> = vec![128, 128, 128, 255];
-        let plain = pack_frame(&src, Channels::Rgb, AlphaMode::Premultiplied, None);
-        assert_eq!(plain, vec![128, 128, 128, 255]);
-
-        // Through Linear: 128/255 = 0.50196 sRGB is 0.21586 linear, so 55.
-        let lin = ColourSpace::Linear.transform().unwrap();
-        let out = pack_frame(&src, Channels::Rgb, AlphaMode::Premultiplied, Some(&lin));
-        assert_eq!(out, vec![55, 55, 55, 255]);
-
-        // Sixteen bits takes the identical path at the wider width:
-        // 0.21586 × 65535 = 14146.
-        let src16: Vec<u16> = vec![32_896, 32_896, 32_896, 65_535];
-        let out16 = pack_frame(&src16, Channels::Rgb, AlphaMode::Premultiplied, Some(&lin));
-        let first = u16::from_le_bytes([out16[0], out16[1]]);
-        assert!(
-            (i32::from(first) - 14_146).abs() <= 2,
-            "16-bit linear grey: {first}"
-        );
-
-        // Half-covered premultiplied grey: the curve must see the *straight*
-        // colour, so the answer is the straight value re-multiplied — not the
-        // curve applied to a half-strength number, which would be darker still.
-        let half: Vec<u8> = vec![64, 64, 64, 128];
-        let out = pack_frame(
-            &half,
-            Channels::RgbAlpha,
-            AlphaMode::Premultiplied,
-            Some(&lin),
-        );
-        // straight 64/128 = 0.5 sRGB → 0.21404 linear → ×128 coverage = 27.4.
-        assert!(
-            (i32::from(out[0]) - 27).abs() <= 1,
-            "premultiplied: {out:?}"
-        );
-        assert_eq!(out[3], 128);
-        // And asked for straight alpha, the same pixel writes the un-multiplied
-        // linear value: 0.21404 × 255 = 55.
-        let out = pack_frame(&half, Channels::RgbAlpha, AlphaMode::Straight, Some(&lin));
-        assert!((i32::from(out[0]) - 55).abs() <= 1, "straight: {out:?}");
-    }
-
-    /// The capability table states which spaces a format can *name*, and the
-    /// spec refuses one the container could not carry — the refusal rule, now
-    /// covering colour.
-    #[test]
-    fn a_format_refuses_a_colour_space_it_cannot_state() {
-        let mp4 = ExportFormat::Video(lumit_media::encode::VideoCodec::H264);
-        assert_eq!(mp4.caps().colour_spaces, BUILT_IN_COLOUR_SPACES);
-        // A still sequence can only write the space that needs no tag.
-        let png = ExportFormat::Images(lumit_media::encode::ImageFormat::Png);
-        assert_eq!(png.caps().colour_spaces, UNTAGGED_COLOUR_SPACE);
-        // Sound has no picture to give a colour to.
-        assert!(ExportFormat::Audio(AudioFormat::Wav)
-            .caps()
-            .colour_spaces
-            .is_empty());
-
-        let base = ExportSpec {
-            colour_space: ColourSpace::Rec2020,
-            ..ExportSpec::default()
-        };
-        base.check()
-            .expect("an mp4 states Rec.2020 in its colr box");
-        let stills = ExportSpec {
-            format: ExportFormat::Images(lumit_media::encode::ImageFormat::Png),
-            ..base.clone()
-        };
-        let err = stills.check().expect_err("a still cannot state Rec.2020");
-        assert!(err.contains("Rec. 2020"), "{err}");
-        // The audio-only export is not tripped by the picture's colour.
-        ExportSpec {
-            format: ExportFormat::Audio(AudioFormat::Wav),
-            audio_depth: AudioDepth::Sixteen,
-            ..base
-        }
-        .check()
-        .expect("a .wav has no picture to colour");
-    }
-
-    /// Every built-in space names itself the same way in a stored preset, and
-    /// an unknown name stays unknown rather than falling back to the default.
-    #[test]
-    fn a_colour_space_round_trips_through_its_stored_name() {
-        for space in BUILT_IN_COLOUR_SPACES {
-            let name = space.stored_name();
-            assert_eq!(&ColourSpace::from_stored_name(&name), space, "{name}");
-        }
-        assert_eq!(ColourSpace::SrgbRec709.stored_name(), "");
-        assert_eq!(
-            ColourSpace::from_stored_name("ACES - ACEScg"),
-            ColourSpace::Ocio("ACES - ACEScg".into())
-        );
-        // A preset written before the family existed names no space at all,
-        // and still loads as the space it was written in.
-        let spec: ExportSpec = serde_json::from_str("{}").expect("an empty preset loads");
-        assert_eq!(spec.colour_space, ColourSpace::SrgbRec709);
-        assert_eq!(spec.resample, lumit_core::pixels::Resample::Fast);
-    }
-
     /// Crop arithmetic, in pixels at composition size: the size it
     /// leaves, the window it keeps, and the pixels it actually copies.
     #[test]
@@ -4150,46 +4126,6 @@ mod tests {
         // Regression: a zero-sized frame used to index past an empty buffer.
         assert!(one_off_each_side.apply::<u8>(&[], 0, 0, 4).is_empty());
         assert!(one_off_each_side.apply::<u8>(&[], 4, 0, 4).is_empty());
-    }
-
-    /// The region of interest crosses as fractions and becomes pixel
-    /// insets here; degenerate input is a gesture, not an error.
-    #[test]
-    fn a_region_of_interest_becomes_pixel_insets() {
-        // The middle half of a 100×100 comp.
-        assert_eq!(
-            Crop::from_region([0.25, 0.25, 0.75, 0.75], 100, 100),
-            Crop {
-                top: 25,
-                left: 25,
-                bottom: 25,
-                right: 25
-            }
-        );
-        // The whole frame is no crop at all.
-        assert!(Crop::from_region([0.0, 0.0, 1.0, 1.0], 100, 100).is_none());
-        // Inside-out, empty and non-finite all answer no crop.
-        assert!(Crop::from_region([0.8, 0.1, 0.2, 0.9], 100, 100).is_none());
-        assert!(Crop::from_region([0.5, 0.5, 0.5, 0.5], 100, 100).is_none());
-        assert!(Crop::from_region([f64::NAN, 0.0, 1.0, 1.0], 100, 100).is_none());
-
-        // The two faces of the dialog: the region wins when asked for, the
-        // typed crop stands otherwise — and when the region is no region.
-        let typed = Crop {
-            top: 5,
-            left: 5,
-            bottom: 5,
-            right: 5,
-        };
-        let region = Some([0.25, 0.25, 0.75, 0.75]);
-        assert_eq!(crop_for(typed, false, region, 100, 100), typed);
-        assert_eq!(crop_for(typed, true, None, 100, 100), typed);
-        assert_eq!(crop_for(typed, true, Some([0.0; 4]), 100, 100), typed);
-        assert_eq!(
-            crop_for(typed, true, region, 100, 100).left,
-            25,
-            "the region wins when it is asked for and real"
-        );
     }
 
     /// The pack stage: what each channel/alpha choice does to the finished
@@ -4250,31 +4186,6 @@ mod tests {
             samples.iter().any(|v| v % 257 != 0),
             "nothing here is a stretched byte"
         );
-    }
-
-    /// The auto bitrate is a straight line through the preset table's own
-    /// 1080p60 point, and it moves the way more pixels and more frames should.
-    #[test]
-    fn the_auto_bitrate_lands_on_the_preset_tables_own_numbers() {
-        let (target, peak) = auto_bitrate(1920, 1080, 60.0, VideoCodec::H264);
-        assert_eq!(target, 16_000_000, "docs/06 §7.5's 1080p60 target");
-        assert_eq!(peak, 24_000_000, "and its peak, at the 1.5× rule");
-
-        // Half the frames, half the bits.
-        let (half, _) = auto_bitrate(1920, 1080, 30.0, VideoCodec::H264);
-        assert_eq!(half, 8_000_000);
-        // HEVC buys a quarter off.
-        let (hevc, _) = auto_bitrate(1920, 1080, 60.0, VideoCodec::Hevc);
-        assert!(hevc < target, "hevc {hevc} < h264 {target}");
-        // More pixels, more bits — monotonic in every direction.
-        let (uhd, _) = auto_bitrate(3840, 2160, 60.0, VideoCodec::Hevc);
-        assert!(uhd > hevc);
-        // Absurd input clamps rather than overflowing or answering zero.
-        let (tiny, _) = auto_bitrate(1, 1, 1.0, VideoCodec::H264);
-        assert_eq!(tiny, 1_000_000);
-        let (huge, huge_peak) = auto_bitrate(60_000, 40_000, 1000.0, VideoCodec::H264);
-        assert_eq!(huge, 400_000_000);
-        assert!(huge_peak > huge);
     }
 
     /// Auto versus manual is stored in the settings and resolved at the last
@@ -4446,61 +4357,6 @@ mod tests {
             .unwrap()
     }
 
-    /// A guide layer leaves the delivery snapshot at every depth: the
-    /// outer one and the one inside the nested comp both stop drawing and stop
-    /// sounding, and the project itself is untouched.
-    #[test]
-    fn a_guide_layer_leaves_the_delivery_at_every_depth() {
-        let (doc, outer_id, outer_guide, inner_guide) = nested_guide_doc();
-        let inner_id = nested_comp_of(&doc, outer_id);
-        let delivery = apply_render_overrides(&doc, &RenderOptions::default())
-            .expect("a guide layer is a document change even at the defaults");
-
-        let find = |d: &Document, comp: Uuid, layer: Uuid| {
-            d.comp(comp)
-                .unwrap()
-                .layers
-                .iter()
-                .find(|l| l.id == layer)
-                .unwrap()
-                .switches
-        };
-        for (comp, layer) in [(outer_id, outer_guide), (inner_id, inner_guide)] {
-            let s = find(&delivery, comp, layer);
-            assert!(!s.visible, "a guide layer draws nothing into the file");
-            assert!(!s.audible, "nor does it sound in it");
-            assert!(s.guide, "it is still marked a guide layer");
-            // The project keeps its guide layer exactly as it was.
-            assert!(find(&doc, comp, layer).visible);
-        }
-
-        // The layers that are not guides are untouched.
-        assert!(delivery.comp(inner_id).unwrap().layers[1].switches.visible);
-        assert!(delivery.comp(outer_id).unwrap().layers[1].switches.visible);
-    }
-
-    /// *Render guide layers* is the export's override: with it on the
-    /// snapshot is left alone, and a document with no guide layer is never
-    /// copied either way.
-    #[test]
-    fn the_render_guides_override_delivers_them_after_all() {
-        let (doc, ..) = nested_guide_doc();
-        let on = RenderOptions {
-            render_guides: true,
-            ..RenderOptions::default()
-        };
-        assert!(
-            apply_render_overrides(&doc, &on).is_none(),
-            "rendering the guides changes nothing, so nothing is cloned"
-        );
-
-        let (plain, _comp) = solid_doc(32, 16);
-        assert!(
-            apply_render_overrides(&plain, &RenderOptions::default()).is_none(),
-            "a document with no guide layer is not copied to skip nothing"
-        );
-    }
-
     /// A two-level document for the motion-blur override: an outer comp
     /// holding a Precomp of [`solid_doc`]'s comp, both comp masters off, and
     /// the solid inside the nested comp **checked** for blur. Moving, so the
@@ -4665,6 +4521,7 @@ mod tests {
             },
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         }));
         let (solid, comp_id) = solid_doc(32, 16);
         let mut layer = solid.comp(comp_id).unwrap().layers[0].clone();
@@ -4754,132 +4611,6 @@ mod tests {
         );
     }
 
-    /// A Sequence layer's clips carry their own interpolation beside the
-    /// layer's, and the planner reads the clip's — so *off for all layers* has
-    /// to reach into the sequence or the row is only half true.
-    #[test]
-    fn the_retime_blend_override_reaches_a_sequences_own_clips() {
-        use lumit_core::sequence::{Clip, ClipSource};
-        use lumit_core::time::Rational;
-        let (doc, comp_id, _probes) = blending_footage_doc();
-        let mut seeded = Document::clone(&doc);
-        let footage = seeded
-            .items
-            .iter()
-            .find_map(|i| match i {
-                ProjectItem::Footage(f) => Some(f.id),
-                _ => None,
-            })
-            .unwrap();
-        for item in &mut seeded.items {
-            if let ProjectItem::Composition(c) = item {
-                let r = |n: i64| Rational::new(n, 1).unwrap();
-                let clip = Clip {
-                    interpolation: Interpolation::Blend,
-                    ..Clip::new(ClipSource::Footage(footage), r(0), r(5), r(0), r(5))
-                };
-                c.layers[0].kind = LayerKind::Sequence { clips: vec![clip] };
-            }
-        }
-        let off = RenderOptions {
-            retime_blend: RetimeBlendOverride::OffForAll,
-            ..RenderOptions::default()
-        };
-        let delivery =
-            apply_render_overrides(&Arc::new(seeded), &off).expect("the clip policy changes");
-        let LayerKind::Sequence { clips } = &delivery.comp(comp_id).unwrap().layers[0].kind else {
-            panic!("the layer is still a sequence");
-        };
-        assert_eq!(clips[0].interpolation, Interpolation::Nearest);
-    }
-
-    /// Both new fields default to the composition's own settings, so an export
-    /// spec written before they existed loads to what it always did.
-    #[test]
-    fn a_spec_without_the_time_overrides_loads_to_the_comp_settings() {
-        let mut json = serde_json::to_value(RenderOptions::default()).unwrap();
-        let obj = json.as_object_mut().unwrap();
-        assert!(obj.remove("motion_blur").is_some());
-        assert!(obj.remove("retime_blend").is_some());
-        let loaded: RenderOptions = serde_json::from_value(json).unwrap();
-        assert_eq!(loaded.motion_blur, MotionBlurOverride::CompSetting);
-        assert_eq!(loaded.retime_blend, RetimeBlendOverride::CompSetting);
-        assert!(
-            !loaded.changes_document(),
-            "and an old spec still copies no document"
-        );
-    }
-
-    /// Guide-ness governs the file, solo governs which layers are looked at: a
-    /// soloed guide layer is still absent from the delivery, and it takes its
-    /// solo with it — so the comp delivers as though the guide layer were not
-    /// there, rather than delivering nothing at all.
-    #[test]
-    fn a_soloed_guide_layer_is_still_absent_from_the_file() {
-        let (doc, outer_id, outer_guide, _inner) = nested_guide_doc();
-        let mut seeded = Document::clone(&doc);
-        for item in &mut seeded.items {
-            if let ProjectItem::Composition(c) = item {
-                if c.id == outer_id {
-                    for l in &mut c.layers {
-                        if l.id == outer_guide {
-                            l.switches.solo = true;
-                        }
-                    }
-                }
-            }
-        }
-        let seeded = Arc::new(seeded);
-        assert!(
-            lumit_core::model::any_picture_solo(seeded.comp(outer_id).unwrap()),
-            "the guide layer is the comp's only solo"
-        );
-
-        let delivery = apply_render_overrides(&seeded, &RenderOptions::default()).unwrap();
-        let comp = delivery.comp(outer_id).unwrap();
-        assert!(
-            !lumit_core::model::any_picture_solo(comp),
-            "the guide layer's solo left with it, so the rest of the comp delivers"
-        );
-        let guide = comp.layers.iter().find(|l| l.id == outer_guide).unwrap();
-        assert!(
-            !guide.switches.visible,
-            "solo does not deliver a guide layer"
-        );
-        assert!(comp.layers[1].switches.visible, "the nested comp delivers");
-    }
-
-    /// The draw list is where it shows: the Viewer's walk draws a guide layer
-    /// at both depths, and the delivery walk — the same builder over the
-    /// delivery snapshot — draws neither.
-    #[test]
-    fn the_viewer_draws_guide_layers_and_the_delivery_walk_does_not() {
-        let (doc, outer_id, outer_guide, inner_guide) = nested_guide_doc();
-        let pixels = std::collections::HashMap::new();
-
-        let drawn = |d: &Arc<Document>| -> (bool, bool) {
-            let comp = d.comp(outer_id).unwrap().clone();
-            let mut visited = vec![outer_id];
-            let draws = crate::build::build_comp_draws(d, &comp, 0.0, &pixels, &mut visited);
-            let outer = draws.iter().any(|dr| dr.layer == outer_guide);
-            let inner = draws.iter().any(|dr| match &dr.source {
-                crate::draw::DrawSource::Nested { draws, .. } => {
-                    draws.iter().any(|n| n.layer == inner_guide)
-                }
-                _ => false,
-            });
-            (outer, inner)
-        };
-
-        assert_eq!(drawn(&doc), (true, true), "the Viewer draws them");
-        let delivery = apply_render_overrides(&doc, &RenderOptions::default()).unwrap();
-        assert_eq!(
-            drawn(&delivery),
-            (false, false),
-            "a delivery walk skips them, inside the nested comp too"
-        );
-    }
-
     /// Preview equals export with a guide layer present: the file an export
     /// writes is the file it would have written had the guide layer never been
     /// in the document — byte for byte, at both depths.
@@ -4922,34 +4653,6 @@ mod tests {
             read(&two),
             "a guide layer changes nothing about the delivered file"
         );
-    }
-
-    /// The render settings' own defaults: an export renders at full quality
-    /// with everything on and no disk cache (docs/06 §7.3 — export never
-    /// degrades), and the export tier is the preview's own machinery.
-    #[test]
-    fn export_renders_at_full_quality_with_everything_on() {
-        let opts = RenderOptions::default();
-        assert_eq!(opts.quality, crate::plan::Quality::default());
-        assert_eq!(opts.quality.divisor, 1);
-        assert!(!opts.quality.draft, "an export never drafts");
-        assert_eq!(opts.disk_cache, DiskCachePolicy::Off);
-        assert!(opts.effects && opts.honour_solo);
-        assert!(
-            !opts.render_guides,
-            "a guide layer is reference-only unless the export says otherwise"
-        );
-        assert!(!opts.changes_document());
-
-        // A half-resolution export is the preview's own tier, not a new one.
-        let half = RenderOptions {
-            quality: crate::plan::Quality {
-                divisor: 2,
-                ..crate::plan::Quality::default()
-            },
-            ..RenderOptions::default()
-        };
-        assert!(!half.changes_document(), "a tier is not a document change");
     }
 
     /// A sound file takes no picture settings (the owner's 2026-08-30 ruling).
@@ -5011,56 +4714,6 @@ mod tests {
         assert!(!patched.comp(comp_id).unwrap().layers[0].switches.solo);
     }
 
-    /// The when-done hook tolerates a missing sound file in silence — the
-    /// owner supplies one later, and until then a finished export must not
-    /// look failed.
-    #[test]
-    fn the_when_done_hook_tolerates_a_missing_sound() {
-        assert_eq!(WhenDone::default(), WhenDone::Nothing);
-        // Whatever this machine has (probably nothing), it answers rather
-        // than panicking, and the answer agrees with the path it resolved.
-        assert_eq!(play_done_sound(), done_sound_path().is_some());
-        // The whole settings payload round-trips, hook included.
-        let spec = ExportSpec {
-            when_done: WhenDone::MakeANoise,
-            ..ExportSpec::default()
-        };
-        let json = serde_json::to_string(&spec).unwrap();
-        let back: ExportSpec = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, spec);
-        // A payload missing every field is today's defaults, so an older
-        // preset still loads.
-        let bare: ExportSpec = serde_json::from_str("{}").unwrap();
-        assert_eq!(bare, ExportSpec::default());
-    }
-
-    /// Audio-only export, end to end through `run`: no compositor, no
-    /// graphics card, a real `.wav` of the range's own length.
-    #[test]
-    fn an_audio_only_export_writes_the_range_as_a_wav() {
-        let (doc, comp) = solid_doc(32, 16);
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("mix.wav");
-        let mut sp = spec(ExportFormat::Audio(AudioFormat::Wav), 32, 16);
-        sp.include_audio = true;
-        // Comp frames 0..60 of a 30 fps comp — two seconds.
-        sp.range = Some((0, 60));
-
-        let (tx, _rx) = channel();
-        let cancel = AtomicBool::new(false);
-        run(&doc, comp, &[], &path, &sp, &tx, &cancel).expect("audio-only export runs");
-
-        let probe = lumit_media::probe::probe(&path).unwrap();
-        assert!(probe.video.is_none(), "no picture in an audio-only export");
-        let audio = probe.audio.expect("it is all sound");
-        assert_eq!((audio.sample_rate, audio.channels), (48_000, 2));
-        assert!(
-            (probe.duration_seconds - 2.0).abs() < 0.05,
-            "two seconds of silence, not {}",
-            probe.duration_seconds
-        );
-    }
-
     /// Every sample rate, sample width and channel layout the dialog offers,
     /// end to end through `run` and probed back off disk. The engine's answer
     /// and the file's own header have to be the same answer.
@@ -5090,8 +4743,17 @@ mod tests {
                         ));
                         let (tx, _rx) = channel();
                         let cancel = AtomicBool::new(false);
-                        run(&doc, comp, &[], &path, &sp, &tx, &cancel)
-                            .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
+                        run(
+                            &doc,
+                            comp,
+                            &[],
+                            &path,
+                            &sp,
+                            &tx,
+                            &cancel,
+                            &AtomicBool::new(false),
+                        )
+                        .unwrap_or_else(|e| panic!("{ext} {rate} Hz: {e}"));
 
                         let probe = lumit_media::probe::probe(&path).unwrap();
                         let audio = probe.audio.expect("it is all sound");
@@ -5117,111 +4779,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    /// The capability table refuses rather than approximates: a width or a
-    /// rate the format cannot carry is an error before a frame is rendered,
-    /// and every offered combination the format *can* carry passes.
-    #[test]
-    fn the_audio_capability_table_refuses_what_the_format_cannot_carry() {
-        let aac = |f| {
-            let mut sp = ExportSpec {
-                format: f,
-                ..ExportSpec::default()
-            };
-            sp.audio_depth = AudioDepth::TwentyFour;
-            sp
-        };
-        // AAC stores coefficients, not samples: there is no width to set.
-        for f in [
-            ExportFormat::Video(VideoCodec::H264),
-            ExportFormat::Audio(AudioFormat::M4a),
-        ] {
-            let err = aac(f).check().expect_err("24-bit AAC is refused");
-            assert!(err.contains("24-bit sound"), "{err}");
-        }
-        // The uncompressed master carries both widths.
-        for depth in AudioDepth::ALL {
-            let sp = ExportSpec {
-                format: ExportFormat::Audio(AudioFormat::Wav),
-                audio_depth: depth,
-                ..ExportSpec::default()
-            };
-            assert!(sp.check().is_ok(), "{depth:?} in a wav");
-        }
-        // A rate off the list is refused, never nudged to the nearest one.
-        let odd = ExportSpec {
-            audio_rate: 22_050,
-            ..ExportSpec::default()
-        };
-        let err = odd.check().expect_err("22 050 Hz is not offered");
-        assert!(err.contains("22050"), "{err}");
-        for rate in EXPORT_AUDIO_RATES.iter().copied() {
-            for f in [
-                ExportFormat::Video(VideoCodec::H264),
-                ExportFormat::Audio(AudioFormat::M4a),
-                ExportFormat::Audio(AudioFormat::Wav),
-            ] {
-                let sp = ExportSpec {
-                    format: f,
-                    audio_rate: rate,
-                    ..ExportSpec::default()
-                };
-                assert!(sp.check().is_ok(), "{rate} Hz in {}", f.extension());
-            }
-        }
-        // A still sequence carries no sound at all, so the audio settings are
-        // unread there rather than a reason to refuse a picture.
-        let stills = ExportSpec {
-            format: ExportFormat::Images(lumit_media::encode::ImageFormat::Png),
-            audio_rate: 22_050,
-            audio_depth: AudioDepth::TwentyFour,
-            ..ExportSpec::default()
-        };
-        assert!(stills.check().is_ok());
-    }
-
-    /// Two runs of the same audio export write the same bytes — the standing
-    /// determinism rule (docs/06 §7.3), asserted on the new options rather
-    /// than only on the old default.
-    #[test]
-    fn the_same_audio_spec_writes_the_same_bytes_twice() {
-        let (doc, comp) = solid_doc(32, 16);
-        let dir = tempfile::tempdir().unwrap();
-        let mut sp = spec(ExportFormat::Audio(AudioFormat::Wav), 32, 16);
-        sp.include_audio = true;
-        sp.range = Some((0, 30));
-        sp.audio_rate = 44_100;
-        sp.audio_depth = AudioDepth::TwentyFour;
-        sp.audio_layout = AudioLayout::Mono;
-
-        let mut written = Vec::new();
-        for n in 0..2 {
-            let path = dir.path().join(format!("twice-{n}.wav"));
-            let (tx, _rx) = channel();
-            let cancel = AtomicBool::new(false);
-            run(&doc, comp, &[], &path, &sp, &tx, &cancel).unwrap();
-            written.push(std::fs::read(&path).unwrap());
-        }
-        assert!(!written[0].is_empty());
-        assert_eq!(written[0], written[1], "two runs, two different files");
-    }
-
-    /// A spec stored before the sound options existed loads as the behaviour
-    /// it was saved under: 48 kHz, sixteen bits, stereo.
-    #[test]
-    fn a_preset_written_before_the_audio_options_loads_unchanged() {
-        let default = ExportSpec::default();
-        let mut json: serde_json::Value = serde_json::to_value(&default).unwrap();
-        let object = json.as_object_mut().unwrap();
-        for key in ["audio_rate", "audio_depth", "audio_layout"] {
-            assert!(object.remove(key).is_some(), "{key} is a spec field");
-        }
-        let old: ExportSpec = serde_json::from_value(json).unwrap();
-        assert_eq!(old, default);
-        assert_eq!(old.audio_rate, EXPORT_AUDIO_RATE);
-        assert_eq!(old.audio_depth, AudioDepth::Sixteen);
-        assert_eq!(old.audio_layout, AudioLayout::Stereo);
     }
 
     /// A crop really crops: the same comp exported with and without one
@@ -5336,29 +4893,6 @@ mod tests {
         assert!(shallow.len() <= 256);
     }
 
-    /// Metadata reaches the file an export writes, not just the encoder that
-    /// was handed it.
-    #[test]
-    fn export_metadata_reaches_the_written_file() {
-        let (doc, comp) = solid_doc(32, 16);
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("tagged.mp4");
-        let mut sp = spec(ExportFormat::Video(VideoCodec::H264), 32, 16);
-        sp.range = Some((0, 5));
-        sp.metadata
-            .set(lumit_media::encode::Metadata::TITLE, "Scene 1");
-        sp.metadata
-            .set(lumit_media::encode::Metadata::AUTHOR, "A Person");
-        let Some(result) = run_now(&doc, comp, &path, &sp) else {
-            return;
-        };
-        result.expect("export runs");
-        // Read it back the way any player would.
-        let text = String::from_utf8_lossy(&std::fs::read(&path).unwrap()).into_owned();
-        assert!(text.contains("Scene 1"), "the title is in the container");
-        assert!(text.contains("A Person"), "and so is the author");
-    }
-
     /// The file says what it is. An mp4 carries a `colr` box in `nclx` form —
     /// three ISO/IEC 23091-2 code points, sixteen bits each — and a player
     /// that cannot read it has to guess, which is how a wide-gamut delivery
@@ -5421,44 +4955,6 @@ mod tests {
         );
     }
 
-    /// A still sequence at the high resampler still writes its frames, and
-    /// letterboxes into a named frame the same way the fast one does — the
-    /// filter choice is the only difference between the two exports.
-    #[test]
-    fn the_resampler_choice_reaches_the_written_stills() {
-        let (doc, comp) = solid_doc(32, 16);
-        let dir = tempfile::tempdir().unwrap();
-        let mut sp = spec(
-            ExportFormat::Images(lumit_media::encode::ImageFormat::Png),
-            32,
-            16,
-        );
-        sp.range = Some((0, 2));
-        sp.target = Some((16, 8));
-
-        let fast_dir = dir.path().join("fast");
-        std::fs::create_dir_all(&fast_dir).unwrap();
-        let Some(result) = run_now(&doc, comp, &fast_dir.join("shot.png"), &sp) else {
-            return;
-        };
-        result.expect("export runs");
-
-        sp.resample = lumit_core::pixels::Resample::High;
-        let high_dir = dir.path().join("high");
-        std::fs::create_dir_all(&high_dir).unwrap();
-        run_now(&doc, comp, &high_dir.join("shot.png"), &sp)
-            .expect("the pipeline was there a moment ago")
-            .expect("export runs");
-
-        for d in [&fast_dir, &high_dir] {
-            assert_eq!(
-                std::fs::read_dir(d).unwrap().count(),
-                2,
-                "both filters write one file per frame"
-            );
-        }
-    }
-
     /// One built-in audio effect on a rack of its own, with `over` written
     /// into its rows.
     ///
@@ -5483,35 +4979,6 @@ mod tests {
         instance
     }
 
-    /// A switch row bakes as nought or one, so a plugin's stepped nought to one
-    /// parameter reaches it.
-    #[test]
-    fn a_switch_row_bakes_as_nought_or_one() {
-        use lumit_core::model::EffectValue;
-
-        let mut instance =
-            lumit_core::fx::instantiate("extract_channels").expect("a catalogue entry");
-        for param in &mut instance.params {
-            if param.id == "bypass" {
-                param.value = EffectValue::Bool(true);
-            }
-        }
-        let def = lumit_core::fx::BUILTIN_DEFS
-            .get("extract_channels")
-            .expect("a catalogue entry");
-        let chain = rack_of(Vec::new());
-        let baked = bake_values(&chain, &instance, def, 0, 1, 48_000);
-        let bypass = lumit_core::fx::ParamId::new("bypass");
-        assert_eq!(
-            baked
-                .first()
-                .and_then(|block| block.iter().find(|(id, _)| *id == bypass))
-                .map(|(_, value)| *value),
-            Some(1.0),
-            "the switch reaches the values handed to a plugin"
-        );
-    }
-
     /// A rack of them.
     fn rack_of(effects: Vec<lumit_core::model::EffectInstance>) -> Arc<AudioChain> {
         Arc::new(AudioChain {
@@ -5534,7 +5001,7 @@ mod tests {
             item: Uuid::nil(),
             layer: Uuid::nil(),
             clip: None,
-            path: PathBuf::new(),
+            sound: lumit_media::SoundSource::file(PathBuf::new()),
             in_s: 0.0,
             out_s: 1.0,
             offset_s: 0.0,
@@ -5631,7 +5098,7 @@ mod tests {
         let rate = 48_000u32;
         let frames = rate as usize / 4;
         let ceiling = 10f32.powf(-6.0 / 20.0);
-        let tone = lumit_media::AudioBuffer {
+        let tone = Arc::new(lumit_media::AudioBuffer {
             rate,
             samples: (0..frames)
                 .flat_map(|n| {
@@ -5639,11 +5106,12 @@ mod tests {
                     [phase.sin() as f32 * 0.5; 2]
                 })
                 .collect(),
-        };
+        });
         let bus = |volume_db: f64| Carrier {
             volume: lumit_core::anim::Property::fixed(volume_db),
             pan: lumit_core::anim::Property::zero(),
             offset_s: 0.0,
+            fade: None,
             chain: Some(audio_rack("audio_limiter", &[("ceiling", -6.0)])),
         };
         let row = Uuid::now_v7();
@@ -5656,10 +5124,11 @@ mod tests {
                 job.carriers = vec![carrier.clone()];
                 job
             };
-            let jobs = [one(Uuid::now_v7()), one(Uuid::now_v7())];
-            let decoded: Vec<(&lumit_media::AudioBuffer, &AudioJob)> =
-                jobs.iter().map(|job| (&tone, job)).collect();
-            mix_decoded(&decoded, rate, 0.25, 1.0)
+            let decoded = [
+                (Arc::clone(&tone), one(Uuid::now_v7())),
+                (Arc::clone(&tone), one(Uuid::now_v7())),
+            ];
+            mixdown_prepared(&decoded, rate, 0.25, 1.0)
         };
 
         let held = through(bus(0.0));
@@ -5720,98 +5189,6 @@ mod tests {
             peak as i64 - i64::from(latency),
             at as i64,
             "placed {latency} frames earlier the click is back where it started"
-        );
-    }
-
-    /// **An echo's repeat runs past the clip's out point** (plan 2).
-    ///
-    /// A tenth of a second of sound through a quarter-second delay: the first
-    /// repeat is due after the input has stopped, so the run has to come back
-    /// longer than it went in or the echo is cut off at the join.
-    #[test]
-    fn an_echos_repeat_runs_past_the_clips_out_point() {
-        let rate = 48_000u32;
-        let frames = 4_800usize;
-        let mut input = vec![0.0f32; frames * 2];
-        input[0] = 0.9;
-        input[1] = 0.9;
-
-        let job = racked_job(
-            None,
-            Some(audio_rack(
-                "audio_delay",
-                &[("time", 250.0), ("wet", 100.0), ("feedback", 50.0)],
-            )),
-        );
-        let (wet, latency) = job_bake(&job, &input, 0, rate, true).expect("the delay opens");
-        assert_eq!(latency, 0, "a delay answers in the moment");
-        assert!(
-            wet.len() / 2 > frames,
-            "the run is longer than its input: {} frames against {frames}",
-            wet.len() / 2
-        );
-        // The first repeat, a quarter of a second along and so well past the
-        // input's own end.
-        let near = |at: usize| {
-            let last = wet.len() / 2;
-            (at.saturating_sub(96)..(at + 96).min(last)).fold(0.0f32, |top, n| top.max(wet[n * 2]))
-        };
-        assert!(
-            near(rate as usize / 4) > 0.05,
-            "the repeat sounds past the out point: {}",
-            near(rate as usize / 4)
-        );
-    }
-
-    /// **Four minutes of stereo through five effects** (docs/impl/
-    /// audio-effects.md §6 plan 6): the whole bake the mixer runs again
-    /// whenever a knob on a rack moves, timed rather than asserted. The
-    /// number this prints is what the note records.
-    ///
-    /// Ignored: it makes and processes four minutes of sound, which is far
-    /// more than a gate should cost on every run. To take a fresh reading:
-    /// `cargo test -p lumit-render --lib -- --ignored --nocapture
-    /// four_minutes_of_stereo`.
-    #[test]
-    #[ignore = "a timing, not a gate"]
-    fn four_minutes_of_stereo_through_five_effects() {
-        let rate = 48_000u32;
-        let frames = 4 * 60 * rate as usize;
-        // Sound rather than silence, so the dynamics have something to follow
-        // and the denormal guard is doing its job.
-        let input: Vec<f32> = (0..frames)
-            .flat_map(|n| {
-                let t = n as f64 / f64::from(rate);
-                let sample = ((std::f64::consts::TAU * 220.0 * t).sin()
-                    * (0.4 + 0.3 * (std::f64::consts::TAU * 0.7 * t).sin()))
-                    as f32;
-                [sample, sample * 0.8]
-            })
-            .collect();
-
-        // A rack a hand would actually build, and one of each family:
-        // shape it, hold it down, thicken it, dirty it, cap it.
-        let rack = rack_of(vec![
-            audio_effect("audio_eq", &[]),
-            audio_effect("audio_compressor", &[("threshold", -18.0)]),
-            audio_effect("audio_chorus", &[]),
-            audio_effect("audio_distortion", &[("drive", 6.0)]),
-            audio_effect("audio_limiter", &[]),
-        ]);
-        let job = racked_job(None, Some(rack));
-
-        let started = std::time::Instant::now();
-        let (wet, latency) = job_bake(&job, &input, 0, rate, true).expect("five effects open");
-        let seconds = started.elapsed().as_secs_f64();
-        println!(
-            "four minutes of stereo through five effects: {seconds:.2} s \
-             ({} frames out, {latency} of latency)",
-            wet.len() / 2
-        );
-        assert_eq!(
-            wet.len() / 2,
-            frames + latency as usize,
-            "no tail on this rack"
         );
     }
 }

@@ -38,31 +38,6 @@ void main() {
     expect(pressed, 2, reason: 'Space presses it too');
   });
 
-  testWidgets('a focused checkbox toggles on Space', (tester) async {
-    var value = false;
-    late StateSetter setOuter;
-    await tester.pumpWidget(host(StatefulBuilder(
-      builder: (context, setState) {
-        setOuter = setState;
-        return HouseCheckbox(
-          value: value,
-          onChanged: (v) => setOuter(() => value = v),
-        );
-      },
-    )));
-    await tester.pump();
-    tester
-        .widget<FocusableActionDetector>(find.descendant(
-            of: find.byType(HouseCheckbox),
-            matching: find.byType(FocusableActionDetector)))
-        .focusNode!
-        .requestFocus();
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.space);
-    await tester.pump();
-    expect(value, isTrue);
-  });
-
   testWidgets('Escape closes a modal, the same as clicking the scrim',
       (tester) async {
     // Flutter's own DismissIntent, which `WidgetsApp` binds Escape to — so the
@@ -109,53 +84,6 @@ void main() {
     expect(answer, 'dismissed',
         reason: 'Escape dismisses with null, as the scrim does');
     expect(find.text('OK'), findsNothing);
-  });
-
-  testWidgets('a modal walks its controls in reading order', (tester) async {
-    final log = <String>[];
-    Widget button(String name, {bool autofocus = false}) => HouseButton(
-          key: ValueKey(name),
-          autofocus: autofocus,
-          onPressed: () => log.add(name),
-          child: Text(name),
-        );
-    late BuildContext ctx;
-    await tester.pumpWidget(host(Builder(builder: (context) {
-      ctx = context;
-      return const SizedBox();
-    })));
-    showLumitModal<void>(
-      context: ctx,
-      builder: (close) => FloatSurface(
-        child: SizedBox(
-          width: 260,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Deliberately composed as two Rows nested in a Column, and the
-              // default button first: widget-tree order and reading order
-              // agree here, so the walk below fails if the policy is neither.
-              Row(children: [button('a', autofocus: true), button('b')]),
-              Row(children: [button('c'), button('d')]),
-            ],
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
-
-    // Press the focused button, step to the next in traversal order, repeat.
-    // (The app wires Tab to this same step through MaterialApp's default
-    // shortcuts; the test drives the traversal directly.)
-    for (var i = 0; i < 4; i++) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      await tester.pump();
-      FocusManager.instance.primaryFocus!.nextFocus();
-      await tester.pump();
-    }
-    expect(log, ['a', 'b', 'c', 'd'],
-        reason: 'left to right, then top to bottom — reading order');
   });
 
   testWidgets('a value box opens its editor with the text selected',

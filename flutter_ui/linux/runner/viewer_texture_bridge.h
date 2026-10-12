@@ -17,6 +17,17 @@
 // but `register` carries the DMA-BUF fields {fd, width, height, stride, offset,
 // fourcc, modifier} instead of a single NT handle.
 //
+// `register` may also carry {renderMajor, renderMinor, primaryMajor,
+// primaryMinor}: the device numbers of the graphics card the buffer is on. A
+// laptop with two cards can render on one and draw the window with the other,
+// and NVIDIA's driver can't share a buffer across them, which crashed the
+// application inside the other card's driver. The bridge compares those numbers
+// with the card behind Flutter's EGL display and answers `register` with the
+// error "gpu_mismatch" in place of importing (gpu_device_match.h has the
+// rule). `frameReady` answers with the same error, or "import_failed", when
+// the import failed later on the raster thread. `displayGpu` returns the line
+// describing the card Flutter is drawing with, for the diagnostics file.
+//
 // The plumbing pattern (the EGL_LINUX_DMA_BUF_EXT attribute list, the
 // glEGLImageTargetTexture2DOES bind, the FlTextureGL populate contract) follows
 // the MIT-licensed `flutter_wgpu_texture` package as a reference. We borrow the

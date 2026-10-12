@@ -909,7 +909,7 @@ pub fn forget(ids: &[Uuid]) {
 }
 
 /// Every id a document's planes are stored under: its planes-tier effect
-/// instances, enabled or not.
+/// instances, on a layer or in a node graph, enabled or not.
 #[must_use]
 pub fn owned_ids(doc: &Document) -> Vec<Uuid> {
     let mut ids = Vec::new();
@@ -917,10 +917,19 @@ pub fn owned_ids(doc: &Document) -> Vec<Uuid> {
         let lumit_core::model::ProjectItem::Composition(comp) = item else {
             continue;
         };
+        let boxes = comp
+            .graph
+            .iter()
+            .flat_map(|g| &g.nodes)
+            .filter_map(|n| match n {
+                lumit_core::comp_graph::GraphNode::Fx(inst) => Some(inst),
+                _ => None,
+            });
         ids.extend(
             comp.layers
                 .iter()
                 .flat_map(|layer| &layer.effects)
+                .chain(boxes)
                 .filter(|e| lumit_core::planes::task_of(e).is_some())
                 .map(|e| e.id),
         );
@@ -1277,9 +1286,22 @@ pub fn job_for(
 }
 
 /// Every cached run a document could be holding, as warm-pass jobs: one per
-/// enabled planes-tier effect on a footage layer whose media has a fingerprint.
+/// enabled planes-tier effect on a footage layer whose media has a fingerprint,
+/// and one per such box in a node graph, against the footage its picture comes
+/// from.
 #[must_use]
 pub fn warm_jobs(doc: &Document) -> Vec<PlaneJob> {
+    // Where a footage item's file is and what names it, or `None` while it is
+    // offline: there is nothing to name a run with.
+    let source_of = |media: Uuid| {
+        let footage = doc.items.iter().find_map(|i| match i {
+            lumit_core::model::ProjectItem::Footage(f) if f.id == media => Some(f),
+            _ => None,
+        })?;
+        let fingerprint = footage.media.fingerprint.as_ref()?;
+        (!footage.media.absolute_path.is_empty())
+            .then(|| (PathBuf::from(&footage.media.absolute_path), fingerprint))
+    };
     let mut out = Vec::new();
     for item in &doc.items {
         let lumit_core::model::ProjectItem::Composition(comp) = item else {
@@ -1289,23 +1311,19 @@ pub fn warm_jobs(doc: &Document) -> Vec<PlaneJob> {
             let LayerKind::Footage { item: media, .. } = layer.kind else {
                 continue;
             };
-            let Some(footage) = doc.items.iter().find_map(|i| match i {
-                lumit_core::model::ProjectItem::Footage(f) if f.id == media => Some(f),
-                _ => None,
-            }) else {
-                continue;
-            };
-            let (Some(fingerprint), false) = (
-                footage.media.fingerprint.as_ref(),
-                footage.media.absolute_path.is_empty(),
-            ) else {
+            let Some((path, fingerprint)) = source_of(media) else {
                 continue;
             };
             for fx in lumit_core::planes::analyses(&layer.effects) {
-                let path = PathBuf::from(&footage.media.absolute_path);
-                if let Some(job) = job_for(fx, path, fingerprint, false) {
+                if let Some(job) = job_for(fx, path.clone(), fingerprint, false) {
                     out.push(job);
                 }
+            }
+        }
+        for (fx, _, media) in comp.graph.iter().flat_map(|g| g.analysis_boxes()) {
+            if let Some((path, fingerprint)) = source_of(media) {
+                // `None` for a Roto brush, which is the roto store's to warm.
+                out.extend(job_for(fx, path, fingerprint, false));
             }
         }
     }

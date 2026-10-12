@@ -19,7 +19,7 @@
     page. The prose above and below - what the effect is for, what each control
     does - is hand-written and survives untouched.
 
-    See docs/learn/09-DOING-IT-YOURSELF.md for the whole routine.
+    See docs/GUIDE.md.
 
 .PARAMETER Check
     Change nothing; fail if the pages have fallen behind the engine. This asks

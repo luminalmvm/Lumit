@@ -1,4 +1,10 @@
-# Deliberately no [env] block here — do not add one for FFmpeg.
+# Everything cargo runs keeps Lumit's presets, preferences, journals and caches
+# under target/, so a test never writes into your real Lumit folders. The
+# installed application is not started by cargo and is unaffected.
+[env]
+LUMIT_USER_DIRS = { value = "target/user-dirs", relative = true }
+
+# Deliberately no FFmpeg entry in [env] - do not add one.
 #
 # This file used to set FFMPEG_PKG_CONFIG_PATH to the macOS Homebrew keg path. Cargo's
 # [env] has no per-target form, so that path was injected on Linux too, and rusty_ffmpeg's

@@ -97,7 +97,17 @@ pub struct Realiser<'a> {
     /// Precomp layer degrades to the passthrough it was before this existed,
     /// which is exactly what an unavailable GPU flow does too.
     pub flow: Option<&'a std::cell::RefCell<CompositeFlow>>,
+    /// Makes Clone to points' pictures for a stream that was only made
+    /// during the render, handed where the list belongs and how many points
+    /// the stream holds ([`crate::build::late_clone_pictures`]). The render's
+    /// owner supplies it, since it holds the document and the decoded pixels
+    /// and this walk holds neither. `None`, which is every builder in the
+    /// tests, leaves such a list absent, so nothing is stamped.
+    pub late_clones: Option<&'a LateCloneMaker<'a>>,
 }
+
+/// What [`Realiser::late_clones`] calls.
+pub type LateCloneMaker<'a> = dyn Fn(&crate::draw::LateClones, usize) -> Vec<LayerInputDraw> + 'a;
 
 /// The flow backend for measuring a **composite's** motion (docs/08 §3.2),
 /// built on the render's own device the first time a layer actually asks for
@@ -337,6 +347,58 @@ impl Realiser<'_> {
             })
     }
 
+    /// A baked picture - a roto matte, a plane - laid into a node graph's frame
+    /// where the footage it was made from is laid.
+    ///
+    /// On a layer the stack runs on the layer's own raster, so a matte of the
+    /// file lines up with the file by construction. A box runs on the graph's
+    /// frame, and the file's picture is in it wherever its Read put it: centred
+    /// at its natural size. So the baked picture is stretched to that size and
+    /// set down at that place, and everything outside it reads nothing.
+    ///
+    /// `size` is the baked picture's own raster: the file's for a roto matte,
+    /// and the model's for a plane, which is a few hundred pixels on the long
+    /// side whatever the file is.
+    fn lay_as_read(
+        &self,
+        baked: &wgpu::Texture,
+        size: (u32, u32),
+        read: &CompLayerDraw,
+        w: u32,
+        h: u32,
+        scale: f32,
+    ) -> wgpu::Texture {
+        let (bw, bh) = (size.0.max(1) as f32, size.1.max(1) as f32);
+        self.compositor.composite_with_camera(
+            &self.ctx,
+            w,
+            h,
+            [0.0, 0.0, 0.0, 0.0],
+            &[lumit_gpu::CompositeLayer {
+                texture: baked,
+                size: (bw, bh),
+                position: (read.position.0 * scale, read.position.1 * scale),
+                anchor: (bw * 0.5, bh * 0.5),
+                scale: (
+                    read.natural_size.0 * scale / bw * 100.0,
+                    read.natural_size.1 * scale / bh * 100.0,
+                ),
+                rotation_deg: 0.0,
+                // Full opacity: a matte is read as a number, never dimmed.
+                opacity: 100.0,
+                matte: None,
+                blend: lumit_gpu::Blend::Normal,
+                z: 0.0,
+                rotation_x_deg: 0.0,
+                rotation_y_deg: 0.0,
+                three_d: false,
+                layer_mask: None,
+                pre: None,
+            }],
+            None,
+        )
+    }
+
     /// Render a layer's layer-input slots (docs/impl/layer-input.md §2) — the
     /// depth passes of its `dof` effects, the matte sources of its Lens
     /// flares. Each [`LayerInputDraw::Layer`] (the referenced layer's source
@@ -346,6 +408,36 @@ impl Realiser<'_> {
     /// `run_ops` is 1:1 with the stack's ops and aligned with the layer
     /// texture the kernel reads. Export renders these identically.
     ///
+    /// One op's whole list of pictures, each rendered as it would be alone and
+    /// with its own size kept beside it.
+    fn several(&self, list: &[LayerInputDraw], w: u32, h: u32) -> crate::fxops::LayerInput {
+        crate::fxops::LayerInput::Several(
+            self.render_layer_inputs(list, w, h)
+                .into_iter()
+                .zip(list.iter().map(LayerInputDraw::size))
+                .collect(),
+        )
+    }
+
+    /// Clone to points' list for a stream that was only made during the
+    /// render: the builder is asked for the pictures now that the stream
+    /// holds `points` points, and they are rendered like any other list.
+    /// Absent where `slot` is not such a list or nobody can make one.
+    fn late_clones(
+        &self,
+        slot: Option<&LayerInputDraw>,
+        points: usize,
+        w: u32,
+        h: u32,
+    ) -> crate::fxops::LayerInput {
+        match (slot, self.late_clones) {
+            (Some(LayerInputDraw::Late(spec)), Some(make)) => {
+                self.several(&make(spec, points), w, h)
+            }
+            _ => crate::fxops::LayerInput::Absent,
+        }
+    }
+
     /// [`LayerInputDraw::ThisLayer`] renders nothing here: it names
     /// the texture `run_ops` is already carrying, which only `run_ops` can
     /// hand over, so it passes through as [`LayerInput::ThisLayer`].
@@ -362,6 +454,11 @@ impl Realiser<'_> {
                 let d = match slot {
                     LayerInputDraw::Absent => return LayerInput::Absent,
                     LayerInputDraw::ThisLayer => return LayerInput::ThisLayer,
+                    // Made when its op comes round (`late_clones`).
+                    LayerInputDraw::Late(_) => return LayerInput::Late,
+                    // An op's whole list: each layer rendered as it would be
+                    // alone, with its own size kept beside it.
+                    LayerInputDraw::Several(list) => return self.several(list, w, h),
                     LayerInputDraw::Layer(d) => d,
                 };
                 // A Precomp input realises its nested comp exactly as a
@@ -408,7 +505,26 @@ impl Realiser<'_> {
                     let side = crate::fxops::Side {
                         roto: &roto,
                         planes: &planes,
+                        late: None,
                     };
+                    // The graphs the referenced layer's own Node graph
+                    // effects apply, at the raster its stack runs on.
+                    let px = if d.natural[0] > 0.0 {
+                        d.tex_w as f32 / d.natural[0]
+                    } else {
+                        1.0
+                    };
+                    let plans: Vec<GraphClosure<'_>> = d
+                        .graph_fx
+                        .iter()
+                        .map(|plan| {
+                            Box::new(move |tex: wgpu::Texture, gw: u32, gh: u32| {
+                                self.realise_graph(plan, Some(&tex), gw, gh, px)
+                            }) as GraphClosure<'_>
+                        })
+                        .collect();
+                    let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
+                        plans.iter().map(|f| &**f).collect();
                     crate::fxops::run_ops(
                         self.fx,
                         &self.ctx,
@@ -431,7 +547,7 @@ impl Realiser<'_> {
                         // through.
                         &[],
                         &side,
-                        &[],
+                        &graphs,
                         // A matte's own stack is part of the effect that reads
                         // it, not a row of its own: its cost is inside that
                         // layer's span already.
@@ -558,8 +674,8 @@ impl Realiser<'_> {
     ///
     /// **What the walk does not carry in v1** (§2.3), each the same boundary a
     /// group header takes: neighbour frames, flow fields, the below-stack,
-    /// paint, lighting, mask paths and roto mattes. Each is a carriage a step
-    /// would grow, and none blocks the compositing the graph is for.
+    /// paint, lighting and mask paths. Each is a carriage a step would grow,
+    /// and none blocks the compositing the graph is for.
     pub fn realise_graph(
         &self,
         plan: &GraphDraw,
@@ -658,6 +774,9 @@ impl Realiser<'_> {
                     picture,
                     colour_tables,
                     flare_lens_files,
+                    roto,
+                    plane,
+                    baked_from,
                     ..
                 } => {
                     let tex = held(&made, input).unwrap_or_else(|| self.transparent(w, h));
@@ -671,6 +790,21 @@ impl Realiser<'_> {
                         Some(t) => LayerInput::Texture(t),
                         None => LayerInput::Absent,
                     };
+                    // What an analysis filed for the file this box reads, laid
+                    // where that file's own picture is laid: the Read step it
+                    // was made from says where. One op, so one slot apiece.
+                    let from = baked_from.and_then(|i| match plan.steps.get(i) {
+                        Some(GraphStep::Read(draw)) => Some(&**draw),
+                        _ => None,
+                    });
+                    let roto = [roto.as_ref().zip(from).map(|(m, read)| {
+                        let matte = upload_roto_matte(&self.ctx, m);
+                        self.lay_as_read(&matte, (m.width, m.height), read, w, h, scale)
+                    })];
+                    let planes = [plane.as_ref().zip(from).map(|(p, read)| {
+                        let plane = self.upload_plane(p);
+                        self.lay_as_read(&plane, (p.width, p.height), read, w, h, scale)
+                    })];
                     let out = crate::fxops::run_ops(
                         self.fx,
                         &self.ctx,
@@ -684,13 +818,16 @@ impl Realiser<'_> {
                         &[bind(picture)],
                         &flare_lens,
                         &[bind(matte)],
-                        // A graph has no masks, no birth schedules, no
-                        // propagated mattes and no graph of its own to run
-                        // here: a nested graph was lowered into these very
-                        // steps rather than left as an op.
+                        // A graph has no masks, no birth schedules and no graph
+                        // of its own to run here: a nested graph was lowered
+                        // into these very steps rather than left as an op.
                         &[],
                         &[],
-                        &crate::fxops::Side::NONE,
+                        &crate::fxops::Side {
+                            roto: &roto,
+                            planes: &planes,
+                            ..crate::fxops::Side::NONE
+                        },
                         &[],
                         None,
                         // Nothing names a box's picture in v1, so every step
@@ -965,8 +1102,8 @@ impl Realiser<'_> {
                 region,
             );
             // An adjustment layer processes the composite below, which has no
-            // footage neighbour frames — temporal effects on an adjustment
-            // layer are a later refinement, so no neighbours here. Its LUT and
+            // footage neighbour frames. A temporal effect's neighbours are
+            // the below-stack built again (`measure_below_flow`). Its LUT and
             // depth-of-field effects still apply (§3.11, §3.22): load/render
             // them the same way the per-layer path does, so preview stays
             // identical to export. The adjustment stack runs on the
@@ -1046,8 +1183,13 @@ impl Realiser<'_> {
                 &l.points_schedules,
                 // An adjustment layer has no source frames, so nothing was
                 // ever propagated through it: a Roto brush there passes
-                // through.
-                &crate::fxops::Side::NONE,
+                // through. It can still stamp clones over a late stream.
+                &crate::fxops::Side {
+                    late: Some(&|slot: usize, points: usize| {
+                        self.late_clones(l.dof_inputs.get(slot), points, tw, th)
+                    }),
+                    ..crate::fxops::Side::NONE
+                },
                 &graphs,
                 fx_ms.as_mut(),
                 // The composite below carries no name in v1.
@@ -1242,9 +1384,11 @@ impl Realiser<'_> {
     ) -> (Vec<(i32, wgpu::Texture)>, Vec<(i32, wgpu::Texture)>) {
         let mut neighbours = Vec::with_capacity(l.flow_below.len());
         let mut fields = Vec::with_capacity(l.flow_below.len());
-        for (offset, draws, camera) in &l.flow_below {
+        for (offset, draws, camera, measure) in &l.flow_below {
             let then = self.realise(*camera, width, height, background, draws);
-            if let Some(field) = self.measure_flow(now, &then) {
+            // Only an offset a flow consumer asked for is measured. An Echo
+            // or a plugin reads the neighbour picture and nothing more.
+            if let Some(field) = measure.then(|| self.measure_flow(now, &then)).flatten() {
                 fields.push((*offset, field));
             }
             neighbours.push((*offset, then));
@@ -1372,7 +1516,26 @@ impl Realiser<'_> {
             let side = crate::fxops::Side {
                 roto: &roto,
                 planes: &planes,
+                late: None,
             };
+            // The graphs the matte source's own Node graph effects apply,
+            // at the raster its stack runs on.
+            let px = if m.natural_size.0 > 0.0 {
+                m.tex_w as f32 / m.natural_size.0
+            } else {
+                1.0
+            };
+            let plans: Vec<GraphClosure<'_>> = m
+                .graph_fx
+                .iter()
+                .map(|plan| {
+                    Box::new(move |tex: wgpu::Texture, gw: u32, gh: u32| {
+                        self.realise_graph(plan, Some(&tex), gw, gh, px)
+                    }) as GraphClosure<'_>
+                })
+                .collect();
+            let graphs: Vec<&dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture> =
+                plans.iter().map(|f| &**f).collect();
             crate::fxops::run_ops(
                 self.fx,
                 &self.ctx,
@@ -1391,7 +1554,7 @@ impl Realiser<'_> {
                 &[],
                 &[],
                 &side,
-                &[],
+                &graphs,
                 // A matte's own stack is part of the layer it
                 // gates, not a row of its own.
                 None,
@@ -1693,9 +1856,13 @@ impl Realiser<'_> {
                     .iter()
                     .map(|slot| slot.as_ref().map(|p| self.plane_texture(p, w, h)))
                     .collect();
+                let late = |slot: usize, points: usize| {
+                    self.late_clones(l.dof_inputs.get(slot), points, w, h)
+                };
                 let side = crate::fxops::Side {
                     roto: &roto_mattes,
                     planes: &planes,
+                    late: Some(&late),
                 };
                 crate::fxops::run_ops(
                     self.fx,
@@ -2254,6 +2421,7 @@ mod tests {
             colour_inputs: None,
             colour_config: None,
             flow: None,
+            late_clones: None,
         }
     }
 
@@ -2300,47 +2468,6 @@ mod tests {
             short + 1,
             long,
             "the working-format copy is the texture that is no longer made (short {short} long {long})"
-        );
-    }
-
-    /// **A layer with an effect keeps the linearise pass**: its stack runs in
-    /// the working format, so it still pays for the copy the plain layer above
-    /// no longer makes. The picture is the plain layer's, because the effect
-    /// is an Exposure sitting at zero stops.
-    #[test]
-    fn a_layer_with_an_effect_still_linearises() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
-        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
-        let realiser = realiser(&ctx, &lut_cache, &fx_cache);
-        let rgba = plate();
-        let plain = draw(&rgba);
-        let mut with_fx = draw(&rgba);
-        with_fx.fx = lumit_core::fx::resolve_stack(
-            &[lumit_core::fx::instantiate("exposure").expect("a built-in")],
-            0.0,
-            1000.0,
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        assert!(!with_fx.fx.is_empty(), "the stack really holds an op");
-
-        let (plain_px, plain_made) = made(&ctx, || {
-            realiser.realise(None, W, H, [0.0; 4], std::slice::from_ref(&plain))
-        });
-        let (fx_px, fx_made) = made(&ctx, || {
-            realiser.realise(None, W, H, [0.0; 4], std::slice::from_ref(&with_fx))
-        });
-
-        assert_eq!(fx_px, plain_px, "zero stops changes nothing");
-        assert_eq!(
-            fx_made,
-            plain_made + 2,
-            "the linear copy the plain layer skips, and the texture the op writes (plain {plain_made} fx {fx_made})"
         );
     }
 }

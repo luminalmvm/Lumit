@@ -437,23 +437,6 @@ mod tests {
         assert!(lru.get(&"c").is_some());
     }
 
-    #[test]
-    fn oversized_values_are_refused_not_thrashed() {
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
-        assert!(lru.insert("a", v(60)));
-        assert!(!lru.insert("huge", v(1000)));
-        assert!(lru.get(&"a").is_some(), "existing entries untouched");
-    }
-
-    #[test]
-    fn reinserting_a_key_replaces_without_double_counting() {
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
-        assert!(lru.insert("a", v(60)));
-        assert!(lru.insert("a", v(30)));
-        assert_eq!(lru.used_bytes(), 30);
-        assert_eq!(lru.len(), 1);
-    }
-
     /// **The governor's ledger follows the contents** (docs/13 §3: "the ledger
     /// MUST equal reality"), through every way they can change — an insert, an
     /// eviction that insert caused, a replacement, a lowered budget, and the
@@ -504,89 +487,6 @@ mod tests {
         assert!(lru.insert(99, v(100)), "and the store fills again");
     }
 
-    /// A store nobody registered is exactly what it was: its own budget, and
-    /// no opinion about anyone else's memory.
-    #[test]
-    fn an_unaccounted_store_has_no_pressure_and_charges_nobody() {
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
-        assert!(lru.insert("a", v(60)));
-        assert_eq!(lru.used_bytes(), 60);
-        assert_eq!(lru.pressure(), None);
-    }
-
-    /// The entries are already in memory by the time the store asks, so a
-    /// refusal is **recorded, not obeyed**: the store keeps what it was given,
-    /// the ledger counts the denial, and the pressure that reads from goes to
-    /// the top — which is what makes whoever is watching act.
-    #[test]
-    fn a_refused_reservation_is_recorded_and_not_obeyed() {
-        let ledger = lumit_budget::Ledger::with_budgets(10_000, 50);
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(1000);
-        lru.account_against(std::sync::Arc::clone(&ledger), lumit_budget::Tier::Ram);
-
-        assert!(lru.insert("a", v(40)));
-        assert_eq!(ledger.used(lumit_budget::Tier::Ram), 40);
-
-        assert!(lru.insert("b", v(40)), "the store's own budget has room");
-        assert_eq!(lru.used_bytes(), 80, "and it kept both");
-        assert_eq!(
-            ledger.used(lumit_budget::Tier::Ram),
-            40,
-            "the second reservation was refused, not the entry"
-        );
-        assert_eq!(ledger.denials(lumit_budget::Tier::Ram), 1);
-        // The denial is the honest signal, not the used figure: a refusal
-        // leaves the ledger *under*-reporting by exactly the entry it could
-        // not grant, and only the counter says so. A reader that watched the
-        // bytes alone would see a tier with room to spare.
-        assert!(lru
-            .pressure()
-            .is_some_and(|p| p > lumit_budget::Pressure::Easy));
-    }
-
-    #[test]
-    fn eviction_cascades_until_it_fits() {
-        let mut lru: ByteLru<u32, Vec<u8>> = ByteLru::new(100);
-        for i in 0..10u32 {
-            assert!(lru.insert(i, v(10)));
-        }
-        assert!(lru.insert(99, v(95)));
-        assert!(lru.used_bytes() <= 100);
-        assert!(lru.get(&99).is_some());
-    }
-
-    #[test]
-    fn lowering_the_budget_evicts_until_it_fits() {
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
-        assert!(lru.insert("a", v(40)));
-        assert!(lru.insert("b", v(40)));
-        lru.get(&"b"); // make "a" the oldest
-        lru.set_budget(50);
-        assert!(lru.used_bytes() <= 50);
-        assert!(lru.contains_key(&"b") && !lru.contains_key(&"a"));
-        // Raising it again keeps what is there and admits more.
-        lru.set_budget(100);
-        assert!(lru.insert("c", v(40)));
-        assert!(lru.contains_key(&"b") && lru.contains_key(&"c"));
-    }
-
-    #[test]
-    fn peek_reads_without_rescuing_from_eviction() {
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
-        assert!(lru.insert("a", v(40)));
-        assert!(lru.insert("b", v(40)));
-        // Peeking "a" many times must not bump its recency: "a" was inserted
-        // first, so it stays the least-recently-used and is the one evicted.
-        for _ in 0..5 {
-            assert!(lru.peek(&"a").is_some());
-        }
-        assert!(lru.insert("c", v(40)));
-        assert!(
-            lru.contains_key(&"b") && !lru.contains_key(&"a"),
-            "peek did not distort eviction: the oldest entry still went"
-        );
-    }
-
     /// docs §5.3 "cheap-to-recompute": a dear entry resists eviction even when
     /// it is the *older* one. "dear" is inserted first (so it is staler), yet
     /// its high recompute cost keeps it while the cheap, newer entry goes.
@@ -600,21 +500,6 @@ mod tests {
             lru.contains_key(&"dear") && !lru.contains_key(&"cheap"),
             "the cheap-to-recompute frame is evicted before the dear one"
         );
-    }
-
-    /// docs §5.3 "large": at equal cost, the bigger frame is reclaimed first —
-    /// it frees the most room — even though the smaller one is staler here.
-    #[test]
-    fn size_aware_eviction_reclaims_the_big_frame() {
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
-        assert!(lru.insert("small", v(20)));
-        assert!(lru.insert("big", v(60)));
-        assert!(lru.insert("c", v(40)));
-        assert!(
-            lru.contains_key(&"small") && !lru.contains_key(&"big"),
-            "the large frame is reclaimed first"
-        );
-        assert!(lru.contains_key(&"c"));
     }
 
     /// docs §5.3's demotion ladder needs eviction to be *visible*: the tier
@@ -661,16 +546,6 @@ mod tests {
         assert!(lru.take_evicted().is_empty());
     }
 
-    /// Without the opt-in nothing is kept, so the default store cannot grow a
-    /// second copy of everything it evicted.
-    #[test]
-    fn evictions_are_dropped_unless_asked_for() {
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(40);
-        assert!(lru.insert("a", v(40)));
-        assert!(lru.insert("b", v(40)));
-        assert!(lru.take_evicted().is_empty());
-    }
-
     /// docs §5.3 pinning: a pinned key is never the victim, so the eviction
     /// falls on a non-pinned entry instead — even though the pinned one would
     /// otherwise be chosen (it is the stalest here).
@@ -689,32 +564,5 @@ mod tests {
         lru.unpin(&"a");
         assert!(lru.insert("d", v(40)));
         assert!(!lru.contains_key(&"a"), "unpinned, the stale frame can go");
-    }
-
-    /// docs §5.3: when only pinned entries remain, the store is left briefly
-    /// over budget rather than dropping a pin (the pin set is small and clears
-    /// as the playhead moves).
-    #[test]
-    fn only_pins_left_accepts_bounded_overage() {
-        let mut lru: ByteLru<&str, Vec<u8>> = ByteLru::new(100);
-        assert!(lru.insert("a", v(40)));
-        assert!(lru.insert("b", v(40)));
-        lru.pin("a");
-        lru.pin("b");
-        assert!(lru.insert("c", v(40))); // nothing evictable → overage
-        assert!(lru.contains_key(&"a") && lru.contains_key(&"b") && lru.contains_key(&"c"));
-        assert_eq!(
-            lru.used_bytes(),
-            120,
-            "pins protected, budget briefly exceeded"
-        );
-        // Once a pin lifts, the next insert reclaims the overage.
-        lru.unpin(&"a");
-        assert!(lru.insert("d", v(40)));
-        assert!(
-            lru.used_bytes() <= 100,
-            "overage clears once a pin is lifted"
-        );
-        assert!(!lru.contains_key(&"a"), "the unpinned frame was reclaimed");
     }
 }

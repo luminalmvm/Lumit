@@ -69,6 +69,7 @@ pub mod plan;
 /// The planes tier: a model's depth or coverage, baked once and read per frame
 /// (docs/impl/addons.md §6.1).
 pub mod planes;
+pub mod prefetch;
 pub mod profile;
 pub mod proxy;
 pub mod puppet;
@@ -76,6 +77,7 @@ pub mod realise;
 pub mod roto;
 mod sidecar;
 pub mod source;
+pub mod standin;
 pub mod track;
 
 pub use build::{
@@ -84,7 +86,8 @@ pub use build::{
 };
 pub use cache::{CacheTier, CachedCompFrame, NestedKeyer, NestedKeys};
 pub use decode::{
-    addon_needs, synthesis_refusal, CompFrame, CompJob, CompLayerPixels, Need, SynthesisRefusal,
+    addon_needs, synthesis_refusal, CompFrame, CompJob, CompLayerPixels, Need, OpenDecoders,
+    SynthesisRefusal,
 };
 pub use draw::{
     AccumulationBelow, CompLayerDraw, DrawSource, GraphDraw, GraphStep, LayerInputDraw, MatteDraw,
@@ -95,6 +98,7 @@ pub use headless::{
     Promotion, DEFAULT_VRAM_CACHE_BYTES,
 };
 pub use plan::{plan_comp_frame, Quality};
+pub use prefetch::{Prefetched, Prefetcher};
 pub use profile::{
     EffectTiming, FrameProfile, FrameProgress, LayerTiming, ProfileSink, ProgressSink, RenderStage,
 };
@@ -121,6 +125,10 @@ pub use lumit_media::DecodedFrame;
 /// bridge answers Settings' VRAM ceiling with it and would otherwise need a
 /// direct `lumit-gpu` dependency to ask.
 pub use lumit_gpu::video_memory_bytes;
+
+/// Which graphics card the renderer opened, as one line, re-exported for the
+/// same reason: the bridge writes it to the diagnostics file once a session.
+pub use lumit_gpu::adapter_summary;
 
 /// The Viewer's display view, re-exported for the same reason: the bridge sets
 /// it on [`HeadlessRenderer::set_display_view`] and would otherwise need a

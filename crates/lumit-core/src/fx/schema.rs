@@ -319,6 +319,17 @@ pub enum ParamKind {
     ColourName {
         role: ColourNameRole,
     },
+    /// A short piece of text the user types, such as a label's wording or a
+    /// name. The value is an [`EffectValue::Text`](crate::model::EffectValue::Text),
+    /// and an effect reads it from the bag as a
+    /// [`ShortText`](super::params::ShortText), which holds it to
+    /// [`TEXT_MAX_BYTES`](super::params::TEXT_MAX_BYTES). Static, and no wire
+    /// drives it.
+    Text {
+        /// What a fresh instance starts with, and what a project saved before
+        /// the row existed reads as.
+        default: &'static str,
+    },
     /// A reference to another layer in the composition (docs/impl/
     /// layer-input.md), sampled as an auxiliary picture — the depth pass a
     /// depth-of-field effect reads, the bright-source matte a Lens flare
@@ -490,6 +501,7 @@ impl ParamKind {
             | ParamKind::MaskPath { .. }
             | ParamKind::Curve { .. }
             | ParamKind::ColourName { .. }
+            | ParamKind::Text { .. }
             | ParamKind::Action => None,
         }
     }
@@ -1070,14 +1082,22 @@ impl EffectSchema {
     /// It is deliberately *independent* of the matte carriage and of whatever
     /// else the effect consumes: Motion blur reads a whole flow field and
     /// a Motion vectors layer and a matte, and Set matte reads a layer and no
-    /// matte at all. An effect takes at most one auxiliary layer, because a
-    /// second would need a second carriage and nothing has asked for one.
+    /// matte at all. An effect with more than one such row still fills one
+    /// slot: the slot holds them all as a list, in
+    /// [`layer_inputs`](Self::layer_inputs) order.
     #[must_use]
     pub fn layer_input(&self) -> Option<&'static str> {
+        self.layer_inputs().next()
+    }
+
+    /// Every [`ParamKind::Layer`] row that is not the effect's matte, in
+    /// declaration order. One for most effects that have any. Clone to points
+    /// has four.
+    pub fn layer_inputs(&self) -> impl Iterator<Item = &'static str> + '_ {
         let matte = self.matte.param();
         self.params
             .iter()
-            .find(|p| matches!(p.kind, ParamKind::Layer { .. }) && Some(p.id) != matte)
+            .filter(move |p| matches!(p.kind, ParamKind::Layer { .. }) && Some(p.id) != matte)
             .map(|p| p.id)
     }
 }

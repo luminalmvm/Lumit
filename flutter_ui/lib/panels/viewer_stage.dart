@@ -22,16 +22,21 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
-import '../state/comp_time.dart' show sampledScalar, timeOfFrame;
+import '../state/comp_time.dart'
+    show sampledExpression, sampledScalar, timeOfFrame;
 import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
+import '../state/share.dart';
 import '../state/tools.dart';
 import '../state/workspace.dart' show ViewerOverlays;
 import '../theme/theme.dart';
+import 'viewer_texture_controller.dart';
 import '../widgets/controls.dart';
 import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
+import 'viewer_effect_points.dart';
+import 'viewer_follow.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
@@ -111,6 +116,9 @@ class ViewerStage extends StatelessWidget {
   final void Function(Offset at, {required bool out}) onZoomAt;
   final void Function(Rect box, {required bool out}) onZoomBox;
 
+  /// A named magnification, null for fit, for the picture's right-click menu.
+  final ValueChanged<double?>? onZoom;
+
   const ViewerStage({
     super.key,
     required this.comp,
@@ -130,6 +138,7 @@ class ViewerStage extends StatelessWidget {
     required this.onChanged,
     required this.onZoomAt,
     required this.onZoomBox,
+    this.onZoom,
   });
 
   /// The tracked layer whose solved point cloud is drawn, and whether it is
@@ -241,8 +250,14 @@ class ViewerStage extends StatelessWidget {
     // The exact comp time, asked for only once a keyed channel needs it: a
     // comp with nothing animated pays for no frame conversion at all.
     late final at = timeOfFrame(comp, uiState.playheadFrame.value);
-    double read(BridgeScalar s) =>
-        s is BridgeScalar_Static ? s.field0 : sampledScalar(s, at);
+    double read(BridgeScalar s, LayerReference layer) => switch (s) {
+          BridgeScalar_Static(:final field0) => field0,
+          // An expression needs the layer it runs on, or the box stays behind
+          // while the picture moves.
+          BridgeScalar_Expression() =>
+            sampledExpression(s, at, layer, revision),
+          _ => sampledScalar(s, at),
+        };
 
     final out = <LayerBox>[];
     for (final entry in model.heldLayers) {
@@ -257,19 +272,19 @@ class ViewerStage extends StatelessWidget {
       final tf = uiState.liveTransforms.value[entry.layer.internallayerId] ??
           entry.info.transform;
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
-      final rotation = read(tf.rotation);
+      final rotation = read(tf.rotation, entry.layer);
       final live = uiState.liveText.value[entry.layer.internallayerId];
       final id = entry.layer.internallayerId;
       out.add(LayerBox(
         layer: entry.layer,
         id: id,
         map: ViewerLayerMap.of(
-          positionX: read(tf.positionX),
-          positionY: read(tf.positionY),
-          anchorX: read(tf.anchorX),
-          anchorY: read(tf.anchorY),
-          scaleXPercent: read(tf.scaleX),
-          scaleYPercent: read(tf.scaleY),
+          positionX: read(tf.positionX, entry.layer),
+          positionY: read(tf.positionY, entry.layer),
+          anchorX: read(tf.anchorX, entry.layer),
+          anchorY: read(tf.anchorY, entry.layer),
+          scaleXPercent: read(tf.scaleX, entry.layer),
+          scaleYPercent: read(tf.scaleY, entry.layer),
           rotationDegrees: rotation,
           origin: fitted.topLeft,
           viewScale: viewScale,
@@ -280,7 +295,7 @@ class ViewerStage extends StatelessWidget {
         bounds: live == null
             ? uiState.layerBounds.boundsOf(entry,
                 compSize: compSize, revision: revision, t: playheadSeconds)
-            : textLayerBounds(live.text, live.size),
+            : textLayerBounds(live),
         // A keyed position has no one value for a body drag to add to; its
         // keys are dragged on the motion path instead. Keyed scale or
         // rotation likewise grows no handles.
@@ -334,12 +349,31 @@ class ViewerStage extends StatelessWidget {
     // The dropper is listened to beside the tools, and for the same reason: it
     // is armed from a parameter row in another panel, and arming it takes the
     // drag away from the pan below (see [_stage]).
+    final share = Provider.of<LumitState>(context, listen: false).share;
+    // Where this person is pointing, in composition pixels, for the others in
+    // a shared project.
+    void point(PointerEvent event) {
+      if (fitted.isEmpty) return;
+      final (x, y) = ShapeSpace.ofComp(
+        fitted: fitted,
+        compSize: Size(compSize.width.toDouble(), compSize.height.toDouble()),
+      ).ofScreen(event.localPosition);
+      share.point(x, y);
+    }
+
     return ListenableBuilder(
       listenable: Listenable.merge([uiState.tools, uiState.dropper]),
       builder: (context, _) => MouseRegion(
         // Which pointer the armed tool wears over the picture.
         cursor: viewerCursorFor(uiState.tools.tool),
-        child: _stage(context, t),
+        onExit: (_) => share.point(null, null),
+        // Moves as well as hovers, for the reason [DrawnPointerRegion] gives.
+        // A listener only watches, so the tools beneath lose nothing to it.
+        child: Listener(
+          onPointerHover: point,
+          onPointerMove: point,
+          child: _stage(context, t, share),
+        ),
       ),
     );
   }
@@ -360,7 +394,7 @@ class ViewerStage extends StatelessWidget {
     );
   }
 
-  Widget _stage(BuildContext context, LumitTheme t) {
+  Widget _stage(BuildContext context, LumitTheme t, ShareState share) {
     // **While a pick is armed, the drag is the dropper's** (docs/07
     // §6.1). Every tool layer in the stack below settles this by sitting above
     // the pan and taking the hit; the dropper cannot, because it reads raw
@@ -428,6 +462,9 @@ class ViewerStage extends StatelessWidget {
                 ),
               ),
             ),
+            // Why there is no picture, on a machine where the runner had to
+            // refuse it. Over the picture's place and under everything else.
+            const Positioned.fill(child: ViewerGpuMismatchNotice()),
             // The grid and the safe areas: over the picture, under the
             // layer controls, and worked out from the picture's own rectangle
             // so they zoom and pan with the shot.
@@ -498,6 +535,9 @@ class ViewerStage extends StatelessWidget {
                   uiState.liveRotations,
                   uiState.liveText,
                   uiState.liveTransforms,
+                  // The box picked on a node graph's canvas is what the Roto
+                  // tools stroke on there.
+                  uiState.compGraphNode,
                 ]),
                 builder: (context, _) {
                   final boxes = _boxes();
@@ -526,6 +566,8 @@ class ViewerStage extends StatelessWidget {
                           compSize.height.toDouble(),
                         ),
                         onChanged: onChanged,
+                        viewId: viewId,
+                        onZoom: onZoom,
                       ),
                       // The shape tools and the Pen: a drag draws a mask on
                       // the selected layer, and the Pen builds one point by
@@ -562,6 +604,7 @@ class ViewerStage extends StatelessWidget {
                         ),
                         accent: t.accent,
                         onChanged: onChanged,
+                        viewId: viewId,
                       ),
                       // The painting tools: a drag paints a stroke on the
                       // selected layer, under their brush ring.
@@ -595,6 +638,13 @@ class ViewerStage extends StatelessWidget {
                           uiState: uiState,
                           boxes: boxes,
                           target: _roto(),
+                          // A node graph has no layers: the brush is the box
+                          // picked on its canvas.
+                          graph: uiState.model.isNodeGraph ? comp : null,
+                          graphBox: uiState.compGraphNode.value?.id,
+                          origin: fitted.topLeft,
+                          compSize: Size(compSize.width.toDouble(),
+                              compSize.height.toDouble()),
                           viewScale: compSize.width == 0
                               ? 1.0
                               : fitted.width / compSize.width,
@@ -711,6 +761,20 @@ class ViewerStage extends StatelessWidget {
                 },
               ),
             ),
+            // Where the selected effects' points are, as the anchor is shown
+            // for a selected layer. A mark like the layer controls, so the
+            // same switch puts it away.
+            if (wireframes)
+              ViewerEffectPoints(
+                comp: comp,
+                uiState: uiState,
+                fitted: fitted,
+                compSize: Size(
+                  compSize.width.toDouble(),
+                  compSize.height.toDouble(),
+                ),
+                colour: t.accent,
+              ),
             // The region of interest: the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
             // the layer controls for the same reason the Zoom tool is: while a
@@ -771,6 +835,27 @@ class ViewerStage extends StatelessWidget {
                 // picture: §3.2 names guides in its own exemption.
                 guideColour: t.accent,
               ),
+            // Where the others in a shared project are pointing. It repaints
+            // off the people themselves, on a layer of its own, so a pointer
+            // moving elsewhere rebuilds nothing and redraws only this.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _PointersPainter(
+                      share: share,
+                      comp: comp,
+                      fitted: fitted,
+                      compSize: Size(
+                        compSize.width.toDouble(),
+                        compSize.height.toDouble(),
+                      ),
+                      theme: t,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             // The held snapshot, over everything: while it is up the
             // Viewer is showing a second picture, and a wireframe belonging to
             // the live one drawn on top of it would be a lie about both. Fitted
@@ -796,6 +881,10 @@ class ViewerStage extends StatelessWidget {
             // is the Viewer's, but it follows the effect selection rather than
             // anything this panel knows.
             ViewerPrefixChip(uiState: uiState),
+            // Whose composition and playhead this machine is following, on
+            // the view that shows the composition in front.
+            if (comp.internalid == uiState.selectedComp?.internalid)
+              ViewerFollow(uiState: uiState),
           ],
         ),
       )),
@@ -812,6 +901,72 @@ class ViewerStage extends StatelessWidget {
       child: _MissingBadge(footage: footage),
     );
   }
+}
+
+/// The layer a click on [comp]'s picture would select at [frame], with [at]
+/// in composition pixels: the gizmo's own rule ([layerAtPoint], over boxes
+/// built as [ViewerStage._boxes] builds them), for a composition and a frame
+/// that need not be the ones on screen.
+///
+/// It is what a review comment's pin is looked up with, and two things differ
+/// from a click. A layer that is not in the picture at [frame], before its in
+/// point or after its out, is passed over. So is one with no picture of its
+/// own, a Camera, Adjustment, Null, Light or Audio layer, because a comment
+/// points at something that was seen.
+///
+/// It reads the composition from the engine and samples what is keyed, so it
+/// is for a handler and never for a build.
+BridgeLayerEntry? layerAtCompPoint(
+    LumitUiState uiState, CompositionReference comp, int frame, Offset at) {
+  final model = comp.getModel();
+  final settings = comp.getSettings();
+  final size = BridgeCompSize(width: settings.width, height: settings.height);
+  final revision = comp.documentRevision();
+  final time = timeOfFrame(comp, frame);
+  final seconds = frame / (model.fps > 0 ? model.fps : 60.0);
+  double read(BridgeScalar s, LayerReference layer) => switch (s) {
+        BridgeScalar_Static(:final field0) => field0,
+        BridgeScalar_Expression() =>
+          sampledExpression(s, time, layer, revision),
+        _ => sampledScalar(s, time),
+      };
+  const pictureless = {
+    BridgeLayerKind.camera,
+    BridgeLayerKind.adjustment,
+    BridgeLayerKind.nullLayer,
+    BridgeLayerKind.light,
+    BridgeLayerKind.audio,
+  };
+  for (final entry in model.layers) {
+    final info = entry.info;
+    if (pictureless.contains(info.kind) || !info.switches.visible) continue;
+    if (frame < info.inFrame || frame >= info.outFrame) continue;
+    final tf = info.transform;
+    final rotation = read(tf.rotation, entry.layer);
+    final box = LayerBox(
+      layer: entry.layer,
+      id: entry.layer.internallayerId,
+      // No fitting and no pan: a "screen" pixel here is a composition pixel.
+      map: ViewerLayerMap.of(
+        positionX: read(tf.positionX, entry.layer),
+        positionY: read(tf.positionY, entry.layer),
+        anchorX: read(tf.anchorX, entry.layer),
+        anchorY: read(tf.anchorY, entry.layer),
+        scaleXPercent: read(tf.scaleX, entry.layer),
+        scaleYPercent: read(tf.scaleY, entry.layer),
+        rotationDegrees: rotation,
+        origin: Offset.zero,
+        viewScale: 1,
+      ),
+      bounds: uiState.layerBounds.boundsOf(entry,
+          compSize: size, revision: revision, t: seconds),
+      draggable: false,
+      scalable: false,
+      rotationDegrees: rotation,
+    );
+    if (box.contains(at)) return entry;
+  }
+  return null;
 }
 
 /// The badge that appears only once a probe has actually found a file gone.
@@ -896,6 +1051,51 @@ class _MissingBadgeState extends State<_MissingBadge> {
       ),
     );
   }
+}
+
+/// The message the Viewer shows in place of a picture when the picture is on
+/// one graphics card and Flutter is drawing with another.
+///
+/// In plain terms: a laptop with two graphics cards can give the renderer one
+/// and the window the other, and NVIDIA's driver can't share a picture with
+/// another card. The Linux runner refuses that hand-off, since taking it
+/// crashed the application, and this says so where the picture would have
+/// been, with what to do about it. Nothing is drawn on any machine where the
+/// runner hasn't refused, which is every Windows and macOS machine and nearly
+/// every Linux one.
+class ViewerGpuMismatchNotice extends StatelessWidget {
+  const ViewerGpuMismatchNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: ViewerTextureController.gpuMismatch,
+        builder: (context, refused, _) {
+          if (!refused) return const SizedBox.shrink();
+          final t = ThemeScope.of(context).theme;
+          return IgnorePointer(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: Container(
+                  key: const ValueKey('viewer-gpu-mismatch'),
+                  margin: const EdgeInsets.all(12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: t.surface2,
+                    borderRadius: BorderRadius.circular(t.tokens.controlRadius),
+                  ),
+                  child: Text(
+                    l10n.viewerGpuMismatch,
+                    textAlign: TextAlign.center,
+                    style: t.small.copyWith(color: t.warning),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
 }
 
 /// How the picture's texture is sampled, given how much of it lands on how
@@ -1246,6 +1446,80 @@ class ViewerWireframePainter extends CustomPainter {
       old.layerLine != layerLine ||
       old.cameraLine != cameraLine ||
       old.lightLine != lightLine;
+}
+
+/// Where the other people in a shared project are pointing over [comp]'s
+/// picture: a dot in each person's colour, with their name beside it.
+class _PointersPainter extends CustomPainter {
+  final ShareState share;
+  final CompositionReference comp;
+  final Rect fitted;
+  final Size compSize;
+  final LumitTheme theme;
+
+  _PointersPainter({
+    required this.share,
+    required this.comp,
+    required this.fitted,
+    required this.compSize,
+    required this.theme,
+  }) : super(repaint: share);
+
+  /// The dot's radius, and how far the name stands off it.
+  static const double _dot = 4;
+  static const double _gap = 4;
+
+  /// The room round the name inside its plate.
+  static const double _padX = 4;
+  static const double _padY = 1;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final space = ShapeSpace.ofComp(fitted: fitted, compSize: compSize);
+    for (final person in share.inComp(comp)) {
+      final x = person.cursorX, y = person.cursorY;
+      if (x == null || y == null) continue;
+      final at = space.toScreen(x, y);
+      final colour = theme.personColour(person.colour);
+      // Ringed in the darkest surface, so the dot reads over any picture.
+      canvas.drawCircle(at, _dot + 1, Paint()..color = theme.surface0);
+      canvas.drawCircle(at, _dot, Paint()..color = colour);
+      // The name on a plate of its own, edged in the person's colour: the
+      // theme's own text on the theme's own ground stays legible whatever the
+      // picture underneath is.
+      final name = TextPainter(
+        text: TextSpan(
+          text: person.name,
+          style: theme.small.copyWith(color: theme.textPrimary),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      final plate = RRect.fromRectAndRadius(
+        Rect.fromLTWH(at.dx + _dot + _gap, at.dy + _dot,
+            name.width + _padX * 2, name.height + _padY * 2),
+        Radius.circular(theme.tokens.controlRadius),
+      );
+      canvas.drawRRect(plate, Paint()..color = theme.surface0);
+      canvas.drawRRect(
+        plate,
+        Paint()
+          ..color = colour
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1,
+      );
+      name.paint(canvas, plate.outerRect.topLeft + const Offset(_padX, _padY));
+      name.dispose();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_PointersPainter old) =>
+      old.share != share ||
+      old.comp != comp ||
+      old.fitted != fitted ||
+      old.compSize != compSize ||
+      old.theme != theme;
 }
 
 /// The transparency checkerboard behind the picture.

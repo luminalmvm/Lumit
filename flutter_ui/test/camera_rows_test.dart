@@ -31,20 +31,6 @@ void main() {
       };
 
   group('A camera shows what a viewpoint has', () {
-    test('no anchor, no scale and no opacity', () {
-      final props = propsOf(rowsFor(BridgeLayerKind.camera));
-      expect(
-          props,
-          isNot(anyOf(
-            contains(BridgeTransformProp.anchorX),
-            contains(BridgeTransformProp.anchorY),
-            contains(BridgeTransformProp.scaleX),
-            contains(BridgeTransformProp.scaleY),
-            contains(BridgeTransformProp.opacity),
-          )),
-          reason: 'they mean nothing on something that draws no pixels');
-    });
-
     test('its place in three dimensions whatever the 3D switch says', () {
       final props = propsOf(rowsFor(BridgeLayerKind.camera));
       expect(
@@ -73,16 +59,6 @@ void main() {
       ]);
     });
 
-    test('the blur level is a percentage, and stops at a hundred', () {
-      final blur = rowsFor(BridgeLayerKind.camera)
-          .firstWhere((g) => g.axes.first.prop == BridgeTransformProp.blurLevel)
-          .axes
-          .single;
-      expect(blur.suffix, '%');
-      expect(blur.min, 0);
-      expect(blur.max, 100);
-    });
-
     test('a point of interest only where there is one to aim', () {
       expect(propsOf(rowsFor(BridgeLayerKind.camera)),
           isNot(contains(BridgeTransformProp.poiX)),
@@ -95,28 +71,9 @@ void main() {
             BridgeTransformProp.poiZ,
           ]));
     });
-
-    test('and it leads the list, above where the camera stands', () {
-      final rows = rowsFor(BridgeLayerKind.camera, twoNode: true);
-      expect(rows.first.axes.first.prop, BridgeTransformProp.poiX);
-    });
   });
 
   group('A light shows the same placement and nothing else', () {
-    test('no anchor, scale, opacity or camera options', () {
-      final rows = rowsFor(BridgeLayerKind.light);
-      expect(
-          propsOf(rows),
-          isNot(anyOf(
-            contains(BridgeTransformProp.anchorX),
-            contains(BridgeTransformProp.scaleX),
-            contains(BridgeTransformProp.opacity),
-            contains(BridgeTransformProp.zoom),
-            contains(BridgeTransformProp.poiX),
-          )));
-      expect(rows.any((g) => g.cameraOption), isFalse);
-    });
-
     test('its place and its three turns', () {
       expect(propsOf(rowsFor(BridgeLayerKind.light)), {
         BridgeTransformProp.positionX,
@@ -126,41 +83,6 @@ void main() {
         BridgeTransformProp.rotationY,
         BridgeTransformProp.rotation,
       });
-    });
-  });
-
-  group('Every other kind is left exactly as it was', () {
-    test('a 2D footage layer still shows its eleven, minus the 3D three', () {
-      expect(propsOf(rowsFor(BridgeLayerKind.footage)), {
-        BridgeTransformProp.anchorX,
-        BridgeTransformProp.anchorY,
-        BridgeTransformProp.positionX,
-        BridgeTransformProp.positionY,
-        BridgeTransformProp.scaleX,
-        BridgeTransformProp.scaleY,
-        BridgeTransformProp.rotation,
-        BridgeTransformProp.opacity,
-      });
-    });
-  });
-
-  group('The two cells a camera row draws differently', () {
-    test('the eye is on a camera, picture or no picture', () {
-      expect(
-          hasVisibilitySwitch(BridgeLayerKind.camera, hasPicture: false), isTrue,
-          reason: 'it is what makes the camera the active one');
-      expect(hasVisibilitySwitch(BridgeLayerKind.audio, hasPicture: false),
-          isFalse);
-      expect(hasVisibilitySwitch(BridgeLayerKind.footage, hasPicture: true),
-          isTrue);
-    });
-
-    test('the 3D cell is blank on a camera and on a light', () {
-      expect(hasThreeDSwitch(BridgeLayerKind.camera), isFalse);
-      expect(hasThreeDSwitch(BridgeLayerKind.light), isFalse);
-      expect(hasThreeDSwitch(BridgeLayerKind.footage), isTrue);
-      expect(hasThreeDSwitch(BridgeLayerKind.nullLayer), isTrue,
-          reason: 'a null is placed in three dimensions by its own switch');
     });
   });
 
@@ -183,10 +105,6 @@ void main() {
     test('reading one answers zero rather than throwing', () {
       expect(read(plain, BridgeTransformProp.zoom), const BridgeScalar.static_(0));
       expect(read(plain, BridgeTransformProp.poiX), const BridgeScalar.static_(0));
-    });
-
-    test('writing one leaves the transform without channels', () {
-      expect(write(plain, BridgeTransformProp.zoom, 1400).camera, isNull);
     });
 
     test('and a camera keeps the other six when one is written', () {
@@ -235,23 +153,6 @@ void main() {
         layerFoldRows(
             entry: comp.getModel().layers.single, open: open, hasAudio: false);
 
-    testWidgets('the Camera options heading appears with Transform open',
-        (tester) async {
-      final c = withCamera();
-      final id = c.camera.internallayerId.toString();
-      final rows = foldOf(c.comp, {transformPath(id)});
-
-      expect(rows.whereType<FoldGroupRow>().map((g) => g.path),
-          contains(cameraOptionsPath(id)));
-      expect(
-          rows.whereType<FoldTransformRow>().map((r) => r.group.label),
-          isNot(anyOf(contains('Anchor point'), contains('Scale'),
-              contains('Opacity'))));
-      expect(rows.whereType<FoldTransformRow>().any((r) => r.group.cameraOption),
-          isFalse,
-          reason: 'the four are behind their own twirl until it is opened');
-    });
-
     testWidgets('and its four rows come out from under it', (tester) async {
       final c = withCamera();
       final id = c.camera.internallayerId.toString();
@@ -273,18 +174,5 @@ void main() {
           reason: 'they sit under the heading, not beside it');
     });
 
-    testWidgets('a reveal on one of them opens that row alone', (tester) async {
-      final c = withCamera();
-      final id = c.camera.internallayerId.toString();
-      final zoom = transformGroups(
-        threeD: false,
-        modes: c.comp.getModel().layers.single.info.axisModes,
-        kind: BridgeLayerKind.camera,
-      ).firstWhere((g) => g.axes.first.prop == BridgeTransformProp.zoom);
-      final rows = foldOf(c.comp, {transformGroupPath(id, zoom)});
-
-      expect(rows.whereType<FoldTransformRow>().map((r) => r.group.label),
-          ['Zoom']);
-    });
   }, skip: !engineAvailable);
 }

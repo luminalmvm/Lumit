@@ -91,7 +91,11 @@ class ViewerDeck extends StatelessWidget {
         left: t.tokens.roomed
             ? concentric
             : viewerStripPadding - viewerMarkEdge,
-        right: t.tokens.roomed ? concentric : viewerStripPadding,
+        // The right-hand end holds a bar and its label, not a capsule, so it
+        // takes the capsule's end inset rather than the concentric one.
+        right: t.tokens.roomed
+            ? math.max(concentric, ShapeTokens.capsuleEnd)
+            : viewerStripPadding,
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -157,26 +161,9 @@ class ViewerDeck extends StatelessWidget {
                   ),
                 ),
                 viewerBarGapBox(viewerBarGap),
-                // The loop mode, one mark cycling through the three (docs/07
-                // §9). The set has one loop glyph, so the colour tells the
-                // modes apart: lit for the work-area loop, muted for once,
-                // accent for ping-pong.
-                viewerBarMark(
-                  key: const ValueKey('viewer-loop'),
-                  icon: LumitIcon.loop,
-                  colour: switch (loop) {
-                    LoopMode.workArea => t.textPrimary,
-                    LoopMode.once => t.textMuted,
-                    LoopMode.pingPong => t.accent,
-                  },
-                  onPressed: () => ui.workspace.setLoopMode(LoopMode
-                      .values[(loop.index + 1) % LoopMode.values.length]),
-                  tip: switch (loop) {
-                    LoopMode.workArea => l10n.tipTransportLoopWorkArea,
-                    LoopMode.once => l10n.tipTransportLoopOnce,
-                    LoopMode.pingPong => l10n.tipTransportLoopPingPong,
-                  },
-                ),
+                // The loop mode, the same mark the bar carries.
+                viewerLoopMark(t,
+                    loop: loop, onLoop: ui.workspace.setLoopMode),
                 viewerBarGapBox(viewerBarGap),
                 // The mute: lit while the output is silenced, which is the
                 // state worth noticing.
@@ -261,19 +248,25 @@ class _CacheMeterState extends State<_CacheMeter> {
   double _count(LumitUiState ui) {
     final frames = widget.duration;
     if (frames <= 0) return 0;
-    final work = workAreaFrames(widget.comp);
-    final held = widget.comp.cachedFrames(
-      frames: BigInt.from(frames),
-      scale: ui.viewerScale,
-    );
-    final start = work.start.clamp(0, frames);
-    final end = work.end.clamp(start, frames);
-    if (end <= start) return 0;
-    var ready = 0;
-    for (var f = start; f < end && f < held.length; f++) {
-      if (held[f] != 0) ready++;
+    try {
+      final work = workAreaFrames(widget.comp);
+      final held = widget.comp.cachedFrames(
+        frames: BigInt.from(frames),
+        scale: ui.viewerScale,
+      );
+      final start = work.start.clamp(0, frames);
+      final end = work.end.clamp(start, frames);
+      if (end <= start) return 0;
+      var ready = 0;
+      for (var f = start; f < end && f < held.length; f++) {
+        if (held[f] != 0) ready++;
+      }
+      return ready / (end - start);
+    } catch (_) {
+      // The composition's project has gone, as when a frame lands while one
+      // project takes the place of another. Nothing of it is held.
+      return 0;
     }
-    return ready / (end - start);
   }
 
   @override

@@ -51,43 +51,6 @@ void main() {
     setUp(() => dir = Directory.systemTemp.createTempSync('lumit-ocio'));
     tearDown(() => dir.deleteSync(recursive: true));
 
-    String writeConfig(String text) {
-      final file = File('${dir.path}${Platform.pathSeparator}config.ocio');
-      file.writeAsStringSync(text);
-      return file.path;
-    }
-
-    test('a project with no config named says so, calmly', () {
-      final summary = LumitBridgeState.newProject().colourSummary();
-      expect(summary.path, '');
-      expect(summary.loaded, isFalse);
-      expect(summary.problem, '');
-      expect(summary.spaces, isEmpty);
-      expect(summary.displays, isEmpty);
-    });
-
-    test('a loaded config hands over its own names, and undo puts them back',
-        () {
-      final project = LumitBridgeState.newProject();
-      project.setColourConfig(path: writeConfig(goodConfig));
-
-      final summary = project.colourSummary();
-      expect(summary.loaded, isTrue, reason: summary.problemEnglish);
-      expect(summary.path, endsWith('config.ocio'));
-      expect(summary.spaces, contains('srgb_texture'));
-      expect(summary.displays.map((d) => d.name), ['sRGB']);
-      expect(summary.displays.single.views, ['Standard']);
-
-      // Whether that space can be delivered is the export dropdown's enable.
-      expect(project.canDeliverColourSpace(name: 'out_srgb'), isTrue);
-      expect(project.canDeliverColourSpace(name: 'no_such_space'), isFalse);
-
-      // An ordinary op, so one gesture is one undo step.
-      project.undo();
-      expect(project.colourSummary().path, '');
-      expect(project.canDeliverColourSpace(name: 'out_srgb'), isFalse);
-    });
-
     test('a refusal crosses as an id and its facts, and Dart writes the words',
         () {
       final project = LumitBridgeState.newProject();

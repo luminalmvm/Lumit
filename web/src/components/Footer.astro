@@ -1,29 +1,109 @@
 ---
-const links = [
-  { href: "/download", label: "Download" },
-  { href: "/releases", label: "Releases" },
-  { href: "https://docs.lumitlab.com", label: "Docs" },
-  { href: "/translate", label: "Translate" },
-  { href: "/sponsor", label: "Sponsor" },
-  { href: "https://github.com/luminalmvm/Lumit", label: "GitHub" },
-  { href: "https://discord.gg/dc3p3XC7mM", label: "Discord" },
-  { href: "https://github.com/luminalmvm/Lumit/blob/main/LICENSE", label: "GPLv3" },
+// The foot of every page: the mark and the line it stands for on the left,
+// every destination on the site in three groups beside it. On a wide window a
+// group is its name with its links in two columns below it, so the whole foot
+// is about as deep as half the longest group.
+const columns = [
+  {
+    h: "Lumit",
+    links: [
+      { href: "/download", label: "Download" },
+      { href: "/pro", label: "Lumit Pro" },
+      { href: "/releases", label: "Releases" },
+      { href: "/releases/rss.xml", label: "Release feed" },
+      { href: "/#roadmap", label: "Roadmap" },
+      { href: "/media", label: "Media" },
+    ],
+  },
+  {
+    h: "Learn",
+    links: [
+      { href: "https://docs.lumitlab.com", label: "Docs" },
+      { href: "https://docs.lumitlab.com/start/first-composition/", label: "First composition" },
+      { href: "https://docs.lumitlab.com/effects/", label: "Effects" },
+      { href: "/projects", label: "Projects" },
+    ],
+  },
+  {
+    h: "Take part",
+    links: [
+      { href: "https://github.com/luminalmvm/Lumit", label: "GitHub" },
+      { href: "https://discord.gg/dc3p3XC7mM", label: "Discord" },
+      { href: "/translate", label: "Translate" },
+      { href: "/sponsor", label: "Sponsor" },
+    ],
+  },
 ];
 ---
 
-<footer class="border-t border-line py-11 text-sm text-fg-3">
-  <div class="mx-auto flex w-full max-w-[1080px] flex-wrap items-center gap-x-8 gap-y-4 px-5 sm:px-10">
-    <a href="/" class="flex items-center gap-2.5 no-underline">
-      <img src="/lumit-mark.svg" alt="" width="22" height="22" class="block" />
-      <span class="font-semibold tracking-[-0.035em] text-fg">Lumit</span>
-    </a>
-    <span class="ml-auto"></span>
-    {
-      links.map((l) => (
-        <a href={l.href} class="text-fg-2 no-underline transition-colors hover:text-fg">
-          {l.label}
-        </a>
-      ))
-    }
+<footer class="border-t border-line text-fg-3">
+  <div class="wrap grid gap-x-10 gap-y-12 py-12 md:grid-cols-[minmax(0,1fr)_auto]">
+    <div class="flex flex-col items-start gap-5">
+      {/* The wordmark's file has room at its left for the mark to open into,
+          so it is pulled back to stand on the column's edge. */}
+      <a href="/" class="-ml-[15px] flex items-center no-underline">
+        <img src="/lumit-wordmark.svg" alt="Lumit" height="22" class="block h-[22px] w-auto" />
+      </a>
+      <p class="max-w-[300px] text-[15px] leading-[1.45]">
+        Let your creativity flow. Free and open-source, forever.
+      </p>
+    </div>
+    <nav class="groups" aria-label="Site">
+      {
+        columns.map((c) => (
+          <div class="group">
+            <p class="kicker text-fg-4">{c.h}</p>
+            <div class="links" style={`--rows:${Math.ceil(c.links.length / 2)}`}>
+              {c.links.map((l) => (
+                <a href={l.href} class="text-[15px] text-fg-2 no-underline transition-colors hover:text-fg">
+                  {l.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        ))
+      }
+    </nav>
+  </div>
+  <div class="wrap flex flex-wrap gap-x-6 gap-y-2 pb-10 text-[13px] text-fg-4">
+    <a href="/terms" class="text-fg-4 no-underline transition-colors hover:text-fg-2">Terms</a>
+    <a href="/privacy" class="text-fg-4 no-underline transition-colors hover:text-fg-2">Privacy</a>
+    <a href="/refunds" class="text-fg-4 no-underline transition-colors hover:text-fg-2">Refunds</a>
+    <a href="mailto:hello@lumitlab.com" class="text-fg-4 no-underline transition-colors hover:text-fg-2">Contact</a>
   </div>
 </footer>
+
+<style>
+  .groups {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, auto));
+    align-content: start;
+    align-items: start;
+    gap: 40px 56px;
+  }
+  .group,
+  .links {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  @media (min-width: 640px) {
+    .groups {
+      grid-template-columns: repeat(3, auto);
+    }
+  }
+  /* Wide enough for it: a group's links fill two columns downwards under its
+     name, the first of them straight below it. */
+  @media (min-width: 1280px) {
+    .groups {
+      column-gap: 52px;
+    }
+    .links {
+      display: grid;
+      grid-auto-flow: column;
+      grid-template-rows: repeat(var(--rows), auto);
+      align-content: start;
+      gap: 12px 26px;
+    }
+  }
+</style>

@@ -12,12 +12,15 @@ import 'dart:ui';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart'
+    show BridgeExpressionLanguage;
 
 import '../l10n/strings.dart';
 import '../theme/custom_theme.dart';
 import '../icons/icon_style.dart';
 import '../theme/theme.dart';
 import 'dock.dart';
+import 'expression_language.dart';
 import 'settings.dart';
 
 /// How the Viewer is looking at one composition: exposure in stops and whether
@@ -33,14 +36,15 @@ const ViewerLook neutralLook = (stops: 0.0, toneMap: false);
 /// frame, the Timeline's magnification, and how far through its scrollable
 /// range the lanes were scrolled (0 at the left, 1 at the right — a fraction
 /// rather than a pixel offset so the view comes back to the same stretch of
-/// time whatever width the panel has since been dragged to).
+/// time whatever width the panel has since been dragged to). [scrollY] is how
+/// far down the layers were scrolled, in pixels, since rows keep their height.
 ///
-/// A record for the same reason [ViewerLook] is: three numbers with no
+/// A record for the same reason [ViewerLook] is: a few numbers with no
 /// behaviour, compared by value.
-typedef CompView = ({int frame, double zoom, double scroll});
+typedef CompView = ({int frame, double zoom, double scroll, double scrollY});
 
-/// A comp nobody has been in yet: frame one, fitted, at the left.
-const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0);
+/// A comp nobody has been in yet: frame one, fitted, at the top left.
+const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0, scrollY: 0.0);
 
 /// Which of the Viewer's marks are drawn over one composition: the proportional
 /// grid, the title/action safe rectangles, and the rulers along the picture's
@@ -197,6 +201,7 @@ class SavedSession {
               'frame': e.value.frame,
               'zoom': e.value.zoom,
               'scroll': e.value.scroll,
+              'scroll_y': e.value.scrollY,
             },
         },
       };
@@ -347,11 +352,14 @@ Map<String, CompView> _compViewsFromJson(Object? raw) {
     if (k is! String || v is! Map || v['frame'] is! num) continue;
     final zoom = v['zoom'] is num ? (v['zoom'] as num).toDouble() : 1.0;
     final scroll = v['scroll'] is num ? (v['scroll'] as num).toDouble() : 0.0;
-    if (!zoom.isFinite || !scroll.isFinite) continue;
+    final scrollY =
+        v['scroll_y'] is num ? (v['scroll_y'] as num).toDouble() : 0.0;
+    if (!zoom.isFinite || !scroll.isFinite || !scrollY.isFinite) continue;
     out[k] = (
       frame: max(0, (v['frame'] as num).toInt()),
       zoom: zoom < 1.0 ? 1.0 : zoom,
       scroll: scroll.clamp(0.0, 1.0),
+      scrollY: max(0.0, scrollY),
     );
   }
   return out;
@@ -535,8 +543,9 @@ class Workspace extends ChangeNotifier {
 
   /// The custom theme in use, or null when a built-in scheme is selected or
   /// the named one has been deleted.
-  CustomTheme? get activeCustomTheme {
-    final name = customThemeName;
+  CustomTheme? get activeCustomTheme => _customThemeNamed(customThemeName);
+
+  CustomTheme? _customThemeNamed(String? name) {
     if (name == null) return null;
     for (final theme in customThemes) {
       if (theme.name == name) return theme;
@@ -568,6 +577,114 @@ class Workspace extends ChangeNotifier {
   void toggleFavouriteEffect(String key) {
     if (!favouriteEffects.remove(key)) favouriteEffects.add(key);
     settingsChanged();
+  }
+
+  /// The expressions saved from the Expressions panel, script by name. They
+  /// live in the settings file, and travel as the file [encodeExpressions]
+  /// writes.
+  final Map<String, String> savedExpressions = <String, String>{};
+
+  /// The language each saved expression is written in. A name with no entry
+  /// is Rhai, which is every expression saved before there was a choice.
+  final Map<String, BridgeExpressionLanguage> savedExpressionLanguages =
+      <String, BridgeExpressionLanguage>{};
+
+  BridgeExpressionLanguage savedExpressionLanguage(String name) =>
+      savedExpressionLanguages[name] ?? BridgeExpressionLanguage.rhai;
+
+  /// The language a new expression starts in, wherever one is made: a row's
+  /// Set expression, Animation ▸ Add expression, the Expressions panel's New.
+  BridgeExpressionLanguage defaultExpressionLanguage =
+      BridgeExpressionLanguage.rhai;
+
+  void setDefaultExpressionLanguage(BridgeExpressionLanguage language) {
+    defaultExpressionLanguage = language;
+    settingsChanged();
+  }
+
+  /// The saved languages as the settings file and the exchange file keep
+  /// them: only the names that are not Rhai.
+  Map<String, String> _encodedExpressionLanguages() => {
+        for (final MapEntry(:key, :value) in savedExpressionLanguages.entries)
+          if (savedExpressions.containsKey(key) &&
+              value != BridgeExpressionLanguage.rhai)
+            key: expressionLanguageId(value),
+      };
+
+  /// Every saved expression as the text of a file to hand to someone.
+  String encodeExpressions() => jsonEncode({
+        'lumit_expressions': savedExpressions,
+        'languages': _encodedExpressionLanguages(),
+      });
+
+  /// Take in a file [encodeExpressions] wrote and say how many it held, or
+  /// null when [text] isn't one. A name already taken by a different script
+  /// keeps both, the new one under a numbered name.
+  int? importExpressions(String text) {
+    final Object? read;
+    try {
+      read = jsonDecode(text);
+    } catch (_) {
+      return null;
+    }
+    if (read case {'lumit_expressions': final Map<dynamic, dynamic> saved}) {
+      final languages = (read as Map<dynamic, dynamic>)['languages'];
+      var count = 0;
+      for (final MapEntry(:key, :value) in saved.entries) {
+        if (key is! String || value is! String) continue;
+        final language = expressionLanguageOfId(
+            languages is Map<dynamic, dynamic> ? languages[key] : null);
+        var name = key;
+        for (var n = 2;
+            savedExpressions.containsKey(name) &&
+                (savedExpressions[name] != value ||
+                    savedExpressionLanguage(name) != language);
+            n++) {
+          name = '$key $n';
+        }
+        _storeExpression(name, value, language);
+        count++;
+      }
+      settingsChanged();
+      return count;
+    }
+    return null;
+  }
+
+  void _storeExpression(
+      String name, String text, BridgeExpressionLanguage language) {
+    savedExpressions[name] = text;
+    if (language == BridgeExpressionLanguage.rhai) {
+      savedExpressionLanguages.remove(name);
+    } else {
+      savedExpressionLanguages[name] = language;
+    }
+  }
+
+  /// Save [text] under [name], over whatever that name held.
+  void saveExpression(String name, String text,
+      [BridgeExpressionLanguage language = BridgeExpressionLanguage.rhai]) {
+    _storeExpression(name, text, language);
+    settingsChanged();
+  }
+
+  void deleteExpression(String name) {
+    savedExpressionLanguages.remove(name);
+    if (savedExpressions.remove(name) != null) settingsChanged();
+  }
+
+  /// The last eight colours applied through the colour picker, newest first,
+  /// each as red, green and blue. Kept here so they outlast a restart.
+  final List<List<double>> recentColours = [];
+
+  /// Put a colour at the front of [recentColours]. Saved at once and nobody
+  /// is told: the picker reads the list when it opens.
+  void rememberColour(double r, double g, double b) {
+    recentColours
+      ..removeWhere((c) => c[0] == r && c[1] == g && c[2] == b)
+      ..insert(0, [r, g, b]);
+    if (recentColours.length > 8) recentColours.length = 8;
+    save();
   }
 
   /// Whether an effect's own graph — Levels' histogram, a Curves channel —
@@ -605,6 +722,11 @@ class Workspace extends ChangeNotifier {
   bool precomposeAdjustDuration = true;
   bool precomposeOpenNewComp = false;
 
+  /// The Timeline outline's columns: the group order, each group's width and
+  /// the groups switched off, as the Timeline wrote them. Null until a column
+  /// is first moved, and the Timeline opens on its defaults.
+  Map<String, dynamic>? timelineColumns;
+
   PerformanceSettings performance = PerformanceSettings();
   InterfaceSettings interface = InterfaceSettings();
 
@@ -616,6 +738,10 @@ class Workspace extends ChangeNotifier {
   /// is only fetched when the user asks for it, so leaving this on never costs
   /// anybody a surprise few hundred megabytes.
   bool autoUpdate = true;
+
+  /// What Discord shows while Lumit is open. Names are a choice and not the
+  /// default, since a project's name can be somebody else's secret.
+  DiscordStatus discordStatus = DiscordStatus.app;
 
   /// Whether the welcome screen opens on launch.
   ///
@@ -639,13 +765,17 @@ class Workspace extends ChangeNotifier {
   /// they came from after months of work would be absurd.
   bool firstRunDone = true;
 
-  /// Take the Vegas answer, or the After Effects one, from the first-run
-  /// screen. Both settings move together here and separately in Settings — this
-  /// is the pair the screen offers, not a mode the rest of the code reads.
-  /// Marks the screen answered, so it is asked exactly once.
-  void setEditingStyle({required bool vegas}) {
-    interface.retimeOpensToSpeed = vegas;
-    interface.videoAsSequenceLayer = vegas;
+  /// Take the first-run screen's editing answer: whether the Retime graph
+  /// opens to speed, and whether video arrives as a Sequence layer. The two
+  /// move together here and separately in Settings: each card is a pair the
+  /// screen offers, not a mode the rest of the code reads. After Effects is
+  /// neither, Vegas is both (or the speed graph alone, by its tick), and
+  /// Premiere Pro or Resolve is Sequence layers alone. Marks the screen
+  /// answered, so it is asked exactly once.
+  void setEditingStyle(
+      {required bool speedGraph, required bool sequenceLayers}) {
+    interface.retimeOpensToSpeed = speedGraph;
+    interface.videoAsSequenceLayer = sequenceLayers;
     firstRunDone = true;
     settingsChanged();
   }
@@ -654,6 +784,22 @@ class Workspace extends ChangeNotifier {
   /// defaults, docs/07 §13.1). Recorded so it is not asked again.
   void skipFirstRun() {
     firstRunDone = true;
+    settingsChanged();
+  }
+
+  /// Whether the guided tour has been finished or skipped (shell/tour.dart),
+  /// after which it only opens from the Help menu.
+  ///
+  /// True unless [load] finds no settings file, for the reason [firstRunDone]
+  /// is: a new machine is shown round once, and somebody who has been working
+  /// in Lumit for months is not.
+  bool tourDone = true;
+
+  /// The tour has been seen to its end, or skipped. Either way it does not
+  /// open by itself again.
+  void finishTour() {
+    if (tourDone) return;
+    tourDone = true;
     settingsChanged();
   }
 
@@ -721,6 +867,151 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// What the others in a shared project see this person called, or null
+  /// until one has been typed. The person's, not the work's, so it lives here.
+  String? shareName;
+
+  void setShareName(String? name) {
+    shareName = name;
+    save();
+  }
+
+  /// Whether sharing a project asks the router to open its port, so people
+  /// outside this network can join. On until the person says otherwise: it
+  /// is what lets a link work for someone far away with nothing to set up.
+  bool shareOutside = true;
+
+  void setShareOutside(bool on) {
+    shareOutside = on;
+    save();
+  }
+
+  /// Whether a shared project keeps a room at Lumit's own relay, for an
+  /// account with Lumit Pro that has typed no relay of its own. On until the
+  /// person says otherwise, for the reason [shareOutside] is.
+  bool shareCloud = true;
+
+  void setShareCloud(bool on) {
+    shareCloud = on;
+    save();
+  }
+
+  /// The relay a shared project keeps a room at, as `host` or `host:port`,
+  /// or null for none. Somebody's own server, which Lumit only uses once it
+  /// has been typed here.
+  String? shareRelay;
+
+  void setShareRelay(String? relay) {
+    shareRelay = relay;
+    save();
+  }
+
+  /// How fast this computer sends and takes footage in a shared project, in
+  /// kilobytes a second. Nought is as fast as the line goes.
+  int shareUpLimit = 0;
+  int shareDownLimit = 0;
+
+  /// Whether this computer makes stand-ins of its footage for the others in
+  /// a shared project, and whether it asks for stand-ins of what it lacks
+  /// without being told to.
+  bool shareGive = true;
+  bool shareTake = true;
+
+  /// Called whenever any of the four above changes, and once they are read
+  /// from disk: what hands them to the engine.
+  VoidCallback? onShareFootage;
+
+  void setShareLimits({int? up, int? down}) {
+    shareUpLimit = (up ?? shareUpLimit).clamp(0, 10000000);
+    shareDownLimit = (down ?? shareDownLimit).clamp(0, 10000000);
+    onShareFootage?.call();
+    save();
+  }
+
+  void setShareFootage({bool? give, bool? take}) {
+    shareGive = give ?? shareGive;
+    shareTake = take ?? shareTake;
+    onShareFootage?.call();
+    save();
+  }
+
+  /// For each extension that has been shown, by its id: the number of the
+  /// dock pane it is shown in. Kept after the extension is removed, so one
+  /// installed again comes back where it was.
+  final Map<String, int> extensionSlots = {};
+
+  void setExtensionSlot(String id, int slot) {
+    extensionSlots[id] = slot;
+    save();
+  }
+
+  /// For each extension, by its id: the folders the person picked for it to
+  /// watch. An extension can ask to watch one of these again without the
+  /// picker, and no other.
+  final Map<String, List<String>> extensionFolders = {};
+
+  void setExtensionFolders(String id, List<String> folders) {
+    extensionFolders[id] = folders;
+    save();
+  }
+
+  /// The most projects [shareHosted] remembers.
+  static const int maxShareHosted = 16;
+
+  /// For each project this machine has shared and not stopped sharing, by the
+  /// engine's id for it: the port and the invite's secret, written
+  /// `port/key`. Sharing that project again with them makes the same invite,
+  /// so the people who hold it find their way back. Newest last, and the
+  /// oldest goes once there are [maxShareHosted].
+  final Map<String, String> shareHosted = {};
+
+  /// Remember how [project] is shared, or forget it for null.
+  void setShareHosted(String project, String? how) {
+    shareHosted.remove(project);
+    if (how != null) shareHosted[project] = how;
+    while (shareHosted.length > maxShareHosted) {
+      shareHosted.remove(shareHosted.keys.first);
+    }
+    save();
+  }
+
+  /// The projects kept online whose originals this machine gives Lumit's
+  /// server, by the engine's id for each. The host's choice, made a project
+  /// at a time, because originals are large and the storage is the host's.
+  final Set<String> shareOriginals = {};
+
+  void setShareOriginals(String project, bool on) {
+    on ? shareOriginals.add(project) : shareOriginals.remove(project);
+    save();
+  }
+
+  /// For each copy of a project kept online, by the engine's id for it: how
+  /// many edits of each recent sitting the copy had in front of it when it
+  /// was last open. A copy opened again is told what it missed, and this is
+  /// what lets that be counted from where it left off.
+  final Map<String, Map<String, int>> shareWatched = {};
+
+  void setShareWatched(String project, Map<String, int> watched) {
+    shareWatched.remove(project);
+    if (watched.isNotEmpty) shareWatched[project] = watched;
+    while (shareWatched.length > maxShareHosted) {
+      shareWatched.remove(shareWatched.keys.first);
+    }
+    save();
+  }
+
+  /// For a project kept online whose host has just made a new invite: that
+  /// invite, from the server taking it until the engine has it. Lumit going
+  /// down between the two would otherwise lose the only copy, and the host's
+  /// own machine could not find its project again.
+  final Map<String, String> shareMoved = {};
+
+  void setShareMoved(String project, String? link) {
+    shareMoved.remove(project);
+    if (link != null) shareMoved[project] = link;
+    save();
+  }
+
   /// How often Lumit writes a spare copy of every open project, in minutes,
   /// and how many copies it keeps (docs/10 §4). Zero minutes is off.
   ///
@@ -782,6 +1073,25 @@ class Workspace extends ChangeNotifier {
     recompose();
   }
 
+  /// The scheme being hovered in the colour scheme list. The interface is
+  /// drawn in it but nothing is saved, and null puts the saved one back.
+  ThemeChoice? _looking;
+
+  void previewChoice(ThemeChoice? choice) {
+    if (_looking == choice) return;
+    _looking = choice;
+    recompose();
+  }
+
+  /// The accent being hovered in Settings, drawn and not saved the same way.
+  Color? _lookingAccent;
+
+  void previewAccent(Color? accent) {
+    if (_lookingAccent == accent) return;
+    _lookingAccent = accent;
+    recompose();
+  }
+
   void recompose() {
     // Density rides on every theme this method can build, preview included:
     // it is a setting about rows rather than about colours, so no colour
@@ -790,6 +1100,7 @@ class Workspace extends ChangeNotifier {
     // The icon weight and the person's own icons ride with the theme: set
     // here so every glyph reads them on its next build.
     IconStyle.weight = IconStyle.weightOf(interface.iconSet);
+    LumitTheme.labelCaseChoice = interface.labelCase;
     if (IconStyle.folder == null) {
       IconStyle.folder =
           '${storeFile().parent.path}${Platform.pathSeparator}icons';
@@ -800,7 +1111,12 @@ class Workspace extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final custom = activeCustomTheme;
+    // A hovered scheme is built the same way as the saved one, so the preview
+    // is what picking it would give.
+    final looking = _looking;
+    final custom = looking == null
+        ? activeCustomTheme
+        : _customThemeNamed(looking.customName);
     if (custom != null) {
       // A custom theme carries its own accent among its colours, so the
       // accent override does not apply on top — it would silently overwrite
@@ -808,17 +1124,18 @@ class Workspace extends ChangeNotifier {
       _theme = _withRoom(custom.build(themeShape).copyWith(density: density));
     } else {
       _theme = _withRoom(LumitTheme.forScheme(
-        colorScheme,
+        looking?.scheme ?? colorScheme,
         themeShape,
-        accentOverride: accentOverride,
+        accentOverride: _lookingAccent ?? accentOverride,
       ).copyWith(density: density));
     }
     notifyListeners();
   }
 
   /// The room Lantern's cards stand in, from the setting: the theme's own
-  /// light neutral by day, the canvas by night. Studio and Desk are never
-  /// roomed, so the colour is carried and never drawn.
+  /// (the night room, unless a custom theme names another), the light neutral
+  /// by day, the canvas by night. Studio and Desk are never roomed, so the
+  /// colour is carried and never drawn.
   LumitTheme _withRoom(LumitTheme t) => switch (interface.room) {
         LanternRoom.auto => t,
         LanternRoom.day => t.copyWith(room: LumitTheme.dayRoom),
@@ -948,6 +1265,11 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setDiscordStatus(DiscordStatus status) {
+    discordStatus = status;
+    settingsChanged();
+  }
+
   /// Turn the welcome screen on or off for the next launch.
   void setShowWelcomeOnLaunch(bool on) {
     showWelcomeOnLaunch = on;
@@ -995,6 +1317,13 @@ class Workspace extends ChangeNotifier {
     precomposeAdjustDuration = adjustDuration;
     precomposeOpenNewComp = openNewComp;
     settingsChanged();
+  }
+
+  /// Saved straight away and without notifying: the Timeline already shows
+  /// what it is writing.
+  void setTimelineColumns(Map<String, dynamic> columns) {
+    timelineColumns = columns;
+    save();
   }
 
   void setShape(ThemeShape s) {
@@ -1057,10 +1386,26 @@ class Workspace extends ChangeNotifier {
   /// workspace strip to tick (docs/07 §1.4).
   ///
   /// Session-only, and not part of the stored layout: what persists is the
-  /// arrangement itself, which the user is free to drag about afterwards — so
-  /// on the next launch the strip shows no preset ticked rather than claiming
-  /// one the panels may no longer match.
+  /// arrangement itself, which the user is free to drag about afterwards. So
+  /// an arrangement read back from a file ticks a preset only when it is
+  /// still that preset's ([tickMatchingPreset]), and none otherwise.
   WorkspacePreset? activePreset;
+
+  /// Tick the preset whose panels the arrangement has in the same places and
+  /// at the same sizes, or none. For an arrangement that was read from a file
+  /// rather than chosen: the stored one at launch, a project's own as it
+  /// opens. Which tab is in front does not count, because start-up fronts
+  /// Project whatever was stored. One of the user's own in force keeps its
+  /// tick: the strip never shows two.
+  void tickMatchingPreset() {
+    if (activeUserWorkspace != null) return;
+    String placed(DockSplit d) =>
+        jsonEncode(d.toJson()).replaceAll(RegExp(r'"active":\d+,'), '');
+    final now = placed(dock);
+    activePreset = WorkspacePreset.values
+        .where((p) => placed(presetLayout(p)) == now)
+        .firstOrNull;
+  }
 
   // --- The user's own workspaces (docs/07 §1.4) ----------------------------
 
@@ -1403,6 +1748,12 @@ class Workspace extends ChangeNotifier {
   static File storeFile() {
     final override = storeOverride;
     if (override != null) return File(override);
+    // A test that never set the override, or let it go with a save still to
+    // come, must not reach this machine's own file either.
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      return File('${Directory.systemTemp.path}${Platform.pathSeparator}'
+          'lumit-test-stray${Platform.pathSeparator}workspace.json');
+    }
     final base = Platform.environment['APPDATA'] ??
         '${Platform.environment['HOME'] ?? '.'}/.config';
     return File('$base${Platform.pathSeparator}lumit'
@@ -1427,17 +1778,38 @@ class Workspace extends ChangeNotifier {
         'performance': performance.toJson(),
         'interface': interface.toJson(),
         'first_run_done': firstRunDone,
+        'tour_done': tourDone,
         'auto_update': autoUpdate,
+        'discord_status': discordStatus.name,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'audio_device': audioDevice,
+        'share_name': shareName,
+        'share_router': shareOutside,
+        'share_relay': shareRelay,
+        'share_cloud': shareCloud,
+        'share_up_limit': shareUpLimit,
+        'share_down_limit': shareDownLimit,
+        'share_give': shareGive,
+        'share_take': shareTake,
+        'extension_slots': extensionSlots,
+        'extension_folders': extensionFolders,
+        'share_hosted': shareHosted,
+        'share_originals': shareOriginals.toList(),
+        'share_watched': shareWatched,
+        'share_moved': shareMoved,
         'autosave_minutes': autosaveMinutes,
         'autosave_keep': autosaveKeep,
         'custom_themes': [for (final t in customThemes) t.toJson()],
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
         'favourite_effects': favouriteEffects.toList()..sort(),
+        'saved_expressions': savedExpressions,
+        'saved_expression_languages': _encodedExpressionLanguages(),
+        'default_expression_language':
+            expressionLanguageId(defaultExpressionLanguage),
+        'recent_colours': [...recentColours],
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
         'themed_viewer_surround': themedViewerSurround,
@@ -1445,6 +1817,7 @@ class Workspace extends ChangeNotifier {
         'precompose_move_attributes': precomposeMoveAttributes,
         'precompose_adjust_duration': precomposeAdjustDuration,
         'precompose_open_new_comp': precomposeOpenNewComp,
+        'timeline_columns': timelineColumns,
         'last_project_path': lastProjectPath,
         'recent_projects': recentProjects,
         'recent_opened': _recentOpened,
@@ -1463,6 +1836,7 @@ class Workspace extends ChangeNotifier {
       final parsed = DockNode.fromJson(d);
       if (parsed is DockSplit) dock = parsed;
     }
+    tickMatchingPreset();
     colorScheme = LumitColorScheme.values.asNameMap()[j['color_scheme']] ??
         LumitColorScheme.dark;
     // The shapes were once called Sharp and Round, and a settings file written
@@ -1498,10 +1872,14 @@ class Workspace extends ChangeNotifier {
     }
     // Absent means an existing user, not a new one — see the field.
     firstRunDone = j['first_run_done'] as bool? ?? true;
+    tourDone = j['tour_done'] as bool? ?? true;
     // Absent means a settings file written before there were updates to check
     // for; the default is on, and an existing user gets the same offer a new
     // one does.
     autoUpdate = j['auto_update'] as bool? ?? true;
+    // By name. Absent, or a name no build wrote, is the shipped default.
+    discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
+        DiscordStatus.app;
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
@@ -1512,6 +1890,65 @@ class Workspace extends ChangeNotifier {
     // already doing.
     final device = j['audio_device'];
     audioDevice = device is String && device.isNotEmpty ? device : null;
+    final sharedAs = j['share_name'];
+    shareName = sharedAs is String && sharedAs.isNotEmpty ? sharedAs : null;
+    // Under a new name: the old one was written as off for everybody, back
+    // when off was what a person who had never touched it got.
+    final outside = j['share_router'];
+    shareOutside = outside is bool ? outside : true;
+    final relay = j['share_relay'];
+    shareRelay = relay is String && relay.isNotEmpty ? relay : null;
+    shareCloud = j['share_cloud'] is! bool || j['share_cloud'] as bool;
+    final (up, down) = (j['share_up_limit'], j['share_down_limit']);
+    shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
+    shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;
+    shareGive = j['share_give'] is! bool || j['share_give'] as bool;
+    shareTake = j['share_take'] is! bool || j['share_take'] as bool;
+    onShareFootage?.call();
+    extensionSlots.clear();
+    final slots = j['extension_slots'];
+    if (slots is Map) {
+      for (final MapEntry(:key, :value) in slots.entries) {
+        if (key is String && value is int) extensionSlots[key] = value;
+      }
+    }
+    extensionFolders.clear();
+    final watched = j['extension_folders'];
+    if (watched is Map) {
+      for (final MapEntry(:key, :value) in watched.entries) {
+        if (key is String && value is List) {
+          extensionFolders[key] = value.whereType<String>().toList();
+        }
+      }
+    }
+    shareHosted.clear();
+    final hosted = j['share_hosted'];
+    if (hosted is Map) {
+      for (final MapEntry(:key, :value) in hosted.entries) {
+        if (key is String && value is String) shareHosted[key] = value;
+      }
+    }
+    shareOriginals.clear();
+    final originals = j['share_originals'];
+    if (originals is List) shareOriginals.addAll(originals.whereType<String>());
+    shareWatched.clear();
+    final sawEdits = j['share_watched'];
+    if (sawEdits is Map) {
+      for (final MapEntry(:key, :value) in sawEdits.entries) {
+        if (key is! String || value is! Map) continue;
+        shareWatched[key] = {
+          for (final MapEntry(key: sitting, value: edits) in value.entries)
+            if (sitting is String && edits is int) sitting: edits,
+        };
+      }
+    }
+    shareMoved.clear();
+    final moved = j['share_moved'];
+    if (moved is Map) {
+      for (final MapEntry(:key, :value) in moved.entries) {
+        if (key is String && value is String) shareMoved[key] = value;
+      }
+    }
     // Absent means the shipped cadence, which is what a file written before the
     // Autosave page existed was already getting. Zero minutes is off and is
     // kept; a negative number is a hand-edited file and reads as off too, since
@@ -1538,6 +1975,32 @@ class Workspace extends ChangeNotifier {
           for (final key in starred)
             if (key is String) key,
       ]);
+    savedExpressions
+      ..clear()
+      ..addAll({
+        if (j['saved_expressions'] case final Map<dynamic, dynamic> saved)
+          for (final MapEntry(:key, :value) in saved.entries)
+            if (key is String && value is String) key: value,
+      });
+    savedExpressionLanguages
+      ..clear()
+      ..addAll({
+        if (j['saved_expression_languages']
+            case final Map<dynamic, dynamic> languages)
+          for (final MapEntry(:key, :value) in languages.entries)
+            if (key is String && value == 'javascript')
+              key: BridgeExpressionLanguage.javaScript,
+      });
+    defaultExpressionLanguage =
+        expressionLanguageOfId(j['default_expression_language']);
+    recentColours
+      ..clear()
+      ..addAll([
+        if (j['recent_colours'] case final List<dynamic> colours)
+          for (final c in colours.take(8))
+            if (c case [final num r, final num g, final num b])
+              [r.toDouble(), g.toDouble(), b.toDouble()],
+      ]);
     themedEffectGraphs = j['themed_effect_graphs'] == true;
     // Absent means a file written before the size could be chosen: medium.
     curvePlotSize = (j['curve_plot_size'] as num?)?.toDouble() ?? 150;
@@ -1546,6 +2009,9 @@ class Workspace extends ChangeNotifier {
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;
     precomposeAdjustDuration = j['precompose_adjust_duration'] as bool? ?? true;
     precomposeOpenNewComp = j['precompose_open_new_comp'] as bool? ?? false;
+    // Absent means a file written before the columns were kept: the defaults.
+    final columns = j['timeline_columns'];
+    timelineColumns = columns is Map<String, dynamic> ? columns : null;
     lastProjectPath = j['last_project_path'] is String
         ? j['last_project_path'] as String
         : null;
@@ -1608,6 +2074,7 @@ class Workspace extends ChangeNotifier {
         // used Lumit already, and losing their settings is enough of an insult
         // without being asked to introduce themselves again.
         firstRunDone = false;
+        tourDone = false;
         return;
       }
       final j = jsonDecode(f.readAsStringSync());
@@ -1703,19 +2170,29 @@ class Workspace extends ChangeNotifier {
   /// no widget test has a graphics adapter to render one on, and the wiring is
   /// what those tests are about.
   static Future<Uint8List?> Function(CompositionReference comp, int frame)
-      compThumbnailPng = _compThumbnailPng;
+      compThumbnailPng = compStillPng;
 
-  static Future<Uint8List?> _compThumbnailPng(
-      CompositionReference comp, int frame) async {
-    final still = await comp.thumbnail(
-        frame: BigInt.from(frame), maxEdge: projectThumbnailPixels);
+  /// The engine's picture of [comp] at [frame], its longer side no more than
+  /// [maxEdge], for whoever asked to draw and then dispose of. Null on a
+  /// machine with nothing to draw it on.
+  static Future<Image?> compStill(CompositionReference comp, int frame,
+      {int maxEdge = projectThumbnailPixels}) async {
+    final still =
+        await comp.thumbnail(frame: BigInt.from(frame), maxEdge: maxEdge);
     if (still == null || still.width == 0 || still.height == 0) return null;
-    // RGBA in, PNG out, both through `dart:ui` — the same encoder the Viewer's
-    // own photograph goes through, so the two roads file the same kind of file.
     final decoded = Completer<Image>();
     decodeImageFromPixels(still.rgba, still.width, still.height,
         PixelFormat.rgba8888, decoded.complete);
-    final image = await decoded.future;
+    return decoded.future;
+  }
+
+  /// The same picture as a PNG.
+  static Future<Uint8List?> compStillPng(CompositionReference comp, int frame,
+      {int maxEdge = projectThumbnailPixels}) async {
+    final image = await compStill(comp, frame, maxEdge: maxEdge);
+    if (image == null) return null;
+    // RGBA in, PNG out, both through `dart:ui` — the same encoder the Viewer's
+    // own photograph goes through, so the two roads file the same kind of file.
     try {
       final png = await image.toByteData(format: ImageByteFormat.png);
       return png?.buffer.asUint8List();

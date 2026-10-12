@@ -27,6 +27,7 @@ import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
 import '../theme/theme.dart';
+import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import '../widgets/dashed_outline.dart';
 
@@ -322,6 +323,19 @@ class FxSection extends StatelessWidget {
   /// recolours the heading and rebuilds nothing above it.
   final FxPick? pick;
 
+  /// The colours of the other people in a shared project who have this
+  /// section picked, or a row inside it in hand. The heading carries a bar
+  /// of them. Empty whenever nobody has. A section that names its own rows
+  /// passes it. One that gives a [scope] has it worked out.
+  final List<int> theirs;
+
+  /// What this section's rows are called in a shared project, for a section
+  /// whose rows have no names of their own: each is `scope/#n`, by its place
+  /// in [rows]. Where the Timeline has a group for the same rows this is its
+  /// path, so someone working in that group there marks this heading. Null
+  /// for a section that names each row itself, or takes no part.
+  final String? scope;
+
   /// The twirl mark's own key — it is the only thing that folds a selectable
   /// section, so it is worth being able to point at.
   final Key? twirlKey;
@@ -380,6 +394,8 @@ class FxSection extends StatelessWidget {
     this.onContextMenu,
     this.onSelect,
     this.pick,
+    this.theirs = const [],
+    this.scope,
     this.twirlKey,
     this.dragKey,
     this.onDropped,
@@ -393,21 +409,39 @@ class FxSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // Bypassed: the heading wears a dashed outline instead of the stack
+    // being dimmed (docs/15 §5).
+    final heading = enabled
+        ? _draggableHeading(t)
+        : DashedOutline(child: _draggableHeading(t));
+    // Asked for only by a section whose rows go by their place in it, so
+    // every other section builds without looking.
+    final share = scope == null ? null : ShareRows.maybeOf(context);
+    final named = share != null && share.active ? share : null;
+    final holders = named == null ? theirs : named.under(scope!);
     final column = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Bypassed: the heading wears a dashed outline instead of the stack
-        // being dimmed (docs/15 §5).
-        enabled
-            ? _draggableHeading(t)
-            : DashedOutline(child: _draggableHeading(t)),
+        if (holders.isNotEmpty)
+          DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: TheirBar(
+              [for (final c in holders) t.personColour(c)],
+              tint: 0.12,
+            ),
+            child: heading,
+          )
+        else
+          heading,
         if (open)
-          for (final row in rows)
+          for (var i = 0; i < rows.length; i++)
             Container(
               decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(color: t.hairline))),
               padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
-              child: row,
+              child: named == null
+                  ? rows[i]
+                  : named.row('$scope/#$i', rows[i]),
             ),
       ],
     );
@@ -513,10 +547,13 @@ class FxSection extends StatelessWidget {
                 child: Padding(
                   // Room to aim at, now that it is the only way in.
                   padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: lumitIcon(
-                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                    size: iconSize,
-                    color: open ? t.textPrimary : t.textMuted,
+                  child: TwirlTurn(
+                    open: open,
+                    child: lumitIcon(
+                      open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                      size: iconSize,
+                      color: open ? t.textPrimary : t.textMuted,
+                    ),
                   ),
                 ),
               ),
@@ -696,14 +733,21 @@ class _RenameFieldState extends State<_RenameField> {
 /// its curve's colour while selected, and carrying a dot per axis on a
 /// multi-axis property. The row that owns the property builds it once and hands
 /// the same widget to whichever layout it draws, so the two cannot drift.
+///
+/// [grows] lets the row be taller than one line, for a control that drops
+/// part of itself onto a second line when the panel is narrow.
 Widget fxTwoColumnRow({
   required BuildContext context,
   required Widget name,
   Widget? keyframeControls,
   required Widget control,
+  bool grows = false,
 }) =>
-    SizedBox(
-      height: fxRowHeight(ThemeScope.of(context).theme),
+    ConstrainedBox(
+      constraints: grows
+          ? BoxConstraints(minHeight: fxRowHeight(ThemeScope.of(context).theme))
+          : BoxConstraints.tightFor(
+              height: fxRowHeight(ThemeScope.of(context).theme)),
       child: LayoutBuilder(
         builder: (context, constraints) => Row(
           children: [
@@ -739,14 +783,23 @@ Widget fxTwoColumnRow({
 /// column's x, so the fold reads as belonging to the rows beneath it and the
 /// panel keeps one straight label edge from top to bottom. The label is
 /// a kicker, as every container label is (§7.1).
+///
+/// [summary] is what a shut fold says about the rows inside it, drawn muted
+/// in the value column. Without one the label has the whole row to itself.
 Widget fxGroupHeaderRow(
   BuildContext context, {
   required String label,
   required bool open,
   required VoidCallback onToggle,
+  String? summary,
   Key? key,
 }) {
   final t = ThemeScope.of(context).theme;
+  final name = Text(
+    t.kickerCase(label),
+    style: open ? t.kickerOn : t.kicker,
+    overflow: TextOverflow.ellipsis,
+  );
   return GestureDetector(
     key: key,
     behavior: HitTestBehavior.opaque,
@@ -762,24 +815,31 @@ Widget fxGroupHeaderRow(
                 alignment: Alignment.centerLeft,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 1),
-                  child: lumitIcon(
-                    open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                    size: iconSize,
-                    color: open ? t.textPrimary : t.textMuted,
+                  child: TwirlTurn(
+                    open: open,
+                    child: lumitIcon(
+                      open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                      size: iconSize,
+                      color: open ? t.textPrimary : t.textMuted,
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(width: 4),
-            SizedBox(
-              width: fxLabelWidthFor(constraints.maxWidth),
-              child: Text(
-                t.kickerCase(label),
-                style: open ? t.kickerOn : t.kicker,
-                overflow: TextOverflow.ellipsis,
+            if (summary == null)
+              Expanded(child: name)
+            else ...[
+              SizedBox(
+                  width: fxLabelWidthFor(constraints.maxWidth), child: name),
+              Expanded(
+                child: Text(
+                  summary,
+                  style: t.small.copyWith(color: t.textMuted),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
-            const Expanded(child: SizedBox.shrink()),
+            ],
           ],
         ),
       ),
@@ -807,7 +867,8 @@ Widget fxTextAction(
       onPressed: onPressed,
       // A little word beside a value is plain mono, not body text (§7.1).
       child:
-          Text(label, style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
+          Text(t.propertyCase(label),
+              style: t.mono.copyWith(fontSize: 10, color: t.textMuted)),
     ),
   );
 }

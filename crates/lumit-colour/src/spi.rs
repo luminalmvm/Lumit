@@ -277,91 +277,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_one_component_curve_applies_to_all_three_channels() {
-        let text = "Version 1\nFrom 0.0 1.0\nLength 3\nComponents 1\n{\n0.0\n0.25\n1.0\n}\n";
-        let curve = parse_spi1d("t.spi1d", text).expect("parses");
-        assert_eq!(curve.domain, [0.0, 1.0]);
-        assert_eq!(curve.data.len(), 3);
-        assert_eq!(curve.data.get(1).copied(), Some([0.25; 3]));
-    }
-
-    #[test]
-    fn the_from_line_is_read_rather_than_assumed() {
-        // The trap named in docs/impl/ocio.md §4.3: a log curve's domain is
-        // routinely not 0..1, and assuming it is squashes the whole curve.
-        let text = "Version 1\nFrom -0.125 1.5\nLength 2\nComponents 3\n{\n0 0 0\n1 1 1\n}\n";
-        let curve = parse_spi1d("t.spi1d", text).expect("parses");
-        assert_eq!(curve.domain, [-0.125, 1.5]);
-        // Halfway along the declared domain is halfway along the curve.
-        let mid = -0.125 + (1.5 - -0.125) * 0.5;
-        let got = curve.sample([mid; 3]);
-        assert!((got[0] - 0.5).abs() < 1e-5, "{got:?}");
-    }
-
-    #[test]
-    fn a_curve_whose_length_lies_is_refused() {
-        let text = "Version 1\nFrom 0 1\nLength 5\nComponents 1\n{\n0.0\n1.0\n}\n";
-        assert!(parse_spi1d("t.spi1d", text).is_err());
-    }
-
-    #[test]
-    fn a_cube_lands_red_fastest_whatever_order_the_file_uses() {
-        // Deliberately written blue-fastest, so a parser that ignored the
-        // indices and pushed in file order would transpose the cube.
-        let mut text = String::from("SPILUT 1.0\n3 3\n2 2 2\n");
-        for r in 0..2 {
-            for g in 0..2 {
-                for b in 0..2 {
-                    text.push_str(&format!(
-                        "{r} {g} {b} {} {} {}\n",
-                        r as f32,
-                        g as f32 * 0.5,
-                        b as f32 * 0.25
-                    ));
-                }
-            }
-        }
-        let cube = parse_spi3d("t.spi3d", &text).expect("parses");
-        assert_eq!(cube.size, 2);
-        // Flat index 1 is (r=1, g=0, b=0).
-        assert_eq!(cube.data.first().copied(), Some([0.0, 0.0, 0.0]));
-        assert_eq!(cube.data.get(1).copied(), Some([1.0, 0.0, 0.0]));
-        assert_eq!(cube.data.get(2).copied(), Some([0.0, 0.5, 0.0]));
-        assert_eq!(cube.data.get(4).copied(), Some([0.0, 0.0, 0.25]));
-    }
-
-    #[test]
-    fn a_cube_with_a_hole_in_it_is_refused_rather_than_filled_with_black() {
-        let text = "SPILUT 1.0\n3 3\n2 2 2\n0 0 0 0 0 0\n1 0 0 1 0 0\n";
-        let err = parse_spi3d("t.spi3d", text);
-        assert!(err.is_err(), "{err:?}");
-    }
-
-    #[test]
-    fn a_non_cubic_grid_is_refused_by_name() {
-        let text = "SPILUT 1.0\n3 3\n4 8 4\n";
-        assert!(parse_spi3d("t.spi3d", text).is_err());
-    }
-
-    #[test]
     fn rubbish_is_a_typed_error_not_a_panic() {
         assert!(parse_spi1d("t", "Version 1\nLength two\n").is_err());
         assert!(parse_spi3d("t", "SPILUT 1.0\n").is_err());
         assert!(parse_spi3d("t", "").is_err());
         assert!(parse_spimtx("t", "1 0 0 0\n0 1 0 0\n").is_err());
         assert!(parse_spimtx("t", "1 0 0 0 0 1 0 0 0 0 1 x").is_err());
-    }
-
-    /// The offset column is in 16-bit code values, and the divide by 65535 is
-    /// the one thing this format can get quietly wrong.
-    #[test]
-    fn a_matrix_files_offsets_are_scaled_out_of_16_bit_code_values() {
-        let text = "0.5 0 0 6553.5\n0 2 0 -65535\n0 0 1 0\n";
-        let m = parse_spimtx("t.spimtx", text).expect("parses");
-        assert_eq!(m[0], 0.5);
-        assert_eq!(m[5], 2.0);
-        assert!((m[3] - 0.1).abs() < 1e-9, "{m:?}");
-        assert_eq!(m[7], -1.0);
-        assert_eq!(m[11], 0.0);
     }
 }

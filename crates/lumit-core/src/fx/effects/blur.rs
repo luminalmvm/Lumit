@@ -8,8 +8,9 @@ use lumit_fx_macros::Effect;
 ///
 /// `match_name` stays "blur", so a project saved with the old combined effect
 /// loads here as Gaussian at its Radius, byte-identically (its now-unread
-/// mode/length/centre params are simply ignored). The Edges control is Radial's
-/// alone now; this one resolves at the old default, Repeat.
+/// mode/length/centre params are simply ignored). The three-way Edges control
+/// is Radial's alone; this one has the switch Channel blur has, on by default,
+/// which is the Repeat an older project was saved with.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
 #[effect(
     match_name = "blur",
@@ -48,6 +49,13 @@ pub struct Blur {
     )]
     pub radius: f32,
 
+    /// On holds the border pixel outward, so the edge of the frame stays solid.
+    /// Off blurs the edge away into transparency and lets the blur spread past
+    /// it, which is what a shape or a line of text wants: their picture is only
+    /// as big as the art, and a blur held inside it looks cut off.
+    #[toggle(label = "Repeat edge pixels", default = true)]
+    pub repeat_edge_pixels: bool,
+
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
@@ -64,12 +72,16 @@ impl Blur {
     /// The kernel half-width in raster pixels, the edge policy and the mix
     /// (docs/impl/effect-registry.md §2.4). `radius` arrives already converted
     /// from % diagonal by the resolve step, so this only floors it — the same
-    /// `.max(0.0)` the old arm applied to the same product. Edge is the fixed
-    /// Repeat (the Gaussian Edges control was dropped; 1 was its default).
+    /// `.max(0.0)` the old arm applied to the same product. Edge is one of the
+    /// shared codes (docs/08 §3.8): 1 Repeat, 0 Transparent.
     /// Both render paths read this one method, so the CPU reference and the
     /// WGSL kernel cannot drift apart.
     pub fn packed(self) -> (f32, u32, f32) {
-        (self.radius.max(0.0), 1, (self.mix / 100.0).clamp(0.0, 1.0))
+        (
+            self.radius.max(0.0),
+            u32::from(self.repeat_edge_pixels),
+            (self.mix / 100.0).clamp(0.0, 1.0),
+        )
     }
 }
 
@@ -84,5 +96,16 @@ impl EffectDef for BlurDef {
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
         let (radius_px, edge, mix) = Blur::read(p).packed();
         cpu::blur_gaussian(rgba, w, h, radius_px, edge, mix);
+    }
+
+    fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
+        let (radius_px, edge, mix) = Blur::read(p).packed();
+        // The kernel reads a Radius out and no further.
+        let reach = if edge == 0 && mix > 0.0 {
+            radius_px
+        } else {
+            0.0
+        };
+        [reach, reach]
     }
 }

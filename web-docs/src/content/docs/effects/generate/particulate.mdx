@@ -31,6 +31,7 @@ A particle system.
 | **Height** | Slider | 0 to 2000; higher | 400 | Pixels at composition size |
 | **Depth** | Slider | 0 to 2000; higher | 0 | Pixels at composition size |
 | **Emitter angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Follow** | Dropdown | Mask · Shape | Mask | - |
 | **Mask path** | Masks | This layer's masks | First mask | - |
 | **Emit rate** | Slider | 0 to 1000; higher | 150 | - |
 | **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | -90° | Degrees |
@@ -43,8 +44,8 @@ A particle system.
 | **Life jitter** | Slider | 0 to 100 | 30 | Per cent |
 | **Size** | Slider | 0 to 200; higher | 4 | Pixels at composition size |
 | **Size jitter** | Slider | 0 to 100 | 40 | Per cent |
-| **Size over life** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
-| **Opacity over life** | Curve | 2 to 16 points in the unit square | The identity diagonal | - |
+| **Size over life** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
+| **Opacity over life** | Curve | 2 to 32 points in the unit square | The identity diagonal | - |
 | **Colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **End colour** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
 | **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
@@ -73,26 +74,31 @@ A particle system.
 
 In the Effect Controls panel:
 
-- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Max particles**, **Seed**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
 - **Streak length** is editable while **Mode** is set to Streak.
+- **Mask path** is editable while **Follow** is anything but Shape.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
 
 ## What each control does
 
-The **Emitter** group — where particles come from and travel:
+The **Emitter** group, where particles come from and travel:
 
 - **Shape**: which emitter.
 - **Position x**, **Position y** and **Position z**: where the emitter sits.
 - **Width** and **Height**: how big the emitter is.
 - **Depth**: how far the emitter reaches through the plane.
 - **Emitter angle**: turns Line, Ellipse and Rectangle about Position.
+- **Follow**: what a Mask path emitter walks. **Mask** is one of the layer's masks. **Shape**
+  is the outline the Shape layer the effect is on draws, after any trim, offset or combine,
+  and dashes as drawn, one line after another, repeater copies included. On any other layer
+  Shape emits nothing.
 - **Mask path**: which of the layer's masks particles are emitted from.
 - **Emit rate**: new particles per second.
 - **Direction**: which way particles travel.
@@ -102,7 +108,7 @@ The **Emitter** group — where particles come from and travel:
 - **Initial speed**: how fast a particle leaves.
 - **Speed jitter**: how much particles differ from each other in that speed.
 
-The **Particle** group — how a particle looks:
+The **Particle** group, how a particle looks:
 
 - **Life** and **Life jitter**: how long a particle lasts, and how much that varies.
 - **Size** and **Size jitter**: how big it is at birth, and how much that varies.
@@ -117,7 +123,7 @@ The **Particle** group — how a particle looks:
 - **Align to motion**: turns each particle to face the way it is travelling, with Spin added
   on top.
 
-The **Forces** group — what moves them:
+The **Forces** group, what moves them:
 
 - **Gravity**: a constant pull.
 - **Wind x**, **Wind y** and **Wind z**: the air's speed.
@@ -127,7 +133,7 @@ The **Forces** group — what moves them:
   different ways.
 - **Turbulence speed**: how fast that noise evolves as a particle ages.
 
-The **Render** group — how they are drawn:
+The **Render** group, how they are drawn:
 
 - **Mode**: Disc, Sprite or Streak.
 - **Feather**: how soft a disc's edge is. Disc mode only.
@@ -141,8 +147,8 @@ The remaining properties:
 
 - **Mix**: how much of the result replaces the picture underneath.
 - **Blend**: how the particles composite with the layer they are drawn over.
-- **Matte** and **Invert** drive the strength of the effect from another layer's brightness;
-  see [Effects](/use/effects/).
+- **Matte** and **Invert** drive the strength of the effect from another layer's brightness.
+  See [Effects](/use/effects/).
 
 ## Related
 

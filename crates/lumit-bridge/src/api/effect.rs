@@ -510,6 +510,32 @@ pub fn list_graph_groups() -> Vec<BridgePresetInfo> {
         .unwrap_or_default()
 }
 
+/// A preset file's text, ready for `load_preset`, whichever kind of preset the
+/// file is.
+///
+/// A Lumit `.lumfx` is handed back as it is. An After Effects `.ffx` is read
+/// and converted first, so the panels have one call to make and one kind of
+/// text to apply: its pseudo effects arrive as Custom controls, the effects
+/// Lumit has arrive as Lumit's, and its expressions come with them.
+///
+/// The file is told apart by its first bytes and not by its name. A file that
+/// is neither is refused as any other non-preset is.
+///
+/// Not sync: it reads a file, and converts one that is After Effects' own.
+pub fn read_effect_preset(path: String) -> Result<String, BridgeError> {
+    let path = std::path::Path::new(&path);
+    if !lumit_import::is_ffx(path) {
+        return std::fs::read_to_string(path).map_err(|_| BridgeError::InvalidPreset);
+    }
+    let (effects, _report) =
+        lumit_import::open_ffx(path).map_err(|_| BridgeError::InvalidPreset)?;
+    let name = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    lumit_core::preset::to_json(&name, &effects).map_err(|_| BridgeError::InvalidPreset)
+}
+
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
 /// navigating anywhere. `None` only when the platform has no home directory.
@@ -633,7 +659,11 @@ fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
                 .collect();
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
-        BridgeScalar::Expression(expr) => lumit_core::expression::evaluate(&expr, None),
+        BridgeScalar::Expression(expr, language) => {
+            lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
+                lumit_core::expression::evaluate_in(language.read(), &expr, None)
+            })
+        }
     }
 }
 
@@ -658,24 +688,25 @@ pub fn sample_scalar_with_context(
                 .collect();
             lumit_core::anim::evaluate(&keys, seconds).unwrap_or(0.0)
         }
-        BridgeScalar::Expression(expr) => {
+        BridgeScalar::Expression(expr, language) => {
             let Some(doc) = document_for(&layer) else {
                 return 0.0;
             };
 
-            lumit_core::expression::evaluate(
-                &expr,
-                Some(Arc::new(ExpressionContext {
-                    document: doc.clone(),
-                    comp: Some(layer.comp_id),
-                    layer: Some(layer.layer_id),
-                    comp_time: Rational::new(time.num, time.den)
-                        .unwrap_or(Rational::ZERO)
-                        .to_f64(),
-                    current_depth: 0,
-                    inputs: None,
-                })),
-            )
+            let context = Arc::new(ExpressionContext {
+                document: doc.clone(),
+                comp: Some(layer.comp_id),
+                layer: Some(layer.layer_id),
+                comp_time: Rational::new(time.num, time.den)
+                    .unwrap_or(Rational::ZERO)
+                    .to_f64(),
+                current_depth: 0,
+                inputs: None,
+            });
+            // This runs on the interface's thread, for every row on screen.
+            lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
+                lumit_core::expression::evaluate_in(language.read(), &expr, Some(context))
+            })
         }
     }
 }
@@ -704,7 +735,7 @@ pub fn sample_scalar_range_with_context(
     samples: i64,
 ) -> Vec<f64> {
     match scalar {
-        BridgeScalar::Expression(expr) => {
+        BridgeScalar::Expression(expr, language) => {
             let Some(doc) = document_for(&layer) else {
                 return Vec::new();
             };
@@ -717,19 +748,28 @@ pub fn sample_scalar_range_with_context(
                 .unwrap_or(Rational::ZERO)
                 .to_f64();
 
-            lumit_core::expression::evaluate_range(
-                &expr,
-                Some(&ExpressionContext {
-                    document: doc.clone(),
-                    comp: Some(layer.comp_id),
-                    layer: Some(layer.layer_id),
-                    comp_time: 0.0, // this time will be overwritten internally,
-                    current_depth: 0,
-                    inputs: None,
-                }),
-                start,
-                end,
-                samples,
+            let context = ExpressionContext {
+                document: doc.clone(),
+                comp: Some(layer.comp_id),
+                layer: Some(layer.layer_id),
+                comp_time: 0.0, // this time will be overwritten internally,
+                current_depth: 0,
+                inputs: None,
+            };
+            // The whole curve shares what one frame of a render may spend, so
+            // a loop that never ends costs one repaint a fixed amount.
+            lumit_core::expression::within_steps(
+                lumit_core::expression::INTERFACE_STEPS.saturating_mul(20),
+                || {
+                    lumit_core::expression::evaluate_range(
+                        language.read(),
+                        &expr,
+                        Some(&context),
+                        start,
+                        end,
+                        samples,
+                    )
+                },
             )
         }
         // Only an expression needs sampling by evaluation. A static value is
@@ -839,6 +879,12 @@ pub enum BridgeParamKind {
     /// config's own spelling, empty for unset.
     ColourName {
         role: BridgeColourNameRole,
+    },
+    /// A short text the user types, drawn as a single-line text field. The
+    /// value crossing is a [`BridgeEffectValue::Text`], and the engine cuts
+    /// what is set to its cap (`lumit_core::fx::TEXT_MAX_BYTES`).
+    Text {
+        default: String,
     },
     Layer,
     /// One clip on the layer a sibling [`BridgeParamKind::Layer`] row names
@@ -998,6 +1044,9 @@ pub(crate) fn bridge_param(param: &lumit_core::fx::ParamSchema) -> BridgeParamIn
                 lumit_core::fx::ColourNameRole::Look => BridgeColourNameRole::Look,
                 lumit_core::fx::ColourNameRole::Config => BridgeColourNameRole::Config,
             },
+        },
+        ParamKind::Text { default } => BridgeParamKind::Text {
+            default: default.to_owned(),
         },
         // `self_default` is an engine-side instantiation detail —
         // the panel draws the same picker either way, and
@@ -1427,6 +1476,40 @@ impl BridgeKeyframe {
     }
 }
 
+/// The language an expression is written in
+/// ([`lumit_core::expression::Language`]).
+///
+/// It crosses with the text every time, in both directions. The person writing
+/// an expression picks it, and nothing works it out from the text: the same
+/// line can mean two things, and a guess would be wrong quietly.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeExpressionLanguage {
+    /// One line of Rhai, Lumit's first language. What an expression with
+    /// nothing stored beside it is.
+    Rhai,
+    /// JavaScript, as After Effects expressions are written.
+    JavaScript,
+}
+
+impl BridgeExpressionLanguage {
+    #[frb(ignore)]
+    pub(crate) fn of(language: lumit_core::expression::Language) -> Self {
+        match language {
+            lumit_core::expression::Language::Rhai => Self::Rhai,
+            lumit_core::expression::Language::JavaScript => Self::JavaScript,
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn read(self) -> lumit_core::expression::Language {
+        match self {
+            Self::Rhai => lumit_core::expression::Language::Rhai,
+            Self::JavaScript => lumit_core::expression::Language::JavaScript,
+        }
+    }
+}
+
 /// One animatable scalar channel: a single number, or the curve it follows.
 ///
 /// The two are separate variants rather than a number plus an "animated" flag
@@ -1442,7 +1525,8 @@ pub enum BridgeScalar {
     /// At least one key, strictly ascending in time — the invariant the
     /// engine's keyframe ops maintain, enforced here on the way in.
     Keyframed(Vec<BridgeKeyframe>),
-    Expression(String),
+    /// The text, and the language it is written in.
+    Expression(String, BridgeExpressionLanguage),
 }
 
 impl BridgeScalar {
@@ -1467,7 +1551,10 @@ impl BridgeScalar {
                     .map(|k| BridgeKeyframe::read_at(k, offset))
                     .collect(),
             ),
-            Animation::Expression(expr) => BridgeScalar::Expression(expr.clone()),
+            Animation::Expression(expr) => BridgeScalar::Expression(
+                expr.clone(),
+                BridgeExpressionLanguage::of(property.expression_language()),
+            ),
         }
     }
 
@@ -1498,7 +1585,22 @@ impl BridgeScalar {
                 }
                 Ok(Animation::Keyframed(out))
             }
-            BridgeScalar::Expression(expr) => Ok(Animation::Expression(expr.clone())),
+            BridgeScalar::Expression(expr, _) => Ok(Animation::Expression(expr.clone())),
+        }
+    }
+
+    /// Put `animation` on `property`: this channel's own, already checked by
+    /// [`Self::animation_at`] and held to whatever bounds apply.
+    ///
+    /// The one way a channel reaches a property that can hold an expression,
+    /// because an expression is two things: its text, which is the animation,
+    /// and its language, which is written beside it. A caller that assigned
+    /// the animation alone would hand a JavaScript expression to Rhai.
+    #[frb(ignore)]
+    pub(crate) fn put(&self, property: &mut Property, animation: Animation) {
+        property.set_animation(animation);
+        if let BridgeScalar::Expression(_, language) = self {
+            property.set_expression_language(language.read());
         }
     }
 }
@@ -1562,13 +1664,14 @@ pub enum BridgeEffectValue {
     /// or `None` for "First mask". The *geometry* never crosses — the render
     /// flattens it engine-side, beside the op.
     MaskPath(Option<Uuid>),
-    /// A tone curve as its own control points: 2..=16 `[x, y]` pairs
+    /// A tone curve as its own control points: 2..=32 `[x, y]` pairs
     /// in the unit square, in x order. Crosses as written — the engine
     /// straightens what it reads (`CurvePoints::sanitised`), so a panel
     /// mid-drag need not, and a curve is never refused for being momentarily
     /// out of order.
     Curve(Vec<Vec<f32>>),
     /// A name from the OCIO config, as the config spells it; empty is unset.
+    /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
     Text(String),
 }
 
@@ -1627,13 +1730,14 @@ impl BridgeEffectValue {
     ) -> Result<(), BridgeError> {
         match (self, target) {
             (BridgeEffectValue::Float(scalar), EffectValue::Float(property)) => {
-                property.animation = clamp_animation(scalar.animation_at(offset)?, bounds);
+                let animation = clamp_animation(scalar.animation_at(offset)?, bounds);
+                scalar.put(property, animation);
                 Ok(())
             }
             (BridgeEffectValue::Point(point), EffectValue::Point(x, y)) => {
                 let (ax, ay) = (point.x.animation_at(offset)?, point.y.animation_at(offset)?);
-                x.animation = clamp_animation(ax, bounds);
-                y.animation = clamp_animation(ay, bounds);
+                point.x.put(x, clamp_animation(ax, bounds));
+                point.y.put(y, clamp_animation(ay, bounds));
                 Ok(())
             }
             (BridgeEffectValue::Colour(colour), EffectValue::Colour(channels)) => {
@@ -1643,8 +1747,11 @@ impl BridgeEffectValue {
                     colour.b.animation_at(offset)?,
                     colour.a.animation_at(offset)?,
                 ];
-                for (property, animation) in channels.iter_mut().zip(animations) {
-                    property.animation = clamp_animation(animation, bounds);
+                let scalars = [&colour.r, &colour.g, &colour.b, &colour.a];
+                for ((property, animation), scalar) in
+                    channels.iter_mut().zip(animations).zip(scalars)
+                {
+                    scalar.put(property, clamp_animation(animation, bounds));
                 }
                 Ok(())
             }
@@ -1898,10 +2005,15 @@ pub struct BridgeEffectInstanceInfo {
     /// [`BridgeEffectInstance::list_parameters`] answers in one piece.
     pub derived_params: Vec<BridgeParamInfo>,
     /// The rows this instance is not showing right now, by id: a plugin's
-    /// own hidden controls, read off its last render (docs/12 §2.2). Empty for
-    /// every built-in. Here for the same reason as the rest: the panel draws
-    /// on every rebuild and may not call.
+    /// own hidden controls, as it last answered an edit (docs/12 §2.2). Empty
+    /// for every built-in. Here for the same reason as the rest: the panel
+    /// draws on every rebuild and may not call.
     pub hidden_rows: Vec<String>,
+    /// The rows a plugin has greyed, by id. Drawn, and not editable.
+    pub disabled_rows: Vec<String>,
+    /// The choice rows whose list a plugin has replaced, with the list to
+    /// draw in place of the schema's.
+    pub row_options: Vec<BridgeRowOptions>,
     /// The node graph this instance applies (docs/impl/node-graph-comp.md
     /// §4.4), and `None` for every other effect.
     ///
@@ -2350,6 +2462,12 @@ pub(crate) fn read_instance_info(
     fill_derived(&mut filled);
     let effect = &filled;
     let (badge_reason, badge_detail) = badge_of(effect);
+    // What the instance's plugin has done to its own rows, or nothing for a
+    // built-in.
+    let rows = lumit_core::fx::def(effect.effect.match_name.as_str())
+        .map(|def| def.row_state(effect))
+        .unwrap_or_default();
+    let owned = |ids: Vec<&'static str>| ids.into_iter().map(str::to_owned).collect();
     BridgeEffectInstanceInfo {
         id: effect.id,
         name: effect.effect.match_name.clone(),
@@ -2368,22 +2486,26 @@ pub(crate) fn read_instance_info(
         badge_reason,
         badge_detail,
         derived_params: derived_params_of(effect),
-        hidden_rows: hidden_rows_of(effect),
+        hidden_rows: owned(rows.hidden),
+        disabled_rows: owned(rows.disabled),
+        row_options: rows
+            .options
+            .into_iter()
+            .map(|(id, options)| BridgeRowOptions {
+                id: id.to_owned(),
+                options,
+            })
+            .collect(),
         node_graph_comp: lumit_core::fx::effects::node_graph::comp_of(effect),
     }
 }
 
-/// The rows the instance's plugin is hiding, or nothing for a built-in.
-#[frb(ignore)]
-fn hidden_rows_of(effect: &EffectInstance) -> Vec<String> {
-    lumit_core::fx::def(effect.effect.match_name.as_str())
-        .map(|def| {
-            def.hidden_rows(effect)
-                .into_iter()
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
+/// One choice row's list, as its plugin has it now.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeRowOptions {
+    pub id: String,
+    pub options: Vec<String>,
 }
 
 impl BridgeEffectInstance {
@@ -2798,6 +2920,56 @@ impl BridgeEffectInstance {
         block.remove("graph");
     }
 
+    /// The text an Expression box runs, empty for a fresh one. Read when its
+    /// editor opens, never in a rebuild.
+    #[frb(sync)]
+    pub fn expression_source(&self) -> String {
+        lumit_core::fx::drivers::expression::source_of(&self.effect).to_owned()
+    }
+
+    /// Stage new text on an Expression box. The graph's own commit writes it, so
+    /// an edit is one undo step.
+    #[frb(sync)]
+    pub fn set_expression_source(&mut self, source: String) {
+        lumit_core::fx::drivers::expression::set_source(&mut self.effect, &source);
+    }
+
+    /// The language an Expression box's text is written in. Rhai for every
+    /// other instance, which holds no text.
+    #[frb(sync)]
+    pub fn expression_language(&self) -> BridgeExpressionLanguage {
+        BridgeExpressionLanguage::of(lumit_core::fx::drivers::expression::language_of(
+            &self.effect,
+        ))
+    }
+
+    /// Stage a change of the language an Expression box's text is written in,
+    /// beside [`Self::set_expression_source`] and committed the same way.
+    #[frb(sync)]
+    pub fn set_expression_language(&mut self, language: BridgeExpressionLanguage) {
+        lumit_core::fx::drivers::expression::set_language(&mut self.effect, language.read());
+    }
+
+    /// Stage one more number input on an Expression box and answer its name,
+    /// which is the word the expression reads it by. `None` when the box holds
+    /// as many as it can. The graph's own commit writes it.
+    #[frb(sync)]
+    pub fn add_expression_input(&mut self) -> Option<String> {
+        let name = lumit_core::fx::drivers::expression::add_input(&mut self.effect)?;
+        self.offered.extend(fill_derived(&mut self.effect));
+        Some(name.to_owned())
+    }
+
+    /// Stage the removal of an Expression box's last input and answer its
+    /// name, so the caller can take its wire off in the same commit. `None`
+    /// for a box with no inputs.
+    #[frb(sync)]
+    pub fn remove_expression_input(&mut self) -> Option<String> {
+        let name = lumit_core::fx::drivers::expression::remove_input(&mut self.effect)?;
+        self.offered.retain(|id| id != name);
+        Some(name.to_owned())
+    }
+
     /// The node graph composition this instance applies, for a **Node graph**
     /// effect, and `None` for every other effect and for one nobody has bound.
     ///
@@ -2871,9 +3043,10 @@ impl BridgeEffectInstance {
         // An effect this build does not know has no schema to consult, so its
         // parameters stay unbounded rather than refused: a project carrying one
         // still opens and still edits, exactly as `list_parameters` allows.
-        let bounds = lumit_core::fx::schema(&self.effect.effect.match_name)
+        let kind = lumit_core::fx::schema(&self.effect.effect.match_name)
             .and_then(|schema| schema.params.iter().find(|p| p.id == id))
-            .map_or((None, None), |p| hard_bounds(&p.kind));
+            .map(|p| p.kind);
+        let bounds = kind.as_ref().map_or((None, None), hard_bounds);
 
         // Every parameter the schema declares is already present: `new` fills
         // the staged copy. A name that is still missing is one no schema
@@ -2887,6 +3060,12 @@ impl BridgeEffectInstance {
             .ok_or(BridgeError::InvalidParam)?;
 
         value.write_at(&mut param.value, offset, bounds)?;
+        // A typed text is held to its cap here, as a number is to its range.
+        if let (Some(lumit_core::fx::ParamKind::Text { .. }), EffectValue::Text(text)) =
+            (kind, &mut param.value)
+        {
+            text.truncate(lumit_core::fx::capped_text(text).len());
+        }
         // Writing to an offered row is the act that adopts it (§1.5): from
         // here it rides the commit like every row the document holds.
         self.offered.retain(|o| *o != id);
@@ -2971,36 +3150,5 @@ mod tests {
             lumit_core::fx::lens_flare::MAX_COATING_ELEMENTS - reachable as usize,
             "the rows past the deepest bundled lens are the ones that never draw"
         );
-    }
-
-    /// **A clip reference crosses, and comes back the same clip.**
-    ///
-    /// It is a reference like a layer's, so it rides the reference road: the
-    /// id crosses bare, unset is a first-class value rather than an error,
-    /// and a write onto a row of another kind is refused, because what a
-    /// parameter *is* belongs to the schema and not to the panel.
-    #[test]
-    fn a_clip_value_crosses_the_bridge_and_writes_back() {
-        for named in [None, Some(Uuid::now_v7())] {
-            let value = EffectValue::Clip(named);
-            let crossed = BridgeEffectValue::read_at(&value, Rational::ZERO);
-            assert_eq!(crossed, BridgeEffectValue::Clip(named));
-
-            let mut target = EffectValue::Clip(None);
-            crossed
-                .write_at(&mut target, Rational::ZERO, (None, None))
-                .expect("a clip value writes to a clip parameter");
-            assert_eq!(target, value);
-        }
-
-        let mut layer = EffectValue::Layer(None);
-        assert!(matches!(
-            BridgeEffectValue::Clip(Some(Uuid::now_v7())).write_at(
-                &mut layer,
-                Rational::ZERO,
-                (None, None)
-            ),
-            Err(BridgeError::ParamKindMismatch)
-        ));
     }
 }

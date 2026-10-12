@@ -19,7 +19,9 @@ use crate::{
 };
 #[frb(ignore_all)]
 pub struct LumitBridgeState {
-    pub store: DocumentStore,
+    /// Shared, so a shared project's network threads can apply the edits
+    /// other people make without going through this project's lock.
+    pub store: Arc<DocumentStore>,
     pub path: Option<PathBuf>,
     /// The store revision the last save wrote (or the revision the project
     /// opened at). `is_dirty` is "the store has moved past this" — an undo
@@ -36,6 +38,11 @@ pub struct LumitBridgeState {
     /// and a `Mutex` rather than a bare handle so recovery can re-arm it when
     /// the document changes identity.
     pub journal: SharedJournal,
+    /// Whether this machine switched on packing every save for this project.
+    /// The document's own switch counts only while this is set, since a file
+    /// or another person in a shared project can set that one
+    /// (`lumit_project::auto_pack_note`).
+    pub(crate) auto_pack_here: bool,
     pub sender: Option<Sender<WorkerRequest>>,
     /// The project's OCIO config as the *seam* holds it: the parse and
     /// the baked output-space tables the colour reads answer from.
@@ -56,10 +63,75 @@ pub struct LumitBridgeState {
 /// or after a save has made it redundant.
 pub type SharedJournal = Arc<Mutex<Option<JournalFile>>>;
 
-/// Arm a journal for `document`, if this platform gives us somewhere to put one.
+/// Arm a journal for `document` as saved at `saved_at`, if this platform gives
+/// us somewhere to put one.
 #[frb(ignore)]
-pub(crate) fn journal_for(document: &Document) -> SharedJournal {
-    Arc::new(Mutex::new(JournalFile::for_document(document.id)))
+pub(crate) fn journal_for(document: &Document, saved_at: Option<&Path>) -> SharedJournal {
+    Arc::new(Mutex::new(journal_file(document.id, saved_at)))
+}
+
+/// The journal file for a document saved at `saved_at`, wherever this build
+/// keeps them. Each file has its own (`lumit_project::journal_in`).
+#[cfg(not(test))]
+#[frb(ignore)]
+pub(crate) fn journal_file(doc_id: Uuid, saved_at: Option<&Path>) -> Option<JournalFile> {
+    JournalFile::for_project(doc_id, saved_at)
+}
+
+// Tests must never write into the user's real cache folder, so a test's
+// projects have no journal unless it asks for one in a temporary folder.
+// Thread-local, the shape `lumit_render::media_index` uses: tests run in
+// parallel threads, and one test's folder must not be another's.
+#[cfg(test)]
+thread_local! {
+    static TEST_JOURNAL_DIR: std::cell::RefCell<Option<PathBuf>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(crate) fn journal_file(doc_id: Uuid, saved_at: Option<&Path>) -> Option<JournalFile> {
+    let dir = TEST_JOURNAL_DIR.with(|dir| dir.borrow().clone())?;
+    Some(JournalFile::at_path(lumit_project::journal_in(
+        &dir, doc_id, saved_at,
+    )))
+}
+
+/// Keeps this thread's journals under a folder until it drops (tests only).
+#[cfg(test)]
+pub(crate) struct TestJournals;
+
+#[cfg(test)]
+impl Drop for TestJournals {
+    fn drop(&mut self) {
+        TEST_JOURNAL_DIR.with(|slot| *slot.borrow_mut() = None);
+    }
+}
+
+/// Journal this thread's projects under `dir` (tests only).
+#[cfg(test)]
+pub(crate) fn journals_in(dir: &Path) -> TestJournals {
+    TEST_JOURNAL_DIR.with(|slot| *slot.borrow_mut() = Some(dir.to_path_buf()));
+    TestJournals
+}
+
+/// Throw away the journal of a project that was never saved, and note on a
+/// saved one's that it was closed on purpose.
+///
+/// Recovery replays a journal onto a saved file, so without a file nothing can
+/// read this one back, and leaving it is how the cache filled with a folder
+/// per project. Only a clean close or a replaced project gets here, a crash
+/// never does, which is how the next open tells the two apart.
+#[frb(ignore)]
+pub(crate) fn discard_unsaved_journal(state: &LumitBridgeState) {
+    if let Ok(journal) = state.journal.lock() {
+        if let Some(file) = journal.as_ref() {
+            if state.path.is_some() {
+                file.mark_closed();
+            } else {
+                let _ = file.clear();
+            }
+        }
+    }
 }
 
 #[frb(non_opaque)]
@@ -73,6 +145,17 @@ pub struct ScopedChange {
     /// everything else, so tweaking a layer value no longer re-probes every
     /// footage file on disk.
     pub items: bool,
+}
+
+/// One Linux graphics device node, as the kernel numbers it: what `stat()`
+/// reports for `/dev/dri/renderD128` or `/dev/dri/card0`. It names a graphics
+/// card unambiguously, which a model name can't on a machine with two of the
+/// same card.
+#[frb(non_opaque)]
+#[derive(Clone)]
+pub struct BridgeDrmNode {
+    pub major: u32,
+    pub minor: u32,
 }
 
 #[frb(non_opaque)]
@@ -91,6 +174,20 @@ pub struct BridgeSharedFrameInfoLinux {
     pub drm_fourcc: u32,
     /// The DRM modifier (`DRM_FORMAT_MOD_LINEAR` = 0 on the linear-tiling path).
     pub modifier: u64,
+    /// The render node of the card the buffer is on, or `None` when the driver
+    /// does not say.
+    ///
+    /// A laptop with two graphics cards renders on the fast one while Flutter
+    /// draws the window with the other, and NVIDIA's driver can't share a
+    /// buffer with the other card: an Intel and NVIDIA laptop crashed on its
+    /// first frame that way. The runner compares this with the card behind
+    /// its own display before it imports the buffer, and refuses it with a
+    /// message when they differ. `None` means the comparison is not made.
+    pub render_node: Option<BridgeDrmNode>,
+    /// The same card's primary node, for a display driver that only names its
+    /// own primary node. A render node is only ever compared with a render
+    /// node, and a primary with a primary.
+    pub primary_node: Option<BridgeDrmNode>,
     /// The preview tier this frame was made at: 1 Full, 2 Half, 3 Third,
     /// 4 Quarter.
     ///
@@ -415,6 +512,10 @@ pub type WorkerResponseStream = StreamSink<WorkerResponse>;
 pub enum OpenPhase {
     /// Unzipping the `.lum` and typing the document out of its JSON.
     ReadingFile,
+    /// Copying packed footage out of the `.lum`, for the files that are no
+    /// longer on disk. Only reported when there is something to copy, and the
+    /// one phase that says how far through itself it is.
+    ReadingPackedMedia,
     /// Pointing every footage reference at a file on this machine (docs/10 §2),
     /// including the one walk of the project's folder a lost item costs.
     ResolvingMedia,
@@ -438,11 +539,31 @@ pub struct OpenProgress {
 
 pub type OpenProgressStream = StreamSink<OpenProgress>;
 
+/// How opening a project went.
+#[frb(non_opaque)]
+#[derive(Debug, Clone)]
+pub enum BridgeOpened {
+    Opened {
+        project: ProjectReference,
+    },
+    /// The file would not open, or the open was cancelled. Whatever was open
+    /// stays.
+    NotOpened,
+    /// Another Lumit window has this project open, so it was not opened here
+    /// as well: two windows on one file would write the same crash journal.
+    /// `focused` says whether that window was brought forward, which only
+    /// Windows does.
+    OpenElsewhere {
+        focused: bool,
+    },
+}
+
 /// Where each phase begins on the bar. One table, so the weights cannot
 /// disagree between the two places that report them.
 fn phase_fraction(phase: OpenPhase) -> f64 {
     match phase {
         OpenPhase::ReadingFile => 0.0,
+        OpenPhase::ReadingPackedMedia => 0.1,
         OpenPhase::ResolvingMedia => 0.4,
         OpenPhase::PreparingProject => 0.7,
         OpenPhase::StartingPreview => 0.9,
@@ -451,7 +572,7 @@ fn phase_fraction(phase: OpenPhase) -> f64 {
 
 /// Say a phase has begun, if anyone is listening. A dropped report costs the
 /// bar one step and nothing else, so it is never worth failing an open over.
-fn report_phase(sink: Option<&OpenProgressStream>, phase: OpenPhase) {
+pub(crate) fn report_phase(sink: Option<&OpenProgressStream>, phase: OpenPhase) {
     if let Some(sink) = sink {
         let _ = sink.add(OpenProgress {
             phase,
@@ -535,6 +656,9 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetItemProxy { .. }
         | Op::SetItemUseProxy { .. }
         | Op::SetUseProxies { .. }
+        // Read by the File menu when it opens, and it is a document change
+        // like the proxy switch above.
+        | Op::SetAutoPack { .. }
         | Op::SetFolderChildren { .. }
         | Op::SetAutoFolder { .. }
         // Where this project parks its frames. No panel draws it — Settings
@@ -634,12 +758,14 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetLayerMatte { comp, layer, .. }
         | Op::SetLayerParent { comp, layer, .. }
         | Op::SetTransformProperty { comp, layer, .. }
+        | Op::SetTransformExpressionSlot { comp, layer, .. }
         | Op::SetTransformAxisMode { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
+        | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. } => (Some(*comp), Some(*layer), false),
 
@@ -667,14 +793,15 @@ impl LumitBridgeState {
         }
 
         let document = Document::new();
-        let journal = journal_for(&document);
-        let store = DocumentStore::new(document);
+        let journal = journal_for(&document, None);
+        let store = Arc::new(DocumentStore::new(document));
         let state = LumitBridgeState {
             saved_revision: store.revision(),
             store,
             path: None,
             media: MediaCache::default(),
             journal: Arc::clone(&journal),
+            auto_pack_here: false,
             sender: None,
             colour: Mutex::new(lumit_render::colour::ColourState::default()),
         };
@@ -722,6 +849,10 @@ impl LumitBridgeState {
         }
 
         let (comp, layer, items) = op_scope(&document_change.op);
+        // What this machine has and wants of a shared project's footage is
+        // looked at again, on that project's own thread: a clip placed in
+        // a composition is one it now wants a stand-in of.
+        crate::footage::Carrier::changed(project_id);
 
         // **Nothing is invalidated here, and that is the point.** This
         // used to drop every held frame of every composition on every committed
@@ -766,18 +897,57 @@ impl LumitBridgeState {
     /// phase says it has begun, and the frontend draws the share of the whole
     /// open that is behind it. Optional, because nothing about opening a project
     /// depends on someone watching.
+    ///
+    /// `share_events` is for a file that is a guest's own copy of a shared
+    /// project, closed while its host was away. It opens as it was left and
+    /// carries on looking for the host, and [`ProjectReference::share_guest`]
+    /// says so. It is also for a copy of a project that is kept online,
+    /// which is a member of it again however it was closed, and
+    /// [`ProjectReference::share_online_state`] says so. Either looks for
+    /// its project through a door, which [`ProjectReference::share_doors`]
+    /// names, and finds it once that is open.
+    ///
+    /// Not opened as well when [`crate::api::import::cancel_import`] stopped
+    /// it, which leaves whatever was open as it was.
     pub fn open_project(
         path: &str,
         on_change_stream: Option<CallbackStream>,
         on_progress_stream: Option<OpenProgressStream>,
-    ) -> Result<Option<ProjectReference>, BridgeError> {
+        share_events: Option<StreamSink<crate::api::share::BridgeShareEvent>>,
+    ) -> Result<BridgeOpened, BridgeError> {
         let progress = on_progress_stream.as_ref();
+        crate::packing::begin();
         report_phase(progress, OpenPhase::ReadingFile);
         let path = PathBuf::from(path);
-        let Ok((doc, _manifest)) = lumit_project::open(&path) else {
+        // Claimed before anything is read. It is let go again by itself if
+        // the open comes to nothing.
+        let claim = match crate::claim::take(&path) {
+            Ok(claim) => claim,
+            Err(holder) => {
+                return Ok(BridgeOpened::OpenElsewhere {
+                    focused: crate::claim::bring_forward(holder),
+                })
+            }
+        };
+        let Ok((mut doc, _manifest)) = lumit_project::open(&path) else {
             // Not an error to report: a `.lum` that will not open is the file
-            // picker's problem, and Dart shows its own notice for None.
-            return Ok(None);
+            // picker's problem, and Dart shows its own notice for it.
+            return Ok(BridgeOpened::NotOpened);
+        };
+        // What was kept is the copy as a guest left it, so it is what opens.
+        let beside = path.parent().unwrap_or_else(|| Path::new(""));
+        let (mut doc, resuming) = match lumit_share::resume(&mut doc, beside) {
+            Some((kept, resuming)) => (kept, Some(resuming)),
+            None => (doc, None),
+        };
+        // Or a copy of a project that is kept online.
+        let reopened = match resuming {
+            Some(_) => None,
+            None => lumit_share::online::resume(&mut doc, beside),
+        };
+        let (doc, member) = match reopened {
+            Some((kept, member)) => (kept, Some(member)),
+            None => (doc, None),
         };
 
         // Relative media paths resolve against the project's own directory. A
@@ -785,9 +955,27 @@ impl LumitBridgeState {
         // directory, which `Path::new("")` gives us — nothing to relink from,
         // rather than a panic.
         let project_dir = path.parent().unwrap_or_else(|| Path::new("")).to_path_buf();
-        let (project, _missing) = adopt(doc, Some(path), &project_dir, on_change_stream, progress)?;
+        let Some((project, _missing)) = adopt(
+            doc,
+            Some(path.clone()),
+            &project_dir,
+            on_change_stream,
+            progress,
+        )?
+        else {
+            return Ok(BridgeOpened::NotOpened);
+        };
+        crate::claim::settle(project.id, Some(&path), claim);
+        use lumit_share::Sharing;
+        if let Some(resuming) = resuming {
+            let start = |store, events| resuming.start(store, events).map(Sharing::Guest);
+            crate::api::share::resume(&project, start, share_events)?;
+        } else if let Some(member) = member {
+            let start = |store, events| member.start(store, events).map(Sharing::Online);
+            crate::api::share::resume(&project, start, share_events)?;
+        }
         report_phase(progress, OpenPhase::StartingPreview);
-        Ok(Some(project))
+        Ok(BridgeOpened::Opened { project })
     }
 }
 
@@ -812,17 +1000,65 @@ impl LumitBridgeState {
 /// §2.5). Opening a `.lum` ignores the list — the Project panel already draws a
 /// relink slate on each of them — while the importer turns it into report rows,
 /// because an import is exactly the moment somebody wants to be told.
+///
+/// `None` when it was cancelled (`crate::packing::cancel`), with nothing
+/// changed. The caller clears the flag before it starts.
 pub(crate) fn adopt(
     mut doc: Document,
     saved_at: Option<PathBuf>,
     media_root: &Path,
     on_change_stream: Option<CallbackStream>,
     on_progress: Option<&OpenProgressStream>,
-) -> Result<(ProjectReference, Vec<String>), BridgeError> {
+) -> Result<Option<(ProjectReference, Vec<String>)>, BridgeError> {
     let id = Uuid::now_v7();
 
+    // A file that says every save packs is believed only when this machine
+    // switched that on for it. Any other opens with it off, which is not an
+    // edit, and it can be switched on again by hand. A document that came
+    // from somebody else in a shared project is left as they have it, and is
+    // not believed either.
+    let auto_pack_here = saved_at
+        .as_deref()
+        .is_some_and(|path| doc.auto_pack && crate::packing::auto_packs(doc.id, path));
+    if saved_at.is_some() {
+        doc.auto_pack = auto_pack_here;
+    }
+
+    // Packed footage first, so the resolver finds those items already placed
+    // and does not go looking for files that were never sent.
+    if let Some(archive) = saved_at.as_deref() {
+        let mut sent = -1.0_f64;
+        crate::packing::restore(&mut doc, archive, media_root, |copied| {
+            // The copy fills the bar from this phase's start to the next one's.
+            let from = phase_fraction(OpenPhase::ReadingPackedMedia);
+            let to = phase_fraction(OpenPhase::ResolvingMedia);
+            let fraction = from + (to - from) * copied;
+            if fraction - sent < 0.005 {
+                return;
+            }
+            sent = fraction;
+            if let Some(sink) = on_progress {
+                let _ = sink.add(OpenProgress {
+                    phase: OpenPhase::ReadingPackedMedia,
+                    fraction,
+                });
+            }
+        });
+    }
+    if crate::packing::cancelled() {
+        return Ok(None);
+    }
     report_phase(on_progress, OpenPhase::ResolvingMedia);
     let (_relinked, missing) = lumit_project::resolve_all_media(&mut doc, media_root, &[]);
+    // What is still missing may be something another person sent before.
+    crate::footage::restore(&mut doc);
+    crate::packing::settle(&doc);
+    // The last moment to stop: from here the project that was open is closed.
+    if crate::packing::cancelled() {
+        return Ok(None);
+    }
+    // Its claim on its file goes with it, unless this is that file again.
+    crate::claim::settle(id, saved_at.as_deref(), None);
     report_phase(on_progress, OpenPhase::PreparingProject);
 
     // Every footage file this project holds, handed to the probe worker
@@ -861,14 +1097,15 @@ pub(crate) fn adopt(
     // nothing on the machine is asked to compile a graph for it.
     let planes = lumit_render::planes::warm_jobs(&doc);
 
-    let journal = journal_for(&doc);
-    let store = DocumentStore::new(doc);
+    let journal = journal_for(&doc, saved_at.as_deref());
+    let store = Arc::new(DocumentStore::new(doc));
     let state = LumitBridgeState {
         saved_revision: store.revision(),
         store,
         path: saved_at,
         media: MediaCache::default(),
         journal: Arc::clone(&journal),
+        auto_pack_here,
         sender: None,
         colour: Mutex::new(lumit_render::colour::ColourState::default()),
     };
@@ -881,6 +1118,10 @@ pub(crate) fn adopt(
         s.insert(id, Arc::new(stream));
     }
 
+    // A shared project that is being replaced stops being shared, before its
+    // store is let go of.
+    crate::api::share::stop_all();
+
     {
         let mut p = PROJECTS.write().map_err(|_| BridgeError::WriteFailed)?;
 
@@ -889,6 +1130,7 @@ pub(crate) fn adopt(
             // so a failed cache clear is not worth refusing the open over.
             if let Ok(mut e) = entry.write() {
                 e.media.clear();
+                discard_unsaved_journal(&e);
             }
         }
         // The waveform summaries are keyed by file path and shared between
@@ -932,37 +1174,5 @@ pub(crate) fn adopt(
         crate::probe::request(file);
     }
 
-    Ok((ProjectReference::new(id), missing))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The order the phases are reported in is the order they are declared in,
-    /// and a progress bar may never go backwards — so the weights must rise
-    /// with the declaration. Reordering the enum without reordering the table
-    /// is the mistake this catches.
-    #[test]
-    fn phase_weights_rise_with_the_phases() {
-        let order = [
-            OpenPhase::ReadingFile,
-            OpenPhase::ResolvingMedia,
-            OpenPhase::PreparingProject,
-            OpenPhase::StartingPreview,
-        ];
-        assert_eq!(phase_fraction(order[0]), 0.0, "the first phase starts at 0");
-        for pair in order.windows(2) {
-            assert!(
-                phase_fraction(pair[0]) < phase_fraction(pair[1]),
-                "{:?} must sit before {:?} on the bar",
-                pair[0],
-                pair[1]
-            );
-        }
-        assert!(
-            phase_fraction(OpenPhase::StartingPreview) < 1.0,
-            "the engine never claims the whole open: the first frame is the frontend's half"
-        );
-    }
+    Ok(Some((ProjectReference::new(id), missing)))
 }

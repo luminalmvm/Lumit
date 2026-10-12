@@ -293,39 +293,151 @@ pub fn parent_world_placement(
         let Some(a) = comp.layers.iter().find(|l| l.id == *ancestor_id) else {
             continue;
         };
-        let alt = lumit_core::time::layer_time(t_comp, a.start_offset.0);
-        let tr = &a.transform;
-        // An ancestor's own expressions are about the ancestor: `layer()`,
-        // `cut_in` and `cut_out` must resolve to the layer being evaluated, not
-        // to the child that started the walk up the chain.
-        let context = Arc::new(ExpressionContext {
-            layer: Some(a.id),
-            ..(*context).clone()
-        });
-        let p = lumit_gpu::place_matrix(
-            (
-                tr.position_x.value_at_with_context(alt, context.clone()) as f32,
-                tr.position_y.value_at_with_context(alt, context.clone()) as f32,
-            ),
-            (
-                tr.anchor_x.value_at_with_context(alt, context.clone()) as f32,
-                tr.anchor_y.value_at_with_context(alt, context.clone()) as f32,
-            ),
-            (
-                tr.scale_x.value_at_with_context(alt, context.clone()) as f32,
-                tr.scale_y.value_at_with_context(alt, context.clone()) as f32,
-            ),
-            tr.rotation.value_at_with_context(alt, context.clone()) as f32,
-            tr.position_z.value_at_with_context(alt, context.clone()) as f32,
-            tr.rotation_x.value_at_with_context(alt, context.clone()) as f32,
-            tr.rotation_y.value_at_with_context(alt, context.clone()) as f32,
-        );
+        let p = own_placement(a, t_comp, &context);
         world = Some(match world {
             Some(w) => lumit_gpu::concat_place(w, p),
             None => p,
         });
     }
     world
+}
+
+/// `layer`'s own placement at comp time `t_comp`, before any parent's.
+fn own_placement(
+    layer: &lumit_core::model::Layer,
+    t_comp: f64,
+    context: &Arc<ExpressionContext>,
+) -> [[f32; 4]; 4] {
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let tr = &layer.transform;
+    // A layer's own expressions are about that layer: `layer()`, `cut_in` and
+    // `cut_out` must resolve to the layer being evaluated, not to the child
+    // that started the walk up the chain.
+    let context = Arc::new(ExpressionContext {
+        layer: Some(layer.id),
+        ..(**context).clone()
+    });
+    lumit_gpu::place_matrix(
+        (
+            tr.position_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.position_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        (
+            tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        (
+            tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
+            tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
+        ),
+        tr.rotation.value_at_with_context(lt, context.clone()) as f32,
+        tr.position_z.value_at_with_context(lt, context.clone()) as f32,
+        tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
+        tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
+    )
+}
+
+/// The transform edits that keep `layer` where it is at comp time `t_comp`
+/// when its parent becomes `new_parent`. Taking a parent, losing one or
+/// swapping one changes what the layer follows from then on. It must not move
+/// the picture on the frame it happens.
+///
+/// A parented layer's values are read inside its parent's space, so the same
+/// numbers under a new parent land somewhere else. This works out the numbers
+/// that land it where it already was: position, scale and the three rotations.
+/// The anchor point stays, and opacity is not inherited. A property that
+/// already reads right is left out, and so is one driven by an expression.
+///
+/// ponytail: a keyed property moves as a whole, each axis on its own, so its
+/// other keys only hold their place under a parent that is not turned. Carry
+/// position keys as x, y pairs if a turned parent needs it.
+pub fn reparented(
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    new_parent: Option<Uuid>,
+    t_comp: f64,
+    context: Arc<ExpressionContext>,
+) -> Vec<(
+    lumit_core::model::TransformProp,
+    lumit_core::anim::Animation,
+)> {
+    use lumit_core::anim::Animation;
+    use lumit_core::model::TransformProp as P;
+
+    // A camera or a light does not follow its parent yet, so it has nothing
+    // to make up.
+    if matches!(
+        layer.kind,
+        lumit_core::model::LayerKind::Camera { .. } | lumit_core::model::LayerKind::Light { .. }
+    ) {
+        return Vec::new();
+    }
+    let identity = lumit_gpu::Mat4::IDENTITY.to_cols_array_2d();
+    let was = parent_world_placement(comp, layer, t_comp, context.clone()).unwrap_or(identity);
+    let now = match new_parent.and_then(|id| comp.layers.iter().find(|l| l.id == id)) {
+        Some(parent) => {
+            let own = own_placement(parent, t_comp, &context);
+            match parent_world_placement(comp, parent, t_comp, context.clone()) {
+                Some(world) => lumit_gpu::concat_place(world, own),
+                None => own,
+            }
+        }
+        None => identity,
+    };
+    let Some(out) = lumit_gpu::invert_place(now).filter(|_| was != now) else {
+        return Vec::new();
+    };
+    // Out of the old parent's space and into the new one's.
+    let carry = lumit_gpu::concat_place(out, was);
+
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let tr = &layer.transform;
+    let at = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
+    let to = lumit_gpu::unplace_matrix(
+        lumit_gpu::concat_place(carry, own_placement(layer, t_comp, &context)),
+        (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32),
+    );
+    // A flip can be written two ways: one axis negative, or the other one
+    // negative and half a turn. Keep the way the layer already has it.
+    let (sx, sy, rz) = if f64::from(to.scale.0) * at(&tr.scale_x) < 0.0 {
+        (-to.scale.0, -to.scale.1, to.rotation_deg + 180.0)
+    } else {
+        (to.scale.0, to.scale.1, to.rotation_deg)
+    };
+
+    let mut edits = Vec::new();
+    // `gain` is what a keyed property's other keys are scaled by. `None` is a
+    // scale, which goes by its own ratio.
+    let mut edit = |prop: P, to: f32, turns: bool, gain: Option<f64>| {
+        let Some(property) = tr.get(prop) else { return };
+        let from = at(property);
+        let mut delta = f64::from(to) - from;
+        if turns {
+            // The nearest way round, so a layer three turns in stays there.
+            delta = (delta + 180.0).rem_euclid(360.0) - 180.0;
+        }
+        // The matrices are f32. Past a thousandth it is their noise.
+        let delta = (delta * 1e3).round() / 1e3;
+        if delta == 0.0 || !delta.is_finite() {
+            return;
+        }
+        let gain = gain.unwrap_or((from + delta) / from);
+        let animation = match &property.animation {
+            Animation::Static(v) => Some(Animation::Static(v + delta)),
+            keyed => lumit_core::ops::remapped(keyed, gain, from + delta - gain * from),
+        };
+        edits.extend(animation.map(|a| (prop, a)));
+    };
+    let along = |axis: usize| Some(f64::from(carry[axis][axis]));
+    edit(P::PositionX, to.position.0, false, along(0));
+    edit(P::PositionY, to.position.1, false, along(1));
+    edit(P::PositionZ, to.z, false, along(2));
+    edit(P::ScaleX, sx, false, None);
+    edit(P::ScaleY, sy, false, None);
+    edit(P::Rotation, rz, true, Some(1.0));
+    edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
+    edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+    edits
 }
 
 /// Where the composition's camera puts a particle that sits off `layer`'s own
@@ -412,6 +524,39 @@ pub fn points_projection(
     Some(lumit_core::fx::points::Projection { m })
 }
 
+/// The empty room a points effect is given round a Shape or Text layer's art:
+/// texels on each side, across and down, and the raster's px per comp px.
+/// `None` where the art already fills the frame.
+///
+/// The room reaches the frame's edges as the layer's position and anchor put
+/// them, so the effect draws into the frame as it does on a solid that fills
+/// it. `corner` is where the art's own corner sits in the frame. Scale and
+/// rotation then turn the wider picture as they would turn that solid.
+// ponytail: a grown picture is placed by its centre, so both sides get the
+// larger margin and art at one edge of the frame makes a picture near twice
+// the frame's width. A parent's move is not read either. Grow one side at a
+// time, and follow the parent, if a profile or a project shows it.
+fn points_room(
+    frame: (f32, f32),
+    natural: (f32, f32),
+    tex: (u32, u32),
+    corner: (f32, f32),
+) -> Option<([u32; 2], f32)> {
+    let scale = tex.0 as f32 / natural.0.max(1.0);
+    let side = |corner: f32, art: f32, frame: f32, tex: u32| {
+        // To the further of the frame's two edges, and never past a frame's
+        // width, however far off the layer has been moved.
+        let px = corner.max(frame - corner - art).clamp(0.0, frame);
+        let most = crate::plan::MAX_TEXTURE_SIDE.saturating_sub(tex) / 2;
+        ((px * scale).ceil() as u32).min(most)
+    };
+    let room = [
+        side(corner.0, natural.0, frame.0, tex.0),
+        side(corner.1, natural.1, frame.1, tex.1),
+    ];
+    (room != [0, 0]).then_some((room, scale))
+}
+
 /// **The stream a points consumer's wire brings it** (points-stream.md §3.3),
 /// in px@comp, and which effect it came from.
 ///
@@ -430,10 +575,13 @@ pub fn points_projection(
 /// `emit_rate` row, so a second consumer that wants a history declares
 /// the same two ids and needs no edit here.
 ///
-/// `(vec![], None)` — the documented calm — for every producer, for a consumer
-/// with nothing wired, and for a producer that cannot answer at this point in
-/// the frame (Scatter). The effect renders as a passthrough and the box
+/// `(vec![], None)` — the documented calm — for every producer and for a
+/// consumer with nothing wired. The effect renders as a passthrough and the box
 /// wears the "no stream" mark; nothing faults, and nothing is guessed.
+///
+/// An empty list with the producer still named is a stream that cannot be made
+/// yet, because its points depend on a picture (Scatter). The walk asks for it
+/// on the card.
 #[allow(clippy::too_many_arguments)]
 fn points_input_for(
     layer: &lumit_core::model::Layer,
@@ -444,26 +592,40 @@ fn points_input_for(
     projection: lumit_core::fx::points::Projection,
     context: &Arc<ExpressionContext>,
     audio: &dyn lumit_core::fx::AudioTap,
-) -> (Vec<lumit_core::fx::points::PointsStream>, Option<u32>) {
+    clone: (u32, u32),
+) -> PointsInput {
     use lumit_core::graph::{InputRef, NodeRef, OutputRef};
-    let none = (Vec::new(), None);
-    // Which socket, from the signature rather than from a name this file would
-    // have to keep in step with the effect's own declaration.
-    let Some(port) = lumit_core::fx::points::consumes_points(def.signature())
-        .then(|| {
-            def.signature()
-                .inputs()
-                .iter()
-                .find(|p| p.ty == lumit_core::fx::PortType::Points)
-        })
-        .flatten()
-    else {
-        return none;
-    };
-    let wire = layer.graph.wire_into(&InputRef::Param {
-        node: NodeRef::Effect(consumer.id),
-        port: port.id.to_owned(),
-    });
+    let mut found = PointsInput::default();
+    // A Bake points reading its bake is handed that in place of its wire, so
+    // nothing above it has to make the stream again.
+    if consumer.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+        let read = context
+            .comp
+            .and_then(|id| context.document.comp(id))
+            .and_then(|comp| {
+                lumit_core::fx::effects::bake_points::reading(
+                    &context.document,
+                    comp,
+                    layer,
+                    consumer,
+                    t,
+                )
+                .stream(projection)
+            });
+        if let Some(stream) = read {
+            found.streams.push(stream);
+            found.from.push(None);
+            return found;
+        }
+    }
+    // Which sockets, from the signature rather than from a name this file
+    // would have to keep in step with the effect's own declaration.
+    let ports: Vec<&lumit_core::fx::Port> = def
+        .signature()
+        .inputs()
+        .iter()
+        .filter(|p| p.ty == lumit_core::fx::PortType::Points)
+        .collect();
     // Two things a points wire may come out of, and nothing else: a producer in
     // this stack, or a **cross-layer tap** naming another layer's. A
     // number or the source matte is neither; the type check refused those at
@@ -474,76 +636,278 @@ fn points_input_for(
         /// A Layer points node in this layer's graph, by node id.
         Tap(uuid::Uuid),
     }
-    let source = match wire {
-        Some(OutputRef::EffectData { effect, .. }) => Source::Effect(*effect),
-        Some(OutputRef::Driver { node, .. }) => Source::Tap(*node),
-        _ => return none,
-    };
-    // **Which producer the wire names, for the frame key**: the stack
-    // index of a same-layer producer, and `None` for a tap — whose own node,
-    // and with it the layer it names and that layer's whole stack, is already
-    // folded into this layer's key by the graph's driver-node hashing
-    // (node-graph.md §2.3).
-    let from = match &source {
-        Source::Effect(effect) => layer
-            .effects
-            .iter()
-            .position(|e| e.id == *effect)
-            .and_then(|i| u32::try_from(i).ok()),
-        Source::Tap(_) => None,
-    };
-    let at = |when: f64| match &source {
-        Source::Effect(effect) => lumit_core::fx::effect_stream(
-            &layer.graph,
-            *effect,
-            when,
-            context.clone(),
-            Some(audio),
-            projection,
-        ),
-        Source::Tap(node) => lumit_core::fx::driver_stream(
-            &layer.graph,
-            *node,
-            when,
-            context.clone(),
-            Some(audio),
-            projection,
-        ),
-    };
-    let Some(stream) = at(t) else {
-        return none;
-    };
-    let mut out = vec![stream];
-
-    // The history, if this consumer asks for one. `Samples` counts the present
-    // moment as the first of them, so the walk starts at 1.
-    use lumit_core::fx::effects::trail::Trail;
-    let declares = |id: &str| def.schema().params.iter().any(|p| p.id == id);
-    if declares(Trail::SAMPLES_PARAM) && declares(Trail::STEP_PARAM) {
-        let read = |id: &str, fallback: f64| {
-            consumer
-                .float_at_with_context(id, t, context.clone())
-                .unwrap_or(fallback)
+    for port in &ports {
+        let wire = layer.graph.wire_into(&InputRef::Param {
+            node: NodeRef::Effect(consumer.id),
+            port: port.id.to_owned(),
+        });
+        let source = match wire {
+            Some(OutputRef::EffectData { effect, .. }) => Some(Source::Effect(*effect)),
+            Some(OutputRef::Driver { node, .. }) => Some(Source::Tap(*node)),
+            _ => None,
         };
-        // Clamped to the row's own hard ceiling here as well as at the socket:
-        // every sample is another whole evaluation of the producer, so this is
-        // the one number that decides what this op costs.
-        let samples = read(Trail::SAMPLES_PARAM, 1.0).clamp(1.0, 256.0) as usize;
-        let step = read(Trail::STEP_PARAM, 0.0).max(0.0);
-        // ponytail: one host evaluation per sample. A GPU carriage
-        // (points-stream.md §3.3) would make this one dispatch per sample
-        // instead; the trigger is a profile showing a real comp spending it.
-        for k in 1..samples {
-            // Before the layer's own clock started there is nothing to ask for,
-            // and a tail that stops there is the honest picture.
-            let when = t - k as f64 * step;
-            match (when >= 0.0).then(|| at(when)).flatten() {
-                Some(past) => out.push(past),
-                None => break,
+        // **Which producer the wire names, for the frame key**: the stack
+        // index of a same-layer producer, and `None` for a tap — whose own
+        // node, and with it the layer it names and that layer's whole stack,
+        // is already folded into this layer's key by the graph's driver-node
+        // hashing (node-graph.md §2.3).
+        let from = match &source {
+            Some(Source::Effect(effect)) => layer
+                .effects
+                .iter()
+                .position(|e| e.id == *effect)
+                .and_then(|i| u32::try_from(i).ok()),
+            _ => None,
+        };
+        let at = |when: f64| match &source {
+            // The clone number goes with it, so a producer driven by a
+            // Clone index hands on the points it draws.
+            Some(Source::Effect(effect)) => lumit_core::fx::drivers::effect_stream_in(
+                &layer.graph,
+                *effect,
+                when,
+                context.clone(),
+                Some(audio),
+                projection,
+                None,
+                clone,
+            ),
+            Some(Source::Tap(node)) => lumit_core::fx::drivers::driver_stream_in(
+                &layer.graph,
+                *node,
+                when,
+                context.clone(),
+                Some(audio),
+                projection,
+                None,
+                clone,
+            ),
+            None => None,
+        };
+        found.from.push(from);
+        let now = at(t);
+        // Several sockets: one stream each, empty where there is none, so the
+        // list stays in step with the sockets.
+        if ports.len() > 1 {
+            found.streams.push(now.unwrap_or_default());
+            continue;
+        }
+        // No stream yet, but the wire may still name its producer: one whose
+        // points depend on a picture is asked again on the card.
+        let Some(stream) = now else {
+            break;
+        };
+        found.streams.push(stream);
+
+        // The history, if this consumer asks for one. `Samples` counts the
+        // present moment as the first of them, so the walk starts at 1.
+        use lumit_core::fx::effects::trail::Trail;
+        let declares = |id: &str| def.schema().params.iter().any(|p| p.id == id);
+        if declares(Trail::SAMPLES_PARAM) && declares(Trail::STEP_PARAM) {
+            let read = |id: &str, fallback: f64| {
+                consumer
+                    .float_at_with_context(id, t, context.clone())
+                    .unwrap_or(fallback)
+            };
+            // Clamped to the row's own hard ceiling here as well as at the
+            // socket: every sample is another whole evaluation of the
+            // producer, so this is the one number that decides what this op
+            // costs.
+            let samples = read(Trail::SAMPLES_PARAM, 1.0).clamp(1.0, 256.0) as usize;
+            let step = read(Trail::STEP_PARAM, 0.0).max(0.0);
+            // ponytail: one host evaluation per sample. A GPU carriage
+            // (points-stream.md §3.3) would make this one dispatch per sample
+            // instead; the trigger is a profile showing a real comp spending it.
+            for k in 1..samples {
+                // Before the layer's own clock started there is nothing to ask
+                // for, and a tail that stops there is the honest picture.
+                let when = t - k as f64 * step;
+                match (when >= 0.0).then(|| at(when)).flatten() {
+                    Some(past) => found.streams.push(past),
+                    None => break,
+                }
             }
         }
     }
-    (out, from)
+    found
+}
+
+/// What Text to points and Label points are handed beside the op: the letters
+/// of the Text layer their row names as that layer draws them at this frame,
+/// or the layer's document with its words as they read now. Nothing for any
+/// other effect, and nothing when the layer named is not text.
+fn text_carriage(
+    comp: &lumit_core::model::Composition,
+    owner: &lumit_core::model::Layer,
+    e: &lumit_core::model::EffectInstance,
+    t_comp: f64,
+    doc: &Arc<lumit_core::model::Document>,
+) -> (
+    Vec<lumit_core::fx::points::TextGlyph>,
+    Option<Box<lumit_core::model::TextDocument>>,
+) {
+    let name = e.effect.match_name.as_str();
+    if name != "text_to_points" && name != "label_points" {
+        return Default::default();
+    }
+    // An unset row means the layer the effect is on.
+    let layer = match e.layer_ref("text_layer") {
+        Some(id) => comp.layers.iter().find(|l| l.id == id),
+        None => Some(owner),
+    };
+    let Some((layer, document)) = layer.and_then(|l| match &l.kind {
+        lumit_core::model::LayerKind::Text { document } => Some((l, document)),
+        _ => None,
+    }) else {
+        return Default::default();
+    };
+    // The same clock and the same words the layer's own picture is drawn at.
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let line = document.resolved_text(Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp.id),
+        layer: Some(layer.id),
+        comp_time: t_comp,
+        current_depth: 0,
+        inputs: None,
+    }));
+    if name == "label_points" {
+        // A label is set straight and still, so the path and the animators
+        // are left behind.
+        let label = lumit_core::model::TextDocument {
+            text: line.into_owned(),
+            expression: None,
+            path: None,
+            animators: Vec::new(),
+            ..document.clone()
+        };
+        return (Vec::new(), Some(Box::new(label)));
+    }
+
+    let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
+    let spine = document
+        .path
+        .map(|id| lumit_core::mask::mask_path_at(&layer.masks, Some(id), false, lt))
+        .filter(|p| !p.is_empty());
+    // Animated letters on a straight line sit in from the layer's edge. On a
+    // path they do not.
+    let laid = lumit_text::layout(
+        &lumit_text::TextBlock::of(document, &line),
+        spine.is_none() && !xforms.is_empty(),
+    );
+    let chars: Vec<char> = line.chars().collect();
+    let (words, _) = lumit_core::text::unit_indices(&line, lumit_core::text::SelectorBasis::Words);
+    let half = (laid.ascent - laid.descent) * 0.5;
+    // How far along the path this line starts. Lines run on one after another.
+    let mut along = document.path_offset.value_at(lt) as f32;
+    let mut glyphs = Vec::new();
+    // Include spaces hands a space over as a letter, which only a point per
+    // character can use: in a word or a line it would shift the middle.
+    let spaces = e.bool_of("include_spaces").unwrap_or(false)
+        && !matches!(
+            e.param("per"),
+            Some(lumit_core::model::EffectValue::Choice(1 | 2))
+        );
+    for (line_no, row) in laid.lines.iter().enumerate() {
+        let first = row.carets.first().copied().unwrap_or(0.0);
+        for (k, pair) in row.carets.windows(2).enumerate() {
+            let ch = row.start + k;
+            let ink = chars
+                .get(ch)
+                .is_some_and(|c| !c.is_whitespace() || (spaces && !matches!(c, '\n' | '\r')));
+            if !ink || glyphs.len() >= lumit_core::fx::points::CAP_HARD as usize {
+                continue;
+            }
+            // Where the pen is and which way the baseline runs there.
+            let (pen, tan) = match &spine {
+                None => ([pair[0], row.baseline], [1.0, 0.0]),
+                Some(path) => {
+                    let total = path.length();
+                    let mut s = along + pair[0] - first;
+                    if path.closed && total > 0.0 {
+                        s = s.rem_euclid(total);
+                    } else if !(0.0..=total).contains(&s) {
+                        // Off the end of an open path, where no letter is drawn.
+                        continue;
+                    }
+                    (path.point_at(s), path.tangent_at(s))
+                }
+            };
+            let nrm = [-tan[1], tan[0]];
+            // An animator pushes a letter along and away from its baseline.
+            let push = xforms.get(ch).map_or([0.0; 2], |x| x.position);
+            let origin = [
+                pen[0] + push[0] * tan[0] + push[1] * nrm[0],
+                pen[1] + push[0] * tan[1] + push[1] * nrm[1],
+            ];
+            let advance = pair[1] - pair[0];
+            glyphs.push(lumit_core::fx::points::TextGlyph {
+                origin,
+                end: [origin[0] + advance * tan[0], origin[1] + advance * tan[1]],
+                up: [-nrm[0] * half, -nrm[1] * half],
+                word: words.get(ch).copied().unwrap_or(0) as u32,
+                line: line_no as u32,
+            });
+        }
+        along += row.carets.last().copied().unwrap_or(first) - first;
+    }
+    (glyphs, None)
+}
+
+/// What the wires into an effect's Points inputs bring it.
+#[derive(Default)]
+struct PointsInput {
+    /// One stream and its history for an effect with one input, or one stream
+    /// per input for an effect with several. Empty where nothing could be
+    /// made yet.
+    streams: Vec<lumit_core::fx::points::PointsStream>,
+    /// Which effect in the stack each input is wired from, by index.
+    from: Vec<Option<u32>>,
+}
+
+/// The stream wired into `effect` on `layer` at composition time `t_comp`,
+/// made the way a frame's builder makes it and without drawing anything.
+/// `None` where it can only be made during the render, because its points
+/// depend on a picture. What the Bake points job asks first.
+#[must_use]
+pub fn points_input_at(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    effect: &lumit_core::model::EffectInstance,
+    t_comp: f64,
+) -> Option<lumit_core::fx::points::PointsStream> {
+    let def = lumit_core::fx::BUILTIN_DEFS.get(&effect.effect.match_name)?;
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let context = Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp.id),
+        layer: Some(layer.id),
+        comp_time: t_comp,
+        current_depth: 0,
+        inputs: None,
+    });
+    let projection = points_projection(doc, comp, layer, t_comp, lt, context.clone());
+    let audio = crate::audio_tap::DocumentAudio::new(doc, comp, t_comp);
+    let found = points_input_for(
+        layer,
+        effect,
+        def,
+        lt,
+        1.0 / comp.frame_rate.fps().max(1.0),
+        projection.unwrap_or(lumit_core::fx::points::Projection::FLAT),
+        &context,
+        &audio,
+        lumit_core::fx::drivers::NO_CLONE,
+    );
+    // A wire that names an effect in this stack and brought nothing is a
+    // stream made on the card. Anything else that brought nothing is empty.
+    let late = found.from.first().is_some_and(Option::is_some);
+    match found.streams.into_iter().next() {
+        Some(stream) => Some(stream),
+        None if late => None,
+        None => Some(Default::default()),
+    }
 }
 
 /// A 3×3 inverse, or `None` when the matrix is singular — a layer scaled to
@@ -877,7 +1241,155 @@ pub fn build_comp_draws_at(
     keys: Option<&dyn crate::cache::NestedKeyer>,
     spliced: bool,
 ) -> Vec<CompLayerDraw> {
+    comp_walk(
+        doc,
+        comp,
+        t_comp,
+        frame_t,
+        pixels_by_layer,
+        visited,
+        keys,
+        spliced,
+        Walk::PLAIN,
+        None,
+    )
+}
+
+/// What a walk carries beyond the frame, handed on to every comp it walks
+/// into.
+#[derive(Clone, Copy)]
+struct Walk<'a> {
+    /// Which copy of how many this walk's layers are rendered as, for their
+    /// Clone index drivers. It goes down into every precomp and node graph
+    /// the walk reaches, so a Clone index anywhere in a clone picture reads
+    /// that picture's number.
+    clone: (u32, u32),
+    /// A placed node graph's own Input values, when the comp being walked is
+    /// that graph (docs/impl/node-graph-comp.md §5.3). Empty on every other
+    /// walk, which is a graph on its own defaults.
+    values: &'a [(String, lumit_core::model::EffectValue)],
+    /// This walk is a comp built again at another moment, for a temporal
+    /// effect further up to read as its neighbour. A neighbour carries no
+    /// neighbours of its own, so nothing in it builds any: otherwise an Echo
+    /// over a Precomp that holds an Echo builds the whole of the inside once
+    /// for every frame of both windows, only to throw it away.
+    rebuild: bool,
+}
+
+impl Walk<'static> {
+    /// An ordinary walk: the first copy of one, and no values handed in.
+    const PLAIN: Walk<'static> = Walk {
+        clone: lumit_core::fx::drivers::NO_CLONE,
+        values: &[],
+        rebuild: false,
+    };
+}
+
+/// Something asked of a walk on its own, in place of its draws. Both are
+/// Clone to points': a picture at another moment or as one copy of several,
+/// and the whole list for a stream that was only made during the render.
+enum Probe<'a> {
+    /// One layer row of an effect, as a picture.
+    Picture {
+        effect: &'a lumit_core::model::EffectInstance,
+        row: &'a str,
+        found: Option<DofInputDraw>,
+    },
+    /// Every picture of the Clone to points `effect` on layer `owner`, now
+    /// that its stream is known to hold `points` points.
+    Clones {
+        owner: uuid::Uuid,
+        effect: uuid::Uuid,
+        points: usize,
+        found: Vec<LayerInputDraw>,
+    },
+}
+
+/// Clone to points' pictures for a stream that was only made during the
+/// render. The realiser asks once the stream exists, since how many copies
+/// there are, and so what each one's Clone index reads, is not known before.
+///
+/// `pixels_by_layer` is the frame's own decoded pixels, as the first walk had
+/// them.
+#[must_use]
+pub fn late_clone_pictures(
+    doc: &Arc<lumit_core::model::Document>,
+    spec: &crate::draw::LateClones,
+    points: usize,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+) -> Vec<LayerInputDraw> {
+    let Some(comp) = doc.comp(spec.comp) else {
+        return Vec::new();
+    };
+    let mut probe = Probe::Clones {
+        owner: spec.owner,
+        effect: spec.effect,
+        points,
+        found: Vec::new(),
+    };
+    comp_walk(
+        doc,
+        comp,
+        spec.t,
+        spec.frame_t,
+        pixels_by_layer,
+        &mut spec.visited.clone(),
+        None,
+        true,
+        Walk {
+            clone: spec.clone,
+            values: &[],
+            rebuild: false,
+        },
+        Some(&mut probe),
+    );
+    match probe {
+        Probe::Clones { found, .. } => found,
+        Probe::Picture { .. } => Vec::new(),
+    }
+}
+
+/// The walk behind [`build_comp_draws_at`]. Handed a `probe`, it makes what
+/// the probe asks for at `t_comp` and no draws at all, so a layer at another
+/// moment is built by the very code that builds it at this one.
+#[allow(clippy::too_many_arguments)]
+fn comp_walk(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    t_comp: f64,
+    frame_t: f64,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+    visited: &mut Vec<uuid::Uuid>,
+    keys: Option<&dyn crate::cache::NestedKeyer>,
+    spliced: bool,
+    with: Walk<'_>,
+    probe: Option<&mut Probe<'_>>,
+) -> Vec<CompLayerDraw> {
     use lumit_core::model::LayerKind;
+    // The frame's own pixels, kept for a probe at another moment to find its
+    // clip in.
+    let frame_pixels = pixels_by_layer;
+    // The copy this walk renders its layers as, and what it hands the comps
+    // it walks into.
+    let clone_number = with.clone;
+    let inner = Walk {
+        clone: clone_number,
+        values: &[],
+        rebuild: with.rebuild,
+    };
+    // A nested frame's name says nothing of which copy it is, so a numbered
+    // copy is never named and never served from the nested store.
+    let keys = keys.filter(|_| clone_number == lumit_core::fx::drivers::NO_CLONE);
+    // A rebuild at another moment draws each clip as it is at that moment,
+    // where the planner fetched it.
+    let at_moment = pixels_at_moment(doc, comp, t_comp, frame_t, pixels_by_layer);
+    let pixels_by_layer = at_moment.as_ref().unwrap_or(pixels_by_layer);
+    // A Sequence layer in a gap now draws nothing, and may still be in the
+    // map for a clip it shows a frame away. `fetched` keeps it, for the
+    // neighbours a temporal effect on an adjustment layer builds.
+    let fetched = pixels_by_layer;
+    let shown = without_gaps(comp, fetched);
+    let pixels_by_layer = shown.as_ref().unwrap_or(fetched);
     let in_span = |l: &lumit_core::model::Layer| {
         t_comp >= l.in_point.0.to_f64() && t_comp < l.out_point.0.to_f64()
     };
@@ -909,7 +1421,14 @@ pub fn build_comp_draws_at(
      -> lumit_core::fx::ResolvedDrivers {
         let projection = points_projection(expr_doc, comp, l, t_comp, dlt, ctx.clone())
             .unwrap_or(lumit_core::fx::points::Projection::FLAT);
-        lumit_core::fx::resolve_drivers_projected(&l.graph, dlt, ctx, Some(&audio), projection)
+        lumit_core::fx::drivers::resolve_drivers_cloned(
+            &l.graph,
+            dlt,
+            ctx,
+            Some(&audio),
+            projection,
+            clone_number,
+        )
     };
 
     // One layer's own picture at layer time `lt`, alone: its source pixels with
@@ -1033,13 +1552,14 @@ pub fn build_comp_draws_at(
                 // back an empty list and the rasteriser takes the path it
                 // always took, byte for byte.
                 let xforms = lumit_core::text::glyph_xforms(&document.animators, &line, lt);
+                // An unstyled single line draws the way it always has. A
+                // styled one, or one with a line break, is set by the shaper.
+                let block = lumit_text::TextBlock::of(document, &line);
                 let r = match &spine {
                     Some(path) => {
                         let (w, h) = lumit_text::path_box(path, size);
-                        lumit_text::rasterise_on_path_animated(
-                            &line,
-                            size,
-                            document.fill,
+                        lumit_text::rasterise_along(
+                            &block,
                             path,
                             document.path_offset.value_at(lt) as f32,
                             w,
@@ -1047,9 +1567,7 @@ pub fn build_comp_draws_at(
                             &xforms,
                         )
                     }
-                    None => {
-                        lumit_text::rasterise_line_animated(&line, size, document.fill, &xforms)
-                    }
+                    None => lumit_text::rasterise(&block, &xforms),
                 };
                 (
                     Arc::new(r.rgba),
@@ -1206,6 +1724,7 @@ pub fn build_comp_draws_at(
         keys,
         audio: &audio,
         pixels_for: &pixels_for,
+        clone: clone_number,
     };
 
     // The values a Precomp layer of a node graph hands the graph's Inputs
@@ -1279,36 +1798,29 @@ pub fn build_comp_draws_at(
             );
             let mut path = visited_path.clone();
             path.push(*nested_id);
-            let draws = match nested.graph.as_ref().filter(|_| src.graph_inputs.is_some()) {
-                // A placed node graph with its own Input values (§5.3).
-                Some(graph) => {
-                    let values = graph_values(src, graph, slt);
-                    vec![graph_comp_draw(
-                        &GraphLower {
-                            t: slt,
-                            frame_t: frame_slt,
-                            ..lower
-                        },
-                        nested,
-                        graph,
-                        lumit_core::comp_graph::GraphView {
-                            values: &values,
-                            pictures_fed: false,
-                        },
-                        &path,
-                    )]
-                }
-                None => build_comp_draws_at(
-                    doc,
-                    nested,
-                    slt,
-                    frame_slt,
-                    pixels_by_layer,
-                    &mut path,
-                    keys,
-                    false,
-                ),
-            };
+            // A placed node graph is walked with its own Input values
+            // (§5.3). It goes through the nested comp's own walk like any
+            // other, so its Reads of footage are found at this moment too.
+            let values = nested
+                .graph
+                .as_ref()
+                .filter(|_| src.graph_inputs.is_some())
+                .map_or_else(Vec::new, |graph| graph_values(src, graph, slt));
+            let draws = comp_walk(
+                doc,
+                nested,
+                slt,
+                frame_slt,
+                pixels_by_layer,
+                &mut path,
+                keys,
+                false,
+                Walk {
+                    values: &values,
+                    ..inner
+                },
+                None,
+            );
             Some(Box::new(crate::draw::NestedInputDraw {
                 width: nested.width,
                 height: nested.height,
@@ -1323,6 +1835,7 @@ pub fn build_comp_draws_at(
     let nested_input_for = |src: &lumit_core::model::Layer| -> Option<DofInputDraw> {
         let nested = nested_comp_draw(src)?;
         Some(DofInputDraw {
+            natural: [nested.width as f32, nested.height as f32],
             rgba: Vec::new(),
             tex_w: nested.width,
             tex_h: nested.height,
@@ -1335,6 +1848,7 @@ pub fn build_comp_draws_at(
             roto_mattes: Vec::new(),
             planes: Vec::new(),
             nested: Some(nested),
+            graph_fx: Vec::new(),
             // A comp's layers were each interpreted as themselves while it was
             // realised; the picture that comes out is already working-space.
             colour_space: None,
@@ -1367,14 +1881,7 @@ pub fn build_comp_draws_at(
                     .get(&e.effect.match_name)
                     .is_some_and(|def| def.is_image_op())
             })
-            .map(|e| {
-                let (width, height, gray) = crate::roto::matte(e.id, source_frame)?;
-                Some(crate::draw::RotoMatteDraw {
-                    width,
-                    height,
-                    gray,
-                })
-            })
+            .map(|e| roto_matte_of(e, source_frame))
             .collect()
     };
 
@@ -1402,19 +1909,7 @@ pub fn build_comp_draws_at(
                     .get(&e.effect.match_name)
                     .is_some_and(|def| def.is_image_op())
             })
-            .map(|e| {
-                let (width, height, kind, data, content) =
-                    crate::planes::plane(e.id, source_frame)?;
-                Some(crate::draw::PlaneDraw {
-                    instance: e.id,
-                    source_frame,
-                    content,
-                    width,
-                    height,
-                    kind,
-                    data,
-                })
-            })
+            .map(|e| plane_of(e, source_frame))
             .collect()
     };
 
@@ -1423,97 +1918,418 @@ pub fn build_comp_draws_at(
     // span gate, the nested-precomp render, and the masks-and-effects folding,
     // so a matte and a background plate can never disagree about what "a layer
     // rendered alone" means.
-    let layer_slot = |e: &lumit_core::model::EffectInstance, param: &str| -> Option<DofInputDraw> {
-        let id = e.layer_ref(param)?;
-        let src = comp.layers.iter().find(|l| l.id == id)?;
-        if !in_span(src) {
-            return None;
-        }
-        // A Precomp reference renders its comp — "a white circle
-        // in a precomp" is the natural way to author a flare source, and
-        // a depth pass authored as a comp is the same shape.
-        if let Some(nested) = nested_input_for(src) {
-            return Some(nested);
-        }
-        let mode = e.layer_source(param);
-        // Layer source. None samples the layer's raw pixels —
-        // clear its masks so `pixels_for` skips them; Masks and Effects
-        // and masks keep them.
-        let (rgba, tex_w, tex_h, natural, format) = if mode.applies_masks() {
-            pixels_for(src)?
-        } else {
-            let mut bare = src.clone();
-            bare.masks.clear();
-            pixels_for(&bare)?
-        };
-        // Effects and masks: resolve the referenced layer's own
-        // stack at its layer time so render_dof_inputs runs it on the
-        // texture before resampling. Uses that layer's decode scale (its
-        // px@comp radii stay honest), the same resolve export uses. Empty
-        // otherwise.
-        let (fx, colour_tables) = if mode.folds_effects() && src.switches.fx {
-            let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
-            let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
-            let scale = tex_w as f32 / natural.0.max(1.0);
-            let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
-            // The referenced layer's own effects, so its own expressions
-            // resolve about it rather than about the layer that pointed
-            // at it.
-            let context = Arc::new(ExpressionContext {
-                document: expr_doc.clone(),
-                comp: Some(comp.id),
-                layer: Some(src.id),
-                comp_time: t_comp,
-                current_depth: 0,
-                inputs: None,
-            });
-            // The referenced layer's own driver graph too: a wire
-            // substitutes where a keyframe would have been read, so it belongs
-            // to whichever stack is being resolved.
-            let drivers = drivers_for(src, slt, context.clone());
-            (
-                lumit_core::fx::resolve_stack_temporal_named(
-                    &src.effects,
-                    &drivers,
-                    slt,
-                    slt,
-                    comp_diag * scale,
-                    scale,
-                    &markers,
-                    context,
+    let layer_slot_plain =
+        |e: &lumit_core::model::EffectInstance, param: &str| -> Option<DofInputDraw> {
+            let id = e.layer_ref(param)?;
+            let src = comp.layers.iter().find(|l| l.id == id)?;
+            if !in_span(src) {
+                return None;
+            }
+            // A Precomp reference renders its comp — "a white circle
+            // in a precomp" is the natural way to author a flare source, and
+            // a depth pass authored as a comp is the same shape.
+            if let Some(nested) = nested_input_for(src) {
+                return Some(nested);
+            }
+            let mode = e.layer_source(param);
+            // Layer source. None samples the layer's raw pixels —
+            // clear its masks so `pixels_for` skips them; Masks and Effects
+            // and masks keep them.
+            let (rgba, tex_w, tex_h, natural, format) = if mode.applies_masks() {
+                pixels_for(src)?
+            } else {
+                let mut bare = src.clone();
+                bare.masks.clear();
+                pixels_for(&bare)?
+            };
+            // Effects and masks: resolve the referenced layer's own
+            // stack at its layer time so render_dof_inputs runs it on the
+            // texture before resampling. Uses that layer's decode scale (its
+            // px@comp radii stay honest), the same resolve export uses. Empty
+            // otherwise.
+            let (fx, colour_tables) = if mode.folds_effects() && src.switches.fx {
+                let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
+                let comp_diag = ((comp.width as f32).powi(2) + (comp.height as f32).powi(2)).sqrt();
+                let scale = tex_w as f32 / natural.0.max(1.0);
+                let markers = lumit_core::fx::MarkerContext::for_layer(comp, src);
+                // The referenced layer's own effects, so its own expressions
+                // resolve about it rather than about the layer that pointed
+                // at it.
+                let context = Arc::new(ExpressionContext {
+                    document: expr_doc.clone(),
+                    comp: Some(comp.id),
+                    layer: Some(src.id),
+                    comp_time: t_comp,
+                    current_depth: 0,
+                    inputs: None,
+                });
+                // The referenced layer's own driver graph too: a wire
+                // substitutes where a keyframe would have been read, so it belongs
+                // to whichever stack is being resolved.
+                let drivers = drivers_for(src, slt, context.clone());
+                (
+                    lumit_core::fx::resolve_stack_temporal_named(
+                        &src.effects,
+                        &drivers,
+                        slt,
+                        slt,
+                        comp_diag * scale,
+                        scale,
+                        &markers,
+                        context,
+                    )
+                    .1,
+                    colour_tables(&src.effects, slt),
                 )
-                .1,
-                colour_tables(&src.effects, slt),
-            )
-        } else {
-            Default::default()
+            } else {
+                Default::default()
+            };
+            // The referenced layer's own baked pictures, on the same two
+            // predicates and the same (instance, source frame) lookup its own draw
+            // uses. Empty when its stack is not being folded in, which is when
+            // there are no ops to carry them to.
+            let src_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
+            let (roto_mattes, planes) = if fx.is_empty() {
+                (Vec::new(), Vec::new())
+            } else {
+                (
+                    roto_mattes_for(&src.effects, src_frame),
+                    planes_for(&src.effects, src_frame),
+                )
+            };
+            Some(DofInputDraw {
+                rgba: rgba.to_vec(),
+                tex_w,
+                tex_h,
+                format,
+                fx,
+                colour_tables,
+                roto_mattes,
+                planes,
+                nested: None,
+                colour_space: crate::colour::footage_colour_space(doc, &src.kind),
+                natural: [natural.0, natural.1],
+                // Filled in by `layer_slot`, which is the slot everything reads.
+                graph_fx: Vec::new(),
+            })
         };
-        // The referenced layer's own baked pictures, on the same two
-        // predicates and the same (instance, source frame) lookup its own draw
-        // uses. Empty when its stack is not being folded in, which is when
-        // there are no ops to carry them to.
-        let src_frame = pixels_by_layer.get(&src.id).map_or(0, |px| px.source_frame);
-        let (roto_mattes, planes) = if fx.is_empty() {
-            (Vec::new(), Vec::new())
-        } else {
-            (
-                roto_mattes_for(&src.effects, src_frame),
-                planes_for(&src.effects, src_frame),
-            )
+
+    // **The Node graph effects' plans** (§2.4): one per enabled `node_graph`
+    // op in stack order, on the same two conditions `mattes_for` applies, so
+    // the list stays 1:1 with the ops `run_ops` walks and the k-th closure
+    // lands on the k-th such op.
+    //
+    // The first picture Input is the layer's own picture, which only `run_ops`
+    // holds; every further one is a row of this instance, rendered alone on
+    // the carriage a depth pass travels. A comp that is missing, is not a node
+    // graph, or is already on the visited path lowers to a plan with no
+    // Output, which the walk renders as the picture unchanged.
+    //
+    // `feed` is how a further picture Input's layer is fetched, so the plans
+    // of a layer that is itself being read as an input can fetch theirs
+    // plainly and the two cannot call each other for ever.
+    let graph_fx_with =
+        |owner: Option<&lumit_core::model::Layer>,
+         effects: &[lumit_core::model::EffectInstance],
+         lt: f64,
+         frame_lt: f64,
+         feed: &dyn Fn(&lumit_core::model::EffectInstance, &str) -> Option<DofInputDraw>|
+         -> Vec<GraphDraw> {
+            use lumit_core::model::EffectNamespace;
+            // **The host layer's clock, not the comp's.** The decode plan and the
+            // frame key both read the named comp at the layer time, so a layer
+            // with a start offset would otherwise take its picture from one clock
+            // and its frame's name from another.
+            let lower = GraphLower {
+                t: lt,
+                frame_t: frame_lt,
+                ..lower
+            };
+            let instances: Vec<&lumit_core::model::EffectInstance> = effects
+                .iter()
+                .filter(|e| {
+                    e.enabled
+                        && e.effect.namespace == EffectNamespace::Builtin
+                        && e.effect.match_name == lumit_core::comp_graph::NODE_GRAPH
+                })
+                .filter(|e| {
+                    lumit_core::fx::BUILTIN_DEFS
+                        .get(&e.effect.match_name)
+                        .is_some_and(|def| def.is_image_op())
+                })
+                .collect();
+            // The overwhelming case, and it costs a filter over the stack.
+            if instances.is_empty() {
+                return Vec::new();
+            }
+            // The layer's own wires, resolved once for all its graph ops: a
+            // driver into a graph's row is substituted where a keyframe would
+            // have been read, exactly as it is on any other effect. A group
+            // header carries no graph, so nothing substitutes there.
+            let drivers = owner.map(|l| {
+                drivers_for(
+                    l,
+                    lt,
+                    Arc::new(ExpressionContext {
+                        document: expr_doc.clone(),
+                        comp: Some(comp.id),
+                        layer: Some(l.id),
+                        comp_time: t_comp,
+                        current_depth: 0,
+                        inputs: None,
+                    }),
+                )
+            });
+            instances
+                .into_iter()
+                .map(|e| {
+                    let mut path = visited_path.clone();
+                    let inner = lumit_core::fx::effects::node_graph::comp_of(e)
+                        .filter(|id| !path.contains(id))
+                        .and_then(|id| doc.comp(id))
+                        .and_then(|c| c.graph.as_ref().map(|g| (c, g)));
+                    let Some((inner_comp, inner_graph)) = inner else {
+                        // A dangling, cyclic or layer-comp reference: the
+                        // passthrough, and no plan to walk.
+                        return GraphDraw {
+                            width: comp.width,
+                            height: comp.height,
+                            steps: Vec::new(),
+                            output: None,
+                        };
+                    };
+                    let mut plan = GraphDraw {
+                        width: inner_comp.width,
+                        height: inner_comp.height,
+                        steps: Vec::new(),
+                        output: None,
+                    };
+                    // The first picture Input is the layer's own picture; every
+                    // further one is a layer row of this instance, which the
+                    // schema never sees because those rows are derived (§1.5).
+                    let mut feeds = vec![GraphFeed::Provided];
+                    for picture in inner_graph
+                        .inputs()
+                        .filter(|i| i.kind == lumit_core::comp_graph::InputKind::Picture)
+                        .skip(1)
+                    {
+                        feeds.push(GraphFeed::Picture(Box::new(
+                            feed(e, &picture.id)
+                                .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer),
+                        )));
+                    }
+                    let overrides = lumit_core::fx::effects::node_graph::overrides_of(
+                        e,
+                        inner_graph,
+                        drivers.as_ref(),
+                    );
+                    path.push(inner_comp.id);
+                    plan.output = lower.lower(
+                        inner_comp,
+                        inner_graph,
+                        lumit_core::comp_graph::GraphView {
+                            values: &overrides,
+                            // Applied as an effect: every picture Input is fed
+                            // from the host, so no preview item stands in.
+                            pictures_fed: true,
+                        },
+                        &mut feeds,
+                        &mut path,
+                        &mut plan,
+                    );
+                    plan
+                })
+                .collect()
         };
-        Some(DofInputDraw {
-            rgba: rgba.to_vec(),
-            tex_w,
-            tex_h,
-            format,
-            fx,
-            colour_tables,
-            roto_mattes,
-            planes,
-            nested: None,
-            colour_space: crate::colour::footage_colour_space(doc, &src.kind),
-        })
+
+    // **The slot everything reads**: the referenced layer as above, with the
+    // plans of its own Node graph effects beside its stack. Without them a
+    // layer that applies a graph lost it the moment another effect read the
+    // layer, so a matte or a clone of it was the wrong picture.
+    //
+    // The plans' own further pictures are fetched plainly, one layer deep and
+    // no further, which is the bound a referenced layer's rows already keep.
+    let layer_slot = |e: &lumit_core::model::EffectInstance, param: &str| -> Option<DofInputDraw> {
+        let mut input = layer_slot_plain(e, param)?;
+        // Only where its stack is folded in: those are the ops the plans go to.
+        let src = e
+            .layer_ref(param)
+            .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+            .filter(|_| !input.fx.is_empty());
+        if let Some(src) = src {
+            let slt = lumit_core::time::layer_time(t_comp, src.start_offset.0);
+            // The frame's own time on the layer's clock, so a comp the graph
+            // reads finds its clips at this walk's moment as well.
+            let frame_slt = lumit_core::time::layer_time(frame_t, src.start_offset.0);
+            input.graph_fx =
+                graph_fx_with(Some(src), &src.effects, slt, frame_slt, &layer_slot_plain);
+        }
+        Some(input)
     };
+    let graph_fx_for =
+        |owner: Option<&lumit_core::model::Layer>,
+         effects: &[lumit_core::model::EffectInstance],
+         lt: f64,
+         frame_lt: f64|
+         -> Vec<GraphDraw> { graph_fx_with(owner, effects, lt, frame_lt, &layer_slot) };
+
+    // **Clone to points' pictures.** Its slot is not a picture a row but the
+    // list the effect lays out itself: each layer at each moment a stamp may
+    // show, or one render a clone. `CloneToPoints::planned` says what they
+    // are, and the draw reads the same layout back off the list.
+    //
+    // `known` is the stream's point count when the realiser is asking again
+    // for a stream that was made during the render. On the first ask such a
+    // list is left for then (`LayerInputDraw::Late`) where the copies are
+    // numbered: how many renders there are, and what each Clone index reads
+    // as its Count, both follow from a count nobody has yet.
+    //
+    // ponytail: every picture is a whole render of the clone layer, up to 32
+    // of them a frame, and one at another moment or with a clone number walks
+    // this comp again for that layer alone. Nothing is kept between frames,
+    // and a nested comp at another moment is never served from the nested
+    // store. Keep the pictures by layer, time and clone number if a profile
+    // shows a cascade costing.
+    let clone_pictures = |owner: uuid::Uuid,
+                          e: &lumit_core::model::EffectInstance,
+                          known: Option<usize>|
+     -> LayerInputDraw {
+        use lumit_core::fx::effects::clone_to_points::CloneToPoints as C;
+        let host = comp.layers.iter().find(|l| l.id == owner);
+        let lt = host.map_or(t_comp, |l| {
+            lumit_core::time::layer_time(t_comp, l.start_offset.0)
+        });
+        // The whole comp, which is what the effect's own resolve reads. A walk
+        // of the layers below an adjustment is handed only some of it.
+        let whole = doc.comp(comp.id).unwrap_or(comp);
+        // How many points there are to number. Only asked when the copies are
+        // numbered, since it is a second evaluation of the producer.
+        let numbered = C::stored(e, lt).per_clone_in(e, doc, whole);
+        let points = match (numbered, known) {
+            (false, _) => None,
+            (true, Some(n)) => Some(n),
+            (true, None) => {
+                let wired = host
+                    .zip(lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name))
+                    .map(|(layer, def)| {
+                        let context = Arc::new(ExpressionContext {
+                            document: expr_doc.clone(),
+                            comp: Some(comp.id),
+                            layer: Some(layer.id),
+                            comp_time: t_comp,
+                            current_depth: 0,
+                            inputs: None,
+                        });
+                        points_input_for(
+                            layer,
+                            e,
+                            def,
+                            lt,
+                            1.0 / comp.frame_rate.fps().max(1.0),
+                            lumit_core::fx::points::Projection::FLAT,
+                            &context,
+                            &audio,
+                            clone_number,
+                        )
+                    })
+                    .unwrap_or_default();
+                match wired.streams.first().map_or(0, |s| s.len()) {
+                    // The wire names an effect above whose points are made on
+                    // the card: the list waits for them.
+                    0 if wired.from.first().copied().flatten().is_some() => {
+                        return LayerInputDraw::Late(Box::new(crate::draw::LateClones {
+                            comp: comp.id,
+                            owner,
+                            effect: e.id,
+                            t: t_comp,
+                            frame_t,
+                            visited: visited_path.clone(),
+                            clone: clone_number,
+                        }));
+                    }
+                    // Nothing wired, or no points: nothing is stamped, so
+                    // nothing is rendered.
+                    0 => return LayerInputDraw::Several(Vec::new()),
+                    n => Some(n),
+                }
+            }
+        };
+        LayerInputDraw::Several(
+            C::planned(e, doc, whole, t_comp, lt, points)
+                .into_iter()
+                .map(|planned| {
+                    let Some(p) = planned else {
+                        return LayerInputDraw::Absent;
+                    };
+                    // "This layer" is the effect's own input, which has no other
+                    // moment to show.
+                    if p.layer == owner {
+                        return LayerInputDraw::ThisLayer;
+                    }
+                    if p.clone.is_none() && p.time.to_bits() == t_comp.to_bits() {
+                        return layer_slot(e, p.row)
+                            .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer);
+                    }
+                    let mut probe = Probe::Picture {
+                        effect: e,
+                        row: p.row,
+                        found: None,
+                    };
+                    // No keyer: a nested comp built for another moment holds its
+                    // footage a whole frame at a time, which is not always the
+                    // picture its name would claim. A copy with no number of
+                    // its own keeps the one this walk is already rendered as.
+                    comp_walk(
+                        doc,
+                        comp,
+                        p.time,
+                        frame_t,
+                        frame_pixels,
+                        &mut visited_path.clone(),
+                        None,
+                        true,
+                        Walk {
+                            clone: p.clone.unwrap_or(clone_number),
+                            values: &[],
+                            rebuild: with.rebuild,
+                        },
+                        Some(&mut probe),
+                    );
+                    match probe {
+                        Probe::Picture { found: Some(d), .. } => LayerInputDraw::Layer(d),
+                        _ => LayerInputDraw::Absent,
+                    }
+                })
+                .collect(),
+        )
+    };
+
+    // A probe wants one thing made at this walk's time and nothing else.
+    match probe {
+        Some(Probe::Picture { effect, row, found }) => {
+            *found = layer_slot(effect, row);
+            return Vec::new();
+        }
+        Some(Probe::Clones {
+            owner,
+            effect,
+            points,
+            found,
+        }) => {
+            let instance = comp
+                .layers
+                .iter()
+                .find(|l| l.id == *owner)
+                .and_then(|l| l.effects.iter().find(|e| e.id == *effect));
+            if let Some(LayerInputDraw::Several(list)) =
+                instance.map(|e| clone_pictures(*owner, e, Some(*points)))
+            {
+                *found = list;
+            }
+            return Vec::new();
+        }
+        None => {}
+    }
 
     // **The auxiliary-layer inputs** (docs/impl/layer-input.md §2): one
     // slot per enabled built-in whose declaration names a Layer row that is not
@@ -1535,16 +2351,29 @@ pub fn build_comp_draws_at(
                 .filter_map(|e| {
                     let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
                     let param = def.schema().layer_input()?;
-                    def.is_image_op().then_some((e, param))
+                    def.is_image_op().then_some((e, def.schema(), param))
                 })
-                .map(|(e, param)| {
-                    // "This layer": a reference to the layer the effect
-                    // is ON is not a second render — it is the effect's own
-                    // input, which `run_ops` already holds.
-                    if e.layer_ref(param) == Some(owner) {
-                        return LayerInputDraw::ThisLayer;
+                .map(|(e, schema, param)| {
+                    let slot = |param: &str| {
+                        // "This layer": a reference to the layer the effect
+                        // is ON is not a second render — it is the effect's own
+                        // input, which `run_ops` already holds.
+                        if e.layer_ref(param) == Some(owner) {
+                            return LayerInputDraw::ThisLayer;
+                        }
+                        layer_slot(e, param).map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
+                    };
+                    // Clone to points lays its own list out.
+                    if e.effect.match_name == "clone_to_points" {
+                        return clone_pictures(owner, e, None);
                     }
-                    layer_slot(e, param).map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
+                    // An effect with several layer rows hands them over as one
+                    // list in row order, so it is still one slot for one op.
+                    if schema.layer_inputs().nth(1).is_some() {
+                        LayerInputDraw::Several(schema.layer_inputs().map(slot).collect())
+                    } else {
+                        slot(param)
+                    }
                 })
                 .collect()
         };
@@ -1622,13 +2451,13 @@ pub fn build_comp_draws_at(
     // on, and an effect walking another layer's shape is a question nobody has
     // asked. That is why nothing is rendered here — unlike a matte, this input
     // is not a picture, and the whole point of the seam is that a coverage
-    // buffer cannot say which way is *along* a curve. Takes the two lists
-    // rather than a `Layer` so a group header's stack — which has no masks at
-    // all — walks the same carriage (docs/impl/group-effects.md §2): every
+    // buffer cannot say which way is *along* a curve. The layer is optional
+    // so a group header's stack, which has no layer and so no masks, walks
+    // the same carriage (docs/impl/group-effects.md §2): every
     // declared row still gets its slot, each an empty polyline, which is the
     // effect's documented no-op.
     let mask_paths_for = |effects: &[lumit_core::model::EffectInstance],
-                          masks: &[lumit_core::mask::Mask],
+                          layer: Option<&lumit_core::model::Layer>,
                           slt: f64|
      -> Vec<lumit_core::mask::MaskPolyline> {
         use lumit_core::model::EffectNamespace;
@@ -1646,14 +2475,9 @@ pub fn build_comp_draws_at(
                     .collect::<Vec<_>>()
             })
             .map(|(e, param, self_default)| {
-                // A row the panel does not show, or shows greyed, is a row
-                // nobody meant — the same rule the matte carriage applies.
-                if !lumit_core::fx::param_visible(e, param)
-                    || !lumit_core::fx::param_enabled(e, param)
-                {
-                    return lumit_core::mask::MaskPolyline::default();
-                }
-                lumit_core::mask::mask_path_at(masks, e.mask_ref(param), self_default, slt)
+                // The one rule the driver walk also asks, so a wire reads
+                // the path the picture draws.
+                lumit_core::mask::effect_path_at(e, param, self_default, layer, slt)
             })
             .collect()
     };
@@ -1682,10 +2506,13 @@ pub fn build_comp_draws_at(
     // stream, no wires to bring one in, and no layer id for an expression to
     // name: its schedules still fill one slot per declared row, so the 1:1
     // walk in `run_ops` holds.
+    // `room` is the empty margin a points effect is given round a Shape or
+    // Text layer's art, in texels each side, and the raster's px per comp px.
     let points_schedules_for = |owner: Option<&lumit_core::model::Layer>,
                                 effects: &[lumit_core::model::EffectInstance],
                                 slt: f64,
-                                frame_slt: f64|
+                                frame_slt: f64,
+                                room: Option<([u32; 2], f32)>|
      -> Vec<lumit_core::fx::points::PointsSchedule> {
         use lumit_core::model::EffectNamespace;
         let dt = 1.0 / comp.frame_rate.fps().max(1.0);
@@ -1709,16 +2536,65 @@ pub fn build_comp_draws_at(
                 }),
             )
         });
-        effects
+        let carried: Vec<_> = effects
             .iter()
-            .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
-            .filter_map(|e| {
+            .enumerate()
+            .filter(|(_, e)| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+            .filter_map(|(i, e)| {
                 let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
                 let wants =
                     lumit_core::fx::points::wants_carriage(def.signature()) && def.is_image_op();
-                wants.then_some((e, def))
+                wants.then_some((i, e, def))
             })
-            .map(|(e, def)| {
+            .collect();
+        // The room is for the points effects the stack ends on, and the first
+        // of them is where it starts. Anything drawn after a points effect
+        // was placed on the art's own picture, so the points before it keep
+        // that picture and draw as they always did. Scatter and Emit from
+        // image count with the rest: they throw their candidates across the
+        // picture they are handed, and a wider one would move every point.
+        let draws = |e: &lumit_core::model::EffectInstance| {
+            e.enabled
+                && (e.effect.namespace != EffectNamespace::Builtin
+                    || lumit_core::fx::BUILTIN_DEFS
+                        .get(&e.effect.match_name)
+                        .is_none_or(|def| def.is_image_op()))
+        };
+        let asks = |i: usize, e: &lumit_core::model::EffectInstance| {
+            carried.iter().any(|(c, ..)| *c == i)
+                && !matches!(e.effect.match_name.as_str(), "scatter" | "emit_from_image")
+        };
+        let last_other = effects
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(i, e)| draws(e) && !asks(*i, e))
+            .map(|(i, _)| i);
+        let room_from = room.and_then(|_| {
+            carried
+                .iter()
+                .position(|(i, ..)| last_other.is_none_or(|other| *i > other))
+        });
+        // Which slot of this list an effect holds, by its place in the stack.
+        // A wire whose stream could not be made here names its producer's
+        // slot, so the walk can ask that op for it on the card.
+        let late = |wired: &PointsInput| -> Vec<(u32, u32)> {
+            wired
+                .from
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| wired.streams.get(*k).is_none_or(|s| s.is_empty()))
+                .filter_map(|(k, from)| {
+                    let from = (*from)? as usize;
+                    let slot = carried.iter().position(|(i, ..)| *i == from)?;
+                    Some((u32::try_from(k).ok()?, u32::try_from(slot).ok()?))
+                })
+                .collect()
+        };
+        carried
+            .iter()
+            .enumerate()
+            .map(|(k, &(_, e, def))| {
                 // A pinned effect is evaluated at the true playhead, so
                 // its schedule is scanned there too: the picture and the
                 // particles it draws must be of one moment.
@@ -1737,7 +2613,7 @@ pub fn build_comp_draws_at(
                 // (points-stream.md §3.3). In px@comp — the units a stream is
                 // data in — and rescaled into the raster by whichever
                 // consumer draws it.
-                let (input, input_from) = match owner {
+                let mut wired = match owner {
                     Some(layer) => points_input_for(
                         layer,
                         e,
@@ -1747,11 +2623,50 @@ pub fn build_comp_draws_at(
                         projection.unwrap_or(lumit_core::fx::points::Projection::FLAT),
                         &context,
                         &audio,
+                        clone_number,
                     ),
                     // A group carries no graph, so no wire can bring a stream
                     // in: the consumer's documented empty input.
-                    None => (Vec::new(), None),
+                    None => PointsInput::default(),
                 };
+                // The room this op's picture has round the art. The points
+                // are drawn that far in, which is one more move on the end
+                // of the camera's. A stream keeps its own positions, so a
+                // driver and another layer read what they always did.
+                let grow = room
+                    .filter(|_| room_from.is_some_and(|from| k >= from))
+                    .map_or([0, 0], |(texels, _)| texels);
+                let scale = room.map_or(1.0, |(_, scale)| scale.max(1e-6));
+                let inset = [grow[0] as f32 / scale, grow[1] as f32 / scale];
+                let moved = |p: lumit_core::fx::points::Projection| {
+                    let [mut x, mut y, w] = p.m;
+                    for ((x, y), w) in x.iter_mut().zip(y.iter_mut()).zip(w) {
+                        *x += inset[0] * w;
+                        *y += inset[1] * w;
+                    }
+                    lumit_core::fx::points::Projection { m: [x, y, w] }
+                };
+                let projection = if grow == [0, 0] {
+                    projection
+                } else {
+                    for stream in &mut wired.streams {
+                        stream.projection = moved(stream.projection);
+                    }
+                    Some(moved(projection.unwrap_or_default()))
+                };
+                // The Text layer that Text to points and Label points read.
+                let (text, label) = owner.map_or_else(Default::default, |layer| {
+                    text_carriage(comp, layer, e, t_comp, expr_doc)
+                });
+                let late = late(&wired);
+                let input_from = wired.from.first().copied().flatten();
+                let ports_from: Vec<u32> = wired
+                    .from
+                    .iter()
+                    .skip(1)
+                    .map(|f| f.unwrap_or(u32::MAX))
+                    .collect();
+                let input = wired.streams;
                 // **A generator has no births to schedule**: its points
                 // are arithmetic over its own parameters, and what it wants
                 // from this carriage is the camera and the clock. A *consumer*
@@ -1763,8 +2678,13 @@ pub fn build_comp_draws_at(
                         schedule: lumit_core::fx::points::Schedule::default(),
                         t,
                         projection,
+                        late,
+                        ports_from,
                         input,
                         input_from,
+                        text,
+                        label,
+                        grow,
                     };
                 }
                 let upto = (t / dt).floor() as i64;
@@ -1790,131 +2710,14 @@ pub fn build_comp_draws_at(
                     schedule,
                     t,
                     projection,
+                    late,
+                    ports_from,
                     input,
                     input_from,
+                    text,
+                    label,
+                    grow,
                 }
-            })
-            .collect()
-    };
-
-    // **The Node graph effects' plans** (§2.4): one per enabled `node_graph`
-    // op in stack order, on the same two conditions `mattes_for` applies, so
-    // the list stays 1:1 with the ops `run_ops` walks and the k-th closure
-    // lands on the k-th such op.
-    //
-    // The first picture Input is the layer's own picture, which only `run_ops`
-    // holds; every further one is a row of this instance, rendered alone on
-    // the carriage a depth pass travels. A comp that is missing, is not a node
-    // graph, or is already on the visited path lowers to a plan with no
-    // Output, which the walk renders as the picture unchanged.
-    let graph_fx_for = |owner: Option<&lumit_core::model::Layer>,
-                        effects: &[lumit_core::model::EffectInstance],
-                        lt: f64,
-                        frame_lt: f64|
-     -> Vec<GraphDraw> {
-        use lumit_core::model::EffectNamespace;
-        // **The host layer's clock, not the comp's.** The decode plan and the
-        // frame key both read the named comp at the layer time, so a layer
-        // with a start offset would otherwise take its picture from one clock
-        // and its frame's name from another.
-        let lower = GraphLower {
-            t: lt,
-            frame_t: frame_lt,
-            ..lower
-        };
-        let instances: Vec<&lumit_core::model::EffectInstance> = effects
-            .iter()
-            .filter(|e| {
-                e.enabled
-                    && e.effect.namespace == EffectNamespace::Builtin
-                    && e.effect.match_name == lumit_core::comp_graph::NODE_GRAPH
-            })
-            .filter(|e| {
-                lumit_core::fx::BUILTIN_DEFS
-                    .get(&e.effect.match_name)
-                    .is_some_and(|def| def.is_image_op())
-            })
-            .collect();
-        // The overwhelming case, and it costs a filter over the stack.
-        if instances.is_empty() {
-            return Vec::new();
-        }
-        // The layer's own wires, resolved once for all its graph ops: a
-        // driver into a graph's row is substituted where a keyframe would
-        // have been read, exactly as it is on any other effect. A group
-        // header carries no graph, so nothing substitutes there.
-        let drivers = owner.map(|l| {
-            drivers_for(
-                l,
-                lt,
-                Arc::new(ExpressionContext {
-                    document: expr_doc.clone(),
-                    comp: Some(comp.id),
-                    layer: Some(l.id),
-                    comp_time: t_comp,
-                    current_depth: 0,
-                    inputs: None,
-                }),
-            )
-        });
-        instances
-            .into_iter()
-            .map(|e| {
-                let mut path = visited_path.clone();
-                let inner = lumit_core::fx::effects::node_graph::comp_of(e)
-                    .filter(|id| !path.contains(id))
-                    .and_then(|id| doc.comp(id))
-                    .and_then(|c| c.graph.as_ref().map(|g| (c, g)));
-                let Some((inner_comp, inner_graph)) = inner else {
-                    // A dangling, cyclic or layer-comp reference: the
-                    // passthrough, and no plan to walk.
-                    return GraphDraw {
-                        width: comp.width,
-                        height: comp.height,
-                        steps: Vec::new(),
-                        output: None,
-                    };
-                };
-                let mut plan = GraphDraw {
-                    width: inner_comp.width,
-                    height: inner_comp.height,
-                    steps: Vec::new(),
-                    output: None,
-                };
-                // The first picture Input is the layer's own picture; every
-                // further one is a layer row of this instance, which the
-                // schema never sees because those rows are derived (§1.5).
-                let mut feeds = vec![GraphFeed::Provided];
-                for picture in inner_graph
-                    .inputs()
-                    .filter(|i| i.kind == lumit_core::comp_graph::InputKind::Picture)
-                    .skip(1)
-                {
-                    feeds.push(GraphFeed::Picture(
-                        layer_slot(e, &picture.id)
-                            .map_or(LayerInputDraw::Absent, LayerInputDraw::Layer),
-                    ));
-                }
-                let overrides = lumit_core::fx::effects::node_graph::overrides_of(
-                    e,
-                    inner_graph,
-                    drivers.as_ref(),
-                );
-                path.push(inner_comp.id);
-                plan.output = lower.lower(
-                    inner_comp,
-                    inner_graph,
-                    lumit_core::comp_graph::GraphView {
-                        values: &overrides,
-                        // Applied as an effect: every picture Input is fed
-                        // from the host, so no preview item stands in.
-                        pictures_fed: true,
-                    },
-                    &mut feeds,
-                    &mut path,
-                    &mut plan,
-                );
-                plan
             })
             .collect()
     };
@@ -1926,11 +2729,15 @@ pub fn build_comp_draws_at(
     if let Some(graph) = &comp.graph {
         // Viewed on its own: a picture Input reads its preview item or
         // transparent, and a value Input its own default (§1.5, §5.11).
+        // A placed graph is handed its host's own Input values instead (§5.3).
         return vec![graph_comp_draw(
             &lower,
             comp,
             graph,
-            lumit_core::comp_graph::GraphView::DEFAULTS,
+            lumit_core::comp_graph::GraphView {
+                values: with.values,
+                pictures_fed: false,
+            },
             &visited_path,
         )];
     }
@@ -2056,12 +2863,12 @@ pub fn build_comp_draws_at(
                 colour_tables: colour_tables(&group.effects, t_comp),
                 dof_inputs: dof_inputs_for(group.id, &group.effects),
                 mattes: mattes_for(group.id, &group.effects, &group_graph),
-                mask_paths: mask_paths_for(&group.effects, &[], t_comp),
+                mask_paths: mask_paths_for(&group.effects, None, t_comp),
                 // No source frames of a group's own, so nothing was ever
                 // propagated: a Roto brush on a header passes through.
                 roto_mattes: roto_mattes_for(&group.effects, 0),
                 planes: planes_for(&group.effects, 0),
-                points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t),
+                points_schedules: points_schedules_for(None, &group.effects, t_comp, frame_t, None),
                 flare_lens_files: flare_lens_files(&group.effects, t_comp),
                 // A Node graph effect on a group header applies to the
                 // wrapped unit, exactly as any other of its effects does.
@@ -2276,8 +3083,16 @@ pub fn build_comp_draws_at(
                 three_d: src.switches.three_d,
                 luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
                 inverted: mr.inverted,
-                fx,
                 colour_tables,
+                // The graphs the matte source's own Node graph effects apply,
+                // as a layer read through an effect's row carries them. Their
+                // further pictures are fetched plainly, which is the same bound.
+                graph_fx: if fx.is_empty() {
+                    Vec::new()
+                } else {
+                    graph_fx_with(Some(src), &src.effects, mlt, mlt, &layer_slot_plain)
+                },
+                fx,
                 roto_mattes: matte_roto,
                 planes: matte_planes,
                 nested,
@@ -2285,7 +3100,170 @@ pub fn build_comp_draws_at(
             })
         });
 
+        // What a Sequence layer shows where a composition is one of the clips
+        // showing. `None` at every other moment, where the decoded pixels
+        // are the layer's source as they always were.
+        let comp_clips = match &layer.kind {
+            LayerKind::Sequence { clips } if !layer.is_adjustment() => {
+                use lumit_core::sequence::{Clip, ClipSource, Shown};
+                let plays = |c: &Clip| matches!(c.source, ClipSource::Comp(_));
+                let shown = lumit_core::sequence::shown_at(clips, lt);
+                match shown {
+                    Shown::One { clip, .. } if plays(clip) => Some(shown),
+                    Shown::Two {
+                        outgoing, incoming, ..
+                    } if plays(outgoing) || plays(incoming) => Some(shown),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+
+        // How much of the layer's opacity a composition clip inside a fade is
+        // showing. One everywhere else.
+        let mut clip_share = 1.0f32;
         let (source, natural) = match &layer.kind {
+            // **A Sequence clip that plays a composition** draws that comp
+            // as a Precomp layer draws its own: walked at the moment the clip
+            // shows, named by its own frame key, sized as the comp is, and
+            // behind the same guard against a comp inside itself.
+            //
+            // A dissolve with such a clip is mixed on the card, since a comp
+            // has no pixels until it is rendered: the two clips become the
+            // draws of one more Nested, each at its share, the second laid
+            // on the first with `Blend::Plus`. That is the crossfade the
+            // decode worker makes of two footage clips
+            // (`lumit_core::pixels::dissolve_rgba`), and two whole pictures
+            // sum to a whole one.
+            //
+            // ponytail: a fade at a lone end is the clip's share of the
+            // layer's opacity (`clip_share`), so it comes after the layer's
+            // effects, where a footage clip fades before them. A nested
+            // picture is read back as straight alpha, so one faded ahead of
+            // the stack would be dimmed twice, as anything part transparent
+            // inside a Precomp is. The upgrade is a nested picture read as
+            // the premultiplied one it is.
+            //
+            // ponytail: the frame's own picture only. Such a clip read as a
+            // matte or as an effect's layer input, and a temporal effect's
+            // neighbours on this layer, do not see the comp. The upgrade is
+            // the roads a Precomp layer has for each.
+            LayerKind::Sequence { .. } if comp_clips.is_some() => {
+                use lumit_core::sequence::{Clip, ClipSource, Shown};
+                // One clip's picture and its natural size: its comp, or the
+                // footage the worker decoded for this layer.
+                let mut picture = |clip: &Clip| -> Option<(DrawSource, (f32, f32))> {
+                    let nested_id = match clip.source {
+                        ClipSource::Footage(_) => {
+                            let lp = pixels_by_layer.get(&layer.id)?;
+                            return Some((
+                                DrawSource::Pixels {
+                                    rgba: Arc::clone(&lp.rgba),
+                                    tex_w: lp.width,
+                                    tex_h: lp.height,
+                                    format: lp.format,
+                                    colour_space: None,
+                                },
+                                (lp.natural_w as f32, lp.natural_h as f32),
+                            ));
+                        }
+                        ClipSource::Comp(id) => id,
+                    };
+                    let nested = doc
+                        .comp(nested_id)
+                        .filter(|_| !visited.contains(&nested_id))?;
+                    let st = clip.nested_time(nested, lt);
+                    visited.push(nested_id);
+                    let nested_draws = comp_walk(
+                        doc,
+                        nested,
+                        st,
+                        clip.nested_time(nested, frame_lt),
+                        pixels_by_layer,
+                        visited,
+                        keys,
+                        false,
+                        inner,
+                        None,
+                    );
+                    visited.pop();
+                    Some((
+                        DrawSource::Nested {
+                            width: nested.width,
+                            height: nested.height,
+                            background: [0.0, 0.0, 0.0, 0.0],
+                            draws: nested_draws,
+                            camera: crate::track::camera_pose(doc, nested, st),
+                            key: keys.and_then(|k| k.nested_key_with(nested, st, None)),
+                            paint: Vec::new(),
+                            paint_time: lt,
+                        },
+                        (nested.width as f32, nested.height as f32),
+                    ))
+                };
+                // The clips showing, each with its share of the picture.
+                let (under, top) = match comp_clips {
+                    Some(Shown::One { clip, gain }) => (None, picture(clip).map(|p| (p, gain))),
+                    Some(Shown::Two {
+                        outgoing,
+                        incoming,
+                        gain,
+                    }) => (
+                        picture(outgoing).map(|p| (p, 1.0 - gain)),
+                        picture(incoming).map(|p| (p, gain)),
+                    ),
+                    _ => continue,
+                };
+                let (mut source, natural) = match (under, top) {
+                    (None, None) => continue,
+                    // One picture: it is the layer's source as it stands,
+                    // and a fade is taken where the layer is composited.
+                    (Some(((source, size), share)), None)
+                    | (None, Some(((source, size), share))) => {
+                        clip_share = share as f32;
+                        (source, size)
+                    }
+                    // A dissolve: both, each at its share and fitted about
+                    // the centre of the incoming clip's size, which is the
+                    // layer's across the overlap as it is where two footage
+                    // clips are mixed.
+                    (Some((going, away)), Some((coming, here))) => {
+                        let natural = coming.1;
+                        let part = |(source, size): (DrawSource, (f32, f32)), share: f64, blend| {
+                            let mut draw = read_draw(layer, source, size);
+                            draw.position = (natural.0 * 0.5, natural.1 * 0.5);
+                            let fit =
+                                (natural.0 / size.0.max(1.0)).min(natural.1 / size.1.max(1.0));
+                            draw.scale = (fit * 100.0, fit * 100.0);
+                            draw.opacity = (share * 100.0) as f32;
+                            draw.blend = blend;
+                            draw
+                        };
+                        let mixed = DrawSource::Nested {
+                            width: natural.0 as u32,
+                            height: natural.1 as u32,
+                            background: [0.0, 0.0, 0.0, 0.0],
+                            draws: vec![
+                                part(going, away, lumit_gpu::Blend::Normal),
+                                part(coming, here, lumit_gpu::Blend::Plus),
+                            ],
+                            camera: None,
+                            // A mix has no name of its own. Each comp
+                            // inside it keeps the one it was given above.
+                            key: None,
+                            paint: Vec::new(),
+                            paint_time: lt,
+                        };
+                        (mixed, natural)
+                    }
+                };
+                // Paint on the layer is stamped into the picture once it is
+                // rendered, as a Precomp layer's is.
+                if let DrawSource::Nested { paint, .. } = &mut source {
+                    paint.clone_from(&layer.paint);
+                }
+                (source, natural)
+            }
             // Guarded so a Precomp acting as an adjustment falls
             // through to the adjustment arm below rather than drawing its comp.
             LayerKind::Precomp { comp: nested_id } if !layer.is_adjustment() => {
@@ -2311,7 +3289,7 @@ pub fn build_comp_draws_at(
                     lumit_core::model::CollapseState::Active
                 ) {
                     visited.push(*nested_id);
-                    let mut inner = build_comp_draws_at(
+                    let mut spliced_in = comp_walk(
                         doc,
                         nested,
                         st,
@@ -2320,6 +3298,8 @@ pub fn build_comp_draws_at(
                         visited,
                         keys,
                         true,
+                        inner,
+                        None,
                     );
                     visited.pop();
 
@@ -2350,7 +3330,7 @@ pub fn build_comp_draws_at(
                         Some(pw) => lumit_gpu::concat_place(pw, own),
                         None => own,
                     };
-                    for d in &mut inner {
+                    for d in &mut spliced_in {
                         d.pre = Some(match d.pre {
                             // A collapsed chain: this parent wraps the child's
                             // own parent placement.
@@ -2380,85 +3360,96 @@ pub fn build_comp_draws_at(
                         // measure motion against a mis-sized picture.
                         d.flow_below = Vec::new();
                     }
-                    draws.extend(inner);
+                    draws.extend(spliced_in);
                     continue;
                 }
                 visited.push(*nested_id);
-                let nested_draws = match nested
+                // A placed node graph with its own Input values (§5.3) is
+                // lowered under them rather than under its defaults, by the
+                // nested comp's own walk.
+                let values = nested
                     .graph
                     .as_ref()
                     .filter(|_| layer.graph_inputs.is_some())
-                {
-                    // A placed node graph with its own Input values (§5.3):
-                    // lowered under them rather than under its defaults.
-                    Some(graph) => {
-                        let values = graph_values(layer, graph, st);
-                        vec![graph_comp_draw(
-                            &GraphLower {
-                                t: st,
-                                frame_t: frame_st,
-                                ..lower
-                            },
-                            nested,
-                            graph,
-                            lumit_core::comp_graph::GraphView {
-                                values: &values,
-                                pictures_fed: false,
-                            },
-                            visited,
-                        )]
-                    }
-                    None => build_comp_draws_at(
-                        doc,
-                        nested,
-                        st,
-                        frame_st,
-                        pixels_by_layer,
-                        visited,
-                        keys,
-                        false,
-                    ),
-                };
+                    .map_or_else(Vec::new, |graph| graph_values(layer, graph, st));
+                let nested_draws = comp_walk(
+                    doc,
+                    nested,
+                    st,
+                    frame_st,
+                    pixels_by_layer,
+                    visited,
+                    keys,
+                    false,
+                    Walk {
+                        values: &values,
+                        ..inner
+                    },
+                    None,
+                );
                 // The nested picture again at each neighbour time (docs/08
-                // §3.2), for a Motion blur or Datamosh on the
-                // Precomp layer itself: a comp has no decoded frames for the
-                // worker to measure between, but it can be built again at
+                // §3.2), for a temporal effect on the Precomp layer itself:
+                // a comp has no decoded frames for the worker to hand over or
+                // measure between, but it can be built again at
                 // another moment. The offset steps by the *parent* comp's
                 // frame, because that is the shutter the effect smears over.
                 // No frame keyer and the temporal inputs stripped, exactly as
-                // `below_draws_at` does and for the same reason: with the
-                // decode held, this is not the picture that name would claim.
+                // `below_draws_at` does and for the same reason: a neighbour
+                // carries no neighbours of its own, so this is not the
+                // picture that name would claim. Footage inside is drawn at
+                // the neighbour's own moment (`pixels_at_moment`).
                 // Empty unless one of those effects is live.
                 let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-                flow_below =
-                    lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx)
-                        .into_iter()
-                        .map(|offset| {
-                            // The neighbour's own layer time, then the Retime
-                            // map (§5.6): a retimed Precomp measures its
-                            // motion between the moments it actually shows.
-                            let nt = lumit_core::model::nested_source_time(
-                                layer,
-                                nested,
-                                lumit_core::time::layer_time(
-                                    t_comp + f64::from(offset) * dt,
-                                    layer.start_offset.0,
-                                ),
-                            );
-                            let mut inner = build_comp_draws_at(
-                                doc,
-                                nested,
-                                nt,
-                                frame_st,
-                                pixels_by_layer,
-                                visited,
-                                None,
-                                false,
-                            );
-                            strip_temporal_inputs(&mut inner);
-                            (offset, inner, crate::track::camera_pose(doc, nested, nt))
-                        })
-                        .collect();
+                flow_below = crate::plan::rebuild_offsets(layer, lt, dt)
+                    .into_iter()
+                    // None inside a walk that is itself a neighbour.
+                    .filter(|_| !with.rebuild)
+                    .map(|(offset, measure)| {
+                        // The neighbour's own layer time, then the Retime
+                        // map (§5.6): a retimed Precomp measures its
+                        // motion between the moments it actually shows.
+                        let nt = lumit_core::model::nested_source_time(
+                            layer,
+                            nested,
+                            lumit_core::time::layer_time(
+                                t_comp + f64::from(offset) * dt,
+                                layer.start_offset.0,
+                            ),
+                        );
+                        // Under the same Input values the frame itself is
+                        // built under, read at the neighbour's moment. On
+                        // the graph's defaults the neighbour was another
+                        // picture, and the difference read as motion.
+                        let values = nested
+                            .graph
+                            .as_ref()
+                            .filter(|_| layer.graph_inputs.is_some())
+                            .map_or_else(Vec::new, |graph| graph_values(layer, graph, nt));
+                        let mut neighbour = comp_walk(
+                            doc,
+                            nested,
+                            nt,
+                            frame_st,
+                            pixels_by_layer,
+                            visited,
+                            None,
+                            false,
+                            Walk {
+                                rebuild: true,
+                                values: &values,
+                                ..inner
+                            },
+                            None,
+                        );
+                        strip_temporal_inputs(&mut neighbour);
+                        (
+                            offset,
+                            neighbour,
+                            crate::track::camera_pose(doc, nested, nt),
+                            measure,
+                        )
+                    })
+                    .collect();
                 visited.pop();
                 (
                     DrawSource::Nested {
@@ -2540,6 +3531,7 @@ pub fn build_comp_draws_at(
                     frame_t,
                     pixels_by_layer,
                     visited,
+                    clone_number,
                 );
                 // Accumulation motion blur everything-below (docs/08 §3.26): N
                 // sub-frame below-stacks realise averages, standing in for the
@@ -2554,6 +3546,7 @@ pub fn build_comp_draws_at(
                     frame_t,
                     pixels_by_layer,
                     visited,
+                    clone_number,
                 )
                 .map(|mut ab| {
                     // Its Matte, rendered by the same helper every
@@ -2640,7 +3633,7 @@ pub fn build_comp_draws_at(
                     // layer-input-consuming ops (docs/08 §3.22, §3.28).
                     dof_inputs: dof_inputs_for(layer.id, &layer.effects),
                     mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
-                    mask_paths: mask_paths_for(&layer.effects, &layer.masks, lt),
+                    mask_paths: mask_paths_for(&layer.effects, Some(layer), lt),
                     // An adjustment layer has no source frames of its own, so
                     // nothing was ever propagated through it: a Roto brush
                     // there passes through, honestly.
@@ -2651,6 +3644,7 @@ pub fn build_comp_draws_at(
                         &layer.effects,
                         lt,
                         frame_lt,
+                        None,
                     ),
                     flare_lens_files: flare_lens_files(&layer.effects, lt),
                     // A Node graph effect on an adjustment layer runs on the
@@ -2671,21 +3665,27 @@ pub fn build_comp_draws_at(
                     lights: Vec::new(),
                     temporal_below,
                     accumulation_below,
-                    // The composite this layer's Motion blur or Datamosh
-                    // measures its motion against (docs/08 §3.2): the
+                    // The composite this layer's temporal effects read as
+                    // their neighbours, and Motion blur or Datamosh measure
+                    // their motion against (docs/08 §3.2): the
                     // below-stack again at each neighbour time. Empty unless
                     // one of those effects is live, which is the whole cost
                     // gate — nothing else on an adjustment layer builds it.
-                    flow_below: adjustment_flow_below(
-                        doc,
-                        comp,
-                        layer,
-                        idx,
-                        t_comp,
-                        frame_t,
-                        pixels_by_layer,
-                        visited,
-                    ),
+                    flow_below: if with.rebuild {
+                        Vec::new()
+                    } else {
+                        adjustment_flow_below(
+                            doc,
+                            comp,
+                            layer,
+                            idx,
+                            t_comp,
+                            frame_t,
+                            fetched,
+                            visited,
+                            clone_number,
+                        )
+                    },
                 });
                 continue;
             }
@@ -2765,9 +3765,11 @@ pub fn build_comp_draws_at(
             DrawSource::Adjust | DrawSource::Graph(_) => None,
         };
         // Decoded neighbour frames for a temporal effect (echo), carried from
-        // the layer's decode job; empty for a plain stack.
+        // the layer's decode job; empty for a plain stack, and where a
+        // composition clip's picture is the source and not the decode.
         let neighbours: Vec<(i32, Vec<u8>, u32, u32)> = pixels_by_layer
             .get(&layer.id)
+            .filter(|_| comp_clips.is_none())
             .map(|lp| {
                 lp.temporal
                     .iter()
@@ -2780,6 +3782,7 @@ pub fn build_comp_draws_at(
         // `(u, v, conf)` are at the layer's decoded size).
         let flow_fields = pixels_by_layer
             .get(&layer.id)
+            .filter(|_| comp_clips.is_none())
             .map(|lp| {
                 lp.flow_fields
                     .iter()
@@ -2796,6 +3799,29 @@ pub fn build_comp_draws_at(
                     .collect()
             })
             .unwrap_or_default();
+        // A Shape or Text layer's picture is only as big as its art, so the
+        // points effects its stack ends on are given room round it to draw
+        // in. A layer style is drawn after the stack, on the art's own
+        // picture, so a layer with one keeps that picture.
+        let room = match (&layer.kind, &source) {
+            (
+                LayerKind::Shape { .. } | LayerKind::Text { .. },
+                DrawSource::Pixels { tex_w, tex_h, .. },
+            ) if !layer.styles.iter().any(|s| s.enabled) => points_room(
+                (comp.width as f32, comp.height as f32),
+                natural,
+                (*tex_w, *tex_h),
+                (
+                    (tr.position_x.value_at_with_context(lt, context.clone())
+                        - tr.anchor_x.value_at_with_context(lt, context.clone()))
+                        as f32,
+                    (tr.position_y.value_at_with_context(lt, context.clone())
+                        - tr.anchor_y.value_at_with_context(lt, context.clone()))
+                        as f32,
+                ),
+            ),
+            _ => None,
+        };
 
         draws.push(CompLayerDraw {
             layer: layer.id,
@@ -2814,7 +3840,7 @@ pub fn build_comp_draws_at(
                 tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
             ),
             rotation_deg: tr.rotation.value_at_with_context(lt, context.clone()) as f32,
-            opacity: tr.opacity.value_at_with_context(lt, context.clone()) as f32,
+            opacity: tr.opacity.value_at_with_context(lt, context.clone()) as f32 * clip_share,
             z: tr.position_z.value_at_with_context(lt, context.clone()) as f32,
             rotation_x_deg: tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
             rotation_y_deg: tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
@@ -2822,7 +3848,13 @@ pub fn build_comp_draws_at(
             matte,
             blend: blend_of(layer.blend),
             mask_cov: match &layer.kind {
-                LayerKind::Precomp { .. } if !layer.masks.is_empty() => {
+                // A comp has no pixels for a mask to be cut into, a
+                // composition clip's as much as a Precomp layer's.
+                LayerKind::Precomp { .. } | LayerKind::Sequence { .. }
+                    if !layer.masks.is_empty()
+                        && (comp_clips.is_some()
+                            || matches!(layer.kind, LayerKind::Precomp { .. })) =>
+                {
                     let (w, h) = (natural.0 as u32, natural.1 as u32);
                     Some((
                         mask_rgba(&lumit_core::mask::combined_coverage(
@@ -2854,10 +3886,10 @@ pub fn build_comp_draws_at(
             // identically.
             dof_inputs: dof_inputs_for(layer.id, &layer.effects),
             mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
-            mask_paths: mask_paths_for(&layer.effects, &layer.masks, lt),
+            mask_paths: mask_paths_for(&layer.effects, Some(layer), lt),
             roto_mattes: roto_mattes_for(&layer.effects, source_frame),
             planes: planes_for(&layer.effects, source_frame),
-            points_schedules: points_schedules_for(Some(layer), &layer.effects, lt, frame_lt),
+            points_schedules: points_schedules_for(Some(layer), &layer.effects, lt, frame_lt, room),
             flare_lens_files: flare_lens_files(&layer.effects, lt),
             // The graphs this layer's Node graph effects apply, lowered
             // (docs/impl/node-graph-comp.md §2.4); empty on every layer that
@@ -3043,8 +4075,9 @@ enum GraphFeed {
     /// holds.
     Provided,
     /// A further picture Input of that effect: one of the host comp's layers,
-    /// rendered alone on the carriage a depth pass travels.
-    Picture(LayerInputDraw),
+    /// rendered alone on the carriage a depth pass travels. Boxed, since a
+    /// layer picture is far larger than the other two.
+    Picture(Box<LayerInputDraw>),
     /// A step of the plan being built. A nested graph reads the outer box's
     /// sockets, so its Input boxes are aliases of steps that are already there
     /// and no second plan is made.
@@ -3128,9 +4161,43 @@ fn graph_comp_draw(
     }
 }
 
+/// One Roto brush's matte for one **source** frame, or `None` outside the
+/// propagated span, with nothing propagated yet, or with the cache folder
+/// deleted - the effect's passthrough and never a fault (docs/impl/roto.md §5).
+fn roto_matte_of(
+    brush: &lumit_core::model::EffectInstance,
+    source_frame: i64,
+) -> Option<crate::draw::RotoMatteDraw> {
+    let (width, height, gray) = crate::roto::matte(brush.id, source_frame)?;
+    Some(crate::draw::RotoMatteDraw {
+        width,
+        height,
+        gray,
+    })
+}
+
+/// One planes-tier effect's plane for one **source** frame, or `None` outside
+/// the analysed span, before any Analyse, and wherever no pack is installed
+/// (docs/impl/addons.md §6.1).
+fn plane_of(
+    fx: &lumit_core::model::EffectInstance,
+    source_frame: i64,
+) -> Option<crate::draw::PlaneDraw> {
+    let (width, height, kind, data, content) = crate::planes::plane(fx.id, source_frame)?;
+    Some(crate::draw::PlaneDraw {
+        instance: fx.id,
+        source_frame,
+        content,
+        width,
+        height,
+        kind,
+        data,
+    })
+}
+
 /// Where one output socket of a box landed in a graph's plan: the box, the
 /// socket, and the step, `None` where it reads transparent.
-type Landed = (Uuid, &'static str, Option<usize>);
+type Landed = (Uuid, std::borrow::Cow<'static, str>, Option<usize>);
 
 /// What the node graph lowering carries, unchanged at every depth: the
 /// project, the comp being walked, the frame, and the fetch the draw builder
@@ -3155,6 +4222,9 @@ struct GraphLower<'a> {
     /// One layer's own picture, alone: the draw builder's own `pixels_for`,
     /// handed in so a Read box fetches by the very road a layer does.
     pixels_for: &'a dyn Fn(&lumit_core::model::Layer) -> Option<LayerPixels>,
+    /// Which copy of how many the walk is rendered as, for a Clone index box
+    /// in the graph and for every comp the graph reads.
+    clone: (u32, u32),
 }
 
 impl GraphLower<'_> {
@@ -3209,11 +4279,13 @@ impl GraphLower<'_> {
             // otherwise, which the expression module falls back to.
             inputs: (!view.values.is_empty()).then(|| view.values.into()),
         });
-        let drivers = lumit_core::fx::resolve_drivers(
+        let drivers = lumit_core::fx::drivers::resolve_drivers_cloned(
             &projection.drivers,
             self.t,
             context.clone(),
             Some(self.audio),
+            lumit_core::fx::points::Projection::FLAT,
+            self.clone,
         );
         let markers = lumit_core::fx::MarkerContext::for_comp(graph_comp);
         // Spatial units are px in the graph's own frame, and the realiser
@@ -3222,13 +4294,14 @@ impl GraphLower<'_> {
         let diag = ((plan.width as f32).powi(2) + (plan.height as f32).powi(2)).sqrt();
 
         // Which step each box's output landed on, in the order they were
-        // lowered. Keyed by socket too, since a Split channels box has four.
+        // lowered. Keyed by socket too, since a Split channels box has four
+        // and a box with a view menu has one per view.
         let mut steps: Vec<Landed> = Vec::with_capacity(order.len());
         let wired = |steps: &[Landed], node: Uuid, port: &str| -> Option<usize> {
             let (from, from_port) = graph.wire_into(node, port)?;
             steps
                 .iter()
-                .find(|(id, out, _)| id == from && *out == from_port)
+                .find(|(id, out, _)| id == from && out == from_port)
                 .and_then(|(_, _, step)| *step)
         };
         // One Set channels pass over `input` with `source` on its Source row,
@@ -3257,6 +4330,9 @@ impl GraphLower<'_> {
                 picture: source,
                 colour_tables: vec![None],
                 flare_lens_files: vec![None],
+                roto: None,
+                plane: None,
+                baked_from: None,
             })
         };
         // Set channels picks, by their place in `SET_CHANNELS_OPTIONS`.
@@ -3298,7 +4374,7 @@ impl GraphLower<'_> {
                                     Some(plan.steps.len() - 1)
                                 }
                                 GraphFeed::Picture(p) => {
-                                    plan.steps.push(GraphStep::Picture(p));
+                                    plan.steps.push(GraphStep::Picture(*p));
                                     Some(plan.steps.len() - 1)
                                 }
                                 GraphFeed::Step(s) => s,
@@ -3334,7 +4410,7 @@ impl GraphLower<'_> {
                     // bypassed box hands on its main picture here, which is
                     // where a bypassed ordinary box lands anyway. A Switch's
                     // own picture is its first socket, and a Split hands its
-                    // input on at every output.
+                    // input on at every output, as a box with views does.
                     if !inst.enabled {
                         let main = if inst.effect.match_name == lumit_core::comp_graph::SWITCH {
                             wired(&steps, id, "in0")
@@ -3346,7 +4422,12 @@ impl GraphLower<'_> {
                         } else {
                             &[OUTPUT_PORT.id]
                         };
-                        steps.extend(outs.iter().map(|port| (id, *port, main)));
+                        steps.extend(outs.iter().map(|port| (id, (*port).into(), main)));
+                        steps.extend(
+                            lumit_core::comp_graph::view_ports(inst)
+                                .into_iter()
+                                .map(|port| (id, port.id.into(), main)),
+                        );
                         continue;
                     }
                     match inst.effect.match_name.as_str() {
@@ -3431,7 +4512,7 @@ impl GraphLower<'_> {
                                 if port == OUTPUT_PORT.id {
                                     red = step;
                                 } else {
-                                    steps.push((id, port, step));
+                                    steps.push((id, port.into(), step));
                                 }
                             }
                             red
@@ -3494,22 +4575,27 @@ impl GraphLower<'_> {
                         NODE_GRAPH => self
                             .nested_step(inst, graph, id, input, &steps, &drivers, visited, plan),
                         _ => {
-                            let (fx_ids, ops) = lumit_core::fx::resolve_stack_temporal_named(
-                                std::slice::from_ref(inst),
-                                &drivers,
-                                self.t,
-                                self.frame_t,
-                                diag,
-                                1.0,
-                                &markers,
-                                context.clone(),
-                            );
-                            // A bypassed box, an entry this build does not
-                            // know, an orchestration-only effect: no op, so
-                            // the box hands on what it was given.
-                            if ops.is_empty() {
-                                input
-                            } else {
+                            // What an analysis filed for the file this box
+                            // reads, looked up once: every view of the box
+                            // draws through the same matte.
+                            let (roto, plane, baked_from) = self.baked_for(graph, inst, &steps);
+                            let mut run = |inst: &lumit_core::model::EffectInstance| {
+                                let (fx_ids, ops) = lumit_core::fx::resolve_stack_temporal_named(
+                                    std::slice::from_ref(inst),
+                                    &drivers,
+                                    self.t,
+                                    self.frame_t,
+                                    diag,
+                                    1.0,
+                                    &markers,
+                                    context.clone(),
+                                );
+                                // A bypassed box, an entry this build does not
+                                // know, an orchestration-only effect: no op, so
+                                // the box hands on what it was given.
+                                if ops.is_empty() {
+                                    return input;
+                                }
                                 let picture = lumit_core::fx::def(&inst.effect.match_name)
                                     .and_then(|d| d.schema().layer_input())
                                     .and_then(|param| wired(&steps, id, param));
@@ -3527,16 +4613,89 @@ impl GraphLower<'_> {
                                         std::slice::from_ref(inst),
                                         self.t,
                                     ),
+                                    roto: roto.clone(),
+                                    plane: plane.clone(),
+                                    baked_from,
                                 });
                                 Some(plan.steps.len() - 1)
+                            };
+                            // A box with a view menu draws once per socket
+                            // something in the cone reads: each view with the
+                            // menu held on its option, and `output` as the
+                            // dropdown has it. Every other box draws once.
+                            let views = lumit_core::comp_graph::view_ports(inst);
+                            let read = |port: &str| {
+                                graph.edges.iter().any(|e| {
+                                    e.from == id && e.from_port == port && order.contains(&e.to)
+                                })
+                            };
+                            let mut landed = Vec::new();
+                            for port in views.iter().filter(|port| read(&port.id)) {
+                                let held = lumit_core::comp_graph::held_on_view(inst, &port.id);
+                                if let Some(held) = held {
+                                    landed.push((id, port.id.clone().into(), run(&held)));
+                                }
                             }
+                            let main = if views.is_empty() || read(OUTPUT_PORT.id) {
+                                run(inst)
+                            } else {
+                                None
+                            };
+                            steps.extend(landed);
+                            main
                         }
                     }
                 }
             };
-            steps.push((id, OUTPUT_PORT.id, step));
+            steps.push((id, OUTPUT_PORT.id.into(), step));
         }
         wired(&steps, output, INPUT_PORT.id)
+    }
+
+    /// What a background analysis filed for one box at this frame, and the
+    /// Read step it was made from: a Roto brush's matte or a planes-tier
+    /// plane, looked up by the box and the **source** frame of the footage its
+    /// picture comes from, the lookup a layer's own carriage makes.
+    ///
+    /// All `None` for every other box, and for a box whose picture comes from
+    /// no Read. Which kind of item the Read brings in is not asked, as a
+    /// layer's carriage does not ask it: only footage can be analysed, so only
+    /// footage has anything filed.
+    fn baked_for(
+        &self,
+        graph: &lumit_core::comp_graph::CompGraph,
+        inst: &lumit_core::model::EffectInstance,
+        steps: &[Landed],
+    ) -> (
+        Option<crate::draw::RotoMatteDraw>,
+        Option<crate::draw::PlaneDraw>,
+        Option<usize>,
+    ) {
+        let brush = inst.effect.match_name == lumit_core::roto::ROTO_BRUSH;
+        if !brush && lumit_core::planes::task_of(inst).is_none() {
+            return (None, None, None);
+        }
+        let found = graph.read_behind(inst.id).and_then(|(read, _)| {
+            let step = steps
+                .iter()
+                .find(|(id, port, _)| *id == read && port == lumit_core::graph::OUTPUT_PORT.id)
+                .and_then(|(_, _, step)| *step)?;
+            // Nought for an item with no frames of its own, which is what a
+            // layer of one reads too.
+            let frame = self
+                .pixels_by_layer
+                .get(&read)
+                .map_or(0, |px| px.source_frame);
+            Some((step, frame))
+        });
+        let Some((step, frame)) = found else {
+            return (None, None, None);
+        };
+        if brush {
+            (roto_matte_of(inst, frame), None, Some(step))
+        } else {
+            (None, plane_of(inst, frame), Some(step))
+        }
     }
 
     /// One Read box as the layer it behaves like (§2.1): the item at default
@@ -3579,7 +4738,7 @@ impl GraphLower<'_> {
                         lumit_core::comp_graph::GraphView::DEFAULTS,
                         visited,
                     )],
-                    None => build_comp_draws_at(
+                    None => comp_walk(
                         self.doc,
                         nested,
                         self.t,
@@ -3588,6 +4747,12 @@ impl GraphLower<'_> {
                         visited,
                         self.keys,
                         false,
+                        Walk {
+                            clone: self.clone,
+                            values: &[],
+                            rebuild: false,
+                        },
+                        None,
                     ),
                 };
                 visited.pop();
@@ -3666,7 +4831,7 @@ impl GraphLower<'_> {
             let (from, from_port) = graph.wire_into(id, port)?;
             steps
                 .iter()
-                .find(|(node, out, _)| node == from && *out == from_port)
+                .find(|(node, out, _)| node == from && out == from_port)
                 .and_then(|(_, _, step)| *step)
         };
         // The box's own sockets, in the inner Inputs' order: the first picture
@@ -3827,6 +4992,33 @@ pub fn below_draws_at(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
 ) -> (Vec<CompLayerDraw>, Option<lumit_core::model::CameraPose>) {
+    below_draws_cloned(
+        doc,
+        comp,
+        below,
+        tau,
+        frame_t,
+        force_mb,
+        pixels_by_layer,
+        visited,
+        lumit_core::fx::drivers::NO_CLONE,
+    )
+}
+
+/// [`below_draws_at`] inside a clone picture: `clone` is which copy of how
+/// many the walk above is rendered as, so the layers below read it too.
+#[allow(clippy::too_many_arguments)]
+fn below_draws_cloned(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: &lumit_core::model::Composition,
+    below: &[lumit_core::model::Layer],
+    tau: f64,
+    frame_t: f64,
+    force_mb: Option<lumit_core::model::MotionBlur>,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+    visited: &mut Vec<uuid::Uuid>,
+    clone: (u32, u32),
+) -> (Vec<CompLayerDraw>, Option<lumit_core::model::CameraPose>) {
     // A below-only view of the comp: the same size, background, frame rate,
     // markers and camera, but only the layers beneath the adjustment. The
     // camera is read from the original comp at `tau` (a Camera layer inside
@@ -3849,7 +5041,7 @@ pub fn below_draws_at(
     }
     // No nested-frame keyer: a held re-render strips the temporal
     // inputs below, so a Precomp in it is not the picture its name would claim.
-    let mut draws = build_comp_draws_at(
+    let mut draws = comp_walk(
         doc,
         &below_comp,
         tau,
@@ -3858,6 +5050,12 @@ pub fn below_draws_at(
         visited,
         None,
         false,
+        Walk {
+            clone,
+            values: &[],
+            rebuild: true,
+        },
+        None,
     );
     strip_temporal_inputs(&mut draws);
     (draws, crate::track::camera_pose(doc, comp, tau))
@@ -3879,6 +5077,7 @@ pub fn posterize_below(
     frame_t: f64,
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
+    clone: (u32, u32),
 ) -> Option<TemporalBelow> {
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let p = lumit_core::fx::stack_posterize(&layer.effects, layer.switches.fx, lt)?;
@@ -3891,7 +5090,7 @@ pub fn posterize_below(
     let below = &comp.layers[idx + 1..];
     // Posterize never forces per-layer motion blur (that is accumulation MB's
     // Force on all layers).
-    let (draws, camera) = below_draws_at(
+    let (draws, camera) = below_draws_cloned(
         doc,
         comp,
         below,
@@ -3900,6 +5099,7 @@ pub fn posterize_below(
         None,
         pixels_by_layer,
         visited,
+        clone,
     );
     Some(TemporalBelow { draws, camera })
 }
@@ -3925,6 +5125,7 @@ pub fn accumulation_mb_below(
     frame_t: f64,
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
+    clone: (u32, u32),
 ) -> Option<AccumulationBelow> {
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let p = lumit_core::fx::stack_accumulation_mb(&layer.effects, layer.switches.fx, lt)?;
@@ -3953,7 +5154,7 @@ pub fn accumulation_mb_below(
             // the frame-time entry, so no frame is copied here.
             let mut at_moment_by_layer = pixels_by_layer.clone();
             for lp in pixels_by_layer.values() {
-                if let Some((_, moment)) = lp
+                if let Some((_, Some(moment))) = lp
                     .shutter
                     .iter()
                     .find(|(o, _)| o.to_bits() == off.to_bits())
@@ -3961,7 +5162,7 @@ pub fn accumulation_mb_below(
                     at_moment_by_layer.insert(lp.layer, &**moment);
                 }
             }
-            below_draws_at(
+            below_draws_cloned(
                 doc,
                 comp,
                 below,
@@ -3970,6 +5171,7 @@ pub fn accumulation_mb_below(
                 force_mb,
                 &at_moment_by_layer,
                 visited,
+                clone,
             )
         })
         .collect();
@@ -4024,7 +5226,8 @@ fn own_shutter_average(
             .shutter
             .iter()
             .find(|(o, _)| o.to_bits() == off.to_bits())
-            .map(|(_, m)| m.rgba.as_slice())
+            .and_then(|(_, m)| m.as_deref())
+            .map(|m| m.rgba.as_slice())
             .filter(|m| m.len() == n)
             .unwrap_or(&lp.rgba);
         for (s, &b) in sum.iter_mut().zip(moment) {
@@ -4043,9 +5246,8 @@ fn own_shutter_average(
     })
 }
 
-/// The neighbour below-stacks a flow-consuming effect on an **adjustment**
-/// layer measures its motion against (docs/08 §3.2), or None when the
-/// layer carries no such effect.
+/// The neighbour below-stacks a temporal effect on an **adjustment** layer
+/// reads (docs/08 §3.2), empty when the layer carries no such effect.
 ///
 /// An adjustment layer's picture is the composite of everything below it, which
 /// the decode worker never sees — so Motion blur and Datamosh on one were
@@ -4058,7 +5260,8 @@ fn own_shutter_average(
 ///
 /// One entry per offset the stack asked for, in ascending order — Fast motion
 /// blur's `+1` and Datamosh's `-1` are different measurements, and each consumer
-/// gets its own.
+/// gets its own. An Echo or a plugin that only reads the neighbour picture
+/// gets its entry with no measurement asked for.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn adjustment_flow_below(
     doc: &Arc<lumit_core::model::Document>,
@@ -4069,32 +5272,160 @@ fn adjustment_flow_below(
     frame_t: f64,
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
+    clone: (u32, u32),
 ) -> Vec<(
     i32,
     Vec<CompLayerDraw>,
     Option<lumit_core::model::CameraPose>,
+    bool,
 )> {
-    let offsets = lumit_core::fx::stack_flow_neighbours(&layer.effects, layer.switches.fx);
     // The comp's own frame interval: the shutter this effect smears over is a
     // frame of the render, not a frame of some source nobody here has.
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let below = &comp.layers[idx + 1..];
-    offsets
-        .iter()
-        .map(|&offset| {
-            let (draws, camera) = below_draws_at(
+    crate::plan::rebuild_offsets(layer, lt, dt)
+        .into_iter()
+        .map(|(offset, measure)| {
+            let (draws, camera) = below_draws_cloned(
                 doc,
                 comp,
                 below,
-                t_comp + f64::from(offset) * dt,
+                lumit_core::time::frames_on(t_comp, offset, dt),
                 frame_t,
                 None,
                 pixels_by_layer,
                 visited,
+                clone,
             );
-            (offset, draws, camera)
+            (offset, draws, camera, measure)
         })
         .collect()
+}
+
+/// The decoded pixels a rebuild of `comp` at `t_comp` draws from, when that
+/// is another moment than the frame's own `frame_t`: each clip the planner
+/// fetched at that moment ([`CompLayerPixels::shutter`]) stands in for its
+/// frame-time picture. `None` on an ordinary build, and when no clip here has
+/// the moment, so the caller's map is used as it is and nothing is copied.
+///
+/// A clip with no picture for the moment (a dropped decode) keeps its
+/// frame-time pixels, which is what every rebuild used to draw. A Sequence
+/// layer in a gap at the moment is left out, so it draws nothing.
+fn pixels_at_moment<'a>(
+    doc: &lumit_core::model::Document,
+    comp: &lumit_core::model::Composition,
+    t_comp: f64,
+    frame_t: f64,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>,
+) -> Option<std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>> {
+    if t_comp.to_bits() == frame_t.to_bits() {
+        return None;
+    }
+    let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    let offset = crate::plan::moment_offset(t_comp, frame_t, dt);
+    let mut out = None;
+    // What this comp's clips are filed under: its layers, or the boxes of
+    // its node graph, whose Reads are keyed by their own ids.
+    let boxes = comp.graph.iter().flat_map(|g| &g.nodes).map(|n| n.id());
+    for id in comp.layers.iter().map(|l| l.id).chain(boxes) {
+        let Some(lp) = pixels_by_layer.get(&id).copied() else {
+            continue;
+        };
+        if let Some((_, moment)) = lp
+            .shutter
+            .iter()
+            .find(|(o, _)| o.to_bits() == offset.to_bits())
+        {
+            let out = out.get_or_insert_with(|| pixels_by_layer.clone());
+            match moment {
+                Some(moment) => out.insert(id, &**moment),
+                None => out.remove(&id),
+            };
+        }
+    }
+    // A graph a layer applies files its clips under its own boxes too, and
+    // runs on that layer's clock. The planner fetched them by the offset on
+    // that clock in frames of the graph's own comp, so that is the offset
+    // they are looked up by.
+    for layer in &comp.layers {
+        let mut boxes = Vec::new();
+        applied_boxes(doc, &layer.effects, &mut Vec::new(), &mut boxes);
+        for (id, graph_dt) in boxes {
+            let offset = crate::plan::moment_offset(
+                lumit_core::time::layer_time(t_comp, layer.start_offset.0),
+                lumit_core::time::layer_time(frame_t, layer.start_offset.0),
+                graph_dt,
+            );
+            let moment = pixels_by_layer.get(&id).and_then(|lp| {
+                lp.shutter
+                    .iter()
+                    .find(|(o, _)| o.to_bits() == offset.to_bits())
+            });
+            if let Some((_, moment)) = moment {
+                let out = out.get_or_insert_with(|| pixels_by_layer.clone());
+                match moment {
+                    Some(moment) => out.insert(id, &**moment),
+                    None => out.remove(&id),
+                };
+            }
+        }
+    }
+    out
+}
+
+/// `pixels_by_layer` without the Sequence layers of `comp` that are in a gap
+/// at the frame's own time. The planner fetches such a layer for the clip it
+/// shows at another moment, and files the frame's own moment as a gap
+/// ([`crate::decode::Cut::Moment`]). `None` when there are none, which is
+/// nearly always, so nothing is copied.
+fn without_gaps<'a>(
+    comp: &lumit_core::model::Composition,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>,
+) -> Option<std::collections::HashMap<uuid::Uuid, &'a CompLayerPixels>> {
+    let mut out = None;
+    for layer in &comp.layers {
+        let in_gap = pixels_by_layer.get(&layer.id).is_some_and(|lp| {
+            let mut moments = lp.shutter.iter();
+            moments.any(|(offset, clip)| *offset == 0.0 && clip.is_none())
+        });
+        if in_gap {
+            let out = out.get_or_insert_with(|| pixels_by_layer.clone());
+            out.remove(&layer.id);
+        }
+    }
+    out
+}
+
+/// Every box of the node graphs `effects` apply, graphs nested in them
+/// included, each with one frame of its own comp in seconds. A graph's Read
+/// of footage is filed under its box. `seen` stops a graph that applies
+/// itself.
+fn applied_boxes(
+    doc: &lumit_core::model::Document,
+    effects: &[lumit_core::model::EffectInstance],
+    seen: &mut Vec<Uuid>,
+    out: &mut Vec<(Uuid, f64)>,
+) {
+    for e in effects.iter().filter(|e| e.enabled) {
+        let Some(named) = lumit_core::fx::effects::node_graph::comp_of(e)
+            .filter(|id| !seen.contains(id))
+            .and_then(|id| doc.comp(id))
+        else {
+            continue;
+        };
+        let Some(graph) = named.graph.as_ref() else {
+            continue;
+        };
+        seen.push(named.id);
+        let dt = 1.0 / named.frame_rate.fps().max(1.0);
+        for node in &graph.nodes {
+            out.push((node.id(), dt));
+            if let lumit_core::comp_graph::GraphNode::Fx(inst) = node {
+                applied_boxes(doc, std::slice::from_ref(inst), seen, out);
+            }
+        }
+    }
 }
 
 /// Drop the neighbour frames and flow field a temporal effect reads, recursing
@@ -4107,10 +5438,9 @@ fn strip_temporal_inputs(draws: &mut [CompLayerDraw]) {
     for d in draws.iter_mut() {
         d.neighbours = Vec::new();
         d.flow_fields = Vec::new();
-        // The composite measurement (§3.2) is temporal too, and dropping
-        // it here is what bounds the work: without this, an adjustment inside a
-        // neighbour render would build its own neighbours, and a stack of them
-        // would multiply a frame's cost by two to the depth.
+        // The composite measurement (§3.2) is temporal too. A walk that is a
+        // rebuild never builds one (`Walk::rebuild`), which is what bounds the
+        // work. This is for a draw that came from anywhere else.
         d.flow_below = Vec::new();
         if let DrawSource::Nested { draws: inner, .. } = &mut d.source {
             strip_temporal_inputs(inner);
@@ -4153,6 +5483,7 @@ mod parent_placement_tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4226,58 +5557,55 @@ mod parent_placement_tests {
         assert_eq!(world, expected);
     }
 
-    /// Backlog 7.53: a keyframed parent slid three frames along the timeline
-    /// places its child at frame f+3 exactly as it did at frame f before the
-    /// move — bit for bit — because layer time is taken on the flick grid
-    /// rather than as an f64 subtraction.
     #[test]
-    fn a_moved_keyframed_parent_places_its_child_bit_identically() {
-        use lumit_core::anim::{Animation, Keyframe, SideInterp};
-        let kf = |t: i64, v: f64| Keyframe {
-            time: Rational::new(t, 1).unwrap(),
-            value: v,
-            interp_in: SideInterp::Linear,
-            interp_out: SideInterp::Linear,
+    fn taking_and_losing_a_parent_leaves_the_layer_where_it_was() {
+        let ctx = || Arc::new(ExpressionContext::detached());
+        let world = |c: &Composition, l: &Layer| {
+            let own = own_placement(l, 0.0, &ctx());
+            match parent_world_placement(c, l, 0.0, ctx()) {
+                Some(pre) => lumit_gpu::concat_place(pre, own),
+                None => own,
+            }
         };
-        let mut parent = layer(0.0, 0.0, None);
-        parent.transform.position_x = Property {
-            extra: serde_json::Map::new(),
-            animation: Animation::Keyframed(vec![kf(0, 0.0), kf(1, 37.0), kf(4, 100.0)]),
-        };
-        let child = layer(5.0, 5.0, Some(parent.id));
-        let before = comp(vec![parent.clone(), child.clone()]);
-        let fr = before.frame_rate;
-        let three = fr.time_of_frame(3).unwrap();
-        let mut moved = parent.clone();
-        moved.start_offset = three;
-        moved.in_point = three;
-        moved.out_point = CompTime(moved.out_point.0.checked_add(three.0).unwrap());
-        let after = comp(vec![moved, child.clone()]);
-        for f in 0..120 {
-            let t0 = fr.time_of_frame(f).unwrap().0.to_f64();
-            let t3 = fr.time_of_frame(f + 3).unwrap().0.to_f64();
-            let ctx = || Arc::new(ExpressionContext::detached());
-            let a = parent_world_placement(&before, &child, t0, ctx()).unwrap();
-            let b = parent_world_placement(&after, &child, t3, ctx()).unwrap();
-            assert_eq!(a, b, "frame {f}");
-        }
-    }
+        // A scaled parent and a tilted one are separate rigs: scale has no z,
+        // so a tilt under a scaled parent has no exact answer.
+        for tilted in [false, true] {
+            let (tilt, scale) = if tilted { (15.0, 100.0) } else { (0.0, 50.0) };
+            let mut gp = layer(10.0, 20.0, None);
+            gp.transform.rotation_y = Property::fixed(tilt);
+            let mut parent = layer(100.0, 40.0, Some(gp.id));
+            parent.transform.anchor_x = Property::fixed(7.0);
+            parent.transform.rotation = Property::fixed(30.0);
+            parent.transform.scale_x = Property::fixed(scale);
+            parent.transform.scale_y = Property::fixed(scale);
+            // Flipped, more than a turn round and tilted: the awkward ones to
+            // read back out of a matrix.
+            let mut child = layer(5.0, 60.0, None);
+            child.transform.anchor_y = Property::fixed(4.0);
+            child.transform.rotation = Property::fixed(400.0);
+            child.transform.rotation_x = Property::fixed(tilt);
+            child.transform.scale_x = Property::fixed(80.0);
+            child.transform.scale_y = Property::fixed(-80.0);
 
-    /// The point of a Null: it draws nothing, yet a layer parented to it is
-    /// placed by its transform exactly as it would be by any other parent's.
-    /// If the parent walk ever skipped the pixel-less kinds, a whole rig would
-    /// silently stop following its null.
-    #[test]
-    fn a_child_follows_a_null_parent() {
-        let mut null = layer(120.0, 40.0, None);
-        null.kind = LayerKind::Null;
-        null.name = "Null".into();
-        let child = layer(5.0, 5.0, Some(null.id));
-        let c = comp(vec![null.clone(), child.clone()]);
-        let world =
-            parent_world_placement(&c, &child, 0.0, Arc::new(ExpressionContext::detached()))
-                .unwrap();
-        assert_eq!(world, place_of(&null));
+            let before = world(&comp(vec![child.clone()]), &child);
+            for new_parent in [Some(parent.id), None] {
+                let c = comp(vec![gp.clone(), parent.clone(), child.clone()]);
+                let edits = reparented(&c, &child, new_parent, 0.0, ctx());
+                assert!(!edits.is_empty());
+                for (prop, animation) in edits {
+                    child.transform.get_mut(prop).unwrap().animation = animation;
+                }
+                child.parent = new_parent;
+                let c = comp(vec![gp.clone(), parent.clone(), child.clone()]);
+                let after = world(&c, &child);
+                for (b, a) in before.iter().flatten().zip(after.iter().flatten()) {
+                    assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
+                }
+            }
+            // Back where it started, in the numbers too.
+            assert!((child.transform.rotation.value_at(0.0) - 400.0).abs() < 1e-2);
+            assert!((child.transform.scale_y.value_at(0.0) + 80.0).abs() < 1e-2);
+        }
     }
 }
 
@@ -4363,56 +5691,6 @@ mod points_projection_tests {
             }
         }
     }
-
-    /// A layer scaled to nothing has no plane to project onto, and the answer
-    /// is the flat projection rather than a division by nought (docs/14 §4).
-    #[test]
-    fn a_singular_placement_answers_no_projection() {
-        assert!(invert3(&[[0.0; 3]; 3]).is_none());
-        assert!(invert3(&[[1.0, 2.0, 3.0], [2.0, 4.0, 6.0], [0.0, 1.0, 0.0]]).is_none());
-        // And a plain one inverts to something that undoes it.
-        let m = [[2.0, 0.0, 5.0], [0.0, 4.0, -3.0], [0.0, 0.0, 1.0]];
-        let inv = invert3(&m).expect("not singular");
-        for (r, row) in inv.iter().enumerate() {
-            for (c, _) in m.iter().enumerate() {
-                let want = f32::from(r == c);
-                let got: f32 = (0..3).map(|k| row[k] * m[k][c]).sum();
-                assert!((got - want).abs() < 1e-5, "row {r} col {c}: {got}");
-            }
-        }
-    }
-
-    /// The raster rescale is the same projection in smaller pixels: a
-    /// particle at half scale lands at half the coordinates it landed at, and
-    /// foreshortens by exactly as much.
-    #[test]
-    fn the_projection_rescales_with_the_raster() {
-        let proj = lumit_core::fx::points::Projection {
-            m: [
-                [1.0, 0.0, 0.4, 0.0],
-                [0.0, 1.0, 0.3, 0.0],
-                [0.0, 0.0, 1.0 / 800.0, 1.0],
-            ],
-        };
-        let s = 0.5f32;
-        let half = proj.rescaled(s);
-        for p in [
-            [300.0f32, 200.0, 0.0],
-            [640.0, 100.0, 400.0],
-            [0.0, 0.0, -250.0],
-        ] {
-            let (full_xy, full_scale) = proj.apply(p);
-            let (half_xy, half_scale) = half.apply([p[0] * s, p[1] * s, p[2] * s]);
-            assert!((half_xy[0] - full_xy[0] * s).abs() < 1e-3, "{half_xy:?}");
-            assert!((half_xy[1] - full_xy[1] * s).abs() < 1e-3, "{half_xy:?}");
-            assert!(
-                (half_scale - full_scale).abs() < 1e-5,
-                "foreshortening is not a ratio: {half_scale} against {full_scale}"
-            );
-        }
-        // At full scale it is the same numbers, not nearly the same.
-        assert_eq!(proj.rescaled(1.0), proj);
-    }
 }
 
 #[cfg(test)]
@@ -4443,6 +5721,8 @@ mod render_below_at_tests {
                     path: None,
                     path_offset: lumit_core::anim::Property::zero(),
                     animators: Vec::new(),
+                    style: Default::default(),
+                    paragraph: Default::default(),
                     extra: serde_json::Map::new(),
                 },
             },
@@ -4460,6 +5740,7 @@ mod render_below_at_tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4563,6 +5844,7 @@ mod render_below_at_tests {
             colour_inputs: None,
             colour_config: None,
             flow: None,
+            late_clones: None,
         };
         // A softbox in front of the comp, big enough to rake across it.
         let mut light = text_layer(160.0);
@@ -4672,6 +5954,7 @@ mod render_below_at_tests {
             colour_inputs: None,
             colour_config: None,
             flow: None,
+            late_clones: None,
         };
         let comp = Composition {
             graph: None,
@@ -4760,107 +6043,6 @@ mod render_below_at_tests {
         assert_eq!(win_px, bytes(&again), "a windowed composite is bit-stable");
     }
 
-    // docs/impl/temporal-rerender.md §7 step 1: a re-render of a still scene at
-    // the SAME time must be bit-identical to compositing it the normal way.
-    // `render_below_at` — the one shared re-render helper — reuses
-    // `build_comp_draws` and `Realiser::realise`, so at `tau == t` it must
-    // reproduce the plain composite exactly. This is the identity the whole
-    // preview==export promise rests on; it is proved before anything is
-    // built on top of the helper.
-    #[test]
-    fn still_scene_rerender_at_same_time_is_bit_identical() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, exactly as the gpu crate's own tests do
-        };
-        let engine = ctx.colour();
-        let compositor = ctx.compositor();
-        let fx = ctx.fx();
-        let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
-        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
-        let realiser = Realiser {
-            ctx: ctx.clone_handle(),
-            engine,
-            compositor,
-            fx,
-            lut_cache: &lut_cache,
-            fx_cache: &fx_cache,
-            render_scale: 1.0,
-            samples: 1,
-            profiler: None,
-            colour_inputs: None,
-            colour_config: None,
-            flow: None,
-        };
-        let comp = Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "c".into(),
-            width: 320,
-            height: 180,
-            frame_rate: FrameRate::new(30, 1).unwrap(),
-            duration: Duration(Rational::new(10, 1).unwrap()),
-            background: LinearColour([0.1, 0.1, 0.1, 1.0]),
-            work_area: None,
-            layers: vec![text_layer(200.0), text_layer(80.0)],
-            markers: Vec::new(),
-            motion_blur: Default::default(),
-            extra: serde_json::Map::new(),
-        };
-        let doc = Document::new();
-        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-        // Compute the background exactly as render_below_at does (from the f32
-        // LinearColour via f64::from), so the plain composite and the re-render
-        // clear to identical values and the comparison is honest.
-        let bg = comp.background.0.map(f64::from);
-        let t = 0.3;
-
-        let mut v1 = vec![comp.id];
-        let draws = build_comp_draws(
-            &std::sync::Arc::new(doc.clone()),
-            &comp,
-            t,
-            &pixels,
-            &mut v1,
-        );
-        let normal = realiser.realise(comp.camera_pose(t), comp.width, comp.height, bg, &draws);
-        let normal_bytes = engine
-            .readback8(
-                &ctx,
-                &engine.display(&ctx, &normal, lumit_gpu::DisplayParams::NEUTRAL),
-            )
-            .unwrap();
-
-        // Re-render the whole stack (every layer counts as "below") at the same
-        // time through the shared helper.
-        let mut v2 = vec![comp.id];
-        let below = render_below_at(
-            &realiser,
-            &std::sync::Arc::new(doc.clone()),
-            &comp,
-            &comp.layers,
-            t,
-            t,
-            None,
-            &pixels,
-            &mut v2,
-        );
-        let below_bytes = engine
-            .readback8(
-                &ctx,
-                &engine.display(&ctx, &below, lumit_gpu::DisplayParams::NEUTRAL),
-            )
-            .unwrap();
-
-        assert_eq!(
-            normal_bytes, below_bytes,
-            "render_below_at at tau == t must reproduce the plain composite bit-for-bit"
-        );
-    }
-
     // A property that ramps linearly from `from` at t=0 to `to` at t=1, so a
     // held time differs visibly from the frame time.
     fn ramp(from: f64, to: f64) -> Property {
@@ -4878,16 +6060,6 @@ mod render_below_at_tests {
             ]),
             extra: serde_json::Map::new(),
         }
-    }
-
-    // The one blur op's radius in raster pixels. Blur lives in the registry
-    // (docs/impl/effect-registry.md §2.1), so its numbers come back out of the
-    // arena through its own typed reader rather than out of a `Resolved` variant.
-    fn blur_radius_px(fx: &lumit_core::fx::ResolvedStack) -> f32 {
-        use lumit_core::fx::{effects::blur::Blur, EffectMetadata};
-        let op = fx.get(0).expect("expected a blur op");
-        assert_eq!(op.def.schema().match_name, "blur");
-        Blur::read(op.params).packed().0
     }
 
     // An adjustment layer carrying a Posterize Time effect (everything-below) at
@@ -4915,6 +6087,7 @@ mod render_below_at_tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -4956,200 +6129,6 @@ mod render_below_at_tests {
         }
     }
 
-    // docs/08 §3.25: a Posterize Time adjustment (everything-below) is detected
-    // at build_comp_draws time and carries a held below-stack. The held draws
-    // must sit at the posterised time tau = 0.3 (x = 30), NOT the frame time
-    // 0.35 (x = 35) — proving the below re-resolves at the held grid, not the
-    // playhead. A GPU-free structural check (the moving-scene coverage).
-    #[test]
-    fn posterize_adjustment_holds_the_below_stack_at_the_grid_time() {
-        let comp = posterize_comp();
-        let doc = Document::new();
-        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-        let mut visited = vec![comp.id];
-        // t = 0.35, 10 fps grid → held tau = floor(3.5)/10 = 0.3.
-        let draws = build_comp_draws(
-            &std::sync::Arc::new(doc.clone()),
-            &comp,
-            0.35,
-            &pixels,
-            &mut visited,
-        );
-        let adj = draws
-            .iter()
-            .find(|d| matches!(d.source, DrawSource::Adjust))
-            .expect("the posterize adjustment emits a staging draw");
-        let tb = adj
-            .temporal_below
-            .as_ref()
-            .expect("an everything-below posterize carries a held below-stack");
-        assert_eq!(tb.draws.len(), 1, "the one text layer below is held");
-        assert!(
-            (tb.draws[0].position.0 - 30.0).abs() < 0.01,
-            "held at tau = 0.3 (x = 30), not the frame time (x = 35); got {}",
-            tb.draws[0].position.0
-        );
-    }
-
-    // docs/impl/temporal-rerender.md §5: an effect in the held below-stack flagged
-    // sample_temporally == false stays pinned to the frame time while the scene's
-    // transforms sample the held time. The text below carries a blur whose radius
-    // ramps 0→100 px over a second and opts out of sampling; under a 10 fps
-    // posterise at t = 0.35 (held tau = 0.3) its transform holds at x = 30 but its
-    // blur resolves at the frame time 0.35 (35 px), not 0.3.
-    #[test]
-    fn a_non_sampling_below_effect_holds_at_the_frame_time_not_the_grid() {
-        let mut text = text_layer(0.0);
-        text.transform.position_x = ramp(0.0, 100.0); // x = 100·t
-        let mut blur = lumit_core::fx::instantiate("blur").unwrap();
-        blur.sample_temporally = false;
-        for p in &mut blur.params {
-            if p.id == "radius" {
-                p.value = lumit_core::model::EffectValue::Float(ramp(0.0, 100.0));
-                // radius px = 100·t
-            }
-        }
-        text.effects = vec![blur];
-        let comp = Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "c".into(),
-            width: 320,
-            height: 180,
-            frame_rate: FrameRate::new(30, 1).unwrap(),
-            duration: Duration(Rational::new(10, 1).unwrap()),
-            background: LinearColour([0.1, 0.1, 0.1, 1.0]),
-            work_area: None,
-            layers: vec![posterize_adjustment(10.0), text],
-            markers: Vec::new(),
-            motion_blur: Default::default(),
-            extra: serde_json::Map::new(),
-        };
-        let doc = Document::new();
-        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-        let mut visited = vec![comp.id];
-        let draws = build_comp_draws(
-            &std::sync::Arc::new(doc.clone()),
-            &comp,
-            0.35,
-            &pixels,
-            &mut visited,
-        );
-        let adj = draws
-            .iter()
-            .find(|d| matches!(d.source, DrawSource::Adjust))
-            .expect("the posterize adjustment emits a staging draw");
-        let tb = adj
-            .temporal_below
-            .as_ref()
-            .expect("an everything-below posterize carries a held below-stack");
-        assert_eq!(tb.draws.len(), 1, "the one text layer below is held");
-        // The transform samples the held time (x = 30).
-        assert!(
-            (tb.draws[0].position.0 - 30.0).abs() < 0.01,
-            "transform held at tau = 0.3; got {}",
-            tb.draws[0].position.0
-        );
-        // The blur, opting out, resolves at the frame time 0.35 (35 px).
-        let radius = blur_radius_px(&tb.draws[0].fx);
-        assert!(
-            (radius - 35.0).abs() < 0.5,
-            "blur must hold at the frame time 0.35 (35 px), got {radius}"
-        );
-        assert!(
-            (radius - 30.0).abs() > 4.0,
-            "blur must NOT sample the held time 0.30; got {radius}"
-        );
-    }
-
-    // docs/08 §3.25: a Posterize time scoped to *This layer's effects* holds only
-    // the layer's OWN effect stack on the coarse grid — no re-render of others,
-    // no adjustment (no orchestration re-entry). The text carries a blur (radius
-    // ramps 0→100 px over a second) and a 10 fps this-layer Posterize; at t = 0.35
-    // its transform stays live (x = 35) while the blur resolves at the held time
-    // 0.3 (30 px), not 0.35. GPU-free structural check.
-    #[test]
-    fn this_layer_posterize_holds_the_layers_own_effects_but_not_its_transform() {
-        let mut text = text_layer(0.0);
-        text.transform.position_x = ramp(0.0, 100.0); // x = 100·t (stays live)
-        let mut blur = lumit_core::fx::instantiate("blur").unwrap();
-        for p in &mut blur.params {
-            if p.id == "radius" {
-                p.value = lumit_core::model::EffectValue::Float(ramp(0.0, 100.0));
-                // px = 100·t
-            }
-        }
-        let mut post = lumit_core::fx::instantiate("posterize_time").unwrap();
-        for p in &mut post.params {
-            match p.id.as_str() {
-                "rate" => p.value = lumit_core::model::EffectValue::Float(Property::fixed(10.0)),
-                // 1 = This layer's effects.
-                "scope" => p.value = lumit_core::model::EffectValue::Choice(1),
-                _ => {}
-            }
-        }
-        text.effects = vec![blur, post];
-        let comp = Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "c".into(),
-            width: 320,
-            height: 180,
-            frame_rate: FrameRate::new(30, 1).unwrap(),
-            duration: Duration(Rational::new(10, 1).unwrap()),
-            background: LinearColour([0.1, 0.1, 0.1, 1.0]),
-            work_area: None,
-            layers: vec![text],
-            markers: Vec::new(),
-            motion_blur: Default::default(),
-            extra: serde_json::Map::new(),
-        };
-        let doc = Document::new();
-        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-        let mut visited = vec![comp.id];
-        let draws = build_comp_draws(
-            &std::sync::Arc::new(doc.clone()),
-            &comp,
-            0.35,
-            &pixels,
-            &mut visited,
-        );
-        let d = draws
-            .iter()
-            .find(|d| !matches!(d.source, DrawSource::Adjust))
-            .expect("the text layer draws");
-        // The transform stays at the playhead — only the effects are held.
-        assert!(
-            (d.position.0 - 35.0).abs() < 0.01,
-            "transform live at t = 0.35 (x = 35); got {}",
-            d.position.0
-        );
-        // The blur resolves at the held time 0.3 (30 px), not 0.35.
-        let radius = blur_radius_px(&d.fx);
-        assert!(
-            (radius - 30.0).abs() < 0.5,
-            "blur held at the grid time 0.3 (30 px); got {radius}"
-        );
-        assert!(
-            (radius - 35.0).abs() > 4.0,
-            "blur must NOT resolve at the live time 0.35; got {radius}"
-        );
-        // The Posterize itself has no per-pixel op — only the blur survives.
-        assert_eq!(
-            d.fx.len(),
-            1,
-            "posterize resolves to nothing; only the blur"
-        );
-    }
-
     // docs/08 §3.25: the whole preview Posterize path (detect → held
     // below → adjustment blend) must reduce, at full coverage, to a plain render
     // of the below-stack at the held time. So a posterised frame at t = 0.35
@@ -5179,6 +6158,7 @@ mod render_below_at_tests {
             colour_inputs: None,
             colour_config: None,
             flow: None,
+            late_clones: None,
         };
         let comp = posterize_comp();
         let doc = Document::new();
@@ -5257,6 +6237,7 @@ mod render_below_at_tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -5295,54 +6276,6 @@ mod render_below_at_tests {
         }
     }
 
-    // docs/08 §3.26: an accumulation motion blur adjustment carries N sub-frame
-    // below-stacks, one per shutter sample, centred on the frame. A moving text
-    // (x = 200·t) in a 2 fps comp (dt = 0.5 s) spreads visibly; at t = 0.5 the 4
-    // below-stacks straddle x = 100, their positions strictly increasing across
-    // the centred shutter. GPU-free structural check.
-    #[test]
-    fn accumulation_adjustment_holds_n_subframe_below_stacks_centred_on_the_frame() {
-        let mut text = text_layer(0.0);
-        text.transform.position_x = ramp(0.0, 200.0); // x = 200·t
-        let comp = comp_with(2, vec![accumulation_adjustment(4.0), text]);
-        let doc = Document::new();
-        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-        let mut visited = vec![comp.id];
-        let draws = build_comp_draws(
-            &std::sync::Arc::new(doc.clone()),
-            &comp,
-            0.5,
-            &pixels,
-            &mut visited,
-        );
-        let adj = draws
-            .iter()
-            .find(|d| matches!(d.source, DrawSource::Adjust))
-            .expect("the accumulation adjustment emits a staging draw");
-        let ab = adj
-            .accumulation_below
-            .as_ref()
-            .expect("an accumulation adjustment carries N sub-frame below-stacks");
-        assert_eq!(ab.samples.len(), 4, "one below-stack per shutter sample");
-        let xs: Vec<f32> = ab
-            .samples
-            .iter()
-            .map(|(draws, _)| draws[0].position.0)
-            .collect();
-        // Strictly increasing (the centred shutter sweeps forward in time).
-        assert!(
-            xs.windows(2).all(|w| w[0] < w[1]),
-            "sub-frame positions increase across the shutter: {xs:?}"
-        );
-        // Centred on the frame: the samples straddle x = 100 (the frame-time
-        // position at t = 0.5).
-        assert!(
-            xs[0] < 100.0 && *xs.last().unwrap() > 100.0,
-            "the shutter is centred on x = 100: {xs:?}"
-        );
-        assert!((ab.mix - 1.0).abs() < 1e-6, "full Mix by default");
-    }
-
     // docs/08 §3.26: a still scene averaged over N is bit-identical to the
     // plain composite (the accumulation adjustment is a pure identity when nothing
     // moves), while a moving scene smears — differs from the plain composite and
@@ -5370,6 +6303,7 @@ mod render_below_at_tests {
             colour_inputs: None,
             colour_config: None,
             flow: None,
+            late_clones: None,
         };
         let doc = Document::new();
         let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
@@ -5470,73 +6404,6 @@ mod render_below_at_tests {
         text
     }
 
-    // docs/08 §3.2: an adjustment layer's picture is the
-    // composite below it, which nothing decodes — so the below-stack is built
-    // again at each neighbour time the effects asked for. The two consumers want
-    // opposite measurements, and each must get its own: one below-stack per
-    // offset, never one field the first effect in stack order takes.
-    // GPU-free structural check.
-    #[test]
-    fn an_adjustment_builds_one_below_stack_per_flow_consumer() {
-        let text = sweeping_text(200.0);
-        let doc = std::sync::Arc::new(Document::new());
-        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-        // 10 fps, so a neighbour is 0.1 s and 20 px away at t = 0.5 (x = 100).
-        let build = |names: &[&str]| {
-            let comp = comp_with(10, vec![flow_adjustment(names), text.clone()]);
-            let mut v = vec![comp.id];
-            build_comp_draws(&doc, &comp, 0.5, &pixels, &mut v)
-        };
-        let offsets = |names: &[&str]| -> Vec<i32> {
-            build(names)
-                .iter()
-                .find(|d| matches!(d.source, DrawSource::Adjust))
-                .expect("the adjustment emits a staging draw")
-                .flow_below
-                .iter()
-                .map(|(o, _, _)| *o)
-                .collect()
-        };
-        assert_eq!(
-            offsets(&["motion_blur"]),
-            vec![1],
-            "Motion blur measures forward, to the next frame"
-        );
-        assert_eq!(
-            offsets(&["datamosh"]),
-            vec![-1],
-            "Datamosh measures back, to the previous one"
-        );
-        assert_eq!(
-            offsets(&["motion_blur", "datamosh"]),
-            vec![-1, 1],
-            "both consumers, both measurements"
-        );
-        assert!(
-            offsets(&["blur"]).is_empty(),
-            "a stack that wants no motion builds no neighbour at all"
-        );
-
-        // And a neighbour really is the below-stack at another moment: the text
-        // has moved one frame's worth between the two.
-        let draws = build(&["motion_blur"]);
-        let here = draws
-            .iter()
-            .find(|d| !matches!(d.source, DrawSource::Adjust))
-            .expect("the text draws")
-            .position
-            .0;
-        let adj = draws
-            .iter()
-            .find(|d| matches!(d.source, DrawSource::Adjust))
-            .expect("the adjustment draws");
-        let there = adj.flow_below[0].1[0].position.0;
-        assert!(
-            (there - here - 20.0).abs() < 0.01,
-            "the +1 below-stack is one frame ahead (x = {here} → {there})"
-        );
-    }
-
     // The two GPU engines plus the flow backend a composite measurement needs,
     // as the headless renderer's owner holds them.
     struct FlowRig {
@@ -5571,14 +6438,25 @@ mod render_below_at_tests {
                 colour_inputs: None,
                 colour_config: None,
                 flow: Some(&self.flow),
+                late_clones: None,
             }
         }
 
         fn render(&self, doc: &Document, comp: &Composition, t: f64) -> Vec<u8> {
-            let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+            self.render_with(doc, comp, t, &HashMap::new())
+        }
+
+        // The same render over decoded footage.
+        fn render_with(
+            &self,
+            doc: &Document,
+            comp: &Composition,
+            t: f64,
+            pixels: &HashMap<Uuid, &CompLayerPixels>,
+        ) -> Vec<u8> {
             let mut v = vec![comp.id];
             let draws =
-                build_comp_draws(&std::sync::Arc::new(doc.clone()), comp, t, &pixels, &mut v);
+                build_comp_draws(&std::sync::Arc::new(doc.clone()), comp, t, pixels, &mut v);
             let tex = self.realiser().realise(
                 comp.camera_pose(t),
                 comp.width,
@@ -5644,113 +6522,586 @@ mod render_below_at_tests {
         );
     }
 
-    // docs/08 §3.12: Datamosh on an adjustment layer wants the
-    // *other* measurement — back to the previous frame — and it drags that
-    // previous picture along the field, so both halves of the composite
-    // measurement have to arrive. Before this it could have neither, and passed
-    // through. Sharing the machinery with Motion blur must not mean sharing
-    // the field: a stack holding both is checked structurally above.
-    #[test]
-    fn an_adjustment_datamosh_drags_the_previous_composite() {
-        let Some(rig) = FlowRig::new() else {
-            return;
-        };
-        let doc = Document::new();
-        let text = sweeping_text(400.0);
-        let plain = comp_with(10, vec![text.clone()]);
-        let moshed = comp_with(10, vec![flow_adjustment(&["datamosh"]), text]);
+    // A stand-in for a plugin that reads the frame before this one, as a
+    // motion blur does: it paints the picture with its -1 neighbour, and
+    // leaves it alone when it is handed none.
+    struct Previous(&'static lumit_core::fx::EffectSchema);
 
-        let a = rig.render(&doc, &plain, 0.5);
-        let b = rig.render(&doc, &moshed, 0.5);
-        assert_ne!(
-            a, b,
-            "Datamosh on an adjustment layer must mosh the composite below it"
+    impl lumit_core::fx::EffectDef for Previous {
+        fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
+            self.0
+        }
+        fn apply_cpu_temporal(
+            &self,
+            _inst: Uuid,
+            _lt: f64,
+            rgba: &mut [f32],
+            _w: u32,
+            _h: u32,
+            _p: lumit_core::fx::Params<'_>,
+            neighbours: &[(i32, &[f32])],
+        ) {
+            if let Some((_, previous)) = neighbours.iter().find(|(o, _)| *o == -1) {
+                rgba.copy_from_slice(previous);
+            }
+        }
+    }
+
+    // One instance of it, registered the way a scanned plugin is: a window of
+    // a frame either side, which is what a plugin with temporal access declares.
+    fn previous_frame_effect() -> lumit_core::model::EffectInstance {
+        const NAME: &str = "ofx:test.build.previous";
+        static REGISTERED: std::sync::Once = std::sync::Once::new();
+        REGISTERED.call_once(|| {
+            let schema = Box::leak(Box::new(lumit_core::fx::EffectSchema {
+                match_name: NAME,
+                label: "Previous frame",
+                version: 1,
+                category: lumit_core::fx::FxCategory::Utility,
+                traits: lumit_core::fx::EffectTraits {
+                    cost: lumit_core::fx::CostClass::Heavy,
+                    roi: lumit_core::fx::Roi::FullFrame,
+                    temporal: &[-1, 0, 1],
+                    premultiplied: true,
+                    seeded: false,
+                    beat_input: false,
+                },
+                params: &[],
+                groups: &[],
+                enabled_when: &[],
+                matte: lumit_core::fx::MatteRole::None,
+            }));
+            assert!(crate::gpufx::ofx::register(Box::leak(Box::new(Previous(
+                schema
+            )))));
+        });
+        lumit_core::fx::instantiate(NAME).unwrap()
+    }
+
+    // A clip that fills the frame, and the item and probe the planner reads
+    // it by: 10 fps, the rate of the comps here, so a comp frame is a source
+    // frame.
+    fn clip(doc: &mut Document) -> (Layer, HashMap<Uuid, crate::SourceProbe>) {
+        use lumit_core::model::{FootageItem, MediaRef, ProjectItem};
+        let item = Uuid::now_v7();
+        doc.items.push(ProjectItem::Footage(FootageItem {
+            sequence: None,
+            id: item,
+            name: "f".into(),
+            media: MediaRef {
+                relative_path: "f.mp4".into(),
+                absolute_path: "/f.mp4".into(),
+                fingerprint: None,
+                extra: serde_json::Map::new(),
+            },
+            extra: serde_json::Map::new(),
+            colour_space: None,
+            source_layer: None,
+        }));
+        let mut l = text_layer(0.0);
+        l.kind = LayerKind::Footage { item };
+        l.transform.position_y = Property::fixed(0.0);
+        let probe = crate::SourceProbe::Video {
+            fps: 10.0,
+            width: 320,
+            height: 180,
+            frames: 100,
+            audio: false,
+        };
+        (l, [(item, probe)].into_iter().collect())
+    }
+
+    // The clip as the decode worker hands it over for a planned job: grey at
+    // the frame's own time and orange at every other moment the plan asked
+    // for, filed under the plan's own keys.
+    fn decoded(job: &crate::decode::CompJob) -> CompLayerPixels {
+        use crate::decode::Cut;
+        let flat = |rgb: [u8; 3]| CompLayerPixels {
+            layer: job.layer,
+            width: 8,
+            height: 8,
+            rgba: [rgb[0], rgb[1], rgb[2], 255].repeat(64).into(),
+            format: lumit_media::PixelFormat::Srgb8,
+            natural_w: 320,
+            natural_h: 180,
+            temporal: Vec::new(),
+            flow_fields: Vec::new(),
+            shutter: Vec::new(),
+            source_key: 0,
+            source_frame: 0,
+        };
+        let neighbour = || flat(ORANGE).rgba.to_vec();
+        let moment = || Some(Box::new(flat(ORANGE)));
+        let mut lp = flat(GREY);
+        lp.temporal = job
+            .temporal
+            .iter()
+            .map(|(o, _)| (*o, neighbour()))
+            .collect();
+        lp.shutter = job.shutter.iter().map(|s| (s.offset, moment())).collect();
+        // Another clip's frame arrives where a frame of this one would, and
+        // a gap arrives as nothing.
+        for cut in &job.cuts {
+            match cut {
+                Cut::Neighbour(o, _) => lp.temporal.push((*o, neighbour())),
+                Cut::Moment(o, clip) => lp.shutter.push((*o, clip.as_ref().and_then(|_| moment()))),
+                // Mixed into the frame's own pixels where it is decoded.
+                Cut::Under(..) => {}
+            }
+        }
+        lp
+    }
+    const GREY: [u8; 3] = [60, 60, 60];
+    const ORANGE: [u8; 3] = [230, 120, 20];
+
+    // The colour a draw list's first clip is drawn in.
+    fn clip_colour(draws: &[CompLayerDraw]) -> [u8; 3] {
+        match &draws.first().expect("the clip draws").source {
+            DrawSource::Pixels { rgba, .. } => [rgba[0], rgba[1], rgba[2]],
+            // A node graph's clip is its Read box.
+            DrawSource::Graph(plan) => match plan.steps.first() {
+                Some(crate::draw::GraphStep::Read(read)) => {
+                    clip_colour(std::slice::from_ref(&**read))
+                }
+                _ => panic!("the graph reads a clip"),
+            },
+            _ => panic!("a clip draws from decoded pixels"),
+        }
+    }
+
+    // The red in the middle of a rendered frame.
+    fn centre_red(px: &[u8]) -> u8 {
+        px[(90 * 320 + 160) * 4]
+    }
+
+    // A plugin on a **Precomp** layer that reads the previous frame must be
+    // handed the nested comp as it was a frame ago, footage and all. The
+    // nested rebuild used to draw the clip inside from the one decode in
+    // hand, so the plugin compared a frame with itself, saw no motion and
+    // gave the picture back unchanged. The footage is tried on a footage
+    // layer, as a clip on a Sequence layer and read by a node graph, since
+    // each is planned by its own arm. The Sequence layer has an edit point
+    // at this frame, so its frame before is another clip's footage, and it
+    // is tried again with the plugin on the layer itself.
+    #[test]
+    fn a_plugin_on_a_precomp_reads_the_nested_footage_a_frame_back() {
+        use crate::decode::Cut;
+        use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
+        use lumit_core::model::ProjectItem;
+        use lumit_core::sequence::{Clip, ClipSource};
+        let mut doc = Document::new();
+        let (footage, mut probes) = clip(&mut doc);
+        let LayerKind::Footage { item } = footage.kind else {
+            panic!("a footage layer");
+        };
+        let (earlier, more) = clip(&mut doc);
+        let LayerKind::Footage { item: other } = earlier.kind else {
+            panic!("a footage layer");
+        };
+        probes.extend(more);
+        let at = |n, d| Rational::new(n, d).unwrap();
+        let mut cut = footage.clone();
+        cut.id = Uuid::now_v7();
+        cut.kind = LayerKind::Sequence {
+            clips: vec![
+                Clip::new(
+                    ClipSource::Footage(other),
+                    at(0, 1),
+                    at(1, 2),
+                    at(0, 1),
+                    at(1, 2),
+                ),
+                Clip::new(
+                    ClipSource::Footage(item),
+                    at(1, 2),
+                    at(10, 1),
+                    at(1, 2),
+                    at(19, 2),
+                ),
+            ],
+        };
+        let sequence = cut.clone();
+        let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
+        let mut graph = comp_with(10, Vec::new());
+        graph.graph = Some(CompGraph {
+            nodes: vec![
+                GraphNode::Read {
+                    id: read,
+                    item,
+                    custom_name: None,
+                },
+                GraphNode::Output { id: out },
+            ],
+            edges: vec![GraphEdge {
+                from: read,
+                from_port: "output".into(),
+                to: out,
+                to_port: "input".into(),
+            }],
+            layout: Vec::new(),
+            exposed: Vec::new(),
+            groups: Vec::new(),
+        });
+        // What the clip's pixels are filed under, the footage it shows a
+        // frame back, and the comp it sits in.
+        let cases = [
+            (
+                "a footage layer",
+                footage.id,
+                item,
+                comp_with(10, vec![footage]),
+            ),
+            ("a Sequence layer", cut.id, other, comp_with(10, vec![cut])),
+            ("a node graph", read, item, graph),
+        ]
+        .map(|(what, clip_id, before, nested)| {
+            let nested_id = nested.id;
+            doc.items.push(ProjectItem::Composition(nested));
+            (what, clip_id, before, nested_id)
+        });
+        let rig = FlowRig::new();
+        let precomp = |nested_id: Uuid, effects: Vec<lumit_core::model::EffectInstance>| {
+            let mut l = text_layer(0.0);
+            l.kind = LayerKind::Precomp { comp: nested_id };
+            l.transform.position_y = Property::fixed(0.0);
+            l.effects = effects;
+            comp_with(10, vec![l])
+        };
+        // A job's other moments, whichever way they were asked for: the
+        // offset, whose footage, and which frame of it.
+        let moments = |job: &crate::decode::CompJob| -> Vec<(f64, Uuid, usize)> {
+            let own = job.shutter.iter();
+            own.map(|s| (s.offset.round(), job.item, s.source_frame))
+                .chain(job.cuts.iter().filter_map(|c| match c {
+                    Cut::Moment(o, Some(clip)) => Some((o.round(), clip.item, clip.source_frame)),
+                    _ => None,
+                }))
+                .collect()
+        };
+
+        for (what, clip_id, before, nested_id) in cases {
+            let outer = precomp(nested_id, vec![previous_frame_effect()]);
+
+            // The plan fetches the clip at both of the plugin's neighbours,
+            // each the one real frame it shows then.
+            let jobs =
+                crate::plan_comp_frame(&doc, &outer, 0.5, crate::Quality::default(), &probes);
+            let job = jobs.iter().find(|j| j.layer == clip_id).expect("planned");
+            assert_eq!(job.source_frame, 5, "{what}");
+            assert_eq!(
+                moments(job),
+                vec![(-1.0, before, 4), (1.0, item, 6)],
+                "{what}: the clip is planned a frame either side"
+            );
+
+            // And the builder draws each neighbour from those pixels.
+            let lp = decoded(job);
+            let pixels: HashMap<Uuid, &CompLayerPixels> = [(clip_id, &lp)].into_iter().collect();
+            let mut v = vec![outer.id];
+            let draws = build_comp_draws(
+                &std::sync::Arc::new(doc.clone()),
+                &outer,
+                0.5,
+                &pixels,
+                &mut v,
+            );
+            let d = draws.first().expect("the Precomp draws");
+            match &d.source {
+                DrawSource::Nested { draws, .. } => assert_eq!(clip_colour(draws), GREY),
+                _ => panic!("a Precomp layer draws a nested comp"),
+            }
+            assert_eq!(
+                d.flow_below
+                    .iter()
+                    .map(|(o, inner, _, measure)| (*o, clip_colour(inner), *measure))
+                    .collect::<Vec<_>>(),
+                vec![(-1, ORANGE, false), (1, ORANGE, false)],
+                "{what}: each neighbour is the clip at its own moment, with no flow asked for"
+            );
+
+            let Some(rig) = &rig else {
+                continue;
+            };
+            let plain = rig.render_with(&doc, &precomp(nested_id, Vec::new()), 0.5, &pixels);
+            let read = rig.render_with(&doc, &outer, 0.5, &pixels);
+            assert!(
+                centre_red(&read) > centre_red(&plain).saturating_add(60),
+                "{what}: the plugin was handed the previous frame ({} → {})",
+                centre_red(&plain),
+                centre_red(&read)
+            );
+        }
+
+        // The plugin on the Sequence layer itself reads its neighbours
+        // through the clips. The frame after is one more frame of this clip,
+        // and the frame before the edit point is the other clip's own job.
+        let mut direct = sequence.clone();
+        direct.effects = vec![previous_frame_effect()];
+        let comp = comp_with(10, vec![direct]);
+        let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);
+        let job = jobs.first().expect("planned");
+        assert_eq!(job.temporal, vec![(1, 6)]);
+        assert!(
+            matches!(&job.cuts[..], [Cut::Neighbour(-1, n)] if n.item == other && n.source_frame == 4),
+            "the frame before the cut is the other clip's"
+        );
+        if let Some(rig) = &rig {
+            let lp = decoded(job);
+            let pixels: HashMap<Uuid, &CompLayerPixels> =
+                [(sequence.id, &lp)].into_iter().collect();
+            let plain = comp_with(10, vec![sequence.clone()]);
+            let (plain, read) = (
+                rig.render_with(&doc, &plain, 0.5, &pixels),
+                rig.render_with(&doc, &comp, 0.5, &pixels),
+            );
+            assert!(
+                centre_red(&read) > centre_red(&plain).saturating_add(60),
+                "a plugin on the Sequence layer was handed the previous frame ({} → {})",
+                centre_red(&plain),
+                centre_red(&read)
+            );
+        }
+
+        // With nothing before the edit point the frame before is a gap, so
+        // that neighbour is drawn without the layer and not with this frame
+        // held.
+        let mut alone = sequence;
+        if let LayerKind::Sequence { clips } = &mut alone.kind {
+            clips.remove(0);
+        }
+        let alone_id = alone.id;
+        let nested = comp_with(10, vec![alone]);
+        let outer = precomp(nested.id, vec![previous_frame_effect()]);
+        doc.items.push(ProjectItem::Composition(nested));
+        let jobs = crate::plan_comp_frame(&doc, &outer, 0.5, crate::Quality::default(), &probes);
+        let lp = decoded(jobs.first().expect("planned"));
+        let pixels: HashMap<Uuid, &CompLayerPixels> = [(alone_id, &lp)].into_iter().collect();
+        let mut v = vec![outer.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &outer,
+            0.5,
+            &pixels,
+            &mut v,
         );
         assert_eq!(
-            b,
-            rig.render(&doc, &moshed, 0.5),
-            "and it is deterministic across two runs"
+            draws[0]
+                .flow_below
+                .iter()
+                .map(|(o, inner, ..)| (*o, inner.len()))
+                .collect::<Vec<_>>(),
+            vec![(-1, 0), (1, 1)],
+            "a gap a frame back is empty"
         );
     }
 
-    // docs/08 §3.2: the same for a **Precomp** layer, whose picture is a
-    // comp render rather than a composite of the layers below — the other kind
-    // with no decoded frames of its own. The motion is inside the nested comp;
-    // the effect sits on the Precomp layer in the parent.
+    // The same on an **adjustment** layer, whose picture is the composite
+    // below it: the clip beneath is planned and drawn a frame either side.
     #[test]
-    fn a_precomp_fast_motion_blur_measures_its_own_picture() {
-        use lumit_core::model::ProjectItem;
+    fn a_plugin_on_an_adjustment_reads_the_footage_below_a_frame_back() {
+        let mut doc = Document::new();
+        let (footage, probes) = clip(&mut doc);
+        let footage_id = footage.id;
+        let mut adjust = flow_adjustment(&[]);
+        adjust.effects = vec![previous_frame_effect()];
+        let plain = comp_with(10, vec![footage.clone()]);
+        // The frame before a cut: a shot that starts on the next frame is not
+        // on screen yet, and is planned all the same, for the frame the
+        // plugin reads ahead. Without it that frame is drawn with a hole
+        // where the next shot is.
+        let mut next = footage.clone();
+        next.id = Uuid::now_v7();
+        next.in_point = lumit_core::time::CompTime(Rational::new(6, 10).unwrap());
+        let cut = comp_with(10, vec![adjust.clone(), next.clone(), footage.clone()]);
+        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        assert!(
+            jobs.iter().any(|j| j.layer == next.id),
+            "the shot after the cut is planned for the neighbour it is in"
+        );
+        // The same for a Sequence layer in a gap now whose clip starts on the
+        // next frame. The clip is fetched for that frame and drawn in it, and
+        // nothing of it is drawn in this one or in the gap a frame back.
+        let LayerKind::Footage { item } = footage.kind else {
+            panic!("a footage layer");
+        };
+        let at = |n, d| Rational::new(n, d).unwrap();
+        let mut gap = footage.clone();
+        gap.id = Uuid::now_v7();
+        gap.kind = LayerKind::Sequence {
+            clips: vec![lumit_core::sequence::Clip::new(
+                lumit_core::sequence::ClipSource::Footage(item),
+                at(0, 1),
+                at(94, 10),
+                at(6, 10),
+                at(94, 10),
+            )],
+        };
+        let gap_id = gap.id;
+        let cut = comp_with(10, vec![adjust.clone(), gap]);
+        let jobs = crate::plan_comp_frame(&doc, &cut, 0.5, crate::Quality::default(), &probes);
+        let lp = decoded(jobs.first().expect("the clip after the gap is planned"));
+        let pixels: HashMap<Uuid, &CompLayerPixels> = [(gap_id, &lp)].into_iter().collect();
+        let mut v = vec![cut.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &cut,
+            0.5,
+            &pixels,
+            &mut v,
+        );
+        assert_eq!(draws.len(), 1, "a layer in a gap draws nothing");
+        assert_eq!(
+            draws[0]
+                .flow_below
+                .iter()
+                .map(|(o, below, ..)| (*o, below.len()))
+                .collect::<Vec<_>>(),
+            vec![(-1, 0), (1, 1)],
+            "the clip after the gap is in the neighbour it starts in"
+        );
+        let comp = comp_with(10, vec![adjust, footage]);
+
+        let jobs = crate::plan_comp_frame(&doc, &comp, 0.5, crate::Quality::default(), &probes);
+        let job = jobs
+            .iter()
+            .find(|j| j.layer == footage_id)
+            .expect("planned");
+        assert_eq!(
+            job.shutter
+                .iter()
+                .map(|s| (s.offset.round(), s.source_frame, s.blend))
+                .collect::<Vec<_>>(),
+            vec![(-1.0, 4, None), (1.0, 6, None)],
+            "the clip below is planned a frame either side"
+        );
+
+        let lp = decoded(job);
+        let pixels: HashMap<Uuid, &CompLayerPixels> = [(footage_id, &lp)].into_iter().collect();
+        let mut v = vec![comp.id];
+        let draws = build_comp_draws(
+            &std::sync::Arc::new(doc.clone()),
+            &comp,
+            0.5,
+            &pixels,
+            &mut v,
+        );
+        let adj = draws
+            .iter()
+            .find(|d| matches!(d.source, DrawSource::Adjust))
+            .expect("the adjustment draws");
+        assert_eq!(
+            adj.flow_below
+                .iter()
+                .map(|(o, below, _, measure)| (*o, clip_colour(below), *measure))
+                .collect::<Vec<_>>(),
+            vec![(-1, ORANGE, false), (1, ORANGE, false)],
+            "each neighbour is the clip below at its own moment"
+        );
+
         let Some(rig) = FlowRig::new() else {
             return;
         };
-        let nested = comp_with(10, vec![sweeping_text(400.0)]);
-        let nested_id = nested.id;
-        let mut doc = Document::new();
-        doc.items.push(ProjectItem::Composition(nested));
+        let before = rig.render_with(&doc, &plain, 0.5, &pixels);
+        let read = rig.render_with(&doc, &comp, 0.5, &pixels);
+        assert!(
+            centre_red(&read) > centre_red(&before).saturating_add(60),
+            "the plugin was handed the previous frame ({} → {})",
+            centre_red(&before),
+            centre_red(&read)
+        );
+    }
 
-        let precomp_layer = |effects: Vec<&str>| {
-            let mut l = text_layer(160.0);
+    // What it costs, and who pays. A Precomp whose stack reads only its own
+    // frame plans one decode and builds no neighbour, and a held frame still
+    // saves its decodes. A temporal stack rebuilds once per frame of its
+    // window, and only a flow consumer's offset is measured.
+    #[test]
+    fn only_a_temporal_stack_on_a_precomp_pays_for_neighbours() {
+        use lumit_core::model::ProjectItem;
+        let mut doc = Document::new();
+        let (footage, probes) = clip(&mut doc);
+        let footage_id = footage.id;
+        let nested = comp_with(10, vec![footage]);
+        let nested_id = nested.id;
+        doc.items.push(ProjectItem::Composition(nested));
+        let precomp = |names: &[&str]| {
+            let mut l = text_layer(0.0);
             l.kind = LayerKind::Precomp { comp: nested_id };
-            // Square on the parent frame: the nested comp is the same size, so
-            // its whole picture (and all of the motion in it) is visible.
-            l.transform.position_x = Property::fixed(0.0);
-            l.transform.position_y = Property::fixed(0.0);
-            l.effects = effects
+            l.effects = names
                 .iter()
                 .map(|n| lumit_core::fx::instantiate(n).unwrap())
                 .collect();
-            l
+            comp_with(10, vec![l])
         };
-        let plain = comp_with(10, vec![precomp_layer(Vec::new())]);
-        let blurred = comp_with(10, vec![precomp_layer(vec!["motion_blur"])]);
+        let plan = |comp: &Composition, held: bool| {
+            crate::plan::plan_comp_frame_held(
+                &doc,
+                comp,
+                0.5,
+                crate::Quality::default(),
+                &probes,
+                Some(&|_, _, _| held),
+            )
+        };
+        let rebuilds = |comp: &Composition| -> Vec<(i32, bool)> {
+            let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+            let mut v = vec![comp.id];
+            build_comp_draws(
+                &std::sync::Arc::new(doc.clone()),
+                comp,
+                0.5,
+                &pixels,
+                &mut v,
+            )
+            .first()
+            .expect("the Precomp draws")
+            .flow_below
+            .iter()
+            .map(|(o, _, _, measure)| (*o, *measure))
+            .collect()
+        };
 
-        // The Precomp draw carries the nested comp again at the +1 neighbour
-        // time, and the two really are a frame apart.
-        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-        let mut v = vec![blurred.id];
-        let draws = build_comp_draws(
-            &std::sync::Arc::new(doc.clone()),
-            &blurred,
-            0.5,
-            &pixels,
-            &mut v,
-        );
-        let d = draws.first().expect("the Precomp draws");
+        let bare = precomp(&[]);
+        let blurred = precomp(&["blur"]);
+        let jobs = plan(&blurred, false);
+        let job = jobs
+            .iter()
+            .find(|j| j.layer == footage_id)
+            .expect("planned");
+        assert!(job.shutter.is_empty(), "one frame, no other moment");
         assert_eq!(
-            d.flow_below.iter().map(|(o, _, _)| *o).collect::<Vec<_>>(),
-            vec![1],
-            "the Precomp carries the +1 neighbour Motion blur asked for"
+            job.source_key(),
+            plan(&bare, false)[0].source_key(),
+            "and the decode keeps its name"
         );
-        let here = match &d.source {
-            DrawSource::Nested { draws, .. } => draws[0].position.0,
-            _ => panic!("a Precomp layer draws a nested comp"),
-        };
-        let there = d.flow_below[0].1[0].position.0;
+        assert!(rebuilds(&blurred).is_empty(), "no neighbour is built");
         assert!(
-            (there - here - 40.0).abs() < 0.01,
-            "the neighbour comp is one frame ahead (x = {here} → {there})"
+            plan(&blurred, true).is_empty(),
+            "a held frame wants no decodes"
         );
 
-        let a = rig.render(&doc, &plain, 0.5);
-        let b = rig.render(&doc, &blurred, 0.5);
-        assert_ne!(
-            a, b,
-            "Motion blur on a Precomp layer must smear the comp inside it"
-        );
-        assert_eq!(
-            b,
-            rig.render(&doc, &blurred, 0.5),
-            "and it is deterministic across two runs"
-        );
+        // Echo reads back through its window and measures nothing.
+        let echoed = precomp(&["echo"]);
+        let trail = rebuilds(&echoed);
+        assert_eq!(trail.len(), 16, "one rebuild per frame of the window");
+        assert!(trail.iter().all(|(o, measure)| *o < 0 && !measure));
+        // A rebuild is made from pixels, so its footage is decoded even
+        // where the frame itself is held.
+        let jobs = plan(&echoed, true);
+        let job = jobs
+            .iter()
+            .find(|j| j.layer == footage_id)
+            .expect("planned");
+        assert!(!job.shutter.is_empty());
+
+        // Motion blur still gets its measurement.
+        assert_eq!(rebuilds(&precomp(&["motion_blur"])), vec![(1, true)]);
     }
 
-    // docs/impl/node-graph-comp.md §5.6: the same Precomp under a **Retime
-    // map**. The neighbour is the nested comp at the neighbour's own *mapped*
-    // moment, so at half speed the picture a frame away has moved half as far.
-    // Without the map the effect would measure a frame of motion the layer
-    // never shows, and smear twice as much as it should.
+    // Echo on a Precomp layer had the same fault as the plugin: every tap
+    // was the frame in hand, so there was no trail.
     #[test]
-    fn a_retimed_precomps_motion_blur_measures_its_mapped_neighbour() {
+    fn an_echo_on_a_precomp_trails_the_comp_inside_it() {
         use lumit_core::model::ProjectItem;
         let Some(rig) = FlowRig::new() else {
             return;
@@ -5759,54 +7110,20 @@ mod render_below_at_tests {
         let nested_id = nested.id;
         let mut doc = Document::new();
         doc.items.push(ProjectItem::Composition(nested));
-
-        // Half speed, and square on the parent frame so the whole nested
-        // picture is visible.
-        let mut l = text_layer(160.0);
-        l.kind = LayerKind::Precomp { comp: nested_id };
-        l.transform.position_x = Property::fixed(0.0);
-        l.transform.position_y = Property::fixed(0.0);
-        // Half speed: a second of the layer is half a second of the comp
-        // inside it, over the very span the sweep covers.
-        l.retime = Some(ramp(0.0, 0.5));
-        l.effects = vec![lumit_core::fx::instantiate("motion_blur").unwrap()];
-        let blurred = comp_with(10, vec![l]);
-
-        let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
-        let mut v = vec![blurred.id];
-        let draws = build_comp_draws(
-            &std::sync::Arc::new(doc.clone()),
-            &blurred,
-            0.5,
-            &pixels,
-            &mut v,
-        );
-        let d = draws.first().expect("the Precomp draws");
-        assert_eq!(
-            d.flow_below.iter().map(|(o, _, _)| *o).collect::<Vec<_>>(),
-            vec![1],
-            "the Precomp still carries the +1 neighbour"
-        );
-        let here = match &d.source {
-            DrawSource::Nested { draws, .. } => draws[0].position.0,
-            _ => panic!("a Precomp layer draws a nested comp"),
+        let precomp = |names: &[&str]| {
+            let mut l = text_layer(0.0);
+            l.kind = LayerKind::Precomp { comp: nested_id };
+            l.transform.position_y = Property::fixed(0.0);
+            l.effects = names
+                .iter()
+                .map(|n| lumit_core::fx::instantiate(n).unwrap())
+                .collect();
+            comp_with(10, vec![l])
         };
-        let there = d.flow_below[0].1[0].position.0;
-        assert!(
-            (there - here - 20.0).abs() < 0.01,
-            "at half speed the neighbour is half a frame ahead (x = {here} → {there})"
-        );
-        // And the picture itself is the nested comp at the mapped moment: at
-        // outer time 0.5 the ramp is a quarter of the way along, not half.
-        assert!(
-            (here - 100.0).abs() < 0.01,
-            "the frame on screen is the one the map points at (x = {here})"
-        );
-
-        assert_eq!(
-            rig.render(&doc, &blurred, 0.5),
-            rig.render(&doc, &blurred, 0.5),
-            "and it is deterministic across two runs"
+        assert_ne!(
+            rig.render(&doc, &precomp(&[]), 0.5),
+            rig.render(&doc, &precomp(&["echo"]), 0.5),
+            "Echo on a Precomp layer must trail the comp inside it"
         );
     }
 }

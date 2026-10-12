@@ -509,19 +509,49 @@ pub enum LayerInput {
     ThisLayer,
     /// Another layer, already rendered alone at this raster.
     Texture(Tex),
+    /// One op's whole list of layers, for an effect with more than one layer
+    /// row. Each entry has the layer's own size beside it, px at composition
+    /// size, where it is another layer's picture.
+    Several(Vec<(LayerInput, Option<[f32; 2]>)>),
+    /// A list that can only be made once the op's points stream exists
+    /// ([`crate::draw::LayerInputDraw::Late`]). [`Side::late`] makes it when
+    /// the op comes round.
+    Late,
 }
 
 impl LayerInput {
     /// The texture this slot names, given the texture the chain currently
-    /// holds. `None` for [`LayerInput::Absent`] — the passthrough.
+    /// holds. `None` for [`LayerInput::Absent`] — the passthrough. A list
+    /// names no one texture, so it answers `None` too.
     #[must_use]
     pub fn texture<'a>(&'a self, current: &'a Tex) -> Option<&'a Tex> {
         match self {
-            LayerInput::Absent => None,
+            LayerInput::Absent | LayerInput::Several(_) | LayerInput::Late => None,
             LayerInput::ThisLayer => Some(current),
             LayerInput::Texture(t) => Some(t),
         }
     }
+
+    /// Whether this slot brings in another layer's picture, which nothing in
+    /// the op's own parameters names.
+    fn binds_a_picture(&self) -> bool {
+        match self {
+            LayerInput::Absent | LayerInput::ThisLayer => false,
+            // A late list is pictures nothing names yet.
+            LayerInput::Texture(_) | LayerInput::Late => true,
+            LayerInput::Several(list) => list.iter().any(|(l, _)| l.binds_a_picture()),
+        }
+    }
+}
+
+/// One layer picture as an op is handed it, at the op's own raster.
+#[derive(Clone)]
+pub struct LayerPicture {
+    pub tex: Tex,
+    /// The layer's own width and height, px at composition size. `None` for
+    /// the effect's own input and for a picture nobody measured, which are
+    /// the size of the frame.
+    pub size: Option<[f32; 2]>,
 }
 
 /// Render one referenced layer alone into the depth input a depth-of-field
@@ -603,6 +633,10 @@ pub struct Side<'a> {
     /// One slot per planes-tier op (docs/impl/addons.md §6.1), holding the
     /// plane its analysis filed for this layer's source frame.
     pub planes: &'a [Option<Tex>],
+    /// Makes a [`LayerInput::Late`] list: handed which of the stack's
+    /// layer-input slots it is and how many points the op's stream holds, it
+    /// answers the rendered list. `None` leaves such a slot absent.
+    pub late: Option<&'a dyn Fn(usize, usize) -> LayerInput>,
 }
 
 impl Side<'static> {
@@ -611,7 +645,31 @@ impl Side<'static> {
     pub const NONE: Side<'static> = Side {
         roto: &[],
         planes: &[],
+        late: None,
     };
+}
+
+thread_local! {
+    /// The effect instance whose incoming points stream this thread's next
+    /// walks report, and the last stream reported. Per thread, so a bake on
+    /// its own renderer never reads a stream the Viewer's walk was handed.
+    static WATCHED: std::cell::RefCell<Option<(uuid::Uuid, Option<lumit_core::fx::points::PointsStream>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Ask [`run_ops`] on this thread to report the points stream it hands to the
+/// effect instance `instance`, or to stop reporting with `None`. The Bake
+/// points job asks, since a stream that depends on a picture exists nowhere
+/// but inside a walk.
+pub fn watch_points(instance: Option<uuid::Uuid>) {
+    WATCHED.with(|w| *w.borrow_mut() = instance.map(|id| (id, None)));
+}
+
+/// The stream handed to the watched instance since it was last taken, in
+/// px@comp. `None` when no walk on this thread reached it.
+#[must_use]
+pub fn take_watched_points() -> Option<lumit_core::fx::points::PointsStream> {
+    WATCHED.with(|w| w.borrow_mut().as_mut().and_then(|(_, seen)| seen.take()))
 }
 
 /// Run `ops` over `tex` in order, returning the final texture (the input
@@ -677,6 +735,60 @@ impl Side<'static> {
 /// where a dispatch would have been and then takes the same road any op takes,
 /// the Mix seam and the matte dissolve included. An op with no closure in the
 /// list passes its picture through, exactly as a missing LUT does.
+/// The room an op that spreads past its picture is given, in texels on each
+/// side across and down, kept inside the widest texture there is.
+fn spread_room(
+    def: &dyn lumit_core::fx::EffectDef,
+    p: lumit_core::fx::Params<'_>,
+    w: u32,
+    h: u32,
+) -> [u32; 2] {
+    let [across, down] = def.spread_px(p);
+    let texels = |px: f32, n: u32| {
+        (px.ceil() as u32).min(crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n) / 2)
+    };
+    [texels(across, w), texels(down, h)]
+}
+
+/// The x and y pairs in pixels that are a distance and not a place on the
+/// picture, by the name they share: Offset's Shift. Every other one is a
+/// place, as a Centre or a noise field's origin is, and goes in with the
+/// picture when an op above has given it room.
+const DISTANCES: &[&str] = &["shift"];
+
+/// `p` with every place it names moved `by` texels right and down.
+fn places_moved(
+    schema: &lumit_core::fx::EffectSchema,
+    p: lumit_core::fx::Params<'_>,
+    by: [u32; 2],
+) -> Vec<(lumit_core::fx::ParamId, lumit_core::fx::Value)> {
+    use lumit_core::fx::{ParamId, Unit, Value};
+    let px = |id: &str| {
+        schema
+            .params
+            .iter()
+            .any(|row| row.id == id && row.unit == Unit::Px)
+    };
+    let slides: Vec<(ParamId, f32)> = schema
+        .pairs()
+        .filter(|pair| px(pair.x) && px(pair.y) && !DISTANCES.contains(&pair.stem))
+        .flat_map(|pair| {
+            [
+                (ParamId::new(pair.x), by[0] as f32),
+                (ParamId::new(pair.y), by[1] as f32),
+            ]
+        })
+        .collect();
+    p.iter()
+        .map(
+            |(id, value)| match (value, slides.iter().find(|(place, _)| *place == id)) {
+                (Value::Float(v), Some((_, by))) => (id, Value::Float(v + by)),
+                _ => (id, value),
+            },
+        )
+        .collect()
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn run_ops(
     fx: &FxEngine,
@@ -699,14 +811,21 @@ pub fn run_ops(
     cache: Option<(&std::cell::RefCell<FxCache>, u128)>,
 ) -> Tex {
     let mut tex = tex;
-    // The working raster, which **one** effect can grow mid-stack: Tile
+    // The working raster, which an effect can grow mid-stack: Tile
     // with Output width or height above 100 % stamps copies past the frame's
     // edges, and the ops after it run on the wider picture so those copies are
-    // real picture to them rather than transparency. Every other op returns the
+    // real picture to them rather than transparency. An op that spreads past
+    // its edges is given room the same way, below. Every other op returns the
     // size it was given, so this pair never moves and the walk is what it was.
     // The caller reads the finished size off the texture; a caller that cannot
     // take a wider one crops it back through `lumit_gpu::fx::fit_centred`.
     let (mut w, mut h) = (w, h);
+    // How many texels of room the spreading ops so far have put on the left
+    // and top of the picture, and its size counting only that room. A later
+    // op's places are measured from the layer's own corner, so they are moved
+    // this far to stay on the picture where they were.
+    let mut moved = [0u32; 2];
+    let (mut spread_w, mut spread_h) = (w, h);
     // The name of each op's output, before anything runs: the input's
     // name, the raster, the flare substitution count, then op after op — so
     // the k-th name covers ops 0..=k. `None` from the first op that binds
@@ -737,9 +856,35 @@ pub fn run_ops(
     // to the last effect is the common case, and it is answered by the op
     // before it in one lookup.
     let mut start = 0usize;
+    // The carriage slots whose op has to make its points stream on the card,
+    // because an op below reads it and it depends on a picture.
+    let late_wanted: Vec<u32> = points_schedules
+        .iter()
+        .flat_map(|s| s.late.iter().map(|(_, slot)| *slot))
+        .collect();
+    // ponytail: such an op and everything after it run every frame, because a
+    // held picture has no stream beside it. File the stream with the picture
+    // if a profile shows a stack like that re-running too much.
+    let held_limit = if late_wanted.is_empty() {
+        ops.len()
+    } else {
+        let mut slot = 0u32;
+        let mut first = ops.len();
+        for (i, op) in ops.iter().enumerate() {
+            if lumit_core::fx::points::wants_carriage(op.def.signature()) {
+                if late_wanted.contains(&slot) {
+                    first = first.min(i);
+                }
+                slot += 1;
+            }
+        }
+        first
+    };
+    // Streams made so far this walk, by the slot of the op that made them.
+    let mut late_streams: Vec<(u32, lumit_core::fx::points::PointsStream)> = Vec::new();
     if let Some((store, _)) = cache {
         let mut store = store.borrow_mut();
-        for i in (0..ops.len()).rev() {
+        for i in (0..held_limit).rev() {
             let Some(key) = keys.get(i).copied().flatten() else {
                 continue;
             };
@@ -842,6 +987,9 @@ pub fn run_ops(
     // per op whose effect asks a model for a plane, which is what
     // `build.rs`'s `planes_for` fills by.
     let mut plane_i = 0usize;
+    // The size the picture had before it was given the room a points effect
+    // asks for round a Shape or Text layer's art. `None` while there is none.
+    let mut unroomed: Option<(u32, u32)> = None;
     for (i, resolved) in ops.iter().enumerate() {
         let role = resolved.def.schema().matte;
         let paths_n = resolved.def.schema().mask_path_count();
@@ -849,13 +997,50 @@ pub fn run_ops(
             .get(path_i..(path_i + paths_n).min(mask_paths.len()))
             .unwrap_or(&[]);
         path_i += paths_n;
-        let schedule = if lumit_core::fx::points::wants_carriage(resolved.def.signature()) {
+        let (slot, schedule) = if lumit_core::fx::points::wants_carriage(resolved.def.signature()) {
             let slot = points_schedules.get(sched_i);
             sched_i += 1;
-            slot
+            (u32::try_from(sched_i - 1).ok(), slot)
         } else {
-            None
+            (None, None)
         };
+        // A stream an op above made on the card takes the place of the empty
+        // one the builder had to leave.
+        let late_input = schedule.filter(|s| !s.late.is_empty()).and_then(|s| {
+            let mut filled = s.clone();
+            let mut any = false;
+            for (entry, slot) in &s.late {
+                let Some((_, stream)) = late_streams.iter().find(|(k, _)| k == slot) else {
+                    continue;
+                };
+                let entry = *entry as usize;
+                if filled.input.len() <= entry {
+                    filled.input.resize(entry + 1, Default::default());
+                }
+                filled.input[entry] = stream.clone();
+                // The op above may have drawn before the room was made, and
+                // this one draws inside it.
+                if s.grow != [0, 0] {
+                    filled.input[entry].projection = s.projection.unwrap_or_default();
+                }
+                any = true;
+            }
+            any.then_some(filled)
+        });
+        let schedule = late_input.as_ref().or(schedule);
+        let asks = schedule.map(|s| s.grow).filter(|g| *g != [0, 0]);
+        // The stream this op is handed, for whoever asked to see it.
+        if let Some(carriage) = schedule {
+            WATCHED.with(|w| {
+                if let Some((_, seen)) = w
+                    .borrow_mut()
+                    .as_mut()
+                    .filter(|(id, _)| *id == resolved.instance)
+                {
+                    *seen = Some(carriage.input.first().cloned().unwrap_or_default());
+                }
+            });
+        }
         let matte = if role.param().is_some() {
             let slot = mattes.get(matte_i);
             matte_i += 1;
@@ -919,8 +1104,106 @@ pub fn run_ops(
             if let Some(into) = timings.as_mut() {
                 into.push(0.0);
             }
+            // The room a held op spread into is in the held picture, and
+            // the ops after it are still that far in.
+            let [across, down] = spread_room(resolved.def, resolved.params, spread_w, spread_h);
+            moved = [moved[0] + across, moved[1] + down];
+            spread_w += across * 2;
+            spread_h += down * 2;
+            // A picture held from inside a run was made with its room.
+            unroomed = asks.map(|[across, down]| {
+                unroomed.unwrap_or((
+                    w.saturating_sub(across.saturating_mul(2)),
+                    h.saturating_sub(down.saturating_mul(2)),
+                ))
+            });
             continue;
         }
+        // Room round the art for a run of points effects to draw in, grown the
+        // way Tile grows the picture. It lasts only as long as the run: an op
+        // that does not ask for it was placed on the art's own picture, so it
+        // is handed the picture cut back to that size, and every position on
+        // it is where it always was. A held op's picture has all this done.
+        match (asks, unroomed) {
+            (Some([across, down]), None) => {
+                unroomed = Some((w, h));
+                w = w.saturating_add(across.saturating_mul(2));
+                h = h.saturating_add(down.saturating_mul(2));
+                tex = lumit_gpu::fx::fit_centred(ctx, tex, w, h);
+            }
+            (None, Some(before)) => {
+                unroomed = None;
+                (w, h) = before;
+                tex = lumit_gpu::fx::fit_centred(ctx, tex, w, h);
+            }
+            _ => {}
+        }
+        // An op that spreads past the edge of its picture, a blur with Repeat
+        // edge pixels off, is given the room to spread into first. The picture
+        // is grown the way Tile grows it, so the ops after it run on the wider
+        // one and the composite places it by its centre. Zero for every other
+        // op, and nothing happens.
+        let [across, down] = spread_room(resolved.def, resolved.params, w, h);
+        if [across, down] != [0, 0] {
+            w += across * 2;
+            h += down * 2;
+            tex = lumit_gpu::fx::fit_centred(ctx, tex, w, h);
+            moved = [moved[0] + across, moved[1] + down];
+            spread_w += across * 2;
+            spread_h += down * 2;
+        }
+        // What this op places goes that far in with the picture: its points
+        // through the camera, its mask paths, and every place it names. All
+        // three are the op's own once nothing has spread, which is nearly
+        // every stack.
+        let px_scale = resolved
+            .params
+            .float(lumit_core::fx::ParamId::new("derived.px_scale"), 1.0)
+            .max(1e-6);
+        let inset = [moved[0] as f32 / px_scale, moved[1] as f32 / px_scale];
+        let moved_schedule = schedule.filter(|_| moved != [0, 0]).map(|s| {
+            let slid = |p: lumit_core::fx::points::Projection| {
+                let [mut x, mut y, w] = p.m;
+                for ((x, y), w) in x.iter_mut().zip(y.iter_mut()).zip(w) {
+                    *x += inset[0] * w;
+                    *y += inset[1] * w;
+                }
+                lumit_core::fx::points::Projection { m: [x, y, w] }
+            };
+            let mut s = s.clone();
+            s.projection = Some(slid(s.projection.unwrap_or_default()));
+            for stream in &mut s.input {
+                stream.projection = slid(stream.projection);
+            }
+            s
+        });
+        let moved_paths: Vec<lumit_core::mask::MaskPolyline> = if moved == [0, 0] {
+            Vec::new()
+        } else {
+            mask_paths_of_op
+                .iter()
+                .map(|path| {
+                    let mut path = path.clone();
+                    for point in &mut path.points {
+                        point[0] += inset[0];
+                        point[1] += inset[1];
+                    }
+                    path
+                })
+                .collect()
+        };
+        let mask_paths_of_op = if moved == [0, 0] {
+            mask_paths_of_op
+        } else {
+            &moved_paths[..]
+        };
+        // A points op's places are read through the camera, which has moved.
+        let moved_places = (moved != [0, 0] && slot.is_none())
+            .then(|| places_moved(resolved.def.schema(), resolved.params, moved));
+        let op_params = moved_places.as_ref().map_or(resolved.params, |entries| {
+            lumit_core::fx::Params::new(entries)
+        });
+        let schedule = moved_schedule.as_ref().or(schedule);
         // The picture this op is handed, kept for the recycling below: an op
         // that passes its input straight through has made nothing, and the one
         // texture must not be offered to the pool while the chain still holds
@@ -984,18 +1267,50 @@ pub fn run_ops(
             // once — the same decision `cpu::apply_stack` makes, read from
             // the same function. Normal leaves the kernel's own Mix alone and
             // runs no pass.
-            let blend = lumit_core::fx::cpu::blend_seam(schema, resolved.params);
+            let blend = lumit_core::fx::cpu::blend_seam(schema, op_params);
             let params = match &blend {
                 Some((_, _, entries)) => lumit_core::fx::Params::new(entries),
-                None => resolved.params,
+                None => op_params,
             };
             let mut blend_input = blend.as_ref().map(|_| tex.clone());
             // As above: a Light wrap's background plate, sized to the
-            // layer, grown into the margin an earlier op added.
-            let fitted_layer_input = layer_input
-                .and_then(|l| l.texture(&tex))
-                .cloned()
-                .map(|t| lumit_gpu::fx::fit_centred(ctx, t, w, h));
+            // layer, grown into the margin an earlier op added. One picture
+            // for most effects, a list for one with several layer rows.
+            // Inside the room a points effect was given, a picture that is
+            // stamped keeps the size it was made at, or every stamp would
+            // show it shrunk into the wider raster. One that is read under
+            // the points is read in place, and takes the room with the rest.
+            let (lw, lh) = match unroomed {
+                Some(before) if !resolved.def.points_need_picture(params) => before,
+                _ => (w, h),
+            };
+            let fitted = |l: &LayerInput, size: Option<[f32; 2]>| {
+                l.texture(&tex).cloned().map(|t| LayerPicture {
+                    tex: lumit_gpu::fx::fit_centred(ctx, t, lw, lh),
+                    size,
+                })
+            };
+            // A list that waited for this op's points is made now that the
+            // stream above has been.
+            let late = match layer_input {
+                Some(LayerInput::Late) => {
+                    let points = schedule
+                        .and_then(|s| s.input.first())
+                        .map_or(0, |s| s.len());
+                    side.late
+                        .filter(|_| points > 0)
+                        .map(|make| make(dof_i.saturating_sub(1), points))
+                }
+                _ => None,
+            };
+            let layer_input = late.as_ref().or(layer_input);
+            let layer_pictures: Vec<Option<LayerPicture>> = match layer_input {
+                Some(LayerInput::Several(list)) => {
+                    list.iter().map(|(l, size)| fitted(l, *size)).collect()
+                }
+                Some(l) => vec![fitted(l, None)],
+                None => Vec::new(),
+            };
             let data = match gpu.aux() {
                 AuxKind::None => AuxData::None,
                 AuxKind::Lut => {
@@ -1026,24 +1341,24 @@ pub fn run_ops(
                     neighbours,
                 },
             };
-            tex = gpu.run(
-                fx,
-                ctx,
-                &tex,
-                w,
-                h,
-                params,
-                AuxSlot::new(
-                    data,
-                    own_matte,
-                    matte.as_ref(),
-                    fitted_layer_input.as_ref(),
-                    mask_paths_of_op,
-                    schedule,
-                    resolved.instance,
-                    resolved.lt,
-                ),
+            let aux = AuxSlot::new(
+                data,
+                own_matte,
+                matte.as_ref(),
+                &layer_pictures,
+                mask_paths_of_op,
+                schedule,
+                resolved.instance,
+                resolved.lt,
             );
+            // Asked before the op draws, because its points are read off the
+            // picture it is handed.
+            if let Some(slot) = slot.filter(|s| late_wanted.contains(s)) {
+                if let Some(stream) = gpu.points_out(fx, ctx, &tex, w, h, params, aux) {
+                    late_streams.push((slot, stream));
+                }
+            }
+            tex = gpu.run(fx, ctx, &tex, w, h, params, aux);
             // A grown raster. The two passes below and every op after
             // this one read texel by texel, so the pictures they compare against
             // — the input the Blend row lerps from, the input the generic matte
@@ -1417,7 +1732,22 @@ fn op_keys(
                     // producer the wire names, or whether one is drawn at all:
                     // cut the wire and nothing in the consumer's own bag moves.
                     h.update(&sched.input_from.unwrap_or(u32::MAX).to_le_bytes());
+                    for from in &sched.ports_from {
+                        h.update(&from.to_le_bytes());
+                    }
                     h.update(&(sched.input.len() as u32).to_le_bytes());
+                    // The Text layer two of the family read is another
+                    // layer's words, which nothing above has named.
+                    for g in &sched.text {
+                        for v in [g.origin, g.end, g.up].as_flattened() {
+                            h.update(&v.to_le_bytes());
+                        }
+                        h.update(&g.word.to_le_bytes());
+                        h.update(&g.line.to_le_bytes());
+                    }
+                    if let Some(label) = &sched.label {
+                        h.update(&serde_json::to_vec(label).unwrap_or_default());
+                    }
                     for row in sched.projection.unwrap_or_default().m {
                         for v in row {
                             h.update(&v.to_le_bytes());
@@ -1438,7 +1768,10 @@ fn op_keys(
             // an AuxKind. A bound plate is a picture nobody named - it breaks
             // the chain exactly as a bound matte does.
             if schema.layer_input().is_some() {
-                if let Some(LayerInput::Texture(_)) = layer_inputs.get(dof_i) {
+                if layer_inputs
+                    .get(dof_i)
+                    .is_some_and(LayerInput::binds_a_picture)
+                {
                     broken = true;
                 }
                 dof_i += 1;
@@ -1580,89 +1913,6 @@ mod tests {
         );
     }
 
-    /// The declared domain travels with the cube, so the kernel can remap
-    /// through it exactly as the CPU oracle does. A default-domain file
-    /// still reads 0..1.
-    #[test]
-    fn the_declared_domain_travels_with_the_cube() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let dir = tempfile::tempdir().expect("a temp dir");
-        let mut cache = LutCache::default();
-
-        let plain = dir.path().join("plain.cube");
-        std::fs::write(&plain, cube_text(2, None)).expect("written");
-        let loaded = cache
-            .get_or_load(&ctx, &plain.to_string_lossy())
-            .expect("loaded");
-        assert_eq!(loaded.domain_min, [0.0; 3]);
-        assert_eq!(loaded.domain_max, [1.0; 3]);
-
-        let log = dir.path().join("log.cube");
-        std::fs::write(
-            &log,
-            cube_text(2, Some(([-0.25, 0.0, 0.1], [1.5, 0.75, 1.0]))),
-        )
-        .expect("written");
-        let loaded = cache
-            .get_or_load(&ctx, &log.to_string_lossy())
-            .expect("loaded");
-        assert_eq!(loaded.domain_min, [-0.25, 0.0, 0.1]);
-        assert_eq!(loaded.domain_max, [1.5, 0.75, 1.0]);
-    }
-
-    /// The cache is bounded and evicts the least recently used, so a long
-    /// session that touches many `.cube` files does not accumulate uploads
-    /// (docs/impl/lut.md §4). Re-asking for an old file *keeps it alive*, which
-    /// is what "least recently used" has to mean.
-    #[test]
-    fn the_cache_is_bounded_and_keeps_what_is_used() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let dir = tempfile::tempdir().expect("a temp dir");
-        let mut cache = LutCache::default();
-        let path = |i: usize| dir.path().join(format!("cube{i}.cube"));
-        for i in 0..=LUT_CACHE_MAX {
-            std::fs::write(path(i), cube_text(2, None)).expect("written");
-        }
-
-        // Fill it exactly, then keep the first one fresh by asking for it again.
-        for i in 0..LUT_CACHE_MAX {
-            cache
-                .get_or_load(&ctx, &path(i).to_string_lossy())
-                .expect("loaded");
-        }
-        assert_eq!(cache.len(), LUT_CACHE_MAX);
-        cache
-            .get_or_load(&ctx, &path(0).to_string_lossy())
-            .expect("still there");
-
-        // One more file evicts the least recently used — which is now cube1,
-        // not cube0.
-        cache
-            .get_or_load(&ctx, &path(LUT_CACHE_MAX).to_string_lossy())
-            .expect("loaded");
-        assert_eq!(cache.len(), LUT_CACHE_MAX, "the bound holds");
-        assert!(
-            cache
-                .entries
-                .iter()
-                .any(|(p, _, _)| p == &*path(0).to_string_lossy()),
-            "the one that was used again survived"
-        );
-        assert!(
-            !cache
-                .entries
-                .iter()
-                .any(|(p, _, _)| p == &*path(1).to_string_lossy()),
-            "and the least recently used went"
-        );
-    }
-
     // ----- The per-effect cache -----
 
     /// A stack of built-in effects with one float parameter set on each:
@@ -1788,83 +2038,6 @@ mod tests {
             .map(|i| ("exposure", "stops", 0.05 * (i + 1) as f32))
             .collect();
         stack(&spec)
-    }
-
-    /// **The holding bound** (docs/13 §3, issue #132 finding 15). A walk that
-    /// is filing its outputs must not hold one frame-sized texture per effect
-    /// for the length of the stack — that is exactly what the work-texture
-    /// pool exists to stop (`GpuContext::pool`), and a store with room for one
-    /// picture was going to evict all but one of them anyway. It holds what the
-    /// store can take, and hands the rest back as it goes.
-    #[test]
-    fn a_filing_walk_holds_no_more_than_the_store_can_take() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let ops = long_stack(6);
-
-        // The control: the same six ops with nothing being filed. Every
-        // intermediate is dead the moment the op after it has read it, so the
-        // walk ping-pongs between a couple of textures however long the stack.
-        let cold = std::cell::RefCell::new(FxCache::new((W * H * 8) as usize));
-        let loose = textures_made_by(fx, &ctx, &ops, &cold, 7);
-
-        // The same six ops, filing, into a store with room for exactly one
-        // output. Five of the six are destined for eviction the moment they
-        // are filed; holding them until the walk ends buys nothing at all.
-        let mut c = FxCache::new((W * H * 8) as usize);
-        c.keep_outputs(true);
-        let warm = std::cell::RefCell::new(c);
-        let held = textures_made_by(fx, &ctx, &ops, &warm, 7);
-
-        assert_eq!(
-            warm.borrow().stats().2,
-            1,
-            "the store took the one output it had room for"
-        );
-        assert!(
-            held <= loose + 1,
-            "a filing walk made {held} work textures where the same stack made \
-             {loose} without filing: it was holding an intermediate per effect"
-        );
-    }
-
-    /// **The ledger equals reality across the frame boundary** (docs/13 §3).
-    /// An intermediate is the one frame-sized allocation meant to outlive the
-    /// frame that made it, so its charge moves with it: the frame puts it down
-    /// as the store takes it up, and the card is never told it holds the same
-    /// texture twice.
-    #[test]
-    fn a_filed_intermediate_is_charged_to_the_store_and_not_the_frame_as_well() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let mut c = FxCache::default();
-        c.keep_outputs(true);
-        c.account_against(std::sync::Arc::clone(ctx.ledger()));
-        let warm = std::cell::RefCell::new(c);
-
-        let made = textures_made_by(fx, &ctx, &long_stack(3), &warm, 7);
-        assert!(made > 0, "the walk drew something");
-
-        // The frame is over, so every texture that belonged to it is gone and
-        // its charge with them. What is left on the ledger is what the store
-        // holds — to the byte, because there is nothing else left to hold.
-        let (held, _, entries) = warm.borrow().stats();
-        assert!(entries > 0, "the store took the walk's outputs");
-        assert_eq!(
-            ctx.ledger().used(lumit_budget::Tier::Vram),
-            held as u64,
-            "the ledger reads exactly what the store is sitting on"
-        );
-
-        // And giving them up gives the card back.
-        warm.borrow_mut().clear();
-        assert_eq!(ctx.ledger().used(lumit_budget::Tier::Vram), 0);
     }
 
     /// **The second rung of the ladder** (docs/13 §4): under pressure the cold
@@ -2029,45 +2202,6 @@ mod tests {
         );
     }
 
-    /// **The first rung of the ladder** (docs/13 §4): a card under pressure
-    /// pauses the cache fill. What is already held is still read — the picture
-    /// that comes out is the same either way, so the only thing that changes is
-    /// how much of the card is spent on a later edit's convenience.
-    #[test]
-    fn a_card_under_pressure_stops_filing_and_still_reads() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let warm = warm_cache();
-        run(fx, &ctx, &long_stack(3), &warm, 7);
-        let filed = warm.borrow().stats().2;
-        assert!(filed > 0, "a card with room takes the walk's outputs");
-
-        // The card is now as full as the ledger says it is — a budget that
-        // stops exactly where this process has already reserved to. What
-        // filled it (another comp's textures, a decode buffer) the walk below
-        // neither knows nor needs to: it reads one number.
-        let used = ctx.ledger().used(lumit_budget::Tier::Vram);
-        assert!(used > 0, "the first walk put textures on the card");
-        ctx.ledger().set_budget(lumit_budget::Tier::Vram, used);
-        assert_eq!(ctx.vram_pressure(), lumit_budget::Pressure::Full);
-
-        // The same three ops with a fourth appended: ops 0..2 keep their names,
-        // so the held prefix still answers for them, and only the new op runs.
-        run(fx, &ctx, &long_stack(4), &warm, 7);
-        assert_eq!(
-            warm.borrow().stats().2,
-            filed,
-            "nothing new was filed while the card was full"
-        );
-        assert!(
-            warm.borrow().counts().1 >= filed as u64,
-            "and the prefix that was already held was still read"
-        );
-    }
-
     /// One custom-shader instance holding `source`, resolved as the walk
     /// resolves it.
     fn shader_stack(source: &str) -> lumit_core::fx::ResolvedStack {
@@ -2127,38 +2261,6 @@ mod tests {
             );
             assert!((halved[i + 3] - before[i + 3]).abs() < 2e-3);
         }
-    }
-
-    /// The source is in the per-effect cache key, because it is in the bag:
-    /// editing a shader must rename its output, or the walk would serve the
-    /// previous shader's picture out of the intermediate cache with nothing to
-    /// say anything was wrong.
-    #[test]
-    fn editing_a_shaders_source_renames_its_output() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let cache = warm_cache();
-        let half = "fn shade(uv: vec2<f32>) -> vec4<f32> { let c = lumit_sample(uv);                     return vec4<f32>(c.rgb * 0.5, c.a); }";
-        let quarter = "fn shade(uv: vec2<f32>) -> vec4<f32> { let c = lumit_sample(uv);                        return vec4<f32>(c.rgb * 0.25, c.a); }";
-        let first = run(fx, &ctx, &shader_stack(half), &cache, 7);
-        assert_eq!(cache.borrow().counts(), (1, 0), "a cold walk runs it");
-        let again = run(fx, &ctx, &shader_stack(half), &cache, 7);
-        assert_eq!(
-            cache.borrow().counts().1,
-            1,
-            "the same source is the same picture, served from the cache"
-        );
-        assert_eq!(first, again);
-        let edited = run(fx, &ctx, &shader_stack(quarter), &cache, 7);
-        assert_eq!(
-            cache.borrow().counts().1,
-            1,
-            "and an edited one is a miss, not a stale hit"
-        );
-        assert_ne!(first, edited, "which is what makes the picture right");
     }
 
     /// **Editing the last effect re-runs only that one** — and the
@@ -2240,88 +2342,6 @@ mod tests {
             8,
         );
         assert_eq!(cache.borrow().counts(), (6, 0));
-    }
-
-    /// **The ops after a growing one run on the wider raster** (docs/08
-    /// §3.39). Tile above 100 % output is the only effect that can grow the
-    /// working picture; what makes that worth having is that the effects below
-    /// it in the stack then see the copies as picture rather than as
-    /// transparency. Here an Exposure after the Tile brightens the margin as
-    /// well as the frame, which it could only do if it was dispatched at the
-    /// grown size.
-    #[test]
-    fn the_ops_after_a_growing_one_run_on_the_wider_raster() {
-        use lumit_core::fx::{effects, Value};
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-
-        let mut ops = lumit_core::fx::ResolvedStack::new();
-        ops.begin(&effects::tile::TileDef, uuid::Uuid::now_v7());
-        ops.push(effects::tile::Tile::TILE_CENTRE_X, Value::Float(4.0));
-        ops.push(effects::tile::Tile::TILE_CENTRE_Y, Value::Float(4.0));
-        // The four sizes are px@comp: one whole-frame tile, stamped
-        // over twice the frame.
-        ops.push(effects::tile::Tile::TILE_WIDTH, Value::Float(W as f32));
-        ops.push(effects::tile::Tile::TILE_HEIGHT, Value::Float(H as f32));
-        ops.push(
-            effects::tile::Tile::OUTPUT_WIDTH,
-            Value::Float((W * 2) as f32),
-        );
-        ops.push(
-            effects::tile::Tile::OUTPUT_HEIGHT,
-            Value::Float((H * 2) as f32),
-        );
-        ops.push(effects::tile::Tile::MIX, Value::Float(100.0));
-        ops.begin(&effects::exposure::ExposureDef, uuid::Uuid::now_v7());
-        ops.push(effects::exposure::Exposure::STOPS, Value::Float(1.0));
-        ops.push(effects::exposure::Exposure::MIX, Value::Float(100.0));
-
-        let out = run_ops(
-            fx,
-            &ctx,
-            source(&ctx),
-            W,
-            H,
-            &ops,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &Side::NONE,
-            &[],
-            None,
-            None,
-        );
-        assert_eq!(
-            (out.width(), out.height()),
-            (W * 2, H * 2),
-            "the stack must hand back the raster Tile grew"
-        );
-        let grown = lumit_gpu::fx::readback_linear_f32(&ctx, &out, W * 2, H * 2).expect("readback");
-        let flat = lumit_gpu::fx::readback_linear_f32(&ctx, &source(&ctx), W, H).expect("readback");
-        // The margin: brightened copies, not the transparency a layer's edge
-        // used to be past its own raster.
-        let corner = 0usize;
-        assert!(
-            grown[corner + 3] > 0.5,
-            "the margin must hold picture, alpha {}",
-            grown[corner + 3]
-        );
-        // And the second op really ran there: +1 stop is a factor of two on the
-        // colour channels, which the source's own texel says.
-        let mid = (((H) * W * 2 + W) * 4) as usize;
-        let src = 0usize;
-        assert!(
-            grown[mid] > flat[src] || grown[mid + 1] > flat[src + 1],
-            "the Exposure after the Tile must have run on the grown raster"
-        );
     }
 
     /// An op that binds a picture nobody named — another layer's texture as a
@@ -2429,238 +2449,6 @@ mod tests {
         assert_eq!(cache.borrow().stats().2, 0);
     }
 
-    /// **A plane a model's analysis filed breaks the chain too**
-    /// (docs/impl/addons.md §13's "the frame key is the easiest thing to
-    /// forget"). Nothing in the bag names it, and neither does the Analyse
-    /// button that made it, so an output filed before a run landed must not be
-    /// handed back after it: the user would press Analyse, watch the run
-    /// finish, and go on looking at the unread picture.
-    #[test]
-    fn a_bound_plane_breaks_the_chain() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        // Depth carries two buttons, two choices and a toggle and no float row
-        // at all, so the helper's parameter matches nothing and sets nothing.
-        let ops = stack(&[("depth", "", 0.0), ("exposure", "stops", 1.0)]);
-
-        // Nothing analysed yet: the effect is a passthrough and both ops are
-        // named, which is the common case and must stay cacheable.
-        let cache = warm_cache();
-        for _ in 0..2 {
-            run(fx, &ctx, &ops, &cache, 7);
-        }
-        assert_eq!(
-            cache.borrow().counts(),
-            (2, 2),
-            "with no plane the stack names itself"
-        );
-
-        // The analysis lands: from the Depth op on, nothing is named.
-        let cache = warm_cache();
-        let planes = [Some(source(&ctx))];
-        let side = Side {
-            roto: &[],
-            planes: &planes,
-        };
-        for _ in 0..2 {
-            run_ops(
-                fx,
-                &ctx,
-                source(&ctx),
-                W,
-                H,
-                &ops,
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &side,
-                &[],
-                None,
-                Some((&cache, 7)),
-            );
-        }
-        assert_eq!(
-            cache.borrow().counts(),
-            (4, 0),
-            "an output made before the analysis was served after it"
-        );
-        assert_eq!(cache.borrow().stats().2, 0);
-    }
-
-    /// A `.cube` edited on disk is a different `lut` op: its mtime is in the
-    /// name (as it is in the LUT cache's).
-    #[test]
-    fn a_lut_edited_on_disk_misses() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let cache = warm_cache();
-        let lut = |mtime: u64| {
-            let cube = vec![[1.0f32, 0.0, 0.0]; 8];
-            Some(ColourTable::Cube(LoadedLut {
-                texture: lumit_gpu::fx::upload_lut_3d(&ctx, 2, &cube),
-                size: 2,
-                domain_min: [0.0; 3],
-                domain_max: [1.0; 3],
-                path: "grade.cube".into(),
-                mtime: Some(std::time::UNIX_EPOCH + std::time::Duration::from_secs(mtime)),
-            }))
-        };
-        let ops = stack(&[("lut", "mix", 100.0), ("exposure", "stops", 1.0)]);
-        for mtime in [1, 1, 2] {
-            run_ops(
-                fx,
-                &ctx,
-                source(&ctx),
-                W,
-                H,
-                &ops,
-                &[],
-                &[],
-                &[lut(mtime)],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &Side::NONE,
-                &[],
-                None,
-                Some((&cache, 7)),
-            );
-        }
-        assert_eq!(
-            cache.borrow().counts(),
-            (4, 2),
-            "same file twice is a hit; the edited file runs both again"
-        );
-    }
-
-    /// A bake merely being **made** renames nothing.
-    ///
-    /// Op outputs used to carry the flare bake *generation*, which moves the
-    /// moment any bake is queued — so with a keyframed aperture keeping one
-    /// queued, every walk of every stack in the project threw away its
-    /// predecessor's outputs and re-ran every op. What belongs in the name is
-    /// whether a flare actually stood other optics in, which is counted.
-    #[test]
-    fn a_bake_in_flight_does_not_rename_every_op() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let cache = warm_cache();
-        let ops = stack(&[
-            ("saturation", "saturation", 20.0),
-            ("exposure", "stops", 1.0),
-        ]);
-        run(fx, &ctx, &ops, &cache, 7);
-        run(fx, &ctx, &ops, &cache, 7);
-        assert_eq!(cache.borrow().counts(), (2, 2));
-
-        fx.set_deferred_flare_bakes(true);
-        let bake = std::sync::Arc::new(|| lumit_gpu::fx::FlareBakeData {
-            surfaces: Vec::new(),
-            ghosts: Vec::new(),
-            spreads: Vec::new(),
-            sensor_z_mm: 0.0,
-            focal_mm: 1.0,
-            native_fstop: 1.0,
-            pupil_mm: 1.0,
-            start_z_mm: 0.0,
-            energy_gain: 1.0,
-            reflectance: Vec::new(),
-            starburst: Vec::new(),
-            sb_res: 1,
-            sb_fields: 1,
-        }) as lumit_gpu::fx::FlareBake;
-        if !fx.warm_flare_bake(0xfeed_face, &bake) {
-            return; // no bake thread on this machine
-        }
-        run(fx, &ctx, &ops, &cache, 7);
-        assert_eq!(
-            cache.borrow().counts(),
-            (2, 4),
-            "a bake in flight leaves every op's name — and so every held output — alone"
-        );
-        assert_eq!(
-            fx.flare_substitutions(),
-            0,
-            "and nothing was stood in for: this stack holds no flare"
-        );
-    }
-
-    /// The budget holds, and holds the most recent: with room for one output,
-    /// the last op's survives, and the next identical walk starts after it.
-    #[test]
-    fn the_budget_evicts_the_oldest_output() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let mut c = FxCache::new((W * H * 8) as usize);
-        c.keep_outputs(true);
-        let cache = std::cell::RefCell::new(c);
-        let ops = stack(&[
-            ("saturation", "saturation", 20.0),
-            ("exposure", "stops", 1.0),
-        ]);
-        run(fx, &ctx, &ops, &cache, 7);
-        assert_eq!(cache.borrow().stats().2, 1, "one output fits");
-        run(fx, &ctx, &ops, &cache, 7);
-        assert_eq!(cache.borrow().counts(), (2, 2), "and it is the last one");
-
-        cache.borrow_mut().set_budget(0);
-        assert_eq!(cache.borrow().stats().2, 0);
-        run(fx, &ctx, &ops, &cache, 7);
-        assert_eq!(cache.borrow().stats().2, 0, "nothing fits in no budget");
-    }
-
-    /// A render that is not committed — a drag, playback — reads the cache
-    /// and never adds to it.
-    #[test]
-    fn an_uncommitted_render_reads_but_never_writes() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let cache = std::cell::RefCell::new(FxCache::default());
-        let ops = stack(&[
-            ("saturation", "saturation", 20.0),
-            ("exposure", "stops", 1.0),
-        ]);
-        run(fx, &ctx, &ops, &cache, 7);
-        assert_eq!(cache.borrow().stats().2, 0);
-
-        cache.borrow_mut().keep_outputs(true);
-        run(fx, &ctx, &ops, &cache, 7);
-        cache.borrow_mut().keep_outputs(false);
-        let dragged = stack(&[
-            ("saturation", "saturation", 20.0),
-            ("exposure", "stops", 3.0),
-        ]);
-        run(fx, &ctx, &dragged, &cache, 7);
-        assert_eq!(
-            cache.borrow().counts(),
-            (5, 1),
-            "the drag was served the prefix"
-        );
-        assert_eq!(cache.borrow().stats().2, 2, "and filed nothing of its own");
-    }
-
     /// `TABLE_EFFECTS` is the predicate `build.rs` fills the colour-table list
     /// by, and `AuxKind::Lut` is the one `run_ops` counts by. One list, so the
     /// two must name the same effects.
@@ -2675,59 +2463,6 @@ mod tests {
         let mut listed = TABLE_EFFECTS.to_vec();
         listed.sort_unstable();
         assert_eq!(declared, listed);
-    }
-
-    /// The OCIO file transform's table: baked and uploaded once per file and
-    /// stamp, bounded like the cubes, and `None` for a file that will not read.
-    #[test]
-    fn an_ocio_file_table_is_baked_once_and_refuses_an_unreadable_file() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let engine = ctx.colour();
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("grade.cc");
-        std::fs::write(
-            &path,
-            "<ColorCorrection><SOPNode><Slope>1.1 1 0.9</Slope></SOPNode></ColorCorrection>",
-        )
-        .unwrap();
-        let request = crate::colour::OcioRequest::File {
-            path: path.to_string_lossy().into_owned(),
-            inverse: false,
-        };
-        let mut cache = LutCache::default();
-        let first = cache
-            .get_or_bake(&ctx, engine, &request, None)
-            .expect("bakes");
-        let again = cache
-            .get_or_bake(&ctx, engine, &request, None)
-            .expect("bakes");
-        assert_eq!(first.identity, again.identity);
-        assert_eq!(cache.ocio_len(), 1, "the same file twice is one entry");
-        let inverse = crate::colour::OcioRequest::File {
-            path: path.to_string_lossy().into_owned(),
-            inverse: true,
-        };
-        let back = cache
-            .get_or_bake(&ctx, engine, &inverse, None)
-            .expect("bakes");
-        assert_ne!(
-            first.identity, back.identity,
-            "forward and inverse are two tables"
-        );
-        let missing = crate::colour::OcioRequest::File {
-            path: dir.path().join("gone.cube").to_string_lossy().into_owned(),
-            inverse: false,
-        };
-        assert!(cache.get_or_bake(&ctx, engine, &missing, None).is_none());
-        // A config edge with no config is the passthrough, never a fault.
-        let edge = crate::colour::OcioRequest::Config(crate::colour::Edge::Convert {
-            from: String::new(),
-            to: "anything".into(),
-        });
-        assert!(cache.get_or_bake(&ctx, engine, &edge, None).is_none());
     }
 
     // ----- The frame's texture pool -----

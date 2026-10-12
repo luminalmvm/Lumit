@@ -60,6 +60,7 @@
 //! # Ok::<(), lumit_track::TrackError>(())
 //! ```
 
+mod blobs;
 mod bundle;
 mod detect;
 mod exclude;
@@ -75,6 +76,7 @@ mod solve;
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests;
 
+pub use blobs::{BlobPoint, BlobSettings, BlobTrack, BlobTracker};
 pub use exclude::ExclusionMask;
 pub use geom::{
     fundamental_eight_point, fundamental_seven_point, homography_dlt, project, sampson_distance,

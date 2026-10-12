@@ -57,6 +57,17 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# The libraries ship in lib\ rather than beside the exe, so the install folder
+# is not a wall of DLLs. Windows only looks beside the exe for the ones named
+# in its import table, so those are delay-loaded instead: nothing asks for
+# them until main.cpp has added lib\ to the search path.
+target_link_libraries(${BINARY_NAME} PRIVATE delayimp)
+target_link_options(${BINARY_NAME} PRIVATE "/DELAYLOAD:flutter_windows.dll")
+foreach(plugin ${FLUTTER_PLUGIN_LIST})
+  target_link_options(${BINARY_NAME} PRIVATE
+    "/DELAYLOAD:$<TARGET_FILE_NAME:${plugin}_plugin>")
+endforeach(plugin)
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
@@ -70,7 +81,7 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
-set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
+set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
@@ -87,10 +98,12 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
-# Copy the native assets provided by the build.dart from all packages.
+# Copy the native assets provided by the build.dart from all packages. These
+# stay beside the exe: Dart opens them by a path worked out from where the exe
+# is, not through the search path.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
-   DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+   DESTINATION "${CMAKE_INSTALL_PREFIX}"
    COMPONENT Runtime)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
@@ -110,7 +123,8 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 # === The plugin brokers ===
 # Third-party plugins never load into Lumit's own process (docs/12 §2.3): OFX
 # ones load into `lumit-ofx-broker`, one process per bundle, and CLAP ones into
-# `lumit-aplug-broker`, one process per module. Both are spawned from
+# `lumit-aplug-broker`, one process per module. `lumit-media-broker` is the
+# process an Illustrator file is read in. All three are spawned from
 # beside the host's own executable. cargokit builds the bridge's cdylib and has
 # no notion of a second binary, so the one command that builds these lives here —
 # and they are installed next to the runner, which is where
@@ -123,7 +137,7 @@ set(LUMIT_WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 # expands to nothing is not. `dev` and `release` are Cargo's own names for the
 # two profiles, and they are what `target/debug` and `target/release` below are.
 add_custom_target(lumit_brokers ALL
-  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker --profile "$<IF:$<CONFIG:Debug>,dev,release>"
+  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker --profile "$<IF:$<CONFIG:Debug>,dev,release>"
   WORKING_DIRECTORY "${LUMIT_WORKSPACE_DIR}"
   VERBATIM
   COMMENT "Building the plugin brokers")
@@ -146,6 +160,14 @@ install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-aplug-broker.exe"
   CONFIGURATIONS Debug
   COMPONENT Runtime)
 install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-aplug-broker.exe"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  CONFIGURATIONS Profile;Release
+  COMPONENT Runtime)
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-media-broker.exe"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  CONFIGURATIONS Debug
+  COMPONENT Runtime)
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-media-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)

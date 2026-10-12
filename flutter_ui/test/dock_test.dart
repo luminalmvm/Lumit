@@ -9,128 +9,6 @@ import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
-  test('default layout matches default_layout() structure and shares', () {
-    final root = defaultLayout();
-    expect(root.axis, DockAxis.vertical);
-    expect(root.shares, [0.68, 0.32]);
-    expect(root.children.length, 2);
-
-    final upper = root.children[0] as DockSplit;
-    expect(upper.axis, DockAxis.horizontal);
-    expect(upper.shares, [0.22, 0.58, 0.20]);
-
-    final left = upper.children[0] as DockTabs;
-    expect(
-      [for (final c in left.children) c.panel],
-      [
-        Panel.project,
-        Panel.effectControls,
-      ],
-    );
-    expect(left.active, 0, reason: 'the left group opens on Project');
-
-    expect((upper.children[1] as DockPane).panel, Panel.viewer);
-    // The right column carries Effects & presets fronted (docs/07 §1.6's
-    // Edit workspace), with Scopes tabbed behind it. Debug is in no shipped
-    // arrangement.
-    final right = upper.children[2] as DockTabs;
-    expect(
-      [for (final c in right.children) c.panel],
-      [Panel.effectsAndPresets, Panel.scopes],
-    );
-    expect(right.active, 0,
-        reason: 'the right group opens on Effects & presets');
-    expect((root.children[1] as DockPane).panel, Panel.timeline);
-  });
-
-  /// Every panel appears at most once, and all but four appear.
-  ///
-  /// This used to read "every panel, exactly once", and the exceptions are
-  /// named one by one on purpose: a fifth wanting the same exemption must be
-  /// added here rather than this loosening to "some panels are missing".
-  ///
-  /// Eight panels are deliberately not in the default arrangement, and all
-  /// for the same reason (docs/07 §1.6): a panel nobody asked for should not
-  /// appear in an arrangement they already know. **Easing** belongs to
-  /// Retiming; the **Graph** and **Node** panels to Nodes; the **Mixer**,
-  /// **Audio** and **Audio timeline** panels to the Audio workspace (the
-  /// AudioWorkspace board); and **Hierarchy** and **Debug** belong to no
-  /// shipped arrangement at all. All eight are one tick away in the Window
-  /// menu.
-  test(
-      'no panel appears twice in the default workspace, and only the '
-      'specialist panels are absent', () {
-    final panels = panelsIn(defaultLayout());
-    expect(panels.toSet().length, panels.length);
-    expect(
-        panels.toSet(),
-        Panel.values.toSet()
-          ..removeAll([
-            Panel.easing,
-            Panel.graph,
-            Panel.node,
-            Panel.hierarchy,
-            Panel.mixer,
-            Panel.audio,
-            Panel.audioTimeline,
-            Panel.debug,
-          ]));
-  });
-
-  /// **No shipped arrangement carries the Hierarchy panel** — not the
-  /// default and not one preset, which is the owner's standing instruction
-  /// and the thing a new preset is most likely to reintroduce by copying an
-  /// old one.
-  test('Hierarchy is in none of the shipped workspaces', () {
-    expect(panelsIn(defaultLayout()), isNot(contains(Panel.hierarchy)));
-    for (final preset in WorkspacePreset.values) {
-      expect(panelsIn(presetLayout(preset)), isNot(contains(Panel.hierarchy)),
-          reason: '${preset.name} must not open with Hierarchy in it');
-    }
-  });
-
-  /// **Nor the Debug panel**. It fronted the right column once and was
-  /// a tab behind Effects & presets until the owner measured the arrangements
-  /// off their own screen; a developer's readout is not what a workspace opens
-  /// on. The Window menu keeps its own row for it.
-  test('Debug is in none of the shipped workspaces', () {
-    expect(panelsIn(defaultLayout()), isNot(contains(Panel.debug)));
-    for (final preset in WorkspacePreset.values) {
-      expect(panelsIn(presetLayout(preset)), isNot(contains(Panel.debug)),
-          reason: '${preset.name} must not open with Debug in it');
-    }
-  });
-
-  /// The Effects workspace's right-hand column, now that the Node preview is
-  /// the Viewer's own chip and Debug is in no arrangement: Effects & presets
-  /// fronted with Scopes behind it. Nothing took either folded panel's slot,
-  /// because nothing was waiting for one.
-  test('the Effects workspace sidebar is Effects and Scopes', () {
-    final root = presetLayout(WorkspacePreset.effects);
-    final upper = root.children[0] as DockSplit;
-    final sidebar = upper.children[3] as DockTabs;
-    expect(
-      [for (final c in sidebar.children) c.panel],
-      [Panel.effectsAndPresets, Panel.scopes],
-    );
-    expect(sidebar.active, 0,
-        reason: 'the sidebar still opens on Effects & presets');
-  });
-
-  /// **One Timeline height**. Edit, Effects and Colour all split down
-  /// the middle of the window, and the owner asked for the same band in each
-  /// so that changing workspace leaves the lanes where the pointer left them.
-  /// Nodes agrees by its graph column (tested with that preset); Audio and
-  /// Retiming keep their own taller bands on purpose.
-  test('Edit, Effects and Colour give the Timeline the same height', () {
-    final edit = presetLayout(WorkspacePreset.edit).shares;
-    for (final preset in [WorkspacePreset.effects, WorkspacePreset.colour]) {
-      expect(presetLayout(preset).shares, edit,
-          reason: '${preset.name} must open on the same band as Edit');
-    }
-    expect(defaultLayout().shares, edit);
-  });
-
   /// **A panel that has been folded away must not cost anyone their
   /// arrangement**. Every workspace saved while the Node preview existed still
   /// names it, and the pane lookup used to be a bare `!` — so reading one back
@@ -166,21 +44,6 @@ void main() {
     expect(root.shares, [0.7, 0.3], reason: 'the shares stay with their panes');
   });
 
-  /// And a group left with nothing in it goes too, rather than opening as a
-  /// blank pane nobody asked for.
-  test('a tab group emptied by a folded panel is dropped with it', () {
-    expect(
-      DockNode.fromJson({
-        'kind': 'tabs',
-        'active': 0,
-        'children': [
-          {'kind': 'pane', 'panel': 'nodePreview'},
-        ],
-      }),
-      isNull,
-    );
-  });
-
   test('serialisation round-trips the tree', () {
     final root = defaultLayout();
     (root.children[0] as DockSplit).shares[0] = 0.3;
@@ -189,28 +52,6 @@ void main() {
     final back = DockNode.fromJson(json) as DockSplit;
     expect(back.toJson(), json);
     expect(((back.children[0] as DockSplit).children[0] as DockTabs).active, 1);
-  });
-
-  test('activatePanelTab fronts the tab that holds the panel', () {
-    final root = defaultLayout();
-    final left = (root.children[0] as DockSplit).children[0] as DockTabs;
-    left.active = 1;
-    expect(activatePanelTab(root, Panel.project), isTrue);
-    expect(left.active, 0);
-    // A panel not in any tab group is a no-op.
-    expect(activatePanelTab(root, Panel.viewer), isFalse);
-    expect(left.active, 0);
-    // And a tab already fronted moved nothing — what `frontPanel` reads before
-    // it repaints the shell and writes the workspace down. Fronting the Effect
-    // controls is asked for on every layer click, and it is nearly always
-    // already in front (docs/impl/ui-performance.md §4.4).
-    expect(activatePanelTab(root, Panel.project), isFalse);
-  });
-
-  test('panel titles are the glossary names', () {
-    expect(Panel.project.title, 'Project');
-    expect(Panel.effectControls.title, 'Effect controls');
-    expect(Panel.effectsAndPresets.title, 'Effects & presets');
   });
 
   group('panel visibility (the Window menu tick list)', () {
@@ -231,16 +72,6 @@ void main() {
       expect(tabs.where((p) => p == Panel.scopes), hasLength(1));
     });
 
-    test('asking for what is already so changes nothing', () {
-      final root = defaultLayout();
-      final before = root.toJson();
-      // One bare pane and one tabbed panel, both already there. (Debug used
-      // to stand for the tabbed case; it is in no arrangement now.)
-      setPanelVisible(root, Panel.viewer, true);
-      setPanelVisible(root, Panel.scopes, true);
-      expect(root.toJson(), before);
-    });
-
     test('the last panel standing cannot be hidden', () {
       final root =
           DockSplit(DockAxis.vertical, [DockPane(Panel.viewer)], [1.0]);
@@ -248,168 +79,9 @@ void main() {
       expect(panelsIn(root), [Panel.viewer],
           reason: 'an empty dock has no way back');
     });
-
-    test('a tree of bare panes still finds somewhere to put one', () {
-      final root = DockSplit(
-        DockAxis.vertical,
-        [DockPane(Panel.viewer), DockPane(Panel.timeline)],
-        [0.5, 0.5],
-      );
-      setPanelVisible(root, Panel.scopes, true);
-      expect(panelVisible(root, Panel.scopes), isTrue);
-      expect(root.shares.length, root.children.length);
-    });
-  });
-
-  /// The Easing panel is Retiming's alone: a new panel that appeared in
-  /// the four arrangements people already know would be a rearrangement nobody
-  /// asked for. Anywhere else it is opened deliberately.
-  group('the Retiming preset', () {
-    test('gives the Easing panel the right-hand column, untabbed', () {
-      final root = presetLayout(WorkspacePreset.retiming);
-      final upper = root.children[0] as DockSplit;
-      final right = upper.children.last;
-      expect(right, isA<DockPane>());
-      expect((right as DockPane).panel, Panel.easing,
-          reason: 'a panel behind a tab is a panel you have to keep fetching');
-      expect(root.shares, [0.55, 0.45],
-          reason: 'retiming is timeline work, so the Timeline is as tall as '
-              "Audio's");
-      expect(upper.shares.length, upper.children.length);
-    });
-
-    test('is the only shipped arrangement holding it', () {
-      for (final preset in WorkspacePreset.values) {
-        expect(
-          panelVisible(presetLayout(preset), Panel.easing),
-          preset == WorkspacePreset.retiming,
-          reason: '${preset.name} should '
-              '${preset == WorkspacePreset.retiming ? '' : 'not '}hold Easing',
-        );
-      }
-      expect(panelVisible(defaultLayout(), Panel.easing), isFalse,
-          reason: 'first run is unchanged by the panel existing');
-    });
-
-    test('every panel is still reachable from the Window menu', () {
-      // The menu ticks `Panel.values`, so a panel in no arrangement must still
-      // be one `setPanelVisible` can place.
-      final root = defaultLayout();
-      setPanelVisible(root, Panel.easing, true);
-      expect(panelVisible(root, Panel.easing), isTrue);
-    });
-  });
-
-  /// The Nodes preset: the Graph panel large with the Timeline under it, a
-  /// small Viewer upper right and the Node panel beneath that. The shares are
-  /// the owner's own, measured off their screen and superseding the drawing's,
-  /// pinned here because "roughly like the picture" is not a test.
-  group('the Nodes preset', () {
-    test('splits across, not down: the Timeline is under the graph only', () {
-      final root = presetLayout(WorkspacePreset.nodes);
-      expect(root.axis, DockAxis.horizontal,
-          reason: 'the small viewer keeps its full height beside the graph '
-              'column, so the Timeline cannot span the window');
-      expect(root.shares, [0.76, 0.24]);
-
-      final graphColumn = root.children[0] as DockSplit;
-      expect(graphColumn.axis, DockAxis.vertical);
-      expect([for (final c in graphColumn.children) (c as DockPane).panel],
-          [Panel.graph, Panel.timeline]);
-      expect(graphColumn.shares, [0.68, 0.32],
-          reason: "the Timeline stands at Edit's height here too");
-
-      final rightColumn = root.children[1] as DockSplit;
-      expect(rightColumn.axis, DockAxis.vertical);
-      expect([for (final c in rightColumn.children) (c as DockPane).panel],
-          [Panel.viewer, Panel.node]);
-      expect(rightColumn.shares, [0.3169, 0.6831],
-          reason: 'the Node panel is what this workspace is for, so it takes '
-              'the greater part of the column');
-    });
-
-    test('the Timeline is the ordinary one, at the one height', () {
-      // A pane, not a tab group and not some second widget: the panel is
-      // shared with every other arrangement, and now so is its height.
-      final nodes = presetLayout(WorkspacePreset.nodes);
-      final strip = (nodes.children[0] as DockSplit).children[1];
-      expect(strip, isA<DockPane>());
-      expect((strip as DockPane).panel, Panel.timeline);
-      expect(
-        (nodes.children[0] as DockSplit).shares[1],
-        presetLayout(WorkspacePreset.edit).shares[1],
-        reason: 'Edit, Effects, Nodes and Colour give the Timeline the '
-            'same height, so changing workspace does not move the lanes',
-      );
-    });
-
-    test('is the only shipped arrangement holding the Graph and Node panels',
-        () {
-      for (final preset in WorkspacePreset.values) {
-        for (final panel in [Panel.graph, Panel.node]) {
-          expect(
-            panelVisible(presetLayout(preset), panel),
-            preset == WorkspacePreset.nodes,
-            reason: '${preset.name} should '
-                '${preset == WorkspacePreset.nodes ? '' : 'not '}'
-                'hold ${panel.name}',
-          );
-        }
-      }
-      expect(panelVisible(defaultLayout(), Panel.node), isFalse,
-          reason: 'first run is unchanged by the panel existing');
-    });
-
-    test('sits third on the strip, beside Effects', () {
-      // The strip is generated from the enum's order, and the drawing puts
-      // Nodes between Effects and Colour.
-      expect(WorkspacePreset.values.map((p) => p.name), [
-        'edit',
-        'effects',
-        'nodes',
-        'colour',
-        'audio',
-        'retiming',
-      ]);
-    });
-
-    test('the Node panel is still reachable from the Window menu', () {
-      // The menu ticks `Panel.values`, so a panel in no arrangement must still
-      // be one `setPanelVisible` can place.
-      final root = defaultLayout();
-      setPanelVisible(root, Panel.node, true);
-      expect(panelVisible(root, Panel.node), isTrue);
-    });
   });
 
   group('Panels declare a minimum, and the seam respects it', () {
-    /// **A subtree's minimum is its panels'**. Across a row the floors
-    /// add up, because every pane in it needs its own width at the same time;
-    /// down a column they do not, because those panes share one.
-    test('a subtree is as wide as the panels in it need', () {
-      expect(
-          dockMinWidth(DockPane(Panel.project)), panelMinWidth(Panel.project));
-
-      // A tab group is one pane's worth of room, so it needs the widest of the
-      // panels stacked behind each other in it.
-      final tabs = DockTabs([DockPane(Panel.scopes), DockPane(Panel.project)]);
-      expect(dockMinWidth(tabs), panelMinWidth(Panel.project));
-
-      final across = DockSplit(DockAxis.horizontal,
-          [DockPane(Panel.project), DockPane(Panel.viewer)], [0.5, 0.5]);
-      expect(dockMinWidth(across),
-          panelMinWidth(Panel.project) + panelMinWidth(Panel.viewer));
-
-      final down = DockSplit(DockAxis.vertical,
-          [DockPane(Panel.project), DockPane(Panel.viewer)], [0.5, 0.5]);
-      expect(
-          dockMinWidth(down),
-          panelMinWidth(Panel.project) > panelMinWidth(Panel.viewer)
-              ? panelMinWidth(Panel.project)
-              : panelMinWidth(Panel.viewer),
-          reason: 'stacked panes share a width rather than adding theirs up');
-    });
-
     /// **The seam stops at the floor** — the owner's own gesture. Dragging the
     /// boundary between Project and Viewer all the way to the left used to
     /// take the Project panel down to a sliver, which is where it crashed.

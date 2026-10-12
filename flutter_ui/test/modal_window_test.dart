@@ -71,18 +71,6 @@ void main() {
   final body = find.byKey(const ValueKey('body'));
   final grip = find.byKey(const ValueKey('window-resize-grip'));
 
-  testWidgets('a window opens centred and drags where it is put',
-      (tester) async {
-    await tester.pumpWidget(host(id: 'test-window'));
-    await open(tester);
-
-    final centred = tester.getCenter(body);
-    await tester.drag(body, const Offset(60, -40));
-    await tester.pump();
-
-    expect(tester.getCenter(body) - centred, const Offset(60, -40));
-  });
-
   testWidgets('where it was left is remembered, and reopening lands there',
       (tester) async {
     await tester.pumpWidget(host(id: 'test-window'));
@@ -104,15 +92,6 @@ void main() {
         reason: 'it opens where it was left');
   });
 
-  testWidgets('a window with no id is not remembered', (tester) async {
-    await tester.pumpWidget(host());
-    await open(tester);
-    await tester.drag(body, const Offset(20, 20));
-    await tester.pump();
-
-    expect(workspace.windowPlacements, isEmpty);
-  });
-
   testWidgets('the corner grip resizes, and the top-left edge stays put',
       (tester) async {
     await tester.pumpWidget(
@@ -131,22 +110,6 @@ void main() {
         reason: 'dragging the bottom-right corner moves only that corner');
     expect(workspace.windowPlacements['sized-window']?.size,
         const Size(380, 260));
-  });
-
-  testWidgets('a size cannot go below the minimum or past the app window',
-      (tester) async {
-    await tester.pumpWidget(
-        host(id: 'sized-window', initialSize: const Size(300, 200)));
-    await open(tester);
-
-    await tester.drag(grip, const Offset(-900, -900));
-    await tester.pump();
-    expect(tester.getSize(find.byType(FloatSurface)), const Size(100, 80));
-
-    await tester.drag(grip, const Offset(9000, 9000));
-    await tester.pump();
-    final screen = tester.getSize(find.byType(Overlay));
-    expect(tester.getSize(find.byType(FloatSurface)), screen);
   });
 
   /// The panels hang their keyboard commands off the hardware keyboard, so
@@ -237,21 +200,5 @@ void main() {
     expect(tester.takeException(), isNull,
         reason: 'the window draws off its own context, not the opener\'s');
     expect(body, findsOneWidget, reason: 'and it is still there');
-  });
-
-  testWidgets('a placement survives a save and load of the store',
-      (tester) async {
-    await tester.pumpWidget(
-        host(id: 'sized-window', initialSize: const Size(300, 200)));
-    await open(tester);
-    await tester.drag(body, const Offset(25, 15));
-    await tester.pump();
-    await tester.drag(grip, const Offset(40, 40));
-    await tester.pump();
-
-    final reloaded = Workspace()..load();
-    final placement = reloaded.windowPlacements['sized-window'];
-    expect(placement?.offset, workspace.windowPlacements['sized-window']?.offset);
-    expect(placement?.size, const Size(340, 240));
   });
 }

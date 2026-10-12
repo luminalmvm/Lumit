@@ -7,6 +7,8 @@
 // (viewer_bar.dart) and is built from these same pieces, which is why they
 // live here rather than in either strip.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/cache.dart';
@@ -16,6 +18,7 @@ import 'package:provider/provider.dart';
 import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../shell/dock_widget.dart' show DockPaneHandle;
 import '../state/settings.dart';
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show ViewerLook;
@@ -33,16 +36,20 @@ const double viewerStripHeight = 22;
 
 /// The strip's height under the shape: Lantern's detached strips are pills
 /// that hold 20px picker faces, so they stand at 28 and the faces sit 4 in
-/// from every edge, the inner corner the outer one less that 4 (the same
-/// concentric rule as every filled state). The flat shapes keep the 22.
+/// from the top and the bottom. The flat shapes keep the 22.
 double viewerStripHeightFor(LumitTheme t) =>
     t.tokens.roomed ? viewerStripHeight + 6 : viewerStripHeight;
 
-/// The room either end of a strip under the shape: the concentric inset on
-/// a Lantern pill, the drawing's 10 elsewhere.
-double viewerStripPaddingFor(LumitTheme t) => t.tokens.roomed
-    ? (viewerStripHeightFor(t) - t.density.dropdownFace) / 2
-    : viewerStripPadding;
+/// The room either end of a strip under the shape: a capsule's end inset on a
+/// Lantern pill, the drawing's 10 elsewhere.
+///
+/// It was the concentric 4 the picker faces take above and below, which is
+/// right for a face and wrong for what actually stands at the ends: the
+/// panel's name at the left and a reading at the right, both words, and a
+/// word 4 from the end of a capsule is sitting in its curve (owner, desk
+/// test).
+double viewerStripPaddingFor(LumitTheme t) =>
+    t.tokens.roomed ? ShapeTokens.capsuleEnd : viewerStripPadding;
 
 /// The room either end of both strips — the drawing's `padding: 0 10px`.
 const double viewerStripPadding = 10;
@@ -85,9 +92,11 @@ Widget viewerBarMark({
   required Color colour,
   required VoidCallback? onPressed,
   required String tip,
+  String? action,
 }) =>
     LumitTooltip(
       message: tip,
+      action: action,
       child: HouseButton(
         key: key,
         frameless: true,
@@ -140,6 +149,33 @@ BoxDecoration viewerStripDecoration(LumitTheme t, bool detached) =>
       border: detached ? Border.all(color: t.hairline) : null,
       boxShadow: detached ? t.tokens.cardShadow : null,
     );
+
+/// The corners of the Viewer's pane where it stands on the room, for the
+/// dock's focus outline. The pane is no card there: it is its strips and its
+/// picture, so each end of the outline rounds with whichever stands at it.
+BorderRadius viewerPaneCorners(BuildContext context, LumitTheme t) {
+  // Lantern's own arrangement where there is no shell above, as in a test.
+  final bars = context
+          .watch<LumitUiState?>()
+          ?.workspace
+          .interface
+          .viewerBarsFor(t.shape) ??
+      ViewerBars.deck;
+  // A strip's corner is the action radius, which a capsule holds to half its
+  // own height.
+  Radius strip(double height) =>
+      Radius.circular(math.min(t.tokens.actionRadius, height / 2));
+  final bar = strip(viewerStripHeightFor(t));
+  final card = Radius.circular(t.tokens.cardRadius);
+  return BorderRadius.vertical(
+    top: bars == ViewerBars.bottom ? card : bar,
+    bottom: switch (bars) {
+      ViewerBars.top => card,
+      ViewerBars.deck => strip(t.density.headerStrip),
+      _ => bar,
+    },
+  );
+}
 
 /// The Viewer's **panel header strip** (§12A.6: 22 tall): the panel's
 /// own kicker, then the three pickers the approved drawing puts at its right —
@@ -224,27 +260,35 @@ class ViewerHeader extends StatelessWidget {
             // Lantern centres the title on the strip, with the pickers still
             // at the right; the pickers sit over it only on a strip too
             // narrow for both, which is under the minimum and slides.
+            // The title and the empty strip round it lift the pane, since a
+            // Viewer standing alone has no tab to drag.
             if (t.tokens.titleCentred) {
               return Stack(children: [
-                Center(child: title),
+                DockPaneHandle(child: Center(child: title)),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Row(mainAxisSize: MainAxisSize.min, children: pickers),
                 ),
               ]);
             }
-            // The title is not flexible here: it and the `Spacer` would then
-            // share the free space between them, and the pickers would stop
-            // at the strip's right-hand *padding*. Above the minimum there is
+            // The title takes all the free space itself, so the pickers still
+            // reach the strip's right-hand padding. Above the minimum there is
             // room for the whole word anyway — below it, the strip slides.
-            return Row(children: [title, const Spacer(), ...pickers]);
+            return Row(children: [
+              Expanded(
+                child: DockPaneHandle(
+                  child: Align(alignment: Alignment.centerLeft, child: title),
+                ),
+              ),
+              ...pickers,
+            ]);
           }
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                title,
+                DockPaneHandle(child: title),
                 const SizedBox(width: _headerGatheredGap),
                 ...pickers,
               ],

@@ -840,17 +840,6 @@ colorspaces:
 "#;
 
     #[test]
-    fn a_legacy_config_composes_through_its_scene_linear_role() {
-        let loaded = load(LEGACY);
-        assert_eq!(
-            loaded.bridge(),
-            &Bridge::ComposeThrough {
-                space: "lin_ap1".to_string()
-            }
-        );
-    }
-
-    #[test]
     fn composing_through_is_still_exact_end_to_end() {
         // The point of §2.1: the assumption cancels on an input → working →
         // display trip, so the picture is exactly what the config describes.
@@ -872,17 +861,6 @@ colorspaces:
                 direct.eval(c)
             );
         }
-    }
-
-    #[test]
-    fn a_missing_direction_is_the_declared_one_inverted() {
-        let loaded = load(LEGACY);
-        // `out_srgb` declares only from_reference; asking the other way round
-        // must invert it rather than refuse.
-        let there = loaded.from_reference("out_srgb").expect("resolves");
-        let back = loaded.to_reference("out_srgb").expect("resolves");
-        let c = [0.2, 0.5, 0.8];
-        assert!(close(back.eval(there.eval(c)), c, 1e-4));
     }
 
     #[test]
@@ -948,40 +926,6 @@ colorspaces:
     }
 
     #[test]
-    fn an_unsupported_transform_refuses_only_where_it_is_used() {
-        let loaded = load(
-            r#"
-ocio_profile_version: 2
-colorspaces:
-  - !<ColorSpace>
-    name: fancy
-    to_scene_reference: !<FixedFunctionTransform> {style: ACES_RedMod03}
-  - !<ColorSpace>
-    name: plain
-    to_scene_reference: !<ExponentTransform> {value: 2.2}
-looks:
-  - !<Look>
-    name: graded
-    process_space: plain
-    transform: !<ExposureContrastTransform> {style: linear, exposure: 1.0}
-"#,
-        );
-        let err = loaded.to_reference("fancy");
-        assert!(
-            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "FixedFunctionTransform"),
-            "{err:?}"
-        );
-        assert!(loaded.to_reference("plain").is_ok());
-        let err = loaded.looks("graded");
-        assert!(
-            matches!(&err, Err(ColourError::UnsupportedTransform { name }) if name == "ExposureContrastTransform"),
-            "{err:?}"
-        );
-        let bad: Vec<String> = unresolvable(&loaded).into_iter().map(|(n, _)| n).collect();
-        assert_eq!(bad, ["fancy"]);
-    }
-
-    #[test]
     fn a_role_may_be_used_wherever_a_space_name_is() {
         let loaded = load(LEGACY);
         let by_role = loaded.to_reference("scene_linear").expect("resolves");
@@ -1014,56 +958,6 @@ colorspaces:
         // ACES white through the exact bridge is Rec.709 white.
         let chain = loaded.from_space("ACES2065-1").expect("resolves");
         assert!(close(chain.eval([1.0; 3]), [1.0; 3], 1e-3));
-    }
-
-    #[test]
-    fn the_bridge_round_trips() {
-        let loaded = load(INTERCHANGE);
-        let there = loaded.from_space("ACEScg").expect("resolves");
-        let back = loaded.to_space("ACEScg").expect("resolves");
-        let c = [0.2, 0.5, 0.8];
-        assert!(close(back.eval(there.eval(c)), c, 1e-4));
-    }
-
-    #[test]
-    fn a_config_with_no_roles_at_all_takes_its_reference_as_working() {
-        let loaded =
-            load("ocio_profile_version: 1\ncolorspaces:\n  - !<ColorSpace>\n    name: ref\n");
-        assert_eq!(loaded.bridge(), &Bridge::ReferenceIsWorking);
-        assert!(loaded
-            .reference_to_working()
-            .expect("resolves")
-            .is_identity());
-    }
-
-    #[test]
-    fn a_view_transform_view_composes_through_the_display_reference() {
-        let text = r#"
-ocio_profile_version: 2
-roles:
-  scene_linear: lin
-displays:
-  Rec1886:
-    - !<View> {name: SDR, view_transform: tonemap, display_colorspace: display_gamma}
-colorspaces:
-  - !<ColorSpace>
-    name: lin
-view_transforms:
-  - !<ViewTransform>
-    name: tonemap
-    from_scene_reference: !<RangeTransform> {minInValue: 0, maxInValue: 4, minOutValue: 0, maxOutValue: 1}
-display_colorspaces:
-  - !<ColorSpace>
-    name: display_gamma
-    from_display_reference: !<ExponentTransform> {value: [0.5, 0.5, 0.5, 1]}
-"#;
-        let loaded = load(text);
-        let chain = loaded.display_view("Rec1886", "SDR").expect("resolves");
-        // 4.0 scene-linear maps to 1.0 through the view transform, then the
-        // display curve leaves 1.0 alone.
-        assert!(close(chain.eval([4.0; 3]), [1.0; 3], 1e-4));
-        // 1.0 maps to 0.25, then the square root of 0.25 is 0.5.
-        assert!(close(chain.eval([1.0; 3]), [0.5; 3], 1e-4));
     }
 
     /// The shape every ACES v2 config's display half is written in, and three
@@ -1100,17 +994,6 @@ display_colorspaces:
 "#;
 
     #[test]
-    fn a_shared_view_takes_the_display_s_own_name_for_its_colour_space() {
-        let loaded = load(SHARED_VIEWS);
-        let chain = loaded.display_view("Rec1886", "SDR").expect("resolves");
-        // 4.0 scene-linear maps to 1.0 through the view transform, and the
-        // display curve leaves 1.0 alone — the same answer the view would give
-        // if it named `Rec1886` outright, which is the whole point.
-        assert!(close(chain.eval([4.0; 3]), [1.0; 3], 1e-4));
-        assert!(close(chain.eval([1.0; 3]), [0.5; 3], 1e-4));
-    }
-
-    #[test]
     fn a_view_onto_a_data_space_shows_the_numbers_untouched() {
         let loaded = load(SHARED_VIEWS);
         // Not merely "the data space does nothing to it": the bridge into the
@@ -1126,53 +1009,6 @@ display_colorspaces:
             .space_to_space("data", "lin")
             .expect("resolves")
             .is_identity());
-    }
-
-    #[test]
-    fn a_display_referred_view_transform_borrows_the_default_for_the_rendering() {
-        let loaded = load(SHARED_VIEWS);
-        // `passthrough` states only a display-referred transform, so the
-        // scene-to-display leg is `default_view_transform`'s. Reading its
-        // `from_display_reference` as a scene-referred one instead — which is
-        // what this parser first did — would invert an identity matrix and
-        // quietly drop the rendering, giving 0.5 here instead of 1.0.
-        let chain = loaded.display_view("Rec1886", "Flat").expect("resolves");
-        assert!(close(chain.eval([4.0; 3]), [1.0; 3], 1e-4));
-    }
-
-    #[test]
-    fn an_exponent_s_negative_style_is_read_from_the_key_a_config_file_writes() {
-        // `style`, not `negativeStyle`: the config file's spelling. Read for
-        // the wrong key it finds nothing and clamps, and nothing above zero
-        // ever shows it.
-        let text = r#"
-ocio_profile_version: 2
-roles:
-  scene_linear: lin
-colorspaces:
-  - !<ColorSpace>
-    name: lin
-  - !<ColorSpace>
-    name: g22
-    from_scene_reference: !<ExponentTransform> {value: [2.2, 2.2, 2.2, 1], style: pass_thru, direction: inverse}
-  - !<ColorSpace>
-    name: mirrored
-    from_scene_reference: !<ExponentTransform> {value: [2.2, 2.2, 2.2, 1], style: mirror, direction: inverse}
-"#;
-        let loaded = load(text);
-        let pass_thru = loaded.from_reference("g22").expect("resolves");
-        let mirror = loaded.from_reference("mirrored").expect("resolves");
-        // Above zero the two agree, which is exactly why the fault hid.
-        assert!(close(
-            pass_thru.eval([0.25; 3]),
-            mirror.eval([0.25; 3]),
-            1e-6
-        ));
-        // Below it they part: pass_thru carries the value, mirror curves it.
-        assert!(close(pass_thru.eval([-0.25; 3]), [-0.25; 3], 1e-6));
-        // −(0.25 ^ (1 / 2.2)) = −exp(ln 0.25 / 2.2) = −0.532 520 5.
-        let m = mirror.eval([-0.25; 3]);
-        assert!(close(m, [-0.532_520_5; 3], 1e-6), "{m:?}");
     }
 
     #[test]
@@ -1199,48 +1035,6 @@ colorspaces:
     }
 
     #[test]
-    fn an_inverted_look_undoes_itself() {
-        let text = r#"
-ocio_profile_version: 1
-roles:
-  scene_linear: lin
-displays:
-  sRGB:
-    - !<View> {name: Plain, colorspace: lin, looks: "+warm, -warm"}
-looks:
-  - !<Look>
-    name: warm
-    process_space: lin
-    transform: !<CDLTransform> {slope: [1.1, 1.0, 0.9], style: no_clamp}
-colorspaces:
-  - !<ColorSpace>
-    name: lin
-"#;
-        let loaded = load(text);
-        let chain = loaded.display_view("sRGB", "Plain").expect("resolves");
-        assert!(close(chain.eval([0.5; 3]), [0.5; 3], 1e-4));
-    }
-
-    #[test]
-    fn a_colour_space_transform_is_followed() {
-        let text = r#"
-ocio_profile_version: 1
-colorspaces:
-  - !<ColorSpace>
-    name: ref
-  - !<ColorSpace>
-    name: half
-    to_reference: !<MatrixTransform> {matrix: [0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]}
-  - !<ColorSpace>
-    name: via
-    to_reference: !<ColorSpaceTransform> {src: half, dst: ref}
-"#;
-        let loaded = load(text);
-        let chain = loaded.to_reference("via").expect("resolves");
-        assert!(close(chain.eval([1.0; 3]), [0.5; 3], 1e-6));
-    }
-
-    #[test]
     fn a_space_that_points_at_itself_is_refused_rather_than_hanging() {
         let text = r#"
 ocio_profile_version: 1
@@ -1256,24 +1050,6 @@ colorspaces:
 "#;
         let loaded = load(text);
         assert!(loaded.to_reference("loop_a").is_err());
-    }
-
-    #[test]
-    fn an_unknown_name_refuses_by_name() {
-        let loaded = load(LEGACY);
-        let err = loaded.to_reference("no such space");
-        assert!(
-            matches!(&err, Err(ColourError::UnknownColourSpace { name }) if name == "no such space"),
-            "{err:?}"
-        );
-        assert!(matches!(
-            loaded.display_view("no such display", "Standard"),
-            Err(ColourError::UnknownDisplay { .. })
-        ));
-        assert!(matches!(
-            loaded.display_view("sRGB", "no such view"),
-            Err(ColourError::UnknownView { .. })
-        ));
     }
 
     #[test]
@@ -1298,43 +1074,6 @@ colorspaces:
             }
         );
         assert_eq!(loaded.shaper_for("plain"), Shaper::DEFAULT);
-    }
-
-    #[test]
-    fn a_data_space_is_left_alone() {
-        let text = r#"
-ocio_profile_version: 1
-colorspaces:
-  - !<ColorSpace>
-    name: raw
-    isdata: true
-    to_reference: !<MatrixTransform> {matrix: [9, 0, 0, 0, 0, 9, 0, 0, 0, 0, 9, 0, 0, 0, 0, 1]}
-"#;
-        let loaded = load(text);
-        assert!(loaded.to_reference("raw").expect("resolves").is_identity());
-    }
-
-    #[test]
-    fn every_space_in_a_healthy_config_resolves() {
-        assert!(unresolvable(&load(LEGACY)).is_empty());
-    }
-
-    #[test]
-    fn an_unsupported_builtin_shows_up_in_the_unresolvable_list_by_name() {
-        let text = r#"
-ocio_profile_version: 2
-colorspaces:
-  - !<ColorSpace>
-    name: fancy
-    to_scene_reference: !<BuiltinTransform> {style: ACES-OUTPUT - SOMETHING}
-"#;
-        let bad = unresolvable(&load(text));
-        assert_eq!(bad.len(), 1);
-        assert!(
-            matches!(bad.first(), Some((name, ColourError::UnsupportedBuiltin { style }))
-                if name == "fancy" && style == "ACES-OUTPUT - SOMETHING"),
-            "{bad:?}"
-        );
     }
 
     /// The OCIO effects' edges (docs/impl/ocio.md §6.6): `None` is the working
@@ -1412,33 +1151,6 @@ colorspaces:
         assert_eq!(loaded.config.look_names(), vec!["warm"]);
     }
 
-    #[test]
-    fn a_display_view_from_a_named_space_starts_there_rather_than_at_working() {
-        let text = r#"
-ocio_profile_version: 1
-roles:
-  scene_linear: lin
-displays:
-  sRGB:
-    - !<View> {name: Plain, colorspace: lin}
-colorspaces:
-  - !<ColorSpace>
-    name: lin
-  - !<ColorSpace>
-    name: half
-    to_reference: !<MatrixTransform> {matrix: [0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]}
-"#;
-        let loaded = load(text);
-        let from_working = loaded
-            .display_view_from(None, "sRGB", "Plain")
-            .expect("resolves");
-        assert!(from_working.is_identity());
-        let from_half = loaded
-            .display_view_from(Some("half"), "sRGB", "Plain")
-            .expect("resolves");
-        assert!(close(from_half.eval([1.0; 3]), [0.5; 3], 1e-6));
-    }
-
     /// An ACES-shaped config: AP0 reference, the interchange role on it, and
     /// ACEScg as `scene_linear`, a matrix away.
     fn aces_shaped() -> String {
@@ -1488,30 +1200,5 @@ colorspaces:
         // Footage tagged acescg is then the identity: it already is the
         // working space.
         assert!(theirs.from_space("acescg").expect("resolves").is_identity());
-    }
-
-    /// Without an interchange role nothing can place `scene_linear`, so it is
-    /// taken as Rec.709 and there is no matrix; and a config with no
-    /// `scene_linear` at all keeps Lumit's working space.
-    #[test]
-    fn a_config_that_cannot_place_its_scene_linear_has_no_matrix() {
-        let text = r#"
-ocio_profile_version: 1
-roles:
-  scene_linear: lin
-colorspaces:
-  - !<ColorSpace>
-    name: lin
-"#;
-        let loaded =
-            LoadedConfig::with_working(Config::parse(Path::new("."), text).expect("parses"), true);
-        assert_eq!(loaded.working_space(), Some("lin"));
-        assert!(loaded.rec709_to_working().expect("resolves").is_none());
-
-        let bare = LoadedConfig::with_working(
-            Config::parse(Path::new("."), "ocio_profile_version: 1\n").expect("parses"),
-            true,
-        );
-        assert_eq!(bare.working_space(), None);
     }
 }

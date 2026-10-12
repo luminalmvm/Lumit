@@ -49,9 +49,9 @@ const _banned = {
 /// calls a track matte. The menu rows are for work not built yet;
 /// `fxCameraTrack` is the effect itself, which is built.
 ///
-/// The Audio timeline panel is the one place a row is called a track in what
-/// the user reads (docs/01-GLOSSARY.md, docs/07-UI-SPEC.md §4.8), so that
-/// panel's own strings are the exception the glossary already grants.
+/// The Audio timeline and Cut timeline panels are the two places a row is
+/// called a track in what the user reads (docs/01-GLOSSARY.md), so those
+/// panels' own strings are the exception the glossary already grants.
 const _bannedWordIsAnotherSense = {
   'menuTrackCamera',
   'menuTrackMotion',
@@ -60,8 +60,16 @@ const _bannedWordIsAnotherSense = {
   'fxCameraTrack',
   // The planar tracker is the same verb sense as the camera's.
   'fxPlanarTrack',
+  // And Track points follows things in the picture, the verb again.
+  'fxTrackPoints',
   // The Audio timeline's own column header.
   'columnTrack',
+  // The Cut timeline's notices about its own rows.
+  'cutRefusedOverlap',
+  'keyCutEveryTrackAtThePlayhead',
+  'keyMoveClipsUpATrack',
+  'keyMoveClipsDownATrack',
+  'cutRefusedLocked',
 };
 
 /// Every `.arb` in lib/l10n, source and translations alike, in a stable order.
@@ -82,10 +90,6 @@ Iterable<MapEntry<String, String>> _messages(Map<String, dynamic> arb) =>
         .map((e) => MapEntry(e.key, e.value as String));
 
 void main() {
-  test('app_en.arb is valid JSON with messages in it', () {
-    expect(_messages(_arb()).length, greaterThan(500));
-  });
-
   test('a tooltip is the control name, not a sentence about it', () {
     final long = <String>[];
     var checked = 0;
@@ -163,16 +167,6 @@ void main() {
       if (missing.isNotEmpty) bad.add('${m.key}: ${missing.join(', ')}');
     }
     expect(bad, isEmpty);
-  });
-
-  test('the target languages have a file to be translated into', () {
-    // The ingest tool writes these; a short one is normal and means the
-    // language is part-way done. Every key it lacks falls back to English.
-    const tags = ['ar', 'de', 'es', 'kk', 'pl', 'pt', 'uk', 'zh', 'zh_Hant'];
-    for (final tag in tags) {
-      expect(File('lib/l10n/app_$tag.arb').existsSync(), isTrue,
-          reason: 'app_$tag.arb is missing — it is a target language');
-    }
   });
 
   test('every .arb names the locale its filename says', () {

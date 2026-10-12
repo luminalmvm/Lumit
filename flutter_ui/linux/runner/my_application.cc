@@ -5,6 +5,7 @@
 #include <gdk/gdkx.h>
 #endif
 
+#include "extension_views.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "viewer_texture_bridge.h"
 
@@ -107,7 +108,13 @@ static void my_application_activate(GApplication* application) {
   gdk_rgba_parse(&background_color, "#000000");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
-  gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+  // The view is the base of an overlay, and not the window's own child, so
+  // that an extension's page can be laid over it (extension_views.h). With
+  // nothing laid over it the overlay is the view and nothing more.
+  GtkWidget* overlay = gtk_overlay_new();
+  gtk_widget_show(overlay);
+  gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(view));
+  gtk_container_add(GTK_CONTAINER(window), overlay);
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.
@@ -128,6 +135,8 @@ static void my_application_activate(GApplication* application) {
   FlEngine* engine = fl_view_get_engine(view);
   viewer_texture_bridge_register(fl_engine_get_binary_messenger(engine),
                                  fl_engine_get_texture_registrar(engine));
+  extension_views_register(fl_engine_get_binary_messenger(engine),
+                           GTK_OVERLAY(overlay), view);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

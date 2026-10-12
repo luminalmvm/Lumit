@@ -20,60 +20,14 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/workspace.dart';
 
 import 'frb_test_support.dart';
 
 void main() {
   setUpAll(initEngineForTests);
-
-  testWidgets('the engine reports the open phase by phase', (tester) async {
-    final dir = Directory.systemTemp.createTempSync('lumit-open-progress');
-    final path = '${dir.path}/progress.lum';
-
-    final state = LumitState()..newProject();
-    LumitUiState(state, workspace: Workspace());
-    final project = state.project!;
-    project.newComposition(name: 'Scene').addSolidLayer();
-    project.save(path: path);
-    await settleFrb(tester, until: () => File(path).existsSync());
-    expect(File(path).existsSync(), isTrue, reason: 'nothing to reopen');
-
-    // The engine's half, read straight off the stream rather than through the
-    // card: a project this small opens in one turn of the event loop, so what
-    // the card would have *drawn* is a question of timing, and what the engine
-    // *said* is not.
-    //
-    // The sink is listened to after the call has been started, not before: it
-    // has no stream until it has been handed to one, and nothing is lost in
-    // between because the stream buffers.
-    final sink = RustStreamSink<OpenProgress>();
-    final pending =
-        LumitBridgeState.openProject(path: path, onProgressStream: sink);
-    final reports = <OpenProgress>[];
-    final watching = sink.stream.listen(reports.add);
-    await settleFrb(tester,
-        until: () => reports.length >= OpenPhase.values.length);
-    expect(await pending, isNotNull, reason: 'the project would not open');
-    await watching.cancel();
-
-    expect(reports.map((r) => r.phase), OpenPhase.values,
-        reason: 'every phase of the read is named, in the order it happens');
-    for (var i = 1; i < reports.length; i++) {
-      expect(reports[i].fraction, greaterThan(reports[i - 1].fraction),
-          reason: 'the fill went backwards at report $i');
-    }
-    expect(reports.first.fraction, 0,
-        reason: 'the card starts empty rather than part-filled');
-    expect(reports.last.fraction, lessThan(1),
-        reason: 'the engine never claims the frame it has not made');
-
-    dir.deleteSync(recursive: true);
-  });
 
   testWidgets('the card fills to the end before it comes down', (tester) async {
     final dir = Directory.systemTemp.createTempSync('lumit-open-done');

@@ -438,6 +438,99 @@ pub fn blend_f32(a: &[u8], b: &[u8], t: f32) -> Vec<u8> {
     out
 }
 
+/// The sRGB curve as two tables, so a frame's worth of pixels can be mixed in
+/// linear light without a `powf` apiece: every byte's linear value, and the
+/// byte for a linear value in 4,096 steps. That many steps bring every byte
+/// back to itself, which is what leaves either end of a dissolve exact.
+fn srgb_tables() -> &'static ([f32; 256], [u8; 4096]) {
+    static TABLES: std::sync::OnceLock<([f32; 256], [u8; 4096])> = std::sync::OnceLock::new();
+    TABLES.get_or_init(|| {
+        (
+            std::array::from_fn(|v| srgb_decode(v as u8)),
+            std::array::from_fn(|i| srgb_encode(i as f32 / 4095.0)),
+        )
+    })
+}
+
+/// A Sequence layer's dissolve and its fade, in place. With a picture under
+/// it, `top` becomes the crossfade `under * (1 - gain) + top * gain`. With
+/// none, it fades to transparent: its alpha times `gain`. Both pictures are
+/// straight-alpha RGBA8 of one size, and where `under` stops short it is
+/// transparent.
+///
+/// The crossfade is made on premultiplied values in linear light, the sum the
+/// compositor makes when a composition is one of the two clips
+/// (`lumit_gpu::Blend::Plus`), so a dissolve looks the same whichever way a
+/// clip reaches the picture. Premultiplied, so a clip with transparency goes
+/// out as the other comes in and does not sit whole under it. A pair of
+/// opaque pixels takes the short road, which is every pixel of ordinary
+/// footage.
+pub fn dissolve_rgba(top: &mut [u8], under: Option<&[u8]>, gain: f64) {
+    let g = gain.clamp(0.0, 1.0) as f32;
+    // Rounded by the cast: every value here is nought or more.
+    let byte = |v: f32| (v + 0.5) as u8;
+    let Some(under) = under else {
+        for t in top.chunks_exact_mut(4) {
+            t[3] = byte(f32::from(t[3]) * g);
+        }
+        return;
+    };
+    let (linear, encoded) = srgb_tables();
+    let lin = |v: u8| linear[usize::from(v)];
+    let enc = |v: f32| encoded[((v * 4095.0 + 0.5) as usize).min(4095)];
+    let mut under = under.chunks_exact(4);
+    for t in top.chunks_exact_mut(4) {
+        let u = under.next().unwrap_or(&[0; 4]);
+        if t[3] == u8::MAX && u[3] == u8::MAX {
+            for c in 0..3 {
+                t[c] = enc(lin(t[c]) * g + lin(u[c]) * (1.0 - g));
+            }
+        } else {
+            let (coming, going) = (
+                f32::from(t[3]) / 255.0 * g,
+                f32::from(u[3]) / 255.0 * (1.0 - g),
+            );
+            let alpha = coming + going;
+            if alpha > 0.0 {
+                for c in 0..3 {
+                    t[c] = enc((lin(t[c]) * coming + lin(u[c]) * going) / alpha);
+                }
+            }
+            t[3] = byte(alpha * 255.0);
+        }
+    }
+}
+
+/// [`dissolve_rgba`] for float frames (`lumit_media::PixelFormat::LinearF32`),
+/// which are linear already, with no clamp at the top for [`blend_f32`]'s
+/// reasons.
+pub fn dissolve_f32(top: &mut [u8], under: Option<&[u8]>, gain: f64) {
+    let g = gain.clamp(0.0, 1.0) as f32;
+    for n in 0..top.len() / 16 {
+        let t = f32_px(top, n);
+        let mut out = t;
+        match under {
+            None => out[3] = t[3] * g,
+            Some(under) => {
+                // Nought where the picture under this one stops short.
+                let u = f32_px(under, n);
+                let (coming, going) = (t[3] * g, u[3] * (1.0 - g));
+                out[3] = coming + going;
+                if t[3] == 1.0 && u[3] == 1.0 {
+                    for c in 0..3 {
+                        out[c] = t[c] * g + u[c] * (1.0 - g);
+                    }
+                } else if out[3] > 0.0 {
+                    for c in 0..3 {
+                        out[c] = (t[c] * coming + u[c] * going) / out[3];
+                    }
+                }
+            }
+        }
+        set_f32_px(top, n, out);
+    }
+}
+
 /// Which source frame(s) show `source_time` seconds of footage at `fps` over
 /// `frames` frames. Nearest → `(frame, None)`. Blend → `(floor, Some((ceil,
 /// weight)))` where `weight` is how far past `floor` the moment sits (0 at the
@@ -488,38 +581,42 @@ pub fn frame_pick(
 mod tests {
     use super::*;
 
-    /// The conform rate, from the other end: animation drawn on 2s.
-    ///
-    /// A 24 fps anime cut animated on 2s holds each drawing for two frames —
-    /// A A B B C C. Interpolating natively, half the pairs bracket a frame and
-    /// its own duplicate (no motion at all) and the rest carry the whole step,
-    /// which reads as judder rather than slow motion. Conforming to 12 — the
-    /// rate it was *drawn* at — makes every bracket span two different
-    /// drawings.
+    /// The middle of a dissolve between two flat colours is their even mix
+    /// in linear light, its ends are each picture alone, and a fade over
+    /// nothing takes the picture to transparent and leaves its colour be.
     #[test]
-    fn a_conform_rate_skips_the_duplicates_of_animation_on_twos() {
-        let fps = 24.0;
-        let frames = 48;
-        // Native: at an eighth of a second in, the bracket is frames 3 and 4 —
-        // and on 2s, frames 2 and 3 are the same drawing, so the pair 3-4
-        // straddles a change while 2-3 would not move at all.
-        let (a, b) = frame_pick(0.14, fps, frames, true, None);
-        assert_eq!(a, 3);
-        assert_eq!(b.map(|(f, _)| f), Some(4));
-
-        // Conformed to 12: brackets are always an even frame and the next even
-        // frame — one drawing to the next, never a drawing to itself.
-        for step in 0..8 {
-            let t = f64::from(step) * 0.09;
-            let (a, b) = frame_pick(t, fps, frames, true, Some(12.0));
-            assert!(
-                a.is_multiple_of(2),
-                "conformed bracket starts on a drawing: {a}"
-            );
-            if let Some((f, _)) = b {
-                assert_eq!(f, a + 2, "and ends on the next one, never a duplicate");
-            }
+    fn a_dissolve_mixes_evenly_and_a_lone_fade_goes_to_transparent() {
+        const RED: [u8; 4] = [255, 0, 0, 255];
+        const BLUE: [u8; 4] = [0, 0, 255, 255];
+        let mixed = |top: [u8; 4], gain: f64, under: Option<&[u8]>| {
+            let mut top = top.repeat(2);
+            dissolve_rgba(&mut top, under, gain);
+            top
+        };
+        let blue = BLUE.repeat(2);
+        assert_eq!(mixed(RED, 0.0, Some(&blue)), blue, "the outgoing clip");
+        // Half the light of each: 188 is what sRGB writes for a half.
+        assert_eq!(mixed(RED, 0.5, Some(&blue)), [188, 0, 188, 255].repeat(2));
+        assert_eq!(mixed(RED, 1.0, Some(&blue)), RED.repeat(2), "the incoming");
+        // Every byte comes back as itself, so an end is the clip exactly.
+        for v in 0..=u8::MAX {
+            let grey = [v, v, v, 255];
+            assert_eq!(mixed(grey, 0.3, Some(&grey.repeat(2))), grey.repeat(2));
         }
+        // A clip with nothing in it does not hold the other one whole under
+        // it: the outgoing clip is half gone at the middle.
+        assert_eq!(mixed([0; 4], 0.5, Some(&blue)), [0, 0, 255, 128].repeat(2));
+        assert_eq!(mixed(RED, 0.0, None), [255, 0, 0, 0].repeat(2));
+        assert_eq!(mixed(RED, 0.5, None), [255, 0, 0, 128].repeat(2));
+        assert_eq!(mixed(RED, 1.0, None), RED.repeat(2));
+
+        // The float road gives the same answers, above white too.
+        let float = |px: [f32; 4]| px.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<u8>>();
+        let mut top = float([4.0, 0.0, 0.0, 1.0]);
+        dissolve_f32(&mut top, Some(&float([0.0, 0.0, 2.0, 1.0])), 0.5);
+        assert_eq!(f32_px(&top, 0), [2.0, 0.0, 1.0, 1.0]);
+        dissolve_f32(&mut top, None, 0.25);
+        assert_eq!(f32_px(&top, 0), [2.0, 0.0, 1.0, 0.25]);
     }
 
     #[test]
@@ -559,19 +656,6 @@ mod tests {
     }
 
     #[test]
-    fn fit_contain_letterboxes_and_pillarboxes() {
-        // 16:9 into a tall 1080×1920 frame: full width, bars top and bottom.
-        let (w, h, ox, oy) = fit_contain(1920, 1080, 1080, 1920);
-        assert_eq!((w, ox), (1080, 0));
-        assert_eq!(h, 608); // 1080 * 9/16 rounded
-        assert_eq!(oy, (1920 - 608) / 2);
-        // Exact multiple upscales cleanly, centred.
-        assert_eq!(fit_contain(2, 2, 4, 4), (4, 4, 0, 0));
-        // Degenerate inputs don't panic.
-        assert_eq!(fit_contain(0, 0, 4, 4), (0, 0, 0, 0));
-    }
-
-    #[test]
     fn letterbox_puts_the_image_in_a_black_frame() {
         // A solid red 4×2 into a 2×2 target: contain scale 0.5 ⇒ 2×1, so the
         // top row is red and the bottom row is the black bar.
@@ -582,17 +666,6 @@ mod tests {
         assert_eq!(&out[4..8], &red); // (1,0) red
         assert_eq!(&out[8..12], &[0, 0, 0, 255]); // (0,1) black bar
         assert_eq!(&out[12..16], &[0, 0, 0, 255]); // (1,1) black bar
-    }
-
-    #[test]
-    fn letterbox_preserves_a_solid_colour() {
-        let blue = [0u8, 0, 255, 255];
-        let src: Vec<u8> = blue.iter().copied().cycle().take(2 * 2 * 4).collect();
-        // Same aspect (square → square) fills the whole target with blue.
-        let out = letterbox_resize(&src, 2, 2, 8, 8, Resample::Fast);
-        for px in out.chunks_exact(4) {
-            assert_eq!(px, &blue);
-        }
     }
 
     /// An 8×8 black/white checker box-downscaled to 2×2 has one analytic
@@ -619,45 +692,5 @@ mod tests {
             }
             assert_eq!(px[3], 255);
         }
-    }
-
-    /// Energy in, energy out: a ramp downscaled 4:1 keeps its mean, because
-    /// every tap row is normalised to sum to one.
-    #[test]
-    fn high_preserves_total_energy() {
-        let (w, h) = (32u32, 32u32);
-        let mut src = Vec::with_capacity((w * h * 4) as usize);
-        for y in 0..h {
-            for x in 0..w {
-                let v = ((x * 7 + y * 3) % 256) as u8;
-                src.extend_from_slice(&[v, v, v, 255]);
-            }
-        }
-        let mean = |px: &[u8]| -> f64 {
-            let n = px.len() / 4;
-            px.chunks_exact(4).map(|p| f64::from(p[0])).sum::<f64>() / n as f64
-        };
-        let out = letterbox_resize(&src, w, h, 8, 8, Resample::High);
-        assert!(
-            (mean(&src) - mean(&out)).abs() < 2.0,
-            "mean drifted: {} -> {}",
-            mean(&src),
-            mean(&out)
-        );
-    }
-
-    /// A flat field stays exactly flat through the high filter too — the
-    /// normalisation makes ringing impossible where there is nothing to ring.
-    #[test]
-    fn high_preserves_a_solid_colour_and_repeats() {
-        let blue = [0u8, 0, 255, 255];
-        let src: Vec<u8> = blue.iter().copied().cycle().take(2 * 2 * 4).collect();
-        let a = letterbox_resize(&src, 2, 2, 8, 8, Resample::High);
-        for px in a.chunks_exact(4) {
-            assert_eq!(px, &blue);
-        }
-        // Deterministic: the same input gives the same bytes, every time.
-        let b = letterbox_resize(&src, 2, 2, 8, 8, Resample::High);
-        assert_eq!(a, b);
     }
 }

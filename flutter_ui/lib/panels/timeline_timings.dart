@@ -103,8 +103,8 @@ class TimingsHeaderCell extends StatelessWidget {
   }
 }
 
-/// The session's measuring switch: a clock in the bottom strip, after the cache
-/// meters. Lit in the accent while measuring.
+/// The session's measuring switch: an hourglass in the bottom strip, after the
+/// cache meters. Lit in the accent while measuring.
 ///
 /// **Why here and not on the column.** It governs the whole session and it
 /// costs something to have on, which is the same shape of thing as the cache
@@ -131,7 +131,7 @@ class RenderTimingsToggle extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: lumitIcon(
-                LumitIcon.stopwatch,
+                LumitIcon.renderTime,
                 size: iconSize,
                 color: on ? t.accent : t.textMuted,
               ),

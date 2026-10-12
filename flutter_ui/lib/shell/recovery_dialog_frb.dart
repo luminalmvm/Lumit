@@ -29,6 +29,7 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
+import 'package:lumit_flutter/src/rust/api/import.dart' show cancelImport;
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 
 import '../l10n/strings.dart';
@@ -59,28 +60,65 @@ const double recoveryDialogWidth = 350;
 /// Offer recovery for `projectPath`. Returns null when there is nothing to
 /// recover, so the caller can open the project normally without a dialogue
 /// nobody needed.
+///
+/// [crashed] is the offer made as a project opens with a crash's edits still
+/// in its journal. There is then something to restore whether or not there is
+/// an autosave, and an answer other than restoring them throws them away, so
+/// the question is not asked again and they never come back under new edits.
 Future<RecoveryChoice?> showRecoveryDialogFrb({
   required BuildContext context,
   required LumitState state,
   required String projectPath,
+  bool crashed = false,
 }) async {
   final autosaves = listAutosaves(project: projectPath);
-  if (autosaves.isEmpty) return null;
+  if (autosaves.isEmpty && !crashed) return null;
+  if (!context.mounted) return null;
 
   final choice = await showLumitModal<RecoveryChoice>(
     context: context,
     id: 'recovery',
-    builder: (close) => _RecoveryDialog(onChoose: close),
+    builder: (close) => _RecoveryDialog(
+        onChoose: close, hasAutosave: autosaves.isNotEmpty),
   );
-  if (choice == null) return null;
+  if (choice == null) {
+    // Closed without picking one. After a crash that is still an answer
+    // other than restoring, so the edits go: left in the journal they would
+    // sit under whatever is done next and come back on top of it.
+    if (crashed) state.project?.discardJournal();
+    return null;
+  }
 
   switch (choice) {
     case RecoveryChoice.journal:
-      state.project?.restoreJournal(projectPath: projectPath);
+      final project = state.project;
+      if (project == null) break;
+      final restored = await state.withBusyCard(
+        l10n.recoveryRestoring,
+        (progress) => project.restoreJournal(
+            projectPath: projectPath, onProgress: progress),
+        cancel: cancelImport,
+        after: const Duration(milliseconds: 300),
+      );
+      // Stopped, so the edits are still in the journal. The question is put
+      // again now: left there under an open project, the next edit would
+      // land on top of them.
+      if (restored.cancelled) {
+        if (!context.mounted) return null;
+        return showRecoveryDialogFrb(
+            context: context,
+            state: state,
+            projectPath: projectPath,
+            crashed: crashed);
+      }
+      state.sharingLetGo();
     case RecoveryChoice.autosave:
-      await state.openProject(autosaves.first.path);
+      // Before the autosave opens: the edits are the saved file's, and the
+      // project in hand stops being that file the moment another opens.
+      if (crashed) state.project?.discardJournal();
+      await state.openProject(autosaves.first.path, recover: false);
     case RecoveryChoice.discard:
-      break;
+      if (crashed) state.project?.discardJournal();
   }
   state.notifyDocumentChanged();
   return choice;
@@ -89,7 +127,10 @@ Future<RecoveryChoice?> showRecoveryDialogFrb({
 class _RecoveryDialog extends StatelessWidget {
   final ValueChanged<RecoveryChoice?> onChoose;
 
-  const _RecoveryDialog({required this.onChoose});
+  /// Whether there is a timed copy to offer.
+  final bool hasAutosave;
+
+  const _RecoveryDialog({required this.onChoose, this.hasAutosave = true});
 
   @override
   Widget build(BuildContext context) {
@@ -115,8 +156,9 @@ class _RecoveryDialog extends StatelessWidget {
           actions: [
             _button(t, 'recover-discard', l10n.recoveryRestoreNone,
                 l10n.tipRecoverNone, RecoveryChoice.discard),
-            _button(t, 'recover-autosave', l10n.recoveryRestoreAutosave,
-                l10n.tipRecoverAutosave, RecoveryChoice.autosave),
+            if (hasAutosave)
+              _button(t, 'recover-autosave', l10n.recoveryRestoreAutosave,
+                  l10n.tipRecoverAutosave, RecoveryChoice.autosave),
             // The window's default action: focused on open, so Enter
             // restores everything — the answer that loses nothing.
             _button(t, 'recover-journal', l10n.recoveryRestoreAll,

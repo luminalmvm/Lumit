@@ -177,6 +177,10 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
   /// Open while the name is being typed into, exactly as a layer row's is.
   TextEditingController? _rename;
 
+  /// Whether the pointer is over this header. At rest an off switch draws as
+  /// dim as a layer row's, and comes up under the pointer the same way.
+  bool _hover = false;
+
   BridgeLayerGroup get _group => widget.header.group;
 
   @override
@@ -240,7 +244,13 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       // stack drag carry the members together without a second drag road.
       onTap: () => widget.actions.onSelect(_group),
       onSecondaryTapDown: (d) => _menu(context, d.globalPosition),
-      child: Container(
+      child: MouseRegion(
+        opaque: false,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) {
+          if (mounted) setState(() => _hover = false);
+        },
+        child: Container(
         height: t.density.laneRow,
         decoration: BoxDecoration(
           // A shade above the panel's ground, so a band of rows reads as one
@@ -268,6 +278,7 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
             ],
           ],
         ),
+      ),
       ),
     );
   }
@@ -462,10 +473,18 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
                   left: wholePixelInset(switchCellWidth, iconSize),
                   top: wholePixelInset(t.density.laneRow, iconSize),
                 ),
+                // A layer row's own rule: off rests dim and comes up under
+                // the pointer, and the eye and the speaker never go dim.
                 child: glyph.LumitIcon(
                   icon!,
                   size: iconSize,
-                  colour: on ? t.textPrimary : t.textMuted,
+                  colour: on
+                      ? t.textPrimary
+                      : _hover ||
+                              which == SwitchCell.visible ||
+                              which == SwitchCell.audible
+                          ? t.textMuted
+                          : t.textDisabled,
                 ),
               ),
             ),
@@ -474,8 +493,13 @@ class _GroupOutlineRowState extends State<GroupOutlineRow> {
       );
     }
 
+    // Only the cells the column has room for, as a layer's row does. A blank
+    // for each one put away overflowed a narrowed column.
     return Row(
-      children: [for (final which in SwitchCell.values) cell(which)],
+      children: [
+        for (final which in SwitchCell.values)
+          if (shown.contains(which)) cell(which),
+      ],
     );
   }
 

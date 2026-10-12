@@ -76,7 +76,7 @@ pub use discover::{
 };
 pub use handles::{Handle, HandleKind, HandleRegistry};
 pub use image::{Frame16, Image, RectI, RowOrder};
-pub use instance::{Instance, ParamSnapshot, ThreadSafety};
+pub use instance::{Controls, Instance, ParamSnapshot, Settled, ThreadSafety};
 pub use ipc::broker::{Broker, BrokerConfig, BrokerError, BrokerRender};
 pub use props::{Element, PropValue, PropertySet};
 pub use quirks::{Quirks, QuirksTable};

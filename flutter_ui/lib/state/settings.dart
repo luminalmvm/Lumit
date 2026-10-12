@@ -8,7 +8,7 @@
 
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/icons/icon_style.dart' show IconSet;
-import 'package:lumit_flutter/theme/theme.dart' show ThemeShape;
+import 'package:lumit_flutter/theme/theme.dart' show LabelCase, ThemeShape;
 
 /// Which of the two playback behaviours the Viewer uses (docs/13 §B5).
 ///
@@ -74,6 +74,11 @@ class PerformanceSettings {
   /// whose machine can afford it, not a better default.
   bool fullResDragPreviews;
 
+  /// Whether footage is decoded by the graphics card's video unit. On by
+  /// default. Off is slower, and is the way out when a graphics driver
+  /// misbehaves with it.
+  bool hardwareDecode;
+
   /// Where parked frames live, as the engine's own enum name
   /// (`appData` / `besideProject` / `custom`). Null means the engine's default.
   /// The frontend never interprets it beyond showing the choice — it hands the
@@ -99,6 +104,7 @@ class PerformanceSettings {
     this.diskCacheLocation,
     this.diskCacheFolder,
     this.fullResDragPreviews = false,
+    this.hardwareDecode = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -110,6 +116,7 @@ class PerformanceSettings {
         if (diskCacheLocation != null) 'disk_cache_location': diskCacheLocation,
         if (diskCacheFolder != null) 'disk_cache_folder': diskCacheFolder,
         'full_res_drag_previews': fullResDragPreviews,
+        'hardware_decode': hardwareDecode,
       };
 
   factory PerformanceSettings.fromJson(Map<String, dynamic> j) =>
@@ -137,6 +144,8 @@ class PerformanceSettings {
         // Absent — a file written before the switch existed — is off, which is
         // the behaviour that file was written under.
         fullResDragPreviews: j['full_res_drag_previews'] == true,
+        // Absent is on, which is what every file before the switch ran with.
+        hardwareDecode: j['hardware_decode'] != false,
       );
 }
 
@@ -198,10 +207,36 @@ enum ToolBarPosition {
   left,
 }
 
+/// What Lumit puts in the person's Discord status.
+enum DiscordStatus {
+  off,
+
+  /// That Lumit is open, and for how long.
+  app,
+
+  /// The project and the composition as well.
+  names,
+}
+
+/// What a file with more than one audio stream becomes when it is added to a
+/// composition. The engine's `BridgeStreamsArrival`, kept as an enum of the
+/// settings file's own so that file does not depend on a generated name.
+enum StreamsArrival {
+  /// The layer plays the first stream, as a file with one stream arrives.
+  /// What a fresh install has.
+  first,
+
+  /// One layer plays every stream mixed.
+  mixed,
+
+  /// A layer to each stream.
+  split,
+}
+
 /// Which room Lantern's cards stand in.
 enum LanternRoom {
-  /// The style's own room: light for a dark scheme, dark for a light one,
-  /// so the cards are always the other way round from the room.
+  /// The style's own room, which is the night room for every scheme. A dark
+  /// scheme used to get the day room here, a bright frame round the picture.
   auto,
 
   /// A light neutral ground, the cards dark against it.
@@ -291,6 +326,10 @@ class InterfaceSettings {
   /// Still images never do: there is nothing to cut in a single frame.
   bool videoAsSequenceLayer;
 
+  /// What a file with more than one audio stream becomes when it is added to
+  /// a composition.
+  StreamsArrival streamsArrival;
+
   /// Whether stopping playback leaves the playhead on the frame that was on
   /// screen, rather than putting it back where play started.
   ///
@@ -363,6 +402,19 @@ class InterfaceSettings {
   /// few pixels to the left. Turning it on gives the labels back, unchanged.
   bool layerNamesOnBars;
 
+  /// Whether each footage row in the Project panel carries its poster frame
+  /// in place of the type glyph.
+  ///
+  /// Off by default: the approved drawing is a tight list of names with the
+  /// picture on the preview card, and that is what a new user sees. On is for
+  /// cutting, where a folder of clips is told apart by what is in them.
+  bool projectThumbnails;
+
+  /// Whether the minimap of the bars is drawn under the Timeline's lanes.
+  ///
+  /// Null follows the style: Lantern draws it, Studio and Desk do not.
+  bool? timelineMinimap;
+
   /// Whether rows are drawn a pixel or two tighter than the approved mockups
   /// render them (`DensityTokens` in `theme/theme.dart`).
   ///
@@ -431,6 +483,10 @@ class InterfaceSettings {
   /// room is what the drawing draws. Read only while the shape is Lantern.
   LanternRoom room;
 
+  /// How labels are cased, or null to leave it to the style: Studio as
+  /// written, Desk lower case, Lantern capitals.
+  LabelCase? labelCase;
+
   /// What the chrome says: words, or the icon set's glyphs.
   ///
   /// [ChromeLabels.icons] by default — see the enum for why that is not Words.
@@ -458,6 +514,7 @@ class InterfaceSettings {
     this.retimeOpensToSpeed = false,
     this.retimeInSeconds = false,
     this.videoAsSequenceLayer = false,
+    this.streamsArrival = StreamsArrival.first,
     this.playheadStaysOnStop = false,
     this.pasteLayersAtOriginalTime = false,
     this.multiwaveWaveforms = true,
@@ -465,6 +522,8 @@ class InterfaceSettings {
     this.showToneMap = false,
     this.easingInPopup = false,
     this.layerNamesOnBars = false,
+    this.projectThumbnails = false,
+    this.timelineMinimap,
     this.compact = false,
     this.viewerBars = ViewerBars.auto,
     this.toolBarPosition = ToolBarPosition.auto,
@@ -475,6 +534,7 @@ class InterfaceSettings {
     this.shiftAOpensNodeSearch = true,
     this.iconSet = IconSet.styleChoice,
     this.room = LanternRoom.auto,
+    this.labelCase,
   });
 
   Map<String, dynamic> toJson() => {
@@ -489,6 +549,7 @@ class InterfaceSettings {
         'retime_opens_to_speed': retimeOpensToSpeed,
         'retime_in_seconds': retimeInSeconds,
         'video_as_sequence_layer': videoAsSequenceLayer,
+        'streams_arrival': streamsArrival.name,
         'playhead_stays_on_stop': playheadStaysOnStop,
         'paste_layers_at_original_time': pasteLayersAtOriginalTime,
         'multiwave_waveforms': multiwaveWaveforms,
@@ -496,6 +557,8 @@ class InterfaceSettings {
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
         'layer_names_on_bars': layerNamesOnBars,
+        'project_thumbnails': projectThumbnails,
+        'timeline_minimap': timelineMinimap,
         'compact': compact,
         'viewer_bars': viewerBars.name,
         'tool_bar_position': toolBarPosition.name,
@@ -506,6 +569,7 @@ class InterfaceSettings {
         'shift_a_opens_node_search': shiftAOpensNodeSearch,
         'icon_set': iconSet.name,
         'lantern_room': room.name,
+        if (labelCase != null) 'label_case': labelCase!.name,
       };
   factory InterfaceSettings.fromJson(Map<String, dynamic> j) =>
       InterfaceSettings(
@@ -541,6 +605,9 @@ class InterfaceSettings {
         // settings file written before this field existed adopts it.
         retimeInSeconds: j['retime_in_seconds'] as bool? ?? false,
         videoAsSequenceLayer: j['video_as_sequence_layer'] as bool? ?? false,
+        streamsArrival: StreamsArrival.values.firstWhere(
+            (a) => a.name == j['streams_arrival'],
+            orElse: () => StreamsArrival.first),
         // Absent means off here too, but for the opposite reason: the returning
         // playhead is the *new* default, so a settings file written
         // before this field existed adopts it rather than being pinned to the
@@ -571,6 +638,10 @@ class InterfaceSettings {
         // ruling on what the editor should look like, and the labels are one
         // click away for anyone who wants them back.
         layerNamesOnBars: j['layer_names_on_bars'] as bool? ?? false,
+        // Absent means off: the glyph is what every file written before this
+        // field existed was drawing.
+        projectThumbnails: j['project_thumbnails'] as bool? ?? false,
+        timelineMinimap: j['timeline_minimap'] as bool?,
         // Absent means off, which is the roomy default — and every settings
         // file written before this field existed was written by a build that
         // drew the tight rows. Those users get the extra pixel or two back,
@@ -613,5 +684,7 @@ class InterfaceSettings {
           (r) => r.name == j['lantern_room'],
           orElse: () => LanternRoom.auto,
         ),
+        // Absent, or a name no build wrote, means the style's own.
+        labelCase: LabelCase.values.asNameMap()[j['label_case']],
       );
 }

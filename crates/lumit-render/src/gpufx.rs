@@ -83,7 +83,7 @@ pub struct AuxSlot<'a> {
     /// the matte *and* is dissolved by it applies it twice, which is the user's
     /// own arithmetic, visible in their own code.
     matte_all: Option<&'a Tex>,
-    layer: Option<&'a Tex>,
+    layers: &'a [Option<crate::fxops::LayerPicture>],
     paths: &'a [lumit_core::mask::MaskPolyline],
     schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
     /// Which effect instance this op is, and the layer time its
@@ -132,7 +132,7 @@ impl<'a> AuxSlot<'a> {
         data: AuxData<'a>,
         matte: Option<&'a Tex>,
         matte_all: Option<&'a Tex>,
-        layer: Option<&'a Tex>,
+        layers: &'a [Option<crate::fxops::LayerPicture>],
         paths: &'a [lumit_core::mask::MaskPolyline],
         schedule: Option<&'a lumit_core::fx::points::PointsSchedule>,
         instance: uuid::Uuid,
@@ -142,7 +142,7 @@ impl<'a> AuxSlot<'a> {
             data,
             matte,
             matte_all,
-            layer,
+            layers,
             paths,
             schedule,
             op: (instance, lt),
@@ -263,7 +263,14 @@ impl<'a> AuxSlot<'a> {
     /// effect that wanted two things would have to add. `None` for an unset,
     /// missing or cyclic reference: the labelled no-op.
     pub fn layer_input(self) -> Option<&'a Tex> {
-        self.layer
+        self.layers.first().and_then(|l| l.as_ref()).map(|l| &l.tex)
+    }
+
+    /// Every layer picture this op was handed, one entry per layer row the
+    /// effect declares, `None` where a row is unset. One entry for most
+    /// effects, which read [`Self::layer_input`] instead.
+    pub fn layer_inputs(self) -> &'a [Option<crate::fxops::LayerPicture>] {
+        self.layers
     }
 
     /// The decoded neighbour frames, empty when there are none — from either of
@@ -312,6 +319,24 @@ pub trait GpuEffect: Sync + 'static {
     /// here stay in step.
     fn aux(&self) -> AuxKind {
         AuxKind::None
+    }
+
+    /// The points stream this op hands on when it can only be made here, in
+    /// px@comp: one that depends on a picture, or on another such stream.
+    /// Called with what [`run`](Self::run) is about to be called with, and
+    /// only when an effect below reads it. `None` for everything else.
+    #[allow(clippy::too_many_arguments)]
+    fn points_out(
+        &self,
+        _fx: &FxEngine,
+        _ctx: &GpuContext,
+        _tex: &Tex,
+        _w: u32,
+        _h: u32,
+        _p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        None
     }
 
     /// Draw the effect, with its parameters read from the resolved bag and its
@@ -430,7 +455,19 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &CloneToPoints,
     &Trail,
     &ConnectPoints,
+    &PointsField,
     &EmitFromImage,
+    &PointsAlongPath,
+    &TrackPoints,
+    &TextToPoints,
+    &LabelPoints,
+    &PointsModifier("vary_points"),
+    &PointsModifier("pick_points"),
+    &PointsModifier("transform_points"),
+    &PointsModifier("merge_points"),
+    &PointsModifier("relax_points"),
+    &PointsModifier("flow_points"),
+    &PointsModifier("bake_points"),
     // The seven layer styles that render (docs/impl/layer-styles.md §8).
     // Satin and Bevel and emboss are declared in `lumit_core::fx::styles` but
     // have no pass here, so an instance of one resolves to an op this table
@@ -3956,6 +3993,7 @@ impl GpuEffect for PixelSort {
                 min: s.min,
                 max: s.max,
                 stride: s.stride,
+                offset_scale: s.offset_scale,
                 seed: s.seed,
                 mix: s.mix,
             },
@@ -4518,6 +4556,12 @@ fn draw_points_tailed(
                 // cap.
                 id: u32::try_from(s.id.get(i).copied().unwrap_or(0)).unwrap_or(u32::MAX),
                 tail: tails.get(i).copied().unwrap_or(position),
+                // A capsule keeps its round ends, so only a dot is stretched.
+                stretch: if tails.get(i).is_some_and(|t| *t != position) {
+                    [1.0; 2]
+                } else {
+                    s.stretch_of(i)
+                },
             }
         })
         .collect()
@@ -4591,6 +4635,233 @@ impl GpuEffect for Grid {
     }
 }
 
+/// Points along path: worked out on the host from the mask's flattened line
+/// and drawn through the shared points draw, as Grid is.
+struct PointsAlongPath;
+impl GpuEffect for PointsAlongPath {
+    fn match_name(&self) -> &'static str {
+        "points_along_path"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::points_along_path::PointsAlongPath as A;
+        let inst = A::read(p);
+        let style = inst.draw_style();
+        let px_scale = A::px_scale_of(p);
+        // The camera and the path both arrive in px@comp.
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        let path = lumit_core::fx::points::scale_path(&path_of(aux), px_scale);
+        let stream = inst.stream(&path, projection.unwrap_or_default());
+        let points = draw_points_of(&stream);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+}
+
+/// Track points: the analysed tracks on this frame, read back on the host and
+/// drawn through the shared points draw, as Grid is.
+struct TrackPoints;
+impl GpuEffect for TrackPoints {
+    fn match_name(&self) -> &'static str {
+        "track_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::track_points::TrackPoints as T;
+        let style = T::read(p).draw_style();
+        // The camera arrives in px@comp. The tracks do too, and the stream
+        // puts them in this raster itself.
+        let projection = aux
+            .schedule()
+            .and_then(|s| s.projection)
+            .map(|proj| proj.rescaled(T::px_scale_of(p)));
+        // Which analysis is this instance's, which the bag cannot say.
+        let stream = T::stream(p, aux.op().0, projection.unwrap_or_default());
+        let points = draw_points_of(&stream);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+}
+
+/// Vary points and Pick points: the wired stream with the effect's own change
+/// made, drawn as discs. The change is the declaration's `modify_points`, the
+/// same function a reader further down the wire goes through.
+struct PointsModifier(&'static str);
+impl GpuEffect for PointsModifier {
+    fn match_name(&self) -> &'static str {
+        self.0
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::ParamId;
+        let px_scale = p.float(ParamId::new("derived.px_scale"), 1.0);
+        let mix = (p.float(ParamId::new("mix"), 100.0) / 100.0).clamp(0.0, 1.0);
+        let stream = self.modified(fx, ctx, tex, w, h, p, aux, px_scale);
+        // Nothing wired, or nothing to show: the picture passes through.
+        let Some(stream) = stream.filter(|_| mix > 0.0) else {
+            return tex.clone();
+        };
+        let points = draw_points_of(&stream);
+        let projection = aux
+            .schedule()
+            .and_then(|c| c.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: (p.float(ParamId::new("feather"), 100.0) / 100.0).clamp(0.0, 1.0),
+                mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+    fn points_out(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        let px_scale = p.float(lumit_core::fx::ParamId::new("derived.px_scale"), 1.0);
+        let made = self.modified(fx, ctx, tex, w, h, p, aux, px_scale)?;
+        Some(made.rescaled(1.0 / px_scale.max(1e-6)))
+    }
+}
+
+impl PointsModifier {
+    /// The wired streams with this effect's change made, in raster pixels.
+    /// A modifier that reads a picture has it sampled under the first
+    /// input's points here, where the picture is.
+    #[allow(clippy::too_many_arguments)]
+    fn modified(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+        px_scale: f32,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        let def = lumit_core::fx::BUILTIN_DEFS.get(self.0)?;
+        let sched = aux.schedule()?;
+        let ports = def
+            .signature()
+            .inputs()
+            .iter()
+            .filter(|port| port.ty == lumit_core::fx::PortType::Points)
+            .count();
+        // One stream per input, or just the first where the list is a history.
+        let inputs: Vec<lumit_core::fx::points::PointsStream> = sched
+            .input
+            .iter()
+            .take(ports.max(1))
+            .map(|s| s.rescaled(px_scale))
+            .collect();
+        let first = inputs.first()?;
+        let sampled = def.points_need_picture(p).then(|| {
+            let points = draw_points_of(first);
+            let projection = sched.projection.map(|proj| proj.rescaled(px_scale).m);
+            fx.points_sampled(
+                ctx,
+                tex,
+                w,
+                h,
+                aux.layer_input(),
+                &lumit_gpu::fx::PointsDrawOp {
+                    points: &points,
+                    feather: 0.0,
+                    mix: 1.0,
+                    projection,
+                    field: lumit_gpu::fx::FieldTest::None,
+                    seed: 0,
+                    mode: 0,
+                    sprite: None,
+                },
+            )
+        });
+        let inputs: Vec<&lumit_core::fx::points::PointsStream> = inputs.iter().collect();
+        def.modify_points(
+            p,
+            &lumit_core::fx::ModifyCx {
+                inputs: &inputs,
+                t: sched.t,
+                sampled: sampled.as_deref(),
+            },
+        )
+    }
+}
+
 /// Scatter (docs/08 §3.89): candidates thrown on the host, kept on the
 /// card where the alpha under them beats their own die.
 ///
@@ -4614,38 +4885,117 @@ impl GpuEffect for Scatter {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
+        Thrown::scatter(p, aux, w, h).draw(fx, ctx, tex, w, h)
+    }
+    fn points_out(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        Some(Thrown::scatter(p, aux, w, h).stood(fx, ctx, tex, w, h))
+    }
+}
+
+/// What Scatter and Emit from image post to the card: the candidates, the
+/// picture they are tested against, and the rule.
+struct Thrown {
+    candidates: lumit_core::fx::points::PointsStream,
+    /// `None` reads the effect's own input.
+    field: Option<Tex>,
+    test: lumit_gpu::fx::FieldTest,
+    seed: u32,
+    style: lumit_core::fx::points::DrawStyle,
+    projection: Option<lumit_core::fx::points::Projection>,
+    px_scale: f32,
+}
+
+impl Thrown {
+    fn scatter(p: Params<'_>, aux: AuxSlot<'_>, w: u32, h: u32) -> Self {
         use lumit_core::fx::effects::scatter::Scatter as S;
         let inst = S::read(p);
-        let style = inst.draw_style();
         let px_scale = S::px_scale_of(p);
         let projection = aux
             .schedule()
             .and_then(|sched| sched.projection)
             .map(|proj| proj.rescaled(px_scale));
-        // The override: the matte is *where the points go*, so it arrives
-        // as the kernel's own input rather than as a dissolve afterwards. Unset
-        // reads this effect's own picture, which is the documented default.
-        let matte = aux.matte().cloned();
-        let invert = p.bool(lumit_core::fx::MATTE_INVERT_ID, false);
-        let candidates = inst.candidates(w, h, px_scale, projection.unwrap_or_default());
-        let points = draw_points_of(&candidates);
-        fx.points_draw(
-            ctx,
-            tex,
-            w,
-            h,
-            matte.as_ref(),
-            &lumit_gpu::fx::PointsDrawOp {
-                points: &points,
-                feather: style.feather,
-                mix: style.mix,
-                projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::Alpha { invert },
-                seed: inst.seed,
-                mode: 0,
-                sprite: None,
+        Thrown {
+            candidates: inst.candidates(w, h, px_scale, projection.unwrap_or_default()),
+            // The override: the matte is *where the points go*, so it arrives
+            // as the kernel's own input rather than as a dissolve afterwards.
+            // Unset reads this effect's own picture, which is the documented
+            // default.
+            field: aux.matte().cloned(),
+            test: lumit_gpu::fx::FieldTest::Alpha {
+                invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
-        )
+            seed: inst.seed,
+            style: inst.draw_style(),
+            projection,
+            px_scale,
+        }
+    }
+
+    fn emit_from_image(p: Params<'_>, aux: AuxSlot<'_>, w: u32, h: u32) -> Self {
+        use lumit_core::fx::effects::emit_from_image::EmitFromImage as E;
+        let inst = E::read(p);
+        let px_scale = E::px_scale_of(p);
+        let projection = aux
+            .schedule()
+            .and_then(|sched| sched.projection)
+            .map(|proj| proj.rescaled(px_scale));
+        Thrown {
+            candidates: inst.candidates(w, h, px_scale, projection.unwrap_or_default()),
+            // The Source layer, or this effect's own picture when the row is
+            // unset, which is what `None` means to the generic draw.
+            field: aux.layer_input().cloned(),
+            test: lumit_gpu::fx::FieldTest::Luma {
+                threshold: (inst.threshold / 100.0).clamp(0.0, 1.0),
+            },
+            seed: inst.seed,
+            style: inst.draw_style(),
+            projection,
+            px_scale,
+        }
+    }
+
+    fn op<'a>(&self, points: &'a [lumit_gpu::fx::DrawPoint]) -> lumit_gpu::fx::PointsDrawOp<'a> {
+        lumit_gpu::fx::PointsDrawOp {
+            points,
+            feather: self.style.feather,
+            mix: self.style.mix,
+            projection: self.projection.map(|proj| proj.m),
+            field: self.test,
+            seed: self.seed,
+            mode: 0,
+            sprite: None,
+        }
+    }
+
+    fn draw(&self, fx: &FxEngine, ctx: &GpuContext, tex: &Tex, w: u32, h: u32) -> Tex {
+        let points = draw_points_of(&self.candidates);
+        fx.points_draw(ctx, tex, w, h, self.field.as_ref(), &self.op(&points))
+    }
+
+    /// The candidates the picture kept, in px@comp, for the effects below
+    /// that read this one's stream.
+    fn stood(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+    ) -> lumit_core::fx::points::PointsStream {
+        let points = draw_points_of(&self.candidates);
+        let kept = fx.points_stood(ctx, tex, w, h, self.field.as_ref(), &self.op(&points));
+        let mut stream = self.candidates.clone();
+        stream.retain(|i| kept.get(i).copied().unwrap_or(false));
+        stream.rescaled(1.0 / self.px_scale.max(1e-6))
     }
 }
 
@@ -4673,39 +5023,19 @@ impl GpuEffect for EmitFromImage {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        use lumit_core::fx::effects::emit_from_image::EmitFromImage as E;
-        let inst = E::read(p);
-        let style = inst.draw_style();
-        let px_scale = E::px_scale_of(p);
-        let projection = aux
-            .schedule()
-            .and_then(|sched| sched.projection)
-            .map(|proj| proj.rescaled(px_scale));
-        // The Source layer, or this effect's own picture when the row is unset
-        // — which is what `None` means to the generic draw, and is the
-        // documented default.
-        let source = aux.layer_input().cloned();
-        let candidates = inst.candidates(w, h, px_scale, projection.unwrap_or_default());
-        let points = draw_points_of(&candidates);
-        fx.points_draw(
-            ctx,
-            tex,
-            w,
-            h,
-            source.as_ref(),
-            &lumit_gpu::fx::PointsDrawOp {
-                points: &points,
-                feather: style.feather,
-                mix: style.mix,
-                projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::Luma {
-                    threshold: (inst.threshold / 100.0).clamp(0.0, 1.0),
-                },
-                seed: inst.seed,
-                mode: 0,
-                sprite: None,
-            },
-        )
+        Thrown::emit_from_image(p, aux, w, h).draw(fx, ctx, tex, w, h)
+    }
+    fn points_out(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        Some(Thrown::emit_from_image(p, aux, w, h).stood(fx, ctx, tex, w, h))
     }
 }
 
@@ -4737,16 +5067,28 @@ impl GpuEffect for CloneToPoints {
         aux: AuxSlot<'_>,
     ) -> Tex {
         use lumit_core::fx::effects::clone_to_points::CloneToPoints as C;
-        let inst = C::read(p);
+        // Time step as the builder read it, so a point's age picks among the
+        // moments that were rendered.
+        let inst = C {
+            time_step: p.float(C::DERIVED_TIME_STEP, C::read(p).time_step),
+            ..C::read(p)
+        };
         let px_scale = C::px_scale_of(p);
         let style = inst.draw_style();
+        // The pictures the builder made, laid out as it laid them. A point's
+        // picture is a place in this list, and an empty place is a layer that
+        // is not there at that moment, which draws nothing.
+        let pictures = aux.layer_inputs();
+        let of = C::handed(p, pictures.len());
         // Nothing to stamp, or nothing to stamp it at: the picture passes
         // through, which is what an unset row and an unwired socket both mean.
-        let (Some(sprite), Some(stream)) = (aux.layer_input(), points_input_at(aux, 0, px_scale))
-        else {
+        let (true, Some(stream)) = (
+            pictures.iter().any(Option::is_some),
+            points_input_at(aux, 0, px_scale),
+        ) else {
             return tex.clone();
         };
-        let stamps = inst.stamps(&stream);
+        let stamps = inst.stamps(&stream, of);
         let points = draw_points_of(&stamps);
         // The camera, in the raster this frame is drawn at —
         // `None` on a 2D layer, where it is not the identity matrix but no
@@ -4755,23 +5097,48 @@ impl GpuEffect for CloneToPoints {
             .schedule()
             .and_then(|c| c.projection)
             .map(|proj| proj.rescaled(px_scale));
-        fx.points_draw(
-            ctx,
-            tex,
-            w,
-            h,
-            None,
-            &lumit_gpu::fx::PointsDrawOp {
-                points: &points,
-                feather: style.feather,
-                mix: style.mix,
-                projection: projection.map(|proj| proj.m),
-                field: lumit_gpu::fx::FieldTest::None,
-                seed: 0,
-                mode: 1,
-                sprite: Some(sprite),
-            },
-        )
+        // The effect's own input has no size of its own, so it takes the
+        // frame's.
+        let frame = [w as f32 / px_scale.max(1e-6), h as f32 / px_scale.max(1e-6)];
+        // One draw per run of neighbours that share a picture, so the stamps
+        // still go down in the stream's one order whichever layer each takes.
+        //
+        // ponytail: a pass and two small buffers per run, so a few thousand
+        // points choosing at random between layers is a few thousand passes.
+        // Bind the pictures as one array and choose per instance in the
+        // kernel if a profile shows that costing.
+        let mut runs = Vec::new();
+        let mut from = 0usize;
+        for to in 1..=points.len() {
+            let which = stamps.index_of(from);
+            if to < points.len() && stamps.index_of(to) == which {
+                continue;
+            }
+            let picture = pictures.get(which as usize).and_then(Option::as_ref);
+            if let (Some(run), Some(picture)) = (points.get(from..to), picture) {
+                let fit = inst.fit(picture.size.unwrap_or(frame), px_scale);
+                runs.push((
+                    lumit_gpu::fx::PointsDrawOp {
+                        points: run,
+                        feather: style.feather,
+                        mix: style.mix,
+                        projection: projection.map(|proj| proj.m),
+                        field: lumit_gpu::fx::FieldTest::None,
+                        seed: 0,
+                        mode: 1,
+                        sprite: Some(&picture.tex),
+                    },
+                    lumit_gpu::fx::SpriteFit {
+                        unit: fit.unit,
+                        anchor: fit.anchor,
+                        uv: fit.uv,
+                        corner: fit.corner,
+                    },
+                ));
+            }
+            from = to;
+        }
+        fx.points_draw_runs(ctx, tex, w, h, &runs)
     }
 }
 
@@ -4895,6 +5262,316 @@ impl GpuEffect for ConnectPoints {
     }
 }
 
+/// Points field: a picture of the wired stream's nearest point at every
+/// pixel. `PointsField::seeds` says which points count, and the kernel's
+/// `shade` is the twin of `PointsField::shade`.
+struct PointsField;
+impl GpuEffect for PointsField {
+    fn match_name(&self) -> &'static str {
+        "points_field"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::points_field::PointsField as F;
+        let inst = F::read(p);
+        // Nothing wired: the picture passes through.
+        let Some(stream) = points_input_at(aux, 0, F::px_scale_of(p)) else {
+            return tex.clone();
+        };
+        fx.points_field(
+            ctx,
+            tex,
+            w,
+            h,
+            &points_field_op(inst, &field_points(inst, &stream)),
+        )
+    }
+}
+
+/// A stream's seeds as the card's pass takes them.
+fn field_points(
+    inst: lumit_core::fx::effects::points_field::PointsField,
+    stream: &lumit_core::fx::points::PointsStream,
+) -> Vec<lumit_gpu::fx::FieldPoint> {
+    inst.seeds(stream)
+        .iter()
+        .map(|s| lumit_gpu::fx::FieldPoint {
+            at: s.at,
+            number: s.number,
+            colour: s.colour,
+        })
+        .collect()
+}
+
+/// Points field's rows as the card's pass takes them.
+fn points_field_op(
+    inst: lumit_core::fx::effects::points_field::PointsField,
+    points: &[lumit_gpu::fx::FieldPoint],
+) -> lumit_gpu::fx::PointsFieldOp<'_> {
+    lumit_gpu::fx::PointsFieldOp {
+        points,
+        output: inst.output,
+        radius: inst.radius,
+        limit: inst.limit,
+        invert: inst.invert,
+        number_range: inst.number_range,
+        mix: inst.mix / 100.0,
+    }
+}
+
+/// Text to points' stream in the raster this frame is drawn at, and the
+/// camera it is seen through. The letters come laid out on the carriage, and
+/// `TextToPoints::stream` says which of them make a point.
+fn text_points(
+    p: Params<'_>,
+    aux: AuxSlot<'_>,
+) -> (
+    lumit_core::fx::points::PointsStream,
+    Option<lumit_core::fx::points::Projection>,
+) {
+    use lumit_core::fx::effects::text_to_points::TextToPoints as T;
+    let px_scale = T::px_scale_of(p);
+    let sched = aux.schedule();
+    let projection = sched
+        .and_then(|s| s.projection)
+        .map(|proj| proj.rescaled(px_scale));
+    let glyphs = sched.map_or(&[][..], |s| &s.text);
+    let stream = T::read(p).stream(glyphs, px_scale, projection.unwrap_or_default());
+    (stream, projection)
+}
+
+/// Text to points: a point per character, word or line of a Text layer,
+/// drawn through the shared points draw as Grid's are.
+struct TextToPoints;
+impl GpuEffect for TextToPoints {
+    fn match_name(&self) -> &'static str {
+        "text_to_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::text_to_points::TextToPoints as T;
+        let style = T::read(p).draw_style();
+        let (stream, projection) = text_points(p, aux);
+        let points = draw_points_of(&stream);
+        fx.points_draw(
+            ctx,
+            tex,
+            w,
+            h,
+            None,
+            &lumit_gpu::fx::PointsDrawOp {
+                points: &points,
+                feather: style.feather,
+                mix: style.mix,
+                projection: projection.map(|proj| proj.m),
+                field: lumit_gpu::fx::FieldTest::None,
+                seed: 0,
+                mode: 0,
+                sprite: None,
+            },
+        )
+    }
+    /// The letters only exist while a frame is drawn, so the effects below
+    /// are handed the stream here, as Scatter's are.
+    fn points_out(
+        &self,
+        _fx: &FxEngine,
+        _ctx: &GpuContext,
+        _tex: &Tex,
+        _w: u32,
+        _h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        use lumit_core::fx::effects::text_to_points::TextToPoints as T;
+        let back = 1.0 / T::px_scale_of(p).max(1e-6);
+        Some(text_points(p, aux).0.rescaled(back))
+    }
+}
+
+/// A label's document in a raster `k` times the size it was written for.
+/// Everything it measures in px takes the factor.
+fn label_document(
+    doc: &lumit_core::model::TextDocument,
+    k: f32,
+) -> lumit_core::model::TextDocument {
+    let mut d = doc.clone();
+    if k != 1.0 {
+        let k = f64::from(k);
+        d.size *= k;
+        d.style.leading = d.style.leading.map(|v| v * k);
+        d.style.baseline_shift *= k;
+        d.style.stroke_width *= k;
+        let p = &mut d.paragraph;
+        for v in [
+            &mut p.indent_left,
+            &mut p.indent_right,
+            &mut p.indent_first,
+            &mut p.space_before,
+            &mut p.space_after,
+        ] {
+            *v *= k;
+        }
+    }
+    d
+}
+
+/// Label points: a piece of text beside every point of a wired stream.
+///
+/// `LabelPoints::labels` says which wording goes where. Each different
+/// wording is drawn once by the text engine, the labels are laid over each
+/// other in one picture the size of the box round them all, and that picture
+/// is stamped over the frame by the shared points draw.
+struct LabelPoints;
+impl GpuEffect for LabelPoints {
+    fn match_name(&self) -> &'static str {
+        "label_points"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::effects::label_points::LabelPoints as L;
+        let inst = L::read(p);
+        let px_scale = L::px_scale_of(p);
+        let mix = (inst.mix / 100.0).clamp(0.0, 1.0);
+        let sched = aux.schedule();
+        // Nothing wired, no Text layer or nothing to show: the picture passes
+        // through.
+        let (Some(stream), Some(doc), true) = (
+            sched.and_then(|c| c.input.first()),
+            sched.and_then(|c| c.label.as_deref()),
+            mix > 0.0,
+        ) else {
+            return tex.clone();
+        };
+        let labels = inst.labels(stream, inst.template(&doc.text), px_scale);
+        let doc = label_document(doc, px_scale);
+        // Labels that read the same share one drawing. Only ever looked up,
+        // so the map's order decides nothing.
+        let mut drawn: std::collections::HashMap<&str, lumit_text::RasterText> =
+            std::collections::HashMap::new();
+        for (text, _) in &labels {
+            drawn.entry(text.as_str()).or_insert_with(|| {
+                lumit_text::rasterise(&lumit_text::TextBlock::of(&doc, text), &[])
+            });
+        }
+        // Each label's top left corner on the frame, and its picture. The
+        // anchor is level with the middle of the label's height.
+        let along = inst.anchor_along();
+        let whole = |v: f32| v.round().clamp(-1e9, 1e9) as i64;
+        let placed: Vec<(i64, i64, &lumit_text::RasterText)> = labels
+            .iter()
+            .filter_map(|(text, at)| {
+                let r = drawn.get(text.as_str())?;
+                Some((
+                    whole(at[0] - along * r.width as f32),
+                    whole(at[1] - 0.5 * r.height as f32),
+                    r,
+                ))
+            })
+            .collect();
+        // The box round every label, kept to the frame.
+        let (mut x0, mut y0, mut x1, mut y1) = (i64::from(w), i64::from(h), 0i64, 0i64);
+        for (x, y, r) in &placed {
+            x0 = x0.min(*x);
+            y0 = y0.min(*y);
+            x1 = x1.max(x + i64::from(r.width));
+            y1 = y1.max(y + i64::from(r.height));
+        }
+        let (x0, y0) = (x0.max(0), y0.max(0));
+        let (x1, y1) = (x1.min(i64::from(w)), y1.min(i64::from(h)));
+        if x1 <= x0 || y1 <= y0 {
+            return tex.clone();
+        }
+        let (bw, bh) = (x1 - x0, y1 - y0);
+        // The text engine's pixels are sRGB bytes with plain alpha. The frame
+        // is linear and premultiplied.
+        let linear: [f32; 256] = std::array::from_fn(|v| lumit_core::pixels::srgb_decode(v as u8));
+        let mut px = vec![0.0f32; (bw * bh * 4) as usize];
+        for (x, y, r) in &placed {
+            let rw = i64::from(r.width.max(1));
+            for (i, texel) in r.rgba.chunks_exact(4).enumerate() {
+                let &[red, green, blue, alpha] = texel else {
+                    continue;
+                };
+                let (at_x, at_y) = (x + i as i64 % rw - x0, y + i as i64 / rw - y0);
+                if alpha == 0 || !(0..bw).contains(&at_x) || !(0..bh).contains(&at_y) {
+                    continue;
+                }
+                let d = ((at_y * bw + at_x) * 4) as usize;
+                let Some(under) = px.get_mut(d..d + 4) else {
+                    continue;
+                };
+                let a = f32::from(alpha) / 255.0;
+                let over = [red, green, blue].map(|c| linear[usize::from(c)] * a);
+                for (under, top) in under.iter_mut().zip(over.into_iter().chain([a])) {
+                    *under = top + *under * (1.0 - a);
+                }
+            }
+        }
+        let sprite = lumit_gpu::fx::upload_linear_f32(ctx, &px, bw as u32, bh as u32);
+        // One stamp, the size of the box and sitting exactly on it, so a
+        // pixel of the labels lands on a pixel of the frame.
+        let centre = [(x0 + x1) as f32 * 0.5, (y0 + y1) as f32 * 0.5, 0.0];
+        let stamp = [lumit_gpu::fx::DrawPoint {
+            position: centre,
+            size: bw as f32,
+            rotation: 0.0,
+            colour: [1.0; 4],
+            id: 0,
+            tail: centre,
+            stretch: [1.0; 2],
+        }];
+        fx.points_draw_runs(
+            ctx,
+            tex,
+            w,
+            h,
+            &[(
+                lumit_gpu::fx::PointsDrawOp {
+                    points: &stamp,
+                    feather: 0.0,
+                    mix,
+                    // The labels were put where the points are seen, so the
+                    // stamp itself is flat.
+                    projection: None,
+                    field: lumit_gpu::fx::FieldTest::None,
+                    seed: 0,
+                    mode: 1,
+                    sprite: Some(&sprite),
+                },
+                lumit_gpu::fx::SpriteFit {
+                    unit: [1.0, bh as f32 / bw as f32],
+                    ..Default::default()
+                },
+            )],
+        )
+    }
+}
+
 struct AddGrain;
 impl GpuEffect for AddGrain {
     fn match_name(&self) -> &'static str {
@@ -4986,6 +5663,7 @@ mod tests {
             width: 60.0,
             height: 40.0,
             emitter_angle: 20.0,
+            path_from: 0,
             mask_path: false,
             emit_rate: 220.0,
             direction: -90.0,
@@ -5061,61 +5739,9 @@ mod tests {
         (packed, style, frames, curves)
     }
 
-    /// **The centre of PS2** (points-stream.md §3.2, particulate.md §9 item 8):
-    /// the compacted GPU stream and the CPU reference describe the same
-    /// particles, attribute by attribute, to **one part in 10⁵ of each
-    /// attribute's own range**.
-    ///
-    /// Pixels get a perceptual tolerance; these numbers get a numerical one,
-    /// because a consumer reads them as *data*. The measure is relative to the
-    /// attribute's range and not to each value, because half of these
-    /// quantities pass through zero — a speed reversing has no meaningful ULP
-    /// count, and asking for one is asking a metric a question it cannot
-    /// answer. The colour region is compared nowhere here: particulate.md §4
-    /// declares it at half precision, which is a storage width rather than an
-    /// agreement, and the picture test below is what holds it.
-    /// A head-on camera over the fixture's little raster, as the restriction
-    /// comes out: a particle `z` deep scales by `zoom/(zoom + z)` about the
-    /// frame's centre. The renderer's own construction is held to the
-    /// compositor's matrices in `build.rs`; what this one is for is giving the
-    /// kernel a projection that is definitely not the identity.
-    fn test_camera(centre: [f32; 2], zoom: f32) -> lumit_core::fx::points::Projection {
-        lumit_core::fx::points::Projection {
-            m: [
-                [1.0, 0.0, centre[0] / zoom, 0.0],
-                [0.0, 1.0, centre[1] / zoom, 0.0],
-                [0.0, 0.0, 1.0 / zoom, 1.0],
-            ],
-        }
-    }
-
     #[test]
     fn the_particulate_stream_agrees_with_the_cpu_reference() {
         stream_agrees_with_the_cpu_reference(None);
-    }
-
-    /// **Border emission, in both paths**: the kernel walks the very
-    /// polyline the CPU reference walks, because the host flattens it once and
-    /// hands the same numbers to both. A twin test rather than a second
-    /// picture: an outline the two paths disagreed about would be a ring drawn
-    /// in one place and sampled in another.
-    #[test]
-    fn the_outline_emitters_agree_between_the_two_paths() {
-        stream_agrees_with_the_cpu_reference_of(5, None);
-        stream_agrees_with_the_cpu_reference_of(6, None);
-    }
-
-    /// **The same agreement, in three axes**: the four passes carry the
-    /// third component, and the depth attributes are held to the same one part
-    /// in 10⁵ of their range as the two that were always there.
-    ///
-    /// The compacted stream is *unprojected* on both sides — it is the layer's
-    /// three axes, which is what a 3D-aware consumer reads — so this is the
-    /// closed forms agreeing about depth, and the draw test below is what says
-    /// the camera agrees about where that depth is seen.
-    #[test]
-    fn the_particulate_stream_agrees_with_the_cpu_reference_in_three_dimensions() {
-        stream_agrees_with_the_cpu_reference(Some(test_camera([64.0, 48.0], 300.0)));
     }
 
     fn stream_agrees_with_the_cpu_reference(
@@ -5255,16 +5881,6 @@ mod tests {
         draw_matches_the_cpu_reference(None);
     }
 
-    /// **The camera draws the same picture on both paths**: the CPU
-    /// reference projects each particle before it stamps it, the vertex stage
-    /// projects each instance before it places its quad, and the two agree
-    /// inside the `moderate` class's epsilon in every render mode — streaks
-    /// included, whose tails take the same camera as their heads.
-    #[test]
-    fn the_particulate_draw_matches_the_cpu_reference_through_a_camera() {
-        draw_matches_the_cpu_reference(Some(test_camera([64.0, 48.0], 300.0)));
-    }
-
     fn draw_matches_the_cpu_reference(projection: Option<lumit_core::fx::points::Projection>) {
         let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
@@ -5362,12 +5978,16 @@ mod tests {
     /// the comparison below can pass by symmetry.
     fn grid_fixture(planes: i32) -> lumit_core::fx::effects::grid::Grid {
         lumit_core::fx::effects::grid::Grid {
+            layout: 0,
             columns: 7,
             rows: 5,
             planes,
             spacing_x: 15.0,
             spacing_y: 17.0,
             spacing_z: 40.0,
+            fit: false,
+            width: 0.0,
+            height: 0.0,
             position_x: 60.0,
             position_y: 44.0,
             position_z: if planes > 1 { -20.0 } else { 0.0 },
@@ -5375,6 +5995,9 @@ mod tests {
             jitter_y: 6.0,
             jitter_z: 0.0,
             seed: 3,
+            start_angle: 0.0,
+            arc: 360.0,
+            inner_radius: 0.0,
             size: 7.0,
             feather: 55.0,
             colour: [0.8, 0.4, 0.9, 1.0],
@@ -5391,14 +6014,6 @@ mod tests {
     #[test]
     fn a_grids_draw_matches_the_cpu_reference() {
         grid_draw_matches(None);
-    }
-
-    /// The same, through a camera: a lattice of planes seen in
-    /// perspective, projected in the vertex stage on one path and before the
-    /// dab on the other.
-    #[test]
-    fn a_grids_draw_matches_the_cpu_reference_through_a_camera() {
-        grid_draw_matches(Some(test_camera([64.0, 48.0], 300.0)));
     }
 
     fn grid_draw_matches(projection: Option<lumit_core::fx::points::Projection>) {
@@ -5457,47 +6072,6 @@ mod tests {
         let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
         let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the generic draw is not bit-stable");
-    }
-
-    /// **Mix at nought is the emit-only mode**: the stream is still
-    /// made, and the picture is the input untouched.
-    #[test]
-    fn a_grid_at_no_mix_leaves_the_picture_alone() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (64u32, 48u32);
-        let mut inst = grid_fixture(1);
-        inst.mix = 0.0;
-        let stream = inst.stream(Default::default());
-        assert!(!stream.is_empty(), "the stream is emitted regardless");
-        let input: Vec<f32> = (0..(w * h * 4)).map(|i| (i % 7) as f32 * 0.1).collect();
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &input, w, h);
-        let points = draw_points_of(&stream);
-        let out = fx.points_draw(
-            &ctx,
-            &tex,
-            w,
-            h,
-            None,
-            &lumit_gpu::fx::PointsDrawOp {
-                points: &points,
-                feather: inst.draw_style().feather,
-                mix: 0.0,
-                projection: None,
-                field: lumit_gpu::fx::FieldTest::None,
-                seed: inst.seed,
-                mode: 0,
-                sprite: None,
-            },
-        );
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-        // Against the *texture*, not the array it was uploaded from: the
-        // working format is fp16, so the picture has already been rounded once
-        // on its way onto the card and this is the pass-through it must equal.
-        let before = lumit_gpu::fx::readback_linear_f32(&ctx, &tex, w, h).expect("readback");
-        assert_eq!(gpu, before, "Mix at nought drew something");
     }
 
     // ---------------------------------------------- Scatter
@@ -5681,14 +6255,6 @@ mod tests {
         clone_draw_matches(None);
     }
 
-    /// The same, through a camera: the stamps foreshorten with depth,
-    /// projected in the vertex stage on one path and before the stamp on the
-    /// other.
-    #[test]
-    fn a_clone_to_points_draw_matches_the_cpu_reference_through_a_camera() {
-        clone_draw_matches(Some(test_camera([64.0, 48.0], 300.0)));
-    }
-
     fn clone_draw_matches(projection: Option<lumit_core::fx::points::Projection>) {
         let Some(ctx) = lumit_gpu::test_support::lease() else {
             return;
@@ -5700,23 +6266,56 @@ mod tests {
         let sprite_px: Vec<f32> = vec![0.5; (8 * 8 * 4) as usize];
         let sprite_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &sprite_px, 8, 8);
 
-        // The wire's own stream, made by a producer that is already tested.
-        let stream = grid_fixture(if projection.is_some() { 3 } else { 1 })
+        // The wire's own stream, made by a producer that is already tested,
+        // with every point stretched so the stamps are too.
+        let mut stream = grid_fixture(if projection.is_some() { 3 } else { 1 })
             .stream(projection.unwrap_or_default());
+        stream.stretch_mut().fill([1.5, 0.75]);
+        // Everything that shapes a stamp at once: a wide layer fitted into a
+        // cell, so the cell is empty above and below it, hung off-centre from
+        // its point with its corners rounded.
         let inst = lumit_core::fx::effects::clone_to_points::CloneToPoints {
             clone_layer: true,
-            scale: 160.0,
+            clone_layer_2: false,
+            clone_layer_3: false,
+            clone_layer_4: false,
+            choose_by: 0,
+            choose_name: Default::default(),
+            seed: 0,
+            time_offset: 0,
+            time_name: Default::default(),
+            time_step: 0.067,
+            time_samples: 8,
+            per_clone: 0,
+            max_renders: 32,
+            apply_to: 0,
+            apply_group: Default::default(),
+            apply_threshold: 0.5,
+            fit: 2,
+            cell_width: 40.0,
+            cell_height: 24.0,
+            scale: 700.0,
             rotation: 25.0,
+            anchor_x: 20.0,
+            anchor_y: 80.0,
+            corner_radius: 6.0,
+            opacity: 80.0,
             tint: 100.0,
+            depth_sort: true,
             max_clones: 20_000,
             mix: 100.0,
         };
-        let stamps = inst.stamps(&stream);
+        let stamps = inst.stamps(
+            &stream,
+            lumit_core::fx::effects::clone_to_points::Pictures::plain(1),
+        );
         assert!(stamps.len() > 20, "the fixture stamped {}", stamps.len());
         let style = inst.draw_style();
+        let fit = inst.fit([80.0, 30.0], 1.0);
+        assert!(fit.uv[1] > 1.5, "the layer does not fit short of the cell");
 
         let mut cpu = vec![0.0f32; (w * h * 4) as usize];
-        lumit_core::fx::points::draw_stream(
+        lumit_core::fx::points::draw_stream_fit(
             &mut cpu,
             w,
             h,
@@ -5728,6 +6327,7 @@ mod tests {
                 w: 8,
                 h: 8,
             }),
+            &fit,
         );
         // A camera that changed nothing would make the comparison pass by
         // comparing two identical flat pictures.
@@ -5735,7 +6335,7 @@ mod tests {
             let mut flat_stamps = stamps.clone();
             flat_stamps.projection = lumit_core::fx::points::Projection::FLAT;
             let mut flat = vec![0.0f32; (w * h * 4) as usize];
-            lumit_core::fx::points::draw_stream(
+            lumit_core::fx::points::draw_stream_fit(
                 &mut flat,
                 w,
                 h,
@@ -5747,6 +6347,7 @@ mod tests {
                     w: 8,
                     h: 8,
                 }),
+                &fit,
             );
             assert_ne!(cpu, flat, "the camera moved nothing at all");
         }
@@ -5763,7 +6364,16 @@ mod tests {
             mode: 1,
             sprite: Some(&sprite_tex),
         };
-        let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let runs = [(
+            op,
+            lumit_gpu::fx::SpriteFit {
+                unit: fit.unit,
+                anchor: fit.anchor,
+                uv: fit.uv,
+                corner: fit.corner,
+            },
+        )];
+        let out = fx.points_draw_runs(&ctx, &tex, w, h, &runs);
         let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
 
         let drawn: f32 = gpu.iter().sum();
@@ -5777,9 +6387,59 @@ mod tests {
         assert!(worst < 2e-2, "worst |Δ| {worst}");
 
         // Bit-stable against itself (docs/08 §2.4).
-        let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
+        let again = fx.points_draw_runs(&ctx, &tex, w, h, &runs);
         let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
         assert_eq!(gpu, twice, "the stamped draw is not bit-stable");
+    }
+
+    // ---------------------------------------------- Points field
+
+    /// The card's jump flooding finds the points the brute-force reference
+    /// finds. Compared on Distance, which runs smoothly across the edge
+    /// between two points' cells, so a pixel that settles on the other of two
+    /// nearly equal points still reads the same grey.
+    #[test]
+    fn a_points_field_matches_the_cpu_reference() {
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            return;
+        };
+        let fx = ctx.fx();
+        let (w, h) = (128u32, 96u32);
+        let stream = grid_fixture(1).stream(Default::default());
+        let inst = lumit_core::fx::effects::points_field::PointsField {
+            output: 0,
+            // Wider than the lattice's pitch, so the fields overlap and the
+            // edges between cells are inside the falloff.
+            radius: 20.0,
+            limit: false,
+            invert: false,
+            number_range: 100.0,
+            number_name: Default::default(),
+            colour_name: Default::default(),
+            max_points: 20_000,
+            mix: 100.0,
+        };
+        let mut cpu = vec![0.0f32; (w * h * 4) as usize];
+        inst.draw(&mut cpu, w, h, &stream);
+
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
+        let points = field_points(inst, &stream);
+        assert!(points.len() > 20, "the fixture has {} points", points.len());
+        let out = fx.points_field(&ctx, &tex, w, h, &points_field_op(inst, &points));
+        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+
+        // Alpha is 1 everywhere, so the falloff has to be looked for in red.
+        let lit = gpu.chunks_exact(4).filter(|px| px[0] > 0.5).count();
+        assert!(lit > 100, "the field drew nothing ({lit} bright pixels)");
+        let worst = cpu
+            .iter()
+            .zip(&gpu)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+        eprintln!("points field: worst |Δ| {worst:.3e}");
+        // Ten times the working format's own rounding near white. Without
+        // the pass's second look next door, one pixel here is past it.
+        assert!(worst < 5e-3, "worst |Δ| {worst}");
     }
 
     // ---------------------------------------------------- Trail
@@ -5831,15 +6491,49 @@ mod tests {
             scale: 80.0,
             feather: 60.0,
             fade: 100.0,
+            fade_power: 1.0,
+            point_colour: true,
+            colour: [1.0; 4],
             max_trails: 400,
             mix: 100.0,
         };
-        let (stream, tails) = trail.tail(&samples);
+        let (mut stream, mut tails) = trail.tail(&samples);
         assert!(stream.len() > 20, "the fixture drew {} dabs", stream.len());
         let style = trail.draw_style();
 
+        // What the trail alone draws, to measure the line below against.
+        let mut bare = vec![0.0f32; (w * h * 4) as usize];
+        lumit_core::fx::points::draw_stream(&mut bare, w, h, &stream, &tails, &style, None);
+        // One more capsule, 1 px wide, lying along the join between pixel
+        // rows 89 and 90. It is half a pixel from both, and used to draw
+        // nothing at all.
+        assert_eq!(tails.len(), stream.len(), "a tail for every dab");
+        stream.append(&lumit_core::fx::points::PointsStream {
+            position: vec![[100.0, 90.0, 0.0]],
+            speed: vec![[0.0; 3]],
+            age: vec![0.0],
+            life: vec![1.0],
+            size: vec![1.0],
+            rotation: vec![0.0],
+            colour: vec![[1.0; 4]],
+            id: vec![u64::MAX],
+            ..Default::default()
+        });
+        tails.push([28.0, 90.0, 0.0]);
+
         let mut cpu = vec![0.0f32; (w * h * 4) as usize];
         lumit_core::fx::points::draw_stream(&mut cpu, w, h, &stream, &tails, &style, None);
+        // Half its light in each of the two rows, over whatever was there.
+        for y in [89u32, 90] {
+            let at = ((y * w + 64) * 4 + 3) as usize;
+            let added = cpu[at] - bare[at];
+            let wanted = 0.5 * (1.0 - bare[at]);
+            assert!(bare[at] < 0.5, "the fixture covers the thin line's place");
+            assert!(
+                (added - wanted).abs() < 1e-3,
+                "the thin line put {added} in row {y}, not {wanted}"
+            );
+        }
 
         let points = draw_points_tailed(&stream, &tails);
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
@@ -5890,107 +6584,6 @@ mod tests {
     }
 
     // ------------------------------------------- Connect points
-
-    /// **The web the card draws is the web the reference drew**: the
-    /// instanced capsules land where the software dabs land, inside the
-    /// `moderate` class's perceptual epsilon — and both are handed the *same*
-    /// segments, so a disagreement here is the rasteriser's alone.
-    #[test]
-    fn a_connect_points_draw_matches_the_cpu_reference() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (128u32, 96u32);
-
-        let stream = lumit_core::fx::effects::grid::Grid {
-            columns: 7,
-            rows: 5,
-            planes: 1,
-            spacing_x: 18.0,
-            spacing_y: 18.0,
-            spacing_z: 0.0,
-            position_x: 64.0,
-            position_y: 48.0,
-            position_z: 0.0,
-            jitter_x: 6.0,
-            jitter_y: 6.0,
-            jitter_z: 0.0,
-            seed: 7,
-            size: 4.0,
-            feather: 100.0,
-            colour: [0.9, 0.7, 0.4, 1.0],
-            max_points: 4_000,
-            mix: 100.0,
-        }
-        .stream(lumit_core::fx::points::Projection::FLAT);
-        assert!(stream.len() > 20, "the fixture emitted nothing");
-
-        let connect = lumit_core::fx::effects::connect_points::ConnectPoints {
-            max_distance: 26.0,
-            max_links: 3,
-            taper: 40.0,
-            fade: 80.0,
-            width: 3.0,
-            feather: 60.0,
-            colour: [1.0, 1.0, 1.0, 1.0],
-            max_points: 4_000,
-            mix: 100.0,
-        };
-        let (segments, tails) = connect.links(&stream);
-        assert!(segments.len() > 10, "the web has {} lines", segments.len());
-        let style = connect.draw_style();
-
-        let mut cpu = vec![0.0f32; (w * h * 4) as usize];
-        lumit_core::fx::points::draw_stream(&mut cpu, w, h, &segments, &tails, &style, None);
-
-        let points = draw_points_tailed(&segments, &tails);
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
-        let op = lumit_gpu::fx::PointsDrawOp {
-            points: &points,
-            feather: style.feather,
-            mix: style.mix,
-            projection: None,
-            field: lumit_gpu::fx::FieldTest::None,
-            seed: 0,
-            mode: 0,
-            sprite: None,
-        };
-        let out = fx.points_draw(&ctx, &tex, w, h, None, &op);
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-
-        let drawn: f32 = gpu.iter().sum();
-        assert!(drawn > 1.0, "the web drew nothing ({drawn})");
-        let worst = cpu
-            .iter()
-            .zip(&gpu)
-            .map(|(a, b)| (a - b).abs())
-            .fold(0.0f32, f32::max);
-        eprintln!("connect points draw: worst |Δ| {worst:.3e}");
-        assert!(worst < 2e-2, "worst |Δ| {worst}");
-
-        // A line that was really a dab would make the comparison pass by
-        // comparing two pictures of dots.
-        let dots = draw_points_tailed(&segments, &[]);
-        let flat = fx.points_draw(
-            &ctx,
-            &tex,
-            w,
-            h,
-            None,
-            &lumit_gpu::fx::PointsDrawOp {
-                points: &dots,
-                ..op
-            },
-        );
-        let flat = lumit_gpu::fx::readback_linear_f32(&ctx, &flat, w, h).expect("readback");
-        assert_ne!(gpu, flat, "the lines joined nothing up");
-
-        // Bit-stable against itself (docs/08 §2.4).
-        let again = fx.points_draw(&ctx, &tex, w, h, None, &op);
-        let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
-        assert_eq!(gpu, twice, "the web draw is not bit-stable");
-    }
 
     // ---------------------------------------------------------------
     // The goldens (PS7; points-stream.md §5, particulate.md §9)
@@ -6273,73 +6866,6 @@ mod tests {
         }
     }
 
-    /// The **card's** half of the goldens: the compacted stream read back off
-    /// the GPU, held to the same checked-in numbers at the same bound — the
-    /// read-back hook `particulate_stream` was built for.
-    ///
-    /// The twin test says the two paths agree with each other; this says which
-    /// numbers they agree *on*. Both drifting together is the one failure a
-    /// twin test cannot see.
-    #[test]
-    fn the_particulate_gpu_stream_matches_the_goldens() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
-        };
-        let fx = ctx.fx();
-        let (w, h) = (GOLDEN_W, GOLDEN_H);
-        let (packed, style, _, carriage) = particulate_golden_fixture(0);
-        let frames = particulate_frames(&carriage);
-        let mut curves = Vec::new();
-        curves.extend_from_slice(&packed.particle.size_curve);
-        curves.extend_from_slice(&packed.particle.opacity_curve);
-        let op = particulate_op(
-            &packed,
-            style,
-            &carriage,
-            &frames,
-            &curves,
-            &[],
-            0.0,
-            0,
-            carriage.projection.map(|proj| proj.m),
-        );
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
-        let (count, words) = fx
-            .particulate_stream(&ctx, &tex, w, h, &op)
-            .expect("the stream reads back");
-
-        let ids = golden_block("ids", None);
-        assert_eq!(
-            count as usize,
-            ids.len(),
-            "the card made a different live set"
-        );
-        let cap = op.cap as usize;
-        for (i, want) in ids.iter().enumerate() {
-            let id =
-                u64::from(words[12 * cap + i * 2]) | (u64::from(words[12 * cap + i * 2 + 1]) << 32);
-            assert_eq!(id as f64, *want, "id {i} moved on the card");
-        }
-        let f = |i: usize| f32::from_bits(words[i]);
-        let flat: Vec<f32> = (0..count as usize)
-            .flat_map(|i| {
-                [
-                    f(i * 3),
-                    f(i * 3 + 1),
-                    f(i * 3 + 2),
-                    f(3 * cap + i * 3),
-                    f(3 * cap + i * 3 + 1),
-                    f(3 * cap + i * 3 + 2),
-                    f(6 * cap + i),
-                    f(7 * cap + i),
-                    f(8 * cap + i),
-                    f(9 * cap + i),
-                ]
-            })
-            .collect();
-        assert_within_range("the GPU stream", &flat, &golden_block("stream", None));
-    }
-
     /// Writes the golden file. Run it on purpose, after a deliberate change to
     /// the closed forms, and read the diff before committing — exactly the way
     /// `fx-reference.json` is regenerated.
@@ -6348,257 +6874,6 @@ mod tests {
     fn regenerate_particulate_goldens() {
         std::fs::write(golden_path(), particulate_golden_text())
             .expect("write particulate-golden.txt");
-    }
-
-    /// **The budget numbers** (docs/13 §2, rows B12–B14), measured rather than
-    /// asserted.
-    ///
-    /// Ignored by default and printed with `--nocapture`, because a timing
-    /// gate on whatever machine happens to be running CI teaches nobody
-    /// anything: the gates themselves belong to the perf harness on the
-    /// reference-desktop runner (PS7). What this is for is the number in the
-    /// commit message and the number the next person checks against it.
-    ///
-    /// `cargo test -p lumit-render --lib particulate_budget -- --ignored --nocapture`
-    #[test]
-    #[ignore = "a measurement, not a gate — PS7 owns the harness"]
-    fn particulate_budget_numbers() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (1920u32, 1080u32);
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
-        let dt = 1.0 / 60.0;
-        for (name, rate, cap, size) in [
-            // The floor first: the same call with nothing to draw, which is one
-            // full-frame copy and one round trip to the queue. Every number
-            // below carries it, and none of them is the effect.
-            ("the floor (no particles)", 0.0f64, 20_000i32, 4.0f32),
-            ("B12 default look", 150.0, 20_000, 4.0),
-            ("B13 20 000 discs", 10_000.0, 20_000, 4.0),
-            ("B14 the 1 000 000 hard cap", 500_000.0, 1_000_000, 2.0),
-        ] {
-            let (mut inst, _, _) = particulate_fixture(0, cap);
-            inst.shape = 3;
-            inst.position_x = 960.0;
-            inst.position_y = 540.0;
-            inst.width = 1600.0;
-            inst.height = 900.0;
-            inst.emit_rate = rate as f32;
-            inst.size = size;
-            inst.life = 2.0;
-            let t = 4.0;
-            let mut schedule = lumit_core::fx::points::Schedule::scan(
-                dt,
-                (t / dt).floor() as i64,
-                inst.window_frames(dt),
-                &|_| rate,
-            );
-            schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
-            let carriage = lumit_core::fx::points::PointsSchedule {
-                schedule,
-                t,
-                projection: None,
-                ..Default::default()
-            };
-            let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
-            let op = particulate_op(
-                &packed,
-                style,
-                &carriage,
-                &frames,
-                &curves,
-                &[],
-                0.0,
-                0,
-                carriage.projection.map(|proj| proj.m),
-            );
-            // A few runs to warm the driver and let the card clock up, then
-            // twenty timed **without waiting between them**: a flush and a poll
-            // per iteration measures the round trip to the queue, which is
-            // latency the effect does not own and a real frame does not pay
-            // once per effect.
-            for _ in 0..4 {
-                let _ = fx.particulate(&ctx, &tex, w, h, None, &op);
-            }
-            ctx.flush();
-            ctx.device.poll(wgpu::Maintain::Wait);
-            let runs = 20;
-            let started = std::time::Instant::now();
-            for _ in 0..runs {
-                let _ = fx.particulate(&ctx, &tex, w, h, None, &op);
-            }
-            ctx.flush();
-            ctx.device.poll(wgpu::Maintain::Wait);
-            let each = started.elapsed().as_secs_f64() / f64::from(runs);
-            // Nothing to draw answers `None` — the honest passthrough, and
-            // the floor row's whole point.
-            let count = fx
-                .particulate_stream(&ctx, &tex, w, h, &op)
-                .map_or(0, |(c, _)| c);
-            println!(
-                "{name}: {count} live of {} candidates, {:.3} ms evaluate + draw at {w}x{h}",
-                op.candidates,
-                each * 1000.0
-            );
-        }
-    }
-
-    /// The whole seam, end to end: an instance in a stack, a schedule threaded
-    /// beside its op, and a picture that moved — plus the claim that the
-    /// **degradation rung is never on the export path**.
-    ///
-    /// The rung is `ParticulateOp::cap`, and there is exactly one place that
-    /// fills it. This asserts that place hands over the *declared* Max
-    /// particles and nothing smaller, which is why no render — preview or
-    /// export — can be quietly drawing half the field. When a governor signal
-    /// reaches an effect kernel, this is the assertion that will have to be
-    /// rewritten to say "except under pressure, and never on export".
-    #[test]
-    fn particulate_renders_through_run_ops_at_its_declared_cap() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (96u32, 96u32);
-        let mut inst =
-            lumit_core::fx::instantiate("particulate").expect("particulate is a built-in");
-        for p in &mut inst.params {
-            let v = match p.id.as_str() {
-                "position_x" | "position_y" => 48.0,
-                "size" => 7.0,
-                "emit_rate" => 400.0,
-                _ => continue,
-            };
-            p.value = lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(v));
-        }
-        let t = 1.0;
-        let ops = lumit_core::fx::resolve_stack(
-            std::slice::from_ref(&inst),
-            t,
-            136.0,
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        let dt = 1.0 / 24.0;
-        let carriage = lumit_core::fx::points::PointsSchedule {
-            schedule: lumit_core::fx::points::Schedule::scan(
-                dt,
-                (t / dt).floor() as i64,
-                200,
-                &|_| 400.0,
-            ),
-            t,
-            projection: None,
-            ..Default::default()
-        };
-
-        let source = vec![0.0f32; (w * h * 4) as usize];
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-        let out = crate::fxops::run_ops(
-            fx,
-            &ctx,
-            tex,
-            w,
-            h,
-            &ops,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            std::slice::from_ref(&carriage),
-            &crate::fxops::Side::NONE,
-            &[],
-            None,
-            None,
-        );
-        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-        let drawn: f32 = got.iter().sum();
-        assert!(
-            drawn > 1.0,
-            "the stack drew no particles ({drawn}) — the schedule did not reach the pass"
-        );
-
-        // The declared cap, unreduced: nothing on this path halves it.
-        use lumit_core::fx::effects::particulate::Particulate as P;
-        let read = P::read(ops.iter().next().expect("one op").params);
-        let packed = read.points();
-        let frames = particulate_frames(&carriage);
-        let mut curves = Vec::new();
-        curves.extend_from_slice(&packed.particle.size_curve);
-        curves.extend_from_slice(&packed.particle.opacity_curve);
-        let op = particulate_op(
-            &packed,
-            read.draw_style(),
-            &carriage,
-            &frames,
-            &curves,
-            &[],
-            0.0,
-            0,
-            None,
-        );
-        assert_eq!(
-            op.cap,
-            lumit_core::fx::points::CAP_DEFAULT as u32,
-            "the pass asked for a reduced cap — the degradation rung is on a render path"
-        );
-    }
-
-    /// **The cap rule and its degradation rung** (particulate.md §9
-    /// item 7): over budget, what survives is the newest `cap` by birth index —
-    /// and halving the cap keeps the newest half of *that*, which is the same
-    /// rule applied twice rather than a second rule.
-    #[test]
-    fn particulate_keeps_the_newest_cap_and_halves_deterministically() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (64u32, 64u32);
-        let (inst, sched, carriage) = particulate_fixture(0, 20_000);
-        let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
-        let full = lumit_core::fx::points::evaluate(
-            &packed,
-            &sched,
-            carriage.t,
-            &lumit_core::mask::MaskPolyline::default(),
-        );
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
-
-        for divisor in [1u32, 2, 4] {
-            let cap = (full.len() as u32) / divisor;
-            let mut expected = full.clone();
-            expected.keep_newest(cap as usize);
-            let mut op = particulate_op(
-                &packed,
-                style,
-                &carriage,
-                &frames,
-                &curves,
-                &[],
-                0.0,
-                0,
-                carriage.projection.map(|proj| proj.m),
-            );
-            op.cap = cap;
-            let (count, words) = fx
-                .particulate_stream(&ctx, &tex, w, h, &op)
-                .expect("the stream reads back");
-            assert_eq!(count, cap, "cap {cap}: drew {count}");
-            let ids: Vec<u64> = (0..count as usize)
-                .map(|i| {
-                    u64::from(words[12 * cap as usize + i * 2])
-                        | (u64::from(words[12 * cap as usize + i * 2 + 1]) << 32)
-                })
-                .collect();
-            assert_eq!(ids, expected.id, "cap {cap}: the wrong particles survived");
-        }
     }
 
     /// The two registries must agree, and nothing but a test can make them:
@@ -6773,89 +7048,6 @@ mod tests {
         for name in gpu_effect_names() {
             assert!(!seen.contains(&name), "two GPU passes answer to {name}");
             seen.push(name);
-        }
-    }
-
-    /// The whole path, end to end: a real effect instance resolves into the
-    /// arena, `run_ops` finds this table by the effect's name, and the kernel
-    /// draws what the CPU reference draws.
-    ///
-    /// This is the one link no compiler checks. Every other failure mode here is
-    /// silent and looks like a picture: a lookup that misses leaves the texture
-    /// untouched, and a bag read wrongly (250 where 2.5 was meant) still
-    /// renders — just not the right thing. So the test pins both ends: the
-    /// output must have *moved* from the input, and it must land where the CPU
-    /// reference lands. The fp16 tolerance is the oracles' business
-    /// (`wgsl_saturation_matches_the_cpu_oracle`); this only asks whether the
-    /// right numbers reached the right kernel.
-    #[test]
-    fn a_migrated_effect_renders_through_run_ops() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
-        };
-        let fx = ctx.fx();
-        let (w, h) = (8u32, 8u32);
-        let source: Vec<f32> = (0..(w * h * 4))
-            .map(|i| match i % 4 {
-                3 => 1.0,
-                _ => (i % 13) as f32 / 13.0,
-            })
-            .collect();
-
-        // A heavily desaturating instance, so a passthrough cannot pass for a
-        // render: Saturation 20 % visibly greys the corpus.
-        let mut inst = lumit_core::fx::instantiate("saturation").expect("saturation is a built-in");
-        for p in &mut inst.params {
-            if p.id == "saturation" {
-                p.value =
-                    lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(20.0));
-            }
-        }
-        let ops = lumit_core::fx::resolve_stack(
-            std::slice::from_ref(&inst),
-            0.0,
-            1000.0,
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-        let out = crate::fxops::run_ops(
-            fx,
-            &ctx,
-            tex,
-            w,
-            h,
-            &ops,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &crate::fxops::Side::NONE,
-            &[],
-            None,
-            None,
-        );
-        let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-
-        let mut cpu = source.clone();
-        lumit_core::fx::cpu::apply_stack(&mut cpu, w, h, &ops);
-
-        assert_ne!(
-            gpu, source,
-            "the op passed the texture through — the GPU table was never reached"
-        );
-        for (i, (g, c)) in gpu.iter().zip(&cpu).enumerate() {
-            assert!(
-                (g - c).abs() < 1e-2,
-                "pixel {i}: GPU {g} vs CPU reference {c} — the bag reached the \
-                 kernel with the wrong numbers"
-            );
         }
     }
 
@@ -7088,279 +7280,6 @@ mod tests {
             .any(|(id, _)| *id == inst.id));
     }
 
-    /// **A run-time effect is handed the layer's decoded neighbours**, read
-    /// back as plain floats beside the picture. A plugin that reads the frames
-    /// either side (a motion blur) was handed nothing but the frame in hand
-    /// and compared it with itself. This is the seam that carries the
-    /// neighbours from the decode to the definition's CPU render.
-    #[test]
-    fn a_run_time_effect_is_handed_the_decoded_neighbours() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return;
-        };
-        /// Paints every pixel with the -1 neighbour's red, or leaves the
-        /// picture alone when there is no such neighbour.
-        struct Previous(&'static lumit_core::fx::EffectSchema);
-        impl lumit_core::fx::EffectDef for Previous {
-            fn schema(&self) -> &'static lumit_core::fx::EffectSchema {
-                self.0
-            }
-            fn apply_cpu_temporal(
-                &self,
-                _inst: uuid::Uuid,
-                _lt: f64,
-                rgba: &mut [f32],
-                _w: u32,
-                _h: u32,
-                _p: lumit_core::fx::Params<'_>,
-                neighbours: &[(i32, &[f32])],
-            ) {
-                let Some((_, previous)) = neighbours.iter().find(|(o, _)| *o == -1) else {
-                    return;
-                };
-                for (out, from) in rgba.iter_mut().zip(previous.iter()) {
-                    *out = *from;
-                }
-            }
-        }
-        let def: &'static Previous = Box::leak(Box::new(Previous(
-            a_run_time_def("ofx:test.render.previous").schema,
-        )));
-        assert!(crate::gpufx::ofx::register(def), "it registered");
-
-        let fx = ctx.fx();
-        let (w, h) = (4u32, 4u32);
-        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [0.2f32, 0.2, 0.2, 1.0]).collect();
-        let previous: Vec<f32> = (0..(w * h)).flat_map(|_| [0.8f32, 0.4, 0.1, 1.0]).collect();
-        let inst = a_run_time_instance("ofx:test.render.previous");
-        let ops = lumit_core::fx::resolve_stack(
-            std::slice::from_ref(&inst),
-            0.0,
-            1000.0,
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-        let neighbours = [(-1, lumit_gpu::fx::upload_linear_f32(&ctx, &previous, w, h))];
-        let out = crate::fxops::run_ops(
-            fx,
-            &ctx,
-            tex,
-            w,
-            h,
-            &ops,
-            &neighbours,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &crate::fxops::Side::NONE,
-            &[],
-            None,
-            None,
-        );
-        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-        assert!(
-            (got[0] - 0.8).abs() < 1e-2 && (got[1] - 0.4).abs() < 1e-2,
-            "the neighbour never reached the definition: {:?}",
-            &got[..4]
-        );
-    }
-
-    /// **Shake picks its own kernel** (docs/08 §3.4, T18).
-    ///
-    /// Shake is the one migrated effect whose dispatch forks: plain, it is the
-    /// Transform kernel; with its own motion blur on, it is the averaging one,
-    /// fed one affine per sub-frame. Nothing but this test joins the fork to
-    /// the bag — a wrapper that read the sub-frames and still called
-    /// `transform` would render a picture, just not a smeared one — so both
-    /// modes run end to end against the CPU reference, and the two must differ
-    /// from each other.
-    #[test]
-    fn shake_renders_through_run_ops_in_both_modes() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            return; // no GPU here — skip, as the gpu crate's own tests do
-        };
-        let fx = ctx.fx();
-        let (w, h) = (16u32, 16u32);
-        let source: Vec<f32> = (0..(w * h * 4))
-            .map(|i| match i % 4 {
-                3 => 1.0,
-                _ => (i % 13) as f32 / 13.0,
-            })
-            .collect();
-
-        // A big wobble, so a passthrough cannot pass for a render: 8 % of this
-        // raster's diagonal is a shift of a pixel or two, with a twist and a
-        // depth pump on top.
-        let shaken = |motion_blur: bool| {
-            let mut inst = lumit_core::fx::instantiate("shake").expect("shake is a built-in");
-            for p in &mut inst.params {
-                let v = match p.id.as_str() {
-                    "amplitude" => 8.0,
-                    "rotation" => 6.0,
-                    "z_amp" => 5.0,
-                    "mb_amount" => 0.9,
-                    "motion_blur" => {
-                        p.value = lumit_core::model::EffectValue::Bool(motion_blur);
-                        continue;
-                    }
-                    _ => continue,
-                };
-                p.value =
-                    lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(v));
-            }
-            lumit_core::fx::resolve_stack(
-                std::slice::from_ref(&inst),
-                0.4,
-                ((w * w + h * h) as f32).sqrt(),
-                1.0,
-                &lumit_core::fx::MarkerContext::NONE,
-                std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-            )
-        };
-
-        let rendered = |ops: &lumit_core::fx::ResolvedStack| {
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-            let out = crate::fxops::run_ops(
-                fx,
-                &ctx,
-                tex,
-                w,
-                h,
-                ops,
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &crate::fxops::Side::NONE,
-                &[],
-                None,
-                None,
-            );
-            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-            let mut cpu = source.clone();
-            lumit_core::fx::cpu::apply_stack(&mut cpu, w, h, ops);
-            (gpu, cpu)
-        };
-
-        let (plain_gpu, plain_cpu) = rendered(&shaken(false));
-        let (smeared_gpu, smeared_cpu) = rendered(&shaken(true));
-        for (name, gpu, cpu) in [
-            ("plain", &plain_gpu, &plain_cpu),
-            ("smeared", &smeared_gpu, &smeared_cpu),
-        ] {
-            assert_ne!(
-                gpu, &source,
-                "{name}: the op passed the texture through — the GPU table was never reached"
-            );
-            for (i, (g, c)) in gpu.iter().zip(cpu.iter()).enumerate() {
-                assert!(
-                    (g - c).abs() < 1e-2,
-                    "{name} pixel {i}: GPU {g} vs CPU reference {c} — the bag reached the                      kernel with the wrong numbers"
-                );
-            }
-        }
-        assert_ne!(
-            plain_gpu, smeared_gpu,
-            "the motion-blur toggle must pick the other kernel"
-        );
-    }
-
-    /// **The k-th planes op binds the k-th plane** (docs/impl/addons.md §6.1,
-    /// §11 test 7).
-    ///
-    /// The twin of the LUT test below, on the carriage this programme added,
-    /// and it pins the same tempting failure: advancing the counter only when a
-    /// plane is actually there. The first slot is deliberately **empty** - the
-    /// passthrough every list allows, and the one a frame outside an analysed
-    /// span gets - so an implementation that skips it hands the second op the
-    /// first slot and draws the plane the wrong way up.
-    ///
-    /// The two ops differ by Invert alone, so the picture says which of them
-    /// bound the plane: the second draws it turned over, and the first would
-    /// draw it straight.
-    #[test]
-    fn the_kth_planes_op_binds_the_kth_slot() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (4u32, 4u32);
-        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 0.0, 0.0, 1.0]).collect();
-        // A plane of one value, well away from a half so straight and turned
-        // over cannot be confused.
-        let plane: Vec<f32> = (0..(w * h)).flat_map(|_| [0.25f32; 4]).collect();
-        let plane = lumit_gpu::fx::upload_linear_f32(&ctx, &plane, w, h);
-
-        let first = lumit_core::fx::instantiate("depth").expect("depth is a built-in");
-        let mut second = first.clone();
-        for p in &mut second.params {
-            if p.id == "invert" {
-                p.value = lumit_core::model::EffectValue::Bool(true);
-            }
-        }
-        assert!(
-            matches!(
-                second.param("invert"),
-                Some(lumit_core::model::EffectValue::Bool(true))
-            ),
-            "the second op was not turned over"
-        );
-        let ops = lumit_core::fx::resolve_stack(
-            &[first, second],
-            0.0,
-            1000.0,
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        assert_eq!(ops.len(), 2, "two Depth ops, two slots to bind");
-
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-        let side = crate::fxops::Side {
-            roto: &[],
-            planes: &[None, Some(plane)],
-        };
-        let out = crate::fxops::run_ops(
-            fx,
-            &ctx,
-            tex,
-            w,
-            h,
-            &ops,
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &side,
-            &[],
-            None,
-            None,
-        );
-        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-        assert!(
-            (got[0] - 0.75).abs() < 1e-2,
-            "the plane came back at {} - 0.75 is the second op drawing it \
-             turned over, 0.25 is the first op having taken its slot",
-            got[0]
-        );
-    }
-
     /// **The k-th LUT op binds the k-th cube** (docs/08 §3.11).
     ///
     /// The whole threading contract in one picture. `build.rs` enumerates a
@@ -7445,122 +7364,6 @@ mod tests {
             (got[0] - 1.0).abs() < 1e-2 && got[2] < 1e-2,
             "the grade changed a channel it was told to leave alone: {got:?}"
         );
-    }
-
-    /// **A plate and a matte are two lists, and neither eats the other's slot**
-    /// (docs/impl/layer-input.md §2).
-    ///
-    /// Depth of field and Light wrap used to share the layer-input list, off one
-    /// predicate and one counter. They were split — not arbitrarily: Light
-    /// wrap's Background is a *plate* whose light spills round an edge, while
-    /// Depth of field's depth pass is that effect's **matte**, and belongs on the
-    /// one carriage every effect's matte uses. So the two now count along
-    /// different lists, and the risk this test exists for is exactly that: an
-    /// implementation where the Depth of field still advances the layer-input
-    /// counter hands the wrap a slot that is not there, and the wrap silently
-    /// stops wrapping.
-    ///
-    /// The stack is Depth of field then Light wrap, and the plate is the layer
-    /// input list's **only** entry. If the two lists are properly separate, the
-    /// wrap reads it and lights the foreground's edge; if the Depth of field is
-    /// still counted, the wrap reads past the end and draws nothing at all.
-    #[test]
-    fn a_background_plate_and_a_matte_do_not_share_a_counter() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (32u32, 24u32);
-
-        // A dim opaque square in an empty frame: a real matte edge for the wrap
-        // to find, and dark enough that a spill is unmistakable.
-        let mut fg = vec![0.0f32; (w * h * 4) as usize];
-        for y in 6..18u32 {
-            for x in 8..24u32 {
-                let i = ((y * w + x) * 4) as usize;
-                fg[i] = 0.05;
-                fg[i + 1] = 0.05;
-                fg[i + 2] = 0.05;
-                fg[i + 3] = 1.0;
-            }
-        }
-        let plate: Vec<f32> = (0..(w * h) as usize)
-            .flat_map(|_| [2.0f32, 2.0, 2.0, 1.0])
-            .collect();
-
-        // Stack order: Depth of field (its Matte row unset — a passthrough, and
-        // no layer-input slot of its own), then Light wrap with a real Width
-        // so it has something to draw.
-        let dof = lumit_core::fx::instantiate("dof").expect("dof is a built-in");
-        let mut wrap = lumit_core::fx::instantiate("light_wrap").expect("light_wrap is a built-in");
-        for p in &mut wrap.params {
-            if p.id == "width" {
-                p.value =
-                    lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(5.0));
-            }
-        }
-        let ops = lumit_core::fx::resolve_stack(
-            &[dof, wrap],
-            0.0,
-            1000.0,
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        assert_eq!(ops.len(), 2, "two ops: one plate to bind, two mattes");
-
-        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &fg, w, h);
-        let plate_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &plate, w, h);
-        let out = crate::fxops::run_ops(
-            fx,
-            &ctx,
-            tex,
-            w,
-            h,
-            &ops,
-            &[],
-            &[],
-            &[],
-            // The layer-input list carries Light wrap's Background plate and
-            // nothing else: one consuming op, one slot, at index 0.
-            &[crate::fxops::LayerInput::Texture(plate_tex)],
-            &[],
-            // Two matte slots, one per op — the Depth of field's unset (its
-            // passthrough) and the wrap's unset too.
-            &[
-                crate::fxops::LayerInput::Absent,
-                crate::fxops::LayerInput::Absent,
-            ],
-            &[],
-            &[],
-            &crate::fxops::Side::NONE,
-            &[],
-            None,
-            None,
-        );
-        let got = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
-
-        // Just inside the square's left edge: the band the wrap paints.
-        let at = |x: u32, y: u32| got[((y * w + x) * 4) as usize];
-        assert!(
-            at(9, 12) > 0.05 + 1e-2,
-            "the edge band is {} — the wrap never saw the second slot",
-            at(9, 12)
-        );
-        // And nowhere outside the matte: an empty pixel stays empty, which is
-        // also what proves the Depth of field passed through rather than
-        // gathering the plate it was never given.
-        for i in (0..got.len()).step_by(4) {
-            if fg[i + 3] == 0.0 {
-                assert_eq!(
-                    got[i + 3],
-                    0.0,
-                    "pixel {} gained coverage outside the matte",
-                    i / 4
-                );
-            }
-        }
     }
 
     /// **Echo is handed the neighbour frames themselves** (docs/08 §3.13). The
@@ -7836,431 +7639,6 @@ mod tests {
             ),
             source,
             "Set matte must consume nothing from the matte carriage"
-        );
-    }
-
-    /// **Set channels reads a Source layer *and* keeps its Matte row.**
-    ///
-    /// It is Set matte's neighbour and the opposite arrangement, which is the
-    /// silent-failure this pins: both effects take another layer's channel,
-    /// both bind it off the layer-input carriage, and one of them carries no
-    /// Matte row while the other keeps the generic strength dissolve. Wiring
-    /// the source onto the matte list would compile, render, and quietly hand
-    /// the kernel nothing — indistinguishable from an unset row. So the test
-    /// walks the whole route: a texture on the layer-input list reaches the
-    /// kernel, the same texture on the matte list does not, and the schema
-    /// still declares the universal `Strength` matte.
-    #[test]
-    fn set_channels_reads_a_source_layer_and_keeps_its_matte_row() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (16u32, 16u32);
-        // Opaque white, so a change in the picture is the channels moving.
-        let source: Vec<f32> = (0..(w * h)).flat_map(|_| [1.0f32, 1.0, 1.0, 1.0]).collect();
-        // A left half opaque and a right half clear, so Alpha from Source alpha
-        // is unmistakable.
-        let shape: Vec<f32> = (0..(w * h))
-            .flat_map(|i| {
-                let lit = f32::from(i % w < w / 2);
-                [lit, lit, lit, lit]
-            })
-            .collect();
-        let shape_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &shape, w, h);
-
-        let mut inst = lumit_core::fx::instantiate("set_channels").expect("a built-in");
-        for p in &mut inst.params {
-            if p.id == "alpha_from" {
-                // Source alpha: index 8 of SET_CHANNELS_OPTIONS.
-                p.value = lumit_core::model::EffectValue::Choice(8);
-            }
-        }
-        let ops = lumit_core::fx::resolve_stack(
-            std::slice::from_ref(&inst),
-            0.0,
-            ((w * w + h * h) as f32).sqrt(),
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        let schema = ops.iter().next().expect("one op").def.schema();
-        assert_eq!(
-            schema.matte,
-            lumit_core::fx::MatteRole::Strength,
-            "Set channels keeps the universal Matte row: its source is not a matte"
-        );
-        assert_eq!(
-            schema.layer_input(),
-            Some("source"),
-            "the Source row is the auxiliary layer, not the matte"
-        );
-
-        let rendered = |layers: &[crate::fxops::LayerInput],
-                        mattes: &[crate::fxops::LayerInput]| {
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-            let out = crate::fxops::run_ops(
-                fx,
-                &ctx,
-                tex,
-                w,
-                h,
-                &ops,
-                &[],
-                &[],
-                &[],
-                layers,
-                &[],
-                mattes,
-                &[],
-                &[],
-                &crate::fxops::Side::NONE,
-                &[],
-                None,
-                None,
-            );
-            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
-        };
-
-        // Bound on the layer-input list: the alpha becomes the source's.
-        let cut = rendered(&[crate::fxops::LayerInput::Texture(shape_tex.clone())], &[]);
-        for y in 0..h {
-            let left = ((y * w) * 4 + 3) as usize;
-            let right = ((y * w + w - 1) * 4 + 3) as usize;
-            assert_eq!(cut[left], 1.0, "the opaque half must stay opaque");
-            assert_eq!(cut[right], 0.0, "the clear half must be cut away");
-        }
-
-        // The same texture on the *matte* list reaches the kernel not at all:
-        // it is the generic strength dissolve there, and this pick has no
-        // source to read, so every alpha goes to zero rather than half of them.
-        let on_matte = rendered(
-            &[crate::fxops::LayerInput::Absent],
-            &[crate::fxops::LayerInput::Texture(shape_tex)],
-        );
-        for y in 0..h {
-            let left = ((y * w) * 4 + 3) as usize;
-            assert_eq!(
-                on_matte[left], 0.0,
-                "a Source pick with no layer bound reads zero, whatever the matte says"
-            );
-        }
-    }
-
-    /// **Motion blur reads a flow field, a Motion vectors layer and a
-    /// matte, all three**. The reason the auxiliary layer became a field
-    /// on the slot rather than a sixth `AuxKind`: this effect already names the
-    /// flow field, so a kind could not also carry its layer.
-    ///
-    /// Run it through `run_ops` on a layer with **no measured flow at all** and
-    /// a vectors layer bound, which is the case the row exists for. It must
-    /// smear; with the row unset and no field either it must be the documented
-    /// passthrough.
-    #[test]
-    fn fast_motion_blur_takes_a_vectors_layer_beside_its_flow_field() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (32u32, 16u32);
-        // A hard vertical edge, so a sideways smear is unmistakable.
-        let source: Vec<f32> = (0..(w * h))
-            .flat_map(|i| {
-                let lit = f32::from(i % w < w / 2);
-                [lit, lit, lit, 1.0]
-            })
-            .collect();
-        // Red well above the standing-still mid-grey: everything moves sideways.
-        let vectors: Vec<f32> = (0..(w * h)).flat_map(|_| [0.9f32, 0.5, 0.5, 1.0]).collect();
-        let vec_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vectors, w, h);
-
-        let inst = lumit_core::fx::instantiate("motion_blur").expect("a built-in");
-        let ops = lumit_core::fx::resolve_stack(
-            std::slice::from_ref(&inst),
-            0.0,
-            ((w * w + h * h) as f32).sqrt(),
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        let schema = ops.iter().next().expect("one op").def.schema();
-        assert_eq!(
-            schema.layer_input(),
-            Some("motion_vectors"),
-            "the vectors row is the auxiliary layer, not the matte"
-        );
-        assert_eq!(
-            schema.matte.param(),
-            Some(lumit_core::fx::MATTE_PARAM),
-            "and the Matte row is still there beside it"
-        );
-
-        let rendered = |layers: &[crate::fxops::LayerInput]| {
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-            let out = crate::fxops::run_ops(
-                fx,
-                &ctx,
-                tex,
-                w,
-                h,
-                &ops,
-                &[],
-                &[],
-                &[],
-                layers,
-                &[],
-                &[],
-                &[],
-                &[],
-                &crate::fxops::Side::NONE,
-                &[],
-                None,
-                None,
-            );
-            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
-        };
-
-        // No field of either kind: the documented passthrough, never a fault.
-        assert_eq!(
-            rendered(&[crate::fxops::LayerInput::Absent]),
-            source,
-            "with no field at all the effect must pass the picture through"
-        );
-        // The layer alone is a field, on a layer that has no measured flow.
-        let smeared = rendered(&[crate::fxops::LayerInput::Texture(vec_tex)]);
-        assert_ne!(
-            smeared, source,
-            "a supplied vectors layer must smear a layer with no measured flow"
-        );
-        // And the smear is sideways: the edge has spread across columns that
-        // were flat before.
-        let row = (h / 2) as usize;
-        let at = |x: usize| smeared[(row * w as usize + x) * 4];
-        let mid = (w / 2) as usize;
-        assert!(
-            (at(mid) - at(mid + 3)).abs() > 1e-3,
-            "the edge did not spread along the vector"
-        );
-    }
-
-    /// **Both flow consumers on one layer are served**.
-    ///
-    /// Motion blur measures forward to the next frame, Datamosh measures
-    /// back to the previous one. The layer used to carry a single field and the
-    /// first of the two in stack order took it, so the other read nothing and
-    /// silently rendered its passthrough. They are separate measurements now,
-    /// keyed by the offset each asked for.
-    ///
-    /// The proof is a stack carrying both, run three ways over the same picture:
-    /// with both fields bound, with only the `+1` field, and with only the `-1`
-    /// field. If each effect is reading its own measurement, the full run
-    /// differs from *both* one-field runs — the missing one having degraded that
-    /// effect to a passthrough. Under the old single-slot routing one of those
-    /// comparisons was an equality, because the second effect never saw a field
-    /// whichever way round it was asked.
-    #[test]
-    fn both_flow_consumers_on_one_layer_read_their_own_measurement() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (32u32, 16u32);
-        let n = (w * h) as usize;
-        // A hard vertical edge: a sideways smear or a melt is unmistakable.
-        let source: Vec<f32> = (0..n)
-            .flat_map(|i| {
-                let lit = f32::from(i as u32 % w < w / 2);
-                [lit, lit, lit, 1.0]
-            })
-            .collect();
-        // The -1 neighbour Datamosh drags along its field: the same edge shifted,
-        // so dragging it in is visible.
-        let prev: Vec<f32> = (0..n)
-            .flat_map(|i| {
-                let lit = f32::from((i as u32 % w + 6) < w / 2);
-                [0.2 * lit, lit, 0.2 * lit, 1.0]
-            })
-            .collect();
-        let neighbours = vec![(-1i32, lumit_gpu::fx::upload_linear_f32(&ctx, &prev, w, h))];
-
-        // Two different measurements, one per offset. Sideways for the +1
-        // (forward) field, downwards for the -1 (backward) one, so a field
-        // handed to the wrong consumer would not merely be wrong, it would move
-        // the picture the wrong way.
-        let field = |u: f32, v: f32| {
-            lumit_gpu::fx::upload_flow_field(&ctx, &vec![u; n], &vec![v; n], &vec![1.0f32; n], w, h)
-        };
-
-        let mb = lumit_core::fx::instantiate("motion_blur").expect("a built-in");
-        let dm = lumit_core::fx::instantiate("datamosh").expect("a built-in");
-        assert_eq!(
-            lumit_core::fx::stack_flow_neighbours(&[mb.clone(), dm.clone()], true),
-            vec![-1, 1],
-            "the stack must ask for both measurements"
-        );
-        // Datamosh first, then the blur: at Intensity 1 the melt replaces the
-        // picture outright, so with it on top nothing upstream of it could show
-        // and the test would prove nothing about the blur.
-        let ops = lumit_core::fx::resolve_stack(
-            &[dm, mb],
-            0.0,
-            ((w * w + h * h) as f32).sqrt(),
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-
-        let rendered = |fields: &[(i32, wgpu::Texture)]| {
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-            let out = crate::fxops::run_ops(
-                fx,
-                &ctx,
-                tex,
-                w,
-                h,
-                &ops,
-                &neighbours,
-                fields,
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &crate::fxops::Side::NONE,
-                &[],
-                None,
-                None,
-            );
-            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
-        };
-
-        let both = rendered(&[(-1, field(0.0, 5.0)), (1, field(7.0, 0.0))]);
-        let blur_only = rendered(&[(1, field(7.0, 0.0))]);
-        let mosh_only = rendered(&[(-1, field(0.0, 5.0))]);
-
-        assert_ne!(
-            both, source,
-            "the stack must do something to the picture at all"
-        );
-        assert_ne!(
-            both, blur_only,
-            "Datamosh must read its own -1 field, not silently do nothing              because Motion blur was asked first"
-        );
-        assert_ne!(
-            both, mosh_only,
-            "Motion blur must read its own +1 field, not silently do              nothing because Datamosh was asked first"
-        );
-        // Neither one-field run is the passthrough either: each effect on its
-        // own field really is changing the picture, so the comparisons above
-        // are about routing rather than about one of them being inert.
-        assert_ne!(blur_only, source, "the +1 field alone must still blur");
-        assert_ne!(mosh_only, source, "the -1 field alone must still melt");
-    }
-
-    /// **An override's matte is spent ONCE**.
-    ///
-    /// The hook's whole risk in one test. An effect that claims the matte inside
-    /// its maths must not *also* be dissolved by it beside the dispatch — the
-    /// matte would then be applied twice, and the give-away is that the picture
-    /// would be neither the kernel's answer nor the dissolve's but a blend of
-    /// the two. At a mid-grey matte the three are all different, which is why
-    /// the matte here is grey rather than the black or white that would let a
-    /// double application hide.
-    ///
-    /// So: run a Gaussian blur through `run_ops` with a grey matte bound, and
-    /// demand the result is **bit-identical** to calling the blur kernel with
-    /// that matte directly. Any extra pass — a lerp, an fp16 round-trip, a
-    /// dissolve by one — shows up immediately.
-    #[test]
-    fn an_override_is_not_also_dissolved() {
-        let Some(ctx) = lumit_gpu::test_support::lease() else {
-            lumit_gpu::no_adapter();
-            return;
-        };
-        let fx = ctx.fx();
-        let (w, h) = (16u32, 16u32);
-        // A hard edge, so a blur has something to do and a dissolve of one would
-        // be visible in the numbers.
-        let source: Vec<f32> = (0..(w * h))
-            .flat_map(|i| {
-                let lit = f32::from(i % w < 8);
-                [lit, lit, lit, 1.0]
-            })
-            .collect();
-        let grey: Vec<f32> = (0..(w * h)).flat_map(|_| [0.5f32, 0.5, 0.5, 1.0]).collect();
-        let matte_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &grey, w, h);
-
-        let mut inst = lumit_core::fx::instantiate("blur").expect("blur is a built-in");
-        for p in &mut inst.params {
-            if p.id == "radius" {
-                p.value =
-                    lumit_core::model::EffectValue::Float(lumit_core::anim::Property::fixed(20.0));
-            }
-        }
-        let ops = lumit_core::fx::resolve_stack(
-            std::slice::from_ref(&inst),
-            0.0,
-            ((w * w + h * h) as f32).sqrt(),
-            1.0,
-            &lumit_core::fx::MarkerContext::NONE,
-            std::sync::Arc::new(lumit_core::expression::ExpressionContext::detached()),
-        );
-        let (radius_px, edge, mix) =
-            lumit_core::fx::effects::blur::Blur::read(ops.iter().next().expect("one op").params)
-                .packed();
-
-        let through_run_ops = {
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-            let out = crate::fxops::run_ops(
-                fx,
-                &ctx,
-                tex,
-                w,
-                h,
-                &ops,
-                &[],
-                &[],
-                &[],
-                &[],
-                &[],
-                &[crate::fxops::LayerInput::Texture(matte_tex.clone())],
-                &[],
-                &[],
-                &crate::fxops::Side::NONE,
-                &[],
-                None,
-                None,
-            );
-            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
-        };
-        let kernel_alone = {
-            let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &source, w, h);
-            let out = fx.blur(
-                &ctx,
-                &tex,
-                w,
-                h,
-                Some(&matte_tex),
-                &lumit_gpu::fx::BlurOp {
-                    radius_px,
-                    edge,
-                    mix,
-                },
-            );
-            lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback")
-        };
-        assert_ne!(
-            kernel_alone, source,
-            "the blur must actually have blurred, or this proves nothing"
-        );
-        assert_eq!(
-            through_run_ops, kernel_alone,
-            "an effect that claims the matte was ALSO dissolved by it — the \
-             matte applied twice"
         );
     }
 

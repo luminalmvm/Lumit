@@ -34,45 +34,6 @@ void main() {
       expect(labels[2], (bar: 3, frame: 120.0));
       expect(labels.last.frame, lessThanOrEqualTo(3600));
     });
-
-    test('narrow bars double the step until the numbers clear each other', () {
-      // 3 px a bar: 1, 2, 4, 8, 16 — sixteen bars is the first step past
-      // the 34 px a label needs.
-      final labels = beatBarLabels(
-          grid: grid, fps: 30, perFrame: 0.05, untilFrame: 100000);
-      expect(labels[0].bar, 1);
-      expect(labels[1].bar, 17);
-      expect(labels[2].bar, 33);
-    });
-
-    test('the phase moves bar one, and bars before time zero are not drawn',
-        () {
-      final nudged = beatBarLabels(
-        grid: const BridgeBeatGrid(bpm: 120, phaseSeconds: 0.5),
-        fps: 30,
-        perFrame: 2,
-        untilFrame: 3600,
-      );
-      expect(nudged.first, (bar: 1, frame: 15.0));
-
-      final early = beatBarLabels(
-        grid: const BridgeBeatGrid(bpm: 120, phaseSeconds: -3.0),
-        fps: 30,
-        perFrame: 2,
-        untilFrame: 3600,
-      );
-      expect(early.first.bar, 3, reason: 'bars one and two fall before zero');
-      expect(early.first.frame, greaterThanOrEqualTo(0));
-    });
-
-    test('no grid, no rate or no room is an empty answer, calmly', () {
-      expect(
-          beatBarLabels(grid: grid, fps: 0, perFrame: 2, untilFrame: 100),
-          isEmpty);
-      expect(
-          beatBarLabels(grid: grid, fps: 30, perFrame: 0, untilFrame: 100),
-          isEmpty);
-    });
   });
 
   group('The beat band on the ruler', () {

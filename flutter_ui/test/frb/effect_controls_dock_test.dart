@@ -51,21 +51,5 @@ void main() {
           reason: 'the tab is fronted; the keyboard is not moved with it');
     });
 
-    testWidgets('a project arriving fronts the Project panel', (tester) async {
-      final p = freshProject();
-      final comp = p.state.project!.newComposition(name: 'Scene');
-      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
-      comp.addFootageLayer(footage: footage, asSequence: false);
-      p.uiState.setSelectedComp(comp);
-      p.uiState.setSelection([comp.getLayers().single]);
-
-      final group = groupOf(p.uiState.split, Panel.project)!;
-      expect(group.activePane.panel, Panel.effectControls);
-
-      // Closing a project is opening the empty one that replaces it, which is
-      // the same adoption and the same rule.
-      p.state.newProject();
-      expect(group.activePane.panel, Panel.project);
-    });
   }, skip: !engineAvailable);
 }

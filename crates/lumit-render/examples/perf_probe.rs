@@ -42,6 +42,7 @@ fn layer(kind: LayerKind, name: &str) -> lumit_core::model::Layer {
         volume_db: Property::zero(),
         pan: Property::zero(),
         audio_only: false,
+        audio_streams: Default::default(),
         adjustment: false,
         retime: None,
         interpolation: Default::default(),
@@ -189,6 +190,7 @@ fn main() {
         },
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     });
     let (doc, comp) = doc_with(LayerKind::Footage { item: item_id }, Some(footage));
     run(

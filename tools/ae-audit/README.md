@@ -1,6 +1,6 @@
 # AE import audit kit
 
-One sitting inside After Effects, and docs/11's "verify against a live AE" rule is
+One sitting inside After Effects, and the "verify against a live AE" rule is
 satisfied for the whole effect table.
 
 ## Steps

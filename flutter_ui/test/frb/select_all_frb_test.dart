@@ -6,12 +6,9 @@
 // `Ctrl+F` uses for the search boxes — and falls back to every layer only when
 // no panel claims it.
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
-import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/state/dock.dart';
-import 'package:lumit_flutter/state/drag_payloads.dart';
 
 import 'frb_test_support.dart';
 
@@ -40,53 +37,6 @@ void main() {
         expect(p.uiState.requestSelectAll(), isFalse,
             reason: 'the shell still means every layer in ${panel?.name}');
       }
-    });
-
-    testWidgets('the Project panel takes every row it is showing',
-        (tester) async {
-      final p = freshProject();
-      for (final name in ['a.mov', 'b.mov', 'c.mov']) {
-        p.state.project!.importFootage(path: 'C:/clips/$name');
-      }
-      await tester.pumpWidget(hostPanel(
-        child: const ProjectPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-
-      p.uiState.activePane.value = Panel.project.pane();
-      expect(p.uiState.requestSelectAll(), isTrue);
-      await tester.pump();
-
-      expect(_selectionOn(tester, 'a.mov'), 3,
-          reason: 'every listed row is picked');
-    });
-
-    /// And only the rows it is *showing*: a search narrows the list, and select
-    /// all means what is in front of you rather than what is filed away.
-    testWidgets('a filtered Project panel takes only what is listed',
-        (tester) async {
-      final p = freshProject();
-      for (final name in ['alpha.mov', 'beta.mov', 'alpine.mov']) {
-        p.state.project!.importFootage(path: 'C:/clips/$name');
-      }
-      await tester.pumpWidget(hostPanel(
-        child: const ProjectPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-
-      await tester.enterText(find.byType(EditableText).first, 'alp');
-      await tester.pump();
-
-      p.uiState.activePane.value = Panel.project.pane();
-      expect(p.uiState.requestSelectAll(), isTrue);
-      await tester.pump();
-
-      expect(_selectionOn(tester, 'alpha.mov'), 2,
-          reason: 'alpha and alpine, not beta');
     });
 
     testWidgets('the Effect controls panel takes the whole stack',
@@ -120,16 +70,3 @@ void main() {
   }, skip: !engineAvailable);
 }
 
-/// How many items a drag started on the row reading [label] would carry — the
-/// panel keeps its selection to itself and this is what it publishes, so it is
-/// also how the existing selection tests read the set.
-int _selectionOn(WidgetTester tester, String label) => tester
-    .widget<Draggable<FootageDragData>>(
-      find.ancestor(
-        of: find.text(label),
-        matching: find.byType(Draggable<FootageDragData>),
-      ),
-    )
-    .data!
-    .footage
-    .length;

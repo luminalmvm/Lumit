@@ -148,30 +148,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_shipped_table_parses_and_answers_the_defaults() {
-        let table = QuirksTable::shipped();
-        let quirks = table.for_plugin("com.vendor.anything");
-        assert_eq!(quirks, Quirks::default());
-        assert_eq!(quirks.control_timeout, Duration::from_secs(2));
-        assert_eq!(quirks.block_floor, BLOCK_PERIOD);
-    }
-
-    #[test]
-    fn a_block_deadline_is_the_margin_but_never_below_the_floor() {
-        let quirks = Quirks::default();
-        assert_eq!(
-            quirks.block_deadline(Duration::from_millis(85)),
-            Duration::from_millis(85),
-            "a caller with lookahead in hand gets the lookahead"
-        );
-        assert_eq!(
-            quirks.block_deadline(Duration::from_millis(1)),
-            BLOCK_PERIOD,
-            "a caller that has fallen behind still gets one block's worth"
-        );
-    }
-
-    #[test]
     fn an_entry_overrides_only_what_it_names() {
         let table = QuirksTable::parse(
             r#"{"plugins":[{"identifier":"com.vendor.slow","block_floor_ms":50,

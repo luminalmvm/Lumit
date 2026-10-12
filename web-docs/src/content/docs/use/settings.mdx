@@ -11,6 +11,9 @@ Open the settings window from **Edit ▸ Settings…**.
 
 <Shot file="settings.png" caption="The settings window, on the Appearance page." eager/>
 
+The search box in the title strip finds a setting by name on any page, and lists what it
+finds under the page names. On the Shortcuts page it searches the shortcuts instead.
+
 ## General
 
 **Language**, which follows the system unless you choose otherwise. Whether the welcome
@@ -19,11 +22,19 @@ back to how it shipped.
 
 Beneath those, whether Lumit checks for updates, and what it found last time it checked.
 
+## Account
+
+The profiles on this machine, the Lumit account the one in use is signed in to, and what
+of it is synced. See [Profiles and accounts](/use/profiles/).
+
 ## Appearance
 
 - **Theme**: seven built-in schemes grouped dark and light, plus your own. **Customise…**
   opens the theme editor; themes can be exported and imported. **Accent** and **Shape** tune
-  whichever scheme is in force.
+  whichever scheme is in force. Shape is the interface style: **Studio**, **Desk** or
+  **Lantern**. **Label case** sets how panel titles, headings and other labels are cased:
+  **Style's choice**, **All caps**, **First letter** or **Lower case**. Left to the style,
+  Studio writes the first letter as a capital, Desk is lower case and Lantern is all caps.
 - **Interface**: [**Scale**](/use/workspaces/#how-large-everything-draws), 75 % to 200 %.
   **Tooltips**, on or off. **Motion**, for how much controls animate. **Compact**, which
   tightens the row spacing throughout. And **labels**, deciding whether the bars carry
@@ -39,8 +50,8 @@ layer](/use/sequence-layers/) automatically, whether pasted layers keep their or
 rather than pasting at the playhead, and whether the playhead stays where playback stopped.
 
 Then the panel habits: whether Transform appears in Effect controls, whether an ease opens in
-a popup or the [Easing panel](/use/workspaces/), and whether layer names are drawn on the lane
-bars.
+a popup or the [Easing panel](/use/workspaces/), whether layer names are drawn on the lane
+bars, and whether a minimap of the bars is drawn under the lanes.
 
 Last, **Node graphs**: whether a right-click, `Tab` or `Shift+A` on a node graph canvas opens
 [node search](/use/nodes/). Each is on by default and can be turned off on its own.
@@ -67,6 +78,8 @@ destination each time or uses a folder you name.
 ## Preview and cache
 
 - **Playback**: every frame, or adaptive resolution.
+- **Hardware video decoding**: on by default. If importing video freezes the computer,
+  turn it off and open the project again.
 - **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
   graphics card, and frames parked on disk. The disk cache's location is set here too, per
   machine or per project.
@@ -75,6 +88,15 @@ destination each time or uses a folder you name.
 
 Every command and its shortcut. Rebind by clicking one; conflicts are flagged. Keymaps export
 and import.
+
+- **After Effects shortcuts ▸ Import…** reads a shortcut file saved by After Effects, the
+  `.txt` in its `aeks` folder. Commands Lumit has no match for are skipped.
+- **Keyboard** shows which keys have a shortcut. A filled key works anywhere and an outlined
+  key works in one panel. Click **Ctrl**, **Alt** or **Shift** on it to see the keys they
+  change, and point at a key to read what it does.
+
+**Dragging** sets the modifier that breaks or joins handles in the
+[graph editor](/use/graph-editor/): `Alt` or `Ctrl`.
 
 :::note[Not built yet]
 There is no page listing installed [plugins](/use/plugins/) — switching one off is a command

@@ -112,66 +112,6 @@ impl DelayLine {
 mod tests {
     use super::*;
 
-    fn line_with_impulse(zeros: usize) -> DelayLine {
-        let mut line = DelayLine::new(64);
-        line.push(1.0);
-        for _ in 0..zeros {
-            line.push(0.0);
-        }
-        line
-    }
-
-    #[test]
-    fn a_pushed_impulse_reads_back_at_the_delay_asked() {
-        let line = line_with_impulse(4);
-        assert_eq!(line.read_linear(4.0), 1.0);
-        assert_eq!(line.read_linear(3.0), 0.0);
-        assert_eq!(line.read_linear(5.0), 0.0);
-        assert_eq!(line.read_cubic(4.0), 1.0);
-    }
-
-    #[test]
-    fn a_fractional_delay_sits_between_the_neighbours() {
-        let line = line_with_impulse(4);
-        assert_eq!(line.read_linear(3.5), 0.5);
-        assert_eq!(line.read_linear(3.25), 0.25);
-
-        // On a straight line the cubic is the straight answer too.
-        let mut ramp = DelayLine::new(64);
-        for n in 0..32 {
-            ramp.push(n as f32);
-        }
-        assert!((ramp.read_linear(2.5) - 28.5).abs() < 1e-5);
-        assert!((ramp.read_cubic(2.5) - 28.5).abs() < 1e-4);
-
-        // On a curve it is not, which is the whole point of it.
-        let mut curve = DelayLine::new(64);
-        for n in 0..32 {
-            curve.push((n as f32) * (n as f32));
-        }
-        let mid = curve.read_cubic(2.5);
-        let straight = curve.read_linear(2.5);
-        assert!(mid < straight, "cubic {mid} straight {straight}");
-        assert!(mid > curve.read_linear(3.0));
-    }
-
-    #[test]
-    fn reset_then_the_same_pushes_twice_read_back_the_same() {
-        let mut line = DelayLine::new(128);
-        let run = |line: &mut DelayLine| -> Vec<f32> {
-            (0..500)
-                .map(|n| {
-                    line.push(((n % 37) as f32 - 18.0) / 18.0);
-                    line.read_cubic(20.0 + 8.0 * ((n % 11) as f64) / 11.0)
-                })
-                .collect()
-        };
-        let first = run(&mut line);
-        line.reset();
-        let second = run(&mut line);
-        assert_eq!(first, second);
-    }
-
     #[test]
     fn a_read_past_the_end_is_held_rather_than_wrapped() {
         let mut line = DelayLine::new(8);

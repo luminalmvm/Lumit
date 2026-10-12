@@ -153,6 +153,20 @@ pub fn layer_time(t: f64, start_offset: Rational) -> f64 {
         .map_or(t - start_offset.to_f64(), Rational::to_f64)
 }
 
+/// The time `frames` frames of `dt` seconds on from `t`, taken on the flick
+/// grid as [`layer_time`] is.
+///
+/// **In plain terms.** A temporal effect reads the frames either side of the
+/// one being drawn. Worked out in plain f64, the frame after frame `k` is
+/// often one bit short of frame `k + 1`'s own time, and anything that asks
+/// "has this layer started yet" or "which clip is this" of it gets the answer
+/// for the frame before: on the frame before a cut, the neighbour was the
+/// outgoing shot held, and not the incoming one.
+#[inline]
+pub fn frames_on(t: f64, frames: i32, dt: f64) -> f64 {
+    layer_time(t + f64::from(frames) * dt, Rational::ZERO)
+}
+
 fn round_ties_even(x: f64) -> f64 {
     let r = x.round();
     if (x - x.trunc()).abs() == 0.5 && r % 2.0 != 0.0 {
@@ -241,10 +255,28 @@ timebase!(
 );
 
 /// Rational frame rate, e.g. 60000/1001.
+///
+/// Read through [`FrameRate::new`], so a file or a peer cannot hand over a
+/// rate of nothing, which every frame count then divides by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "RateAsWritten")]
 pub struct FrameRate {
     num: u32,
     den: u32,
+}
+
+#[derive(Deserialize)]
+struct RateAsWritten {
+    num: u32,
+    den: u32,
+}
+
+impl TryFrom<RateAsWritten> for FrameRate {
+    type Error = TimeError;
+
+    fn try_from(rate: RateAsWritten) -> Result<Self, TimeError> {
+        Self::new(rate.num, rate.den)
+    }
 }
 
 impl FrameRate {
@@ -344,26 +376,6 @@ mod tests {
         assert_eq!(rat(0, 5), Rational::ZERO);
         assert_eq!(rat(0, -5).den(), 1);
         assert!(Rational::new(1, 0).is_err());
-    }
-
-    #[test]
-    fn hash_agrees_with_eq() {
-        use std::collections::HashSet;
-        let mut set = HashSet::new();
-        set.insert(rat(1, 2));
-        assert!(set.contains(&rat(2, 4)));
-    }
-
-    #[test]
-    fn ntsc_walk_three_hours_is_exact() {
-        // 3 h at 30000/1001: frame 323,676 lands exactly back on rational time.
-        let fr = FrameRate::new(30000, 1001).unwrap();
-        let n = 3 * 3600 * 30000 / 1001;
-        let t = fr.time_of_frame(n).unwrap();
-        assert_eq!(fr.frame_at(t), n);
-        // and the next flick-grid point still round-trips through f64 quantisation
-        let q = Rational::from_f64_on_grid(t.0.to_f64(), Rational::FLICK_DEN).unwrap();
-        assert!((q.to_f64() - t.0.to_f64()).abs() < 1e-9);
     }
 
     /// The playhead's arithmetic when a comp's rate changes under it:

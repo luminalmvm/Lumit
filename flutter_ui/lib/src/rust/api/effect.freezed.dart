@@ -1700,6 +1700,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function(BridgeParamKind_Seed value)? seed,
     TResult Function(BridgeParamKind_File value)? file,
     TResult Function(BridgeParamKind_ColourName value)? colourName,
+    TResult Function(BridgeParamKind_Text value)? text,
     TResult Function(BridgeParamKind_Layer value)? layer,
     TResult Function(BridgeParamKind_Clip value)? clip,
     TResult Function(BridgeParamKind_MaskPath value)? maskPath,
@@ -1728,6 +1729,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_ColourName() when colourName != null:
         return colourName(_that);
+      case BridgeParamKind_Text() when text != null:
+        return text(_that);
       case BridgeParamKind_Layer() when layer != null:
         return layer(_that);
       case BridgeParamKind_Clip() when clip != null:
@@ -1769,6 +1772,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function(BridgeParamKind_Seed value) seed,
     required TResult Function(BridgeParamKind_File value) file,
     required TResult Function(BridgeParamKind_ColourName value) colourName,
+    required TResult Function(BridgeParamKind_Text value) text,
     required TResult Function(BridgeParamKind_Layer value) layer,
     required TResult Function(BridgeParamKind_Clip value) clip,
     required TResult Function(BridgeParamKind_MaskPath value) maskPath,
@@ -1796,6 +1800,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_ColourName():
         return colourName(_that);
+      case BridgeParamKind_Text():
+        return text(_that);
       case BridgeParamKind_Layer():
         return layer(_that);
       case BridgeParamKind_Clip():
@@ -1834,6 +1840,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function(BridgeParamKind_Seed value)? seed,
     TResult? Function(BridgeParamKind_File value)? file,
     TResult? Function(BridgeParamKind_ColourName value)? colourName,
+    TResult? Function(BridgeParamKind_Text value)? text,
     TResult? Function(BridgeParamKind_Layer value)? layer,
     TResult? Function(BridgeParamKind_Clip value)? clip,
     TResult? Function(BridgeParamKind_MaskPath value)? maskPath,
@@ -1861,6 +1868,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that);
       case BridgeParamKind_ColourName() when colourName != null:
         return colourName(_that);
+      case BridgeParamKind_Text() when text != null:
+        return text(_that);
       case BridgeParamKind_Layer() when layer != null:
         return layer(_that);
       case BridgeParamKind_Clip() when clip != null:
@@ -1911,6 +1920,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult Function()? seed,
     TResult Function(List<String> filter, String filterName)? file,
     TResult Function(BridgeColourNameRole role)? colourName,
+    TResult Function(String default_)? text,
     TResult Function()? layer,
     TResult Function()? clip,
     TResult Function()? maskPath,
@@ -1941,6 +1951,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_ColourName() when colourName != null:
         return colourName(_that.role);
+      case BridgeParamKind_Text() when text != null:
+        return text(_that.default_);
       case BridgeParamKind_Layer() when layer != null:
         return layer();
       case BridgeParamKind_Clip() when clip != null:
@@ -1993,6 +2005,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     required TResult Function() seed,
     required TResult Function(List<String> filter, String filterName) file,
     required TResult Function(BridgeColourNameRole role) colourName,
+    required TResult Function(String default_) text,
     required TResult Function() layer,
     required TResult Function() clip,
     required TResult Function() maskPath,
@@ -2023,6 +2036,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_ColourName():
         return colourName(_that.role);
+      case BridgeParamKind_Text():
+        return text(_that.default_);
       case BridgeParamKind_Layer():
         return layer();
       case BridgeParamKind_Clip():
@@ -2071,6 +2086,7 @@ extension BridgeParamKindPatterns on BridgeParamKind {
     TResult? Function()? seed,
     TResult? Function(List<String> filter, String filterName)? file,
     TResult? Function(BridgeColourNameRole role)? colourName,
+    TResult? Function(String default_)? text,
     TResult? Function()? layer,
     TResult? Function()? clip,
     TResult? Function()? maskPath,
@@ -2101,6 +2117,8 @@ extension BridgeParamKindPatterns on BridgeParamKind {
         return file(_that.filter, _that.filterName);
       case BridgeParamKind_ColourName() when colourName != null:
         return colourName(_that.role);
+      case BridgeParamKind_Text() when text != null:
+        return text(_that.default_);
       case BridgeParamKind_Layer() when layer != null:
         return layer();
       case BridgeParamKind_Clip() when clip != null:
@@ -2843,6 +2861,72 @@ class _$BridgeParamKind_ColourNameCopyWithImpl<$Res>
 
 /// @nodoc
 
+class BridgeParamKind_Text extends BridgeParamKind {
+  const BridgeParamKind_Text({required this.default_}) : super._();
+
+  final String default_;
+
+  /// Create a copy of BridgeParamKind
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeParamKind_TextCopyWith<BridgeParamKind_Text> get copyWith =>
+      _$BridgeParamKind_TextCopyWithImpl<BridgeParamKind_Text>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeParamKind_Text &&
+            (identical(other.default_, default_) ||
+                other.default_ == default_));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, default_);
+
+  @override
+  String toString() {
+    return 'BridgeParamKind.text(default_: $default_)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeParamKind_TextCopyWith<$Res>
+    implements $BridgeParamKindCopyWith<$Res> {
+  factory $BridgeParamKind_TextCopyWith(BridgeParamKind_Text value,
+          $Res Function(BridgeParamKind_Text) _then) =
+      _$BridgeParamKind_TextCopyWithImpl;
+  @useResult
+  $Res call({String default_});
+}
+
+/// @nodoc
+class _$BridgeParamKind_TextCopyWithImpl<$Res>
+    implements $BridgeParamKind_TextCopyWith<$Res> {
+  _$BridgeParamKind_TextCopyWithImpl(this._self, this._then);
+
+  final BridgeParamKind_Text _self;
+  final $Res Function(BridgeParamKind_Text) _then;
+
+  /// Create a copy of BridgeParamKind
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? default_ = null,
+  }) {
+    return _then(BridgeParamKind_Text(
+      default_: null == default_
+          ? _self.default_
+          : default_ // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+
 class BridgeParamKind_Layer extends BridgeParamKind {
   const BridgeParamKind_Layer() : super._();
 
@@ -3176,7 +3260,8 @@ extension BridgeScalarPatterns on BridgeScalar {
   TResult maybeWhen<TResult extends Object?>({
     TResult Function(double field0)? static_,
     TResult Function(List<BridgeKeyframe> field0)? keyframed,
-    TResult Function(String field0)? expression,
+    TResult Function(String field0, BridgeExpressionLanguage field1)?
+        expression,
     required TResult orElse(),
   }) {
     final _that = this;
@@ -3186,7 +3271,7 @@ extension BridgeScalarPatterns on BridgeScalar {
       case BridgeScalar_Keyframed() when keyframed != null:
         return keyframed(_that.field0);
       case BridgeScalar_Expression() when expression != null:
-        return expression(_that.field0);
+        return expression(_that.field0, _that.field1);
       case _:
         return orElse();
     }
@@ -3209,7 +3294,8 @@ extension BridgeScalarPatterns on BridgeScalar {
   TResult when<TResult extends Object?>({
     required TResult Function(double field0) static_,
     required TResult Function(List<BridgeKeyframe> field0) keyframed,
-    required TResult Function(String field0) expression,
+    required TResult Function(String field0, BridgeExpressionLanguage field1)
+        expression,
   }) {
     final _that = this;
     switch (_that) {
@@ -3218,7 +3304,7 @@ extension BridgeScalarPatterns on BridgeScalar {
       case BridgeScalar_Keyframed():
         return keyframed(_that.field0);
       case BridgeScalar_Expression():
-        return expression(_that.field0);
+        return expression(_that.field0, _that.field1);
     }
   }
 
@@ -3238,7 +3324,8 @@ extension BridgeScalarPatterns on BridgeScalar {
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function(double field0)? static_,
     TResult? Function(List<BridgeKeyframe> field0)? keyframed,
-    TResult? Function(String field0)? expression,
+    TResult? Function(String field0, BridgeExpressionLanguage field1)?
+        expression,
   }) {
     final _that = this;
     switch (_that) {
@@ -3247,7 +3334,7 @@ extension BridgeScalarPatterns on BridgeScalar {
       case BridgeScalar_Keyframed() when keyframed != null:
         return keyframed(_that.field0);
       case BridgeScalar_Expression() when expression != null:
-        return expression(_that.field0);
+        return expression(_that.field0, _that.field1);
       case _:
         return null;
     }
@@ -3396,10 +3483,11 @@ class _$BridgeScalar_KeyframedCopyWithImpl<$Res>
 /// @nodoc
 
 class BridgeScalar_Expression extends BridgeScalar {
-  const BridgeScalar_Expression(this.field0) : super._();
+  const BridgeScalar_Expression(this.field0, this.field1) : super._();
 
   @override
   final String field0;
+  final BridgeExpressionLanguage field1;
 
   /// Create a copy of BridgeScalar
   /// with the given fields replaced by the non-null parameter values.
@@ -3414,15 +3502,16 @@ class BridgeScalar_Expression extends BridgeScalar {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is BridgeScalar_Expression &&
-            (identical(other.field0, field0) || other.field0 == field0));
+            (identical(other.field0, field0) || other.field0 == field0) &&
+            (identical(other.field1, field1) || other.field1 == field1));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, field0);
+  int get hashCode => Object.hash(runtimeType, field0, field1);
 
   @override
   String toString() {
-    return 'BridgeScalar.expression(field0: $field0)';
+    return 'BridgeScalar.expression(field0: $field0, field1: $field1)';
   }
 }
 
@@ -3433,7 +3522,7 @@ abstract mixin class $BridgeScalar_ExpressionCopyWith<$Res>
           $Res Function(BridgeScalar_Expression) _then) =
       _$BridgeScalar_ExpressionCopyWithImpl;
   @useResult
-  $Res call({String field0});
+  $Res call({String field0, BridgeExpressionLanguage field1});
 }
 
 /// @nodoc
@@ -3449,12 +3538,17 @@ class _$BridgeScalar_ExpressionCopyWithImpl<$Res>
   @pragma('vm:prefer-inline')
   $Res call({
     Object? field0 = null,
+    Object? field1 = null,
   }) {
     return _then(BridgeScalar_Expression(
       null == field0
           ? _self.field0
           : field0 // ignore: cast_nullable_to_non_nullable
               as String,
+      null == field1
+          ? _self.field1
+          : field1 // ignore: cast_nullable_to_non_nullable
+              as BridgeExpressionLanguage,
     ));
   }
 }

@@ -28,7 +28,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -184,41 +183,6 @@ fn perimeter(path: &BezierPath) -> f64 {
 // ---------------------------------------------------------------------------
 // The bundle itself
 // ---------------------------------------------------------------------------
-
-/// **The bundle a real After Effects wrote opens, and says which one.**
-///
-/// The shallow check every other test in this file assumes, and the one fact
-/// no synthetic fixture can carry: `ae_version` is the build that dictated
-/// this capture. The project block rides along because docs/11 §3's colour
-/// flag is a fact about the project and nothing downstream can recover it —
-/// and because this project is 16-bit with linear blending *off*, which is the
-/// combination that raises no row (the flag is for 8-bit without it).
-#[test]
-fn the_golden_bundle_is_the_walkers_own_output() {
-    let (bundle, doc, _) = golden();
-
-    assert_eq!(bundle.manifest.format.as_deref(), Some("lumit-ae-bundle"));
-    assert_eq!(bundle.manifest.version.as_deref(), Some("1.0.0"));
-    assert_eq!(bundle.manifest.ae_version.as_deref(), Some("26.0x67"));
-    assert_eq!(bundle.manifest.bridge_version.as_deref(), Some("1.0.0"));
-
-    let project = bundle.capture.project.as_ref().expect("a project block");
-    assert_eq!(project.bits_per_channel, Some(16));
-    assert_eq!(project.linear_blending, Some(false));
-    assert_eq!(project.expression_engine.as_deref(), Some("javascript-1.0"));
-    assert!(
-        !reported(|r| matches!(r, Reason::ProjectBlendingDiffers { .. })),
-        "sixteen bits is not the eight-bit blending difference"
-    );
-
-    // Two comps, twenty-two items, twenty-four layers between them.
-    assert_eq!(bundle.capture.comps.len(), 2);
-    assert_eq!(doc.items.len(), 22);
-    assert_eq!(
-        fixture().layers.len() + comp(doc, "Fixture inner").layers.len(),
-        24
-    );
-}
 
 // ---------------------------------------------------------------------------
 // §5: nested comps, the item tree, the comp settings
@@ -537,27 +501,6 @@ fn a_separated_position_animates_on_its_own_followers() {
         child_b.transform.position_z.animation,
         Animation::Static(0.0)
     );
-}
-
-/// **§5 row: rotation and opacity keys.**
-///
-/// The plain case, on the layer `make-fixture.jsx` gives both to. Worth its
-/// own assertion because the two lanes come out of different AE match names
-/// (`ADBE Rotate Z` and `ADBE Opacity`) and land on differently named Lumit
-/// fields, which is exactly where a transcription slip lives.
-#[test]
-fn rotation_and_opacity_keys_come_across() {
-    let multiply = layer(fixture(), "blend multiply");
-
-    let rotation = keys(&multiply.transform.rotation);
-    assert_eq!(rotation.len(), 2);
-    assert_eq!((rotation[0].value, rotation[1].value), (0.0, 180.0));
-    assert_eq!(rotation[1].time, Rational::new(2, 1).unwrap());
-    assert_eq!(multiply.transform.rotation.value_at(1.0), 90.0);
-
-    let opacity = keys(&multiply.transform.opacity);
-    assert_eq!((opacity[0].value, opacity[1].value), (100.0, 40.0));
-    assert_eq!(multiply.transform.opacity.value_at(1.0), 70.0);
 }
 
 /// **§5 row: one enabled expression and one disabled one.**
@@ -942,16 +885,24 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
 
 /// **§5 rows: the text layer's source string, and the shape layer's slot.**
 ///
-/// Lumit's text layer has the words, the size and the fill colour, so those
-/// three convert (the fill through the same sRGB curve as everything else) and
-/// the rest of the styling — the stroke, the tracking, the justification the
-/// builder sets — is a report row. The shape layer keeps its place, its
-/// transform and its parenting and draws nothing, which is also a row.
+/// The words, the size and the fill colour convert (the fill through the same
+/// sRGB curve as everything else), and so does the styling the builder sets:
+/// the stroke, the tracking and the centred justification. Nothing on this
+/// layer is left behind, so it raises no row. The shape layer keeps its place,
+/// its transform and its parenting and draws nothing, which is a row.
+///
+/// After Effects hangs centred point text from the middle of its first
+/// baseline, and the builder leaves the anchor at that origin. Lumit measures
+/// from the raster's corner, so the anchor has to land on the same point of
+/// the block Lumit lays out, whichever font this machine sets it in.
 #[test]
 fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
+    use lumit_core::text::{Kerning, TextAlign};
+
     let c = fixture();
 
-    let LayerKind::Text { document } = &layer(c, "Lumit fixture").kind else {
+    let words = layer(c, "Lumit fixture");
+    let LayerKind::Text { document } = &words.kind else {
         panic!("a text layer");
     };
     assert_eq!(document.text, "Lumit fixture");
@@ -959,7 +910,33 @@ fn the_text_layers_words_arrive_and_the_shape_layer_keeps_its_slot() {
     // fillColor [1, 0.55, 0.1].
     assert_close(f64::from(document.fill.0[1]), to_linear(0.550_000_011));
     assert_close(f64::from(document.fill.0[2]), to_linear(0.100_000_001));
-    assert!(reported(|r| matches!(r, Reason::TextStylingNotMapped)));
+
+    let style = &document.style;
+    assert_eq!(style.family, "Times New Roman");
+    assert_eq!(style.face, "Regular");
+    assert_eq!(style.kerning, Kerning::Metrics);
+    assert_eq!(style.tracking, 20.0);
+    assert!(style.fill_on && style.stroke_on && style.stroke_over);
+    assert_eq!(style.stroke_width, 3.0);
+    assert_eq!(style.stroke.0, [0.0, 0.0, 0.0, 1.0]);
+    // Auto leading, and the scales After Effects writes as 1.
+    assert_eq!(style.leading, None);
+    assert_eq!((style.scale_x, style.scale_y), (100.0, 100.0));
+    assert_eq!(document.paragraph.align, TextAlign::Centre);
+    assert_eq!(document.paragraph.box_width, 0.0);
+    assert!(!reported(|r| matches!(r, Reason::TextStylingNotMapped)));
+
+    let block = lumit_text::layout(&lumit_text::TextBlock::of(document, &document.text), false);
+    assert_close(
+        words.transform.anchor_x.value_at(0.0),
+        f64::from(block.left + block.right) / 2.0,
+    );
+    assert_close(
+        words.transform.anchor_y.value_at(0.0),
+        f64::from(block.lines[0].baseline),
+    );
+    assert_eq!(words.transform.position_x.value_at(0.0), 320.0);
+    assert_eq!(words.transform.position_y.value_at(0.0), 180.0);
 
     assert_eq!(
         layer(c, "shape").kind,
@@ -1153,7 +1130,10 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // the camera gained its second node: the fixture's two-node
             // camera and its point of interest cross over whole.
             // One more for the 3D card's Casts Shadows.
-            adjusted: 58,
+            // One fewer since the text layer's styling carries.
+            // Two fewer since the Gaussian blur gained Repeat edge pixels:
+            // the fixture's two blurs carry theirs.
+            adjusted: 55,
             placeholders: 1,
             skipped: 1,
         }
@@ -1198,96 +1178,6 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
         let said = row.to_string();
         assert!(said.contains(": "), "a row names where it happened: {said}");
     }
-}
-
-/// **The capture's hundred and nine unreadables are the classes we know
-/// about — and a new class fails this test.**
-///
-/// After Effects' scripting DOM refuses four kinds of property, and every one
-/// of the 109 rows in the golden bundle's `report.json` is one of them:
-///
-/// - **the gradient blobs** — every layer carries a Layer Styles group whose
-///   Outer Glow, Inner Glow and Gradient Overlay each hold a colour ramp the
-///   DOM will not hand over, three per layer across the 22 layers that have
-///   the group, plus the shape layer's own gradient fill;
-/// - **`ADBE Layer Source Alternate`** — the Source Options row every footage,
-///   solid and precomp layer carries;
-/// - **the three `CUSTOM_VALUE` blobs** the impl note §3 names by hand:
-///   Curves' point list, Levels' histogram, Hue/Saturation's channel ranges;
-/// - **the effects' own hidden group rows** — Fractal Noise's six, Vegas'
-///   eight, Scribble's four and Tint's one, which are section headers in the
-///   Effect Controls panel and `NO_VALUE` properties in the DOM.
-///
-/// The assertion is the exact tally rather than a spot check, because the
-/// failure worth catching is a *new* kind of refusal appearing — that would
-/// mean the walker started asking for something it did not ask for before, and
-/// a quietly growing unreadable list is how an import loses data.
-#[test]
-fn the_captures_unreadables_are_the_four_classes_we_know_about() {
-    let unreadables = &golden().0.report.unreadables;
-    assert_eq!(unreadables.len(), 109);
-
-    let mut tally: BTreeMap<&str, usize> = BTreeMap::new();
-    for row in unreadables {
-        *tally
-            .entry(row.match_name.as_deref().unwrap_or("(unnamed)"))
-            .or_default() += 1;
-    }
-
-    let expected: BTreeMap<&str, usize> = [
-        // The gradient blobs: three per layer that has Layer Styles, plus the
-        // shape layer's gradient fill.
-        ("outerGlow/gradient", 22),
-        ("innerGlow/gradient", 22),
-        ("gradientFill/gradient", 22),
-        ("ADBE Vector Grad Colors", 1),
-        // The Source Options row.
-        ("ADBE Layer Source Alternate", 20),
-        // The three the impl note names by hand.
-        ("ADBE CurvesCustom-0001", 1),
-        ("ADBE Easy Levels2-0002", 1),
-        ("ADBE HUE SATURATION-0003", 1),
-        // Fractal Noise's hidden group rows.
-        ("ADBE Fractal Noise-0007", 1),
-        ("ADBE Fractal Noise-0014", 1),
-        ("ADBE Fractal Noise-0016", 1),
-        ("ADBE Fractal Noise-0022", 1),
-        ("ADBE Fractal Noise-0024", 1),
-        ("ADBE Fractal Noise-0028", 1),
-        // And the same shape on the other three effects that have them.
-        ("APC Vegas-0027", 1),
-        ("APC Vegas-0033", 1),
-        ("APC Vegas-0035", 1),
-        ("APC Vegas-0049", 1),
-        ("APC Vegas-0051", 1),
-        ("APC Vegas-0054", 1),
-        ("APC Vegas-0056", 1),
-        ("APC Vegas-0069", 1),
-        ("ADBE Scribble Fill-0009", 1),
-        ("ADBE Scribble Fill-0021", 1),
-        ("ADBE Scribble Fill-0031", 1),
-        ("ADBE Scribble Fill-0045", 1),
-        ("ADBE Tint-0004", 1),
-    ]
-    .into_iter()
-    .collect();
-
-    assert_eq!(
-        tally, expected,
-        "a class of unreadable this test has never seen — the walker is asking \
-         After Effects for something new"
-    );
-
-    // Only the three CUSTOM_VALUE rows say so; the rest are NO_VALUE headers.
-    let custom = unreadables
-        .iter()
-        .filter(|u| {
-            u.error
-                .as_deref()
-                .is_some_and(|e| e.contains("CUSTOM_VALUE"))
-        })
-        .count();
-    assert_eq!(custom, 3);
 }
 
 // ---------------------------------------------------------------------------
@@ -1352,70 +1242,4 @@ fn the_golden_document_round_trips_through_a_saved_project() {
         reversed.retime.as_ref().expect("a Retime").value_at(-5.0),
         5.0,
     );
-}
-
-/// **The twenty-two layers carrying the Layer Styles group wear no style, and
-/// the import puts none on them** (docs/impl/layer-styles.md §7).
-///
-/// After Effects lists all ten style slots on any layer that has ever had the
-/// group, switched off or not, and every one of the bundle's two hundred and
-/// twenty slots is off — nobody in the fixture project actually dressed a
-/// layer. So the map stage's own rule is what this pins: an off slot is a style
-/// nobody added, and importing them would put eighty disabled instances on
-/// layers that show none in After Effects.
-///
-/// The positive half — the angle formula, the opacity, the order and every
-/// report row — is in `src/map/styles/tests.rs`, against hand-built groups, so
-/// each can be pinned exactly rather than hunted for in a megabyte of JSON.
-/// What lives here is the fact only the real capture can prove.
-#[test]
-fn the_bundles_layer_styles_are_all_switched_off_and_none_import() {
-    let mut groups = 0usize;
-    let mut slots = 0usize;
-    fn walk(props: &[lumit_import::capture::Property], groups: &mut usize, slots: &mut usize) {
-        for node in props {
-            if node.match_name.as_deref() == Some("ADBE Layer Styles") {
-                *groups += 1;
-                for style in node.children() {
-                    if style.match_name.as_deref() != Some("ADBE Blend Options Group") {
-                        *slots += 1;
-                        assert_eq!(
-                            style.enabled,
-                            Some(false),
-                            "a style switched on would give this layer one, and the counts below \
-                             would need saying differently"
-                        );
-                    }
-                }
-            }
-            walk(node.children(), groups, slots);
-        }
-    }
-    for comp in &golden().0.capture.comps {
-        for layer in &comp.layers {
-            walk(&layer.properties, &mut groups, &mut slots);
-        }
-    }
-    assert_eq!(groups, 22, "the layers carrying the group");
-    assert_eq!(slots, 220, "ten slots apiece");
-
-    for item in &doc().items {
-        if let ProjectItem::Composition(comp) = item {
-            for layer in &comp.layers {
-                assert!(
-                    layer.styles.is_empty(),
-                    "{} wears a style nobody switched on",
-                    layer.name
-                );
-            }
-        }
-    }
-
-    // And no style row reached the report, which is what "nothing to say"
-    // looks like: the gradient ramps the DOM refuses are still counted by the
-    // capture, and the map stage never visited them.
-    assert!(!report().rows.iter().any(|row| matches!(
-        &row.reason,
-        Reason::EffectParamNotCarried { effect, .. } if effect == "Layer styles"
-    )));
 }

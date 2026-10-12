@@ -6,9 +6,14 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart' show PointerEnterEvent;
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
+import 'package:provider/provider.dart';
 
+import '../../state/ui_state.dart';
+import '../../theme/motion.dart';
 import '../escape_ladder.dart';
 import 'base.dart';
+import 'motion.dart';
 
 /// One popup on the chain: the handle that takes it back down again.
 class _PopupHandle {
@@ -33,14 +38,41 @@ class _PopupHandle {
 /// up. One click on a barrier, or one Escape, takes the whole chain.
 final List<_PopupHandle> _popupChain = [];
 
+/// The depths of the chain that have lost a popup since the last frame, for
+/// telling a menu that takes over from another apart from one opening afresh.
+///
+/// Crossing the menu bar with a menu open closes one list and opens the next
+/// inside a single pointer event, and so does moving from one submenu row to
+/// its neighbour. A list that arrives that way is a continuation of the one it
+/// replaced, and it makes no entrance: playing one for every heading crossed
+/// would have the bar flickering under a moving pointer. Only the first popup
+/// of a chain, opened onto nothing, arrives with motion.
+///
+/// Emptied after the next frame, which the dismissal itself schedules, so
+/// "took over" means opened before the screen had shown the gap.
+final Set<int> _popupJustLeft = {};
+bool _popupJustLeftClears = false;
+
+void _notePopupLeft(int depth) {
+  _popupJustLeft.add(depth);
+  if (_popupJustLeftClears) return;
+  _popupJustLeftClears = true;
+  SchedulerBinding.instance.addPostFrameCallback((_) {
+    _popupJustLeft.clear();
+    _popupJustLeftClears = false;
+  });
+}
+
 /// Close every popup at [depth] and deeper, innermost first.
 void _truncatePopups(int depth) {
   while (_popupChain.length > depth) {
+    _notePopupLeft(_popupChain.length - 1);
     _popupChain.removeLast().dismiss();
   }
   if (_popupChain.isEmpty) {
     _popupEscapeRelease?.call();
     _popupEscapeRelease = null;
+    lumitPopupUp.value = false;
   }
 }
 
@@ -50,6 +82,10 @@ void closeLumitPopups() => _truncatePopups(0);
 /// Whether any popup is up. The menus are not a modal — panels keep their
 /// keyboard — so this is for tests and for Escape, not for gating commands.
 bool get lumitPopupOpen => _popupChain.isNotEmpty;
+
+/// The same answer as something to listen to, for a control that draws
+/// differently under its own open menu and has to know when the menu goes.
+final ValueNotifier<bool> lumitPopupUp = ValueNotifier<bool>(false);
 
 /// Escape while a chain is up dismisses all of it.
 ///
@@ -133,8 +169,12 @@ Future<T?> showLumitPopup<T>({
       context.getInheritedWidgetOfExactType<_PopupScope>()?.depth ?? -1;
   _truncatePopups(parentDepth + 1);
   final depth = _popupChain.length;
+  // Whether this one takes over from a popup that left at the same depth
+  // during this very event, in which case it arrives without an entrance.
+  final takesOver = _popupJustLeft.contains(depth);
   handle = _PopupHandle(() => close(null));
   _popupChain.add(handle);
+  lumitPopupUp.value = true;
   if (_popupChain.length == 1) {
     _popupEscapeRelease = EscapeLadder.register(EscapeRung.popup, _popupEscape);
   }
@@ -168,7 +208,14 @@ Future<T?> showLumitPopup<T>({
               // Scrolls only when it has to: a shorter popup shrink-wraps and
               // behaves exactly as before.
               child: SingleChildScrollView(
-                child: _PopupScope(depth: depth, child: builder(close)),
+                child: _PopupScope(
+                  depth: depth,
+                  child: _PopupEntrance(
+                    flyout: depth > 0,
+                    still: takesOver,
+                    child: builder(close),
+                  ),
+                ),
               ),
             ),
           ),
@@ -178,6 +225,43 @@ Future<T?> showLumitPopup<T>({
   );
   overlay.insert(entry);
   return completer.future;
+}
+
+/// How a popup arrives (docs/15-DESIGN.md §8): the first of a chain fades in
+/// while it settles from its anchor, a flyout only fades, and one taking over
+/// from another is simply there.
+///
+/// The spec is read when the popup mounts and [Entrance] plays once, so a
+/// rebuild of the overlay never replays it.
+class _PopupEntrance extends StatelessWidget {
+  final bool flyout;
+  final bool still;
+  final Widget child;
+
+  const _PopupEntrance({
+    required this.flyout,
+    required this.still,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = ThemeScope.maybeOf(context)?.motion;
+    if (motion == null || still) {
+      return Entrance(spec: MotionSpec.still, child: child);
+    }
+    if (flyout) return Entrance(spec: motion.flyout, child: child);
+    return Entrance(
+      spec: motion.popup,
+      rise: motion.popupRise,
+      scale: motion.popupScale,
+      // Grown from the corner it is anchored at, which is the control that
+      // opened it.
+      alignment: Alignment.topLeft,
+      leads: true,
+      child: child,
+    );
+  }
 }
 
 /// Places a popup at its anchor, then pulls it back on screen if it would hang
@@ -190,7 +274,12 @@ Future<T?> showLumitPopup<T>({
 /// control near the right edge.
 class _PopupLayout extends SingleChildLayoutDelegate {
   final Offset anchor;
-  const _PopupLayout(this.anchor);
+
+  /// Where the popup's bottom edge goes when there is no room under the
+  /// anchor. A tip on a control at the foot of the window then sits over the
+  /// control and not on top of it. Null only pulls it up as far as fits.
+  final double? above;
+  const _PopupLayout(this.anchor, {this.above});
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
@@ -202,34 +291,63 @@ class _PopupLayout extends SingleChildLayoutDelegate {
       ));
 
   @override
-  Offset getPositionForChild(Size size, Size childSize) => Offset(
-        anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
-        anchor.dy.clamp(0.0, (size.height - childSize.height).clamp(0.0, 1e6)),
-      );
+  Offset getPositionForChild(Size size, Size childSize) {
+    final over = above;
+    final top = over != null && anchor.dy + childSize.height > size.height
+        ? over - childSize.height
+        : anchor.dy;
+    return Offset(
+      anchor.dx.clamp(0.0, (size.width - childSize.width).clamp(0.0, 1e6)),
+      top.clamp(0.0, (size.height - childSize.height).clamp(0.0, 1e6)),
+    );
+  }
 
   @override
-  bool shouldRelayout(_PopupLayout old) => old.anchor != anchor;
+  bool shouldRelayout(_PopupLayout old) =>
+      old.anchor != anchor || old.above != above;
 }
 
 /// A tooltip that honours Settings → Interface → Show tooltips app-wide —
 /// the one thing Flutter's own Tooltip cannot do.
 class LumitTooltip extends StatelessWidget {
   final String message;
+
+  /// The keymap action the control runs, when it has one. Its chord is shown
+  /// after the message, read from the keymap as the tip appears, so a rebound
+  /// shortcut is taught rebound and an unbound one is left out.
+  final String? action;
+
+  /// How wide the tip may be before its words wrap. For one that says a
+  /// name of any length, which would otherwise be one line across the
+  /// window. Null leaves it on one line.
+  final double? maxWidth;
   final Widget child;
-  const LumitTooltip({super.key, required this.message, required this.child});
+  const LumitTooltip(
+      {super.key,
+      required this.message,
+      this.action,
+      this.maxWidth,
+      required this.child});
 
   @override
   Widget build(BuildContext context) {
     final scope = ThemeScope.of(context);
     if (!scope.showTooltips) return child;
-    return _HoverTip(message: message, child: child);
+    return _HoverTip(
+        message: message, action: action, maxWidth: maxWidth, child: child);
   }
 }
 
 class _HoverTip extends StatefulWidget {
   final String message;
+  final String? action;
+  final double? maxWidth;
   final Widget child;
-  const _HoverTip({required this.message, required this.child});
+  const _HoverTip(
+      {required this.message,
+      this.action,
+      this.maxWidth,
+      required this.child});
 
   @override
   State<_HoverTip> createState() => _HoverTipState();
@@ -257,9 +375,21 @@ class _HoverTipState extends State<_HoverTip> {
     if (!mounted || _entry != null) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.attached) return;
-    final origin = box.localToGlobal(Offset(0, box.size.height + 4));
+    // In the overlay's own space, or the UI scale puts the tip further from
+    // its control the further the control is from the window's corner.
+    final origin = overlayLocal(
+        context, box.localToGlobal(Offset(0, box.size.height + 4)));
+    final above =
+        overlayLocal(context, box.localToGlobal(const Offset(0, -4))).dy;
     final scope = ThemeScope.of(context);
     final t = scope.theme;
+    // Null outside the shell (a bare widget test), where there is no keymap.
+    final action = widget.action;
+    final chord = action == null
+        ? null
+        : Provider.of<LumitUiState?>(context, listen: false)
+            ?.keymap
+            .chordFor(action);
     _entry = OverlayEntry(
       builder: (_) => Positioned.fill(
         child: IgnorePointer(
@@ -267,16 +397,33 @@ class _HoverTipState extends State<_HoverTip> {
           // near the bottom (the Viewer's transport) would otherwise tip below
           // the window entirely.
           child: CustomSingleChildLayout(
-            delegate: _PopupLayout(origin),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: t.surface3,
-                borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-                border: Border.all(color: t.hairline),
-                boxShadow: t.floatShadow,
+            delegate: _PopupLayout(origin, above: above),
+            child: Entrance(
+              spec: scope.motion.tooltip,
+              rise: scope.motion.tooltipRise,
+              child: Container(
+                constraints: BoxConstraints(
+                    maxWidth: widget.maxWidth ?? double.infinity),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: t.surface3,
+                  borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+                  border: Border.all(color: t.hairline),
+                  boxShadow: t.floatShadow,
+                ),
+                // The chord reads as a menu row's does: small and muted.
+                child: chord == null
+                    ? Text(widget.message, style: t.body)
+                    : Text.rich(
+                        TextSpan(text: widget.message, children: [
+                          TextSpan(
+                            text: '  $chord',
+                            style: t.small.copyWith(color: t.textMuted),
+                          ),
+                        ]),
+                        style: t.body,
+                      ),
               ),
-              child: Text(widget.message, style: t.body),
             ),
           ),
         ),

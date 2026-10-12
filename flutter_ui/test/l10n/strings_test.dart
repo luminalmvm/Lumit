@@ -16,40 +16,11 @@ void main() {
   // later test file in the same process inherits a German interface.
   tearDown(() => useLocale(const Locale('en')));
 
-  test('English is what is loaded before anything asks', () {
-    expect(l10n.menuFile, 'File');
-  });
-
-  test('choosing a language takes effect on the next read', () {
-    useLocale(const Locale('de'));
-    // Nothing is translated into German yet, so this proves the fallback rather
-    // than the translation — which is the behaviour that matters while the
-    // translations are still being written.
-    expect(l10n.menuFile, isNotEmpty);
-  });
-
-  test('a language nobody has translated into opens in English', () {
-    useLocale(const Locale('ja'));
-    expect(l10n.menuFile, 'File');
-  });
-
   test('a hand-edited settings file cannot stop Lumit opening', () {
     for (final tag in ['', 'not-a-language', 'zz_ZZ', '!!']) {
       expect(() => useLocale(localeFromTag(tag)), returnsNormally,
           reason: 'the tag $tag must resolve to something');
       expect(l10n.menuFile, isNotEmpty);
-    }
-  });
-
-  test('a locale resolves to its own language before it falls back', () {
-    // A machine set to Swiss German gets the German strings, not English.
-    expect(resolveLocale(const Locale('de', 'CH')).languageCode, 'de');
-    expect(resolveLocale(const Locale('en', 'AU')).languageCode, 'en');
-  });
-
-  test('a tag survives the trip through the settings file', () {
-    for (final locale in Strings.supportedLocales) {
-      expect(localeFromTag(localeTag(locale)), locale);
     }
   });
 

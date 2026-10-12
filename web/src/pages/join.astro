@@ -1,0 +1,53 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+{/*
+  Where an invite link leads. The invite is everything after the # in the
+  address, which a browser keeps to itself: it is never sent to this site or
+  to anyone else. The script below hands it to Lumit on this computer, and
+  does nothing else with it.
+*/}
+<Base
+  title="Join a shared project - Lumit"
+  description="Opens in Lumit."
+>
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
+    <div class="wrap">
+      <div class="sec-rule"><p class="kicker pl-3">Shared project</p></div>
+
+      <div id="join-ready" hidden>
+        <h1 class="sec-title">Join a shared project.</h1>
+        <div class="mt-9 flex flex-wrap gap-3">
+          <a class="btn border-white" id="join-open" href="/download">Open in Lumit</a>
+          <a class="btn btn-ghost" href="/download">Download Lumit</a>
+        </div>
+        <p class="lede mt-9">
+          Not opening? Paste the link into <strong>File ▸ Shared project… ▸ Join a project</strong>.
+        </p>
+      </div>
+
+      <div id="join-empty">
+        <h1 class="sec-title">This invite link is incomplete.</h1>
+        <p class="lede mt-4">Ask for it again.</p>
+        <div class="mt-9 flex flex-wrap gap-3">
+          <a class="btn border-white" href="/">Back to the start</a>
+          <a class="btn btn-ghost" href="/download">Download Lumit</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<script is:inline>
+  (() => {
+    const invite = window.location.hash.slice(1);
+    // Only what Lumit writes an invite in. Anything else is not handed on.
+    if (!/^[A-Za-z0-9_-]{40,600}$/.test(invite)) return;
+    const link = "lumit://join/" + invite;
+    document.getElementById("join-open").href = link;
+    document.getElementById("join-empty").hidden = true;
+    document.getElementById("join-ready").hidden = false;
+    window.location.href = link;
+  })();
+</script>

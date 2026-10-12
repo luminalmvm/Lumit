@@ -12,6 +12,11 @@ param([string]$Version)
 $ErrorActionPreference = 'Stop'
 $root = Resolve-Path "$PSScriptRoot\..\.."
 
+# A build never clears its output folder, and the installer takes everything
+# in it. A library left beside the exe by a build from before they moved to
+# lib\ would be packaged, and Windows loads the one beside the exe first.
+Remove-Item "$root\flutter_ui\build\windows\x64\runner\Release\*.dll" -ErrorAction SilentlyContinue
+
 Push-Location "$root\flutter_ui"
 try {
     flutter build windows --release
@@ -21,7 +26,8 @@ try {
 }
 
 # The bridge links FFmpeg's *shared* build (scripts/win-dev-env.ps1), so the
-# DLLs must ship beside the exe — a clean machine has no FFmpeg on its PATH.
+# DLLs must ship in lib\ with the bridge. A clean machine has no FFmpeg on its
+# PATH.
 $release = "$root\flutter_ui\build\windows\x64\runner\Release"
 $ffbin = $null
 if ($env:FFMPEG_LIBS_DIR) {
@@ -37,7 +43,7 @@ if ($null -eq $ffbin) {
         "(scripts/win-dev-env.ps1) or put avcodec-*.dll on PATH")
     exit 1
 }
-Copy-Item "$ffbin\*.dll" $release -Force
+Copy-Item "$ffbin\*.dll" "$release\lib" -Force
 Write-Host "Bundled FFmpeg DLLs from $ffbin"
 
 # The vendored ACES bakes are read at runtime from data\colour beside the exe

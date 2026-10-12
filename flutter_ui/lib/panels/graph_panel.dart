@@ -34,6 +34,8 @@ import 'dart:typed_data' show Float32List;
 import 'dart:ui' show PointMode;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart'
+    show BoxHitTestEntry, BoxHitTestResult, RenderStack;
 import 'package:flutter/services.dart'
     show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
@@ -62,8 +64,11 @@ import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
+import 'layer_fold_frb.dart' show effectPath;
+import '../state/share.dart';
 import 'placeholder.dart';
-import 'shader_graph.dart' show ShaderGraphPanel;
+import 'shader_editor.dart' show InstanceHome;
+import 'shader_graph.dart' show ShaderGraphPanel, ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
 
 // --- The drawing's own numbers (NodeGraph, Nodes-workspace) ---------------
@@ -146,46 +151,25 @@ const double graphWireStub = 40;
 
 /// One wire's curve, in **screen** coordinates (both ends already transformed).
 ///
-/// A cubic whose handles run horizontally out of each socket — right out of the
-/// output, left into the input — by half the gap between them, or by
-/// [graphWireStub] when that half is smaller or points the wrong way. Free of
-/// the painter so its geometry can be asserted directly.
+/// The handles run horizontally out of each socket — right out of the output,
+/// left into the input. With the input to the right it is one cubic, reaching
+/// half the gap or [graphWireStub], whichever is longer. With the input to the
+/// left it is two cubics that meet level at the midpoint, so each end turns
+/// back in a round hook no wider than the stub however far apart the boxes
+/// are. The stub is never longer than half the wire, so a short wire stays a
+/// short curve. Free of the painter so its geometry can be asserted directly.
 Path graphWirePath(Offset a, Offset b, {double zoom = 1}) {
-  final path = Path();
-
   final dx = b.dx - a.dx;
-  final dy = b.dy - a.dy;
-  final length = math.sqrt(dx * dx + dy * dy);
-
-  if (length < 0.001) {
-    path.moveTo(a.dx, a.dy);
-    return path;
+  final stub = math.min(graphWireStub * zoom, (b - a).distance / 2);
+  final path = Path()..moveTo(a.dx, a.dy);
+  if (dx >= 0) {
+    final reach = math.max(stub, dx / 2);
+    return path..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
   }
-
-  final sag = length * 0.25;
-
-  path.moveTo(a.dx, a.dy);
-
-  const samples = 40;
-
-  for (int i = 1; i <= samples; i++) {
-    final t = i / samples;
-
-    final yOffset = 4 * sag * t * (1 - t);
-
-    path.lineTo(
-      a.dx + dx * t,
-      a.dy + dy * t + yOffset,
-    );
-  }
-
-  return path;
-
-  // final reach = math.max(graphWireStub * zoom, (b.dx - a.dx).abs() / 2);
-
-  // return Path()
-  //   ..moveTo(a.dx, a.dy)
-  //   ..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
+  final mid = (a + b) / 2;
+  return path
+    ..cubicTo(a.dx + stub, a.dy, a.dx, mid.dy, mid.dx, mid.dy)
+    ..cubicTo(b.dx, mid.dy, b.dx - stub, b.dy, b.dx, b.dy);
 }
 
 /// The glyphs in the toolbar. A size down from the
@@ -322,14 +306,19 @@ typedef DrivenParam = ({String driver, BridgePortType type, bool noStream});
 /// guards against. Empty for every layer that has never been wired,
 /// which is nearly all of them.
 Map<String, DrivenParam> drivenParamsOf(LayerReference layer) {
-  final out = <String, DrivenParam>{};
   final BridgeLayerGraph graph;
   try {
     graph = layer.getGraph();
   } catch (_) {
     // The layer has gone; the rows simply draw their own controls again.
-    return out;
+    return {};
   }
+  return drivenParamsIn(graph);
+}
+
+/// The same reading, for a panel that already holds the graph.
+Map<String, DrivenParam> drivenParamsIn(BridgeLayerGraph graph) {
+  final out = <String, DrivenParam>{};
   final byRef = {for (final n in graph.nodes) graphNodeKey(n.node): n};
   for (final edge in graph.wiring.edges) {
     if (edge.to case BridgeInputRef_Param(:final node, :final port)) {
@@ -384,6 +373,12 @@ class GraphSocket {
   final Offset at;
   const GraphSocket(this.node, this.port, this.isInput, this.at);
 }
+
+/// The picture of its inner graph a Custom shader box carries under its rows:
+/// how tall it is, the air round it, and the room the two take on the box.
+const double graphShaderThumbHeight = 56;
+const double graphFootPad = 6;
+const double graphShaderFoot = graphShaderThumbHeight + graphFootPad * 2;
 
 /// What one box shows, whichever graph it came out of.
 ///
@@ -453,13 +448,15 @@ class GraphBox {
 /// it draws every socket it has (§1.4). Exposure grows the box; it is not a
 /// second kind of wiring. [params] are the parameters an open node graph box
 /// gives a control row each, in the order the panel lists them; the layer
-/// canvas passes none and its rows are sockets alone.
+/// canvas passes none and its rows are sockets alone. [foot] is room left
+/// under the rows, which a Custom shader box fills with its inner graph.
 GraphBox graphLayoutBox(
   GraphCard card,
   Offset at, {
   required bool open,
   double width = graphNodeWidth,
   List<String> params = const [],
+  double foot = 0,
 }) {
   List<BridgePort> shown(List<BridgePort> ports) => [
         for (final p in ports)
@@ -475,7 +472,7 @@ GraphBox graphLayoutBox(
       at.dx,
       at.dy,
       width + 2,
-      2 + graphNodeHeaderHeight + height,
+      2 + graphNodeHeaderHeight + height + foot,
     ),
     inputs,
     outputs,
@@ -674,6 +671,7 @@ GraphLayout _layoutOf(
       open: exposed.contains(key) || isDriver,
       width:
           node.node is BridgeNodeRef_Out ? graphOutNodeWidth : graphNodeWidth,
+      foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
     ));
   }
   return GraphLayout(boxes);
@@ -715,8 +713,11 @@ bool _alwaysDrawn(BridgePortType type) =>
 bool graphNoStream(BridgeGraphNode node) => graphNoStreamPorts(node.inputs);
 
 /// The same question asked of a card's sockets, which is what the canvas holds.
-bool graphNoStreamPorts(List<BridgePort> inputs) =>
-    inputs.any((p) => p.portType == BridgePortType.points && !p.wired);
+/// One wire is enough: Merge points has four sockets and reads any of them.
+bool graphNoStreamPorts(List<BridgePort> inputs) {
+  final points = inputs.where((p) => p.portType == BridgePortType.points);
+  return points.isNotEmpty && !points.any((p) => p.wired);
+}
 
 /// Where one stored wire starts and ends in canvas units, and the type it
 /// carries — the *source* port's, which is the type the wire is. Null when
@@ -922,10 +923,47 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _publishPick();
   }
 
+  /// The shared project's people, whose picked boxes are ringed here. Its
+  /// roster only moves while a project is shared.
+  ShareState? _share;
+
+  /// Someone came, went or picked something else. Nothing happens here
+  /// while the project is not shared.
+  void _onRoster() {
+    if (!mounted) return;
+    final now = _share?.active ?? false;
+    if (now || _sharing) setState(() => _sharing = now);
+  }
+
+  bool _sharing = false;
+
+  /// What a box is called in a shared project: an effect by the path the
+  /// Timeline and the Effect controls panel know it by, so one picked in any
+  /// of the three is marked in all of them, and a driver by a name of its
+  /// own. Null for the two ends of the graph.
+  String? _boxName(LayerReference layer, String key) {
+    final owner = layer.internallayerId.toString();
+    final colon = key.indexOf(':');
+    if (colon < 0) return null;
+    final id = key.substring(colon + 1);
+    return key.startsWith('effect:')
+        ? effectPath(owner, id)
+        : '$owner/drivers/$id';
+  }
+
   void _publishPick() {
     _ui?.graphNode.value = _selected;
     final layer = _layer;
     if (layer == null) return;
+    // A driver is not an effect, so it is not in the selection below. In a
+    // shared project the others are told of it the way a panel with no
+    // selection tells them of a row.
+    if (_sharing) {
+      for (final key in _selection.keys) {
+        if (!key.startsWith('driver:')) continue;
+        if (_boxName(layer, key) case final name?) _ui?.touchProperty(name);
+      }
+    }
     // In stack order, which is the order `selectedEffects` is documented to
     // hold and the order the graph's own node list is already in. A pick of
     // drivers alone carries no effects, and an empty list clears — which is
@@ -1019,6 +1057,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     if (identical(ui, _ui)) return;
     _unbind();
     _ui = ui;
+    _share ??= Provider.of<LumitState>(context, listen: false).share
+      ..roster.addListener(_onRoster);
+    _sharing = _share!.active;
     ui.selectedLayer.addListener(_reload);
     ui.model.addListener(_reload);
     // Entering (or leaving) a Custom shader's inner graph swaps this panel's
@@ -1034,6 +1075,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     // graph wants it too when it is the panel's face.
     if (ui.consoleClaim != _consoleClaim) _priorConsoleClaim = ui.consoleClaim;
     ui.consoleClaim = _consoleClaim;
+    ui.nodeSearchExhibit.addListener(_onSearchExhibit);
     // **Delete means the picked boxes while this panel is the focused one**,
     // claimed rather than left to the canvas's own focus handler: the shell
     // answers Delete on the hardware keyboard, which runs *before* the focus
@@ -1097,6 +1139,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   }
 
   void _unbind() {
+    _share?.roster.removeListener(_onRoster);
+    _share = null;
+    _ui?.nodeSearchExhibit.removeListener(_onSearchExhibit);
+    _exhibitDown?.call();
+    _exhibitDown = null;
     _ui?.selectedLayer.removeListener(_reload);
     _ui?.model.removeListener(_reload);
     _ui?.shaderGraphEntry.removeListener(_onShaderEntry);
@@ -1744,63 +1791,94 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   Future<void> _openSearch(Offset at, {GraphSocket? wire}) async {
     if (_searching) return;
     setState(() => _searching = true);
+    try {
+      await showFxConsoleFrb(
+        context: context,
+        anchor: lastKnownPointerPosition,
+        model: _searchModel(at, wire: wire),
+      );
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  /// What the console lists over this canvas, for a box that would land on
+  /// [at] and ride [wire] when there is one in hand.
+  FxConsoleModel _searchModel(Offset at, {GraphSocket? wire}) {
     final all = (widget.driversLister ?? listDrivers)();
     // `listEffects` carries the drivers too; here they come from the
     // drivers listing instead, because the canvas's own add places the box on
     // the drop spot and rides the wire in one commit.
     final driverNames = {for (final driver in all) driver.name};
-    try {
-      await showFxConsoleFrb(
-        context: context,
-        anchor: lastKnownPointerPosition,
-        model: FxConsoleModel(
-          // A wire summoned this by a drop, not by a key, so it wears none.
-          keyHint: wire == null ? l10n.fxConsoleKey : null,
-          footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
-          entries: [
-            // The drivers first — the graph's own family. With a wire in hand
-            // the list is the entries that wire could actually land on, which
-            // is what makes the foot's sentence true: pick one and it is
-            // connected.
-            for (final driver in all)
-              if (wire == null || _fitsWire(driver, wire))
-                FxConsoleEntry(
-                  label: engineLabel(driver.label),
-                  kind: FxConsoleKind.effect,
-                  group: engineLabel(driver.categoryLabel),
-                  run: () => _addDriver(driver, at, wire),
-                ),
-            // Then every effect: chosen, it joins the layer's stack,
-            // and the stack is the chain — so the box appears wired into the
-            // picture's own path, auto-wired by construction. Only
-            // with no wire in hand: a dragged wire is a value looking for a
-            // socket, and the chain's sockets take no wire.
-            if (wire == null)
-              for (final effect in listEffects())
-                if (!driverNames.contains(effect.name))
-                  FxConsoleEntry(
-                    label: engineLabel(effect.label),
-                    kind: FxConsoleKind.effect,
-                    group: engineLabel(effect.categoryLabel),
-                    run: () => _addEffect(effect.name),
-                  ),
-            // The saved groups, beside the drivers they are made of.
-            // Only with no wire in hand: a group is a rig, not a socket, so
-            // there is nothing for the wire to land on.
-            if (wire == null)
-              for (final saved in (widget.groupsLister ?? listNodeGroups)())
-                FxConsoleEntry(
-                  label: saved.name,
-                  kind: FxConsoleKind.effect,
-                  group: l10n.graphGroup,
-                  run: () => _insertGroup(saved.path, at),
-                ),
-          ],
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _searching = false);
-    }
+    return FxConsoleModel(
+      // A wire summoned this by a drop, not by a key, so it wears none.
+      keyHint: wire == null ? _ui?.keymap.chordFor('console.open') : null,
+      footer: wire == null ? l10n.graphConsoleAdds : l10n.graphSearchWires,
+      entries: [
+        // The drivers first — the graph's own family. With a wire in hand
+        // the list is the entries that wire could actually land on, which
+        // is what makes the foot's sentence true: pick one and it is
+        // connected.
+        for (final driver in all)
+          if (wire == null || _fitsWire(driver, wire))
+            FxConsoleEntry(
+              label: engineLabel(driver.label),
+              kind: FxConsoleKind.effect,
+              group: engineLabel(driver.categoryLabel),
+              run: () => _addDriver(driver, at, wire),
+            ),
+        // Then every effect: chosen, it joins the layer's stack,
+        // and the stack is the chain — so the box appears wired into the
+        // picture's own path, auto-wired by construction. Only
+        // with no wire in hand: a dragged wire is a value looking for a
+        // socket, and the chain's sockets take no wire.
+        if (wire == null)
+          for (final effect in listEffects())
+            if (!driverNames.contains(effect.name))
+              FxConsoleEntry(
+                label: engineLabel(effect.label),
+                kind: FxConsoleKind.effect,
+                group: engineLabel(effect.categoryLabel),
+                run: () => _addEffect(effect.name),
+              ),
+        // The saved groups, beside the drivers they are made of.
+        // Only with no wire in hand: a group is a rig, not a socket, so
+        // there is nothing for the wire to land on.
+        if (wire == null)
+          for (final saved in (widget.groupsLister ?? listNodeGroups)())
+            FxConsoleEntry(
+              label: saved.name,
+              kind: FxConsoleKind.effect,
+              group: l10n.graphGroup,
+              run: () => _insertGroup(saved.path, at),
+            ),
+      ],
+    );
+  }
+
+  /// What takes the shown search down, while it is up.
+  VoidCallback? _exhibitDown;
+
+  /// The search shown and not used ([LumitUiState.nodeSearchExhibit]): the
+  /// console with this canvas's own list, over the middle of the canvas and
+  /// near its top so the list has the canvas to open over. Nothing is shown
+  /// while the panel's face is something other than a layer's graph.
+  void _onSearchExhibit() {
+    _exhibitDown?.call();
+    _exhibitDown = null;
+    final ui = _ui;
+    if (!mounted || ui == null || !ui.nodeSearchExhibit.value) return;
+    final canvas = _canvasKey.currentContext?.findRenderObject();
+    if (_graph == null || canvas is! RenderBox || !canvas.hasSize) return;
+    _exhibitDown = showFxConsoleExhibitFrb(
+      context: context,
+      anchor: canvas
+          .localToGlobal(Offset(canvas.size.width / 2, canvas.size.height / 5)),
+      model: _searchModel(graphClearSpot(
+        _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
+        [for (final b in _boxesNow()) b.rect],
+      )),
+    );
   }
 
   /// The stack's own add, which is the graph's add for an effect: the chain
@@ -2216,6 +2294,24 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       _marqueeTo = null;
       _marqueeAdds = additive;
     });
+  }
+
+  /// A Custom shader box's picture of its inner graph, which a click opens.
+  /// Null for every other box.
+  Widget? _shaderThumb(String key) {
+    final layer = _layer;
+    final node = _node(key);
+    if (layer == null || node == null || node.matchName != 'custom_shader') {
+      return null;
+    }
+    final effect = _effectIdOf(node.node);
+    if (effect == null) return null;
+    return ShaderGraphThumb(
+      home: InstanceHome.layer(layer),
+      effect: effect,
+      height: graphShaderThumbHeight,
+      onOpen: () => _enterBox(node),
+    );
   }
 
   /// A double-click on a box with an inside: a Custom shader opens its inner
@@ -2648,8 +2744,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                           ..setEntry(1, 3, _pan.dy)
                           ..setEntry(0, 0, _zoom)
                           ..setEntry(1, 1, _zoom),
-                        child: Stack(
-                          clipBehavior: Clip.none,
+                        child: GraphBoxStack(
                           children: [
                             // The named regions, under every box and taking no
                             // pointer: a wash is something to read, never
@@ -2663,6 +2758,35 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                               ])
                                   case final rect?)
                                 _groupWash(t, group, rect),
+                            // A ring round each box someone else in the
+                            // shared project has picked, in their colour.
+                            // Only walked while the project is shared.
+                            if (_sharing && _layer != null)
+                              for (final box in layout.boxes)
+                                if (_boxName(_layer!, box.key) case final name?)
+                                  for (final (held, colour) in (_share!
+                                              .inHand(_ui?.selectedComp)[name] ??
+                                          const <int>[])
+                                      .indexed)
+                                    Positioned(
+                                      key: ValueKey<String>(
+                                          'graph-share-box-${box.key}-$held'),
+                                      left: box.rect.left - 3 - 3.0 * held,
+                                      top: box.rect.top - 3 - 3.0 * held,
+                                      width: box.rect.width + 6 + 6.0 * held,
+                                      height: box.rect.height + 6 + 6.0 * held,
+                                      child: IgnorePointer(
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                                t.tokens.cardRadius + 3),
+                                            border: Border.all(
+                                                color: t.personColour(colour),
+                                                width: 1.5),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
                             for (final box in layout.boxes)
                               Positioned(
                                 left: box.rect.left,
@@ -2684,6 +2808,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                                   // Escape: shut the editor, rename nothing.
                                   onRenameCancelled: () =>
                                       setState(() => _renamingNode = null),
+                                  foot: _shaderThumb(box.key),
                                 ),
                               ),
                           ],
@@ -2815,6 +2940,10 @@ class GraphNodeCard extends StatelessWidget {
   /// own row, on the box. Null on a canvas whose rows are sockets alone.
   final Widget Function(String param)? paramRow;
 
+  /// What the box draws under its rows, in the room its layout left: a Custom
+  /// shader's picture of its inner graph. A press on it is its own.
+  final Widget? foot;
+
   const GraphNodeCard({
     super.key,
     required this.box,
@@ -2828,6 +2957,7 @@ class GraphNodeCard extends StatelessWidget {
     required this.onRenamed,
     required this.onRenameCancelled,
     this.paramRow,
+    this.foot,
   });
 
   GraphCard get _card => box.card;
@@ -2866,6 +2996,13 @@ class GraphNodeCard extends StatelessWidget {
               width: box.rect.width - 2,
               height: row.height,
               child: _row(t, row),
+            ),
+          if (foot case final foot?)
+            Positioned(
+              left: 1 + graphFootPad,
+              right: 1 + graphFootPad,
+              bottom: 1 + graphFootPad,
+              child: _claim(foot),
             ),
         ],
       ),
@@ -3027,10 +3164,13 @@ class GraphNodeCard extends StatelessWidget {
           width: graphBadgeSize,
           height: graphBadgeSize,
           child: Center(
-            child: lumitIcon(
-              exposed ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-              size: graphTwirlSize,
-              color: exposed ? t.textPrimary : t.textMuted,
+            child: TwirlTurn(
+              open: exposed,
+              child: lumitIcon(
+                exposed ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                size: graphTwirlSize,
+                color: exposed ? t.textPrimary : t.textMuted,
+              ),
             ),
           ),
         ),
@@ -3172,6 +3312,46 @@ class _FramePainter extends CustomPainter {
       old.fill != fill ||
       old.dashed != dashed ||
       old.radius != radius;
+}
+
+/// The boxes' own stack, under the canvas's pan and zoom.
+///
+/// **In plain terms.** A stack answers the pointer only inside its own
+/// rectangle, and this one is the size of the panel while what it holds is the
+/// whole canvas. Zoomed out, panned, or in a short panel, a box drawn outside
+/// that rectangle looked right and took no press: its tick, its twirl and its
+/// value wells were dead, and a drag on a well moved the box instead. This one
+/// asks its boxes wherever the pointer is.
+///
+/// Public for the reason [GraphNodeFrame] is: all three canvases lay their
+/// boxes out the same way.
+class GraphBoxStack extends Stack {
+  const GraphBoxStack({super.key, super.children})
+      : super(clipBehavior: Clip.none);
+
+  @override
+  RenderStack createRenderObject(BuildContext context) => _RenderBoxStack(
+        alignment: alignment,
+        textDirection: textDirection ?? Directionality.maybeOf(context),
+        fit: fit,
+        clipBehavior: clipBehavior,
+      );
+}
+
+class _RenderBoxStack extends RenderStack {
+  _RenderBoxStack({
+    super.alignment,
+    super.textDirection,
+    super.fit,
+    super.clipBehavior,
+  });
+
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    if (!hitTestChildren(result, position: position)) return false;
+    result.add(BoxHitTestEntry(this, position));
+    return true;
+  }
 }
 
 /// A path as 3-on, 3-off dashes — the drawing's own stroke-dasharray. Public

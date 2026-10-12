@@ -57,6 +57,7 @@ import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
@@ -381,6 +382,22 @@ class _ExportDialogState extends State<_ExportDialog> {
   bool _makeANoise = false;
   String? _refused;
 
+  /// The footage this composition uses that this computer has no original
+  /// of, in a shared project. Empty everywhere else.
+  List<BridgeFootageLack> _lacking = const [];
+
+  /// What the export does about [_lacking]: one of the three below, or the
+  /// number of the person whose computer does the export instead.
+  int _footage = _footageAsItIs;
+  static const int _footageAsItIs = -1;
+  static const int _footageFrames = -2;
+  static const int _footageOriginals = -3;
+
+  /// The footage is on its way, or someone else's computer is exporting,
+  /// and this is what the footer says about it meanwhile.
+  String? _waiting;
+  Timer? _waitTimer;
+
   /// Whether [_refused] is the addon one, which is the only refusal with
   /// somewhere to send the reader: the Addons page.
   bool _refusedForAddon = false;
@@ -544,11 +561,22 @@ class _ExportDialogState extends State<_ExportDialog> {
     _seedDestination(defaults);
     _recompute();
     _scroll.addListener(_spy);
+    try {
+      _lacking = widget.comp.shareLacking();
+    } catch (_) {
+      // No engine to ask, as in a widget test.
+    }
+    // The frames it reads, where everything can be had from someone: the
+    // least to send that still delivers at full quality.
+    if (_lacking.isNotEmpty && _lacking.every((l) => l.holders.isNotEmpty)) {
+      _footage = _footageFrames;
+    }
   }
 
   @override
   void dispose() {
     _flashTimer?.cancel();
+    _waitTimer?.cancel();
     _scroll.dispose();
     _presetName.dispose();
     for (final field in _metadata) {
@@ -757,9 +785,18 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
         dialogFooter(
           t,
-          summary: _refused ?? (_check.isNotEmpty ? _check : _summary),
+          summary:
+              _waiting ?? _refused ?? (_check.isNotEmpty ? _check : _summary),
           keyPrefix: 'export',
           actions: [
+            // While footage is on its way there is one thing to press.
+            if (_waiting != null)
+              HouseButton(
+                key: const ValueKey('export-footage-cancel'),
+                onPressed: _stopWaiting,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(l10n.cancel),
+              ),
             // Only beside the one refusal that has somewhere to go: the page
             // where the missing addon is installed.
             if (_refusedForAddon)
@@ -795,11 +832,12 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// Somewhere to write, and a spec the format will actually carry. A refusal
   /// stands in the footer where the summary was, so the reason is read before
   /// the button is missed.
-  bool get _canQueue => _path != null && _check.isEmpty;
+  bool get _canQueue => _path != null && _check.isEmpty && _waiting == null;
 
   /// The page, in the order it reads. Composition follows Output and belongs to
   /// its tab; every other group is a section of its own.
   List<Widget> _groups(LumitTheme t) => [
+        if (_lacking.isNotEmpty) _footageGroup(t),
         _section_(ExportSection.output, _outputGroup(t)),
         _compositionGroup(t),
         _section_(ExportSection.time, _timeGroup(t)),
@@ -1410,32 +1448,43 @@ class _ExportDialogState extends State<_ExportDialog> {
           _row(
             t,
             l10n.exportChannels,
-            dialogDropdown<bool>(
-              t,
-              id: 'export-channels',
-              value: _alphaChannel,
-              options: const [false, true],
-              label: (alpha) =>
-                  alpha ? l10n.exportChannelsRgbAlpha : l10n.exportChannelsRgb,
-              onChanged:
-                  _caps.alpha ? (a) => _edit(() => _alphaChannel = a) : null,
+            _why(
+              _caps.alpha ? null : l10n.tipExportFormatLimit,
+              dialogDropdown<bool>(
+                t,
+                id: 'export-channels',
+                value: _alphaChannel,
+                options: const [false, true],
+                label: (alpha) => alpha
+                    ? l10n.exportChannelsRgbAlpha
+                    : l10n.exportChannelsRgb,
+                onChanged:
+                    _caps.alpha ? (a) => _edit(() => _alphaChannel = a) : null,
+              ),
             ),
             dimmed: dim,
           ),
           _row(
             t,
             l10n.exportAlpha,
-            dialogDropdown<bool>(
-              t,
-              id: 'export-alpha',
-              value: _straightAlpha,
-              options: const [false, true],
-              label: (straight) => straight
-                  ? l10n.exportAlphaStraight
-                  : l10n.exportAlphaPremultiplied,
-              onChanged: _caps.alpha && _alphaChannel
-                  ? (s) => _edit(() => _straightAlpha = s)
-                  : null,
+            _why(
+              !_caps.alpha
+                  ? l10n.tipExportFormatLimit
+                  : _alphaChannel
+                      ? null
+                      : l10n.tipExportNeedsAlpha,
+              dialogDropdown<bool>(
+                t,
+                id: 'export-alpha',
+                value: _straightAlpha,
+                options: const [false, true],
+                label: (straight) => straight
+                    ? l10n.exportAlphaStraight
+                    : l10n.exportAlphaPremultiplied,
+                onChanged: _caps.alpha && _alphaChannel
+                    ? (s) => _edit(() => _straightAlpha = s)
+                    : null,
+              ),
             ),
             labelColumn: exportLabelColumnPaired,
             dimmed: dim,
@@ -1448,12 +1497,15 @@ class _ExportDialogState extends State<_ExportDialog> {
             t,
             l10n.exportBitRate,
             Row(children: [
-              _tick(
-                t,
-                'export-bitrate-auto',
-                l10n.exportBitRateAuto,
-                _autoBitrate,
-                _caps.bitRate ? (on) => _edit(() => _autoBitrate = on) : null,
+              _why(
+                _caps.bitRate ? null : l10n.tipExportFormatLimit,
+                _tick(
+                  t,
+                  'export-bitrate-auto',
+                  l10n.exportBitRateAuto,
+                  _autoBitrate,
+                  _caps.bitRate ? (on) => _edit(() => _autoBitrate = on) : null,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -1737,6 +1789,8 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// goes dead entire rather than offering four rows that write nothing.
   Widget _audioGroup(LumitTheme t) {
     final dim = !_caps.audio;
+    // Why the settings after the first list are dead while it reads Off.
+    final off = _audio ? null : l10n.tipExportAudioOff;
     return _group(
       t,
       ExportSection.audio,
@@ -1767,58 +1821,71 @@ class _ExportDialogState extends State<_ExportDialog> {
             SizedBox(
               width: exportAudioRateWidth,
               height: dialogControlHeight,
-              child: BareDropdown<int>(
-                key: const ValueKey('export-audio-sample-rate'),
-                value: _audioSampleRate,
-                options: _sampleRates,
-                label: _sampleRateLabel,
-                onChanged: _caps.audio && _audio
-                    ? (r) => _edit(() => _audioSampleRate = r)
-                    : null,
+              child: _why(
+                off,
+                BareDropdown<int>(
+                  key: const ValueKey('export-audio-sample-rate'),
+                  value: _audioSampleRate,
+                  options: _sampleRates,
+                  label: _sampleRateLabel,
+                  onChanged: _caps.audio && _audio
+                      ? (r) => _edit(() => _audioSampleRate = r)
+                      : null,
+                ),
               ),
             ),
             const SizedBox(width: 6),
             SizedBox(
               width: exportAudioDepthWidth,
               height: dialogControlHeight,
-              child: BareDropdown<int>(
-                key: const ValueKey('export-audio-depth'),
-                value: _audioDepth,
-                options: _caps.audio24Bit ? const [16, 24] : const [16],
-                label: (d) =>
-                    d >= 24 ? l10n.exportAudio24Bit : l10n.exportAudio16Bit,
-                onChanged: _caps.audio && _caps.audio24Bit && _audio
-                    ? (d) => _edit(() => _audioDepth = d)
-                    : null,
+              child: _why(
+                off ?? (_caps.audio24Bit ? null : l10n.tipExportFormatLimit),
+                BareDropdown<int>(
+                  key: const ValueKey('export-audio-depth'),
+                  value: _audioDepth,
+                  options: _caps.audio24Bit ? const [16, 24] : const [16],
+                  label: (d) =>
+                      d >= 24 ? l10n.exportAudio24Bit : l10n.exportAudio16Bit,
+                  onChanged: _caps.audio && _caps.audio24Bit && _audio
+                      ? (d) => _edit(() => _audioDepth = d)
+                      : null,
+                ),
               ),
             ),
             const SizedBox(width: 6),
             SizedBox(
               width: exportAudioLayoutWidth,
               height: dialogControlHeight,
-              child: BareDropdown<int>(
-                key: const ValueKey('export-audio-layout'),
-                value: _audioChannels,
-                options: const [2, 1],
-                label: (c) =>
-                    c == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
-                onChanged: _caps.audio && _audio
-                    ? (c) => _edit(() => _audioChannels = c)
-                    : null,
+              child: _why(
+                off,
+                BareDropdown<int>(
+                  key: const ValueKey('export-audio-layout'),
+                  value: _audioChannels,
+                  options: const [2, 1],
+                  label: (c) =>
+                      c == 1 ? l10n.exportAudioMono : l10n.exportAudioStereo,
+                  onChanged: _caps.audio && _audio
+                      ? (c) => _edit(() => _audioChannels = c)
+                      : null,
+                ),
               ),
             ),
             const Spacer(),
             SizedBox(
               width: exportAudioBitRateWidth,
               height: dialogControlHeight,
-              child: BareDropdown<int>(
-                key: const ValueKey('export-audio-rate'),
-                value: _audioRate,
-                options: _audioRates,
-                label: (r) => '${r ~/ 1000} kb/s',
-                onChanged: _caps.audioBitRate && _audio
-                    ? (r) => _edit(() => _audioRate = r)
-                    : null,
+              child: _why(
+                off ??
+                    (_caps.audioBitRate ? null : l10n.tipExportFormatLimit),
+                BareDropdown<int>(
+                  key: const ValueKey('export-audio-rate'),
+                  value: _audioRate,
+                  options: _audioRates,
+                  label: (r) => '${r ~/ 1000} kb/s',
+                  onChanged: _caps.audioBitRate && _audio
+                      ? (r) => _edit(() => _audioRate = r)
+                      : null,
+                ),
               ),
             ),
           ]),
@@ -1934,13 +2001,24 @@ class _ExportDialogState extends State<_ExportDialog> {
     List<Widget> rows, {
     bool dimmed = false,
   }) =>
-      dialogGroup(
-        t,
-        title,
-        rows,
-        key: ValueKey<String>('export-group-${title.toLowerCase()}'),
-        highlighted: _flash == section,
-        dimmed: dimmed,
+      _why(
+        // A dead group answers no pointer, so it says why once for all its
+        // rows. Only three things leave a group dead, one per kind of group.
+        !dimmed
+            ? null
+            : switch (section) {
+                ExportSection.audio => l10n.tipExportNoSound,
+                ExportSection.metadata => l10n.tipExportNoMetadata,
+                _ => l10n.tipExportNoPicture,
+              },
+        dialogGroup(
+          t,
+          title,
+          rows,
+          key: ValueKey<String>('export-group-${title.toLowerCase()}'),
+          highlighted: _flash == section,
+          dimmed: dimmed,
+        ),
       );
 
   Widget _row(LumitTheme t, String label, Widget control,
@@ -1995,23 +2073,34 @@ class _ExportDialogState extends State<_ExportDialog> {
         ),
       );
 
+  /// A control with the reason it is dead on hover, or the control alone when
+  /// it is live. A greyed list with no reason reads as a fault. The reasons
+  /// are two words each, which is all a tooltip is allowed here.
+  Widget _why(String? reason, Widget control) => reason == null
+      ? control
+      : LumitTooltip(message: reason, child: control);
+
   /// The colour depth, offered only where the format carries more than one.
-  Widget _depthDropdown(LumitTheme t, String id) => dialogDropdown<int>(
-        t,
-        id: id,
-        value: _depth,
-        options: _caps.depths.isEmpty
-            ? [_depth]
-            : _caps.depths.map((d) => d.toInt()).toList(),
-        // OpenEXR carries floats and nothing else, so its 16 is half floats
-        // rather than sixteen-bit codes and it offers a 32 the others do not.
-        // Naming those by their depth alone keeps the row honest without a
-        // second word for what is already an established abbreviation.
-        label: (d) => _format.key == 'exr'
-            ? l10n.bitsPerChannel('$d')
-            : (d >= 16 ? l10n.exportDepth16 : l10n.exportDepth8),
-        onChanged:
-            _caps.depths.length > 1 ? (d) => _edit(() => _depth = d) : null,
+  Widget _depthDropdown(LumitTheme t, String id) => _why(
+        _caps.depths.length > 1 ? null : l10n.tipExportFormatLimit,
+        dialogDropdown<int>(
+          t,
+          id: id,
+          value: _depth,
+          options: _caps.depths.isEmpty
+              ? [_depth]
+              : _caps.depths.map((d) => d.toInt()).toList(),
+          // OpenEXR carries floats and nothing else, so its 16 is half floats
+          // rather than sixteen-bit codes and it offers a 32 the others do
+          // not. Naming those by their depth alone keeps the row honest
+          // without a second word for what is already an established
+          // abbreviation.
+          label: (d) => _format.key == 'exr'
+              ? l10n.bitsPerChannel('$d')
+              : (d >= 16 ? l10n.exportDepth16 : l10n.exportDepth8),
+          onChanged:
+              _caps.depths.length > 1 ? (d) => _edit(() => _depth = d) : null,
+        ),
       );
 
   /// One crop inset: its mark and its well, in pixels at composition size.
@@ -2063,6 +2152,140 @@ class _ExportDialogState extends State<_ExportDialog> {
           overflow: TextOverflow.ellipsis,
         ),
       );
+
+  /// What to do about footage this computer has no original of: the choices
+  /// that can be had, the least to send first.
+  Widget _footageGroup(LumitTheme t) {
+    final share = context.read<LumitState>().share;
+    final everyone = _lacking.every((l) => l.holders.isNotEmpty);
+    // The people who have every one of them, and so could do the export.
+    final able = [
+      if (everyone)
+        for (final person in share.others)
+          if (_lacking.every((l) => l.holders.contains(person.id))) person.id,
+    ];
+    final bytes = _lacking.fold<int>(0, (sum, l) => sum + l.bytes.toInt());
+    final megabytes = (bytes / (1 << 20)).ceil();
+    return dialogGroup(t, l10n.exportFootageGroup, [
+      _row(
+        t,
+        l10n.exportFootage,
+        dialogDropdown<int>(
+          t,
+          id: 'export-footage',
+          value: _footage,
+          options: [
+            if (everyone) ...[_footageFrames, _footageOriginals],
+            ...able,
+            _footageAsItIs,
+          ],
+          label: (choice) => switch (choice) {
+            _footageFrames => l10n.exportFootageFrames,
+            _footageOriginals => l10n.exportFootageOriginals(megabytes),
+            _footageAsItIs => l10n.exportFootageStandIns,
+            final person => l10n.exportFootageOn(
+                share.nameOf(person) ?? l10n.shareDefaultName),
+          },
+          onChanged: _waiting != null
+              ? null
+              : (choice) => setState(() => _footage = choice),
+        ),
+      ),
+      _reading(t, l10n.exportFootageCount(_lacking.length)),
+    ]);
+  }
+
+  /// Give up waiting on footage or on someone else's export. What has
+  /// arrived is kept, and an export already asked of someone carries on
+  /// there: its file still comes back.
+  void _stopWaiting() {
+    _waitTimer?.cancel();
+    _waitTimer = null;
+    if (_footage < 0) context.read<LumitState>().share.cancelFetch();
+    if (mounted) setState(() => _waiting = null);
+  }
+
+  /// Get the footage first, or hand the export to someone who has it, and
+  /// say in the footer how that is going until it is done.
+  void _queueWithFootage(String path, {required bool start}) {
+    final app = context.read<LumitState>();
+    try {
+      if (_footage >= 0) {
+        widget.comp.shareAskExport(to: _footage, spec: _spec, path: path);
+      } else {
+        widget.comp.shareFetchExport(
+            spec: _spec,
+            path: path,
+            parts: _footage == _footageFrames,
+            start: start);
+      }
+    } catch (error) {
+      setState(() => _refused = '$error');
+      return;
+    }
+    setState(() {
+      _refused = null;
+      _waiting = l10n.exportFootageStarting;
+    });
+    _waitTimer?.cancel();
+    _waitTimer = Timer.periodic(const Duration(milliseconds: 300),
+        (_) => _watchFootage(app, start: start));
+  }
+
+  void _watchFootage(LumitState app, {required bool start}) {
+    if (!mounted) return;
+    int percent(BigInt done, BigInt total) =>
+        total == BigInt.zero ? 0 : (done.toInt() * 100 / total.toInt()).round();
+    void failed(String why) {
+      _waitTimer?.cancel();
+      setState(() {
+        _waiting = null;
+        _refused = why;
+      });
+    }
+
+    final String text;
+    if (_footage >= 0) {
+      final who = app.share.nameOf(_footage) ?? l10n.shareDefaultName;
+      switch (app.share.asking()) {
+        case BridgeShareAsking_Idle() || BridgeShareAsking_Waiting():
+          text = l10n.exportRemoteWaiting(who);
+        case BridgeShareAsking_Running(:final frame, :final total):
+          text = l10n.exportRemoteRunning(who, frame.toInt(), total.toInt());
+        case BridgeShareAsking_Fetching(:final done, :final total):
+          text = l10n.exportRemoteFetching(percent(done, total));
+        case BridgeShareAsking_Done(:final path):
+          _waitTimer?.cancel();
+          app.postNotice(l10n.exportRemoteDone(_leaf(path)));
+          return widget.onClose();
+        case BridgeShareAsking_Failed(:final why):
+          return failed(switch (why) {
+            'refused' => l10n.exportRemoteRefused(who),
+            'lacking' => l10n.exportRemoteLacking(who),
+            _ => l10n.exportRemoteStopped(who),
+          });
+      }
+    } else {
+      switch (app.share.fetching()) {
+        case BridgeShareFetching_Idle():
+          text = l10n.exportFootageStarting;
+        case BridgeShareFetching_Working(:final done, :final total):
+          // Nothing has crossed while the others' computers are still
+          // making what was asked for.
+          text = total == BigInt.zero
+              ? l10n.exportFootageMaking
+              : l10n.exportFootageFetching(percent(done, total));
+        case BridgeShareFetching_Queued():
+          _waitTimer?.cancel();
+          if (start) statusLineExportStarted.value++;
+          showExportQueueFrb(context: context);
+          return widget.onClose();
+        case BridgeShareFetching_Failed():
+          return failed(l10n.exportFootageFailed);
+      }
+    }
+    if (text != _waiting) setState(() => _waiting = text);
+  }
 
   /// A factual line under a group's rows, in the label column's own indent.
   Widget _reading(LumitTheme t, String text, {Key? key}) => Padding(
@@ -2334,6 +2557,7 @@ class _ExportDialogState extends State<_ExportDialog> {
             'export.${_format.extension}',
             extension: _format.extension,
             label: _format.pickerLabel,
+            numbered: _format.type == ExportOutputType.imageSequence,
           );
     if (path != null) _edit(() => _path = path);
   }
@@ -2348,6 +2572,9 @@ class _ExportDialogState extends State<_ExportDialog> {
       _refused = null;
       _refusedForAddon = false;
     });
+    if (_lacking.isNotEmpty && _footage != _footageAsItIs) {
+      return _queueWithFootage(path, start: start);
+    }
     try {
       widget.comp.queueExport(spec: _spec, path: path, start: start);
     } catch (error) {

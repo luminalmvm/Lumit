@@ -55,6 +55,7 @@ import '../state/dock.dart';
 import '../state/drag_payloads.dart';
 import '../state/panel_folds.dart';
 import '../state/settings.dart';
+import '../state/share.dart';
 import '../state/timeline_columns.dart';
 import '../state/tools.dart';
 import '../theme/theme.dart';
@@ -90,6 +91,7 @@ import 'spectral_lane_frb.dart';
 import 'timeline_razor.dart';
 import 'layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
+import '../widgets/share_marks.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/zoom_anchored_scroll.dart';
 import 'waveform_frb.dart';
@@ -152,7 +154,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// graph's own outline — both views that opened every layer by default, and
   /// neither of which exists now. Both remaining views are the Layers outline,
   /// where shut-by-default is the right answer.
-  bool _isOpen(String id) => _open.contains(id);
+  bool _isOpen(String id) =>
+      _underReveal(id) ? !_revealShut.contains(id) : _open.contains(id);
+
+  /// Whether [path] is a heading inside a layer a reveal is still filtering.
+  bool _underReveal(String path) => _revealed.containsKey(layerIdOfPath(path));
 
   /// Open or shut one twirl. The paths reach below the layer
   /// (`<layer>/transform` and the rest).
@@ -160,9 +166,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Exactly this path: shutting a group leaves what was open *inside* it
   /// remembered, so twirling it back down finds it as it was.
   void _setOpen(String path, bool open) {
-    // Whatever this path belongs to is being twirled by hand or by another
-    // reveal, so it stops answering the last single `U`.
-    _revealed.remove(path.split('/').first);
+    // A heading inside a revealed layer folds without ending the reveal:
+    // shutting the one keyed effect must not bring back Transform and every
+    // other effect. The filter lasts until the layer's own twirl turns.
+    if (_underReveal(path)) {
+      open ? _revealShut.remove(path) : _revealShut.add(path);
+      return;
+    }
+    // The layer's own twirl, by hand or by another reveal, so it stops
+    // answering the last single `U`.
+    _revealed.remove(path);
+    _revealShut.removeWhere((p) => isUnderPath(path, p));
     if (open) {
       _open.add(path);
     } else {
@@ -175,6 +189,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// than adding to whatever the last one left open.
   void _shutLayerDeep(String id) {
     _revealed.remove(id);
+    _revealShut.removeWhere((p) => isUnderPath(id, p));
     _open.removeWhere((p) => p == id || isUnderPath(id, p));
   }
 
@@ -490,7 +505,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       source.field0.mediaInfo().then((info) {
         if (!mounted || info == null) return;
         setState(() {
-          _footageFrames[id] = frameOfTime(info.duration, fpsNum, fpsDen);
+          _footageFrames[id] = footageSourceFrames(info, fpsNum, fpsDen);
           // The answer changes the bounds, and the document has not moved:
           // forget the revision so the next build works them out again.
           _boundsRevision = null;
@@ -576,6 +591,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// the staged span rather than jumping back.
   final ValueNotifier<({int start, int end, bool whole})?> _workPreview =
       ValueNotifier(null);
+
+  /// The marker a drag on the ruler has staged, for the same reason: a
+  /// region's band in the lanes and the graph follows its flag by listening,
+  /// not by this panel rebuilding on every pointer move.
+  final ValueNotifier<MarkerPreview?> _markerPreview = ValueNotifier(null);
   BigInt? _workRevision;
   CompositionReference? _workComp;
 
@@ -629,19 +649,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// selection too".
   void _toggle(String path) => setState(() {
         final opening = !_isOpen(path);
-        for (final row in rowsTwirledWith(path, _twirlSelection())) {
+        for (final row in rowsTwirledWith(path, _twirlSelection(path))) {
           _setOpen(row, opening);
           if (!opening) _dropSelectionUnder(row);
         }
       });
 
-  /// Every row a twirl could act on: the selected layers and the selected
-  /// properties, as the paths [_open] is keyed by.
-  Set<String> _twirlSelection() => {
-        for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
-          id.toString(),
-        ..._selectedProperties,
-      };
+  /// Every row [path]'s twirl could carry with it, as the paths [_open] is
+  /// keyed by: the selected layers for a layer's twirl, the selected
+  /// properties for a heading's. Never both, or shutting a picked heading
+  /// would shut the selected layer round it.
+  Set<String> _twirlSelection(String path) => layerIdOfPath(path) == null
+      ? {
+          for (final id in _ui?.selectedLayerIds ?? const <UuidValue>{})
+            id.toString(),
+        }
+      : {..._selectedProperties};
 
   /// Forget any selected property at or below [path], and any keyframes of
   /// theirs the marquee had caught.
@@ -928,7 +951,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   double? _masterDrag;
 
   /// The outline's column groups in their current order. Dragging a header
-  /// group reorders them as a unit; session-lived, like the twirl state.
+  /// group reorders them as a unit. The order, the widths and the hidden
+  /// groups are kept in the workspace store and come back on the next launch
+  /// ([_saveColumns]).
   List<TimelineGroup> _groupOrder = [...defaultGroupOrder];
 
   /// Each group's width. Dragging a header seam changes one of these and
@@ -937,10 +962,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The column groups the bottom bar has switched **off** (§12A.1),
   /// so the outline pares down to names and bars when the columns are not in
-  /// use. Session-lived, like the order and the widths. The identity group is
+  /// use. Kept with the order and the widths. The identity group is
   /// never in here: names and bars are what "pared down" means, and a table
   /// with no first column is a table of nothing.
   final Set<TimelineGroup> _hiddenGroups = <TimelineGroup>{};
+
+  /// Write the columns to the workspace store, after any change to them.
+  void _saveColumns() => _ui?.workspace.setTimelineColumns(
+      columnsToJson(_groupOrder, _groupWidths, _hiddenGroups));
 
   /// The groups a bottom-bar toggle offers, in the order the bar shows them.
   /// **Each toggle hides the columns its own word names** (owner, desktop
@@ -980,6 +1009,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _liveResize.value = null;
         if (groupIsFixedWidth(group)) return;
         _groupWidths = {..._groupWidths, group: _resizedWidth(group, delta)};
+        _saveColumns();
       });
 
   /// The same width, mid-drag: published for the outline to draw and not
@@ -1024,6 +1054,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   final ValueNotifier<TimelineSelection> _rowSelection =
       ValueNotifier(const TimelineSelection());
 
+  /// The shared project's people, whose selections mark the rows as well.
+  /// Held for the reason [_ui] is.
+  late final ShareState _share;
+
   /// Each selected path's graph line colours, keyed by path.
   Map<String, List<Color>> _colourOfChannels(List<GraphChannel> channels) {
     final t = ThemeScope.of(context).theme;
@@ -1035,9 +1069,73 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     return out;
   }
 
+  /// Tell the others in a shared project which keyframes this person has
+  /// selected, in whichever view is showing. Always as the lanes name them,
+  /// `path#index`, so the other end can mark them in either view. Nothing is
+  /// gathered when the project is not shared.
+  void _shareKeys() {
+    if (!_share.active) return;
+    if (!_graph) {
+      _share.keys(Set<String>.of(_laneKeySelection));
+      return;
+    }
+    final pathOf = {for (final c in _channelsNow()) c.id: c.path};
+    _share.keys({
+      for (final id in _graphKeySelection)
+        if (id.lastIndexOf('#') case final hash when hash > 0)
+          if (pathOf[id.substring(0, hash)] case final path?)
+            '$path${id.substring(hash)}',
+    });
+  }
+
+  /// The keyframes the others have selected, as the graph names its own:
+  /// `channelId#index`, with the colour of whoever holds each. A key on a
+  /// lane stands for every axis of its row, so it rings each of them. Empty,
+  /// and nothing walked, when the project is not shared.
+  Map<String, List<int>> _otherGraphKeys(List<GraphChannel> channels) {
+    if (!_share.active) return const {};
+    final out = <String, List<int>>{};
+    for (final person in _share.inComp(_ui?.selectedComp)) {
+      for (final id in person.keys) {
+        final hash = id.lastIndexOf('#');
+        if (hash <= 0) continue;
+        final path = id.substring(0, hash);
+        for (final channel in channels) {
+          if (channel.path == path) {
+            (out['${channel.id}${id.substring(hash)}'] ??= [])
+                .add(person.colour);
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Someone in the shared project came, went or selected something else.
+  /// The rows follow by themselves. The graph is drawn by the panel, so with
+  /// it showing the panel is what redraws.
+  void _onRoster() {
+    _publishRowSelection();
+    if (!mounted) return;
+    if (_graph || _sharing != _share.active) {
+      setState(() => _sharing = _share.active);
+    }
+  }
+
+  /// Whether the project was shared the last time anyone was heard from,
+  /// which is what puts the others' marks in the lanes and takes them out.
+  bool _sharing = false;
+
   /// Hand the rows the selection as it now stands. Silent when nothing they
   /// draw has changed, so a publish that says the same thing costs no repaint.
   void _publishRowSelection([Map<String, List<Color>>? colours]) {
+    // Whatever changed the rows may have emptied the graph's key selection
+    // with them. Not when a build is what asks, which hands its colours in:
+    // nothing is sent to anyone from a build.
+    if (colours == null) _shareKeys();
+    // What the other people in a shared project have selected in this comp.
+    // Layers, property rows, and the layer of anything on it they hold.
+    final others = _share.inHand(_ui?.selectedComp);
     final next = TimelineSelection(
       // The shell's list as the rows read it: strings, because that is
       // what a block is keyed by on both sides of the table.
@@ -1048,19 +1146,20 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       properties: List<String>.unmodifiable(_selectedProperties),
       highlighted: _highlighted,
       colours: colours ?? _colourOfChannels(_channelsNow()),
+      others: others,
     );
     final held = _rowSelection.value;
     if (held.highlighted == next.highlighted &&
         setEquals(held.layers, next.layers) &&
         listEquals(held.properties, next.properties) &&
-        _sameColours(held.colours, next.colours)) {
+        _sameColours(held.colours, next.colours) &&
+        _sameColours(held.others, next.others)) {
       return;
     }
     _rowSelection.value = next;
   }
 
-  static bool _sameColours(
-      Map<String, List<Color>> a, Map<String, List<Color>> b) {
+  static bool _sameColours<T>(Map<String, List<T>> a, Map<String, List<T>> b) {
     if (a.length != b.length) return false;
     for (final entry in a.entries) {
       if (!listEquals(entry.value, b[entry.key])) return false;
@@ -1148,6 +1247,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Auto-fit: the graph frames its curves vertically by itself; toggled off,
   /// the wheel pans and `Alt`+wheel zooms the value axis (docs/07 §5.3).
   bool _graphAutoFit = true;
+
+  /// Break handles: a handle drag in the graph moves its own side only.
+  bool _graphBreakHandles = false;
 
   final GlobalKey<GraphEditorFrbState> _graphPane = GlobalKey();
 
@@ -1402,6 +1504,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Switch views. The easing claim follows, because which panel owns the
   /// selected keys' easing depends on which view is up.
   void _setMode(TimelineMode mode) {
+    // The other view has a key selection of its own, which is now the one
+    // the others in a shared project should see.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _shareKeys();
+    });
     if (mode == _mode) return;
     setState(() => _mode = mode);
     _publishEasingClaim();
@@ -1633,6 +1740,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// only the waveform lanes redraw as the pointer moves, not the whole table.
   final ValueNotifier<BarDragPreview?> _barDrag = ValueNotifier(null);
 
+  /// A bar is being moved or trimmed. Its layers are in this person's hand,
+  /// which the others in a shared project are told.
+  void _barsTravel() => sayInHand(_barDrag, [...?_barDrag.value?.layers]);
+
   /// What a move drag starting on a selected bar carries: every
   /// **unlocked** selected layer — a locked one sits still, the way it sits
   /// out a switch batch — and the earliest in frame among them, the wall the
@@ -1656,6 +1767,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// reason: the box and every lane it crosses have to move together, and only
   /// they need to repaint while a handle is being dragged.
   final ValueNotifier<KeyStretch?> _keyStretch = ValueNotifier(null);
+
+  /// Keyframes are travelling in the lanes, by one key's drag or by the
+  /// block's. Their rows are in this person's hand, which the others in a
+  /// shared project are told. A row someone else is changing does not
+  /// travel: the travel is taken back as it is made, so the release finds
+  /// nothing to write.
+  void _keysTravel() {
+    final rows = {
+      for (final key in _keyStretch.value?.keys ?? const <String>{})
+        key.substring(0, key.lastIndexOf('#')),
+    };
+    if (!rows.every(valuesInHand.value.contains) && heldByOthers(rows)) {
+      _keyStretch.value = null;
+      return;
+    }
+    sayInHand(_keyStretch, rows.toList());
+  }
+
+  /// The lane marquee's box while it is being dragged.
+  final ValueNotifier<Rect?> _laneMarquee = ValueNotifier(null);
 
   /// The lane view's selected keyframes, as `rowId#index` (docs/07 §4.3) —
   /// what the marquee gathered. Session state, like the twirl set.
@@ -1687,13 +1818,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (setEquals(_laneKeysPublished, _laneKeySelection)) return;
     _laneKeysPublished = Set<String>.of(_laneKeySelection);
     _laneKeys.value = UnmodifiableSetView(_laneKeySelection);
+    _shareKeys();
   }
 
   /// The layer drag in flight, read by both halves of the table. A
   /// notifier rather than panel state: a drag slides rows, and rebuilding the
   /// whole panel per pointer move to do it would cost the table its bridge
   /// budget (docs/13).
-  final ValueNotifier<LayerDrag?> _layerDrag = ValueNotifier(null);
+  final LayerDragState _layerDrag = LayerDragState();
 
   /// The layer `Enter` has asked to rename. A notifier for the same
   /// reason the drag is one: only the row it names has anything to do, and
@@ -1746,9 +1878,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// scope is in reach — the same arrangement the Viewer's zoom uses.
   AnimationLevel _animationLevel = AnimationLevel.all;
 
+  /// The room the lanes leave either side of the frames
+  /// ([TimelineAxis.padFor]), read in build beside [_animationLevel] so the
+  /// scroll arithmetic outside it measures against the axis that is drawn.
+  double _axisPad = TimelineAxis.pad;
+
   double get _perFrameNow => _laneFrames <= 0
       ? 0
-      : max(0.0, _laneViewport * _zoomMotion.value - TimelineAxis.pad * 2) /
+      : max(0.0, _laneViewport * _zoomMotion.value - _axisPad * 2) /
           _laneFrames;
 
   /// How many frames full zoom-in shows across the lanes (owner, 2026-08-06).
@@ -1792,11 +1929,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// three Reveal rows are the same machinery under a wider rule each, which is
   /// why the filter is stored per layer rather than the layer merely marked.
   ///
-  /// Dropped per layer by [_setOpen] and [_shutLayerDeep], which is every twirl
-  /// a hand or another reveal key can turn: a layer someone has started opening
-  /// by hand is no longer showing the answer to a `U`, and going on filtering it
-  /// would make the caret look broken.
+  /// Dropped per layer by [_setOpen] and [_shutLayerDeep] when the layer's own
+  /// twirl turns, by hand or by another reveal key. The headings inside it
+  /// fold without ending it ([_revealShut]).
   final Map<String, RevealFilter> _revealed = {};
+
+  /// The headings twirled shut by hand inside a revealed layer. A reveal
+  /// draws every heading it keeps as open, so these are the exceptions.
+  final Set<String> _revealShut = {};
 
   /// The comp's size when the last **modified** reveal was run, kept for the
   /// builds after it: that reveal asks whether a layer has been moved, and
@@ -1834,9 +1974,21 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // is kept, not looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
-    _itemChanges = Provider.of<LumitState>(context, listen: false)
+    // The columns as they were left, or the defaults.
+    final columns = columnsFromJson(_ui!.workspace.timelineColumns);
+    _groupOrder = columns.order;
+    _groupWidths = columns.widths;
+    _hiddenGroups.addAll(columns.hidden);
+    _itemChanges =Provider.of<LumitState>(context, listen: false)
         .onChange
         .listen(_onItemsChanged);
+    // Someone else selecting a layer marks its row. The roster, not the whole
+    // notifier, which also fires for every playhead and pointer move.
+    _share = Provider.of<LumitState>(context, listen: false).share
+      ..roster.addListener(_onRoster);
+    _keyStretch.addListener(_keysTravel);
+    _barDrag.addListener(_barsTravel);
+    _sharing = _share.active;
     // Chained, not overwritten: Effect controls may hold the claim already.
     _priorDeleteClaim = _ui!.deleteClaim;
     _priorCopyClaim = _ui!.copyClaim;
@@ -1844,6 +1996,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _ui!.deleteClaim = _claimDelete;
     _ui!.copyClaim = _claimCopy;
     _ui!.pasteClaim = _claimPaste;
+    _ui!.noteTimelineView = _rememberShownView;
     _publishEasingClaim();
     // An effect can be picked in the Effect controls panel too, and one
     // selection means the row here lights up when it is.
@@ -1934,13 +2087,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final position = positionOf(_hLane);
     if (position == null || position.maxScrollExtent <= 0) return;
     final viewport = position.viewportDimension;
-    final span = viewport + position.maxScrollExtent - TimelineAxis.pad * 2;
+    final span = viewport + position.maxScrollExtent - _axisPad * 2;
     if (_laneFrames <= 0 || span <= 0) return;
-    final x = TimelineAxis.pad + ui.playheadFrame.value * span / _laneFrames;
+    final x = _axisPad + ui.playheadFrame.value * span / _laneFrames;
     final at = x - position.pixels;
     if (at >= 0 && at <= viewport) return;
     // The playhead to the left edge, one padding in so its head is whole.
-    _hLane.jumpTo((x - TimelineAxis.pad).clamp(0.0, position.maxScrollExtent));
+    _hLane.jumpTo((x - _axisPad).clamp(0.0, position.maxScrollExtent));
   }
 
   /// When the render cache may have changed — a frame arrived, or the cache
@@ -3046,6 +3199,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   void dispose() {
     _mixRetry?.cancel();
     _itemChanges?.cancel();
+    _share.roster.removeListener(_onRoster);
+    sayInHand(_keyStretch, const []);
+    sayInHand(_barDrag, const []);
+    // With the panel gone nothing in it is selected, for the others either.
+    _share.keys(const {});
     laneModes.removeListener(_onLaneMode);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _ui?.workspace.presetApplied.removeListener(_onPresetApplied);
@@ -3058,6 +3216,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (_ui?.deleteClaim == _claimDelete) _ui!.deleteClaim = _priorDeleteClaim;
     if (_ui?.copyClaim == _claimCopy) _ui!.copyClaim = _priorCopyClaim;
     if (_ui?.pasteClaim == _claimPaste) _ui!.pasteClaim = _priorPasteClaim;
+    if (_ui?.noteTimelineView == _rememberShownView) {
+      _ui!.noteTimelineView = null;
+    }
     if (_ui?.easingApply.value == _applyEasing) _ui!.easingApply.value = null;
     if (_ui?.easingKey.value?.apply == _applyKeyEase) {
       _ui!.easingKey.value = null;
@@ -3073,6 +3234,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _liveResize.dispose();
     _rowSelection.dispose();
     _laneKeys.dispose();
+    _laneMarquee.dispose();
+    _markerPreview.dispose();
     _vOutline.dispose();
     _vLane.dispose();
     _hLane.dispose();
@@ -3166,15 +3329,25 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// on stays exactly where it is while the span changes around it. The strip
   /// swaps the two ends over for the other handle by naming a different start.
   ///
-  /// A pan asks for the same span it already had, and a zoom that is not
-  /// changing does not notify — so there is no tick to carry the anchor into
-  /// layout, and the offset is jumped straight to the frame instead.
-  void _navigateTo(double start, double span) {
+  /// A pan only scrolls, so it can't change the zoom however many pointer
+  /// moves it is made of. A zoom that is not changing does not notify, so
+  /// there is no tick to carry the anchor into layout, and the offset is
+  /// jumped straight to the frame instead.
+  void _navigateTo(double start, double span, {required bool pan}) {
     if (_laneFrames <= 0 || span <= 0) return;
+    if (pan) {
+      _scrollFrameToLeftEdge(start);
+      return;
+    }
     _zoomAnchorFrame = start;
     _zoomAnchorViewportX = 0;
     _zoomAnchorHeld = true;
-    final want = (_laneFrames / span).clamp(1.0, _maxZoom);
+    final want = navigatorZoom(
+      span: span,
+      frames: _laneFrames,
+      viewport: positionOf(_hLane)?.viewportDimension ?? _laneViewport,
+      pad: _axisPad,
+    ).clamp(1.0, _maxZoom);
     if ((want - _zoomMotion.target).abs() > 1e-9) {
       _setZoom(want, fly: false);
     } else {
@@ -3188,9 +3361,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (position == null || _laneFrames <= 0) return;
     final span = position.viewportDimension +
         position.maxScrollExtent -
-        TimelineAxis.pad * 2;
+        _axisPad * 2;
     if (span <= 0) return;
-    _hLane.jumpTo((TimelineAxis.pad + frame * span / _laneFrames)
+    _hLane.jumpTo((_axisPad + frame * span / _laneFrames)
         .clamp(0.0, position.maxScrollExtent));
   }
 
@@ -3226,12 +3399,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 0.0,
                 _hLane.position.viewportDimension +
                     _hLane.position.maxScrollExtent -
-                    TimelineAxis.pad * 2) /
+                    _axisPad * 2) /
             _laneFrames
         : _perFrameNow;
     final playhead = (_ui?.playheadFrame.value ?? 0).toDouble();
     _zoomAnchorFrame = playhead;
-    final x = TimelineAxis.pad + playhead * perFrame - offset;
+    final x = _axisPad + playhead * perFrame - offset;
     _zoomAnchorViewportX =
         perFrame > 0 && x >= 0 && x <= viewport ? x : viewport / 2;
   }
@@ -3271,13 +3444,41 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       frame: _zoomAnchorFrame,
       viewportX: _zoomAnchorViewportX,
       frames: _laneFrames,
-      pad: TimelineAxis.pad,
+      pad: _axisPad,
     ));
   }
 
   /// The comp the zoom and the scroll offset currently belong to, so a change
   /// of front can be told from an ordinary rebuild.
   UuidValue? _shownComp;
+
+  /// Write down the zoom and scroll on screen as [comp]'s. Called when a comp
+  /// is left, and whenever the session is about to be saved.
+  void _rememberView(UuidValue? comp) {
+    final position = positionOf(_hLane);
+    // Nothing is laid out, so there is no view to write down.
+    if (comp == null || position == null) return;
+    final extent = position.maxScrollExtent;
+    _ui?.rememberCompView(
+      comp.toString(),
+      zoom: _zoomMotion.target,
+      // A fraction of the scrollable range rather than a pixel offset: the
+      // panel may be a different width when the user comes back, and it is
+      // the stretch of time they were looking at that they want back.
+      scroll: extent > 0 ? (position.pixels / extent).clamp(0.0, 1.0) : 0.0,
+      scrollY: positionOf(_vOutline)?.pixels,
+    );
+  }
+
+  void _rememberShownView() => _rememberView(_shownComp);
+
+  /// The panel is on its way out, and its scroll positions are still attached
+  /// here, which they are not by `dispose`.
+  @override
+  void deactivate() {
+    _rememberShownView();
+    super.deactivate();
+  }
 
   /// This panel's half of "a composition remembers where you were":
   /// the magnification and how far the lanes are scrolled. The shell holds the
@@ -3296,23 +3497,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (now == _shownComp) return;
     final was = _shownComp;
     _shownComp = now;
-    if (was != null) {
-      final position = positionOf(_hLane);
-      final extent = position?.maxScrollExtent ?? 0;
-      ui.rememberCompView(
-        was.toString(),
-        zoom: _zoomMotion.target,
-        // A fraction of the scrollable range rather than a pixel offset: the
-        // panel may be a different width when the user comes back, and it is
-        // the stretch of time they were looking at that they want back.
-        scroll: extent > 0 ? (position!.pixels / extent).clamp(0.0, 1.0) : 0.0,
-      );
+    // What the others in a shared project have selected is read per comp, so
+    // it is read again for this one. After the frame, as this is a build.
+    if (_share.active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _publishRowSelection();
+      });
     }
+    _rememberView(was);
     if (now == null) return;
     final view = ui.compViews[now.toString()];
     if (view == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _shownComp != now) return;
+      // The rows are laid out by now. The lanes follow the outline.
+      final rows = positionOf(_vOutline);
+      rows?.jumpTo(view.scrollY.clamp(0.0, rows.maxScrollExtent));
       // Not "the zoom before a fit": that belonged to the comp just left.
       _zoomBeforeFit = null;
       _setZoom(view.zoom.clamp(1.0, _maxZoom), fly: false);
@@ -3474,6 +3674,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final t = scope.theme;
     // How much motion the shell shows, for the zoom's flight.
     _animationLevel = scope.animationLevel;
+    _axisPad = TimelineAxis.padFor(t);
     // The columns actually drawn. The render-time column is only there while
     // something is being measured: switched off it takes no width, no
     // header and no cells — a column of blanks is not a column, and the outline
@@ -3568,6 +3769,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         // The strip filters the whole comp; a reveal filters only the layers
         // it opened, by the rule it opened them with.
         reveal: _animatedOnly ? everyLayerKeyframed : _revealed,
+        revealShut: _revealShut,
         groupHeaders: folds.headers,
         compWidth: _revealCompWidth,
         compHeight: _revealCompHeight);
@@ -3659,7 +3861,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     comp.addFootageLayer(
                         footage: f,
                         asSequence: _videoAsSequence(context),
-                        row: at);
+                        row: at,
+                        arrival: ui.streamsArrival);
                   }
                 case CompDragData(comp: final dropped):
                   // A comp cannot nest into itself; the engine refuses and
@@ -3806,6 +4009,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               // and the playhead for itself.
                               TimelineNavigator(
                                 trailing: scrollGutterWidth,
+                                pad: _axisPad,
                                 frames: frames,
                                 zoom: _zoomMotion,
                                 hScroll: _hLane,
@@ -3832,8 +4036,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     // lanes scroll under the bottom bar's scrollbar.
                                     final axis = TimelineAxis(
                                         frames: frames,
-                                        width: laneViewport * _zoom);
-                                    return _graph
+                                        width: laneViewport * _zoom,
+                                        inset: _axisPad);
+                                    final half = _graph
                                         ? _graphHalf(context, ui, comp,
                                             axis: axis,
                                             channels: channels,
@@ -3852,6 +4057,36 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             frames: frames,
                                             fpsNum: fpsNum,
                                             fpsDen: fpsDen);
+                                    final t = ThemeScope.of(context).theme;
+                                    return Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        half,
+                                        // A composition with no layers at
+                                        // all says so, in the middle of the
+                                        // lane area: under the ruler, over
+                                        // the bottom bar, clear of the
+                                        // scroll gutter.
+                                        if (ui.model.layers.isEmpty)
+                                          Positioned(
+                                            top: t.density.ruler,
+                                            left: 12,
+                                            right: scrollGutterWidth + 12,
+                                            bottom: t.density.secondaryRow,
+                                            child: IgnorePointer(
+                                              child: Center(
+                                                child: Text(
+                                                  l10n.timelineNoLayers,
+                                                  key: const ValueKey(
+                                                      'tl-no-layers'),
+                                                  style: t.small,
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    );
                                   },
                                 ),
                               ),
@@ -3951,15 +4186,17 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             // headers, in both views (the graph's own
                             // filter row went with its own outline).
                             ColumnHeader(
+                              key: const ValueKey('tl-column-header'),
                               order: groupOrder,
                               widths: groupWidths,
                               matteToggles: matteToggles,
                               onResize: _resizeGroup,
                               onResizeLive: _liveResizeGroup,
-                              onReorder: (dragged, target) => setState(
-                                () => _groupOrder = reorderedGroups(
-                                    _groupOrder, dragged, target),
-                              ),
+                              onReorder: (dragged, target) => setState(() {
+                                _groupOrder = reorderedGroups(
+                                    _groupOrder, dragged, target);
+                                _saveColumns();
+                              }),
                             ),
                             // The rows scroll under the pinned toolbar
                             // and header, in step with the lanes.
@@ -3976,6 +4213,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 key: const ValueKey('tl-outline-ground'),
                                 behavior: HitTestBehavior.translucent,
                                 onTap: () => _deselectAll(ui),
+                                // A right-click on the ground opens the same
+                                // menu as the lane ground. A fold row with
+                                // no menu of its own lets the click through
+                                // to here, so anything above the foot of the
+                                // last row is ignored.
+                                onSecondaryTapUp: (d) {
+                                  final foot = blockHeights.fold<double>(
+                                          0, (sum, height) => sum + height) -
+                                      (_vOutline.hasClients
+                                          ? _vOutline.offset
+                                          : 0);
+                                  if (d.localPosition.dy < foot) return;
+                                  showTimelineMoreMenu(
+                                    context,
+                                    comp: comp,
+                                    playhead: ui.playheadFrame,
+                                    position: d.globalPosition,
+                                    onChanged: ui.model.refresh,
+                                  );
+                                },
                                 // The viewport's own height, which is what
                                 // the row list windows itself against.
                                 child: LayoutBuilder(
@@ -3990,6 +4247,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                           child: Outline(
                                             comp: comp,
                                             rows: rows,
+                                            stack: ui.model.heldLayers,
                                             vScroll: _vOutline,
                                             viewport: box.maxHeight,
                                             onOpenSequence: _openLayerView,
@@ -4064,10 +4322,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 bottom: 0,
                 child: IgnorePointer(
                   child: AnimatedBuilder(
-                    animation: _vOutline,
+                    // And the layer drag's band, which the seams stand clear
+                    // of so a layer in hand is drawn over them.
+                    animation: Listenable.merge(
+                        [_vOutline, _layerDrag.band, _layerDrag.mark]),
                     builder: (context, _) => CustomPaint(
+                      // The line marking a drop's place, for a drag that is
+                      // not carried: across the columns and the gutter, so it
+                      // meets the lane area's.
+                      foregroundPainter: switch (_layerDrag.mark.value) {
+                        final y? => DropMarkPainter(
+                            y: y - (positionOf(_vOutline)?.pixels ?? 0),
+                            colour: t.accent),
+                        null => null,
+                      },
                       painter: RowDividerPainter(
-                        step: t.density.laneRow,
+                        // No rows, no rules, as on the lanes.
+                        step: rows.isEmpty ? 0 : t.density.laneRow,
                         colour: rowSeamColour(t),
                         phase: -((positionOf(_vOutline)?.pixels ?? 0) %
                             t.density.laneRow),
@@ -4081,9 +4352,48 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               b.$1 - (positionOf(_vOutline)?.pixels ?? 0),
                               b.$2 - (positionOf(_vOutline)?.pixels ?? 0),
                             ),
+                          if (_layerDrag.band.value case final band?)
+                            (
+                              band.top - (positionOf(_vOutline)?.pixels ?? 0),
+                              band.bottom -
+                                  (positionOf(_vOutline)?.pixels ?? 0),
+                            ),
                         ],
                       ),
                     ),
+                  ),
+                ),
+              ),
+              // The stretch of a lifted layer's card that crosses the gutter.
+              // The outline's block draws the card's left end and the lanes'
+              // block its right; without this the gutter showed between them
+              // and a layer in hand read as two cards.
+              Positioned(
+                top: t.density.navigatorBand + t.density.ruler,
+                right: 0,
+                // A pixel over the columns' edge: the two stretches meet on
+                // a fractional pixel at any interface scale but 1, and
+                // butted there they showed a hairline of the ground between.
+                width: scrollGutterWidth + 1,
+                bottom: 0,
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_vOutline, _layerDrag.band]),
+                    builder: (context, _) {
+                      final band = _layerDrag.band.value;
+                      if (band == null) return const SizedBox.expand();
+                      final scrolled = positionOf(_vOutline)?.pixels ?? 0;
+                      return CustomPaint(
+                        key: const ValueKey('tl-lift-bridge'),
+                        painter: LiftBridgePainter(
+                          top: band.top - scrolled,
+                          bottom: band.bottom - scrolled,
+                          amount: band.amount,
+                          ground: liftGround(t),
+                          shadow: liftShadow(t),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -4130,8 +4440,14 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           // width it takes exactly the room its buttons need and the toggles
           // keep the rest; squeezed, neither run overflows — each scrolls
           // inside its own share.
+          //
+          // In Layers the strip is four glyphs and never needs squeezing, so
+          // it is laid out at its own width and the toggles really do keep
+          // the rest. As a flexible half it left the toggles scrolling inside
+          // the other half with empty bar beside them.
           Row(children: [
             Flexible(
+              flex: _graph ? 1 : 0,
               child: KeyCommandStrip(
                 // The keyframe strip in Layers, the graph's own
                 // commands in graph view — the same seven or ten buttons that
@@ -4145,6 +4461,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 autoFit: _graphAutoFit,
                 onToggleAutoFit: () =>
                     setState(() => _graphAutoFit = !_graphAutoFit),
+                breakHandles: _graphBreakHandles,
+                onToggleBreakHandles: () => setState(
+                    () => _graphBreakHandles = !_graphBreakHandles),
                 onInterp: (side) => _applyInterp(side),
                 onTangentMode: _applyTangentMode,
                 onOpenEasing: _openEasing,
@@ -4157,11 +4476,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             ),
             Expanded(
                 child: ColumnToggles(
+              key: const ValueKey('tl-column-toggles'),
               groups: _toggleableGroups,
               labels: _chromeLabels,
               hidden: _hiddenGroups,
               onToggle: (group) => setState(() {
                 if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
+                _saveColumns();
               }),
               animatedOnly: _animatedOnly,
               onToggleAnimated: () =>
@@ -4202,7 +4523,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     final snap = timelineSnapTargets(
       rows: rows,
       comp: comp,
-      playheadFrame: ui.playheadFrame.value,
+      playhead: ui.playheadFrame,
       work: work,
       fps: ui.model.fps,
     );
@@ -4210,7 +4531,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: Row(
+          // The lane half's wrapper, empty here: see [_laneHalf].
+          child: CustomPaint(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
@@ -4247,6 +4570,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               onWorkPreview: (span) =>
                                   _workPreview.value = span,
                               onMarkersChanged: () => setState(() {}),
+                              onMarkerPreview: (staged) =>
+                                  _markerPreview.value = staged,
                               // The graph shares the ruler, so it shares the
                               // ruler's snapping (docs/07 §4.5).
                               snapTargets: snap,
@@ -4288,6 +4613,15 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     outside: t.timelineOutOfRange,
                                     edge: workAreaEdgeColour(t),
                                   ),
+                                  // The markers' regions run down through
+                                  // the curves as they do through the lanes.
+                                  MarkerRegionsGround(
+                                    key: const ValueKey<String>(
+                                        'tl-graph-regions'),
+                                    comp: comp,
+                                    axis: axis,
+                                    preview: _markerPreview,
+                                  ),
                                   GraphEditorFrb(
                                     key: _graphPane,
                                     comp: comp,
@@ -4305,8 +4639,13 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     vegas: _vegas(context),
                                     penArmed:
                                         ui.tools.tool.group == ToolGroup.pen,
+                                    breakHandles: _graphBreakHandles,
                                     selectedKeys: _graphKeySelection,
-                                    onSelectionChanged: () => setState(() {}),
+                                    otherKeys: _otherGraphKeys(channels),
+                                    onSelectionChanged: () {
+                                      _shareKeys();
+                                      setState(() {});
+                                    },
                                     onChanged: ui.model.refresh,
                                     onWheelTime: (e, x) => _wheel(e, x, axis),
                                   ),
@@ -4346,6 +4685,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 ],
               ),
             ],
+          ),
           ),
         ),
         LaneBottomBar(
@@ -4387,7 +4727,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: Row(
+          // Behind the lane card, the lifted layer's card where the lane
+          // card's own rounded corner would otherwise cut it
+          // ([_LiftCornerPainter]). The graph half wears the same wrapper
+          // with nothing to paint, so the two halves keep one shape of tree.
+          child: CustomPaint(
+            painter: t.tokens.roomed
+                ? _LiftCornerPainter(
+                    drag: _layerDrag,
+                    scroll: _vLane,
+                    top: t.density.ruler,
+                    width: t.tokens.sectionRadius,
+                    ground: liftGround(t),
+                    shadow: liftShadow(t),
+                  )
+                : null,
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
@@ -4438,6 +4793,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                           _razorCutAt(ui, entry, frame, ui.model.refresh),
                       vScroll: _vLane,
                       selectedKeys: _laneKeys,
+                      marquee: _laneMarquee,
+                      sharing: _sharing,
                       stretch: _keyStretch,
                       project: Provider.of<LumitState>(context, listen: false)
                           .project,
@@ -4446,6 +4803,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       work: work,
                       onWorkPreview: (span) => _workPreview.value = span,
                       workPreview: _workPreview,
+                      markerPreview: _markerPreview,
                       onKeysSelected: _onLaneKeysSelected,
                       onKeyMenu: _laneKeyMenu,
                       onWheel: (e, x) => _wheel(e, x, axis),
@@ -4480,6 +4838,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               ),
             ],
           ),
+          ),
         ),
         // The Sound mix row's lane, level with the outline's row for it.
         if (mixRow)
@@ -4492,12 +4851,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             onOpen: () => _openAudioWorkspace(ui),
             onMenu: (at) => _soundMixMenu(ui, comp, at),
           ),
-        // Lantern's minimap: the whole comp's bars compressed into a strip
+        // The minimap: the whole comp's bars compressed into a strip
         // under the lanes, with the visible range as a lighter window that
         // drags to scroll. The same strip the navigator is, drawing bars.
-        if (t.shape == ThemeShape.lantern)
+        // Lantern draws it unless Settings says otherwise, the others when
+        // asked.
+        if (ui.workspace.interface.timelineMinimap ??
+            t.shape == ThemeShape.lantern)
           TimelineNavigator(
             trailing: scrollGutterWidth,
+            pad: _axisPad,
             frames: frames,
             zoom: _zoomMotion,
             hScroll: _hLane,
@@ -4529,4 +4892,69 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       ],
     );
   }
+}
+
+/// The lifted layer's card, where the lane card's rounded corner would cut it.
+///
+/// Lantern stands the lanes in a card with the section's corners, and that
+/// card cuts everything in it to those corners, a layer in hand included. A
+/// card carried across the bottom corner lost a wedge there: the gutter's
+/// stretch ran up to the lane card's edge and the lanes' stretch began past
+/// the curve, with the panel's ground showing between them (owner, desk
+/// test). This paints the card behind the lane card, in a strip as wide as
+/// the corner, so what the curve cuts away from the lanes is the same card
+/// underneath.
+///
+/// It repaints from the drag and the scroll themselves, so it costs no build.
+class _LiftCornerPainter extends CustomPainter {
+  final LayerDragState drag;
+  final ScrollController scroll;
+
+  /// Where the rows start below the painter's top edge: the ruler's height.
+  final double top;
+
+  /// How far in from the left edge the lane card's corner reaches.
+  final double width;
+  final Color ground;
+  final Color shadow;
+
+  _LiftCornerPainter({
+    required this.drag,
+    required this.scroll,
+    required this.top,
+    required this.width,
+    required this.ground,
+    required this.shadow,
+  }) : super(repaint: Listenable.merge([drag.band, scroll]));
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final band = drag.band.value;
+    if (band == null || size.height <= top) return;
+    final scrolled = positionOf(scroll)?.pixels ?? 0;
+    canvas.save();
+    canvas.translate(0, top);
+    LiftBridgePainter(
+      top: band.top - scrolled,
+      bottom: band.bottom - scrolled,
+      amount: band.amount,
+      ground: ground,
+      shadow: shadow,
+    ).paint(canvas, Size(width, size.height - top));
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_LiftCornerPainter old) =>
+      old.drag != drag ||
+      old.scroll != scroll ||
+      old.top != top ||
+      old.width != width ||
+      old.ground != ground ||
+      old.shadow != shadow;
+
+  /// Never a pointer's: it stands behind the lanes and must not answer for
+  /// them.
+  @override
+  bool? hitTest(Offset position) => false;
 }

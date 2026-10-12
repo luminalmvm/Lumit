@@ -29,7 +29,10 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/keymap.dart';
+import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:lumit_flutter/src/rust/api/streams.dart'
+    show BridgeAudioStreams;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
@@ -51,6 +54,7 @@ import '../widgets/marquee.dart';
 import '../widgets/smooth_zoom.dart';
 import '../widgets/time_readout.dart';
 import '../widgets/zoom_anchored_scroll.dart';
+import 'audio_streams_menu_frb.dart';
 import 'audio_timeline_clips_frb.dart';
 import 'audio_timeline_fades_frb.dart';
 import 'audio_timeline_rows_frb.dart';
@@ -65,6 +69,8 @@ import 'graph_edits.dart' show applyEasingToSelection;
 import 'graph_maths.dart' show rationalSeconds;
 import 'key_block.dart' show KeyStretch;
 import 'layer_fold_frb.dart';
+import '../state/share.dart';
+import '../widgets/share_marks.dart';
 import 'placeholder.dart';
 import 'spectral_lane_frb.dart';
 import 'timeline_bar_frb.dart' show BarGrab;
@@ -206,9 +212,35 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   final ValueNotifier<KeyStretch?> _keyStretch =
       ValueNotifier<KeyStretch?>(null);
 
+  /// The lane marquee's box while it is being dragged.
+  final ValueNotifier<Rect?> _laneMarquee = ValueNotifier<Rect?>(null);
+
   /// Which property rows are picked, so a row draws itself lit. A plain list:
   /// this panel has no graph to colour and no range selection yet.
   List<String> _selectedProperties = const [];
+
+  /// The shared project's people, whose tracks and rows are marked here.
+  /// Its roster only moves while a project is shared.
+  ShareState? _share;
+
+  /// Whether the project was shared the last time anyone was heard from.
+  bool _sharing = false;
+
+  /// Someone came, went or selected something else: the rows are drawn
+  /// again. Nothing happens here while the project is not shared.
+  void _onRoster() {
+    if (!mounted) return;
+    final now = _share?.active ?? false;
+    if (now || _sharing) setState(() => _sharing = now);
+    _shareKeys();
+  }
+
+  /// Tell the others in a shared project which keyframes are selected in
+  /// these lanes. Nothing is gathered when the project is not shared.
+  void _shareKeys() {
+    if (!(_share?.active ?? false)) return;
+    _share!.keys(Set<String>.of(_laneKeys.value), from: 'audio');
+  }
 
   /// The work area, held between document revisions - reading it is several
   /// bridge calls and only an edit can change the answer - and the span staged
@@ -286,6 +318,10 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     // Kept rather than looked up again: `dispose` runs after the element is
     // deactivated, where an ancestor lookup is no longer safe.
     _ui = Provider.of<LumitUiState>(context, listen: false);
+    _share = Provider.of<LumitState>(context, listen: false).share
+      ..roster.addListener(_onRoster);
+    _sharing = _share!.active;
+    _laneKeys.addListener(_shareKeys);
     _cacheRevision = Listenable.merge([_ui!.frameArrived, _ui!.cacheChanged]);
     _ui!.activePane.addListener(_onActivePanel);
     _onActivePanel();
@@ -295,6 +331,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
 
   @override
   void dispose() {
+    _share?.roster.removeListener(_onRoster);
+    // With the panel gone nothing in it is selected, for the others either.
+    _share?.keys(const {}, from: 'audio');
     _escapeRelease?.call();
     _boundTools?.removeListener(_onToolChanged);
     _ui?.activePane.removeListener(_onActivePanel);
@@ -308,6 +347,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     _searchField.dispose();
     _laneKeys.dispose();
     _keyStretch.dispose();
+    _laneMarquee.dispose();
     _workPreview.dispose();
     for (final drag in _clipDrag.values) {
       drag.dispose();
@@ -821,13 +861,21 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// The navigator asked for a window: `start` frames from the left, `span`
   /// frames across. The window's left edge is the anchor and is held for the
   /// length of the gesture, so dragging its right-hand end zooms about its
-  /// left-hand one.
-  void _navigateTo(double start, double span) {
+  /// left-hand one. A pan only scrolls (see the Timeline panel's own).
+  void _navigateTo(double start, double span, {required bool pan}) {
     if (_laneFrames <= 0 || span <= 0) return;
+    if (pan) {
+      _scrollFrameToLeftEdge(start);
+      return;
+    }
     _zoomAnchorFrame = start;
     _zoomAnchorViewportX = 0;
     _zoomAnchorHeld = true;
-    final want = (_laneFrames / span).clamp(1.0, _maxZoom);
+    final want = navigatorZoom(
+      span: span,
+      frames: _laneFrames,
+      viewport: positionOf(_hLane)?.viewportDimension ?? _laneViewport,
+    ).clamp(1.0, _maxZoom);
     if ((want - _zoomMotion.target).abs() > 1e-9) {
       _setZoom(want, fly: false);
     } else {
@@ -1032,6 +1080,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             ),
       ],
       playheadFrame: ui.playheadFrame.value,
+      playhead: ui.playheadFrame,
       work: work,
       fps: fps,
     );
@@ -1061,10 +1110,14 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             builder: (context, candidate, _) => Container(
               // A live outline while something is over it, so the drop is
               // visibly going to land rather than being taken on faith.
-              foregroundDecoration: candidate.isEmpty
-                  ? null
-                  : BoxDecoration(
-                      border: Border.all(color: t.accent, width: 2)),
+              // Always a decoration, clear until then: adding one only
+              // then rebuilt the lanes under it from nothing.
+              foregroundDecoration: BoxDecoration(
+                  border: Border.all(
+                      color: candidate.isEmpty
+                          ? t.accent.withValues(alpha: 0)
+                          : t.accent,
+                      width: 2)),
               child: LayoutBuilder(
                 builder: (context, box) {
                   final outlineWidth = min(
@@ -1374,13 +1427,12 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     AudioTrackRow track,
     int index, {
     required int playhead,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // The pick rides on the shell's own list, so choosing a track
-          // repaints this row and its neighbour and rebuilds no panel.
-          ValueListenableBuilder<List<LayerReference>>(
+  }) {
+    // What the others in a shared project have in hand, by track and by row.
+    // Empty, and nothing walked, outside one.
+    final theirs = _sharing ? _share!.inHand(comp) : const <String, List<int>>{};
+    final onTrack = theirs[track.id] ?? const <int>[];
+    final head = ValueListenableBuilder<List<LayerReference>>(
             valueListenable: ui.selectedLayers,
             builder: (context, picked, _) => AudioTrackOutlineRow(
               key: ValueKey<String>('atl-row-${track.id}'),
@@ -1401,7 +1453,21 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               onResize: (dy) => _resizeTrack(track, dy),
               onResizeStart: () => _rowCarry = 0,
             ),
-          ),
+          );
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The pick rides on the shell's own list, so choosing a track
+          // repaints this row and its neighbour and rebuilds no panel.
+          if (onTrack.isEmpty)
+            head
+          else
+            DecoratedBox(
+              position: DecorationPosition.foreground,
+              decoration:
+                  TheirBar([for (final c in onTrack) t.personColour(c)]),
+              child: head,
+            ),
           for (final row in track.drawnRows)
             FoldRow(
               key: ValueKey<String>('atl-prop-${foldRowPath(track.id, row)}'),
@@ -1414,6 +1480,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               timingsColumn: const ValueColumn(0, 0),
               baseIndent: outlineGap + switchCellWidth * 3 + outlineGap,
               path: foldRowPath(track.id, row),
+              others: theirs[foldRowPath(track.id, row)] ?? const [],
               selectedProperties: _selectedProperties,
               graphColours: const {},
               onSelectProperty: _pickProperty,
@@ -1436,9 +1503,14 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
             ),
         ],
       );
+  }
 
-  void _pickProperty(String path) =>
-      setState(() => _selectedProperties = [path]);
+  void _pickProperty(String path) {
+    setState(() => _selectedProperties = [path]);
+    // This panel's picks are its own, so the others in a shared project are
+    // told of the row the way a panel with no selection tells them.
+    _ui?.touchProperty(path);
+  }
 
   /// *Detach audio* on a faded picture row: its sound goes onto an Audio layer
   /// of its own and the picture row is muted, which takes it off this list and
@@ -1498,7 +1570,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       );
     } else {
       for (final f in footage) {
-        await comp.addAudioLayer(footage: f);
+        await comp.addAudioLayer(footage: f, arrival: _ui?.streamsArrival);
       }
     }
     if (mounted) _afterWrite();
@@ -1764,11 +1836,39 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     );
   }
 
+  /// Split or merge the audio streams of one clip, and say so in the status
+  /// line where there was nothing to do.
+  void _clipStreams(CompositionReference comp, BridgeClip clip,
+      {required bool split}) {
+    var done = false;
+    try {
+      final result = split
+          ? comp.cutSplitAudioStreams(clips: [clip.id])
+          : comp.cutMergeAudioStreams(clips: [clip.id]);
+      done = result == BridgeCutResult.done;
+    } catch (_) {}
+    if (!mounted) return;
+    if (!done) {
+      Provider.of<LumitState>(context, listen: false).postNotice(split
+          ? l10n.audioStreamsNothingToSplit
+          : l10n.audioStreamsNothingToMerge);
+      return;
+    }
+    _afterWrite();
+  }
+
   /// What can be done to one clip: its two fades by shape, the split at the
   /// playhead, and the delete.
   Future<void> _clipMenu(
       AudioTrackRow track, BridgeClip clip, Offset at) async {
     final ui = _ui;
+    // The audio streams of the clip's file, for the rows that choose among
+    // them. The track draws the clip's wave, so its file has been opened.
+    BridgeAudioStreams? streams;
+    try {
+      streams = track.entry.layer.clipAudioStreams(clip: clip.id);
+    } catch (_) {}
+    final comp = ui?.selectedComp;
     Widget shapes(VoidCallback dismiss, {required bool into}) => FloatSurface(
           width: 140,
           child: Column(
@@ -1816,6 +1916,38 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           },
           child: Text(l10n.clipSplitAtPlayhead),
         ),
+        // A file with several audio streams: which of them this clip plays,
+        // a clip to each on a track of its own, and back onto one.
+        if (streams != null && streams.streams.length > 1 && comp != null) ...[
+          audioStreamsSubmenu(
+            key: ValueKey<String>('atl-clip-audio-streams-${clip.id}'),
+            closeParent: () => close(null),
+            streams: streams,
+            onChoose: (places) {
+              try {
+                track.entry.layer
+                    .setClipAudioStreams(clip: clip.id, streams: places);
+              } catch (_) {}
+              _afterWrite();
+            },
+          ),
+          MenuRow(
+            key: ValueKey<String>('atl-clip-split-streams-${clip.id}'),
+            onPressed: () {
+              close(null);
+              _clipStreams(comp, clip, split: true);
+            },
+            child: Text(l10n.menuSplitAudioStreams),
+          ),
+          MenuRow(
+            key: ValueKey<String>('atl-clip-merge-streams-${clip.id}'),
+            onPressed: () {
+              close(null);
+              _clipStreams(comp, clip, split: false);
+            },
+            child: Text(l10n.menuMergeAudioStreams),
+          ),
+        ],
         MenuRow(
           key: ValueKey<String>('atl-clip-delete-${clip.id}'),
           onPressed: () {
@@ -2037,6 +2169,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                             Positioned.fill(
                               child: MarqueeSelect(
                                 key: const ValueKey('atl-lane-marquee'),
+                                box: _laneMarquee,
                                 onSelect: (rect, additive) =>
                                     _laneKeys.value = {
                                   if (additive) ..._laneKeys.value,
@@ -2100,6 +2233,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                                 ),
                               ),
                             ),
+                            // The marquee's box, over the lanes and the seams
+                            // it is dragged across.
+                            MarqueeOverlay(box: _laneMarquee),
                           ],
                         ),
                       ),
@@ -2356,10 +2492,22 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     final keys = laneKeysOf(row);
     if (keys.isEmpty) return const SizedBox.shrink();
     final rowId = foldRowPath(track.id, row);
+    // The keys of this lane someone else has selected, in their colours.
+    final others = <int, List<Color>>{};
+    if (_sharing) {
+      final t = ThemeScope.of(context).theme;
+      final held = _share!.keysInHand(ui.selectedComp);
+      for (var i = 0; held.isNotEmpty && i < keys.length; i++) {
+        if (held['$rowId#$i'] case final colours?) {
+          others[i] = [for (final c in colours) t.personColour(c)];
+        }
+      }
+    }
     return ValueListenableBuilder<Set<String>>(
       valueListenable: _laneKeys,
       builder: (context, selected, _) => KeyLane(
         key: ValueKey<String>('atl-keys-$rowId'),
+        others: others,
         entry: track.entry,
         row: row,
         rowId: rowId,

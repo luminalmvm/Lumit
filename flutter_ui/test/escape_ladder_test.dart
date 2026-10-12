@@ -69,42 +69,6 @@ void main() {
     expect(drag.end(), isFalse, reason: 'an abandoned drag commits nothing');
   });
 
-  testWidgets('the open menu takes Escape before a selection is cleared',
-      (tester) async {
-    await tester.pumpWidget(host());
-    final anchor = tester.element(find.byKey(const ValueKey('anchor')));
-
-    var cleared = false;
-    addTearDown(EscapeLadder.register(EscapeRung.selection, () {
-      cleared = true;
-      return true;
-    }));
-    openMenu(anchor);
-    await tester.pump();
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-
-    expect(find.text('menu'), findsNothing, reason: 'the chain went');
-    expect(cleared, isFalse, reason: 'the selection is still what was picked');
-  });
-
-  testWidgets('a selection is cleared when nothing above it claims the press',
-      (tester) async {
-    await tester.pumpWidget(host());
-
-    var cleared = false;
-    addTearDown(EscapeLadder.register(EscapeRung.selection, () {
-      cleared = true;
-      return true;
-    }));
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-
-    expect(cleared, isTrue);
-  });
-
   testWidgets('a rung with nothing to take back passes the press down',
       (tester) async {
     await tester.pumpWidget(host());

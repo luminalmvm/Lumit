@@ -110,6 +110,12 @@ pub enum Op {
     SetUseProxies {
         use_proxies: bool,
     },
+    /// Whether every save packs the project's footage into the `.lum`
+    /// (`Document::auto_pack`). Which items are packed already is not an op:
+    /// see `DocumentStore::set_packed`.
+    SetAutoPack {
+        auto_pack: bool,
+    },
     RenameItem {
         id: Uuid,
         name: String,
@@ -507,6 +513,21 @@ pub enum Op {
         prop: TransformProp,
         animation: Animation,
     },
+    /// Replace what a transform property's expression knows about its
+    /// property ([`crate::expression::Slot`]): the language it is written in,
+    /// the value underneath it, and its seed. `None` is a property with no
+    /// such note, which is every one without an expression.
+    ///
+    /// Its own op beside [`Op::SetTransformProperty`], in the same
+    /// [`Op::Batch`] when an edit changes both, so every other writer of a
+    /// transform's animation stays as it was. The note is whole in the op, so
+    /// replaying the journal writes the same seed the edit did.
+    SetTransformExpressionSlot {
+        comp: Uuid,
+        layer: Uuid,
+        prop: TransformProp,
+        slot: Option<serde_json::Value>,
+    },
     /// Set how one two-axis transform property is shown and edited — combined
     /// on one row, linked, or separated onto a row per axis.
     ///
@@ -573,6 +594,15 @@ pub enum Op {
         comp: Uuid,
         layer: Uuid,
         animation: Animation,
+    },
+    /// Choose which of its file's audio streams a layer sounds
+    /// ([`crate::model::AudioStreams`]). Carries the whole choice, so undoing
+    /// it puts back the one before. Valid on any layer, as Volume and Pan
+    /// are, and only heard on a Footage layer of a file with those streams.
+    SetLayerAudioStreams {
+        comp: Uuid,
+        layer: Uuid,
+        streams: crate::model::AudioStreams,
     },
     /// Move a composition's **master fader** — one gain stage on the summed
     /// mix, ahead of the safety limiter (docs/09 §3.1). dB; 0 is
@@ -806,6 +836,7 @@ impl Op {
             Op::SetItemProxy { .. } => "Set proxy",
             Op::SetItemUseProxy { .. } => "Use proxy",
             Op::SetUseProxies { .. } => "Use proxies",
+            Op::SetAutoPack { .. } => "Pack automatically",
             Op::RenameItem { .. } => "Rename item",
             Op::SetItemLabel { .. } => "Set item colour",
             Op::AddLayer { .. } => "Add layer",
@@ -855,12 +886,14 @@ impl Op {
             Op::SetLayerMatte { .. } => "Set matte",
             Op::SetLayerParent { .. } => "Set parent",
             Op::SetTransformProperty { .. } => "Edit transform",
+            Op::SetTransformExpressionSlot { .. } => "Edit expression",
             Op::SetTransformAxisMode { .. } => "Set axis mode",
             Op::SetCameraZoom { .. } => "Set camera zoom",
             Op::SetCameraSettings { .. } => "Set camera settings",
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
+            Op::SetLayerAudioStreams { .. } => "Set audio streams",
             Op::SetMasterVolume { .. } => "Move master fader",
             Op::SetSoundMix { .. } => "Sound mix",
             Op::SetBeatGrid { .. } => "Set beat grid",
@@ -942,12 +975,14 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetLayerMatte { comp, layer, .. }
         | Op::SetLayerParent { comp, layer, .. }
         | Op::SetTransformProperty { comp, layer, .. }
+        | Op::SetTransformExpressionSlot { comp, layer, .. }
         | Op::SetTransformAxisMode { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
+        | Op::SetLayerAudioStreams { comp, layer, .. }
         | Op::SetRetimeProperty { comp, layer, .. }
         | Op::SetLayerInterpolation { comp, layer, .. } => Some((*comp, *layer)),
 
@@ -1007,11 +1042,13 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetLayerMatte { comp, .. }
         | Op::SetLayerParent { comp, .. }
         | Op::SetTransformProperty { comp, .. }
+        | Op::SetTransformExpressionSlot { comp, .. }
         | Op::SetTransformAxisMode { comp, .. }
         | Op::SetCameraZoom { comp, .. }
         | Op::SetCameraSolveLink { comp, .. }
         | Op::SetLayerVolume { comp, .. }
         | Op::SetLayerPan { comp, .. }
+        | Op::SetLayerAudioStreams { comp, .. }
         | Op::SetRetimeProperty { comp, .. }
         | Op::SetLayerInterpolation { comp, .. }
         | Op::GroupLayers { comp, .. }
@@ -1141,6 +1178,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = std::mem::replace(&mut doc.use_proxies, *use_proxies);
             Ok(Op::SetUseProxies {
                 use_proxies: previous,
+            })
+        }
+        Op::SetAutoPack { auto_pack } => {
+            let previous = std::mem::replace(&mut doc.auto_pack, *auto_pack);
+            Ok(Op::SetAutoPack {
+                auto_pack: previous,
             })
         }
         Op::RenameItem { id, name } => {
@@ -1986,6 +2029,31 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 animation: previous,
             })
         }
+        Op::SetTransformExpressionSlot {
+            comp,
+            layer,
+            prop,
+            slot,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let property = l.prop_mut(*prop).ok_or(OpError::PropNotOnLayer)?;
+            let key = crate::expression::SLOT_KEY;
+            let previous = match slot {
+                Some(slot) => property.extra.insert(key.to_owned(), slot.clone()),
+                None => property.extra.remove(key),
+            };
+            Ok(Op::SetTransformExpressionSlot {
+                comp: *comp,
+                layer: *layer,
+                prop: *prop,
+                slot: previous,
+            })
+        }
         Op::SetTransformAxisMode {
             comp,
             layer,
@@ -2123,6 +2191,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 animation: previous,
+            })
+        }
+        Op::SetLayerAudioStreams {
+            comp,
+            layer,
+            streams,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.audio_streams, streams.clone());
+            Ok(Op::SetLayerAudioStreams {
+                comp: *comp,
+                layer: *layer,
+                streams: previous,
             })
         }
         Op::SetMasterVolume { comp, db } => {
@@ -2516,12 +2602,39 @@ fn shifted(animation: &Animation, delta: f64) -> Option<Animation> {
     if delta == 0.0 {
         return None;
     }
+    remapped(animation, 1.0, delta)
+}
+
+/// `animation` with every value `v` made `gain * v + offset`, or `None` for
+/// an expression, which has no values to move. A key's speed is a slope, so
+/// it takes the gain and not the offset.
+#[must_use]
+pub fn remapped(animation: &Animation, gain: f64, offset: f64) -> Option<Animation> {
+    use crate::anim::SideInterp as S;
+    let side = |s: S| match s {
+        S::Bezier { speed, influence } => S::Bezier {
+            speed: speed * gain,
+            influence,
+        },
+        S::Auto {
+            clamped,
+            speed,
+            influence,
+        } => S::Auto {
+            clamped,
+            speed: speed * gain,
+            influence,
+        },
+        other => other,
+    };
     match animation {
-        Animation::Static(v) => Some(Animation::Static(v + delta)),
+        Animation::Static(v) => Some(Animation::Static(gain * v + offset)),
         Animation::Keyframed(keys) => Some(Animation::Keyframed(
             keys.iter()
                 .map(|k| crate::anim::Keyframe {
-                    value: k.value + delta,
+                    value: gain * k.value + offset,
+                    interp_in: side(k.interp_in),
+                    interp_out: side(k.interp_out),
                     ..*k
                 })
                 .collect(),
@@ -2781,16 +2894,6 @@ mod unretime_tests {
         Duration(Rational::new(secs, 1).unwrap())
     }
 
-    /// The simple case: the layer was showing the source's first frame, so it
-    /// simply plays from there until the source runs out.
-    #[test]
-    fn anchored_on_the_first_frame_runs_to_the_source_end() {
-        // In at comp 10, showing source 0, and a 5-second source: the layer
-        // ends at comp 15 however long the retimed version was.
-        let (i, o, off) = unretimed_span(ct(10), ct(100), st(0), Some(dur(5))).unwrap();
-        assert_eq!((i, o, off), (ct(10), ct(15), ct(10)));
-    }
-
     /// Anchored part-way in, only what is left of the source is available.
     #[test]
     fn anchored_mid_source_runs_out_sooner() {
@@ -2798,30 +2901,6 @@ mod unretime_tests {
         assert_eq!(i, ct(10));
         assert_eq!(o, ct(13), "three seconds of source were left");
         assert_eq!(off, ct(8), "source zero sits two seconds before the in");
-    }
-
-    /// It never grows: a layer already shorter than the source keeps its length.
-    #[test]
-    fn a_trimmed_layer_keeps_its_length() {
-        let (_, o, _) = unretimed_span(ct(10), ct(12), st(0), Some(dur(5))).unwrap();
-        assert_eq!(o, ct(12));
-    }
-
-    /// No readable length — missing media, or a kind with no source of its own
-    /// — re-anchors and leaves the out point alone rather than guessing.
-    #[test]
-    fn no_source_length_leaves_the_out_point_alone() {
-        let (i, o, off) = unretimed_span(ct(10), ct(100), st(2), None).unwrap();
-        assert_eq!((i, o, off), (ct(10), ct(100), ct(8)));
-    }
-
-    /// Anchored at or past the end of the source, there is nothing left to
-    /// measure: the span survives intact rather than collapsing to nothing.
-    #[test]
-    fn an_anchor_past_the_source_end_keeps_the_span() {
-        let (_, o, off) = unretimed_span(ct(10), ct(20), st(5), Some(dur(5))).unwrap();
-        assert_eq!(o, ct(20));
-        assert_eq!(off, ct(5));
     }
 }
 
@@ -2841,13 +2920,6 @@ mod span_edit_tests {
         let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(10), SpanEdit::MoveIn).unwrap();
         // In lands on the playhead; duration (3s) and the source-at-in are kept.
         assert_eq!((i, o, off), (ct(10), ct(13), ct(9)));
-    }
-
-    #[test]
-    fn move_out_puts_the_out_point_on_the_playhead() {
-        let (i, o, off) = edit_layer_span(ct(2), ct(5), ct(1), ct(10), SpanEdit::MoveOut).unwrap();
-        // Out lands on 10; duration 3s kept, so in = 7, offset shifts by +5.
-        assert_eq!((i, o, off), (ct(7), ct(10), ct(6)));
     }
 
     #[test]

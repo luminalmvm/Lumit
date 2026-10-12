@@ -114,7 +114,8 @@ const double _widthForFooterLabels = 380;
 /// Timeline header's own treatment — a 1×10 `hairline_strong` rule centred in
 /// the gap — and it stands at every column boundary, because it is what says
 /// where one column ends and the next begins. What varies is whether it
-/// resizes: beside a fixed-width column (items, fps, path) it is a plain rule
+/// resizes: beside a fixed-width column (items, fps, duration, path) it is a
+/// plain rule
 /// with no drag and no resize cursor, and beside a column with a width of its
 /// own it is a handle.
 ///
@@ -163,10 +164,16 @@ ProjectColumn _leftOf(ProjectColumns cols, ProjectColumn column) {
 /// The column headings. Kicker words, and the values below them are laid out
 /// by the same [ProjectColumns.cells] call, so they cannot come apart. The
 /// gaps between them are the drag handles that resize the columns.
+///
+/// A click on a heading sorts by that column and a second click reverses it:
+/// [sort] is the column in force, null for the project's own order.
 Widget projectColumnHeader(
   LumitTheme t,
   ProjectColumns cols, {
   required void Function(ProjectColumn column, double delta) onResize,
+  required ProjectColumn? sort,
+  required bool ascending,
+  required ValueChanged<ProjectColumn> onSort,
 }) =>
     Container(
       key: const ValueKey('project-column-header'),
@@ -180,8 +187,13 @@ Widget projectColumnHeader(
         children: [
           // Name is the flexible slot, and what it is left with is
           // [projectNameColumn] — see [ProjectColumns.laidOutWidth].
-          Expanded(child: Text(t.kickerCase(l10n.name), style: t.kicker)),
+          Expanded(
+            child: _sortHeading(t, ProjectColumn.name, sort, ascending, onSort,
+                Text(t.kickerCase(l10n.name), style: t.kicker)),
+          ),
           ...cols.cells(
+            heading: (column, word) =>
+                _sortHeading(t, column, sort, ascending, onSort, word),
             seam: (before) => _ColumnSeam(
               key: ValueKey<String>(
                   'project-seam-${_leftOf(cols, before).name}'),
@@ -195,6 +207,7 @@ Widget projectColumnHeader(
             items: t.kickerCase(l10n.projectColumnItems),
             size: t.kickerCase(l10n.projectColumnSize),
             fps: t.kickerCase(l10n.unitFps),
+            duration: t.kickerCase(l10n.duration),
             path: t.kickerCase(l10n.projectColumnPath),
             style: t.kicker,
             // The heading is as quiet as its column: Path is context, not a
@@ -203,6 +216,44 @@ Widget projectColumnHeader(
           ),
         ],
       ),
+    );
+
+/// One heading as something to click, and the caret it wears while the list
+/// is sorted by it: up for smallest first, down for largest first.
+///
+/// The caret stands over the middle of the heading, where Explorer puts its
+/// own, and not beside the word: FPS and ITEMS fill their columns, so a mark
+/// beside them would have nowhere to stand.
+Widget _sortHeading(LumitTheme t, ProjectColumn column, ProjectColumn? sort,
+        bool ascending, ValueChanged<ProjectColumn> onSort, Widget word) =>
+    GestureDetector(
+      key: ValueKey<String>('project-sort-${column.name}'),
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onSort(column),
+      child: sort != column
+          ? word
+          : Stack(
+              clipBehavior: Clip.none,
+              // The word keeps the width its column gave it.
+              fit: StackFit.passthrough,
+              children: [
+                word,
+                Positioned(
+                  key: const ValueKey('project-sort-arrow'),
+                  top: -6,
+                  left: 0,
+                  right: 0,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: RotatedBox(
+                      quarterTurns: ascending ? 2 : 0,
+                      child: lumitIcon(LumitIcon.twirlOpen,
+                          size: 8, color: t.textPrimary),
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
 
 /// The search well. Inset on `surface_0` like every other value well (§2.1),
@@ -579,11 +630,14 @@ Widget _footerAction(
 
 /// The picked item's readout (docs/07 §3.1): poster frame, name, and the
 /// item's own vital statistics. Always present at a fixed height, so the tree
-/// below never jumps when the selection changes; with nothing picked it is
-/// simply quiet.
+/// below never jumps when the selection changes; with nothing picked it says
+/// what the project holds.
 Widget projectPreviewCard(
   LumitTheme t, {
   required ItemReference? item,
+
+  /// The line shown while nothing is picked: how many of each kind there are.
+  required String summary,
 
   /// The item's name, read by the panel's own walk — which is where the
   /// calm-on-a-deleted-item guard lives, so the card never reads it again.
@@ -617,7 +671,13 @@ Widget projectPreviewCard(
       ),
       padding: const EdgeInsets.all(_previewPad),
       child: item == null
-          ? const SizedBox.expand()
+          ? Align(
+              alignment: Alignment.topLeft,
+              child: Text(summary,
+                  key: const ValueKey('project-summary'),
+                  style: projectMetaStyle(t),
+                  overflow: TextOverflow.ellipsis),
+            )
           : _previewContent(t, item, name, missing, thumb, info, nodeGraph,
               onScrub: onScrub,
               onPlaySound: onPlaySound,
@@ -829,6 +889,9 @@ String? _previewCodecs(
     if (info.audioCodec != null && info.sampleRate > 0)
       '${projectSampleRateText(info.sampleRate)} '
           '${projectChannelText(info.channels)}',
+    // Said only of a file with more than one: the rate and layout before it
+    // are the first stream's, and this is what says there are others.
+    if (info.audioStreams > 1) l10n.projectAudioStreamCount(info.audioStreams),
   ];
   return parts.isEmpty ? null : parts.join(' · ');
 }

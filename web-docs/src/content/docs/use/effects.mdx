@@ -30,6 +30,20 @@ animated: turn on its stopwatch to begin. See [Keyframes](/use/keyframes/).
 Effects run in stack order. An exposure ahead of a glow does not look like a glow ahead of an
 exposure. Drag an effect up or down the stack to reorder it.
 
+## Past the layer's edges
+
+A layer's picture is the size of the layer, and a shape or text layer's is the size of its
+art. Some effects reach past it, and the layer grows to hold them:
+
+- **Drop shadow**, always.
+- **Gaussian blur**, **Channel blur**, **Directional blur** and **Glow**, with **Repeat edge
+  pixels** off. Added to a shape or text layer, they start with it off.
+- **Tile**, with an output larger than the layer.
+
+An effect after one of these works on the grown layer. Its points and mask paths stay
+where they were on the layer. A **Matte** is black past the layer's edges. On an
+adjustment layer nothing reaches past the frame.
+
 ## Apply one effect to many layers
 
 Select several layers and apply an effect, and each of them gets its own copy — from the
@@ -41,11 +55,17 @@ below them. See [Layers](/use/layers/).
 ## Every effect has a Matte
 
 Every effect's controls have a layer picker labelled **Matte**, with a **Channel**
-dropdown and an **Invert** checkbox beside it. Channel picks what is read from the matte
+dropdown and an **Invert** checkbox beside it. It sits with the **Mix** row under
+**Compositing** at the foot of the effect. Channel picks what is read from the matte
 layer: its brightness by default, or its alpha or one of the colour channels. Select a
 layer and that layer's brightness decides how much of the effect each pixel gets. White
 applies the effect in full and black gets none. Invert reads the same picture the other
 way round.
+
+**Compositing** is shut until you twirl it open. Shut, it reads whatever is off its
+default: the mix, the blend and the matte layer.
+
+<Shot file="effect-compositing.png" caption="Compositing shut on one effect, reading its mix, and open on the next." />
 
 A matte is different from a mask on the effect. A mask can hide what an effect does,
 whereas a matte drives the effect itself. For a handful of effects it applies more than

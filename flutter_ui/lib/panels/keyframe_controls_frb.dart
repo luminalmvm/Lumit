@@ -160,6 +160,9 @@ class KeyedValueField extends StatefulWidget {
   final int decimals;
   final String? suffix;
 
+  /// The property's default, where it has one: what the field's Reset keys.
+  final double? resetTo;
+
   /// The finished edit: a released drag, or a typed value. Called once.
   final ValueChanged<double> onCommit;
 
@@ -189,6 +192,7 @@ class KeyedValueField extends StatefulWidget {
     this.speed = 1,
     this.decimals = 2,
     this.suffix,
+    this.resetTo,
   });
 
   @override
@@ -216,6 +220,7 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
         speed: widget.speed,
         decimals: widget.decimals,
         suffix: widget.suffix,
+        resetTo: widget.resetTo,
         // Typed, reset and pasted values are already one-shot edits.
         onChanged: _commit,
         onChangeStart: () {
@@ -231,6 +236,57 @@ class _KeyedValueFieldState extends State<KeyedValueField> {
         onDragCancel: () => setState(() => _staged = null),
       );
 }
+
+/// A [KeyedValueField] for one scalar that follows the playhead for itself.
+///
+/// The Timeline does not rebuild when the playhead moves, so a row that reads
+/// the frame it was built with shows the wrong value and writes its edit onto
+/// the key it last stood on.
+class PlayheadKeyedField extends StatelessWidget {
+  final Key fieldKey;
+  final BridgeScalar scalar;
+  final CompositionReference comp;
+  final double min;
+  final double max;
+  final int decimals;
+  final String? suffix;
+
+  /// The scalar with the edit keyed at the playhead.
+  final ValueChanged<BridgeScalar> onWrite;
+
+  const PlayheadKeyedField({
+    super.key,
+    required this.fieldKey,
+    required this.scalar,
+    required this.comp,
+    required this.min,
+    required this.max,
+    required this.onWrite,
+    this.decimals = 1,
+    this.suffix,
+  });
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable:
+            Provider.of<LumitUiState>(context, listen: false).playheadFrame,
+        builder: (context, frame, _) => KeyedValueField(
+          fieldKey: fieldKey,
+          value: sampledScalar(scalar, timeOfFrame(comp, frame)),
+          min: min,
+          max: max,
+          decimals: decimals,
+          suffix: suffix,
+          onCommit: (v) => onWrite(scalarWithValueAt(scalar, v, comp, frame)),
+        ),
+      );
+}
+
+/// The stopwatch a property row draws under [t]: the square-bodied one in
+/// Desk, where everything is square, and the round one in Studio and Lantern.
+String stopwatchGlyph(LumitTheme t) => t.shape == ThemeShape.desk
+    ? LumitIcons.stopwatch
+    : LumitIcons.stopwatchRound;
 
 class KeyframeControlsFrb extends StatelessWidget {
   /// The animations this control covers — one for a single value, several for a
@@ -349,38 +405,23 @@ class KeyframeControlsFrb extends StatelessWidget {
         // The one place the stopwatch has colour of its own: `animated` says
         // the property is keyed (§3.1's closed job list), never the accent,
         // which the redesign spends on the filled action and the playhead.
-        // Desk draws the switch as a square, filled when the value is
-        // keyed and outlined when it is not (15-DESIGN-DESK.md 3.2).
-        child: t.shape == ThemeShape.desk
-            ? SizedBox(
-                width: iconSize,
-                height: iconSize,
-                child: Center(
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _animated ? t.accent : null,
-                      border: Border.all(
-                          color: _animated ? t.accent : t.textMuted),
-                    ),
-                  ),
-                ),
-              )
-            : LumitIcon(LumitIcons.stopwatch,
-                size: iconSize, colour: _animated ? t.animated : t.textMuted),
+        child: LumitIcon(stopwatchGlyph(t),
+            size: iconSize, colour: _animated ? t.animated : t.textMuted),
         onPressed: () => _toggleAnimated(playhead.value),
       ),
     );
 
     final navigator = <Widget>[
-      _button(
-        keyName: 'kf-prev-$rowKey',
-        enabled: previous != null,
-        child: LumitIcon(LumitIcons.previousKey,
-            size: iconSize,
-            colour: previous == null ? t.textDisabled : t.textMuted),
-        onPressed: () => _seekTo(previous),
+      LumitTooltip(
+        message: l10n.keyPreviousKeyframe,
+        child: _button(
+          keyName: 'kf-prev-$rowKey',
+          enabled: previous != null,
+          child: LumitIcon(LumitIcons.previousKey,
+              size: iconSize,
+              colour: previous == null ? t.textDisabled : t.textMuted),
+          onPressed: () => _seekTo(previous),
+        ),
       ),
       LumitTooltip(
         message: onKey ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
@@ -391,13 +432,16 @@ class KeyframeControlsFrb extends StatelessWidget {
           onPressed: () => _toggleKeyHere(playhead.value),
         ),
       ),
-      _button(
-        keyName: 'kf-next-$rowKey',
-        enabled: next != null,
-        child: LumitIcon(LumitIcons.nextKey,
-            size: iconSize,
-            colour: next == null ? t.textDisabled : t.textMuted),
-        onPressed: () => _seekTo(next),
+      LumitTooltip(
+        message: l10n.keyNextKeyframe,
+        child: _button(
+          keyName: 'kf-next-$rowKey',
+          enabled: next != null,
+          child: LumitIcon(LumitIcons.nextKey,
+              size: iconSize,
+              colour: next == null ? t.textDisabled : t.textMuted),
+          onPressed: () => _seekTo(next),
+        ),
       ),
     ];
 
@@ -651,19 +695,22 @@ class PathKeyframesFrb extends StatelessWidget {
           message: _animated ? l10n.tipStopAnimating : l10n.tipAnimate,
           child: button(
             keyName: 'kf-stopwatch-$rowKey',
-            child: LumitIcon(LumitIcons.stopwatch,
+            child: LumitIcon(stopwatchGlyph(t),
                 size: iconSize, colour: _animated ? t.animated : t.textMuted),
             onPressed: () => _toggleAnimated(playhead.value),
           ),
         ),
         if (_animated) ...[
-          button(
-            keyName: 'kf-prev-$rowKey',
-            enabled: previous != null,
-            child: LumitIcon(LumitIcons.previousKey,
-                size: iconSize,
-                colour: previous == null ? t.textDisabled : t.textMuted),
-            onPressed: () => onSeek(previous!),
+          LumitTooltip(
+            message: l10n.keyPreviousKeyframe,
+            child: button(
+              keyName: 'kf-prev-$rowKey',
+              enabled: previous != null,
+              child: LumitIcon(LumitIcons.previousKey,
+                  size: iconSize,
+                  colour: previous == null ? t.textDisabled : t.textMuted),
+              onPressed: () => onSeek(previous!),
+            ),
           ),
           LumitTooltip(
             message: onKey ? l10n.tipRemoveKeyframe : l10n.tipAddKeyframe,
@@ -674,13 +721,16 @@ class PathKeyframesFrb extends StatelessWidget {
               onPressed: () => _toggleKeyHere(playhead.value),
             ),
           ),
-          button(
-            keyName: 'kf-next-$rowKey',
-            enabled: next != null,
-            child: LumitIcon(LumitIcons.nextKey,
-                size: iconSize,
-                colour: next == null ? t.textDisabled : t.textMuted),
-            onPressed: () => onSeek(next!),
+          LumitTooltip(
+            message: l10n.keyNextKeyframe,
+            child: button(
+              keyName: 'kf-next-$rowKey',
+              enabled: next != null,
+              child: LumitIcon(LumitIcons.nextKey,
+                  size: iconSize,
+                  colour: next == null ? t.textDisabled : t.textMuted),
+              onPressed: () => onSeek(next!),
+            ),
           ),
         ],
       ],

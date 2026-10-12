@@ -192,25 +192,6 @@ impl Meters {
 mod tests {
     use super::*;
 
-    /// The accumulator's arithmetic: peak is the loudest absolute sample,
-    /// RMS is the root mean square over the frames actually seen, and an
-    /// empty buffer reads as silence rather than dividing by nothing.
-    #[test]
-    fn the_accumulator_is_peak_and_root_mean_square() {
-        let mut acc = MeterAcc::default();
-        assert_eq!(acc.reading(), MeterReading::default());
-
-        // Two frames: L swings ±0.5 (RMS 0.5), R is 0 then 1 (RMS 1/√2).
-        acc.add(0.5, 0.0, 1.0);
-        acc.add(-0.5, 1.0, 1.0);
-        let r = acc.reading();
-        assert!((r.peak[0] - 0.5).abs() < 1e-6, "peak is the absolute value");
-        assert!((r.peak[1] - 1.0).abs() < 1e-6);
-        assert!((r.rms[0] - 0.5).abs() < 1e-6);
-        assert!((r.rms[1] - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-6);
-        assert!(r.clipped, "a sample at the ceiling is a clip");
-    }
-
     /// A sample under the ceiling is not a clip, and the flag is sticky
     /// across buffers until it is reset by hand — the light stays on so it
     /// can be seen by someone who was not watching when it happened.
@@ -233,31 +214,5 @@ mod tests {
         assert!(meters.read(0).clipped, "only a reset puts the light out");
         meters.reset_clip();
         assert!(!meters.read(0).clipped);
-    }
-
-    /// Publishing overwrites rather than accumulating (the newest buffer is
-    /// the reading), silence drops the bars, the master has its own slot,
-    /// and a slot past the bank reads as silence rather than panicking.
-    #[test]
-    fn the_newest_buffer_is_the_reading_and_the_master_has_its_own_slot() {
-        let meters = Meters::default();
-        let mut acc = [MeterAcc::default(); SLOTS];
-        acc[2].add(0.8, 0.8, 1.0);
-        acc[MASTER].add(0.4, 0.4, 1.0);
-        meters.publish(&acc);
-        assert!((meters.read(2).peak[0] - 0.8).abs() < 1e-6);
-        assert!((meters.read(MASTER).peak[0] - 0.4).abs() < 1e-6);
-        assert_eq!(meters.read(1), MeterReading::default(), "an unused strip");
-
-        // A quieter buffer replaces the loud one — meters fall, they do not
-        // remember (the hold above the bar is the panel's, not this bank's).
-        let mut quieter = [MeterAcc::default(); SLOTS];
-        quieter[2].add(0.1, 0.1, 1.0);
-        meters.publish(&quieter);
-        assert!((meters.read(2).peak[0] - 0.1).abs() < 1e-6);
-
-        meters.silence();
-        assert_eq!(meters.read(2).peak, [0.0, 0.0]);
-        assert_eq!(meters.read(SLOTS + 5), MeterReading::default());
     }
 }

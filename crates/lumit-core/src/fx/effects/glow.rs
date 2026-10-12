@@ -174,6 +174,13 @@ pub struct Glow {
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub tint: [f32; 4],
 
+    /// On keeps the halo inside the layer's own picture, holding its strength
+    /// along the edge. Off lets it spread past the edge, which is what a shape
+    /// or a line of text wants: their picture is only as big as the art, and a
+    /// glow held inside it never shows.
+    #[toggle(label = "Repeat edge pixels", default = true)]
+    pub repeat_edge_pixels: bool,
+
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
@@ -259,5 +266,22 @@ impl EffectDef for GlowDef {
             mix,
             &[],
         );
+    }
+
+    fn spread_px(&self, p: Params<'_>) -> [f32; 2] {
+        let glow = Glow::read(p);
+        let (halo, _, _, intensity, _, mix) = glow.packed();
+        if glow.repeat_edge_pixels || intensity <= 0.0 || mix <= 0.0 {
+            return [0.0, 0.0];
+        }
+        // The gaussian is read 6σ out and σ is half the Radius.
+        // ponytail: with Falloff up the widest exponential reads 73 Radii out,
+        // which is too much room to make for light that faint. This gives it
+        // up to 21, where that one is down to a hundredth. Raise it if a very
+        // bright halo shows where the room stops.
+        let ratio = 1.0 - 1.0 / (1.0 + halo.falloff);
+        let reach =
+            halo.radius_px * (0.5 * cpu::GLOW_GAUSS_REACH + 18.0 * ratio) + halo.chromatic_px;
+        [reach, reach]
     }
 }

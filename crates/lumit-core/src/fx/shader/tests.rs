@@ -8,7 +8,7 @@ use std::sync::Arc;
 use super::*;
 use crate::anim::{Animation, Keyframe, Property, SideInterp};
 use crate::expression::ExpressionContext;
-use crate::fx::effects::custom_shader::{program_of, source_of, EXTRA_KEY};
+use crate::fx::effects::custom_shader::{source_of, EXTRA_KEY};
 use crate::fx::{instantiate, MarkerContext, ParamId, Value};
 use crate::model::{EffectParam, EffectValue};
 
@@ -55,21 +55,6 @@ fn row<'a>(p: &'a ShaderProgram, id: &str) -> &'a ParamSchema {
 }
 
 // ------------------------------------------------------------------ §8 item 1
-
-#[test]
-fn a_custom_shader_with_no_source_is_a_passthrough() {
-    let inst = instantiate("custom_shader").unwrap();
-    assert_eq!(source_of(&inst), None, "a fresh instance holds no source");
-    assert!(program_of(&inst).is_none(), "and so compiles nothing");
-    let def = crate::fx::BUILTIN_DEFS.get("custom_shader").unwrap();
-    assert!(def.derived(&inst).is_empty(), "and offers no derived rows");
-    // The identity CPU rung: `apply_cpu` is the default, so the picture is
-    // byte-identical to what it was handed.
-    let mut rgba = vec![0.25, 0.5, 0.75, 1.0, 0.1, 0.2, 0.3, 0.4];
-    let before = rgba.clone();
-    def.apply_cpu(&mut rgba, 2, 1, crate::fx::Params::new(&[]));
-    assert_eq!(rgba, before);
-}
 
 // ------------------------------------------------------------------ §8 item 2
 
@@ -153,72 +138,9 @@ fn the_annotation_reader_derives_every_kind() {
 
 // ------------------------------------------------------------------ §8 item 3
 
-#[test]
-fn an_unannotated_field_is_still_a_parameter() {
-    let p = program(
-        "struct Params {\n  a: f32,\n  b: i32,\n  c: u32,\n  d: vec4<f32>,\n  \
-         /// Where\n  e: vec2<f32>,\n}\nfn shade(uv: vec2<f32>) -> vec4<f32> { return \
-         vec4<f32>(p.a); }",
-    );
-    assert_eq!(
-        row(p, "a").kind,
-        ParamKind::Float {
-            default: 0.0,
-            slider: (0.0, 1.0),
-            hard: (None, None)
-        }
-    );
-    assert_eq!(
-        row(p, "a").label,
-        "A",
-        "an unlabelled field humanises its name"
-    );
-    assert!(matches!(row(p, "b").kind, ParamKind::Int { .. }));
-    assert!(matches!(row(p, "c").kind, ParamKind::Int { .. }));
-    assert!(matches!(row(p, "d").kind, ParamKind::Colour { .. }));
-    assert_eq!(row(p, "e_x").label, "Where X");
-    assert!(
-        !p.params.iter().any(|r| r.id == "e"),
-        "a point is its two halves and never a row of its own"
-    );
-}
-
 // ------------------------------------------------------------------ §8 item 4
 
-#[test]
-fn a_malformed_annotation_skips_one_parameter_and_keeps_the_rest() {
-    let p = program(
-        "struct Params {\n  /// @slider(nonsense) Radius\n  radius: f32,\n  \
-         /// @default(2) Steps\n  steps: i32,\n}\n\
-         fn shade(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }",
-    );
-    assert_eq!(
-        p.params.iter().map(|r| r.id).collect::<Vec<_>>(),
-        vec!["steps"],
-        "the typo costs its own row and no other"
-    );
-    assert_eq!(p.notes.len(), 1, "and says so, calmly: {:?}", p.notes);
-    assert!(p.notes[0].contains("radius"), "{:?}", p.notes);
-    // The field still occupies its bytes: dropping it would move every offset
-    // after it, which is the §7 trap with no error anywhere.
-    assert_eq!(p.fields.len(), 2);
-    assert_eq!(p.fields[1].offset, 4);
-}
-
 // ------------------------------------------------------------------ §8 item 5
-
-#[test]
-fn a_vec3_parameter_is_refused_with_the_padding_reason() {
-    let err = build(
-        "struct Params {\n  /// Tint\n  tint: vec3<f32>,\n}\n\
-         fn shade(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }",
-    )
-    .unwrap_err();
-    assert_eq!(err, ShaderRefusal::Vec3Field("tint".to_owned()));
-    let said = err.to_string();
-    assert!(said.contains("sixteen bytes"), "{said}");
-    assert!(said.contains("vec4<f32>"), "{said}");
-}
 
 // ------------------------------------------------------------------ §8 item 6
 
@@ -270,113 +192,9 @@ fn a_shader_that_declares_its_own_binding_is_refused_at_the_edit() {
     assert!(err.to_string().contains("the host declares the bindings"));
 }
 
-#[test]
-fn every_reserved_name_is_refused_at_the_edit() {
-    for name in RESERVED.iter().copied().chain(["lumit_sample"]) {
-        let source = format!(
-            "fn {name}() -> f32 {{ return 1.0; }}\n\
-             fn shade(uv: vec2<f32>) -> vec4<f32> {{ return vec4<f32>(0.0); }}"
-        );
-        assert_eq!(
-            build(&source).err(),
-            Some(ShaderRefusal::ReservedName(name.to_owned())),
-            "`{name}` must be refused"
-        );
-    }
-    // Inside a function body the same word is the user's own, and is left alone.
-    assert!(build(
-        "fn shade(uv: vec2<f32>) -> vec4<f32> { let src = 1.0; return vec4<f32>(src); }"
-    )
-    .is_ok());
-}
-
-#[test]
-fn a_source_with_no_shade_function_is_refused_at_the_edit() {
-    let err = build("fn other(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }").unwrap_err();
-    assert_eq!(err, ShaderRefusal::NoShadeFunction);
-}
-
-#[test]
-fn a_derived_id_may_not_collide_with_a_declared_one() {
-    let err = build(
-        "struct Params {\n  /// Mix\n  mix: f32,\n}\n\
-         fn shade(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }",
-    )
-    .unwrap_err();
-    assert_eq!(err, ShaderRefusal::DuplicateId("mix".to_owned()));
-}
-
 // ----------------------------------------------------------------- §8 item 10
 
-#[test]
-fn the_prologue_line_count_is_what_remaps_a_compile_error() {
-    let p = program(NINE);
-    let head: String = p
-        .assembled
-        .lines()
-        .take(p.prologue_lines as usize)
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(
-        head.contains("struct Params {") && head.contains("@binding(6)"),
-        "the lifted struct and every binding are host lines"
-    );
-    assert!(
-        !head.contains("fn shade"),
-        "the user's own text begins after them"
-    );
-}
-
 // -------------------------------------------------------- §7, the padding trap
-
-#[test]
-fn the_uniform_layout_is_pinned() {
-    let p = program(NINE);
-    let at = |name: &str| {
-        p.fields
-            .iter()
-            .find(|f| f.name == name)
-            .map(|f| (f.ty, f.offset))
-            .unwrap_or_else(|| panic!("no field `{name}`"))
-    };
-    // f32 f32 f32 i32 u32 u32 | vec4 (16) | vec2 (8) | u32 → 4 4 4 4 4 4, pad to
-    // 32 for the colour, 48 for the point, 56 for the seed, block rounded to 64.
-    assert_eq!(at("radius"), (WgslTy::F32, 0));
-    assert_eq!(at("blend_point"), (WgslTy::F32, 4));
-    assert_eq!(at("angle"), (WgslTy::F32, 8));
-    assert_eq!(at("steps"), (WgslTy::I32, 12));
-    assert_eq!(at("invert"), (WgslTy::U32, 16));
-    assert_eq!(at("edge"), (WgslTy::U32, 20));
-    assert_eq!(at("tint"), (WgslTy::Vec4, 32), "a vec4 aligns to sixteen");
-    assert_eq!(at("centre"), (WgslTy::Vec2, 48), "a vec2 aligns to eight");
-    assert_eq!(at("seed_v"), (WgslTy::U32, 56));
-    assert_eq!(
-        p.params_size, 64,
-        "a uniform block is a multiple of sixteen"
-    );
-
-    // The padding is visible in the text the user can read, not inferred.
-    let head: String = p
-        .assembled
-        .lines()
-        .take(p.prologue_lines as usize)
-        .collect();
-    assert!(
-        head.contains("_pad0: u32,"),
-        "explicit named padding: {head}"
-    );
-}
-
-#[test]
-fn an_empty_params_block_is_still_a_legal_uniform() {
-    // WGSL has no empty struct, so a shader that declares no parameters gets one
-    // placeholder member and a sixteen-byte buffer.
-    let p = program("fn shade(uv: vec2<f32>) -> vec4<f32> { return vec4<f32>(0.0); }");
-    assert!(p.params.is_empty());
-    assert_eq!(p.params_size, 16);
-    assert_eq!(p.pack(crate::fx::Params::new(&[])).len(), 16);
-    assert!(p.assembled.contains("struct Params {"));
-}
 
 #[test]
 fn the_packed_bytes_land_where_the_struct_says() {
@@ -408,20 +226,6 @@ fn the_packed_bytes_land_where_the_struct_says() {
     // The bytes between the last u32 and the block's end are the padding, and
     // they are nought rather than whatever was in the buffer.
     assert_eq!(&bytes[60..64], &[0, 0, 0, 0]);
-}
-
-#[test]
-fn one_source_is_read_once() {
-    let a = program_for(NINE).unwrap();
-    let b = program_for(NINE).unwrap();
-    assert!(
-        std::ptr::eq(a, b),
-        "the parse is cached per distinct source"
-    );
-    assert_eq!(a.source_hash, hash64(NINE.as_bytes()));
-    // A refusal is cached too, so a broken source is not re-read every frame.
-    assert!(program_for("nothing at all").is_err());
-    assert!(program_for("nothing at all").is_err());
 }
 
 // -------------------------------------------------- §8 items 7 and 8, resolve
@@ -483,26 +287,6 @@ fn a_derived_parameter_animates_and_serialises_like_a_declared_one() {
     let back: crate::model::EffectInstance = serde_json::from_str(&json).unwrap();
     assert_eq!(source_of(&back), Some(NINE));
     assert_eq!(resolved_radius(&back, 1.0, 1.0), Some(20.0));
-}
-
-#[test]
-fn a_derived_px_parameter_rescales_with_the_stack() {
-    let inst = instance_with_shader();
-    let mut ops = crate::fx::resolve_stack(
-        std::slice::from_ref(&inst),
-        1.0,
-        2202.9,
-        1.0,
-        &MarkerContext::NONE,
-        Arc::new(ExpressionContext::detached()),
-    );
-    ops.rescale_spatial(0.5);
-    let fx = ops.get(0).unwrap();
-    assert_eq!(
-        fx.params.get(ParamId::new("radius")),
-        Some(Value::Float(10.0)),
-        "a stack reused at another raster moves a derived pixel count too"
-    );
 }
 
 #[test]

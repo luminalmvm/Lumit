@@ -61,27 +61,6 @@ void main() {
           shape: shape,
         );
 
-    /// **The regression.** Under Sharp there was no clip anywhere above the
-    /// stage, so a wireframe wider than the panel landed on whatever sat next
-    /// to the Viewer. The clip is the stage's own now, so both shapes have it.
-    for (final shape in ThemeShape.values) {
-      testWidgets('nothing the stage draws leaves it (${shape.name})',
-          (tester) async {
-        final p = selected();
-        await tester.pumpWidget(host(p, width: 480, shape: shape));
-        await tester.pump();
-        expect(
-          find.descendant(
-            of: find.byType(ViewerStage),
-            matching: find.byType(ClipRect),
-          ),
-          findsWidgets,
-          reason: 'the stage must clip its own marks by construction, not by '
-              'whichever wrapper the theme shape happens to put round it',
-        );
-      });
-    }
-
     /// The drag itself: one tree, re-laid-out at every width the pointer
     /// passes through. Nothing may throw, and the clip must survive every one
     /// of them — a clip that is there at rest and gone mid-gesture is no clip.

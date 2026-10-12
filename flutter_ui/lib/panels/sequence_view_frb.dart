@@ -762,9 +762,9 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
         layer.slideClip(
           clip: drag.clip.id,
           toFrame: drag.clip.startFrame + shift,
-          // A picture row shows one clip at a time and cannot dissolve, so a
-          // slide here overwrites what it lands on. Overlapping is the audio
-          // row's own rule.
+          // A slide on a picture row overwrites what it lands on. Overlapping
+          // by a slide is the audio row's own rule, and a dissolve on a
+          // picture row is made by its own command.
           overlap: false,
         );
       case _Grab.start:

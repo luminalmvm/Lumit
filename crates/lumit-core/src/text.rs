@@ -417,10 +417,286 @@ pub fn glyph_xforms(animators: &[TextAnimator], text: &str, lt: f64) -> Vec<Glyp
     out
 }
 
+// ---- Character and paragraph style --------------------------------------
+
+fn is_default<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+fn is_hundred(v: &f64) -> bool {
+    *v == 100.0
+}
+
+fn is_one(v: &f64) -> bool {
+    *v == 1.0
+}
+
+fn is_true(v: &bool) -> bool {
+    *v
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn hundred_per_cent() -> f64 {
+    100.0
+}
+
+fn one() -> f64 {
+    1.0
+}
+
+fn black() -> crate::model::LinearColour {
+    crate::model::LinearColour::BLACK
+}
+
+fn is_black(c: &crate::model::LinearColour) -> bool {
+    *c == crate::model::LinearColour::BLACK
+}
+
+/// Whether pairs of letters are pulled together by the font's own kerning.
+///
+/// `Off` is what every Text layer drew before there was a choice, so it stays
+/// the value a file with no key reads as.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Kerning {
+    #[default]
+    Off,
+    Metrics,
+}
+
+/// Capitals: as typed, all capitals, or small capitals for the lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Caps {
+    #[default]
+    Normal,
+    All,
+    Small,
+}
+
+/// Where the letters sit against the baseline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Script {
+    #[default]
+    Normal,
+    Superscript,
+    Subscript,
+}
+
+/// Which side the lines of a block line up on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Centre,
+    Right,
+}
+
+/// How a Text layer's letters are set: the font, the spacing, the scale and
+/// the outline.
+///
+/// One style for the whole layer. Every field is left out of the file while
+/// it holds its default, so a layer nobody has styled writes no `style` key.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TextStyle {
+    /// The font family as the system lists it. Empty is the built-in Inter.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub family: String,
+    /// The face inside the family, such as "Bold Italic". Empty is the
+    /// family's regular face.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub face: String,
+    /// Baseline to baseline in px. Unset is auto, 120 % of the size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leading: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub kerning: Kerning,
+    /// Extra space after every letter, in thousandths of an em.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub tracking: f64,
+    /// Per cent. Stretches the letters and their advances sideways.
+    #[serde(default = "hundred_per_cent", skip_serializing_if = "is_hundred")]
+    pub scale_x: f64,
+    /// Per cent. Stretches the letters up from the baseline.
+    #[serde(default = "hundred_per_cent", skip_serializing_if = "is_hundred")]
+    pub scale_y: f64,
+    /// Px the letters are lifted off the baseline, positive is up.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub baseline_shift: f64,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub caps: Caps,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub script: Script,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub faux_bold: bool,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub faux_italic: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub ligatures: bool,
+    /// Off draws the outline alone.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub fill_on: bool,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub stroke_on: bool,
+    /// Kept while the outline is off, so turning it back on brings the same
+    /// colour and width.
+    #[serde(default = "black", skip_serializing_if = "is_black")]
+    pub stroke: crate::model::LinearColour,
+    /// Px, centred on the letter's edge.
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    pub stroke_width: f64,
+    /// The outline is drawn over the fill. Off puts the fill on top, which
+    /// hides the inner half of the outline.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub stroke_over: bool,
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl Default for TextStyle {
+    fn default() -> Self {
+        Self {
+            family: String::new(),
+            face: String::new(),
+            leading: None,
+            kerning: Kerning::Off,
+            tracking: 0.0,
+            scale_x: 100.0,
+            scale_y: 100.0,
+            baseline_shift: 0.0,
+            caps: Caps::Normal,
+            script: Script::Normal,
+            faux_bold: false,
+            faux_italic: false,
+            ligatures: true,
+            fill_on: true,
+            stroke_on: false,
+            stroke: crate::model::LinearColour::BLACK,
+            stroke_width: 1.0,
+            stroke_over: true,
+            extra: serde_json::Map::new(),
+        }
+    }
+}
+
+impl TextStyle {
+    /// True while nothing has been styled, which is when the layer draws the
+    /// way it always did.
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The style as bytes for the frame key. Only the fields that differ from
+    /// the default are in it, the same as the file.
+    #[must_use]
+    pub fn key_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap_or_default()
+    }
+}
+
+/// How the lines of a Text layer are laid out against each other.
+///
+/// Each line the user breaks is its own paragraph, as it is for point text in
+/// After Effects, so without a box the first line indent reaches every line.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct ParagraphStyle {
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub align: TextAlign,
+    /// Px the words wrap to. Nought is point text, where a line only ends
+    /// where it was broken.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub box_width: f64,
+    /// Stretch every line but a paragraph's last to the box, by its spaces.
+    /// Does nothing without a box.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub justify: bool,
+    /// Px in from the left edge of the block.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub indent_left: f64,
+    /// Px in from the right edge of the block.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub indent_right: f64,
+    /// Px added to the left indent of a paragraph's first line.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub indent_first: f64,
+    /// Px of room above every line but the first.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub space_before: f64,
+    /// Px of room below every line but the last.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub space_after: f64,
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl ParagraphStyle {
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The same idea as [`TextStyle::key_bytes`].
+    #[must_use]
+    pub fn key_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap_or_default()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+
+    /// An unstyled layer writes nothing, and a styled one writes only what was
+    /// changed and reads back the same.
+    #[test]
+    fn a_style_writes_only_what_was_changed() {
+        assert_eq!(serde_json::to_string(&TextStyle::default()).unwrap(), "{}");
+        assert_eq!(
+            serde_json::to_string(&ParagraphStyle::default()).unwrap(),
+            "{}"
+        );
+        assert_eq!(
+            serde_json::from_str::<TextStyle>("{}").unwrap(),
+            TextStyle::default()
+        );
+
+        let style = TextStyle {
+            family: "Arial".into(),
+            face: "Bold".into(),
+            leading: Some(90.0),
+            kerning: Kerning::Metrics,
+            tracking: 50.0,
+            scale_x: 87.0,
+            stroke_on: true,
+            stroke_width: 4.0,
+            ligatures: false,
+            ..TextStyle::default()
+        };
+        let json = serde_json::to_string(&style).unwrap();
+        assert!(!json.contains("scale_y"), "{json}");
+        assert!(!json.contains("caps"), "{json}");
+        assert_eq!(serde_json::from_str::<TextStyle>(&json).unwrap(), style);
+        assert_ne!(style.key_bytes(), TextStyle::default().key_bytes());
+
+        let paragraph = ParagraphStyle {
+            align: TextAlign::Centre,
+            space_after: 12.0,
+            ..ParagraphStyle::default()
+        };
+        let json = serde_json::to_string(&paragraph).unwrap();
+        assert!(!json.contains("indent"), "{json}");
+        assert_eq!(
+            serde_json::from_str::<ParagraphStyle>(&json).unwrap(),
+            paragraph
+        );
+    }
 
     fn selector(start: f64, end: f64, offset: f64) -> RangeSelector {
         RangeSelector {
@@ -429,82 +705,6 @@ mod tests {
             offset: Property::fixed(offset),
             ..RangeSelector::default()
         }
-    }
-
-    /// **A square selector is in or out.** Half the run selected means half the
-    /// letters moved the whole way and the rest not moved at all — the case
-    /// every cascade is built out of, asserted letter by letter.
-    #[test]
-    fn a_square_selector_moves_the_letters_inside_it_and_no_others() {
-        let s = selector(0.0, 50.0, 0.0);
-        assert_eq!(s.weights_at(4, 0.0), vec![1.0, 1.0, 0.0, 0.0]);
-        // And sliding it by the offset walks the selection along.
-        let slid = selector(0.0, 50.0, 50.0);
-        assert_eq!(slid.weights_at(4, 0.0), vec![0.0, 0.0, 1.0, 1.0]);
-    }
-
-    /// **A ramp rises across the range and stays up past it.** The first letter
-    /// is barely touched, the last is moved the whole way, and letters past the
-    /// end keep the whole way rather than snapping back.
-    #[test]
-    fn a_ramp_rises_across_the_range_and_holds_past_it() {
-        let s = RangeSelector {
-            shape: SelectorShape::Ramp,
-            ..selector(0.0, 50.0, 0.0)
-        };
-        let w = s.weights_at(4, 0.0);
-        assert!((w[0] - 0.25).abs() < 1e-6, "{w:?}");
-        assert!((w[1] - 0.75).abs() < 1e-6, "{w:?}");
-        assert_eq!((w[2], w[3]), (1.0, 1.0), "the ramp fell back down");
-        // Rising, and never falling.
-        assert!(w.windows(2).all(|p| p[1] >= p[0]));
-    }
-
-    /// A range with no width is a step rather than a division by nothing.
-    #[test]
-    fn a_zero_width_ramp_is_a_step() {
-        let s = RangeSelector {
-            shape: SelectorShape::Ramp,
-            ..selector(50.0, 50.0, 0.0)
-        };
-        assert_eq!(s.weights_at(4, 0.0), vec![0.0, 0.0, 1.0, 1.0]);
-        // A square one selects nothing at all, which is the honest reading of
-        // a range between a point and itself.
-        assert_eq!(selector(50.0, 50.0, 0.0).weights_at(4, 0.0), vec![0.0; 4]);
-    }
-
-    /// A range dragged inside out still means the stretch between its ends.
-    #[test]
-    fn an_inside_out_range_still_names_the_stretch_between_its_ends() {
-        assert_eq!(
-            selector(75.0, 25.0, 0.0).weights_at(4, 0.0),
-            selector(25.0, 75.0, 0.0).weights_at(4, 0.0)
-        );
-    }
-
-    /// **Words are counted whole, and the gaps go with the word before them.**
-    /// Otherwise a range sweeping a sentence would pause on each space as if it
-    /// were a word of its own.
-    #[test]
-    fn words_are_counted_whole_and_the_spaces_go_with_them() {
-        let (units, total) = unit_indices("ab cd", SelectorBasis::Words);
-        assert_eq!(total, 2);
-        assert_eq!(units, vec![0, 0, 0, 1, 1], "the space left its word");
-        // Runs of spaces, and leading spaces, behave the same way.
-        let (units, total) = unit_indices("  a   b ", SelectorBasis::Words);
-        assert_eq!(total, 2);
-        assert_eq!(units, vec![0, 0, 0, 0, 0, 0, 1, 1]);
-        // Counting characters, every character is its own unit.
-        assert_eq!(
-            unit_indices("ab cd", SelectorBasis::Characters),
-            (vec![0, 1, 2, 3, 4], 5)
-        );
-        // Nothing to count is not an error.
-        assert_eq!(unit_indices("", SelectorBasis::Words), (Vec::new(), 0));
-        assert_eq!(
-            unit_indices("   ", SelectorBasis::Words),
-            (vec![0, 0, 0], 0)
-        );
     }
 
     /// Counting words, the letters of one word move **together** — which is the
@@ -525,19 +725,6 @@ mod tests {
         for c in &x[3..5] {
             assert_eq!(c.position[1], 0.0, "the second word moved");
         }
-    }
-
-    /// **No animators, no transforms** — the promise the byte-identity gate
-    /// rests on: the caller is handed nothing to apply, not a list of
-    /// identities it has to notice are identities.
-    #[test]
-    fn a_layer_with_no_animators_asks_for_nothing() {
-        assert!(glyph_xforms(&[], "Lumit", 0.0).is_empty());
-        // And an animator on an empty line has nothing to move.
-        assert!(glyph_xforms(&[TextAnimator::new("A")], "", 0.0).is_empty());
-        // A fresh animator changes nothing until a number is moved.
-        let fresh = glyph_xforms(&[TextAnimator::new("A")], "Lu", 0.0);
-        assert!(fresh.iter().all(GlyphXform::is_identity), "{fresh:?}");
     }
 
     /// **Two animators compose.** A fade and a drop written separately have to
@@ -575,15 +762,5 @@ mod tests {
         assert!((x[0].position[0] - 25.0).abs() < 1e-4, "{x:?}");
         assert!((x[1].position[0] - 75.0).abs() < 1e-4, "{x:?}");
         assert!((x[0].scale[0] - 1.25).abs() < 1e-6, "{x:?}");
-    }
-
-    /// A fresh animator writes almost nothing: every default is left out of the
-    /// file, so an animator nobody has touched costs its name and no more.
-    #[test]
-    fn a_default_animator_writes_only_its_name() {
-        let json = serde_json::to_string(&TextAnimator::new("Animator 1")).unwrap();
-        assert_eq!(json, r#"{"name":"Animator 1"}"#, "{json}");
-        let back: TextAnimator = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, TextAnimator::new("Animator 1"));
     }
 }

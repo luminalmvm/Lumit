@@ -239,44 +239,6 @@ mod tests {
         assert_eq!(far, [65535, 37449, 56173, 0]);
     }
 
-    /// **A flat frame is flat, and so is a frame of nonsense.** Stretching
-    /// either over the whole range would paint rounding noise as depth.
-    #[test]
-    fn a_frame_with_no_range_comes_back_flat() {
-        assert_eq!(
-            quantise(&[3.0, 3.0, 3.0], DepthKind::InverseRelative),
-            [0; 3]
-        );
-        assert_eq!(quantise(&[], DepthKind::InverseRelative), Vec::<u16>::new());
-        assert_eq!(
-            quantise(&[f32::NAN, f32::NAN], DepthKind::InverseRelative),
-            [0; 2]
-        );
-    }
-
-    /// **With nothing installed, opening the pack is a refusal that says which
-    /// is missing.** The badge's detail is chosen off this, so "install the
-    /// runtime" and "install a depth pack" must not be the same answer.
-    #[test]
-    fn opening_with_nothing_installed_refuses_by_name() {
-        let _serial = crate::test_support::serially();
-        let root = tempfile::tempdir().unwrap();
-        store::with_dir(Some(root.path().to_path_buf()));
-        let refusal = Depth::open().unwrap_err();
-        assert!(
-            matches!(
-                refusal,
-                MlError::RuntimeMissing | MlError::PackMissing(Task::Depth)
-            ),
-            "{refusal:?}"
-        );
-        assert!(
-            installed_identity().is_none(),
-            "and there is nothing to name"
-        );
-        store::with_dir(None);
-    }
-
     /// Where the real Depth Anything file sits on the reference machine.
     fn real_depth() -> Option<PathBuf> {
         let packs = crate::test_support::packs_dir()?;

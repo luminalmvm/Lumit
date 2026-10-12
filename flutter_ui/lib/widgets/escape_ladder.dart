@@ -31,7 +31,7 @@ enum EscapeRung {
   popup,
 
   /// A dialogue or a surface that has taken the window: a modal, the FX
-  /// console, the command palette, the welcome screen.
+  /// console, the command palette, the welcome screen, the guided tour.
   dialog,
 
   /// The finest selection held on screen.

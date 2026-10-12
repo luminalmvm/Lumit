@@ -22,7 +22,6 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
-import '../state/comp_time.dart';
 import '../state/timeline_columns.dart';
 import '../widgets/controls.dart';
 import 'keyframe_controls_frb.dart';
@@ -205,9 +204,6 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
 
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
 
-  void _commitKeyed(double v) =>
-      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -222,7 +218,7 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(puppetValueLabel(widget.value),
+          child: Text(t.propertyCase(puppetValueLabel(widget.value)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(
@@ -259,15 +255,14 @@ class _PuppetPinValueRowState extends State<PuppetPinValueRow> {
     }
     // Animated: the field shows what the curve reads at the playhead, and an
     // edit writes the key there.
-    return KeyedValueField(
+    return PlayheadKeyedField(
       fieldKey: key,
-      value:
-          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      scalar: scalar,
+      comp: widget.comp,
       min: min,
       max: max,
-      decimals: 1,
       suffix: suffix,
-      onCommit: _commitKeyed,
+      onWrite: _write,
     );
   }
 }

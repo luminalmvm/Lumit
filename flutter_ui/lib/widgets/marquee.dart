@@ -6,6 +6,7 @@
 // coordinates and the owner decides what fell inside it. A plain click calls
 // [onClear] — a selection box around nothing means "select nothing" everywhere.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -47,6 +48,28 @@ class MarqueeBox extends StatelessWidget {
   }
 }
 
+/// A box handed out through [MarqueeSelect.box], drawn where its owner puts
+/// this: a `Stack` child above whatever the gesture layer sits behind.
+class MarqueeOverlay extends StatelessWidget {
+  final ValueListenable<Rect?> box;
+
+  const MarqueeOverlay({super.key, required this.box});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: ValueListenableBuilder<Rect?>(
+        valueListenable: box,
+        builder: (context, rect, _) => rect == null
+            ? const SizedBox.shrink()
+            : Stack(children: [
+                Positioned.fromRect(rect: rect, child: const MarqueeBox()),
+              ]),
+      ),
+    );
+  }
+}
+
 class MarqueeSelect extends StatefulWidget {
   /// The finished box, in this widget's own coordinates, and whether the drag
   /// was **additive** — `Shift` or `Ctrl` held when it started.
@@ -65,11 +88,18 @@ class MarqueeSelect extends StatefulWidget {
   /// (the graph editor's Ctrl+click plants a key on the curve there).
   final void Function(Offset local)? onTapAt;
 
+  /// When set, the box is written here instead of being drawn, for a
+  /// [MarqueeOverlay] higher up the owner's stack. This widget has to sit
+  /// behind the bars to leave them their gestures, and a box drawn from back
+  /// here was drawn behind them too, and behind the row lines.
+  final ValueNotifier<Rect?>? box;
+
   const MarqueeSelect({
     super.key,
     required this.onSelect,
     required this.onClear,
     this.onTapAt,
+    this.box,
   });
 
   @override
@@ -84,14 +114,22 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
   /// this drag began.
   bool _additive = false;
 
+  /// The box's moving corner, or null to put the box away.
+  void _show(Offset? to) {
+    setState(() {
+      _to = to;
+      if (to == null) _from = null;
+    });
+    final from = _from;
+    widget.box?.value =
+        from == null || to == null ? null : Rect.fromPoints(from, to);
+  }
+
   void _finish() {
     final from = _from;
     final to = _to;
     final additive = _additive;
-    setState(() {
-      _from = null;
-      _to = null;
-    });
+    _show(null);
     if (from == null || to == null) return;
     widget.onSelect(Rect.fromPoints(from, to), additive);
   }
@@ -121,16 +159,13 @@ class _MarqueeSelectState extends State<MarqueeSelect> {
                   keys.isControlPressed ||
                   keys.isMetaPressed;
             },
-            onPanStart: (d) => setState(() => _to = d.localPosition),
-            onPanUpdate: (d) => setState(() => _to = d.localPosition),
+            onPanStart: (d) => _show(d.localPosition),
+            onPanUpdate: (d) => _show(d.localPosition),
             onPanEnd: (_) => _finish(),
-            onPanCancel: () => setState(() {
-              _from = null;
-              _to = null;
-            }),
+            onPanCancel: () => _show(null),
           ),
         ),
-        if (_from != null && _to != null)
+        if (widget.box == null && _from != null && _to != null)
           Positioned.fromRect(
             rect: Rect.fromPoints(_from!, _to!),
             child: const MarqueeBox(),

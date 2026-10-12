@@ -20,6 +20,7 @@ import '../state/comp_time.dart';
 import '../state/drag_payloads.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
+import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import 'placeholder.dart';
 import 'timeline_extras_frb.dart';
@@ -112,6 +113,11 @@ class FoldRow extends StatelessWidget {
   final String path;
   final List<String> selectedProperties;
 
+  /// The colour of each other person in a shared project who has this row
+  /// selected. The row is tinted in the first one's and carries a bar shared
+  /// out between them.
+  final List<int> others;
+
   /// Each selected path's graph line colours, one per axis — the label text
   /// takes them so the outline names its curves (docs/07 §5).
   final Map<String, List<Color>> graphColours;
@@ -162,6 +168,7 @@ class FoldRow extends StatelessWidget {
     required this.onToggle,
     required this.onChanged,
     required this.locked,
+    this.others = const [],
     this.onSetEnabled,
     this.onAddEffect,
   });
@@ -178,6 +185,7 @@ class FoldRow extends StatelessWidget {
     final selected = selectedProperties.contains(path);
     final contains =
         !selected && selectedProperties.any((p) => isUnderPath(path, p));
+    final theirs = others.isEmpty ? null : t.personColour(others.first);
     // Selection rides on the property's *name* (docs/07 §4.3) — and on any
     // press that *acts* on the row: the stopwatch, the ◄ ◆ ►
     // navigator, a value drag. Touching a row's controls IS choosing it, and
@@ -233,11 +241,16 @@ class FoldRow extends StatelessWidget {
                 ? rowSelectionFill(t)
                 : contains
                     ? rowSelectionFill(t).withValues(alpha: 0.45)
-                    : null,
+                    : theirs?.withValues(alpha: 0.16),
             borderRadius: t.shape == ThemeShape.lantern
                 ? BorderRadius.circular(t.tokens.controlRadius)
                 : null,
           ),
+          // Someone else's row keeps their bar under this person's own
+          // selection too. Painted over the row, so it moves nothing in it.
+          foregroundDecoration: theirs == null
+              ? null
+              : TheirBar([for (final c in others) t.personColour(c)]),
           // **The trailing inset is the layer rows' own** (`outlineRowTrailing`).
           // A fold row's value cells and its render-time reading sit in the
           // columns the layer rows set, and both are laid out from the right,
@@ -259,7 +272,11 @@ class FoldRow extends StatelessWidget {
               ? AbsorbPointer(
                   child: Opacity(opacity: 0.5, child: _control(context)),
                 )
-              : _control(context),
+              // A property row is held for whoever else in a shared project
+              // is changing its value.
+              : picks
+                  ? HeldFor(names: [path], child: _control(context))
+                  : _control(context),
         ),
       ),
     );
@@ -364,7 +381,13 @@ class FoldRow extends StatelessWidget {
             },
           ),
         ),
-      FoldGroupRow(:final path, :final label, :final open, :final enabled) =>
+      FoldGroupRow(
+        :final path,
+        :final label,
+        :final open,
+        :final enabled,
+        :final named
+      ) =>
         GestureDetector(
           key: ValueKey<String>('tl-group-$path'),
           behavior: HitTestBehavior.opaque,
@@ -375,9 +398,15 @@ class FoldRow extends StatelessWidget {
           // how the outline is navigated; a *modified* click only picks, so
           // Ctrl- and Shift-clicking a run of effects does not flap every one
           // of them open on the way past.
+          //
+          // An effect's own heading only picks, whatever the click. Its name
+          // is the thing being chosen, here and in the effect controls, so
+          // choosing an open effect must not fold it away.
           onTap: () {
             onSelectProperty(path);
-            if (!isModifiedClick) onToggle(path);
+            if (!isModifiedClick && effectIdOfPath(path) == null) {
+              onToggle(path);
+            }
           },
           // An *effect's* heading offers to copy the picked effects. The other
           // headings — Transform, Effects, Masks, Audio — are groupings rather
@@ -411,10 +440,13 @@ class FoldRow extends StatelessWidget {
                   // Wider than the glyph: the twirl is now the only way to open
                   // a heading, so it has to be worth aiming at.
                   width: iconSize + 6,
-                  child: glyph.LumitIcon(
-                    open ? LumitIcons.collapse : LumitIcons.expand,
-                    size: iconSize,
-                    colour: open ? t.textPrimary : t.textMuted,
+                  child: TwirlTurn(
+                    open: open,
+                    child: glyph.LumitIcon(
+                      open ? LumitIcons.collapse : LumitIcons.expand,
+                      size: iconSize,
+                      colour: open ? t.textPrimary : t.textMuted,
+                    ),
                   ),
                 ),
               ),
@@ -433,7 +465,7 @@ class FoldRow extends StatelessWidget {
               if (effectIdOfPath(path) case final String effectId
                   when timingsColumn.width > 0) ...[
                 Expanded(
-                  child: Text(label,
+                  child: Text(named ? label : t.propertyCase(label),
                       style: t.body, overflow: TextOverflow.ellipsis),
                 ),
                 Padding(
@@ -445,7 +477,7 @@ class FoldRow extends StatelessWidget {
                 ),
               ] else
                 Flexible(
-                  child: Text(label,
+                  child: Text(named ? label : t.propertyCase(label),
                       style: t.body, overflow: TextOverflow.ellipsis),
                 ),
               // The glyph that fills the rack this heading names, where a
@@ -562,11 +594,13 @@ class FoldRow extends StatelessWidget {
           valueColumn: valueColumn,
           onChanged: onChanged,
         ),
-      FoldShapeValueRow(:final item, :final value) => ShapeValueRow(
+      FoldShapeValueRow(:final item, :final value, :final stop) =>
+        ShapeValueRow(
           comp: comp,
           layer: layer,
           item: item,
           value: value,
+          stop: stop,
           valueColumn: valueColumn,
           playheadFrame: playheadFrame,
           onSeek: onSeek,
@@ -691,6 +725,7 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
       // One lane tall, like every other fold row: the card's own vertical
       // padding on top of that clipped the fields.
       rowPadding: EdgeInsets.zero,
+      sliderTrack: false,
       // The staged value while a drag is in flight, the document's otherwise.
       value: _editor.stagedValue(row.info.id, row.param.id) ?? row.value,
       siblings: {for (final v in row.info.values) v.id: v.value},
@@ -827,7 +862,9 @@ class _FlowRow extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: onLabelTap,
             child: Row(children: [
-              Flexible(child: Text(row.kind.label, style: t.body)),
+              Flexible(
+                  child:
+                      Text(t.propertyCase(row.kind.label), style: t.body)),
             ]),
           ),
         ),
@@ -940,7 +977,8 @@ class _VolumeRowState extends State<_VolumeRow> {
               },
             ),
             const SizedBox(width: 4),
-            Expanded(child: Text(l10n.volume, style: t.body)),
+            Expanded(
+                child: Text(t.propertyCase(l10n.volume), style: t.body)),
             SizedBox(
               width: widget.valueColumn.width,
               // Animated: the change lands in the key under the playhead (or

@@ -1,0 +1,22 @@
+---
+// A page of plain writing: the terms, the privacy page, refunds. Written as
+// Markdown, and set the way a release note is.
+import Base from "./Base.astro";
+
+const { frontmatter } = Astro.props;
+---
+
+<Base title={`${frontmatter.title} - Lumit`} description={frontmatter.description}>
+  <section class="pt-14 pb-24 sm:pt-20 sm:pb-32">
+    <div class="wrap">
+      <div class="sec-rule">
+        <p class="kicker pl-3">{frontmatter.kicker}</p>
+        <span class="sec-no">{frontmatter.updated}</span>
+      </div>
+      <h1 class="sec-title mt-7">{frontmatter.title}</h1>
+      <div class="release-prose mt-10 max-w-[720px] text-fg-2">
+        <slot />
+      </div>
+    </div>
+  </section>
+</Base>

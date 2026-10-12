@@ -385,7 +385,7 @@ pub fn fire_effect_action(
     // track's four: one doorway, so a press is one crossing whichever effect
     // made it.
     if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
-        return crate::api::roto::press(&layer, fx, &param);
+        return crate::api::roto::press(crate::api::roto::layer_source(&layer), fx, &param);
     }
     // Extract channels' one button, through the same doorway (docs/08 §3.97):
     // read the layer's file again and rebuild the four dropdowns from what it
@@ -422,10 +422,56 @@ pub fn fire_effect_action(
             _ => Err(BridgeError::InvalidParam),
         };
     }
+    // Track points' two, filed under the instance as the Planar track's are.
+    if fx.effect.match_name == lumit_core::fx::effects::track_points::MATCH_NAME {
+        return match param.as_str() {
+            CANCEL => {
+                lumit_render::track::cancel(effect);
+                Ok(())
+            }
+            ANALYSE => {
+                let LayerKind::Footage { item: media } = item.kind else {
+                    return Err(BridgeError::NotFootage);
+                };
+                let (path, fingerprint) = media_source(&layer, media)?;
+                let job = lumit_render::track::points_job_for(&item, fx, path, &fingerprint, true)
+                    .ok_or(BridgeError::NotFootage)?;
+                match lumit_render::track::request(job) {
+                    lumit_render::track::Requested::Started => Ok(()),
+                    _ => Err(BridgeError::AnalysisBusy),
+                }
+            }
+            _ => Err(BridgeError::InvalidParam),
+        };
+    }
+    // Bake points' two. The bake reads the document as it stands now.
+    if fx.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+        return match param.as_str() {
+            CANCEL => {
+                lumit_render::track::cancel(effect);
+                Ok(())
+            }
+            "bake" => {
+                let project = layer.project()?;
+                let doc = project
+                    .read()
+                    .map_err(|_| BridgeError::ReadFailed)?
+                    .store
+                    .snapshot();
+                let asked =
+                    lumit_render::track::request_bake(doc, layer.comp_id, layer.layer_id, effect);
+                match asked {
+                    lumit_render::track::Requested::Started => Ok(()),
+                    _ => Err(BridgeError::AnalysisBusy),
+                }
+            }
+            _ => Err(BridgeError::InvalidParam),
+        };
+    }
     // And the planes tier's two, on the one predicate `lumit_core::planes`
     // owns rather than a list of names here (docs/impl/addons.md §6.1).
     if lumit_core::planes::task_of(fx).is_some() {
-        return crate::api::planes::press(&layer, fx, &param);
+        return crate::api::planes::press(crate::api::roto::layer_source(&layer), fx, &param);
     }
     if matches!(fx.effect.namespace, EffectNamespace::Ofx) {
         return press_plugin(layer, effect, param, frame.unwrap_or(0));
@@ -482,9 +528,18 @@ pub(crate) fn media_source(
     layer: &LayerReference,
     media: Uuid,
 ) -> Result<(PathBuf, Fingerprint), BridgeError> {
+    media_source_in(layer.project_id, media)
+}
+
+/// [`media_source`] by the project's own id, for a caller with no layer to
+/// name it through: a box in a node graph reads a footage item directly.
+pub(crate) fn media_source_in(
+    project: Uuid,
+    media: Uuid,
+) -> Result<(PathBuf, Fingerprint), BridgeError> {
     let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
     let project = projects
-        .get(&layer.project_id)
+        .get(&project)
         .ok_or(BridgeError::InvalidProject)?
         .clone();
     drop(projects);
@@ -581,14 +636,47 @@ pub(crate) fn press_plugin_now(
             .iter_mut()
             .find(|e| e.id == effect)
             .ok_or(BridgeError::InvalidEffect)?;
-        for (row, value) in pressed.rows {
-            if let Some(param) = fx.params.iter_mut().find(|p| p.id == row) {
-                write_row(&mut param.value, value, at);
-            }
-        }
-        fx.set_plugin_state(pressed.memory.as_deref().unwrap_or(&[]));
+        keep(fx, pressed, at);
         Ok(())
     })
+}
+
+/// Let each plugin in an edited list answer the edit, and keep what it wrote
+/// on the list.
+///
+/// A plugin answers an edit by setting, hiding and greying its other
+/// controls. Only a new instance, or one whose values moved, is news to it.
+/// Called before the commit and with no lock held, since the plugin is asked
+/// in its own process and a render in flight is waited for.
+pub(crate) fn settle(
+    before: &[lumit_core::model::EffectInstance],
+    after: &mut [lumit_core::model::EffectInstance],
+) {
+    for fx in after {
+        let was = before.iter().find(|held| held.id == fx.id);
+        if was.is_some_and(|was| was.params == fx.params) {
+            continue;
+        }
+        let answer =
+            lumit_core::fx::def(fx.effect.match_name.as_str()).and_then(|def| def.settle(was, fx));
+        if let Some(answer) = answer {
+            keep(fx, answer, Rational::ZERO);
+        }
+    }
+}
+
+/// Put what a plugin wrote onto the document's copy of its instance.
+pub(crate) fn keep(
+    fx: &mut lumit_core::model::EffectInstance,
+    pressed: lumit_core::fx::Pressed,
+    at: Rational,
+) {
+    for (row, value) in pressed.rows {
+        if let Some(param) = fx.params.iter_mut().find(|p| p.id == row) {
+            write_row(&mut param.value, value, at);
+        }
+    }
+    fx.set_plugin_state(pressed.memory.as_deref().unwrap_or(&[]));
 }
 
 /// The picture the plugin's window is shown: the comp at `frame` with the
@@ -636,7 +724,7 @@ fn press_frame(
 /// Put a value the plugin wrote onto the document's row at `at`, keeping the
 /// row's animation: a static row takes the value, a keyed row gets a key
 /// there, and a row an expression drives stays the expression's.
-fn write_row(value: &mut EffectValue, written: Value, at: Rational) {
+pub(crate) fn write_row(value: &mut EffectValue, written: Value, at: Rational) {
     fn set(property: &mut Property, v: f64, at: Rational) {
         if let Animation::Static(held) = &mut property.animation {
             *held = v;
@@ -955,13 +1043,17 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
     let Ok(item) = layer.item() else {
         return status;
     };
-    if !item
-        .effects
-        .iter()
-        .any(|e| e.id == effect && e.effect.match_name == lumit_core::track::PLANAR_TRACK)
-    {
+    // Track points files its progress under its own id too, so the one status
+    // answers for both.
+    use lumit_core::fx::effects::{bake_points, track_points};
+    let Some(inst) = item.effects.iter().find(|e| {
+        e.id == effect
+            && (e.effect.match_name == lumit_core::track::PLANAR_TRACK
+                || e.effect.match_name == track_points::MATCH_NAME
+                || e.effect.match_name == bake_points::MATCH_NAME)
+    }) else {
         return status;
-    }
+    };
     match lumit_render::track::progress(effect) {
         Some(lumit_render::track::Progress::Queued) => status.stage = BridgeTrackStage::Queued,
         Some(lumit_render::track::Progress::Tracking { done, total }) => {
@@ -987,6 +1079,39 @@ pub fn planar_status(layer: LayerReference, effect: Uuid) -> BridgePlanarStatus 
         status.frames = u32::try_from(tracked.track.frames.len()).unwrap_or(u32::MAX);
         status.clip_frames = u32::try_from(tracked.clip_frames).unwrap_or(u32::MAX);
         status.reanchors = tracked.track.reanchors;
+    }
+    // An analysis that matches the rows as they stand covers the whole clip.
+    if let Some(baked) = track_points::fresh(inst, &item) {
+        if status.stage == BridgeTrackStage::Idle {
+            status.stage = BridgeTrackStage::Done;
+        }
+        status.frames = baked.frames;
+        status.clip_frames = baked.frames;
+    }
+    // A bake this instance may read. Fewer frames than the span is one a
+    // budget stopped early.
+    let bake = || {
+        if inst.effect.match_name != bake_points::MATCH_NAME {
+            return None;
+        }
+        let project = layer.project().ok()?;
+        let doc = project.read().ok()?.store.snapshot();
+        bake_points::usable(&doc, doc.comp(layer.comp_id)?, &item, inst)
+    };
+    if let Some(baked) = bake() {
+        if status.stage == BridgeTrackStage::Idle {
+            status.stage = BridgeTrackStage::Done;
+        }
+        status.frames = u32::try_from(baked.frames.len()).unwrap_or(u32::MAX);
+        status.clip_frames = baked.span;
+    }
+    // Done with nothing to read: the rows have changed since, and the effect
+    // is drawing without that answer. A Planar track always has its own.
+    if status.stage == BridgeTrackStage::Done
+        && status.clip_frames == 0
+        && inst.effect.match_name != lumit_core::track::PLANAR_TRACK
+    {
+        status.stage = BridgeTrackStage::Idle;
     }
     status
 }

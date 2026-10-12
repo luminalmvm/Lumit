@@ -43,6 +43,18 @@ const double projectItemsColumn = 36;
 const double projectSizeColumn = 64;
 const double projectFpsColumn = 22;
 
+/// The Duration column: an item's length as the panel's own clock face, the
+/// one the preview card already writes. `00:00:00:00` is eleven characters of
+/// the 10px mono, and twelve where the frames field takes three digits or a
+/// sound file counts milliseconds, so the column is sized for twelve. Fixed,
+/// like fps: a clock face is as wide as the digits it writes.
+const double projectDurationColumn = 72;
+
+/// The slot a footage row's poster frame takes when thumbnails are on, in
+/// place of the 13 the type glyph stands in: the row's own 22 tall at 16:9.
+/// Every row widens its slot together, so the names still stand in one column.
+const double projectRowThumbWidth = 39;
+
 /// The Path column, at the list's right (§12A.3a). **Its starting width**, not
 /// its width: Path is the column the panel's spare room goes to (owner, desk
 /// test), so 40 is the narrowest it is ever drawn and every pixel the panel
@@ -79,7 +91,10 @@ const double projectNameColumn = 220;
 /// Session-lived, like the Timeline's group widths — nothing writes a column
 /// width to the settings file, and the two panels answer this question the
 /// same way.
-enum ProjectColumn { name, items, size, fps, path }
+///
+/// Duration follows fps, which is the order the preview card's fact line
+/// already reads in: size, rate, length.
+enum ProjectColumn { name, items, size, fps, duration, path }
 
 /// Each column's width before anybody has dragged it.
 const Map<ProjectColumn, double> defaultProjectColumnWidths = {
@@ -87,18 +102,21 @@ const Map<ProjectColumn, double> defaultProjectColumnWidths = {
   ProjectColumn.items: projectItemsColumn,
   ProjectColumn.size: projectSizeColumn,
   ProjectColumn.fps: projectFpsColumn,
+  ProjectColumn.duration: projectDurationColumn,
   ProjectColumn.path: projectPathColumn,
 };
 
-/// **Items and fps are fixed**, on the Timeline's own rule
+/// **Items, fps and Duration are fixed**, on the Timeline's own rule
 /// ([groupIsFixedWidth]): a column whose cells cannot use more room buys only
 /// blank space by being widened, so the seam beside it is not a handle at all.
-/// A count of children and a frame rate are both as wide as the number they
-/// write. Name and Size each hold something that gains from more room, and
-/// Path takes whatever is left over, so it has no width of its own to drag.
+/// A count of children, a frame rate and a clock face are all as wide as the
+/// digits they write. Name and Size each hold something that gains from more
+/// room, and Path takes whatever is left over, so it has no width of its own
+/// to drag.
 bool projectColumnIsFixedWidth(ProjectColumn column) =>
     column == ProjectColumn.items ||
     column == ProjectColumn.fps ||
+    column == ProjectColumn.duration ||
     column == ProjectColumn.path;
 
 /// How narrow a column may be dragged: enough for what cannot shrink.
@@ -114,6 +132,7 @@ double minProjectColumnWidth(ProjectColumn column) => switch (column) {
       // tail is still a reading).
       ProjectColumn.size => 40,
       ProjectColumn.fps => projectFpsColumn,
+      ProjectColumn.duration => projectDurationColumn,
       ProjectColumn.path => projectPathColumn,
     };
 
@@ -148,8 +167,9 @@ const double projectMinWidth = 180;
 /// columns hide, least essential first). The two mockups are the two ends of
 /// this ladder — the 360-wide artboard shows everything, the 260-wide docked
 /// panel has already dropped the preview card and the Items column.
-/// The preview card, the Path column and the Items column leave **together**,
-/// at the first step down from the 360 artboard.
+/// The preview card and the Items column leave **together**, at the first
+/// step down from the 360 artboard. Path left with them until it was given a
+/// step of its own above theirs, see [_widthForPath].
 ///
 /// §12A.3a lists them one after the other, but the two mockups are the only
 /// measurements there are — 360 wide shows all three, 260 shows none — so
@@ -159,8 +179,33 @@ const double projectMinWidth = 180;
 /// columns, and four columns plus an `in use` pill need more room than the
 /// header alone does. Below this the row keeps its badges and sheds the two
 /// least essential columns, which is §12A.6's ladder in the order it asks for.
-const double _widthForPath = 340;
 const double _widthForItems = 340;
+
+/// **Duration arrives one step above the 360 artboard**, at that arrangement
+/// with its own room added: 414. The artboard's columns were measured on a
+/// drawing without it, and at 360 they already leave a badged row the name it
+/// needs and no more, so a clock face squeezed in there would have come out
+/// of the name. One step up it costs nothing the drawing had, and the
+/// artboard draws exactly as it did.
+const double _widthForDuration =
+    _widthForItems + projectRowGap + projectDurationColumn;
+
+/// **Path now goes first, before Name gives anything up.** It is drawn only
+/// once the panel can carry every column at its starting width, Name's 220
+/// included, which comes to 512. The docked panel opens narrower than that,
+/// and there the 40 Path was holding showed five letters of a folder while a
+/// name beside an `in use` badge was cut to "White s…". So the room goes to
+/// Name, and a name is shortened only once the panel is too narrow for Path
+/// as well.
+const double _widthForPath = projectHeaderPadLeft +
+    projectNameColumn +
+    projectRowPadding +
+    5 * projectRowGap +
+    projectItemsColumn +
+    projectSizeColumn +
+    projectFpsColumn +
+    projectDurationColumn +
+    projectPathColumn;
 const double _widthForFps = 230;
 const double _widthForSize = 190;
 
@@ -171,6 +216,7 @@ class ProjectColumns {
   final bool items;
   final bool size;
   final bool fps;
+  final bool duration;
   final bool path;
 
   /// Each column's dragged width. Absent falls back to the default, so a map
@@ -185,6 +231,7 @@ class ProjectColumns {
     required this.items,
     required this.size,
     required this.fps,
+    required this.duration,
     required this.path,
     required this.panelWidth,
     this.widths = defaultProjectColumnWidths,
@@ -198,6 +245,7 @@ class ProjectColumns {
         items: width >= _widthForItems,
         size: width >= _widthForSize,
         fps: width >= _widthForFps,
+        duration: width >= _widthForDuration,
         path: width >= _widthForPath,
         panelWidth: width,
         widths: widths,
@@ -211,6 +259,7 @@ class ProjectColumns {
         ProjectColumn.items => items,
         ProjectColumn.size => size,
         ProjectColumn.fps => fps,
+        ProjectColumn.duration => duration,
         ProjectColumn.path => path,
       };
 
@@ -274,14 +323,19 @@ class ProjectColumns {
   /// does — and the rows pass nothing, so they keep the plain [projectRowGap]
   /// the header's handle is drawn inside. Both sides therefore reserve the
   /// same width and stay column-aligned.
+  ///
+  /// [heading] wraps a finished cell, which is how the header makes each
+  /// heading something to click.
   List<Widget> cells({
     String? items,
     String? size,
     String? fps,
+    String? duration,
     String? path,
     required TextStyle style,
     TextStyle? pathStyle,
     Widget Function(ProjectColumn before)? seam,
+    Widget Function(ProjectColumn column, Widget cell)? heading,
   }) =>
       [
         for (final column in visible)
@@ -293,6 +347,7 @@ class ProjectColumns {
                 ProjectColumn.items => items,
                 ProjectColumn.size => size,
                 ProjectColumn.fps => fps,
+                ProjectColumn.duration => duration,
                 ProjectColumn.path => path,
                 ProjectColumn.name => null,
               },
@@ -300,7 +355,11 @@ class ProjectColumns {
               overflow: column == ProjectColumn.path
                   ? TextOverflow.ellipsis
                   : TextOverflow.clip,
-            ),
+              // The gap comes first and stays bare. The cell after it is
+              // what a heading wraps.
+            ).indexed.map((part) => part.$1 == 1 && heading != null
+                ? heading(column, part.$2)
+                : part.$2),
       ];
 
   List<Widget> _cell(
@@ -364,8 +423,25 @@ class ProjectCells {
   final String? items;
   final String? size;
   final String? fps;
+
+  /// The item's length as a clock face, or null where there is none to state:
+  /// a folder, a still, a solid, and footage that has not probed yet.
+  final String? duration;
   final String? path;
-  const ProjectCells({this.items, this.size, this.fps, this.path});
+  const ProjectCells(
+      {this.items, this.size, this.fps, this.duration, this.path});
+}
+
+/// A clock face back to seconds, for sorting the Duration column: the last
+/// field is frames or milliseconds, and either grows with the length within
+/// its second. -1 for a cell with nothing to state, which sorts first.
+double projectClockSeconds(String? cell) {
+  if (cell == null) return -1;
+  final parts = cell.split(':').map(int.tryParse).toList();
+  if (parts case [final h?, final m?, final s?, final last?]) {
+    return h * 3600 + m * 60 + s + last / 1000;
+  }
+  return -1;
 }
 
 /// A sound's channel layout in the words the preview card uses. Two names for

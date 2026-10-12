@@ -609,6 +609,7 @@ fn feed_comp_graph(
         h.update(b"graph-drivers/");
         feed_f64(h, t);
     }
+    feed_graph_analyses(h, doc, comp, graph, t, stamper);
     Some(())
 }
 
@@ -848,6 +849,32 @@ fn feed_effect_stack(
                 h.update(text.as_bytes());
             }
         }
+        // Track points draws nothing until its analysis lands, and a landing
+        // changes no row. Whether one is in hand for these rows joins the key,
+        // so frames cached before it are not served after.
+        if e.effect.match_name == lumit_core::fx::effects::track_points::MATCH_NAME
+            && marker_layer
+                .is_some_and(|l| lumit_core::fx::effects::track_points::fresh(e, l).is_some())
+        {
+            h.update(b"tracked/");
+        }
+        // Bake points draws from a bake kept outside the document, and one
+        // landing changes no row. Which bake a frame reads, and which frame
+        // of it, joins the key, so a frame drawn before it is not served.
+        if e.effect.match_name == lumit_core::fx::effects::bake_points::MATCH_NAME {
+            use lumit_core::fx::effects::bake_points::{reading, Reading};
+            match marker_layer.map(|l| reading(doc, comp, l, e, lt)) {
+                Some(Reading::Baked(baked, frame)) => {
+                    h.update(b"baked/");
+                    h.update(&baked.content);
+                    h.update(&frame.to_le_bytes());
+                }
+                Some(Reading::Nothing) => {
+                    h.update(b"unbaked/");
+                }
+                _ => {}
+            }
+        }
         // **The Node graph effect's own graph** (docs/impl/node-graph-comp.md
         // §2.5), for the Custom shader's reason above: the loop below hashes
         // every stored parameter, which covers the graph's Inputs for free,
@@ -898,6 +925,140 @@ fn feed_effect_stack(
                 },
                 None => {
                     h.update(b"nocomp");
+                }
+            }
+        }
+        // **A birth schedule.** An effect with an Emit rate row is born from
+        // the whole of that track: every frame's rate up to this one decides
+        // how many particles there are and which is which, and the loop below
+        // feeds the rate at this frame only. So a keyed or expression-driven
+        // track is fed whole, as a keyed mask is. That renames a frame for an
+        // edit after it, which costs a render and can never serve a stale one.
+        // A still rate is named by its one value already. Found by the row and
+        // not by Particulate, as the builder finds it. A layer read through a
+        // Layer points tap has its stack folded by the Layer arm below, so its
+        // track comes through here too.
+        if let Some(lumit_core::model::EffectValue::Float(rate)) = e.param("emit_rate") {
+            if !matches!(rate.animation, lumit_core::anim::Animation::Static(_)) {
+                h.update(b"emit-track/");
+                let _ = serde_json::to_writer(&mut *h, rate);
+            }
+        }
+        // **A points history.** An effect that declares Trail's two rows reads
+        // the stream wired into it again at earlier times, one for each
+        // sample, and every row above is fed at this frame's time only. A
+        // keyframe that moves a producer at one of those times and not at this
+        // one would change the tail and not the name. So what a stream is made
+        // from is fed again at each: the points effects of this stack, its
+        // drivers, its animated masks, and the same of any layer a Layer
+        // points tap names. Named by the two rows and not by Trail, as the
+        // builder finds them.
+        {
+            use lumit_core::fx::effects::trail::Trail;
+            let declares = |id: &str| {
+                lumit_core::fx::schema(&e.effect.match_name)
+                    .is_some_and(|s| s.params.iter().any(|p| p.id == id))
+            };
+            if declares(Trail::SAMPLES_PARAM) && declares(Trail::STEP_PARAM) {
+                // Read as the builder reads them, with the same clamps.
+                let samples = e
+                    .float_at(Trail::SAMPLES_PARAM, lt)
+                    .unwrap_or(1.0)
+                    .clamp(1.0, 256.0) as usize;
+                let step = e.float_at(Trail::STEP_PARAM, lt).unwrap_or(0.0).max(0.0);
+                h.update(b"points-history/");
+                for k in 1..samples {
+                    let when = lt - k as f64 * step;
+                    if when < 0.0 {
+                        break;
+                    }
+                    feed_f64(h, when);
+                    let masks = marker_layer.map_or(&[][..], |l| &l.masks[..]);
+                    feed_points_rows_at(h, effects, drivers, masks, when);
+                    for tap in drivers.iter().filter(|d| {
+                        d.enabled
+                            && d.effect.match_name
+                                == lumit_core::fx::drivers::layer_points::MATCH_NAME
+                    }) {
+                        let named = tap
+                            .layer_ref(lumit_core::fx::drivers::layer_points::SOURCE_PARAM)
+                            .and_then(|id| comp.layers.iter().find(|l| l.id == id));
+                        if let Some(far) = named {
+                            feed_points_rows_at(
+                                h,
+                                &far.effects,
+                                &far.graph.nodes,
+                                &far.masks,
+                                when,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        // **Clone to points' other moments.** A time offset stamps a clone
+        // layer as it was at other times, and the Layer arm below feeds each
+        // layer at this frame's time only. So every other picture the builder
+        // renders joins the key: the layer, the time, its source there and
+        // its stack there. The list is the builder's own, from the same code.
+        //
+        // Whether the copies are rendered one per clone joins too. A Clone
+        // index nobody has wired changes which render a stamp takes, and
+        // changes no stored value this walk reads. The clone numbers
+        // themselves need nothing: they follow from this flag, this effect's
+        // own rows and the wired stream, which are all in the key already.
+        //
+        // Not for a referenced layer's own stack, whose layer rows render as
+        // a passthrough.
+        if allow_after_effects_refs && e.effect.match_name == "clone_to_points" {
+            use lumit_core::fx::effects::clone_to_points::CloneToPoints;
+            h.update(b"clone-moments/");
+            h.update(&[u8::from(
+                CloneToPoints::stored(e, lt).per_clone_in(e, doc, comp),
+            )]);
+            let mut fed: Vec<(Uuid, u64)> = Vec::new();
+            for m in CloneToPoints::planned(e, doc, comp, t, lt, None)
+                .into_iter()
+                .flatten()
+            {
+                let at = (m.layer, m.time.to_bits());
+                // This layer is the effect's own input, which has no other
+                // moment, and a moment fed once is fed.
+                if m.time.to_bits() == t.to_bits()
+                    || marker_layer.is_some_and(|l| l.id == m.layer)
+                    || fed.contains(&at)
+                {
+                    continue;
+                }
+                fed.push(at);
+                let Some(src) = comp.layers.iter().find(|l| l.id == m.layer) else {
+                    continue;
+                };
+                h.update(src.id.as_bytes());
+                feed_f64(h, m.time);
+                // Out of its span there, the layer stamps nothing.
+                if m.time < src.in_point.0.to_f64() || m.time >= src.out_point.0.to_f64() {
+                    h.update(&[0]);
+                    continue;
+                }
+                h.update(&[1]);
+                let slt = lumit_core::time::layer_time(m.time, src.start_offset.0);
+                feed_source(h, doc, comp, src, slt, m.time, quality, stamper, visited)?;
+                if e.layer_source(m.row).folds_effects() {
+                    feed_effect_stack(
+                        h,
+                        src.switches.fx,
+                        &src.effects,
+                        Some(src),
+                        comp,
+                        doc,
+                        m.time,
+                        slt,
+                        quality,
+                        stamper,
+                        visited,
+                        false,
+                    )?;
                 }
             }
         }
@@ -1187,6 +1348,66 @@ fn feed_effect_stack(
     Some(())
 }
 
+/// Feed what a points stream is made from, at layer time `when`: every row
+/// that can animate on each enabled points effect of `effects` and on each
+/// enabled driver, and the shape of every animated mask.
+///
+/// For an effect that reads its stream at other times than the frame's own.
+/// More than any one wire carries, which costs a needless miss and can never
+/// cause a stale hit.
+fn feed_points_rows_at(
+    h: &mut blake3::Hasher,
+    effects: &[lumit_core::model::EffectInstance],
+    drivers: &[lumit_core::model::EffectInstance],
+    masks: &[lumit_core::mask::Mask],
+    when: f64,
+) {
+    use lumit_core::model::EffectValue;
+    let makes_points = |e: &&lumit_core::model::EffectInstance| {
+        lumit_core::fx::BUILTIN_DEFS
+            .get(&e.effect.match_name)
+            .is_some_and(|def| lumit_core::fx::points::wants_carriage(def.signature()))
+    };
+    for e in effects
+        .iter()
+        .filter(makes_points)
+        .chain(drivers)
+        .filter(|e| e.enabled)
+    {
+        for p in &e.params {
+            match &p.value {
+                EffectValue::Float(v) => feed_f64(h, v.value_at(when)),
+                EffectValue::Point(x, y) => {
+                    feed_f64(h, x.value_at(when));
+                    feed_f64(h, y.value_at(when));
+                }
+                EffectValue::Colour(c) => {
+                    for ch in c {
+                        feed_f64(h, ch.value_at(when));
+                    }
+                }
+                // Nothing else moves with time.
+                _ => {}
+            }
+        }
+    }
+    for mask in masks.iter().filter(|m| m.path_is_animated()) {
+        let path = mask.path_at(when);
+        for v in &path.vertices {
+            for c in [
+                v.pos.0,
+                v.pos.1,
+                v.tan_in.0,
+                v.tan_in.1,
+                v.tan_out.0,
+                v.tan_out.1,
+            ] {
+                feed_f64(h, c);
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn feed_layer(
     h: &mut blake3::Hasher,
@@ -1393,6 +1614,113 @@ fn feed_layer(
                     h.update(&o.to_le_bytes());
                     h.update(identity.as_bytes());
                     h.update(&frame.to_le_bytes());
+                }
+            }
+        }
+        // An adjustment layer and a Precomp have no source frames to stamp.
+        // Their neighbours are their own picture built again a frame away
+        // (`lumit-render`'s `rebuild_offsets`), so that picture is named:
+        // the layers below at the neighbour time, or the nested comp's frame
+        // there. Two times that share this frame and not the one before it
+        // are then two names.
+        let comp_dt = 1.0 / comp.frame_rate.fps().max(1.0);
+        let window = || {
+            lumit_core::fx::stack_temporal_window(&layer.effects, layer.switches.fx, lt / comp_dt)
+                .into_iter()
+                .filter(|&o| o != 0)
+        };
+        if layer.is_adjustment() {
+            h.update(b"temporal-below/");
+            let any_solo = lumit_core::model::any_picture_solo(comp);
+            let below = comp.layers.iter().skip_while(|l| l.id != layer.id).skip(1);
+            for o in window() {
+                let tau = lumit_core::time::frames_on(t, o, comp_dt);
+                h.update(&o.to_le_bytes());
+                // The gates `feed_comp` puts in front of a layer, at `tau`.
+                for l in below.clone().filter(|l| {
+                    !l.audio_only
+                        && l.switches.visible
+                        && !l.graph.out_unwired
+                        && tau >= l.in_point.0.to_f64()
+                        && tau < l.out_point.0.to_f64()
+                        && !(any_solo && !l.switches.solo)
+                        && !matches!(l.kind, LayerKind::Camera { .. })
+                }) {
+                    let llt = lumit_core::time::layer_time(tau, l.start_offset.0);
+                    feed_layer(h, doc, comp, l, tau, llt, quality, stamper, visited)?;
+                }
+            }
+        } else if let LayerKind::Precomp { comp: nested_id } = &layer.kind {
+            if let Some(nested) = doc
+                .comp(*nested_id)
+                .filter(|_| !visited.contains(nested_id))
+            {
+                h.update(b"temporal-nested/");
+                for o in window() {
+                    let nt = lumit_core::model::nested_source_time(
+                        layer,
+                        nested,
+                        lumit_core::time::layer_time(
+                            t + f64::from(o) * comp_dt,
+                            layer.start_offset.0,
+                        ),
+                    );
+                    visited.push(*nested_id);
+                    let r = comp_key_visited(doc, nested, nt, quality, stamper, visited);
+                    visited.pop();
+                    h.update(&o.to_le_bytes());
+                    h.update(&r?.0.to_le_bytes());
+                }
+            }
+        } else if let LayerKind::Sequence { clips } = &layer.kind {
+            // A Sequence layer's neighbours are whichever clip is live then,
+            // across an edit point too, and a gap is no neighbour. A
+            // neighbour inside a fade or a dissolve adds the gain and the
+            // other clip, and a plain one feeds what it always has.
+            use lumit_core::sequence::{Clip, ClipSource, Shown};
+            h.update(b"temporal-clips/");
+            let native = wants_flow(layer, &lumit_core::retime::Interpolation::Nearest);
+            for o in window() {
+                h.update(&o.to_le_bytes());
+                let at = lumit_core::time::frames_on(lt, o, comp_dt);
+                let feed_clip = |h: &mut blake3::Hasher, clip: &Clip| {
+                    let stamp = match clip.source {
+                        ClipSource::Footage(item) => {
+                            stamper.stamp(item, clip.held_source_time(at), native)
+                        }
+                        ClipSource::Comp(_) => None,
+                    };
+                    match stamp {
+                        Some((identity, frame)) => {
+                            h.update(identity.as_bytes());
+                            h.update(&frame.to_le_bytes());
+                        }
+                        None => {
+                            h.update(b"gap");
+                        }
+                    }
+                };
+                match lumit_core::sequence::shown_at(clips, at) {
+                    Shown::Nothing => {
+                        h.update(b"gap");
+                    }
+                    Shown::One { clip, gain } => {
+                        feed_clip(h, clip);
+                        if gain < 1.0 {
+                            h.update(b"fade/");
+                            feed_f64(h, gain);
+                        }
+                    }
+                    Shown::Two {
+                        outgoing,
+                        incoming,
+                        gain,
+                    } => {
+                        feed_clip(h, outgoing);
+                        h.update(b"dissolve/");
+                        feed_f64(h, gain);
+                        feed_clip(h, incoming);
+                    }
                 }
             }
         }
@@ -1721,14 +2049,44 @@ fn feed_source(
             for c in document.fill.0 {
                 h.update(&c.to_le_bytes());
             }
-            // Text on a path. The mask this names is already fed to
-            // the key by the layer's own mask walk, so what is left is which
-            // mask it is and how far the line has been slid along it — both of
-            // which change the picture without changing a single glyph.
+            // The style and the paragraph, once there is one. An unstyled
+            // layer feeds nothing here and keeps the key it has always had.
+            if !document.style.is_default() {
+                h.update(b"style/");
+                h.update(&document.style.key_bytes());
+                h.update(&[0]);
+            }
+            if !document.paragraph.is_default() {
+                h.update(b"paragraph/");
+                h.update(&document.paragraph.key_bytes());
+                h.update(&[0]);
+            }
+            // Text on a path: which mask it is, how far the line has been
+            // slid along it, and the mask's own shape. The layer's own mask
+            // walk feeds the shape too, but not when the layer is hidden or
+            // is only read by another layer's effect, and Text to points
+            // reads a hidden one. Without it here, moving the path left the
+            // points where they were.
             if let Some(path) = document.path {
                 h.update(b"onpath/");
                 h.update(path.as_bytes());
                 feed_f64(h, document.path_offset.value_at(lt));
+                if let Some(mask) = layer.masks.iter().find(|mask| mask.id == path) {
+                    let shape = mask.path_at(lt);
+                    for v in &shape.vertices {
+                        for c in [
+                            v.pos.0,
+                            v.pos.1,
+                            v.tan_in.0,
+                            v.tan_in.1,
+                            v.tan_out.0,
+                            v.tan_out.1,
+                        ] {
+                            feed_f64(h, c);
+                        }
+                    }
+                    h.update(&[u8::from(shape.closed)]);
+                }
             }
             // Text animators. What is fed is what actually reaches the
             // picture — each letter's resolved push, turn, size, opacity and
@@ -1824,73 +2182,100 @@ fn feed_source(
             }
         }
         LayerKind::Sequence { clips } => {
-            // Key the active clip's resolved source (docs/04-RETIMING.md §1.3):
-            // a gap is transparent, a footage clip keys its retimed source
-            // frame, a comp clip recurses.
-            match lumit_core::sequence::resolve(clips, lt) {
-                None => {
-                    h.update(b"gap");
-                }
-                Some((_id, lumit_core::sequence::ClipSource::Footage(item), st)) => {
-                    let seq_interp = lumit_core::sequence::active_clip(clips, lt)
-                        .map(|c| {
-                            flow_effective_at(
-                                &c.interpolation,
-                                c.retime.as_ref(),
-                                item,
-                                lt,
-                                comp_fps,
-                                stamper,
-                            )
-                        })
-                        .unwrap_or(&lumit_core::retime::Interpolation::Nearest);
-                    let native = wants_flow(layer, seq_interp);
-                    let (identity, frame) = stamper.stamp(item, st, native)?;
-                    h.update(b"seq-footage/");
-                    h.update(identity.as_bytes());
-                    h.update(&frame.to_le_bytes());
-                    feed_roto(h, layer, frame, stamper);
-                    feed_planes(h, layer, frame, stamper);
-                    {
+            use lumit_core::sequence::{Clip, ClipSource, Shown};
+            // Key one clip's resolved source (docs/04-RETIMING.md §1.3): a
+            // footage clip keys its retimed source frame, a comp clip
+            // recurses.
+            let mut feed_clip = |h: &mut blake3::Hasher, clip: &Clip| -> Option<()> {
+                let st = clip.held_source_time(lt);
+                match clip.source {
+                    ClipSource::Footage(item) => {
+                        let seq_interp = flow_effective_at(
+                            &clip.interpolation,
+                            clip.retime.as_ref(),
+                            item,
+                            lt,
+                            comp_fps,
+                            stamper,
+                        );
+                        let native = wants_flow(layer, seq_interp);
+                        let (identity, frame) = stamper.stamp(item, st, native)?;
+                        h.update(b"seq-footage/");
+                        h.update(identity.as_bytes());
+                        h.update(&frame.to_le_bytes());
+                        feed_roto(h, layer, frame, stamper);
+                        feed_planes(h, layer, frame, stamper);
                         // Gated exactly as the Footage case: flow that cannot
                         // help keys as the Nearest it renders as. The
                         // clip's own retime supplied the speed, since a
                         // Sequence layer's clips each carry their own.
-                        let interpolation = seq_interp;
-                        if !matches!(interpolation, lumit_core::retime::Interpolation::Nearest) {
+                        if !matches!(seq_interp, lumit_core::retime::Interpolation::Nearest) {
                             // The sub-frame position is content under blend/flow
                             // (see the Footage case above). The flow
                             // params — conform rate included — ride along, read
                             // at the clip's layer-local time like the footage
                             // case.
-                            feed_interp(h, interpolation, lt, stamper);
+                            feed_interp(h, seq_interp, lt, stamper);
                             feed_f64(h, st);
                         }
                     }
-                }
-                Some((_id, lumit_core::sequence::ClipSource::Comp(comp), st)) => {
-                    if visited.contains(&comp) {
-                        h.update(b"cycle");
-                        return Some(());
+                    ClipSource::Comp(comp) => {
+                        if visited.contains(&comp) {
+                            h.update(b"cycle");
+                            return Some(());
+                        }
+                        let Some(nested) = doc.comp(comp) else {
+                            h.update(b"nocomp");
+                            return Some(());
+                        };
+                        // The nested comp's own name at the moment the clip
+                        // shows, as a Precomp layer folds its comp's: the
+                        // name the renderer keeps that frame's texture under,
+                        // which moves with anything inside the comp. Not the
+                        // `seq-comp/` this fed before a composition clip drew
+                        // a picture, so a frame kept from then, with the clip
+                        // missing from it, is not served under this name.
+                        h.update(b"seq-nested/");
+                        visited.push(comp);
+                        let r = comp_key_visited(
+                            doc,
+                            nested,
+                            clip.nested_time(nested, lt),
+                            quality,
+                            stamper,
+                            visited,
+                        );
+                        visited.pop();
+                        h.update(&r?.0.to_le_bytes());
                     }
-                    let Some(nested) = doc.comp(comp) else {
-                        h.update(b"nocomp");
-                        return Some(());
-                    };
-                    h.update(b"seq-comp/");
-                    visited.push(comp);
-                    let r = feed_comp(
-                        h,
-                        doc,
-                        nested,
-                        st,
-                        lumit_core::comp_graph::GraphView::DEFAULTS,
-                        quality,
-                        stamper,
-                        visited,
-                    );
-                    visited.pop();
-                    r?;
+                }
+                Some(())
+            };
+            // A gap is transparent. One whole clip is named by its own bytes
+            // and nothing else, the name it had before a picture row could
+            // fade, so every frame cached under it is still found. A fade
+            // and a dissolve are other pictures and carry the gain, and a
+            // dissolve both clips (`lumit_core::sequence::shown_at`).
+            match lumit_core::sequence::shown_at(clips, lt) {
+                Shown::Nothing => {
+                    h.update(b"gap");
+                }
+                Shown::One { clip, gain } => {
+                    if gain < 1.0 {
+                        h.update(b"seq-fade/");
+                        feed_f64(h, gain);
+                    }
+                    feed_clip(h, clip)?;
+                }
+                Shown::Two {
+                    outgoing,
+                    incoming,
+                    gain,
+                } => {
+                    h.update(b"seq-dissolve/");
+                    feed_f64(h, gain);
+                    feed_clip(h, outgoing)?;
+                    feed_clip(h, incoming)?;
                 }
             }
         }
@@ -2019,13 +2404,24 @@ fn feed_roto(
     }
     let frame = i64::try_from(frame).unwrap_or(i64::MAX);
     for fx in lumit_core::roto::brushes(&layer.effects) {
-        if let Some(chain) = lumit_core::roto::frame_stamp(fx, frame) {
-            h.update(b"roto/");
-            h.update(&chain);
-            if lumit_core::roto::RotoSettings::of(fx).segments() {
-                if let Some(identity) = stamper.roto_identity(fx.id, frame) {
-                    h.update(&identity);
-                }
+        feed_brush(h, fx, frame, stamper);
+    }
+}
+
+/// One Roto brush's stamp at one source frame: [`feed_roto`]'s body, which a
+/// brush in a node graph is named by as well.
+fn feed_brush(
+    h: &mut blake3::Hasher,
+    fx: &lumit_core::model::EffectInstance,
+    frame: i64,
+    stamper: &dyn SourceStamper,
+) {
+    if let Some(chain) = lumit_core::roto::frame_stamp(fx, frame) {
+        h.update(b"roto/");
+        h.update(&chain);
+        if lumit_core::roto::RotoSettings::of(fx).segments() {
+            if let Some(identity) = stamper.roto_identity(fx.id, frame) {
+                h.update(&identity);
             }
         }
     }
@@ -2056,17 +2452,69 @@ fn feed_planes(
     }
     let frame = i64::try_from(frame).unwrap_or(i64::MAX);
     for fx in lumit_core::planes::analyses(&layer.effects) {
-        let (Some(task), Some(stamp)) = (
-            lumit_core::planes::task_of(fx),
-            lumit_core::planes::frame_stamp(fx, frame),
-        ) else {
+        feed_plane(h, fx, frame, stamper);
+    }
+}
+
+/// One planes-tier effect's stamp at one source frame: [`feed_planes`]'s body,
+/// which a box in a node graph is named by as well.
+fn feed_plane(
+    h: &mut blake3::Hasher,
+    fx: &lumit_core::model::EffectInstance,
+    frame: i64,
+    stamper: &dyn SourceStamper,
+) {
+    let (Some(task), Some(stamp)) = (
+        lumit_core::planes::task_of(fx),
+        lumit_core::planes::frame_stamp(fx, frame),
+    ) else {
+        return;
+    };
+    h.update(b"planes/");
+    h.update(&stamp);
+    if let Some(identity) = stamper.planes_identity(task, fx.id) {
+        h.update(&identity);
+    }
+}
+
+/// The stamps of what a background analysis filed for a node graph's boxes
+/// (docs/impl/roto.md §5, docs/impl/addons.md §6.1).
+///
+/// A Roto brush or a planes-tier box draws through a picture the document does
+/// not contain, exactly as it does on a layer, so the frame's name needs the
+/// same two terms. What differs is whose frames they describe: a box has no
+/// layer, so it reads the footage its picture comes from
+/// ([`lumit_core::comp_graph::CompGraph::read_behind`]), and the stamp is made
+/// at that footage's source frame.
+///
+/// Emits nothing for a graph with no such box, which is every graph written
+/// before this existed.
+fn feed_graph_analyses(
+    h: &mut blake3::Hasher,
+    doc: &Document,
+    comp: &Composition,
+    graph: &lumit_core::comp_graph::CompGraph,
+    t: f64,
+    stamper: &dyn SourceStamper,
+) {
+    for (fx, read, item) in graph.analysis_boxes() {
+        let Some(layer) = doc
+            .item(item)
+            .and_then(|i| lumit_core::comp_graph::read_layer(read, i, comp))
+        else {
             continue;
         };
-        h.update(b"planes/");
-        h.update(&stamp);
-        if let Some(identity) = stamper.planes_identity(task, fx.id) {
-            h.update(&identity);
+        if !matches!(layer.kind, LayerKind::Footage { .. }) {
+            continue;
         }
+        // Unprobed media has no frame to name yet; the Read's own arm has
+        // already made the whole key unknowable in that case.
+        let Some((_, frame)) = stamper.stamp(item, layer.source_time_at(t), false) else {
+            continue;
+        };
+        let frame = i64::try_from(frame).unwrap_or(i64::MAX);
+        feed_brush(h, fx, frame, stamper);
+        feed_plane(h, fx, frame, stamper);
     }
 }
 
@@ -2222,6 +2670,8 @@ mod tests {
                     path: None,
                     path_offset: lumit_core::anim::Property::zero(),
                     animators: Vec::new(),
+                    style: Default::default(),
+                    paragraph: Default::default(),
                     extra: serde_json::Map::new(),
                 },
             },
@@ -2235,6 +2685,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -2273,81 +2724,6 @@ mod tests {
         }
     }
 
-    /// **A frame drawn from the comp's mix is named by the mix**
-    /// (docs/impl/audio-nodes.md §3, plan 5).
-    ///
-    /// Audio level left on *This comp* draws pixels from a set of faders no
-    /// other part of this walk looks at, so the host's fingerprint has to reach
-    /// the key, and reach it only there, or every comp in the project would
-    /// re-render each time somebody moved a Volume.
-    #[test]
-    fn a_this_comp_reading_folds_the_mix_into_the_frame_key() {
-        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-
-        /// The stub stamper, answering a mix fingerprint of its own.
-        struct Mixed(u64);
-        impl SourceStamper for Mixed {
-            fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
-                StubStamper.stamp(item, lt, native)
-            }
-            fn mix_fingerprint(&self, _doc: &Arc<Document>, _comp: &Composition) -> Option<u64> {
-                Some(self.0)
-            }
-        }
-
-        let blur = lumit_core::fx::instantiate("blur").unwrap();
-        let blur_id = blur.id;
-        // Straight out of the catalogue: the Audio row is unset, which is the
-        // comp's own mix.
-        let level = lumit_core::fx::instantiate("audio_level").unwrap();
-        let level_id = level.id;
-        let wired = LayerGraph {
-            nodes: vec![level],
-            edges: vec![Edge {
-                from: OutputRef::Driver {
-                    node: level_id,
-                    port: "amplitude".into(),
-                },
-                to: InputRef::Param {
-                    node: NodeRef::Effect(blur_id),
-                    port: "radius".into(),
-                },
-            }],
-            ..LayerGraph::default()
-        };
-        let layer_with = |graph: LayerGraph| {
-            let mut l = text_layer("hello", 0.0, 5.0, 0.0);
-            l.effects = vec![blur.clone()];
-            l.graph = graph;
-            l
-        };
-
-        let doc = Document::new();
-        let driven = comp_with(vec![layer_with(wired)]);
-        let plain = comp_with(vec![layer_with(LayerGraph::default())]);
-        let key_with = |sig: u64, comp: &Composition| {
-            comp_frame_key(
-                &Arc::new(doc.clone()),
-                comp,
-                1.0,
-                Quality::default(),
-                &Mixed(sig),
-            )
-            .unwrap()
-        };
-
-        assert_ne!(
-            key_with(1, &driven),
-            key_with(2, &driven),
-            "the mix draws the picture, so it has to name the frame"
-        );
-        assert_eq!(
-            key_with(1, &plain),
-            key_with(2, &plain),
-            "and a comp that reads no mix keys exactly as it did before"
-        );
-    }
-
     fn key(doc: &Document, comp: &Composition, t: f64) -> FrameKey {
         // Tests hold plain Documents; the Arc the real callers share is
         // manufactured here so the call sites stay one line.
@@ -2359,38 +2735,6 @@ mod tests {
             &StubStamper,
         )
         .unwrap()
-    }
-
-    /// **An unplugged Layer out reaches the frame key.**
-    ///
-    /// A layer whose output is unwired draws nothing, so every frame it used
-    /// to be in is a different picture now and must have a different name.
-    /// It travels by the road `switches.visible` takes - the layer is fed to
-    /// the key not at all - which is why this holds without a line of its own
-    /// in the hasher, and why it must be tested rather than assumed.
-    #[test]
-    fn an_unplugged_layer_out_renames_every_frame_it_drew() {
-        let doc = Document::new();
-        let plain = comp_with(vec![text_layer("fx", 0.0, 10.0, 0.0)]);
-        let base = key(&doc, &plain, 1.0);
-
-        let mut unwired = plain.clone();
-        unwired.layers[0].graph.out_unwired = true;
-        assert_ne!(
-            base,
-            key(&doc, &unwired, 1.0),
-            "a layer that has stopped drawing cannot keep its frames' names"
-        );
-
-        // And it is the same nothing a hidden layer draws, which is the whole
-        // claim: two ways of saying it, one picture.
-        let mut hidden = plain.clone();
-        hidden.layers[0].switches.visible = false;
-        assert_eq!(
-            key(&doc, &hidden, 1.0),
-            key(&doc, &unwired, 1.0),
-            "unplugged and hidden are the same absent layer"
-        );
     }
 
     /// **The driver graph reaches the frame key.**
@@ -2513,267 +2857,6 @@ mod tests {
         assert_ne!(key(&doc, &driven, 1.0), key(&doc, &off, 1.0));
     }
 
-    /// **A points wire folds like any other wire** (points-stream.md §3.4).
-    ///
-    /// No new term reaches the key for it: the edge hashes as an edge, and the
-    /// producer's own parameters were always hashed with the stack. What that
-    /// buys is checked here, because the three cases are the three stale frames
-    /// a missing term would have left behind — cutting the wire, editing the
-    /// producer's Emit rate, and an edit that carries no picture with it.
-    #[test]
-    fn a_points_wire_reaches_the_frame_key() {
-        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-
-        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
-            for p in &mut inst.params {
-                if p.id == id {
-                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
-                    return;
-                }
-            }
-            panic!("no parameter {id}");
-        };
-
-        let mut producer = lumit_core::fx::instantiate("particulate").unwrap();
-        set(&mut producer, "emit_rate", 200.0);
-        let blur = lumit_core::fx::instantiate("blur").unwrap();
-        let sampler = lumit_core::fx::instantiate("points_sample").unwrap();
-        let (producer_id, blur_id, sampler_id) = (producer.id, blur.id, sampler.id);
-
-        let wired = LayerGraph {
-            out_unwired: false,
-            groups: Vec::new(),
-            nodes: vec![sampler.clone()],
-            edges: vec![
-                Edge {
-                    from: OutputRef::EffectData {
-                        effect: producer_id,
-                        port: "points".into(),
-                    },
-                    to: InputRef::Param {
-                        node: NodeRef::Driver(sampler_id),
-                        port: "points".into(),
-                    },
-                },
-                Edge {
-                    from: OutputRef::Driver {
-                        node: sampler_id,
-                        port: "nearest_distance".into(),
-                    },
-                    to: InputRef::Param {
-                        node: NodeRef::Effect(blur_id),
-                        port: "radius".into(),
-                    },
-                },
-            ],
-            layout: Vec::new(),
-            exposed: Vec::new(),
-        };
-
-        let layer_with = |graph: LayerGraph, effects: Vec<lumit_core::model::EffectInstance>| {
-            let mut l = text_layer("hello", 0.0, 5.0, 0.0);
-            l.effects = effects;
-            l.graph = graph;
-            l
-        };
-        let stack = vec![producer.clone(), blur.clone()];
-        let doc = Document::new();
-        let driven = comp_with(vec![layer_with(wired.clone(), stack.clone())]);
-
-        // Cutting the points wire is a different picture, so a different name —
-        // the driver falls back to its empty-stream value the moment it goes.
-        let mut cut = wired.clone();
-        cut.edges.remove(0);
-        assert_ne!(
-            key(&doc, &driven, 1.0),
-            key(&doc, &comp_with(vec![layer_with(cut, stack.clone())]), 1.0),
-            "a points wire is a picture, so cutting it renames the frame"
-        );
-
-        // Editing the producer's Emit rate renames it: the crowd the driver
-        // measures is a different crowd.
-        let mut faster = producer.clone();
-        set(&mut faster, "emit_rate", 400.0);
-        assert_ne!(
-            key(&doc, &driven, 1.0),
-            key(
-                &doc,
-                &comp_with(vec![layer_with(wired.clone(), vec![faster, blur.clone()])]),
-                1.0
-            ),
-        );
-
-        // And an edit that carries no picture — where the sampler sits on the
-        // canvas, and the layer's name — leaves the name alone.
-        let mut moved = wired.clone();
-        moved
-            .layout
-            .push((NodeRef::Driver(sampler_id), [120.0, 40.0]));
-        let mut renamed = layer_with(moved, stack);
-        renamed.name = "an entirely different name".into();
-        assert_eq!(
-            key(&doc, &driven, 1.0),
-            key(&doc, &comp_with(vec![renamed]), 1.0),
-        );
-    }
-
-    /// **A cross-layer tap folds the layer it names, and that layer's stack**
-    /// (node-graph.md §2.3).
-    ///
-    /// This is the one thing the tap could have got wrong quietly. What it
-    /// reads off another layer is not that layer's *source* but the points its
-    /// effect stack makes — so if only the source were hashed, moving a
-    /// producer's Columns over there would leave the reading layer's frames
-    /// cached under a name that no longer describes them.
-    ///
-    /// It costs no new term: a driver node is hashed exactly as an effect is,
-    /// and its layer-reference row goes through the arm that already folds an
-    /// Effects-and-masks source's whole stack. Asserted here rather
-    /// than assumed, because "for free" is a claim and this is the test of it.
-    #[test]
-    fn a_cross_layer_points_tap_keys_on_the_layer_it_names() {
-        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-
-        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
-            for p in &mut inst.params {
-                if p.id == id {
-                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
-                    return;
-                }
-            }
-            panic!("no parameter {id}");
-        };
-
-        let mut producer = lumit_core::fx::instantiate("grid").unwrap();
-        set(&mut producer, "columns", 5.0);
-        let consumer = lumit_core::fx::instantiate("clone_to_points").unwrap();
-        let consumer_id = consumer.id;
-
-        // The source layer, whose stack makes the points.
-        let mut source = text_layer("source", 0.0, 5.0, 0.0);
-        source.effects = vec![producer.clone()];
-        let source_id = source.id;
-
-        let tap_named = |layer: Option<Uuid>| {
-            let mut node = lumit_core::fx::instantiate("layer_points").unwrap();
-            for p in &mut node.params {
-                if p.id == "source" {
-                    p.value = lumit_core::model::EffectValue::Layer(layer);
-                }
-            }
-            node
-        };
-        let reader_with = |node: lumit_core::model::EffectInstance| {
-            let node_id = node.id;
-            let mut l = text_layer("reader", 0.0, 5.0, 0.0);
-            l.effects = vec![consumer.clone()];
-            l.graph = LayerGraph {
-                out_unwired: false,
-                groups: Vec::new(),
-                nodes: vec![node],
-                edges: vec![Edge {
-                    from: OutputRef::Driver {
-                        node: node_id,
-                        port: "points".into(),
-                    },
-                    to: InputRef::Param {
-                        node: NodeRef::Effect(consumer_id),
-                        port: "points".into(),
-                    },
-                }],
-                layout: Vec::new(),
-                exposed: Vec::new(),
-            };
-            l
-        };
-
-        let doc = Document::new();
-        let comp_of = |node: lumit_core::model::EffectInstance,
-                       fx: lumit_core::model::EffectInstance| {
-            let mut src = source.clone();
-            src.effects = vec![fx];
-            comp_with(vec![reader_with(node), src])
-        };
-        let wired = comp_of(tap_named(Some(source_id)), producer.clone());
-
-        // **Moving the far layer's producer renames this frame.** The points
-        // the tap hands over are a different set, so the picture is.
-        let mut wider = producer.clone();
-        set(&mut wider, "columns", 9.0);
-        assert_ne!(
-            key(&doc, &wired, 1.0),
-            key(&doc, &comp_of(tap_named(Some(source_id)), wider), 1.0),
-            "the tapped layer's stack is not in the reading layer's key"
-        );
-
-        // **Cutting the reference renames it too**: the consumer falls back to
-        // the empty stream and draws nothing.
-        assert_ne!(
-            key(&doc, &wired, 1.0),
-            key(&doc, &comp_of(tap_named(None), producer.clone()), 1.0),
-            "an unset Points layer row keys the same as a named one"
-        );
-
-        // And the same document twice is the same name, which is what makes
-        // any of the above an assertion rather than a coincidence.
-        assert_eq!(key(&doc, &wired, 1.0), key(&doc, &wired, 1.0));
-    }
-    /// §2.3's other half: a **temporal** driver declares how far either side of
-    /// the frame it reads, and that range is in the key — so widening Smooth's
-    /// window retires the frames smoothed with the narrow one.
-    #[test]
-    fn a_temporal_drivers_window_reaches_the_frame_key() {
-        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
-
-        let set = |inst: &mut lumit_core::model::EffectInstance, id: &str, v: f64| {
-            for p in &mut inst.params {
-                if p.id == id {
-                    p.value = lumit_core::model::EffectValue::Float(Property::fixed(v));
-                    return;
-                }
-            }
-            panic!("no parameter {id}");
-        };
-
-        let blur = lumit_core::fx::instantiate("blur").unwrap();
-        let blur_id = blur.id;
-        let mut smooth = lumit_core::fx::instantiate("smooth").unwrap();
-        set(&mut smooth, "time", 0.2);
-        let smooth_id = smooth.id;
-
-        let graph_at = |time: f64| {
-            let mut node = smooth.clone();
-            set(&mut node, "time", time);
-            LayerGraph {
-                out_unwired: false,
-                groups: Vec::new(),
-                nodes: vec![node],
-                edges: vec![Edge {
-                    from: OutputRef::Driver {
-                        node: smooth_id,
-                        port: "value".into(),
-                    },
-                    to: InputRef::Param {
-                        node: NodeRef::Effect(blur_id),
-                        port: "radius".into(),
-                    },
-                }],
-                layout: Vec::new(),
-                exposed: Vec::new(),
-            }
-        };
-        let comp_at = |time: f64| {
-            let mut l = text_layer("hello", 0.0, 5.0, 0.0);
-            l.effects = vec![blur.clone()];
-            l.graph = graph_at(time);
-            comp_with(vec![l])
-        };
-
-        let doc = Document::new();
-        assert_ne!(key(&doc, &comp_at(0.2), 1.0), key(&doc, &comp_at(0.8), 1.0));
-        assert_eq!(key(&doc, &comp_at(0.2), 1.0), key(&doc, &comp_at(0.2), 1.0));
-    }
-
     /// Same content, different instance ids and names → the same key. This
     /// is the Global Performance Cache lesson made a test: identity never
     /// feeds the hash, so a duplicated comp shares its original's cache.
@@ -2817,29 +2900,6 @@ mod tests {
         );
         comp.layers[1].switches.solo = true;
         assert_eq!(both, key(&doc, &comp, 1.0));
-    }
-
-    /// A Null has no pixels, so it is tempting to treat it as invisible to the
-    /// cache — but its transform places every layer parented to it, so moving
-    /// one changes the picture and must retire the cached frames. Leaving it
-    /// out of the key would replay the rig's old position for ever.
-    #[test]
-    fn moving_a_null_retires_the_cached_frames() {
-        let doc = Document::new();
-        let mut null = text_layer("null", 0.0, 5.0, 0.0);
-        null.kind = LayerKind::Null;
-        null.name = "Null".into();
-        let mut child = text_layer("child", 0.0, 5.0, 0.0);
-        child.parent = Some(null.id);
-
-        let mut comp = comp_with(vec![child, null]);
-        let before = key(&doc, &comp, 1.0);
-        comp.layers[1].transform.position_x = Property::fixed(400.0);
-        assert_ne!(
-            before,
-            key(&doc, &comp, 1.0),
-            "moving a Null moves what is parented to it, so its frames must retire"
-        );
     }
 
     /// **The hidden-parent hole (ALGO_VERSION 2).** A hidden layer draws
@@ -2887,30 +2947,6 @@ mod tests {
         assert_ne!(before, key(&doc, &chain, 1.0), "the whole chain is content");
     }
 
-    /// The other half of the same promise: hiding a layer nothing is parented
-    /// to, and then editing it, changes no pixel — so every frame's key, and
-    /// every cached frame with it, must survive. This is the behaviour the
-    /// cache is judged on in the hand ("changing the opacity of a hidden layer
-    /// should not reset the cache"), and the parent-chain fold above must not
-    /// have cost it.
-    #[test]
-    fn editing_a_hidden_layer_keeps_every_frame() {
-        let doc = Document::new();
-        let mut hidden = text_layer("hidden", 0.0, 5.0, 0.0);
-        hidden.switches.visible = false;
-        let mut comp = comp_with(vec![text_layer("shown", 0.0, 5.0, 0.0), hidden]);
-        let before = key(&doc, &comp, 1.0);
-
-        comp.layers[1].transform.opacity = Property::fixed(12.0);
-        comp.layers[1].transform.position_x = Property::fixed(900.0);
-        comp.layers[1].name = "renamed while hidden".into();
-        assert_eq!(
-            before,
-            key(&doc, &comp, 1.0),
-            "a hidden layer with no children draws nothing, whatever is done to it"
-        );
-    }
-
     /// Edits that cannot reach a pixel keep every key — the whole reason the
     /// cache is content-keyed rather than emptied on every commit. The work
     /// area is where the playhead loops, a marker is a label, a label colour is
@@ -2934,6 +2970,7 @@ mod tests {
             duration: None,
             label: "beat".into(),
             kind: lumit_core::markers::MarkerKind::Beat { confidence: 1.0 },
+            colour: None,
             extra: serde_json::Map::new(),
         });
         assert_eq!(before, key(&doc, &comp, 1.0), "a marker is a label");
@@ -2969,118 +3006,6 @@ mod tests {
             key(&gdoc, &arranged, 1.0),
             "layout, exposure and groups are the canvas, not the picture"
         );
-    }
-
-    /// Timeline position is not content: sliding a static layer's span and
-    /// offset together keeps every overlapping frame's key.
-    #[test]
-    fn time_shifted_static_layer_keeps_its_keys() {
-        let doc = Document::new();
-        let a = comp_with(vec![text_layer("hi", 0.0, 8.0, 0.0)]);
-        // Same layer slid 2 s later (span and offset together): at t+2 the
-        // local time matches, so the pixels match, so the key must match.
-        let b = comp_with(vec![text_layer("hi", 2.0, 10.0, 2.0)]);
-        assert_eq!(key(&doc, &a, 1.0), key(&doc, &b, 3.0));
-        // Trimming the bar without crossing t changes nothing either.
-        let c = comp_with(vec![text_layer("hi", 0.0, 3.0, 0.0)]);
-        assert_eq!(key(&doc, &a, 1.0), key(&doc, &c, 1.0));
-    }
-
-    /// Backlog 7.53: moving a *keyframed* layer keeps its keys too. Layer time
-    /// is taken on the flick grid (`lumit_core::time::layer_time`), so the
-    /// opacity sampled at frame f+3 after a three-frame move is bit-identical
-    /// to the one at frame f before — a plain f64 subtraction is a ulp off on
-    /// most frames, and every one of those earned a new key.
-    #[test]
-    fn time_shifted_keyframed_layer_keeps_its_keys() {
-        use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
-        let doc = Document::new();
-        let kf = |t: i64, v: f64| Keyframe {
-            time: Rational::new(t, 1).unwrap(),
-            value: v,
-            interp_in: SideInterp::Linear,
-            interp_out: SideInterp::Linear,
-        };
-        let fr = FrameRate::new(30, 1).unwrap();
-        let fade = |offset_s: f64| {
-            let mut l = text_layer("hi", offset_s, offset_s + 4.0, offset_s);
-            l.transform.opacity = Property {
-                extra: serde_json::Map::new(),
-                animation: Animation::Keyframed(vec![kf(0, 0.0), kf(1, 37.0), kf(4, 100.0)]),
-            };
-            l
-        };
-        let mut before = comp_with(vec![fade(0.0)]);
-        before.frame_rate = fr;
-        let mut after = comp_with(vec![fade(0.1)]);
-        after.frame_rate = fr;
-        for f in 0..120 {
-            let t0 = fr.time_of_frame(f).unwrap().0.to_f64();
-            let t3 = fr.time_of_frame(f + 3).unwrap().0.to_f64();
-            assert_eq!(key(&doc, &before, t0), key(&doc, &after, t3), "frame {f}");
-        }
-    }
-
-    /// GEN-3: a layer may sit across the comp boundaries — starting
-    /// before comp time 0 or ending past the comp duration. Only the portion
-    /// overlapping [0, comp_end) is ever sampled, so the out-of-window head or
-    /// tail changes no rendered frame. In/out points gate presence; they never
-    /// feed the hash, and rendered frames only exist within the comp window.
-    #[test]
-    fn layers_crossing_comp_bounds_render_only_the_in_window_overlap() {
-        let doc = Document::new();
-        // Negative start: in = -3, out = 2, offset 0 — the head before comp 0 is
-        // never sampled, so across [0, 2) every rendered frame keys identically
-        // to the same content placed exactly at 0.
-        let crossing = comp_with(vec![text_layer("x", -3.0, 2.0, 0.0)]);
-        let in_window = comp_with(vec![text_layer("x", 0.0, 2.0, 0.0)]);
-        for t in [0.0, 0.5, 1.9] {
-            assert_eq!(key(&doc, &crossing, t), key(&doc, &in_window, t));
-        }
-        // Past its out point the crossing layer is gone (empty-comp key), just
-        // like the in-window one — a negative start does not extend the tail.
-        let empty = comp_with(vec![]);
-        assert_eq!(key(&doc, &crossing, 2.0), key(&doc, &empty, 2.0));
-
-        // Ending past comp end: out = 20 while the comp is 10 s long. It is
-        // present at the last comp frames and keys like a layer trimmed exactly
-        // to the comp end, because frames only exist within [0, comp_end).
-        let over_end = comp_with(vec![text_layer("y", 0.0, 20.0, 0.0)]);
-        let to_end = comp_with(vec![text_layer("y", 0.0, 10.0, 0.0)]);
-        for t in [8.0, 9.5] {
-            assert_eq!(key(&doc, &over_end, t), key(&doc, &to_end, t));
-        }
-    }
-
-    /// Evaluated values, not keyframe data: adding a keyframe beyond the
-    /// evaluated point (linear span unchanged before it) keeps the key;
-    /// changing the value at the point changes it.
-    #[test]
-    fn keyframe_edits_only_invalidate_where_values_change() {
-        let doc = Document::new();
-        let keyed = |keys: Vec<(f64, f64)>| {
-            let mut l = text_layer("k", 0.0, 10.0, 0.0);
-            l.transform.opacity = Property {
-                extra: serde_json::Map::new(),
-                animation: Animation::Keyframed(
-                    keys.iter()
-                        .map(|(t, v)| Keyframe {
-                            time: Rational::from_f64_on_grid(*t, Rational::FLICK_DEN).unwrap(),
-                            value: *v,
-                            interp_in: SideInterp::Linear,
-                            interp_out: SideInterp::Linear,
-                        })
-                        .collect(),
-                ),
-            };
-            comp_with(vec![l])
-        };
-        let two = keyed(vec![(0.0, 0.0), (2.0, 100.0)]);
-        let three = keyed(vec![(0.0, 0.0), (2.0, 100.0), (6.0, 40.0)]);
-        // At t=1 the evaluated opacity is 50 either way → same key.
-        assert_eq!(key(&doc, &two, 1.0), key(&doc, &three, 1.0));
-        // At t=4 the extra keyframe changes the value → different key.
-        assert_ne!(key(&doc, &two, 4.0), key(&doc, &three, 4.0));
     }
 
     /// Every content axis moves the key: text, solid colour (through the
@@ -3208,101 +3133,6 @@ mod tests {
         assert_eq!(key(&doc, &animated, 0.5), key(&doc, &moved, 1.5));
     }
 
-    /// The collapse switch is content (docs/06 §1.4 — it changes how a
-    /// Precomp composites), so toggling it changes the key; and because it
-    /// hashes only when set, every pre-collapse key stays valid.
-    #[test]
-    fn collapse_switch_changes_a_precomp_layers_key() {
-        let mut doc = Document::new();
-        let nested = comp_with(vec![text_layer("inner", 0.0, 10.0, 0.0)]);
-        let nested_id = nested.id;
-        doc.items.push(ProjectItem::Composition(nested));
-        let mut pre = text_layer("", 0.0, 10.0, 0.0);
-        pre.kind = LayerKind::Precomp { comp: nested_id };
-        let parent = comp_with(vec![pre]);
-        let base = key(&doc, &parent, 1.0);
-
-        let mut collapsed = parent.clone();
-        collapsed.layers[0].switches.collapse = true;
-        assert_ne!(base, key(&doc, &collapsed, 1.0));
-
-        // On a non-Precomp layer the switch is inert and never hashed.
-        let plain = comp_with(vec![text_layer("t", 0.0, 10.0, 0.0)]);
-        let mut plain_flagged = plain.clone();
-        plain_flagged.layers[0].switches.collapse = true;
-        assert_eq!(key(&doc, &plain, 1.0), key(&doc, &plain_flagged, 1.0));
-    }
-
-    /// **A plugin op keys like any other op** (docs/12 §2.1,
-    /// docs/impl/effect-registry.md §4.4).
-    ///
-    /// A plugin's parameters are ordinary stored properties — the host owns the
-    /// animation (docs/12 §2.2) — so the key that already hashes every effect's
-    /// namespace, name, version, ids and values covers a plugin for free. What
-    /// this pins is that it really does, in both directions: a control that
-    /// moves renames the frame, a version bump renames the frame (a
-    /// plugin update is new maths under the same identifier), and nothing else
-    /// does — because a key that moved for no reason would make every plugin
-    /// frame a cache miss.
-    #[test]
-    fn a_plugin_effect_keys_on_its_values_and_its_version() {
-        use lumit_core::model::{
-            EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue,
-        };
-        let doc = Document::new();
-        let plain = comp_with(vec![text_layer("fx", 0.0, 10.0, 0.0)]);
-        let base = key(&doc, &plain, 1.0);
-
-        let plugin = |gain: f64, version: u32| EffectInstance {
-            id: Uuid::now_v7(),
-            effect: EffectKey {
-                namespace: EffectNamespace::Ofx,
-                match_name: "ofx:com.example.gain".into(),
-                version,
-                extra: serde_json::Map::new(),
-            },
-            roto: None,
-            enabled: true,
-            params: vec![EffectParam {
-                id: "gain".into(),
-                value: EffectValue::Float(lumit_core::anim::Property::fixed(gain)),
-                extra: serde_json::Map::new(),
-            }],
-            sample_temporally: true,
-            custom_name: None,
-            linked_pairs: Vec::new(),
-            plugin_state: None,
-            extra: serde_json::Map::new(),
-        };
-
-        let mut with_plugin = plain.clone();
-        with_plugin.layers[0].effects.push(plugin(2.0, 1));
-        let fx_key = key(&doc, &with_plugin, 1.0);
-        assert_ne!(base, fx_key, "a live plugin is content");
-
-        // The same values on another instance key the same: the instance's own
-        // id is not content, the effect it is an instance of is.
-        let mut twin = plain.clone();
-        twin.layers[0].effects.push(plugin(2.0, 1));
-        assert_eq!(fx_key, key(&doc, &twin, 1.0));
-        assert_eq!(fx_key, key(&doc, &with_plugin, 1.0), "the key is stable");
-
-        // A control that moves renames the frame.
-        let mut turned = plain.clone();
-        turned.layers[0].effects.push(plugin(2.5, 1));
-        assert_ne!(fx_key, key(&doc, &turned, 1.0));
-
-        // So does a plugin update — new maths under the same identifier.
-        let mut updated = plain.clone();
-        updated.layers[0].effects.push(plugin(2.0, 2));
-        assert_ne!(fx_key, key(&doc, &updated, 1.0));
-
-        // Bypassed, it contributes nothing, exactly as a built-in does.
-        let mut bypassed = with_plugin.clone();
-        bypassed.layers[0].effects[0].enabled = false;
-        assert_eq!(base, key(&doc, &bypassed, 1.0));
-    }
-
     /// The Custom shader's source is content and its origin is not
     /// (custom-shader.md §2.4).
     #[test]
@@ -3357,69 +3187,6 @@ mod tests {
             .effects
             .push(lumit_core::fx::instantiate("custom_shader").expect("the effect exists"));
         assert_ne!(base, key(&doc, &empty, 1.0));
-    }
-
-    /// The inner graph is content and its canvas positions are not
-    /// (custom-shader.md §2.4, §8 item 13): edit a wire and the frame is a
-    /// different frame; move a box and the key holds.
-    #[test]
-    fn the_frame_key_changes_with_the_graph_and_not_with_its_layout() {
-        use lumit_core::fx::shader::graph::{ShaderEdge, ShaderGraph, ShaderNode, ShaderNodePos};
-        use lumit_core::model::EffectInstance;
-        let doc = Document::new();
-        let plain = comp_with(vec![text_layer("fx", 0.0, 10.0, 0.0)]);
-
-        let node = |id: u32, kind: &str| ShaderNode {
-            id,
-            kind: kind.to_owned(),
-            settings: serde_json::Map::new(),
-        };
-        let with_graph = |graph: &ShaderGraph| {
-            let mut inst: EffectInstance =
-                lumit_core::fx::instantiate("custom_shader").expect("the effect exists");
-            let mut block = serde_json::Map::new();
-            block.insert(
-                "graph".into(),
-                serde_json::to_value(graph).expect("the graph serialises"),
-            );
-            inst.extra
-                .insert("shader".into(), serde_json::Value::Object(block));
-            let mut comp = plain.clone();
-            comp.layers[0].effects.push(inst);
-            comp
-        };
-
-        let mut graph = ShaderGraph {
-            nodes: vec![node(1, "picture"), node(2, "result")],
-            edges: vec![ShaderEdge {
-                from: 1,
-                from_port: 0,
-                to: 2,
-                to_port: 0,
-            }],
-            layout: Vec::new(),
-        };
-        let base = key(&doc, &with_graph(&graph), 1.0);
-
-        // Moving a box changes no pixel, so it changes no name.
-        graph.layout.push(ShaderNodePos {
-            node: 1,
-            x: 640.0,
-            y: 480.0,
-        });
-        assert_eq!(
-            base,
-            key(&doc, &with_graph(&graph), 1.0),
-            "a canvas position is presentation, not content"
-        );
-
-        // Cutting the wire changes the picture, so it renames the frame.
-        graph.edges.clear();
-        assert_ne!(
-            base,
-            key(&doc, &with_graph(&graph), 1.0),
-            "editing the graph must rename every frame it draws"
-        );
     }
 
     /// The effect stack is content (docs/08): adding a live effect changes
@@ -3640,63 +3407,6 @@ mod tests {
         );
     }
 
-    /// **Which mask an effect walks is content.**
-    ///
-    /// The geometry needs no help from this arm — `feed_layer` already hashes
-    /// every mask, so editing the shape renames the frame — and the flattening
-    /// tolerance is a constant, so the polyline cannot vary a frame's identity
-    /// on its own. What is left is the *choice*, and a choice that changed the
-    /// picture without changing the key would be a stale frame nobody could
-    /// explain. Hashed by the mask's **position** rather than its id, the rule
-    /// every other arm follows — identity never feeds a key.
-    #[test]
-    fn which_mask_an_effect_walks_names_the_frame() {
-        use lumit_core::{
-            mask::Mask,
-            model::{EffectParam, EffectValue},
-        };
-
-        let doc = Document::new();
-        let mut layer = text_layer("m", 0.0, 10.0, 0.0);
-        layer.masks = vec![
-            Mask::rectangle(0.0, 0.0, 10.0, 10.0),
-            Mask::ellipse(40.0, 40.0, 6.0, 6.0),
-        ];
-        let (first, second) = (layer.masks[0].id, layer.masks[1].id);
-        // No built-in declares a path row yet (the seam landed ahead of its
-        // consumers), so the value is put on a real effect by hand — which
-        // is exactly what the hash walk sees: it reads the stored value, not
-        // the schema.
-        let walking = |named: Option<uuid::Uuid>| {
-            let mut l = layer.clone();
-            let mut fx = lumit_core::fx::instantiate("blur").expect("a built-in");
-            fx.params.push(EffectParam {
-                id: "path".into(),
-                value: EffectValue::MaskPath(named),
-                extra: serde_json::Map::new(),
-            });
-            l.effects = vec![fx];
-            comp_with(vec![l])
-        };
-
-        let on_first = key(&doc, &walking(Some(first)), 1.0);
-        let on_second = key(&doc, &walking(Some(second)), 1.0);
-        assert_ne!(on_first, on_second, "the choice never reached the key");
-        assert_eq!(
-            on_first,
-            key(&doc, &walking(Some(first)), 1.0),
-            "not stable"
-        );
-
-        // A mask since deleted is the effect's no-op, and so is a row naming
-        // nothing where the schema does not default to the first — both feed
-        // the same "nothing to walk" marker, which is honest: they render the
-        // same picture.
-        let gone = key(&doc, &walking(Some(uuid::Uuid::now_v7())), 1.0);
-        assert_eq!(gone, key(&doc, &walking(None), 1.0));
-        assert_ne!(gone, on_first);
-    }
-
     /// An Effects-and-masks DoF depth input folds the depth layer's own
     /// stack into the consumer's key, so grading the depth pass invalidates its
     /// cached frames; None/Masks ignore it. The depth layer is hidden, so its
@@ -3785,6 +3495,271 @@ mod tests {
             key(&doc, &legacy, 1.0),
             key(&doc, &legacy_no_stack, 1.0),
             "the legacy after-effects bool still folds the depth layer's stack"
+        );
+    }
+
+    /// **Clone to points keys the other moments it shows.**
+    ///
+    /// With a time offset a stamp shows its clone layer as it was earlier, so
+    /// an edit to a keyframe that moves only an earlier moment changes a later
+    /// frame's picture and has to change its name. The clone layer here
+    /// settles at 2 s and the frame asked for is 2.5 s: the edit moves the
+    /// middle key at 1 s, which nothing at 2.5 s reads but a stamp 0.6 s back
+    /// does.
+    ///
+    /// And a Clone index on the clone layer keys the frame even unwired,
+    /// since it changes which render a stamp takes.
+    #[test]
+    fn clone_to_points_keys_the_other_moments_it_shows() {
+        use lumit_core::model::EffectValue;
+        let doc = Document::new();
+        let stops = |middle: f64| {
+            EffectValue::Float(linear_retime(&[(0.0, 0.0), (1.0, middle), (2.0, -6.0)]))
+        };
+        let set = |e: &mut lumit_core::model::EffectInstance, id: &str, value: EffectValue| {
+            for p in &mut e.params {
+                if p.id == id {
+                    p.value = value.clone();
+                }
+            }
+        };
+        let mut cloned = text_layer("c", 0.0, 10.0, 0.0);
+        cloned.switches.visible = false;
+        let mut darken = lumit_core::fx::instantiate("exposure").unwrap();
+        set(&mut darken, "stops", stops(-1.0));
+        cloned.effects.push(darken);
+        let mut host = text_layer("h", 0.0, 10.0, 0.0);
+        let mut clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
+        set(
+            &mut clone,
+            "clone_layer",
+            EffectValue::Layer(Some(cloned.id)),
+        );
+        set(
+            &mut clone,
+            "time_step",
+            EffectValue::Float(lumit_core::anim::Property::fixed(0.2)),
+        );
+        host.effects.push(clone);
+        let off = comp_with(vec![host, cloned]);
+        let with = |comp: &Composition, time_offset: u32, middle: f64| {
+            let mut c = comp.clone();
+            set(
+                &mut c.layers[0].effects[0],
+                "time_offset",
+                EffectValue::Choice(time_offset),
+            );
+            set(&mut c.layers[1].effects[0], "stops", stops(middle));
+            c
+        };
+
+        assert_eq!(
+            key(&doc, &with(&off, 0, -1.0), 2.5),
+            key(&doc, &with(&off, 0, -3.0), 2.5),
+            "with no time offset the edit moves nothing this frame shows"
+        );
+        assert_ne!(
+            key(&doc, &with(&off, 1, -1.0), 2.5),
+            key(&doc, &with(&off, 1, -3.0), 2.5),
+            "a stamp shows the moment the edit moved, so the frame is renamed"
+        );
+
+        let mut indexed = off.clone();
+        indexed.layers[1]
+            .graph
+            .nodes
+            .push(lumit_core::fx::instantiate("clone_index").unwrap());
+        assert_ne!(
+            key(&doc, &off, 2.5),
+            key(&doc, &indexed, 2.5),
+            "an unwired Clone index still renders the copies one per clone"
+        );
+    }
+
+    /// **Trail keys the earlier moments it reads its stream at.**
+    ///
+    /// A tail is the producer evaluated again at earlier times, so an edit
+    /// to a keyframe that moves the producer only at an earlier time changes
+    /// the tail of a later frame and has to change its name. The Grid here
+    /// settles at 2 s and the frame asked for is 2.5 s. The edit moves the
+    /// middle key at 1 s, which the Grid at 2.5 s does not read and a tail
+    /// sample 0.6 s back does.
+    ///
+    /// Checked twice: with the Grid in Trail's own stack, and with it on
+    /// another layer read through a Layer points tap.
+    #[test]
+    fn trail_keys_the_earlier_moments_it_reads_its_stream_at() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        use lumit_core::model::EffectValue;
+        let doc = Document::new();
+        let fixed = |v: f64| EffectValue::Float(lumit_core::anim::Property::fixed(v));
+        let slide = |middle: f64| {
+            EffectValue::Float(linear_retime(&[(0.0, 0.0), (1.0, middle), (2.0, 100.0)]))
+        };
+        let set = |e: &mut lumit_core::model::EffectInstance, id: &str, value: EffectValue| {
+            for p in &mut e.params {
+                if p.id == id {
+                    p.value = value.clone();
+                }
+            }
+        };
+        let into_points = |to: Uuid| InputRef::Param {
+            node: NodeRef::Effect(to),
+            port: "points".into(),
+        };
+        let grid = || {
+            let mut g = lumit_core::fx::instantiate("grid").unwrap();
+            set(&mut g, "position_x", slide(50.0));
+            g
+        };
+        let trail = |samples: f64| {
+            let mut t = lumit_core::fx::instantiate("trail").unwrap();
+            set(&mut t, "back_samples", fixed(samples));
+            set(&mut t, "back_step", fixed(0.2));
+            t
+        };
+
+        // The producer in Trail's own stack.
+        let same_stack = |samples: f64, middle: f64| {
+            let mut l = text_layer("t", 0.0, 10.0, 0.0);
+            let (mut g, t) = (grid(), trail(samples));
+            set(&mut g, "position_x", slide(middle));
+            l.graph = LayerGraph {
+                edges: vec![Edge {
+                    from: OutputRef::EffectData {
+                        effect: g.id,
+                        port: "points".into(),
+                    },
+                    to: into_points(t.id),
+                }],
+                ..LayerGraph::default()
+            };
+            l.effects = vec![g, t];
+            l
+        };
+        // One layer and its ids, edited in place so only the keyframe differs.
+        let base = comp_with(vec![same_stack(8.0, 50.0)]);
+        let with = |samples: f64, middle: f64| {
+            let mut c = base.clone();
+            set(&mut c.layers[0].effects[0], "position_x", slide(middle));
+            set(&mut c.layers[0].effects[1], "back_samples", fixed(samples));
+            c
+        };
+        assert_eq!(
+            key(&doc, &with(1.0, 50.0), 2.5),
+            key(&doc, &with(1.0, 20.0), 2.5),
+            "with no tail the edit moves nothing this frame shows"
+        );
+        assert_ne!(
+            key(&doc, &with(8.0, 50.0), 2.5),
+            key(&doc, &with(8.0, 20.0), 2.5),
+            "a tail sample reads the moment the edit moved"
+        );
+
+        // The producer on another layer, through a tap. That layer is hidden,
+        // so it reaches the key through the tap alone.
+        let mut far = text_layer("far", 0.0, 10.0, 0.0);
+        far.switches.visible = false;
+        far.effects = vec![grid()];
+        let mut near = text_layer("near", 0.0, 10.0, 0.0);
+        let t = trail(8.0);
+        let mut tap = lumit_core::fx::instantiate("layer_points").unwrap();
+        set(&mut tap, "source", EffectValue::Layer(Some(far.id)));
+        near.graph = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: tap.id,
+                    port: "points".into(),
+                },
+                to: into_points(t.id),
+            }],
+            nodes: vec![tap],
+            ..LayerGraph::default()
+        };
+        near.effects = vec![t];
+        let tapped = comp_with(vec![near, far]);
+        let mut edited = tapped.clone();
+        set(&mut edited.layers[1].effects[0], "position_x", slide(20.0));
+        assert_ne!(
+            key(&doc, &tapped, 2.5),
+            key(&doc, &edited, 2.5),
+            "a tail read through a tap keys the far layer's earlier moments"
+        );
+    }
+
+    /// **Particulate keys the whole of its Emit rate track.**
+    ///
+    /// Births follow every frame's rate up to this one, so an edit to an
+    /// earlier keyframe changes how many particles a later frame holds and
+    /// which is which, and has to change its name. The rate here settles at
+    /// 2 s and the frame asked for is 2.5 s. The edit moves the middle key at
+    /// 1 s, which the rate at 2.5 s does not read.
+    ///
+    /// Checked twice: Particulate in the layer's own stack, and on a hidden
+    /// layer read through a Layer points tap.
+    #[test]
+    fn particulate_keys_the_whole_of_its_emit_rate_track() {
+        use lumit_core::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
+        use lumit_core::model::EffectValue;
+        let doc = Document::new();
+        let rate = |middle: f64| {
+            EffectValue::Float(linear_retime(&[(0.0, 10.0), (1.0, middle), (2.0, 50.0)]))
+        };
+        let set = |e: &mut lumit_core::model::EffectInstance, id: &str, value: EffectValue| {
+            for p in &mut e.params {
+                if p.id == id {
+                    p.value = value.clone();
+                }
+            }
+        };
+        let particulate = || {
+            let mut p = lumit_core::fx::instantiate("particulate").unwrap();
+            set(&mut p, "emit_rate", rate(30.0));
+            p
+        };
+
+        // In the layer's own stack.
+        let mut own = text_layer("p", 0.0, 10.0, 0.0);
+        own.effects = vec![particulate()];
+        let own = comp_with(vec![own]);
+        let mut edited = own.clone();
+        set(&mut edited.layers[0].effects[0], "emit_rate", rate(90.0));
+        assert_ne!(
+            key(&doc, &own, 2.5),
+            key(&doc, &edited, 2.5),
+            "an earlier rate changes which particles this frame holds"
+        );
+
+        // On a hidden layer, read through a tap into Clone to points.
+        let mut far = text_layer("far", 0.0, 10.0, 0.0);
+        far.switches.visible = false;
+        far.effects = vec![particulate()];
+        let mut near = text_layer("near", 0.0, 10.0, 0.0);
+        let clone = lumit_core::fx::instantiate("clone_to_points").unwrap();
+        let mut tap = lumit_core::fx::instantiate("layer_points").unwrap();
+        set(&mut tap, "source", EffectValue::Layer(Some(far.id)));
+        near.graph = LayerGraph {
+            edges: vec![Edge {
+                from: OutputRef::Driver {
+                    node: tap.id,
+                    port: "points".into(),
+                },
+                to: InputRef::Param {
+                    node: NodeRef::Effect(clone.id),
+                    port: "points".into(),
+                },
+            }],
+            nodes: vec![tap],
+            ..LayerGraph::default()
+        };
+        near.effects = vec![clone];
+        let tapped = comp_with(vec![near, far]);
+        let mut edited = tapped.clone();
+        set(&mut edited.layers[1].effects[0], "emit_rate", rate(90.0));
+        assert_ne!(
+            key(&doc, &tapped, 2.5),
+            key(&doc, &edited, 2.5),
+            "a tap keys the far layer's whole Emit rate track"
         );
     }
 
@@ -3910,70 +3885,6 @@ mod tests {
         assert_eq!(key(&doc, &manual, 1.0), key(&doc, &manual, 2.0));
     }
 
-    /// Strobe's Nth-beat indexing counts from the comp's first beat, so a
-    /// beat added far in the past can change which beat fires *now*. The
-    /// key hashes the filtered triggers the envelope actually consumes, so
-    /// that edit retires the frame — hashing raw neighbours would miss it.
-    #[test]
-    fn strobe_reindexing_retires_the_frame() {
-        use lumit_core::markers::Marker;
-        use lumit_core::model::{EffectValue, ProjectItem, SolidDef};
-        let mut doc = Document::new();
-        let def_id = Uuid::now_v7();
-        doc.items.push(ProjectItem::Solid(SolidDef {
-            id: def_id,
-            name: "s".into(),
-            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            width: 64,
-            height: 64,
-            extra: serde_json::Map::new(),
-        }));
-        let beat = |s: i64| Marker::beat(Uuid::now_v7(), Rational::new(s, 1).unwrap(), 0.9);
-        let mut l = text_layer("x", 0.0, 10.0, 0.0);
-        l.kind = LayerKind::Solid { def: def_id };
-        let mut fx = lumit_core::fx::instantiate("flash").unwrap();
-        for p in &mut fx.params {
-            match p.id.as_str() {
-                "mode" => p.value = EffectValue::Choice(2),
-                "every_nth" => p.value = EffectValue::Float(lumit_core::anim::Property::fixed(2.0)),
-                _ => {}
-            }
-        }
-        l.effects.push(fx);
-        let mut comp = comp_with(vec![l]);
-        // Beats at 4 s and 6 s; every 2nd fires index 0 only (4 s), so just
-        // after 6 s the flash is long spent.
-        comp.markers = vec![beat(4), beat(6)];
-        let before = key(&doc, &comp, 6.02);
-        // A beat at 0 s re-indexes: now 0 s and 6 s fire, so the same frame
-        // sits one frame into a live flash — its key must move.
-        let mut reindexed = comp.clone();
-        reindexed.markers.insert(0, beat(0));
-        assert_ne!(before, key(&doc, &reindexed, 6.02));
-    }
-
-    /// Precomps recurse: an edit inside the nested comp changes the parent's
-    /// key.
-    #[test]
-    fn precomp_edits_propagate_to_parents() {
-        let mut doc = Document::new();
-        let nested = comp_with(vec![text_layer("inner", 0.0, 10.0, 0.0)]);
-        let nested_id = nested.id;
-        doc.items.push(ProjectItem::Composition(nested));
-        let mut pre = text_layer("", 0.0, 10.0, 0.0);
-        pre.kind = LayerKind::Precomp { comp: nested_id };
-        let parent = comp_with(vec![pre]);
-        let base = key(&doc, &parent, 1.0);
-
-        let mut doc2 = doc.clone();
-        if let Some(c) = doc2.comp_mut(nested_id) {
-            if let LayerKind::Text { document } = &mut c.layers[0].kind {
-                document.text = "changed".into();
-            }
-        }
-        assert_ne!(base, key(&doc2, &parent, 1.0));
-    }
-
     /// An expression-driven caption says something different at every frame, so
     /// consecutive frames must key differently — otherwise the cache serves the
     /// first line it rendered for the whole comp and the number on screen never
@@ -3991,115 +3902,28 @@ mod tests {
         assert_eq!(key(&doc, &comp, 1.0), key(&doc, &comp, 1.0));
     }
 
-    /// **Text on a path is in the name**. Naming a mask and sliding the
-    /// line along it both change the picture without changing a single glyph,
-    /// so a key that ignored them would serve the straight line back for ever.
+    /// A style or a paragraph changes the picture, so it changes the key. An
+    /// unstyled layer feeds neither and keeps the key it had before there was
+    /// a style to feed.
     #[test]
-    fn a_line_on_a_path_keys_by_its_path_and_its_offset() {
+    fn a_text_layer_keys_by_its_style_and_its_paragraph() {
         let doc = Document::new();
-        let mask = lumit_core::mask::Mask::ellipse(60.0, 40.0, 30.0, 18.0);
-        let comp_with_path = |path: Option<uuid::Uuid>, offset: f64| {
+        let styled = |edit: &dyn Fn(&mut lumit_core::model::TextDocument)| {
             let mut l = text_layer("Lumit", 0.0, 10.0, 0.0);
-            l.masks = vec![mask.clone()];
             if let LayerKind::Text { document } = &mut l.kind {
-                document.path = path;
-                document.path_offset = lumit_core::anim::Property::fixed(offset);
+                edit(document);
             }
-            comp_with(vec![l])
+            key(&doc, &comp_with(vec![l]), 1.0)
         };
-        let straight = key(&doc, &comp_with_path(None, 0.0), 1.0);
-        let on_path = key(&doc, &comp_with_path(Some(mask.id), 0.0), 1.0);
-        let slid = key(&doc, &comp_with_path(Some(mask.id), 25.0), 1.0);
-        assert_ne!(straight, on_path, "naming a path left the name alone");
-        assert_ne!(on_path, slid, "sliding the line left the name alone");
-        // An offset nobody has touched is inert on a straight layer: it cannot
-        // retire frames of a line that never reads it.
-        assert_eq!(straight, key(&doc, &comp_with_path(None, 25.0), 1.0));
-    }
-
-    /// The stored `text` is dead while an expression drives the layer: editing
-    /// it must not retire cached frames that look exactly the same.
-    #[test]
-    fn stored_text_is_inert_under_an_expression() {
-        let doc = Document::new();
-        let with_expression = |body: &str| {
-            let mut l = text_layer(body, 0.0, 10.0, 0.0);
-            if let LayerKind::Text { document } = &mut l.kind {
-                document.expression = Some("1 + 1".into());
-            }
-            comp_with(vec![l])
-        };
-        assert_eq!(
-            key(&doc, &with_expression("one"), 1.0),
-            key(&doc, &with_expression("another"), 1.0)
-        );
-    }
-
-    /// An Audio layer is sound, so it is not in the picture's name at
-    /// all — and **none of its switches can change that name**. This is the
-    /// promise docs/TODO 2.5 asks for: muting a music track, hiding it, soloing
-    /// it or shying it must not retire a single rendered frame.
-    ///
-    /// Fails without the `audio_only` skip in `feed_comp`: the visible switch
-    /// alone would decide whether the layer is hashed, so toggling it would
-    /// rename every frame of the comp.
-    #[test]
-    fn an_audio_layers_switches_never_change_the_picture() {
-        let doc = Document::new();
-        let item = Uuid::now_v7();
-        // A comp that draws something, plus a music track over it.
-        let picture = text_layer("hello", 0.0, 10.0, 0.0);
-        let audio = |edit: &dyn Fn(&mut Layer)| {
-            let mut l = text_layer("", 0.0, 10.0, 0.0);
-            l.kind = LayerKind::Footage { item };
-            l.audio_only = true;
-            edit(&mut l);
-            comp_with(vec![picture.clone(), l])
-        };
-
-        let plain = audio(&|_| {});
-        let baseline = key(&doc, &plain, 1.0);
-
-        for (what, edit) in [
-            (
-                "hidden",
-                Box::new(|l: &mut Layer| l.switches.visible = false) as Box<dyn Fn(&mut Layer)>,
-            ),
-            (
-                "muted",
-                Box::new(|l: &mut Layer| l.switches.audible = false),
-            ),
-            ("soloed", Box::new(|l: &mut Layer| l.switches.solo = true)),
-            ("shy", Box::new(|l: &mut Layer| l.switches.shy = true)),
-            ("locked", Box::new(|l: &mut Layer| l.switches.locked = true)),
-            (
-                "volume pulled to silence",
-                Box::new(|l: &mut Layer| l.volume_db = Property::fixed(-100.0)),
-            ),
-            (
-                "moved",
-                Box::new(|l: &mut Layer| l.transform.position_x = Property::fixed(500.0)),
-            ),
-        ] {
-            assert_eq!(
-                key(&doc, &audio(&edit), 1.0),
-                baseline,
-                "an Audio layer {what} must not rename the picture's frame"
-            );
-        }
-
-        // And the guard on the guard: the same edits on a layer that DOES draw
-        // still change the key, so this test cannot pass by hashing nothing.
-        let mut drawn = plain.clone();
-        drawn.layers[1].audio_only = false;
-        let drawn_key = key(&doc, &drawn, 1.0);
-        let mut hidden = drawn.clone();
-        hidden.layers[1].switches.visible = false;
-        assert_ne!(
-            key(&doc, &hidden, 1.0),
-            drawn_key,
-            "hiding a drawing layer still renames the frame"
-        );
+        let plain = styled(&|_| {});
+        let tracked = styled(&|d| d.style.tracking = 50.0);
+        let bold = styled(&|d| d.style.face = "Bold".into());
+        let centred = styled(&|d| d.paragraph.align = lumit_core::text::TextAlign::Centre);
+        assert_ne!(plain, tracked, "tracking left the name alone");
+        assert_ne!(tracked, bold);
+        assert_ne!(plain, centred, "alignment left the name alone");
+        // Setting a field to the value it already had is no style at all.
+        assert_eq!(plain, styled(&|d| d.style.scale_x = 100.0));
     }
 
     /// Soloing an Audio layer is a mixer instruction, not a picture one: the
@@ -4263,62 +4087,6 @@ mod tests {
         }
     }
 
-    /// Which model painted the frame is part of its name, and only where a
-    /// model paints it (docs/impl/addons.md §7).
-    ///
-    /// A pack is not in the document, so two machines with different packs, or
-    /// one machine before and after an update, would otherwise agree on the
-    /// name of two different pictures. The built-in engine must not move when
-    /// a pack is installed, or installing one would retire every cached frame
-    /// in the project for nothing.
-    #[test]
-    fn the_model_that_painted_a_frame_is_part_of_its_name() {
-        use lumit_core::retime::{FlowEngineChoice, FlowParams, Interpolation};
-
-        /// A host with a synthesis pack installed, answering its identity.
-        struct Installed([u8; 32]);
-        impl SourceStamper for Installed {
-            fn stamp(&self, item: Uuid, lt: f64, native: bool) -> Option<(String, u64)> {
-                StubStamper.stamp(item, lt, native)
-            }
-            fn synthesis_identity(&self) -> Option<[u8; 32]> {
-                Some(self.0)
-            }
-        }
-
-        let doc = Arc::new(Document::new());
-        let item = Uuid::now_v7();
-        let comp = |engine: FlowEngineChoice| {
-            let mut l = text_layer("", 0.0, 10.0, 0.0);
-            l.kind = LayerKind::Footage { item };
-            l.interpolation = Interpolation::Flow(FlowParams {
-                engine,
-                ..FlowParams::default()
-            });
-            comp_with(vec![l])
-        };
-        let at = |c: &Composition, stamper: &dyn SourceStamper| {
-            comp_frame_key(&doc, c, 1.0, Quality::default(), stamper).unwrap()
-        };
-
-        let rife = comp(FlowEngineChoice::Rife);
-        let one = at(&rife, &Installed([1u8; 32]));
-        let two = at(&rife, &Installed([2u8; 32]));
-        let none = at(&rife, &StubStamper);
-        assert_ne!(one, two, "two packs paint two pictures");
-        assert_ne!(
-            one, none,
-            "and a machine with no pack previews with the built-in engine"
-        );
-
-        let dis = comp(FlowEngineChoice::Dis);
-        assert_eq!(
-            at(&dis, &Installed([1u8; 32])),
-            at(&dis, &StubStamper),
-            "installing a pack must not retire a built-in engine's frames"
-        );
-    }
-
     /// Two comp times whose retimed source lands in the *same* integer source
     /// frame (the stamper returns the same frame index) but at different
     /// sub-frame positions. Blend and Flow synthesise a different in-between at
@@ -4405,161 +4173,6 @@ mod tests {
         assert_ne!(k(&layer(true), 1.0), k(&layer(true), 1.5));
     }
 
-    /// A retimer **plugin** asks for five frames either side of the one being
-    /// rendered — per instance, per frame, through `getFramesNeeded`
-    /// (docs/12 §2.1) — and those eleven frames are what this layer's frame
-    /// depends on. So the key moves when any one of them changes and stands
-    /// when a frame outside the window does; a cached frame can never outlive
-    /// what the plugin sampled to make it.
-    ///
-    /// The window itself is asserted in `lumit-core`; this is the same window
-    /// end to end, at the place the cache is actually decided
-    /// (docs/impl/ofx-host.md §5 item 3).
-    #[test]
-    fn a_plugins_eleven_sampled_frames_are_what_its_key_depends_on() {
-        use lumit_core::fx::{
-            CostClass, EffectDef, EffectSchema, EffectTraits, FxCategory, MatteRole, Roi,
-        };
-
-        /// A plugin that reads t ± 5, whatever the frame and whatever the
-        /// instance — the smallest thing that is a retimer.
-        struct Retimer;
-        impl EffectDef for Retimer {
-            fn schema(&self) -> &'static EffectSchema {
-                // Declared ±1: the widening the host applies at describe time
-                // when a plugin says it reads other frames at all. It is the
-                // gate; the per-instance answer below is the window.
-                Box::leak(Box::new(EffectSchema {
-                    match_name: "ofx:test.eval.retimer",
-                    label: "Retimer",
-                    version: 1,
-                    category: FxCategory::Utility,
-                    traits: EffectTraits {
-                        cost: CostClass::Heavy,
-                        roi: Roi::FullFrame,
-                        temporal: &[-1, 0, 1],
-                        premultiplied: true,
-                        seeded: false,
-                        beat_input: false,
-                    },
-                    params: &[],
-                    groups: &[],
-                    enabled_when: &[],
-                    matte: MatteRole::None,
-                }))
-            }
-
-            fn frames_needed(
-                &self,
-                _inst: &lumit_core::model::EffectInstance,
-                _lt: f64,
-            ) -> Option<Vec<i32>> {
-                Some((-5..=5).collect())
-            }
-        }
-
-        // A schema is looked up by name once and must answer the same pointer
-        // every time, so the leak happens once here rather than per call.
-        let def: &'static Retimer = Box::leak(Box::new(Retimer));
-        assert!(
-            lumit_core::fx::BUILTIN_DEFS.register(def),
-            "the catalogue took the plugin"
-        );
-
-        /// The stub stamper with one frame changed: exactly the shape of "the
-        /// footage under this layer was re-imported and frame N is different
-        /// now".
-        struct Bumped(u64);
-        impl SourceStamper for Bumped {
-            fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
-                let frame = (lt * 60.0).round().max(0.0) as u64;
-                let identity = if frame == self.0 {
-                    format!("stub:{item}:changed")
-                } else {
-                    format!("stub:{item}")
-                };
-                Some((identity, frame))
-            }
-        }
-
-        let doc = Arc::new(Document::new());
-        let item = Uuid::now_v7();
-        let mut layer = text_layer("", 0.0, 10.0, 0.0);
-        layer.kind = LayerKind::Footage { item };
-        layer
-            .effects
-            .push(lumit_core::fx::instantiate("ofx:test.eval.retimer").expect("it registered"));
-        let comp = comp_with(vec![layer]);
-
-        // One second in, at sixty frames a second: the frame being rendered is
-        // 60 and the plugin reads 55 to 65.
-        let at = |stamper: &dyn SourceStamper| {
-            comp_frame_key(&doc, &comp, 1.0, Quality::default(), stamper).unwrap()
-        };
-        let base = at(&StubStamper);
-        for inside in [55_u64, 59, 61, 65] {
-            assert_ne!(
-                base,
-                at(&Bumped(inside)),
-                "frame {inside} is one the plugin samples, so the cached frame is stale"
-            );
-        }
-        for outside in [54_u64, 66, 120] {
-            assert_eq!(
-                base,
-                at(&Bumped(outside)),
-                "frame {outside} is outside the plugin's window and must retire nothing"
-            );
-        }
-
-        // And the gate in front of the window is the declaration: bypass the
-        // stack and the neighbours leave the key altogether.
-        let mut bypassed = comp.clone();
-        bypassed.layers[0].switches.fx = false;
-        let plain = comp_frame_key(&doc, &bypassed, 1.0, Quality::default(), &StubStamper).unwrap();
-        assert_eq!(
-            plain,
-            comp_frame_key(&doc, &bypassed, 1.0, Quality::default(), &Bumped(55)).unwrap(),
-            "a bypassed stack samples nothing but its own frame"
-        );
-    }
-
-    /// The neighbour-frame rule covers Flow motion blur too: its temporal
-    /// window is {0, 1}, so the existing neighbour-key block already hashes the
-    /// +1 source frame it reads (the frame the flow field is measured against).
-    /// A motion-blur layer's key therefore differs from the same layer
-    /// bypassed, and moves with time as the next frame changes — the cache
-    /// can't hold one motion-blurred frame across a span. A regression pinning
-    /// that the {0, 1} forward window is covered with no motion-blur-specific
-    /// plumbing.
-    #[test]
-    fn motion_blur_keys_its_next_frame() {
-        let doc = Document::new();
-        let item = Uuid::now_v7();
-        let layer = |enabled: bool| {
-            let mut l = text_layer("", 0.0, 10.0, 0.0);
-            let mut mb = lumit_core::fx::instantiate("motion_blur").unwrap();
-            mb.enabled = enabled;
-            l.effects.push(mb);
-            l.kind = LayerKind::Footage { item };
-            comp_with(vec![l])
-        };
-        let k = |c: &Composition, t: f64| {
-            comp_frame_key(
-                &Arc::new(doc.clone()),
-                c,
-                t,
-                Quality::default(),
-                &StubStamper,
-            )
-            .unwrap()
-        };
-        // Live hashes the next-frame block; bypassed does not.
-        assert_ne!(k(&layer(true), 1.0), k(&layer(false), 1.0));
-        // The +1 neighbour moves with time, so the key evolves.
-        assert_ne!(k(&layer(true), 1.0), k(&layer(true), 1.5));
-    }
-
     /// Per-layer transform motion blur (docs/06 §4) feeds the key only
     /// while the comp master and the layer switch are both on: with the master
     /// off the switch is inert (every pre-motion-blur key holds); with both on,
@@ -4633,39 +4246,6 @@ mod tests {
         }
     }
 
-    /// A flow conform rate synthesises from different source frames at the same
-    /// time, so changing it (including to/from Native) changes the key — the
-    /// cache can't serve a frame flowed at the wrong rate.
-    #[test]
-    fn flow_conform_rate_keys_distinctly() {
-        use lumit_core::retime::{FlowParams, Interpolation};
-        let doc = Document::new();
-        let item = Uuid::now_v7();
-        let footage = |fps: Option<f64>| {
-            let mut l = text_layer("", 0.0, 10.0, 0.0);
-            l.kind = LayerKind::Footage { item };
-            l.interpolation = Interpolation::Flow(FlowParams {
-                input_fps: fps
-                    .map(lumit_core::anim::Property::fixed)
-                    .unwrap_or_else(lumit_core::anim::Property::zero),
-                ..FlowParams::default()
-            });
-            comp_with(vec![l])
-        };
-        let k = |c: &Composition| {
-            comp_frame_key(
-                &Arc::new(doc.clone()),
-                c,
-                1.0,
-                Quality::default(),
-                &StubStamper,
-            )
-            .unwrap()
-        };
-        assert_ne!(k(&footage(None)), k(&footage(Some(24.0))));
-        assert_ne!(k(&footage(Some(24.0))), k(&footage(Some(12.0))));
-    }
-
     /// A Sequence layer keys the active clip's source frame; a gap keys
     /// distinctly and moving through clips changes the key.
     #[test]
@@ -4697,6 +4277,87 @@ mod tests {
         // Different clips → different keys; the gap differs from both.
         assert_ne!(k(1.0), k(4.0));
         assert_ne!(k(1.0), k(2.5));
+    }
+
+    /// A clip that plays a composition is named by that composition's own
+    /// frame, so an edit inside it renames the frames that show the clip.
+    #[test]
+    fn a_composition_clip_is_named_by_what_its_composition_holds() {
+        use lumit_core::sequence::{Clip, ClipSource};
+        let r = |n| Rational::new(n, 1).unwrap();
+        let scene = |words: &str| {
+            let mut held = text_layer(words, 0.0, 10.0, 0.0);
+            held.id = Uuid::from_u128(1);
+            let mut inner = comp_with(vec![held]);
+            inner.id = Uuid::from_u128(2);
+            let mut doc = Document::new();
+            doc.items.push(ProjectItem::Composition(inner));
+            let mut row = text_layer("", 0.0, 10.0, 0.0);
+            row.id = Uuid::from_u128(3);
+            let plays = ClipSource::Comp(Uuid::from_u128(2));
+            row.kind = LayerKind::Sequence {
+                clips: vec![Clip::new(plays, r(0), r(4), r(0), r(4))],
+            };
+            let mut outer = comp_with(vec![row]);
+            outer.id = Uuid::from_u128(4);
+            key(&doc, &outer, 1.0)
+        };
+        assert_eq!(scene("one"), scene("one"));
+        assert_ne!(scene("one"), scene("two"), "an edit inside the comp");
+    }
+
+    /// A moment with no fade and no overlap keeps the name it had before a
+    /// picture row could fade or dissolve. The bytes are pinned, so every
+    /// frame already cached under them is still found. A fading or dissolving
+    /// moment is named apart, by both clips and the gain.
+    #[test]
+    fn a_plain_sequence_moment_keeps_its_name_and_a_mixed_one_gets_another() {
+        use lumit_core::sequence::{Clip, ClipSource, Fade, FadeShape};
+        let doc = Document::new();
+        let r = |n| Rational::new(n, 1).unwrap();
+        let (a, b) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        // Clip A on [0, 3) and clip B on [2, 5): they share [2, 3).
+        let row = |clips: Vec<Clip>| {
+            let mut l = text_layer("", 0.0, 10.0, 0.0);
+            l.id = Uuid::from_u128(3);
+            l.kind = LayerKind::Sequence { clips };
+            let mut comp = comp_with(vec![l]);
+            comp.id = Uuid::from_u128(4);
+            comp
+        };
+        let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
+        let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
+        let cut = row(vec![clip_a.clone(), clip_b.clone()]);
+        // Pinned on the code as it stood before fades reached the picture.
+        assert_eq!(
+            (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
+            (
+                303_821_901_826_944_988_283_012_693_430_024_403_241,
+                214_093_313_630_544_915_097_010_732_135_860_045_414
+            )
+        );
+
+        // Inside the overlap the name carries the gain, which another shape
+        // moves at the same frame, and both clips.
+        let dissolving = key(&doc, &cut, 2.5);
+        let mut linear = clip_b.clone();
+        linear.fade_in.shape = FadeShape::Linear;
+        let reshaped = row(vec![clip_a.clone(), linear]);
+        assert_ne!(dissolving, key(&doc, &reshaped, 2.5), "the gain");
+        let mut other = clip_a.clone();
+        other.source = ClipSource::Footage(Uuid::from_u128(5));
+        let swapped = row(vec![other, clip_b.clone()]);
+        assert_ne!(dissolving, key(&doc, &swapped, 2.5), "the clip under");
+
+        // A fade at a lone end renames the moments inside it and no others.
+        let mut faded = clip_a.clone();
+        faded.fade_in = Fade {
+            seconds: r(1),
+            shape: FadeShape::Linear,
+        };
+        let fading = row(vec![faded, clip_b]);
+        assert_ne!(key(&doc, &fading, 0.25), key(&doc, &cut, 0.25));
+        assert_eq!(key(&doc, &fading, 1.0), key(&doc, &cut, 1.0));
     }
 
     // ---------------------------------------------------------------
@@ -4775,22 +4436,6 @@ mod tests {
         (doc, comp, read, fx_id, input)
     }
 
-    /// **A node graph names a frame**, and names it the same way twice.
-    ///
-    /// A layer comp never reaches the fork at all - it has no graph - so every
-    /// key ever made holds, which is why `ALGO_VERSION` did not move; the rest
-    /// of this module is that assertion, made a hundred times over.
-    #[test]
-    fn a_node_graph_names_a_frame() {
-        let (doc, comp, ..) = node_graph_doc();
-        assert_eq!(key(&doc, &comp, 1.0), key(&doc, &comp, 1.0));
-        // And it is a different picture from the empty comp it would be
-        // without its boxes.
-        let mut bare = comp.clone();
-        bare.graph = None;
-        assert_ne!(key(&doc, &comp, 1.0), key(&doc, &bare, 1.0));
-    }
-
     /// **Every content edit inside a graph renames the frame**: a parameter, a
     /// wire, an Input's default, and a Read pointed at another item. Each is a
     /// different picture, so each must retire the frames it drew.
@@ -4864,63 +4509,6 @@ mod tests {
         );
     }
 
-    /// **Two outputs of one box are two pictures.** The Output wired from a
-    /// Split channels box's Red and from its Green names two frames.
-    #[test]
-    fn two_outputs_of_a_split_name_two_frames() {
-        use lumit_core::comp_graph::GraphNode;
-        let (doc, mut comp, read, _, _) = node_graph_doc();
-        let split = lumit_core::fx::instantiate("split_channels").unwrap();
-        let split_id = split.id;
-        let out = comp
-            .graph
-            .as_ref()
-            .and_then(|g| g.output_id())
-            .expect("an Output");
-        if let Some(g) = comp.graph.as_mut() {
-            g.nodes.push(GraphNode::Fx(split));
-        }
-        let at = |port: &str| {
-            let mut c = comp.clone();
-            if let Some(g) = c.graph.as_mut() {
-                g.edges = vec![
-                    wire(read, "output", split_id, "input"),
-                    wire(split_id, port, out, "input"),
-                ];
-            }
-            key(&doc, &c, 1.0)
-        };
-        assert_ne!(at("output"), at("green"));
-    }
-
-    /// **A driver inside a graph turns its clock** (§2.5). A Wiggle into a
-    /// parameter moves the picture while every stored number holds still, so
-    /// two frames of such a graph must not share a name - and a graph with no
-    /// wire out of a driver keeps the one name it had across its whole span.
-    #[test]
-    fn a_driver_inside_a_node_graph_names_every_frame_of_it() {
-        use lumit_core::comp_graph::GraphNode;
-        let (doc, comp, _, fx_id, _) = node_graph_doc();
-        assert_eq!(
-            key(&doc, &comp, 1.0),
-            key(&doc, &comp, 2.0),
-            "a graph of static numbers holds one name across its span"
-        );
-
-        let mut driven = comp.clone();
-        if let Some(g) = driven.graph.as_mut() {
-            let w = lumit_core::fx::instantiate("wiggle").unwrap();
-            let w_id = w.id;
-            g.nodes.push(GraphNode::Fx(w));
-            g.edges.push(wire(w_id, "value", fx_id, "stops"));
-        }
-        assert_ne!(
-            key(&doc, &driven, 1.0),
-            key(&doc, &driven, 2.0),
-            "a wire that wobbles must name every frame it wobbles through"
-        );
-    }
-
     /// **A host layer's frame follows the graph its effect applies** (§2.5):
     /// editing inside the graph renames every frame that shows it, and moving
     /// a box in it renames none.
@@ -4981,111 +4569,6 @@ mod tests {
         );
     }
 
-    /// **And it reads the graph on the host layer's clock** (§2.5). The same
-    /// graph on a layer dragged a second along the timeline is the same frame a
-    /// second later, which is what keeps a frame's name, its decodes and its
-    /// picture on one clock.
-    #[test]
-    fn a_graph_effects_frame_is_named_at_the_layer_time() {
-        use lumit_core::comp_graph::GraphNode;
-        use lumit_core::model::EffectValue;
-        let (mut doc, mut graph_comp, _, fx_id, _) = node_graph_doc();
-        // A keyframed row inside the graph, so the graph's content differs
-        // from moment to moment and a clock that slipped shows.
-        if let Some(GraphNode::Fx(inst)) = graph_comp
-            .graph
-            .as_mut()
-            .and_then(|g| g.nodes.iter_mut().find(|n| n.id() == fx_id))
-        {
-            for p in &mut inst.params {
-                if p.id == "stops" {
-                    p.value = EffectValue::Float(Property {
-                        extra: serde_json::Map::new(),
-                        animation: Animation::Keyframed(vec![
-                            Keyframe {
-                                time: Rational::ZERO,
-                                value: 0.0,
-                                interp_in: SideInterp::Linear,
-                                interp_out: SideInterp::Linear,
-                            },
-                            Keyframe {
-                                time: Rational::new(4, 1).unwrap(),
-                                value: 4.0,
-                                interp_in: SideInterp::Linear,
-                                interp_out: SideInterp::Linear,
-                            },
-                        ]),
-                    });
-                }
-            }
-        }
-        let graph_id = graph_comp.id;
-        let graph = graph_comp.graph.clone().unwrap();
-        doc.items.push(ProjectItem::Composition(graph_comp));
-
-        let hosted = |offset: f64| {
-            let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
-            lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
-            let mut host = text_layer("host", 0.0, 5.0, offset);
-            host.effects = vec![inst];
-            comp_with(vec![host])
-        };
-
-        assert_eq!(
-            key(&doc, &hosted(0.0), 0.5),
-            key(&doc, &hosted(1.0), 1.5),
-            "a layer dragged a second along shows the graph a second later"
-        );
-        assert_ne!(
-            key(&doc, &hosted(0.0), 1.5),
-            key(&doc, &hosted(1.0), 1.5),
-            "and the graph's own keys are what move it"
-        );
-    }
-
-    /// **An unprobed Read makes the frame unkeyable**, exactly as an unprobed
-    /// footage layer does: the frame is rendered live and never banked.
-    #[test]
-    fn an_unprobed_read_makes_a_node_graphs_frame_unkeyable() {
-        use lumit_core::comp_graph::GraphNode;
-        use lumit_core::model::{FootageItem, MediaRef};
-        let (mut doc, mut comp, read, ..) = node_graph_doc();
-        let item = Uuid::now_v7();
-        doc.items.push(ProjectItem::Footage(FootageItem {
-            id: item,
-            name: "clip".into(),
-            media: MediaRef {
-                relative_path: "clip.mp4".into(),
-                absolute_path: "/clip.mp4".into(),
-                fingerprint: None,
-                extra: serde_json::Map::new(),
-            },
-            colour_space: None,
-            sequence: None,
-            extra: serde_json::Map::new(),
-        }));
-        if let Some(GraphNode::Read { item: named, .. }) = comp
-            .graph
-            .as_mut()
-            .and_then(|g| g.nodes.iter_mut().find(|n| n.id() == read))
-        {
-            *named = item;
-        }
-        let named = |stamper: &dyn SourceStamper| {
-            comp_frame_key(
-                &Arc::new(doc.clone()),
-                &comp,
-                1.0,
-                Quality::default(),
-                stamper,
-            )
-        };
-        assert!(
-            named(&UnknownStamper).is_none(),
-            "an unprobed Read cannot be named"
-        );
-        assert!(named(&StubStamper).is_some(), "and a probed one can");
-    }
     // Round two: Precomp retime, a placed graph's Inputs, the preview item
     // (docs/impl/node-graph-comp.md §5.3, §5.6, §5.11, test 20)
     // ---------------------------------------------------------------
@@ -5160,244 +4643,78 @@ mod tests {
         );
     }
 
-    /// **A placed graph's Input value renames the parent frame** (§5.3), and a
-    /// layer that hands nothing over keeps the name it always had - so every
-    /// project written before the field existed is untouched.
+    /// **A temporal effect on a Precomp or an adjustment layer names its
+    /// neighbours.** Neither has source frames to stamp, so the picture a
+    /// frame away is named instead: without it, two times that show one
+    /// picture now and different ones next would share a name, and the cache
+    /// would hand one frame's blur to the other.
     #[test]
-    fn a_placed_graphs_input_value_renames_the_parent() {
-        use lumit_core::model::{EffectParam, EffectValue};
-        let (mut doc, graph_comp, ..) = node_graph_doc();
-        let graph_id = graph_comp.id;
-        let graph = graph_comp.graph.clone().unwrap();
-        doc.items.push(ProjectItem::Composition(graph_comp));
-
-        let placed = |value: Option<f64>| {
-            let mut l = precomp_layer(graph_id);
-            l.graph_inputs = value.map(|v| {
-                let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
-                lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
-                inst.params.push(EffectParam {
-                    id: "amount".into(),
-                    value: EffectValue::Float(Property::fixed(v)),
-                    extra: serde_json::Map::new(),
-                });
-                inst
-            });
-            comp_with(vec![l])
+    fn a_temporal_effect_on_a_precomp_or_an_adjustment_keys_its_neighbours() {
+        let mut doc = Document::new();
+        // Still for five seconds and moving after: 4 s and 5 s show the same
+        // picture, and only at 5 s is the next frame a different one.
+        let key_at = |time: i64, value: f64| Keyframe {
+            time: Rational::new(time, 1).unwrap(),
+            value,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
         };
-        let bare = key(&doc, &placed(None), 1.0);
-        let two = key(&doc, &placed(Some(2.0)), 1.0);
-        let three = key(&doc, &placed(Some(3.0)), 1.0);
-        assert_ne!(bare, two, "handing a value over is a different picture");
-        assert_ne!(two, three, "and so is handing a different one over");
-        assert_eq!(
-            bare,
-            key(&doc, &placed(None), 1.0),
-            "a layer with no instance names what it always named"
-        );
-    }
-
-    /// **A placed graph names itself by its values** (§5.3). The nested comp's
-    /// own name is the graph on its defaults, so the instance is named beside
-    /// it: this is the half [`instance_key`] answers, and what
-    /// `NestedKeyer::nested_key_with` folds into the texture's name.
-    #[test]
-    fn a_placed_graphs_values_name_the_nested_frame() {
-        use lumit_core::model::{EffectParam, EffectValue};
-        let (mut doc, graph_comp, ..) = node_graph_doc();
-        let graph_id = graph_comp.id;
-        let graph = graph_comp.graph.clone().unwrap();
-        doc.items.push(ProjectItem::Composition(graph_comp.clone()));
-        let doc = Arc::new(doc);
-
-        let instance = |v: f64| {
-            let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
-            lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
-            inst.params.push(EffectParam {
-                id: "amount".into(),
-                value: EffectValue::Float(Property::fixed(v)),
-                extra: serde_json::Map::new(),
-            });
-            inst
-        };
-        let named = |v: f64| {
-            instance_key(
-                &doc,
-                &graph_comp,
-                &instance(v),
-                1.0,
-                Quality::default(),
-                &StubStamper,
-            )
-            .unwrap()
-        };
-        assert_eq!(named(2.0), named(2.0), "the same values name one picture");
-        assert_ne!(named(2.0), named(3.0), "and two values name two");
-    }
-
-    /// **An `input()` expression reads the same value in the key's walk as in
-    /// the render's** (§5.5). Both build the graph's context from the very
-    /// list `overrides_of` answers, so the number an expression sees cannot
-    /// depend on which of the two asked.
-    #[test]
-    fn an_input_expression_reads_alike_in_the_key_and_the_render() {
-        use lumit_core::expression::ExpressionContext;
-        use lumit_core::model::EffectValue;
-        let (mut doc, graph_comp, ..) = node_graph_doc();
-        let comp_id = graph_comp.id;
-        doc.items.push(ProjectItem::Composition(graph_comp));
-        let doc = Arc::new(doc);
-
-        let values: Vec<(String, EffectValue)> =
-            vec![("amount".into(), EffectValue::Float(Property::fixed(4.0)))];
-        let context = |values: Option<&[(String, EffectValue)]>| {
-            Arc::new(ExpressionContext {
-                document: doc.clone(),
-                comp: Some(comp_id),
-                layer: None,
-                comp_time: 1.0,
-                current_depth: 0,
-                inputs: values.map(Into::into),
-            })
-        };
-        let read = |ctx| lumit_core::expression::evaluate("input(\"amount\")", Some(ctx));
-        assert_eq!(read(context(Some(&values))), read(context(Some(&values))));
-        assert_eq!(
-            read(context(Some(&values))),
-            4.0,
-            "the host's value, not the Input's own default"
-        );
-        assert_eq!(
-            read(context(None)),
-            1.0,
-            "and the declared default where nobody handed one over"
-        );
-    }
-
-    /// **A preview item renames a graph viewed on its own, and not the same
-    /// graph applied** (§5.11). It stands in for a picture nobody is feeding,
-    /// so where the pictures arrive on sockets it changes no pixel and must
-    /// change no name.
-    #[test]
-    fn a_preview_item_renames_only_the_view_that_shows_it() {
-        use lumit_core::comp_graph::{GraphNode, InputKind};
-        let (mut doc, comp, ..) = node_graph_doc();
-        let solid = Uuid::now_v7();
-        doc.items.push(ProjectItem::Solid(SolidDef {
-            id: solid,
-            name: "stand-in".into(),
-            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
-            width: 32,
-            height: 32,
+        let mut mover = text_layer("inner", 0.0, 10.0, 0.0);
+        mover.transform.position_x = Property {
+            animation: Animation::Keyframed(vec![
+                key_at(0, 0.0),
+                key_at(5, 0.0),
+                key_at(10, 1000.0),
+            ]),
             extra: serde_json::Map::new(),
-        }));
-        // The same graph with a picture Input, with and without a stand-in.
-        let with_picture = |preview: Option<Uuid>| {
-            let mut c = comp.clone();
-            if let Some(g) = c.graph.as_mut() {
-                g.nodes.push(GraphNode::Input {
-                    id: Uuid::now_v7(),
-                    input: lumit_core::comp_graph::GraphInput {
-                        id: "plate".into(),
-                        label: "Plate".into(),
-                        kind: InputKind::Picture,
-                        default: [0.0; 4],
-                        min: 0.0,
-                        max: 1.0,
-                        unit: lumit_core::fx::Unit::Raw,
-                        preview,
-                    },
-                });
-            }
-            c
         };
-        let bare = with_picture(None);
-        let shown = with_picture(Some(solid));
-        assert_ne!(
-            key(&doc, &bare, 1.0),
-            key(&doc, &shown, 1.0),
-            "viewed on its own, the stand-in is the picture"
-        );
+        let blur = || lumit_core::fx::instantiate("motion_blur").unwrap();
 
-        // Applied as an effect, every picture Input is fed from the host, so
-        // the two graphs are one picture and must be one name.
-        let applied = |graph: &Composition| {
-            let mut host = doc.clone();
-            host.items.push(ProjectItem::Composition(graph.clone()));
-            let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
-            lumit_core::fx::effects::node_graph::bind(
-                &mut inst,
-                graph.id,
-                graph.graph.as_ref().unwrap(),
+        let nested = comp_with(vec![mover.clone()]);
+        let mut pre = precomp_layer(nested.id);
+        pre.effects.push(blur());
+        doc.items.push(ProjectItem::Composition(nested));
+        let mut adjust = text_layer("", 0.0, 10.0, 0.0);
+        adjust.kind = LayerKind::Adjustment;
+        adjust.effects.push(blur());
+
+        for comp in [comp_with(vec![pre]), comp_with(vec![adjust, mover])] {
+            assert_ne!(
+                key(&doc, &comp, 4.0),
+                key(&doc, &comp, 5.0),
+                "one picture now, another next: two names"
             );
-            let mut l = text_layer("host", 0.0, 10.0, 0.0);
-            l.effects = vec![inst];
-            let parent = comp_with(vec![l]);
-            comp_frame_key(
-                &Arc::new(host),
-                &parent,
-                1.0,
-                Quality::default(),
-                &StubStamper,
-            )
-            .unwrap()
-        };
-        assert_eq!(
-            applied(&bare),
-            applied(&shown),
-            "applied, the stand-in draws nothing and names nothing"
-        );
-    }
+            assert_eq!(
+                key(&doc, &comp, 3.0),
+                key(&doc, &comp, 4.0),
+                "and a still stretch keeps one name"
+            );
+        }
 
-    /// **A Posterize time on the host holds the graph it applies** (§5.2). The
-    /// builder and the planner lower the effect at the held time, so the key
-    /// reads it there too - otherwise a held frame would carry the live
-    /// graph's name.
-    #[test]
-    fn a_posterize_on_the_host_holds_the_graphs_name() {
-        use lumit_core::comp_graph::GraphNode;
-        use lumit_core::model::EffectValue;
-        let (mut doc, graph_comp, _, fx_id, _) = node_graph_doc();
-        let graph_id = graph_comp.id;
-        // A Wiggle into the Exposure, so the graph's own name moves with the
-        // clock and a hold is visible in it.
-        let mut graph = graph_comp.graph.clone().unwrap();
-        let wiggle = lumit_core::fx::instantiate("wiggle").unwrap();
-        let wiggle_id = wiggle.id;
-        graph.nodes.push(GraphNode::Fx(wiggle));
-        graph.edges.push(wire(wiggle_id, "value", fx_id, "stops"));
-        let mut graph_comp = graph_comp;
-        graph_comp.graph = Some(graph.clone());
-        doc.items.push(ProjectItem::Composition(graph_comp));
-
-        let host = |posterize: bool| {
-            let mut inst = lumit_core::fx::instantiate("node_graph").unwrap();
-            lumit_core::fx::effects::node_graph::bind(&mut inst, graph_id, &graph);
-            let mut effects = vec![inst];
-            if posterize {
-                let mut p = lumit_core::fx::instantiate("posterize_time").unwrap();
-                for row in &mut p.params {
-                    if row.id == "rate" {
-                        row.value = EffectValue::Float(Property::fixed(1.0));
-                    }
-                }
-                effects.insert(0, p);
-            }
-            let mut l = text_layer("host", 0.0, 10.0, 0.0);
-            l.effects = effects;
-            comp_with(vec![l])
+        // A Sequence layer's neighbour is whichever clip is live then. One
+        // shot twice and then another: the last frame of each showing is the
+        // same picture, and only the second is followed by the other shot.
+        // Four frames a second, so every time here is exact.
+        use lumit_core::sequence::{Clip, ClipSource};
+        let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
+        let r = |n| Rational::new(n, 1).unwrap();
+        let clip = |item, at| Clip::new(ClipSource::Footage(item), r(0), r(2), r(at), r(2));
+        let mut cut = text_layer("", 0.0, 10.0, 0.0);
+        cut.kind = LayerKind::Sequence {
+            clips: vec![clip(a, 0), clip(a, 2), clip(b, 4)],
         };
-        let live = host(false);
+        cut.effects.push(blur());
+        let mut comp = comp_with(vec![cut]);
+        comp.frame_rate = lumit_core::time::FrameRate::new(4, 1).unwrap();
         assert_ne!(
-            key(&doc, &live, 1.2),
-            key(&doc, &live, 1.8),
-            "a driven graph names every frame of itself"
+            key(&doc, &comp, 1.75),
+            key(&doc, &comp, 3.75),
+            "the same frame before two different clips: two names"
         );
-        let held = host(true);
         assert_eq!(
-            key(&doc, &held, 1.2),
-            key(&doc, &held, 1.8),
-            "and a one-per-second hold names one frame across the second"
+            key(&doc, &comp, 0.0),
+            key(&doc, &comp, 2.0),
+            "and the same frame before the same one keeps one name"
         );
     }
 }

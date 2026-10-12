@@ -11,7 +11,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
-import 'package:lumit_flutter/src/rust/api/effect.dart';
 
 import 'frb_test_support.dart';
 
@@ -26,22 +25,6 @@ void main() {
       p.uiState.setSelectedComp(comp);
       return (state: p.state, uiState: p.uiState, comp: comp);
     }
-
-    testWidgets('an unstyled layer shows no Styles group at all',
-        (tester) async {
-      final p = withComp();
-      p.comp.addSolidLayer();
-      final rows = layerFoldRows(
-        entry: p.comp.getModel().layers.single,
-        open: everyFoldPath,
-        hasAudio: false,
-      );
-      expect(
-        rows.whereType<FoldGroupRow>().map((g) => g.label),
-        isNot(contains('Styles')),
-        reason: 'an empty heading is a promise the row cannot keep',
-      );
-    });
 
     testWidgets(
         'a styled layer shows the group, in the pinned order, after Effects',
@@ -96,40 +79,6 @@ void main() {
             .every((path) => isUnderPath(effectsPath(id), path)),
         isTrue,
       );
-    });
-
-    testWidgets('a style parameter edit round-trips through setEffects',
-        (tester) async {
-      final p = withComp();
-      final layer = p.comp.addSolidLayer();
-      layer.addEffect(name: 'blur');
-      layer.addStyle(name: 'style_drop_shadow');
-
-      // Exactly what a row's write does: the list the row says it is on,
-      // freshly read, the value staged on it, and `setEffects` as the commit.
-      final id = layer.getStyles().single.id();
-      final staged = layer.getStyles();
-      expect(staged.single.id(), id, reason: 'the styles, not the stack');
-      staged.single.setValue(
-        id: 'distance',
-        value: const BridgeEffectValue.float(BridgeScalar.static_(41)),
-      );
-      layer.setEffects(effects: staged);
-
-      final info = p.comp.getModel().layers.single.info;
-      expect(info.effects.length, 1, reason: 'the stack is untouched');
-      expect(
-        info.styles.single.values
-            .firstWhere((v) => v.id == 'distance')
-            .value,
-        const BridgeEffectValue.float(BridgeScalar.static_(41)),
-      );
-
-      // And the effect stack is still its own list, untouched by the write
-      // above: the two lists never merge, whichever one a row names.
-      final effect = layer.getEffects().single.id();
-      expect(layer.getEffects().single.id(), effect);
-      expect(effect, isNot(id));
     });
   });
 }

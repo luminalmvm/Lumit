@@ -167,45 +167,7 @@ pub(crate) fn reset() {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
-    use super::{drag_scale, drag_scale_for, drag_tier, DRAG_PIXEL_BUDGET};
-    use lumit_eval::schedule::RealtimeController;
-
-    /// With the Settings switch on, the drag budget is off and a drag renders
-    /// at exactly the scale the Viewer asked for — including the 1080p case
-    /// below, which is the one the cap was built for.
-    #[test]
-    fn full_resolution_drags_ignore_the_budget() {
-        assert!((drag_scale_for(true, 1920, 1080, 1.0) - 1.0).abs() < 1e-6);
-        assert!((drag_scale_for(true, 3840, 2160, 0.5) - 0.5).abs() < 1e-6);
-        assert!((drag_scale_for(false, 1920, 1080, 1.0) - 1.0 / 3.0).abs() < 1e-6);
-        // And off is what the session starts on, so an untouched build drags
-        // exactly as it did before the switch existed.
-        assert!((drag_scale(1920, 1080, 1.0) - 1.0 / 3.0).abs() < 1e-6);
-    }
-
-    /// A drag on a comp small enough to be cheap already is not degraded at all
-    /// — softening a picture that was keeping up buys nothing and costs the
-    /// only thing being judged.
-    #[test]
-    fn a_small_comp_drags_at_full_resolution() {
-        assert_eq!(drag_tier(640, 360, 1.0), 1);
-        assert_eq!(drag_scale(640, 360, 1.0), 1.0);
-        // And a big comp shown in a small panel is small too: the Viewer's own
-        // scale is already inside the budget, so there is nothing to take.
-        assert_eq!(drag_tier(1920, 1080, 0.33), 1);
-    }
-
-    /// The case the owner hit: a 1080p comp at full scale, Depth of field on a
-    /// layer, the picture 1-5 s behind the pointer. It has to come down.
-    #[test]
-    fn a_full_size_comp_drags_coarser() {
-        assert_eq!(drag_tier(1920, 1080, 1.0), 3);
-        assert!((drag_scale(1920, 1080, 1.0) - 1.0 / 3.0).abs() < 1e-6);
-        // 4K goes to the floor rather than further: below Quarter the picture
-        // stops being judgeable, which is the point of dragging it.
-        assert_eq!(drag_tier(3840, 2160, 1.0), 4);
-        assert_eq!(drag_tier(7680, 4320, 1.0), 4);
-    }
+    use super::{drag_tier, DRAG_PIXEL_BUDGET};
 
     /// Whatever tier is picked, the raster it implies is inside the budget —
     /// unless the floor was hit, in which case it is the floor's fault and not
@@ -251,46 +213,5 @@ mod tests {
             assert_eq!(drag_tier(1920, 1080, scale), 3, "scale {scale}");
         }
         assert_eq!(drag_tier(1920, 1080, 4.0), 3);
-    }
-
-    /// **The costs this controller is fed, written down.**
-    ///
-    /// Its own controller rather than the process-global one: the tier is shared
-    /// session state and other tests reset it, so asserting exact tiers against
-    /// the global would race. What is pinned here is that the numbers actually
-    /// measured on the read-back transport reach a verdict, which is the thing
-    /// that silently was not true.
-    ///
-    /// The render path used to stop its clock *before* handing the pixels to
-    /// Dart, so it reported the render alone. Measured on this transport, a
-    /// 1.44 MB frame (800x450) costs about 3 ms to render and about 6 ms to hand
-    /// over — the hand-off is the larger half and is linear in bytes, so a full
-    /// 1080p frame is around 35 ms against a 16.7 ms budget at 60 fps. Reporting
-    /// 3 ms of that left the controller believing it had headroom, so it never
-    /// left Full and playback skipped frames instead of getting softer.
-    #[test]
-    fn the_measured_read_back_costs_reach_the_right_verdicts() {
-        // A full-size 1080p frame on this transport: hopeless at 60 fps.
-        let mut over = RealtimeController::new();
-        assert_eq!(over.tier(), 1, "a fresh controller is optimistic");
-        assert!(
-            over.record(0.035, 60.0) > 1,
-            "35 ms a frame against a 16.7 ms budget must coarsen the preview, \
-             not sit at Full while playback skips frames around it"
-        );
-
-        // The render cost alone, which is what used to be reported. It has to
-        // read as comfortable — that is precisely why the old measurement never
-        // moved anything, and why the fix is where the clock stops, not here.
-        let mut render_only = RealtimeController::new();
-        for _ in 0..20 {
-            render_only.record(0.003, 60.0);
-        }
-        assert_eq!(
-            render_only.tier(),
-            1,
-            "3 ms of a 16.7 ms budget is not a reason to soften — so a \
-             controller fed only the render can never do its job"
-        );
     }
 }

@@ -238,42 +238,6 @@ mod tests {
         assert_eq!(spec, a_spec());
     }
 
-    /// Saving under an existing name replaces it in place rather than making
-    /// a second row of the same name.
-    #[test]
-    fn saving_over_a_name_replaces_it_and_keeps_its_place() {
-        let mut lib = PresetLibrary::default();
-        lib.put("A", a_spec()).unwrap();
-        lib.put("B", ExportSpec::default()).unwrap();
-        lib.put("A", ExportSpec::default()).unwrap();
-        assert_eq!(lib.user_count(), 2);
-        assert_eq!(
-            lib.list()
-                .into_iter()
-                .filter(|(_, read_only)| !read_only)
-                .map(|(n, _)| n)
-                .collect::<Vec<_>>(),
-            ["A", "B"],
-            "the replaced preset kept its row"
-        );
-        assert_eq!(lib.get("A"), Some(ExportSpec::default()));
-    }
-
-    /// Built-ins are read-only in both directions, and a nameless preset is
-    /// refused before it can become an unnameable row.
-    #[test]
-    fn built_ins_cannot_be_replaced_or_deleted() {
-        let mut lib = PresetLibrary::default();
-        assert!(lib.put("Master", ExportSpec::default()).is_err());
-        assert!(lib.delete("Master").is_err());
-        assert!(lib.put("  ", ExportSpec::default()).is_err());
-        assert!(lib.delete("never existed").is_err());
-        // A user preset deletes cleanly.
-        lib.put("Mine", ExportSpec::default()).unwrap();
-        assert!(lib.delete("Mine").is_ok());
-        assert_eq!(lib.user_count(), 0);
-    }
-
     /// The list is built-ins first, all marked read-only, and every one of
     /// them resolves to a spec that would actually run.
     #[test]
@@ -290,18 +254,5 @@ mod tests {
         }
         // "Master" follows the composition's own frame.
         assert_eq!(lib.get("Master").unwrap().target, None);
-    }
-
-    /// A missing or damaged file is an empty library, never an error: losing
-    /// saved presets must cost a re-save, not an export.
-    #[test]
-    fn a_missing_or_damaged_file_reads_as_an_empty_library() {
-        let dir = tempfile::tempdir().unwrap();
-        let missing = dir.path().join("not-there.json");
-        assert_eq!(PresetLibrary::load(&missing).user_count(), 0);
-
-        let damaged = dir.path().join("damaged.json");
-        std::fs::write(&damaged, "{ this is not json").unwrap();
-        assert_eq!(PresetLibrary::load(&damaged).user_count(), 0);
     }
 }

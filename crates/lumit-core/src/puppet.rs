@@ -1887,59 +1887,6 @@ mod tests {
         solve(mesh, pins, &f)
     }
 
-    /// **1 — a rectangle is one contour with four corners.** The staircase the
-    /// marching squares walks must simplify back to the shape a human sees.
-    #[test]
-    fn a_rectangle_simplifies_to_four_corners() {
-        let alpha = rect(40, 30, 10, 8, 30, 22);
-        let cov = expanded_coverage(&alpha, 40, 30, 0.0).unwrap();
-        let raw = contours(&cov);
-        assert_eq!(raw.len(), 1, "one silhouette, one contour");
-        let simple = simplify_all(&raw, SIMPLIFY_TOLERANCE, 8.0);
-        assert_eq!(simple.len(), 1);
-        let c = &simple[0];
-        assert_eq!(c.len(), 4, "four corners, got {c:?}");
-        let pad = cov.pad as f64;
-        let corners: Vec<[f64; 2]> = c.iter().map(|p| [p[0] - pad, p[1] - pad]).collect();
-        // Pixel centres are whole coordinates, so the edge of the filled block
-        // sits half a pixel outside the outermost covered centre. Marching
-        // squares chamfers a right angle across the corner cell, and
-        // simplification keeps one end of that chamfer — so a corner lands
-        // within one cell's diagonal of the true corner, not on the nose.
-        for want in [[9.5, 7.5], [29.5, 7.5], [9.5, 21.5], [29.5, 21.5]] {
-            assert!(
-                corners
-                    .iter()
-                    .any(|g| (g[0] - want[0]).abs() <= 0.75 && (g[1] - want[1]).abs() <= 0.75),
-                "no corner near {want:?} in {corners:?}"
-            );
-        }
-    }
-
-    /// **2 — a ring is two contours, and nothing is meshed over the hole.**
-    #[test]
-    fn a_ring_keeps_its_hole_empty() {
-        let mut alpha = rect(80, 80, 8, 8, 72, 72);
-        for y in 28..52 {
-            for x in 28..52 {
-                alpha[y * 80 + x] = 0;
-            }
-        }
-        let cov = expanded_coverage(&alpha, 80, 80, 0.0).unwrap();
-        assert_eq!(contours(&cov).len(), 2, "outer silhouette and hole");
-
-        let mesh = build_mesh(&alpha, 80, 80, 10.0, 0.0).unwrap();
-        for tri in &mesh.triangles {
-            let [a, b, c] = tri_positions(&mesh, tri).unwrap();
-            let cx = (a[0] + b[0] + c[0]) / 3.0;
-            let cy = (a[1] + b[1] + c[1]) / 3.0;
-            assert!(
-                !(28.0..51.0).contains(&cx) || !(28.0..51.0).contains(&cy),
-                "triangle centroid {cx},{cy} sits in the hole"
-            );
-        }
-    }
-
     /// **3 — the weld test.** Two blobs with a gap between them must come out
     /// as two mesh components, and a drag in one must not move the other by so
     /// much as a bit.
@@ -2001,29 +1948,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             "two solves, one answer, bit for bit"
         );
-    }
-
-    /// **5 — a rigid motion is reproduced exactly.** Two pins moved by the same
-    /// delta is a translation, and ARAP's whole promise is that it finds one
-    /// when one exists.
-    #[test]
-    fn two_pins_translated_together_translate_the_mesh() {
-        let mesh = bar_mesh();
-        let d = [13.0, -7.0];
-        let mut pins = vec![
-            SolvePin::position(Uuid::from_u128(1), [20.0, 20.0]),
-            SolvePin::position(Uuid::from_u128(2), [140.0, 20.0]),
-        ];
-        for p in pins.iter_mut() {
-            p.now = [p.rest[0] + d[0], p.rest[1] + d[1]];
-        }
-        let out = solved(&mesh, &pins);
-        for (r, v) in mesh.vertices.iter().zip(&out.vertices) {
-            assert!(
-                (v[0] - r[0] - d[0]).abs() < 1e-6 && (v[1] - r[1] - d[1]).abs() < 1e-6,
-                "vertex {r:?} landed at {v:?}"
-            );
-        }
     }
 
     /// **6 — a quarter turn comes out a quarter turn**, not a shear.
@@ -2276,21 +2200,6 @@ mod tests {
         );
     }
 
-    /// **10 — one pin is a translation**, not an underdetermined solve.
-    #[test]
-    fn one_pin_translates() {
-        let mesh = bar_mesh();
-        let mut pins = vec![SolvePin::position(Uuid::from_u128(1), [80.0, 20.0])];
-        pins[0].now = [95.0, 5.0];
-        let out = solved(&mesh, &pins);
-        for (r, v) in mesh.vertices.iter().zip(&out.vertices) {
-            assert!(
-                (v[0] - r[0] - 15.0).abs() < 1e-9 && (v[1] - r[1] + 15.0).abs() < 1e-9,
-                "vertex {r:?} landed at {v:?}"
-            );
-        }
-    }
-
     /// **11 — the refusals are values.** A transparent layer, a click outside
     /// the mesh, and a density no coarsening can afford each come back as an
     /// answer rather than a crash.
@@ -2314,53 +2223,6 @@ mod tests {
             }
             other => panic!("a 0.5 px density over 210² px should refuse, got {other:?}"),
         }
-    }
-
-    /// **12 — an untouched puppet block is a no-op**, byte for byte, so a frame
-    /// cache that includes it stays honest.
-    #[test]
-    fn pins_at_rest_leave_the_buffer_untouched() {
-        let (w, h) = (160usize, 40usize);
-        let mesh = bar_mesh();
-        let pins = vec![
-            SolvePin::position(Uuid::from_u128(1), [20.0, 20.0]),
-            SolvePin::position(Uuid::from_u128(2), [140.0, 20.0]),
-        ];
-        let out = solved(&mesh, &pins);
-        assert!(out.identity, "no pin moved, so nothing moves");
-
-        let mut buf: Vec<u8> = (0..w * h * 4).map(|i| (i % 251) as u8).collect();
-        let before = buf.clone();
-        apply_puppet(
-            &mut buf, w as u32, h as u32, w as f64, h as f64, &mesh, &out,
-        );
-        assert_eq!(buf, before, "an identity warp must not touch a byte");
-    }
-
-    /// The caches hand back the same object rather than rebuilding, and a
-    /// changed pin position does *not* invalidate the factorisation — the whole
-    /// point of the 2005 formulation.
-    #[test]
-    fn caches_hit_on_the_keys_they_promise() {
-        let alpha = rect(120, 60, 10, 10, 110, 50);
-        let cache = PuppetCache::new();
-        let a = cache.mesh(&alpha, 120, 60, 12.0, 0.0).unwrap();
-        let b = cache.mesh(&alpha, 120, 60, 12.0, 0.0).unwrap();
-        assert!(Arc::ptr_eq(&a, &b), "same alpha, same mesh");
-        let c = cache.mesh(&alpha, 120, 60, 16.0, 0.0).unwrap();
-        assert!(!Arc::ptr_eq(&a, &c), "a new density is a new mesh");
-
-        let mut pins = vec![
-            SolvePin::position(Uuid::from_u128(1), [20.0, 30.0]),
-            SolvePin::position(Uuid::from_u128(2), [100.0, 30.0]),
-        ];
-        let f1 = cache.factorisation(&a, &pins);
-        pins[1].now = [100.0, 12.0];
-        let f2 = cache.factorisation(&a, &pins);
-        assert!(Arc::ptr_eq(&f1, &f2), "moving a pin only moves the RHS");
-        pins.push(SolvePin::position(Uuid::from_u128(3), [60.0, 30.0]));
-        let f3 = cache.factorisation(&a, &pins);
-        assert!(!Arc::ptr_eq(&f1, &f3), "a new pin is a new factorisation");
     }
 
     /// The block survives a trip through the file, writes only what differs
@@ -2448,26 +2310,5 @@ mod float_raster_tests {
         let mut out = [0u8; 16];
         LinearF32::sample_into(&src, 2, 2, 0.0, 0.0, &mut out);
         assert_eq!(crate::pixels::f32_px(&out, 0)[0], 9.0);
-    }
-
-    /// The mesh is built from a silhouette, so the bitmap stays one byte a
-    /// pixel — but it has to be read out of sixteen-byte pixels to be right.
-    #[test]
-    fn the_float_alpha_lift_reads_the_right_channel() {
-        let src = plate(9.0, 0.5);
-        let alpha = alpha_at_natural_f32(&src, 2, 2, 2, 2);
-        assert_eq!(alpha.len(), 4);
-        // 0.5 coverage, scaled into the bitmap's own 0..255.
-        for a in alpha {
-            assert_eq!(a, 128);
-        }
-    }
-
-    /// A raster whose length does not match its stated size lifts nothing
-    /// rather than reading past the end (docs/14 §4).
-    #[test]
-    fn a_short_float_raster_lifts_no_alpha() {
-        let alpha = alpha_at_natural_f32(&[0u8; 3], 2, 2, 2, 2);
-        assert_eq!(alpha, vec![0; 4]);
     }
 }

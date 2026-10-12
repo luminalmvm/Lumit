@@ -10,9 +10,9 @@
 // cannot drift apart.
 //
 // **What a row can say.** Every engine-backed item calls straight through a
-// reference handle. An item with no action yet is still *listed*, marked
-// "(Not implemented)" and disabled, so the shape of the finished application is
-// visible while it is being built and nobody has to guess whether a command is
+// reference handle. An item with no action yet stays in the tree as a
+// [MenuEntry.todo] and is left off the menus until it is built, so a menu
+// offers only what works and nobody has to guess whether a listed command is
 // missing or broken. An item whose command needs something that is not there —
 // no project, no composition, no selected layer — greys out rather than failing
 // when pressed: an item you can see is disabled tells you the state of the
@@ -43,6 +43,7 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
+import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
@@ -61,23 +62,32 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'about_window_frb.dart';
 import 'ae_report_frb.dart';
+import 'backups_window.dart';
+import 'bring_composition_frb.dart';
 import 'command_palette_frb.dart';
 import 'comp_settings_frb.dart';
 import 'fx_console_context.dart';
+import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
 import 'layer_settings_frb.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
 import 'precompose_dialog_frb.dart';
+import 'pro_window.dart';
+import 'project_history_window.dart';
 import 'export_dialog_frb.dart';
 import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
+import 'review_links_window.dart';
 import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
+import 'share_dialog_frb.dart';
 import 'theme_name_dialog.dart';
 import 'tool_bar_frb.dart' show LumitTopLineToolsFrb;
+import 'tour_frb.dart';
 import 'update_dialog_frb.dart';
+import 'welcome_frb.dart' show projectDisplayName;
 import 'workspace_shortcut_frb.dart';
 
 /// The machinery half of Window ▸ Workspace (docs/07 §1.4): saving the
@@ -178,8 +188,8 @@ List<MenuEntry> _userWorkspaceRows(
 ///
 /// [action] is a keymap action id, not a callback — the chord beside the row is
 /// looked up from the live keymap when the bar is built. [todo] marks a command
-/// that is specified but not built; it draws disabled with "(Not implemented)"
-/// after its name. [checked] makes the row a toggle, drawn with a tick column.
+/// that is specified but not built; neither renderer shows it ([shown]).
+/// [checked] makes the row a toggle, drawn with a tick column.
 class MenuEntry {
   final String? label;
   final VoidCallback? onPressed;
@@ -187,6 +197,10 @@ class MenuEntry {
   final bool isDivider;
   final String? action;
   final bool todo;
+
+  /// A word shown where the chord would be, in its place. The backup rows
+  /// say Pro there to an account that has not got it.
+  final String? aside;
 
   /// The tick a fixed row was built with. Null on a row that is not a toggle,
   /// and null on a [MenuEntry.toggle], which reads its own tick live.
@@ -206,6 +220,7 @@ class MenuEntry {
     this.label,
     this.onPressed, {
     this.action,
+    this.aside,
     bool? checked,
   })  : isDivider = false,
         children = null,
@@ -232,6 +247,7 @@ class MenuEntry {
       : isDivider = false,
         children = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = checked,
         live = null,
@@ -253,6 +269,7 @@ class MenuEntry {
       : isDivider = false,
         children = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = checked,
         live = null,
@@ -265,6 +282,7 @@ class MenuEntry {
         isDivider = true,
         action = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -275,6 +293,7 @@ class MenuEntry {
         isDivider = false,
         action = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -286,6 +305,7 @@ class MenuEntry {
         children = null,
         isDivider = false,
         todo = true,
+        aside = null,
         _checked = null,
         _checkedNow = null,
         live = null,
@@ -308,6 +328,7 @@ class MenuEntry {
         isDivider = false,
         action = null,
         todo = false,
+        aside = null,
         _checked = null,
         _checkedNow = null;
 
@@ -330,9 +351,33 @@ class MenuEntry {
   /// What the row reads as, suffix and all.
   String get text => todo ? l10n.notImplemented(label ?? '') : (label ?? '');
 
+  /// The rows of [items] a menu draws: all but the commands not built yet.
+  /// Both renderers ask here, so an unbuilt row is hidden in one place.
+  static List<MenuEntry> shown(List<MenuEntry> items) =>
+      items.where((item) => !item.todo).toList();
+
   /// Whether pressing this row does anything. A submenu is never "pressed" but
   /// is still live, so it counts as enabled when it has children.
   bool get enabled => onPressed != null || (children?.isNotEmpty ?? false);
+
+  /// Press this row from the keyboard, the way its menu would. False when it
+  /// is greyed out, so the key is left for whatever else wants it.
+  bool press() {
+    final run = current.onPressed;
+    if (run == null) return false;
+    run();
+    return true;
+  }
+
+  /// Press the row among [rows], or under one of them, that carries [action].
+  static bool pressAction(List<MenuEntry> rows, String action) {
+    for (final row in rows) {
+      if (row.action == action) return row.press();
+      final children = row.children;
+      if (children != null && pressAction(children, action)) return true;
+    }
+    return false;
+  }
 }
 
 /// One top-level menu: its heading, and its rows **built when it opens**.
@@ -350,8 +395,11 @@ typedef MenuSection = ({String title, List<MenuEntry> Function() items});
 /// pressing it opens the same palette Ctrl+Shift+P does. A pill on the room
 /// under Lantern, a well elsewhere.
 class _CommandBox extends StatelessWidget {
+  /// The chord that opens the palette, from the live keymap. Null when the
+  /// action is unbound, and then no chord is drawn.
+  final String? chord;
   final VoidCallback onPressed;
-  const _CommandBox({required this.onPressed});
+  const _CommandBox({required this.chord, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
@@ -366,7 +414,8 @@ class _CommandBox extends StatelessWidget {
         child: Container(
           width: 220,
           height: pill ? 28 : 20,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: EdgeInsets.symmetric(
+              horizontal: pill ? ShapeTokens.capsuleEnd : 8),
           decoration: BoxDecoration(
             color: pill ? t.surface1 : t.surface0,
             borderRadius: BorderRadius.circular(
@@ -390,8 +439,8 @@ class _CommandBox extends StatelessWidget {
                   overflow: TextOverflow.clip,
                 ),
               ),
-              Text('Ctrl+Shift+P',
-                  style: t.kicker.copyWith(color: t.textDisabled)),
+              if (chord case final chord?)
+                Text(chord, style: t.kicker.copyWith(color: t.textDisabled)),
             ],
           ),
         ),
@@ -426,57 +475,40 @@ class LumitMenuBarFrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // macOS puts menus in the system bar, not in the window, and they are
+    // read on other terms there: see [_SystemMenuBar].
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      return _SystemMenuBar(bar: this);
+    }
     // Half this bar's enablement is about the *selection* — the Effect menu,
     // Delete, Duplicate, Pre-compose, Retime — and the selection lives in a
     // ValueNotifier that does not notify the shell state. Without this the bar
     // would keep whatever selection it was last built with, and every one of
     // those rows would be greyed out with a layer plainly selected.
-    // The updater is watched on macOS only, where the whole tree is handed to
-    // the system and there is no rebuilding a single row. In-app, the Help
-    // menu's live row listens for itself (see [_MenuList]), so download
-    // progress never rebuilds the whole bar.
+    // The updater is not watched here: the Help menu's live row listens for
+    // itself (see [_MenuList]), so download progress never rebuilds the whole
+    // bar.
     final ui = context.read<LumitUiState>();
     return ValueListenableBuilder<List<LayerReference>>(
       valueListenable: ui.selectedLayers,
-      builder: (context, _, __) => defaultTargetPlatform == TargetPlatform.macOS
-          ? ListenableBuilder(
-              listenable: ui.updates,
-              builder: (context, _) => _bar(context),
-            )
-          : _bar(context),
+      builder: (context, _, __) => _bar(context),
     );
   }
 
+  /// Every menu, with this bar's pickers and its palette.
+  List<MenuSection> _menus(BuildContext context) => lumitMenus(
+        context,
+        app,
+        openPicker: openPicker,
+        savePicker: savePicker,
+        footagePicker: footagePicker,
+        aeProjectPicker: aeProjectPicker,
+        palette: () => _palette(context),
+      );
+
   Widget _bar(BuildContext context) {
     final t = ThemeScope.of(context).theme;
-    final menus = lumitMenus(
-      context,
-      app,
-      openPicker: openPicker,
-      savePicker: savePicker,
-      footagePicker: footagePicker,
-      aeProjectPicker: aeProjectPicker,
-      palette: () => _palette(context),
-    );
-
-    // macOS puts menus in the system bar, not in the window. The bar itself
-    // draws nothing here; the hotkey holder still has to be in the tree.
-    if (defaultTargetPlatform == TargetPlatform.macOS) {
-      return PlatformMenuBar(
-        menus: platformMenusFor(context, menus),
-        child: Stack(children: [
-          _RequestHotkey(
-            requests: context.read<LumitUiState>().paletteRequest,
-            onRequested: () => _palette(context),
-          ),
-          _RequestHotkey(
-            requests: context.read<LumitUiState>().consoleRequest,
-            onRequested: () => _console(context),
-          ),
-        ]),
-      );
-    }
-
+    final menus = _menus(context);
     final ui = context.read<LumitUiState>();
     // Nine menu names do not fit a narrow window, and a menu you cannot
     // reach is worse than one you have to scroll to, so the bar scrolls
@@ -557,7 +589,14 @@ class LumitMenuBarFrb extends StatelessWidget {
             // narrow to hold the menus and the box at once (the chord still
             // opens the palette).
             if (ui.workspace.interface.commandBox && c.maxWidth >= 1000) ...[
-              _CommandBox(onPressed: () => _palette(context)),
+              // Watching the keymap, so a rebind shows here as it lands.
+              ListenableBuilder(
+                listenable: ui.keymap,
+                builder: (context, _) => _CommandBox(
+                  chord: ui.keymap.chordFor('palette.open'),
+                  onPressed: () => _palette(context),
+                ),
+              ),
               const SizedBox(width: 6),
             ],
           ],
@@ -566,136 +605,141 @@ class LumitMenuBarFrb extends StatelessWidget {
     );
   }
 
-  /// The palette's commands are declared here, where the menu items are, so the
-  /// two cannot drift apart into different ideas of what "New composition" does.
-  /// A row teaches whatever chord the keymap gives its action, the same lookup
-  /// the menus do, so a rebound shortcut is taught rebound and an unbound one
-  /// is not taught at all.
-  /// Beyond commands it carries the other three categories docs/07 §12 asks
-  /// for: every effect (applies to the selected layer), every comp (fronts
-  /// it), and every panel (focuses it) — each under its own badge.
+  /// The palette finds everything from one box: every menu command, and the
+  /// compositions, layers, effects, panels and settings, each under its own
+  /// badge.
+  ///
+  /// The commands are not a list of their own. They are the menu bar's tree,
+  /// walked, so a command the menus gain is in the palette the same day and
+  /// runs the same closure its menu row runs. A row teaches whatever chord the
+  /// keymap gives its action, the same lookup the menus do. A row the menus
+  /// show disabled is left out.
   Future<void> _palette(BuildContext context) async {
-    final project = app.project;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     final keymap = ui.keymap;
     final workspace = ui.workspace;
+    final commands = <PaletteCommand>[];
+
+    void walk(String path, List<MenuEntry> rows) {
+      for (final raw in rows) {
+        final row = raw.current;
+        if (row.isDivider || !row.enabled) continue;
+        final label = '$path$palettePathSeparator${row.text}';
+        if (row.children case final children?) {
+          walk(label, children);
+          continue;
+        }
+        commands.add(PaletteCommand(
+          label: label,
+          category: l10n.paletteCommand,
+          shortcut: row.action == null ? null : keymap.chordFor(row.action!),
+          ticked: row.checked ?? false,
+          run: row.onPressed!,
+        ));
+      }
+    }
+
+    // Built without the palette's own opener, so the row that opens the
+    // palette is disabled here and is not offered from inside it.
+    final menus = lumitMenus(
+      context,
+      app,
+      openPicker: openPicker,
+      savePicker: savePicker,
+      footagePicker: footagePicker,
+      aeProjectPicker: aeProjectPicker,
+    );
+    for (final menu in menus) {
+      // The Effect menu is the effect rows further down, which are kept when
+      // no layer is selected so they can say why they are greyed.
+      if (menu.title != l10n.menuEffect) walk(menu.title, menu.items());
+    }
+
+    // Every comp, by name: Enter fronts it in the Viewer and Timeline.
+    for (final (comp, name) in app.comps()) {
+      commands.add(PaletteCommand(
+        label: name,
+        category: l10n.paletteComps,
+        run: () => ui.setSelectedComp(comp),
+      ));
+    }
+    // Every layer of the front comp: Enter selects it.
+    try {
+      for (final each
+          in ui.selectedComp?.getLayers() ?? const <LayerReference>[]) {
+        commands.add(PaletteCommand(
+          label: each.getName(),
+          category: l10n.paletteLayer,
+          run: () => ui.setSelection([each]),
+        ));
+      }
+    } catch (_) {
+      // The comp has gone since it was fronted; it has no layers to offer.
+    }
+    // Every effect: Enter applies it to the primary layer, as the Effect menu
+    // does. With no layer selected the rows stay, greyed, and say what they
+    // are waiting for.
+    final layer = ui.selectedLayer.value;
+    for (final effect in listEffects()) {
+      commands.add(PaletteCommand(
+        label: engineLabel(effect.label),
+        category: l10n.menuEffect,
+        disabled: layer == null ? l10n.paletteNeedsLayer : null,
+        run: () {
+          layer?.addEffect(name: effect.name);
+          app.notifyDocumentChanged();
+        },
+      ));
+    }
+    // Every panel: Enter shows it if it was closed, fronts it in its group
+    // and points the keyboard at it, which is what cycling to it does.
+    for (final extension in ui.extensions.installed) {
+      commands.add(PaletteCommand(
+        label: extension.name,
+        category: l10n.palettePanels,
+        run: () {
+          if (!ui.extensionShown(extension.id)) {
+            ui.toggleExtension(extension.id);
+          }
+        },
+      ));
+    }
+    for (final panel in Panel.values) {
+      if (panel == Panel.extension) continue;
+      commands.add(PaletteCommand(
+        label: panel.title,
+        category: l10n.palettePanels,
+        run: () {
+          setPanelVisible(ui.split, panel, true);
+          activatePanelTab(ui.split, panel);
+          ui.activePane.value = panel.pane();
+          ui.workspace.touch();
+        },
+      ));
+    }
+    // Every Settings page and every row on one: Enter opens Settings there.
+    for (final page in SettingsPage.values) {
+      final path = '${l10n.settingsTitle}$palettePathSeparator${page.label}';
+      commands.add(PaletteCommand(
+        label: path,
+        category: l10n.paletteSetting,
+        run: () => showSettingsWindowFrb(context, initialPage: page),
+      ));
+      for (final row in settingsRowNames(page, ui)) {
+        commands.add(PaletteCommand(
+          label: '$path$palettePathSeparator$row',
+          category: l10n.paletteSetting,
+          run: () =>
+              showSettingsWindowFrb(context, initialPage: page, row: row),
+        ));
+      }
+    }
+
     await showCommandPaletteFrb(
       context: context,
       recent: workspace.paletteRecents,
       onRun: workspace.noteCommandRun,
-      commands: [
-        PaletteCommand(
-          label: l10n.menuNew,
-          category: l10n.menuFile,
-          shortcut: keymap.chordFor('file.new'),
-          run: app.newProject,
-        ),
-        if (project != null) ...[
-          PaletteCommand(
-            label: l10n.menuSave,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.save'),
-            run: () => saveProjectFrb(app, ui, picker: savePicker),
-          ),
-          PaletteCommand(
-            label: l10n.menuSaveAs,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.save.as'),
-            run: () =>
-                saveProjectFrb(app, ui, forcePicker: true, picker: savePicker),
-          ),
-          PaletteCommand(
-            label: l10n.menuImportFootage,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.import'),
-            run: () => importFootageFrb(app, picker: footagePicker),
-          ),
-          PaletteCommand(
-            label: l10n.newComposition,
-            category: l10n.menuComposition,
-            shortcut: keymap.chordFor('comp.new'),
-            run: () => newCompositionFrb(context, app),
-          ),
-          PaletteCommand(
-            label: l10n.newNodeGraph,
-            category: l10n.menuComposition,
-            run: () => app.newNodeGraph(context),
-          ),
-          PaletteCommand(
-            label: l10n.menuUndo,
-            category: l10n.menuEdit,
-            shortcut: keymap.chordFor('edit.undo'),
-            run: () => undoFrb(app),
-          ),
-          PaletteCommand(
-            label: l10n.menuRedo,
-            category: l10n.menuEdit,
-            shortcut: keymap.chordFor('edit.redo'),
-            run: () => redoFrb(app),
-          ),
-          PaletteCommand(
-            label: l10n.menuExport,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('file.export'),
-            run: () => exportFrb(context),
-          ),
-          // Every comp, by name: Enter fronts it in the Viewer and Timeline.
-          for (final (comp, name) in app.comps())
-            PaletteCommand(
-              label: name,
-              category: l10n.paletteComps,
-              run: () => ui.setSelectedComp(comp),
-            ),
-          // Every built-in effect: Enter applies it to the selected layer;
-          // with none selected it does nothing, exactly like the browser.
-          for (final effect in listEffects())
-            PaletteCommand(
-              label: engineLabel(effect.label),
-              category: l10n.menuEffect,
-              run: () => ui.selectedLayer.value?.addEffect(name: effect.name),
-            ),
-        ],
-        // Every panel: Enter focuses it in the dock.
-        for (final panel in Panel.values)
-          PaletteCommand(
-            label: panel.title,
-            category: l10n.palettePanels,
-            run: () => ui.activePane.value = panel.pane(),
-          ),
-        // The View menu's magnification and preview resolution, so the palette
-        // carries them too rather than the menu being the only route.
-        for (final zoom in ViewerZoomCommand.values)
-          PaletteCommand(
-            label: zoom.title,
-            category: l10n.menuView,
-            shortcut: keymap.chordFor(zoom.action),
-            run: () => ui.requestViewerZoom(zoom),
-          ),
-        // Under the Resolution badge rather than View's, because "Full" on its
-        // own says nothing about what it is full of.
-        for (final resolution in PreviewResolution.values)
-          PaletteCommand(
-            label: resolution.title,
-            category: l10n.menuResolution,
-            shortcut: resolution.action == null
-                ? null
-                : keymap.chordFor(resolution.action!),
-            run: () => ui.setPreviewResolution(resolution),
-          ),
-        PaletteCommand(
-          label: l10n.menuSettings,
-          category: l10n.menuEdit,
-          shortcut: keymap.chordFor('app.settings'),
-          run: () => showSettingsWindowFrb(context),
-        ),
-        if (app.project case final project?)
-          PaletteCommand(
-            label: l10n.menuProjectSettings,
-            category: l10n.menuFile,
-            shortcut: keymap.chordFor('project.settings'),
-            run: () => showProjectSettingsFrb(context, project),
-          ),
-      ],
+      commands: commands,
     );
   }
 
@@ -720,11 +764,11 @@ class LumitMenuBarFrb extends StatelessWidget {
     }
 
     // A saved preset's whole stack, to the primary layer only.
-    void applyPreset(BridgePresetInfo preset) {
+    Future<void> applyPreset(BridgePresetInfo preset) async {
       final layer = ui.selectedLayer.value;
       if (layer == null) return;
       try {
-        layer.loadPreset(text: File(preset.path).readAsStringSync());
+        layer.loadPreset(text: await readEffectPreset(path: preset.path));
       } catch (_) {
         return;
       }
@@ -769,7 +813,8 @@ class LumitMenuBarFrb extends StatelessWidget {
       // last was, because the key event itself has no position.
       anchor: lastKnownPointerPosition,
       model: FxConsoleModel(
-        keyHint: l10n.fxConsoleKey,
+        // The chord the keymap has for it now, as the menus read theirs.
+        keyHint: ui.keymap.chordFor('console.open'),
         footer: l10n.fxConsoleApplies,
         onSnapshot: comp == null ? null : () => saveSnapshotFrb(app, ui),
         entries: [
@@ -867,6 +912,10 @@ List<MenuSection> lumitMenus(
     return () => run(layer);
   }
 
+  /// What a backup row says where its chord would be: Pro, to an account
+  /// that has not got it. Read as the menu opens.
+  String? needsPro() => ui.account.pro ? null : l10n.proTag;
+
   return [
     (
       title: l10n.menuFile,
@@ -882,6 +931,8 @@ List<MenuSection> lumitMenus(
                 for (final path in ui.workspace.recentProjects)
                   MenuEntry(path, () => app.openProject(path)),
             ]),
+            MenuEntry(l10n.backupMenuOpen, () => showBackups(context),
+                aside: needsPro()),
             MenuEntry.divider(),
             // Closing a project puts an empty one in its place, because the shell
             // always has a document: the engine's `close` is what `newProject`
@@ -905,6 +956,42 @@ List<MenuSection> lumitMenus(
                     : () => saveProjectFrb(app, ui,
                         forcePicker: true, picker: savePicker),
                 action: 'file.save.as'),
+            // Save, and name the version the save makes. Greyed for a
+            // project whose saves are not sent, which has no version to name.
+            MenuEntry(
+                l10n.backupMenuSaveVersion,
+                project == null || (ui.account.pro && !ui.backup.sends)
+                    ? null
+                    : () => saveVersionFrb(context, app, ui,
+                        picker: savePicker),
+                action: 'file.save.version',
+                aside: needsPro()),
+            // The footage inside the `.lum`, so the one file can be handed to
+            // somebody else. Read as the menu opens: a pack is a save, and
+            // nothing else tells the bar that one has happened.
+            MenuEntry.submenu(l10n.menuPackedProject, [
+              MenuEntry.toggle(
+                  l10n.menuPackAutomatically,
+                  project == null
+                      ? null
+                      : () {
+                          final on = _packState(project)?.autoPack ?? false;
+                          project.setAutoPack(autoPack: !on);
+                          app.notifyDocumentChanged();
+                        },
+                  checked: () => _packState(project)?.autoPack ?? false),
+              MenuEntry(
+                  l10n.menuPackProject,
+                  (_packState(project)?.footage ?? 0) == 0
+                      ? null
+                      : () => saveProjectFrb(app, ui,
+                          picker: savePicker, pack: true)),
+              MenuEntry(
+                  l10n.menuUnpackProject,
+                  (_packState(project)?.packed ?? 0) == 0
+                      ? null
+                      : () => unpackProjectFrb(app, ui)),
+            ]),
             MenuEntry.divider(),
             // Import footage stands in the menu proper (owner, 2026-08-25,
             // superseding the one-Import-home grouping of 2026-08-21): it is the
@@ -913,7 +1000,8 @@ List<MenuSection> lumitMenus(
                 l10n.menuImportFootage,
                 project == null
                     ? null
-                    : () => importFootageFrb(app, picker: footagePicker),
+                    : () =>
+                        importFootageFrb(context, app, picker: footagePicker),
                 action: 'file.import'),
             // The After Effects route keeps the submenu. The Bridge-bundle entry
             // is gone (owner, repeatedly): the .aep front door is the import; the
@@ -931,6 +1019,12 @@ List<MenuSection> lumitMenus(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
             MenuEntry.divider(),
+            // Sharing this project, joining somebody else's, and who is here.
+            MenuEntry(
+                l10n.menuSharedProject, () => showShareFrb(context, app)),
+            // Exports sent out for comments, and the comments that came back.
+            MenuEntry(l10n.menuReviewLinks, () => showReviewLinks(context)),
+            MenuEntry.divider(),
             // The project's own settings, kept apart from Settings because Settings
             // is this machine's and these travel in the `.lum`.
             MenuEntry(
@@ -944,15 +1038,29 @@ List<MenuSection> lumitMenus(
             // is the one command whose absence costs a day's work.
             MenuEntry(l10n.menuRecover,
                 projectPath == null ? null : () => _recover(context, app)),
+            MenuEntry(l10n.backupMenuHistory,
+                project == null ? null : () => showProjectHistory(context),
+                aside: needsPro()),
           ]
     ),
     (
       title: l10n.menuEdit,
-      items: () => [
-            MenuEntry(l10n.menuUndo,
+      items: () {
+        // Undo and Redo name the step they would take. Read as the menu
+        // opens, like the pack state above, so the bar's own rebuilds cost
+        // nothing for it.
+        final steps = _historySteps(project);
+        return [
+            MenuEntry(
+                steps.undo == null
+                    ? l10n.menuUndo
+                    : l10n.menuUndoStep(steps.undo!),
                 (history?.canUndo ?? false) ? () => undoFrb(app) : null,
                 action: 'edit.undo'),
-            MenuEntry(l10n.menuRedo,
+            MenuEntry(
+                steps.redo == null
+                    ? l10n.menuRedo
+                    : l10n.menuRedoStep(steps.redo!),
                 (history?.canRedo ?? false) ? () => redoFrb(app) : null,
                 action: 'edit.redo'),
             // The journal as a list you can read and click. Undo and redo above it
@@ -991,10 +1099,15 @@ List<MenuSection> lumitMenus(
                       },
                 action: 'edit.delete.selection'),
             MenuEntry.divider(),
-            MenuEntry(l10n.menuDuplicate, onLayer((l) {
-              l.duplicate();
-              app.notifyDocumentChanged();
-            }), action: 'layer.duplicate'),
+            MenuEntry(
+                l10n.menuDuplicate,
+                layers.isEmpty
+                    ? null
+                    : () {
+                        duplicateLayersFrb(layers);
+                        app.notifyDocumentChanged();
+                      },
+                action: 'layer.duplicate'),
             MenuEntry(l10n.menuSplitLayer, onComp((c) => _splitAtPlayhead(ui)),
                 action: 'layer.split'),
             MenuEntry(l10n.menuSelectAll,
@@ -1009,7 +1122,8 @@ List<MenuSection> lumitMenus(
             // application *those* users know puts it.
             MenuEntry(l10n.menuSettings, () => showSettingsWindowFrb(context),
                 action: 'app.settings'),
-          ]
+          ];
+      }
     ),
     (
       title: l10n.menuComposition,
@@ -1027,11 +1141,15 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.compositionSettingsEllipsis,
                 comp == null ? null : () => _compSettings(context, app),
                 action: 'comp.settings'),
+            MenuEntry(l10n.menuFlowchart,
+                comp == null ? null : () => openFlowchartFrb(context, ui),
+                action: 'comp.flowchart'),
             // Make the comp be the stretch you marked, and the frame be the
             // rectangle you swept. Each is greyed until there is one: a comp with
             // no work area is already its own work area, and with no region there
             // is no rectangle to crop to.
-            MenuEntry(l10n.menuTrimCompToWorkArea, _trimAction(app, comp)),
+            MenuEntry(l10n.menuTrimCompToWorkArea, trimCompAction(app, comp),
+                action: 'comp.trim.workarea'),
             MenuEntry(
                 l10n.menuCropCompToRegion,
                 comp == null || ui.regionOfInterest == null
@@ -1051,6 +1169,11 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.menuAddToExportQueue,
                 comp == null ? null : () => exportFrb(context),
                 action: 'export.queue.add'),
+            MenuEntry(
+                l10n.menuSendForReview,
+                comp == null
+                    ? null
+                    : () => showReviewLinks(context, send: comp)),
             MenuEntry.divider(),
             // Comp-level markers, including the beat pass, which makes them
             // (docs/09 §10) — the layer's own markers are Layer ▸ Markers.
@@ -1116,7 +1239,7 @@ List<MenuSection> lumitMenus(
               if (await showLayerSettingsFrb(context: context, layer: l)) {
                 app.notifyDocumentChanged();
               }
-            })),
+            }), action: 'layer.settings'),
             MenuEntry.divider(),
             MenuEntry.submenu(l10n.menuMask, maskRows(context, app, ui)),
             MenuEntry.submenu(
@@ -1142,6 +1265,39 @@ List<MenuSection> lumitMenus(
                         }
                       })
                     : null,
+              ),
+              // A file with several audio streams: each onto a row of its
+              // own, and back onto one. Offered on any layer and answered in
+              // the status line where there is nothing to do, as Detach is.
+              // Which streams a layer plays is chosen on its own right-click
+              // menu, which can read the file's streams when it is opened.
+              MenuEntry(
+                l10n.menuSplitAudioStreams,
+                onLayer((l) {
+                  var split = false;
+                  try {
+                    split = l.splitAudioStreams();
+                  } catch (_) {}
+                  if (split) {
+                    app.notifyDocumentChanged();
+                  } else {
+                    app.postNotice(l10n.audioStreamsNothingToSplit);
+                  }
+                }),
+              ),
+              MenuEntry(
+                l10n.menuMergeAudioStreams,
+                onLayer((l) {
+                  var merged = false;
+                  try {
+                    merged = l.mergeAudioStreams();
+                  } catch (_) {}
+                  if (merged) {
+                    app.notifyDocumentChanged();
+                  } else {
+                    app.postNotice(l10n.audioStreamsNothingToMerge);
+                  }
+                }),
               ),
             ]),
             // The selected layer's Retime. In the menu as well as on the keyboard
@@ -1182,6 +1338,9 @@ List<MenuSection> lumitMenus(
                 action: 'layer.sequence.convert'),
             flowRow(app, ui),
             threeDRow(app, ui),
+            lockRow(app, ui),
+            unlockAllRow(app, ui),
+            MenuEntry.submenu(l10n.menuArrange, arrangeRows(app, ui)),
             MenuEntry.submenu(l10n.menuMarkers, markerRows(app, ui)),
             MenuEntry.divider(),
             MenuEntry.todo(l10n.menuPreserveTransparency),
@@ -1378,15 +1537,19 @@ List<MenuSection> lumitMenus(
             // same switch under its own name — they are one switch until the full
             // wireframe display mode of §2.2 item 5 gives this row something of
             // its own to turn on.
-            MenuEntry(l10n.menuShowWireframe,
-                () => ui.setViewerLayerControls(!ui.viewerLayerControls),
-                checked: ui.viewerLayerControls),
+            MenuEntry.toggle(
+              l10n.menuShowWireframe,
+              () => ui.setViewerLayerControls(!ui.viewerLayerControls),
+              action: 'viewer.controls.toggle',
+              checked: () => ui.viewerLayerControls,
+            ),
             // Whether the grid's own lines are things a dragged layer lands on,
             // over and above the guides. The magnet on the toolbar is what decides
             // whether *any* of it engages; this says what is in the list.
             MenuEntry.toggle(
               l10n.menuSnapToGrid,
               () => ui.tools.snapToGrid = !ui.tools.snapToGrid,
+              action: 'viewer.snap.grid.toggle',
               checked: () => ui.tools.snapToGrid,
             ),
             MenuEntry.divider(),
@@ -1502,15 +1665,27 @@ List<MenuSection> lumitMenus(
             // because turning three panels on is three ticks, not three trips to
             // the Window menu.
             for (final panel in Panel.values)
-              MenuEntry.toggle(
-                panel.title,
-                () {
-                  setPanelVisible(
-                      ui.split, panel, !panelVisible(ui.split, panel));
-                  ui.workspace.touch();
-                },
-                checked: () => panelVisible(ui.split, panel),
-              ),
+              // An extension's panel is listed by the extension, below.
+              if (panel != Panel.extension)
+                MenuEntry.toggle(
+                  panel.title,
+                  () => togglePanel(ui, panel),
+                  action: panelToggleAction(panel),
+                  checked: () => panelVisible(ui.split, panel),
+                ),
+            MenuEntry.submenu(l10n.menuExtensions, [
+              for (final extension in ui.extensions.installed)
+                MenuEntry.toggle(
+                  extension.name,
+                  () => ui.toggleExtension(extension.id),
+                  checked: () => ui.extensionShown(extension.id),
+                ),
+              if (ui.extensions.installed.isNotEmpty) MenuEntry.divider(),
+              MenuEntry(
+                  l10n.menuManageExtensions,
+                  () => showSettingsWindowFrb(context,
+                      initialPage: SettingsPage.addons)),
+            ]),
             MenuEntry.divider(),
             // Another Viewer panel, beside the one being worked in. The Viewer is
             // the one panel that can be in the arrangement more than once
@@ -1519,7 +1694,8 @@ List<MenuSection> lumitMenus(
                 action: 'viewer.new'),
             MenuEntry.divider(),
             MenuEntry(l10n.menuExportQueue,
-                () => showExportQueueFrb(context: context)),
+                () => showExportQueueFrb(context: context),
+                action: 'export.queue.open'),
             MenuEntry(l10n.menuCommandPalette, palette, action: 'palette.open'),
           ]
     ),
@@ -1527,6 +1703,7 @@ List<MenuSection> lumitMenus(
       title: l10n.menuHelp,
       items: () => [
             MenuEntry(l10n.menuAboutLumit, () => showAboutWindowFrb(context)),
+            MenuEntry(l10n.menuLumitPro, () => showProWindow(context)),
             MenuEntry.live(
               ui.updates,
               () => updateMenuEntry(context, app, ui, savePicker: savePicker),
@@ -1536,9 +1713,11 @@ List<MenuSection> lumitMenus(
             // pages on docs.lumitlab.com rather than one of them being the
             // marketing site: "online guides" is where you are taught, and that is
             // the walkthrough, not the download page.
-            MenuEntry(l10n.menuLumitHelp, () => _openLink(app, lumitDocsUrl)),
+            MenuEntry(l10n.menuLumitHelp, () => openLumitHelp(app),
+                action: 'help.open'),
             MenuEntry(l10n.menuLumitOnlineGuides,
                 () => _openLink(app, lumitGuidesUrl)),
+            MenuEntry(l10n.menuShowTour, () => showTourFrb(context, app, ui)),
             MenuEntry.divider(),
             MenuEntry.toggle(
               l10n.menuEnableDebugPanel,
@@ -1573,7 +1752,7 @@ List<MenuEntry> _effectMenu(LumitState app, List<LayerReference> layers) => [
         ]),
     ];
 
-/// Every built-in effect, grouped by its heading, in the engine's own order.
+/// Every built-in effect, grouped by its heading, each group sorted by name.
 ///
 /// Read once: the catalogue is fixed for the run, and the menu bar rebuilds on
 /// every document change — a bridge call per rebuild is exactly the cost the
@@ -1584,7 +1763,7 @@ Map<String, List<BridgeEffectInfo>> _effectGroups() =>
       for (final effect in listEffects()) {
         groups.putIfAbsent(effect.categoryLabel, () => []).add(effect);
       }
-      return groups;
+      return groups..forEach((_, effects) => effects.sort(byEffectLabel));
     }();
 
 Map<String, List<BridgeEffectInfo>>? _effectGroupsCache;
@@ -1711,6 +1890,27 @@ Future<void> _openLink(LumitState app, String url) async {
   app.postNotice(l10n.couldNotOpenLink(url), error: true);
 }
 
+/// Help ▸ Lumit help, which the keyboard opens too.
+Future<void> openLumitHelp(LumitState app) => _openLink(app, lumitDocsUrl);
+
+/// The keymap action that puts [panel] up and takes it down, for the panels
+/// that have one. They are the ones After Effects has a key for.
+String? panelToggleAction(Panel panel) => switch (panel) {
+      Panel.project => 'panel.toggle.project',
+      Panel.effectControls => 'panel.toggle.effects',
+      Panel.effectsAndPresets => 'panel.toggle.presets',
+      Panel.audio => 'panel.toggle.audio',
+      Panel.text => 'panel.toggle.text',
+      Panel.paragraph => 'panel.toggle.paragraph',
+      _ => null,
+    };
+
+/// Add [panel]'s pane to the arrangement, or drop it, and keep the layout.
+void togglePanel(LumitUiState ui, Panel panel) {
+  setPanelVisible(ui.split, panel, !panelVisible(ui.split, panel));
+  ui.workspace.touch();
+}
+
 Future<void> openProjectFrb(LumitState app,
     {Future<String?> Function()? picker}) async {
   final path = await (picker ?? pickProjectToOpen)();
@@ -1718,9 +1918,26 @@ Future<void> openProjectFrb(LumitState app,
   await app.openProject(path);
 }
 
-Future<void> importFootageFrb(LumitState app,
-        {Future<List<String>> Function()? picker}) async =>
-    app.importFootagePaths(await (picker ?? pickFootage)());
+/// Import what was picked, and say whether anything came in. Footage comes
+/// in as footage. A Lumit project is not footage: one of its compositions is
+/// brought in, chosen from a list.
+Future<bool> importFootageFrb(BuildContext context, LumitState app,
+    {Future<List<String>> Function()? picker}) async {
+  final picked = await (picker ?? () => pickFootage(projects: true))();
+  bool project(String path) => path.toLowerCase().endsWith('.lum');
+  var landed = await app.importFootagePaths([
+    for (final path in picked)
+      if (!project(path)) path,
+  ]);
+  for (final path in picked.where(project)) {
+    if (!context.mounted) break;
+    landed |= await bringCompositionFrom(context, path,
+        earlierSave: false,
+        subject: projectDisplayName(path),
+        source: projectDisplayName(path));
+  }
+  return landed;
+}
 
 /// Import an After Effects project, then show its report (docs/11 §9).
 ///
@@ -1766,6 +1983,35 @@ void redoFrb(LumitState app) {
   app.notifyDocumentChanged();
 }
 
+/// What Undo and Redo would each do, in the History window's own words, or
+/// null where there is nothing that way.
+({String? undo, String? redo}) _historySteps(ProjectReference? project) {
+  try {
+    final steps = project?.historyEntries() ?? const <BridgeHistoryEntry>[];
+    final applied = project?.appliedSteps() ?? 0;
+    return (
+      undo: applied > 0 && applied <= steps.length
+          ? engineLabel(steps[applied - 1].name)
+          : null,
+      redo: applied < steps.length ? engineLabel(steps[applied].name) : null,
+    );
+  } catch (_) {
+    // A project that has just gone: the plain words, greyed.
+    return (undo: null, redo: null);
+  }
+}
+
+/// Duplicate every layer in [layers]. One function for the Edit menu, the
+/// chord and the Timeline row's own menu, so they all copy the same set. A
+/// layer that refuses leaves the rest standing.
+void duplicateLayersFrb(Iterable<LayerReference> layers) {
+  for (final layer in layers) {
+    try {
+      layer.duplicate();
+    } catch (_) {}
+  }
+}
+
 /// Whether Cut and Copy have anything to act on — an effect picked out of a
 /// stack, or a layer. Keyframes are not counted: the panel holding them claims
 /// the chord, and a menu row that ungreyed on a selection the menu cannot see
@@ -1804,6 +2050,9 @@ bool copySelectionFrb(LumitUiState ui) {
 /// Cut is Copy plus the removal, so the two can never disagree about what the
 /// selection was, effects included.
 bool cutSelectionFrb(LumitState app, LumitUiState ui) {
+  // A panel holding a finer selection takes the whole of Cut, so its copy is
+  // not followed by the layer under it going too.
+  if (ui.cutClaim?.call() ?? false) return true;
   final effects = ui.selectedEffects.value;
   final effectsLayer = ui.selectedEffectsLayer;
   final layer = ui.selectedLayer.value;
@@ -1898,7 +2147,7 @@ VoidCallback? _pasteAction(
 /// a deliberate press rather than one per rebuild of the bar — and it is
 /// guarded, like the bar's other engine reads, so a reference that has just
 /// gone dead greys the row instead of taking the menu down with it.
-VoidCallback? _trimAction(LumitState app, CompositionReference? comp) {
+VoidCallback? trimCompAction(LumitState app, CompositionReference? comp) {
   if (comp == null) return null;
   try {
     if (comp.getWorkArea() == null) return null;
@@ -1984,6 +2233,41 @@ Future<void> fileProjectThumbnail(String path,
   if (png != null) Workspace.writeThumbnail(path, png);
 }
 
+/// How much of the project's footage its file carries, or null for a project
+/// that is not there to ask.
+BridgePackState? _packState(ProjectReference? project) {
+  try {
+    return project?.packState();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Write the packed footage back out beside the project and save the project
+/// without it.
+Future<void> unpackProjectFrb(LumitState app, LumitUiState ui) async {
+  final project = app.project;
+  if (project == null) return;
+  try {
+    final done = await app.withBusyCard(l10n.unpackingProject,
+        (progress) => project.unpack(onProgress: progress),
+        cancel: project.cancelPacking);
+    if (done.cancelled) {
+      app.postNotice(l10n.unpackCancelled);
+    } else if (done.kept > 0) {
+      app.postNotice(l10n.unpackKept(done.kept), error: true);
+    } else {
+      app.postNotice(l10n.unpackedProject(done.written, done.folder));
+    }
+  } catch (_) {
+    app.postNotice(l10n.couldNotUnpackProject, error: true);
+  }
+  // An unpack saves the project, which is a save to back up like any other.
+  final path = project.path();
+  if (path != null) ui.backup.saved(path);
+  app.notifyDocumentChanged();
+}
+
 /// Save the project, asking for a location only when there is not one already
 /// — or always, for Save as.
 ///
@@ -1993,11 +2277,16 @@ Future<void> fileProjectThumbnail(String path,
 ///
 /// [picker] is the injectable seam a widget test needs: no plugin channel can
 /// open a real dialogue in one.
+///
+/// [pack] is Pack project file: the same save, with every footage item's file
+/// written into the `.lum`. A project that packs already, or packs
+/// automatically, takes the packing road without being asked.
 Future<void> saveProjectFrb(
   LumitState app,
   LumitUiState ui, {
   bool forcePicker = false,
   Future<String?> Function()? picker,
+  bool pack = false,
 }) async {
   final project = app.project;
   if (project == null) return;
@@ -2012,14 +2301,42 @@ Future<void> saveProjectFrb(
   // someone else opens the way it was left. Written here rather than as it
   // changes, because this is the moment it is asked for: recording a panel
   // drag into the document would make moving furniture an unsaved change.
-  project.setUiState(uiState: ui.sessionJson());
+  project.setUiState(uiState: ui.backup.stamp(ui.sessionJson(), target));
   try {
-    final written = await project.save(path: target);
-    app.postNotice(l10n.savedTo(written));
+    final packs = project.packState();
+    final String written;
+    if (!pack && !packs.autoPack && packs.packed == 0) {
+      written = await project.save(path: target);
+      app.postNotice(l10n.savedTo(written));
+    } else {
+      final saved = await app.withBusyCard(
+        l10n.packingProject,
+        (progress) => project.savePacked(
+            path: target, packAll: pack, onProgress: progress),
+        cancel: project.cancelPacking,
+        after: pack ? Duration.zero : const Duration(milliseconds: 300),
+      );
+      if (saved.cancelled) {
+        app.postNotice(l10n.packCancelled);
+        app.notifyDocumentChanged();
+        return;
+      }
+      written = saved.path;
+      if (saved.leftOut > 0) {
+        app.postNotice(l10n.packedProjectLeftOut(saved.leftOut), error: true);
+      } else if (pack) {
+        app.postNotice(l10n.packedProject(saved.packed, written));
+      } else {
+        app.postNotice(l10n.savedTo(written));
+      }
+    }
     // Save as gives the project a new path, and the session is filed by path —
     // and the title bar carries the name.
     ui.rememberSession();
     app.refreshWindowTitle();
+    ui.pushDiscordStatus();
+    // Told and not waited for: sending the save is no part of making it.
+    ui.backup.saved(written);
     // The welcome screen's picture of this project, taken *after* the save and
     // never in front of it: the save is done, the notice is posted, and taking
     // the picture happens on its own time. The fronted composition at the
@@ -2035,7 +2352,9 @@ Future<void> saveProjectFrb(
   } catch (_) {
     // The work is still in the document and the journal; say so calmly and let
     // the user pick somewhere writable.
-    app.postNotice(l10n.couldNotSaveProject, error: true);
+    app.postNotice(
+        pack ? l10n.couldNotPackProject : l10n.couldNotSaveProject,
+        error: true);
   }
   app.notifyDocumentChanged();
 }
@@ -2098,15 +2417,15 @@ List<PlatformMenuItem> platformMenusFor(
       group = [];
     }
 
-    for (final raw in items) {
+    for (final raw in MenuEntry.shown(items)) {
       if (raw.isDivider) {
         flush();
         continue;
       }
       // A live row resolves to whatever it currently reads. The Mac menu is
-      // rebuilt whenever the bar is, and the bar watches the same object the
-      // row does, so this stays in step without the in-app renderer's
-      // rebuild-in-place machinery.
+      // read again whenever the object the row watches speaks (see
+      // [_SystemMenuBar]), so this stays in step without the in-app
+      // renderer's rebuild-in-place machinery.
       final item = raw.current;
       final label = switch (item.checked) {
         true => '✓ ${item.text}',
@@ -2184,6 +2503,114 @@ List<PlatformMenuItem> platformMenusFor(
         ]),
       ),
   ];
+}
+
+/// The bar on macOS, where the menus are the system's and this draws nothing.
+///
+/// **Read when something changes, not when the bar is rebuilt.** The system is
+/// handed the whole tree at once, every row of every menu with its enablement
+/// worked out, where the in-window bar reads one menu as it opens. Working
+/// that out asks the engine a few dozen questions, and the bar is rebuilt
+/// whenever the shell is, which a resized window does on every frame. So the
+/// tree is read here when what it shows has changed — the document, the
+/// selection, the shell's own state, the updater's row — and kept. A rebuild
+/// hands over what was kept and asks the engine nothing, and because the
+/// rows are then the same objects, `PlatformMenuBar` sends the system nothing
+/// either.
+class _SystemMenuBar extends StatefulWidget {
+  final LumitMenuBarFrb bar;
+
+  const _SystemMenuBar({required this.bar});
+
+  @override
+  State<_SystemMenuBar> createState() => _SystemMenuBarState();
+}
+
+class _SystemMenuBarState extends State<_SystemMenuBar> {
+  List<PlatformMenuItem> _menus = const [];
+  late final LumitUiState _ui = context.read<LumitUiState>();
+  StreamSubscription<Object>? _edits;
+
+  /// Whether a read is already on its way, so that an edit which says so
+  /// three times over is read once.
+  bool _stale = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _watch(widget.bar.app);
+    // The selection and the updater each speak for themselves, and neither
+    // tells the shell state.
+    for (final each in [_ui, _ui.selectedLayers, _ui.updates]) {
+      each.addListener(_markStale);
+    }
+  }
+
+  /// An edit made elsewhere comes down the change stream and one made here is
+  /// announced on the state itself, so both are listened to.
+  void _watch(LumitState app) {
+    app.addListener(_markStale);
+    _edits = app.onChange.listen((_) => _markStale());
+  }
+
+  void _unwatch(LumitState app) {
+    app.removeListener(_markStale);
+    _edits?.cancel();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The first read, once there is a tree above to read the rows against,
+    // and another only if something they were built from up there changes.
+    _menus = _read();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SystemMenuBar old) {
+    super.didUpdateWidget(old);
+    if (old.bar.app == widget.bar.app) return;
+    _unwatch(old.bar.app);
+    _watch(widget.bar.app);
+    _markStale();
+  }
+
+  @override
+  void dispose() {
+    _unwatch(widget.bar.app);
+    for (final each in [_ui, _ui.selectedLayers, _ui.updates]) {
+      each.removeListener(_markStale);
+    }
+    super.dispose();
+  }
+
+  void _markStale() {
+    if (_stale) return;
+    _stale = true;
+    scheduleMicrotask(() {
+      _stale = false;
+      if (mounted) setState(() => _menus = _read());
+    });
+  }
+
+  List<PlatformMenuItem> _read() =>
+      platformMenusFor(context, widget.bar._menus(context));
+
+  @override
+  Widget build(BuildContext context) => PlatformMenuBar(
+        menus: _menus,
+        // The hotkey holders still have to be in the tree.
+        child: Stack(children: [
+          _RequestHotkey(
+            requests: _ui.paletteRequest,
+            onRequested: () => widget.bar._palette(context),
+          ),
+          _RequestHotkey(
+            requests: _ui.consoleRequest,
+            onRequested: () => widget.bar._console(context),
+          ),
+        ]),
+      );
 }
 
 // --- The in-app renderer --------------------------------------------------
@@ -2346,7 +2773,7 @@ class _MenuList extends StatefulWidget {
 class _MenuListState extends State<_MenuList> {
   @override
   Widget build(BuildContext context) {
-    final items = widget.items;
+    final items = MenuEntry.shown(widget.items);
     final close = widget.close;
     final t = ThemeScope.of(context).theme;
     final keymap = context.read<LumitUiState>().keymap;
@@ -2437,7 +2864,12 @@ class _MenuListState extends State<_MenuList> {
       children: [
         if (ticks) menuTick(item.checked == true, colour: style?.color),
         Expanded(child: Text(item.text, style: style)),
-        if (shortcut != null)
+        if (item.aside case final aside?)
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Text(t.kickerCase(aside), style: t.kicker),
+          )
+        else if (shortcut != null)
           Padding(
             padding: const EdgeInsets.only(left: 16),
             child: Text(shortcut, style: t.small.copyWith(color: t.textMuted)),

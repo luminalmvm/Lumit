@@ -16,6 +16,15 @@ fontdue = "0.9"
 # hands back bitmaps only; the curves come from the font parser fontdue itself
 # is built on, so this is the same crate at the same version, named directly.
 ttf-parser = "0.21"
+# Styled text. fontique finds the fonts the system has installed, harfrust
+# shapes a line (kerning, ligatures, joined scripts), skrifa reads the glyph
+# outlines and zeno fills and strokes them. fontconfig is opened at run time,
+# so a Linux build needs no fontconfig headers and a machine without it just
+# has no system fonts.
+fontique = { version = "0.11", features = ["fontconfig-dlopen"] }
+harfrust = "0.14"
+skrifa = "0.48"
+zeno = "0.3"
 thiserror = "2"
 
 [lints]

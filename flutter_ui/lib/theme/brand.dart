@@ -39,3 +39,8 @@ const Color brandWordmarkPaper = Color(0xfff4f6f8);
 /// The wordmark's lettering on a light ground: the mark's own rim, which is the
 /// dark end of the brand's palette (docs/15-DESIGN.md §11).
 const Color brandWordmarkInk = Color(0xff0c0e14);
+
+/// What marks something as Lumit Pro: the ring round a profile's picture, the
+/// badge beside its name. One stop from each key, so it reads as the whole
+/// mark and not as either half. It is the brand's, so no theme changes it.
+const List<Color> brandProSweep = [brandKeyJade, brandKeyBlueLight];

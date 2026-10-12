@@ -6,8 +6,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../theme/motion.dart';
 import '../../theme/theme.dart';
 import 'base.dart';
+import 'motion.dart';
 
 /// Enter, numpad Enter and Space, once per press (never on key repeat) —
 /// what "press the focused control" means for every house control.
@@ -186,6 +188,8 @@ class _HouseButtonState extends State<HouseButton> {
     // a stadium and a rounded corner keeps its margin at the corner too.
     final radius = BorderRadius.circular(
         math.max(0, t.tokens.actionRadius - inset).toDouble());
+    // The fill comes up quickly and leaves a little slower (docs/15 §8).
+    final step = _hover || _down ? scope.motion.hoverIn : scope.motion.hoverOut;
     // Keyboard-reachable (docs/15 §9): Tab lands here in reading order,
     // Enter/Space press it, and the accent edge is the focus ring (§6.5).
     return FocusableActionDetector(
@@ -212,7 +216,8 @@ class _HouseButtonState extends State<HouseButton> {
         onTapCancel: enabled ? () => setState(() => _down = false) : null,
         onTap: widget.onPressed,
         child: AnimatedContainer(
-          duration: animationDuration(scope.animationLevel),
+          duration: step.duration,
+          curve: step.curve,
           margin: margin,
           padding: innerPad,
           decoration: BoxDecoration(
@@ -326,6 +331,17 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
   bool _focused = false;
   final ControlFocusNode _focusNode = ControlFocusNode(debugLabel: 'checkbox');
 
+  /// How many times the box has been ticked while on screen. The block pops
+  /// in when somebody ticks it and not when a window full of ticked boxes
+  /// opens, so a box that mounts already ticked counts nought and stays still.
+  int _ticked = 0;
+
+  @override
+  void didUpdateWidget(HouseCheckbox old) {
+    super.didUpdateWidget(old);
+    if (widget.value && !old.value) _ticked++;
+  }
+
   @override
   void dispose() {
     _focusNode.dispose();
@@ -334,7 +350,8 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
     final onChanged = widget.onChanged;
     // The mockups' checkbox: a 9px outlined box whose checked state is a 5px
     // block of the primary text colour — no accent, which also puts the control
@@ -362,10 +379,16 @@ class _HouseCheckboxState extends State<HouseCheckbox> {
           ),
           child: widget.value
               ? Center(
-                  child: Container(
-                    width: 5,
-                    height: 5,
-                    color: onChanged == null ? t.textDisabled : t.textPrimary,
+                  child: Entrance(
+                    key: ValueKey<int>(_ticked),
+                    spec: _ticked == 0 ? MotionSpec.still : scope.motion.pop,
+                    scale: scope.motion.popScale,
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      color:
+                          onChanged == null ? t.textDisabled : t.textPrimary,
+                    ),
                   ),
                 )
               : null,
@@ -463,7 +486,11 @@ class _HouseToggleState extends State<HouseToggle> {
             ),
           ),
           child: AnimatedContainer(
-            duration: animationDuration(scope.animationLevel),
+            // The track only changes colour, so it eases plainly whatever the
+            // knob does: a curve that lands long would ask for a colour past
+            // the one it is heading to.
+            duration: scope.motion.toggle.duration,
+            curve: Curves.easeOut,
             width: _width,
             height: _height,
             decoration: BoxDecoration(
@@ -473,7 +500,8 @@ class _HouseToggleState extends State<HouseToggle> {
             child: Stack(
               children: [
                 AnimatedPositioned(
-                  duration: animationDuration(scope.animationLevel),
+                  duration: scope.motion.toggle.duration,
+                  curve: scope.motion.toggle.curve,
                   left: widget.value ? _width - _knob - _inset : _inset,
                   top: _inset,
                   child: Container(
@@ -518,6 +546,16 @@ class _HouseRadioState extends State<HouseRadio> {
   bool _focused = false;
   final ControlFocusNode _focusNode = ControlFocusNode(debugLabel: 'radio');
 
+  /// How many times this one has been chosen while on screen, for the same
+  /// reason [HouseCheckbox] counts its ticks.
+  int _chosen = 0;
+
+  @override
+  void didUpdateWidget(HouseRadio old) {
+    super.didUpdateWidget(old);
+    if (widget.selected && !old.selected) _chosen++;
+  }
+
   @override
   void dispose() {
     _focusNode.dispose();
@@ -526,7 +564,8 @@ class _HouseRadioState extends State<HouseRadio> {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
     final borderColor = !widget.enabled
         ? t.textMuted.withValues(alpha: 0.4)
         : (_focused || widget.selected ? t.accent : t.hairlineStrong);
@@ -555,12 +594,17 @@ class _HouseRadioState extends State<HouseRadio> {
           ),
           alignment: Alignment.center,
           child: widget.selected
-              ? Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: widget.enabled ? t.accent : t.textMuted,
-                    shape: BoxShape.circle,
+              ? Entrance(
+                  key: ValueKey<int>(_chosen),
+                  spec: _chosen == 0 ? MotionSpec.still : scope.motion.pop,
+                  scale: scope.motion.popScale,
+                  child: Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: widget.enabled ? t.accent : t.textMuted,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 )
               : null,

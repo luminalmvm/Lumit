@@ -13,8 +13,8 @@ import 'package:uuid/uuid.dart';
 import 'roto.dart';
 part 'effect.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `hidden_rows_of`, `is_audio_effect`, `is_audio_match_name`, `param`, `plugin_category_key`, `presets_in`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `animation_at`, `animation_of`, `badge_of`, `bridge_derived_param`, `bridge_param`, `bridge_shader_ty`, `bridge_unit`, `catalogue`, `clamp_animation`, `core_unit`, `derived_params_of`, `document_for`, `drop_stale_offers`, `fill_derived`, `hard_bounds`, `is_audio_effect`, `is_audio_match_name`, `of`, `param`, `plugin_category_key`, `presets_in`, `put`, `read_at`, `read_at`, `read_at`, `read_instance_info`, `read`, `read`, `sample_at`, `scan_audio_plugins`, `seconds_of`, `shader_error`, `validated`, `with_live_inputs`, `write_at`, `write_at`, `write`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `get_effects`, `new`
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -166,6 +166,21 @@ List<BridgePresetInfo> listNodeGroups() =>
 List<BridgePresetInfo> listGraphGroups() =>
     BridgeLib.instance.api.crateApiEffectListGraphGroups();
 
+/// A preset file's text, ready for `load_preset`, whichever kind of preset the
+/// file is.
+///
+/// A Lumit `.lumfx` is handed back as it is. An After Effects `.ffx` is read
+/// and converted first, so the panels have one call to make and one kind of
+/// text to apply: its pseudo effects arrive as Custom controls, the effects
+/// Lumit has arrive as Lumit's, and its expressions come with them.
+///
+/// The file is told apart by its first bytes and not by its name. A file that
+/// is neither is refused as any other non-preset is.
+///
+/// Not sync: it reads a file, and converts one that is After Effects' own.
+Future<String> readEffectPreset({required String path}) =>
+    BridgeLib.instance.api.crateApiEffectReadEffectPreset(path: path);
+
 /// Where the preset library lives, created on first ask — the save dialogue's
 /// default folder, so a saved preset appears in the listing without the user
 /// navigating anywhere. `None` only when the platform has no home directory.
@@ -271,6 +286,11 @@ BridgeShaderGraphView shaderGraphView({required String graph}) =>
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<BridgeEffectInstance>>
 abstract class BridgeEffectInstance implements RustOpaqueInterface {
+  /// Stage one more number input on an Expression box and answer its name,
+  /// which is the word the expression reads it by. `None` when the box holds
+  /// as many as it can. The graph's own commit writes it.
+  String? addExpressionInput();
+
   /// Detach the inner graph (§4.1): keep the compiled text, drop the `graph`
   /// key, and leave an ordinary hand-written shader behind. One staged edit,
   /// committed with the stack, so it is one undo step — and it is not
@@ -281,6 +301,14 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// False when the effect is individually bypassed (docs/08 §1.5) — the state
   /// of the checkbox in its title bar.
   bool enabled();
+
+  /// The language an Expression box's text is written in. Rhai for every
+  /// other instance, which holds no text.
+  BridgeExpressionLanguage expressionLanguage();
+
+  /// The text an Expression box runs, empty for a fresh one. Read when its
+  /// editor opens, never in a rebuild.
+  String expressionSource();
 
   /// One read for everything a card draws — see [`BridgeEffectInstanceInfo`].
   BridgeEffectInstanceInfo getInfo();
@@ -341,6 +369,11 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// An effect this build does not know answers nothing either way: with no
   /// declaration to hold the stored rows against, none of them is unused.
   BridgeParamSync parameterSync();
+
+  /// Stage the removal of an Expression box's last input and answer its
+  /// name, so the caller can take its wire off in the same commit. `None`
+  /// for a box with no inputs.
+  String? removeExpressionInput();
 
   /// **Remove unused parameters** (registry §4 rule 1): take away every
   /// stored row that neither the declaration nor the derivation names, on
@@ -452,6 +485,14 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// committing op (`LayerReference::set_effect_enabled`) and does not need
   /// this.
   void setEnabled({required bool enabled});
+
+  /// Stage a change of the language an Expression box's text is written in,
+  /// beside [`Self::set_expression_source`] and committed the same way.
+  void setExpressionLanguage({required BridgeExpressionLanguage language});
+
+  /// Stage new text on an Expression box. The graph's own commit writes it, so
+  /// an edit is one undo step.
+  void setExpressionSource({required String source});
 
   /// Chain or unchain the vector pair keyed by `stem`, on the **staged**
   /// copy — `LayerReference::set_effects` is the commit, exactly as
@@ -784,10 +825,17 @@ class BridgeEffectInstanceInfo {
   final List<BridgeParamInfo> derivedParams;
 
   /// The rows this instance is not showing right now, by id: a plugin's
-  /// own hidden controls, read off its last render (docs/12 §2.2). Empty for
-  /// every built-in. Here for the same reason as the rest: the panel draws
-  /// on every rebuild and may not call.
+  /// own hidden controls, as it last answered an edit (docs/12 §2.2). Empty
+  /// for every built-in. Here for the same reason as the rest: the panel
+  /// draws on every rebuild and may not call.
   final List<String> hiddenRows;
+
+  /// The rows a plugin has greyed, by id. Drawn, and not editable.
+  final List<String> disabledRows;
+
+  /// The choice rows whose list a plugin has replaced, with the list to
+  /// draw in place of the schema's.
+  final List<BridgeRowOptions> rowOptions;
 
   /// The node graph this instance applies (docs/impl/node-graph-comp.md
   /// §4.4), and `None` for every other effect.
@@ -810,6 +858,8 @@ class BridgeEffectInstanceInfo {
     this.badgeDetail,
     required this.derivedParams,
     required this.hiddenRows,
+    required this.disabledRows,
+    required this.rowOptions,
     this.nodeGraphComp,
   });
 
@@ -826,6 +876,8 @@ class BridgeEffectInstanceInfo {
       badgeDetail.hashCode ^
       derivedParams.hashCode ^
       hiddenRows.hashCode ^
+      disabledRows.hashCode ^
+      rowOptions.hashCode ^
       nodeGraphComp.hashCode;
 
   @override
@@ -844,6 +896,8 @@ class BridgeEffectInstanceInfo {
           badgeDetail == other.badgeDetail &&
           derivedParams == other.derivedParams &&
           hiddenRows == other.hiddenRows &&
+          disabledRows == other.disabledRows &&
+          rowOptions == other.rowOptions &&
           nodeGraphComp == other.nodeGraphComp;
 }
 
@@ -890,7 +944,7 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
     UuidValue? field0,
   ]) = BridgeEffectValue_MaskPath;
 
-  /// A tone curve as its own control points: 2..=16 `[x, y]` pairs
+  /// A tone curve as its own control points: 2..=32 `[x, y]` pairs
   /// in the unit square, in x order. Crosses as written — the engine
   /// straightens what it reads (`CurvePoints::sanitised`), so a panel
   /// mid-drag need not, and a curve is never refused for being momentarily
@@ -900,6 +954,7 @@ sealed class BridgeEffectValue with _$BridgeEffectValue {
   ) = BridgeEffectValue_Curve;
 
   /// A name from the OCIO config, as the config spells it; empty is unset.
+  /// Also what a [`BridgeParamKind::Text`] row holds: the text as typed.
   const factory BridgeEffectValue.text(
     String field0,
   ) = BridgeEffectValue_Text;
@@ -955,6 +1010,22 @@ class BridgeEnabledWhen {
           param == other.param &&
           on_ == other.on_ &&
           cond == other.cond;
+}
+
+/// The language an expression is written in
+/// ([`lumit_core::expression::Language`]).
+///
+/// It crosses with the text every time, in both directions. The person writing
+/// an expression picks it, and nothing works it out from the text: the same
+/// line can mean two things, and a guess would be wrong quietly.
+enum BridgeExpressionLanguage {
+  /// One line of Rhai, Lumit's first language. What an expression with
+  /// nothing stored beside it is.
+  rhai,
+
+  /// JavaScript, as After Effects expressions are written.
+  javaScript,
+  ;
 }
 
 /// A file parameter: the paths it references, and the index that selects which
@@ -1196,6 +1267,13 @@ sealed class BridgeParamKind with _$BridgeParamKind {
   const factory BridgeParamKind.colourName({
     required BridgeColourNameRole role,
   }) = BridgeParamKind_ColourName;
+
+  /// A short text the user types, drawn as a single-line text field. The
+  /// value crossing is a [`BridgeEffectValue::Text`], and the engine cuts
+  /// what is set to its cap (`lumit_core::fx::TEXT_MAX_BYTES`).
+  const factory BridgeParamKind.text({
+    required String default_,
+  }) = BridgeParamKind_Text;
   const factory BridgeParamKind.layer() = BridgeParamKind_Layer;
 
   /// One clip on the layer a sibling [`BridgeParamKind::Layer`] row names
@@ -1441,6 +1519,28 @@ class BridgeRational {
           den == other.den;
 }
 
+/// One choice row's list, as its plugin has it now.
+class BridgeRowOptions {
+  final String id;
+  final List<String> options;
+
+  const BridgeRowOptions({
+    required this.id,
+    required this.options,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ options.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeRowOptions &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          options == other.options;
+}
+
 @freezed
 sealed class BridgeScalar with _$BridgeScalar {
   const BridgeScalar._();
@@ -1454,8 +1554,11 @@ sealed class BridgeScalar with _$BridgeScalar {
   const factory BridgeScalar.keyframed(
     List<BridgeKeyframe> field0,
   ) = BridgeScalar_Keyframed;
+
+  /// The text, and the language it is written in.
   const factory BridgeScalar.expression(
     String field0,
+    BridgeExpressionLanguage field1,
   ) = BridgeScalar_Expression;
 }
 

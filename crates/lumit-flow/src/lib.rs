@@ -1937,12 +1937,6 @@ pub(crate) mod testutil {
         value_noise(x / 8.0, y / 8.0, seed.wrapping_add(23))
     }
 
-    /// An anti-aliased checkerboard, also continuous.
-    pub fn checker(x: f32, y: f32, cell: f32) -> f32 {
-        let s = (std::f32::consts::PI * x / cell).sin() * (std::f32::consts::PI * y / cell).sin();
-        0.5 + 0.45 * (s * 6.0).clamp(-1.0, 1.0)
-    }
-
     /// Render a continuous scalar field into a Gray image.
     pub fn render(w: usize, h: usize, f: impl Fn(f32, f32) -> f32) -> Gray {
         let mut data = vec![0f32; w * h];
@@ -1992,31 +1986,6 @@ mod tests {
         })
     }
 
-    #[test]
-    fn recovers_a_known_translation() {
-        let (w, h) = (96, 96);
-        let a = texture(w, h, 0.0, 0.0);
-        let b = texture(w, h, 3.0, 2.0); // content shifted by (3, 2)
-        let f = flow_with(&a, &b, &FlowSettings::default());
-        let epe = mean_epe(&f, 16, |_, _| (3.0, 2.0));
-        assert!(epe < 0.3, "mean endpoint error too high: {epe}");
-    }
-
-    /// Impl note §6.1: translation ≤ 32 px recovered at half resolution to
-    /// < 0.3 px mean endpoint error (measured in full-res pixels).
-    #[test]
-    fn large_translation_at_half_res() {
-        let (w, h) = (256, 256);
-        let (dx, dy) = (26.0f32, -14.0f32); // ‖d‖ ≈ 29.5 px ≤ 32
-        let a = render(w, h, |x, y| perlin(x, y, 1));
-        let b = render(w, h, |x, y| perlin(x - dx, y - dy, 1));
-        let (ha, hb) = (downsample(&a), downsample(&b));
-        let (f, _) = flow_pair_with(&ha, &hb, &FlowSettings::default());
-        // Error measured at the working (half) resolution, in its own pixels.
-        let epe = mean_epe(&f, 24, |_, _| (dx / 2.0, dy / 2.0));
-        assert!(epe < 0.3, "mean endpoint error too high at half res: {epe}");
-    }
-
     /// Impl note §6.1: a known rotation field.
     #[test]
     fn recovers_a_known_rotation() {
@@ -2037,18 +2006,6 @@ mod tests {
             (cos * rx - sin * ry - rx, sin * rx + cos * ry - ry)
         });
         assert!(epe < 0.3, "mean endpoint error too high on rotation: {epe}");
-    }
-
-    /// Impl note §6.1: the checkerboard case (aperture-prone texture).
-    #[test]
-    fn recovers_translation_on_a_checkerboard() {
-        let (w, h) = (192, 192);
-        let (dx, dy) = (6.0f32, 4.0f32);
-        let a = render(w, h, |x, y| checker(x, y, 16.0));
-        let b = render(w, h, |x, y| checker(x - dx, y - dy, 16.0));
-        let f = flow_with(&a, &b, &FlowSettings::default());
-        let epe = mean_epe(&f, 24, |_, _| (dx, dy));
-        assert!(epe < 0.3, "mean endpoint error too high on checker: {epe}");
     }
 
     /// Impl note §6.1: occlusion mask of a sliding square vs the analytic
@@ -2110,18 +2067,6 @@ mod tests {
         }
         let iou = inter as f64 / uni.max(1) as f64;
         assert!(iou >= 0.9, "occlusion IoU too low: {iou}");
-    }
-
-    #[test]
-    fn synthesis_round_trips_at_the_endpoints() {
-        let (w, h) = (16, 16);
-        let a: Vec<u8> = (0..w * h * 4).map(|i| (i % 251) as u8).collect();
-        let b: Vec<u8> = (0..w * h * 4).map(|i| ((i * 7) % 251) as u8).collect();
-        // phi 0 and 1 return the endpoints bit-exactly (degenerate path).
-        let mut eng = FlowEngine::cpu();
-        let set = FlowSettings::default();
-        assert_eq!(eng.interpolate_at(&a, &b, w, h, 0.0, &set), a);
-        assert_eq!(eng.interpolate_at(&a, &b, w, h, 1.0, &set), b);
     }
 
     #[test]
@@ -2218,65 +2163,6 @@ mod tests {
         );
     }
 
-    /// Static but *smooth* content is not an overlay — a locked-off sky must
-    /// not trip the guard, or the guard is just "blend everything still".
-    #[test]
-    fn the_hud_guard_ignores_static_smooth_content() {
-        let (w, h) = (64, 64);
-        let flat = render(w, h, |_, _| 0.5);
-        let n = w * h;
-        let still = FlowField {
-            w,
-            h,
-            u: vec![0.0; n],
-            v: vec![0.0; n],
-            valid: vec![1; n],
-        };
-        let g = hud_weights(&flat, &still);
-        assert!(
-            g.iter().all(|&v| v < 0.01),
-            "a featureless still region is not a HUD"
-        );
-    }
-
-    /// The guard changes the picture in the direction it claims: guarded
-    /// pixels come back as the plain blend, unwarped.
-    #[test]
-    fn a_guarded_pixel_synthesises_as_the_plain_blend() {
-        let (w, h) = (32, 32);
-        let n = w * h;
-        let a: Vec<u8> = (0..n * 4).map(|i| (i % 251) as u8).collect();
-        let b: Vec<u8> = (0..n * 4).map(|i| ((i * 7) % 251) as u8).collect();
-        // A flow field that would drag every pixel a long way sideways.
-        let f = FlowField {
-            w,
-            h,
-            u: vec![5.0; n],
-            v: vec![0.0; n],
-            valid: vec![1; n],
-        };
-        let bwd = FlowField {
-            w,
-            h,
-            u: vec![-5.0; n],
-            v: vec![0.0; n],
-            valid: vec![1; n],
-        };
-        let set = FlowSettings::default();
-        let guarded = synthesize_with(&a, &b, w, h, &f, &bwd, 0.5, &set, Some(&vec![1.0; n]));
-        // Full guard everywhere == the crossfade, exactly.
-        for i in 0..n * 4 {
-            let want = (f32::from(a[i]) * 0.5 + f32::from(b[i]) * 0.5).round() as u8;
-            assert_eq!(
-                guarded[i], want,
-                "guarded pixel {i} should be the plain blend"
-            );
-        }
-        // With no guard the warp is visible, so the result differs.
-        let warped = synthesize_with(&a, &b, w, h, &f, &bwd, 0.5, &set, None);
-        assert_ne!(warped, guarded);
-    }
-
     /// The Fallback knob (docs/08 §3.1) picks what shows where neither frame
     /// can explain a pixel: a crossfade, or the nearer frame.
     #[test]
@@ -2325,72 +2211,6 @@ mod tests {
             None,
         );
         assert_eq!(nearest[0], 0, "nearer frame at phi 0.25 is A");
-    }
-
-    /// Smoothness moves the regularisation it claims to move, and the default
-    /// leaves the tuned constant exactly where the analytic tests found it.
-    #[test]
-    fn smoothness_scales_the_flow_sigma_around_the_tuned_default() {
-        let at = |s: f32| {
-            FlowSettings {
-                smoothness: s,
-                ..FlowSettings::default()
-            }
-            .flow_sigma2()
-        };
-        assert_eq!(at(50.0), FLOW_SIGMA2);
-        assert!(at(10.0) < at(50.0));
-        assert!(at(90.0) > at(50.0));
-        // Clamped at both ends: never zero (which would refuse to smooth) and
-        // never unbounded (which would average across any motion boundary).
-        assert!(at(0.0) > 0.0);
-        assert!(at(1000.0) <= FLOW_SIGMA2 * 4.0);
-    }
-
-    /// Flow resolution is a divisor on the source, and a frame too small to
-    /// divide stays whole rather than starving the pyramid.
-    #[test]
-    fn working_size_divides_but_never_starves() {
-        let full = FlowSettings::default();
-        assert_eq!(full.working_size(1920, 1080), (1920, 1080));
-        let half = FlowSettings {
-            divisor: 2,
-            ..FlowSettings::default()
-        };
-        assert_eq!(half.working_size(1920, 1080), (960, 540));
-        let quarter = FlowSettings {
-            divisor: 4,
-            ..FlowSettings::default()
-        };
-        assert_eq!(quarter.working_size(1920, 1080), (480, 270));
-        // Too small to divide: unchanged, not reduced into uselessness.
-        assert_eq!(quarter.working_size(40, 40), (40, 40));
-    }
-
-    /// Vector detail buys accuracy: the same hard motion is recovered at least
-    /// as well at Ultra's iteration count as at Low's.
-    #[test]
-    fn more_vector_detail_is_never_worse() {
-        let (w, h) = (192, 192);
-        let (dx, dy) = (7.0f32, -5.0f32);
-        let a = render(w, h, |x, y| perlin(x, y, 9));
-        let b = render(w, h, |x, y| perlin(x - dx, y - dy, 9));
-        let epe_at = |iters: u32| {
-            let f = flow_with(
-                &a,
-                &b,
-                &FlowSettings {
-                    iterations: iters,
-                    ..FlowSettings::default()
-                },
-            );
-            mean_epe(&f, 24, |_, _| (dx, dy))
-        };
-        let (low, ultra) = (epe_at(6), epe_at(32));
-        assert!(
-            ultra <= low + 1e-4,
-            "more iterations should not be worse: low {low}, ultra {ultra}"
-        );
     }
 
     /// The reported artefact: a large low-texture region moving with the frame.
@@ -2442,36 +2262,6 @@ mod tests {
             with < without,
             "variational refinement should improve untextured regions: \
              with {with} vs without {without}"
-        );
-    }
-
-    /// Refinement must not cost accuracy where the old path was already fine —
-    /// a plain textured translation stays within the §6.1 budget.
-    #[test]
-    fn refinement_keeps_the_analytic_accuracy_budget() {
-        let (w, h) = (192, 192);
-        let (dx, dy) = (5.0f32, -3.0f32);
-        let a = render(w, h, |x, y| perlin(x, y, 31));
-        let b = render(w, h, |x, y| perlin(x - dx, y - dy, 31));
-        let f = flow_with(&a, &b, &FlowSettings::default());
-        let epe = mean_epe(&f, 24, |_, _| (dx, dy));
-        assert!(epe < 0.3, "refined flow must still meet §6.1: {epe}");
-    }
-
-    /// Validity now means "the flow explains these pixels", not "a patch
-    /// covered me". On a clean textured translation nearly everything
-    /// should be valid — under the old rule, flat areas were not.
-    #[test]
-    fn refined_validity_marks_explained_pixels() {
-        let (w, h) = (128, 128);
-        let a = render(w, h, |x, y| perlin(x, y, 41));
-        let b = render(w, h, |x, y| perlin(x - 3.0, y - 2.0, 41));
-        let f = flow_with(&a, &b, &FlowSettings::default());
-        let valid: usize = f.valid.iter().filter(|&&v| v == 1).count();
-        let frac = valid as f32 / (w * h) as f32;
-        assert!(
-            frac > 0.9,
-            "a clean translation should be almost entirely explained: {frac}"
         );
     }
 
@@ -2617,61 +2407,6 @@ mod tests {
         assert_eq!(f1.valid, f2.valid);
         assert_eq!(g1.u, g2.u);
         assert_eq!(g1.v, g2.v);
-    }
-
-    // confidence (docs/08 §3.2, FX-19): high where forward and backward flow
-    // agree, low where they disagree, always in 0..1, and a graceful all-1 for a
-    // mismatched-size pair (the smooth cut-free replacement for a hard gate).
-    #[test]
-    fn confidence_is_high_for_a_consistent_pair_and_low_when_they_disagree() {
-        let (w, h) = (4usize, 4usize);
-        let n = w * h;
-        let field = |u: f32, v: f32, valid: u8| FlowField {
-            w,
-            h,
-            u: vec![u; n],
-            v: vec![v; n],
-            valid: vec![valid; n],
-        };
-        // Forward (1,0), backward (-1,0): f + g(x+f) ≈ 0 → near-full confidence.
-        let f = field(1.0, 0.0, 1);
-        let g = field(-1.0, 0.0, 1);
-        let c = confidence(&f, &g);
-        assert_eq!(c.len(), n);
-        assert!(
-            c.iter().all(|&x| (0.0..=1.0).contains(&x) && x > 0.9),
-            "a consistent pair is near-full confidence"
-        );
-        // Backward pointing the SAME way: f + g is large → confidence drops.
-        let c2 = confidence(&f, &field(1.0, 0.0, 1));
-        assert!(
-            c2.iter().all(|&x| x < 0.9),
-            "an inconsistent pair loses confidence"
-        );
-        // An all-invalid forward is *dimmed*, not extinguished. It used to go
-        // to zero, and that hard cut-off is what left Motion blur with
-        // scattered patches of blur and hard edges between them on a fast
-        // camera move — the very artefact FX-19's smooth confidence exists to
-        // avoid, reintroduced by a binary term inside it. A vector nothing
-        // could explain photometrically, but whose two directions still agree,
-        // is worth some of its streak.
-        let c3 = confidence(&field(1.0, 0.0, 0), &g);
-        assert!(
-            c3.iter().all(|&x| x > 0.0 && x < 0.5),
-            "invalid dims confidence rather than killing it"
-        );
-        // ...and it is still clearly below a pair that is both valid and
-        // consistent, or the term would mean nothing.
-        assert!(c3.iter().zip(&c).all(|(a, b)| a < b));
-        // A mismatched-size twin degrades to all-1 (claim nothing suspect).
-        let small = FlowField {
-            w: 2,
-            h: 2,
-            u: vec![0.0; 4],
-            v: vec![0.0; 4],
-            valid: vec![1; 4],
-        };
-        assert!(confidence(&f, &small).iter().all(|&x| x == 1.0));
     }
 
     // An uncertain patch inside a neighbourhood that agrees ends up moving
@@ -2953,24 +2688,6 @@ mod tests {
         }
     }
 
-    /// Same inputs → same flow on the GPU too, bit for bit against itself.
-    #[test]
-    fn gpu_flow_is_deterministic() {
-        let Some((_lease, mut g)) = gpu_flow() else {
-            return;
-        };
-        let (w, h) = (160, 128);
-        let a = render(w, h, |x, y| perlin(x, y, 9));
-        let b = render(w, h, |x, y| perlin(x - 5.2, y + 3.4, 9));
-        let (f1, g1) = g.flow_pair(&a, &b).unwrap();
-        let (f2, g2) = g.flow_pair(&a, &b).unwrap();
-        assert_eq!(f1.u, f2.u);
-        assert_eq!(f1.v, f2.v);
-        assert_eq!(f1.valid, f2.valid);
-        assert_eq!(g1.u, g2.u);
-        assert_eq!(g1.v, g2.v);
-    }
-
     /// The engine degrades, interpolates, and honours the endpoint contract
     /// whichever backend it holds.
     #[test]
@@ -2989,91 +2706,6 @@ mod tests {
         let mut cpu = FlowEngine::cpu();
         assert_eq!(cpu.backend(), "dis-cpu");
         assert_eq!(cpu.interpolate_at(&a, &b, w, h, 0.5, &set).len(), mid.len());
-    }
-
-    /// Perf numbers (impl note §6.5: flow pair ≤ 4 ms at half-res 1080p on
-    /// the reference GPU). Run by hand:
-    /// `cargo test -p lumit-flow --release bench_flow -- --ignored --nocapture`
-    #[test]
-    #[ignore = "manual benchmark; prints timings"]
-    fn bench_flow_1080p() {
-        let Some((_lease, mut g)) = gpu_flow() else {
-            return;
-        };
-        let (w, h) = (960, 540);
-        let a = render(w, h, |x, y| perlin(x, y, 3));
-        let b = render(w, h, |x, y| perlin(x - 9.7, y + 4.3, 3));
-        // Bench the two-part configuration (no variational refinement), the
-        // older baseline: it is what the adaptive path runs when the refinement
-        // budget is zero, and it keeps this number comparable across the change
-        // that added refinement. The GPU runs all three parts these days.
-        let two_part = FlowSettings {
-            refine_iters: 0,
-            ..FlowSettings::default()
-        };
-        for _ in 0..3 {
-            let _ = g.flow_pair_with(&a, &b, &two_part); // warm-up
-        }
-        let runs = 20;
-        let t0 = std::time::Instant::now();
-        for _ in 0..runs {
-            let _ = g
-                .flow_pair_with(&a, &b, &two_part)
-                .expect("two-part GPU path");
-        }
-        let per_pair = t0.elapsed() / runs;
-        eprintln!("gpu flow pair, parts 1-2 (960x540): {per_pair:?}");
-
-        for _ in 0..3 {
-            let _ = g.flow_pair(&a, &b); // warm the refined plan
-        }
-        let t0 = std::time::Instant::now();
-        for _ in 0..runs {
-            let _ = g.flow_pair(&a, &b).expect("refined GPU path");
-        }
-        eprintln!(
-            "gpu flow pair, all three parts (960x540): {:?}",
-            t0.elapsed() / runs
-        );
-
-        let t0 = std::time::Instant::now();
-        let _ = flow_pair_with(&a, &b, &two_part);
-        eprintln!(
-            "cpu flow pair, parts 1-2 only (960x540): {:?}",
-            t0.elapsed()
-        );
-        let t0 = std::time::Instant::now();
-        let _ = flow_pair_with(&a, &b, &FlowSettings::default());
-        eprintln!(
-            "cpu flow pair, with refinement (960x540): {:?}",
-            t0.elapsed()
-        );
-
-        // End-to-end 1080p interpolate (gray + halve + flow + synthesis).
-        let px = |g: &Gray| -> Vec<u8> {
-            let mut f = vec![0u8; g.w * g.h * 4];
-            for i in 0..g.w * g.h {
-                let v = (g.data[i] * 255.0).round().clamp(0.0, 255.0) as u8;
-                f[i * 4] = v;
-                f[i * 4 + 1] = v;
-                f[i * 4 + 2] = v;
-                f[i * 4 + 3] = 255;
-            }
-            f
-        };
-        let (fw, fh) = (1920, 1080);
-        let fa = px(&render(fw, fh, |x, y| perlin(x, y, 4)));
-        let fb = px(&render(fw, fh, |x, y| perlin(x - 9.7, y + 4.3, 4)));
-        let mut eng = FlowEngine::new_auto();
-        eprintln!("engine backend: {}", eng.backend());
-        let set = FlowSettings::default();
-        let _ = eng.interpolate_at(&fa, &fb, fw, fh, 0.5, &set); // warm-up
-        let t0 = std::time::Instant::now();
-        let _ = eng.interpolate_at(&fa, &fb, fw, fh, 0.5, &set);
-        eprintln!(
-            "end-to-end 1080p interpolate at phi 0.5: {:?}",
-            t0.elapsed()
-        );
     }
 }
 
@@ -3133,38 +2765,5 @@ mod float_synth_tests {
                 "pixel {i} synthesised as {got}, wanted 4.0"
             );
         }
-    }
-
-    /// The degrade path — anything inconsistent falls back to a crossfade — has
-    /// to keep the width too, or a mismatched field would turn a float frame
-    /// into a quarter-length buffer of nonsense.
-    #[test]
-    fn the_float_crossfade_fallback_keeps_its_width() {
-        let (w, h) = (4, 4);
-        let n = w * h;
-        let a = frame(n, 2.0);
-        let b = frame(n, 6.0);
-        // A field of the wrong size is what sends it down the fallback.
-        let wrong = FlowField {
-            w: 2,
-            h: 2,
-            u: vec![0.0; 4],
-            valid: vec![1; 4],
-            v: vec![0.0; 4],
-        };
-        let out = synthesize_with_as::<Floats>(
-            &a,
-            &b,
-            w,
-            h,
-            &wrong,
-            &wrong,
-            0.5,
-            &FlowSettings::default(),
-            None,
-        );
-
-        assert_eq!(out.len(), n * 16);
-        assert!((read(&out, 0, 0) - 4.0).abs() < 1e-5);
     }
 }

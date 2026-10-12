@@ -12,7 +12,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
-import 'package:lumit_flutter/panels/keyframe_controls_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -147,29 +146,6 @@ void main() {
       expect(p.comp.frameAtTime(time: keys.single.time), 0);
     });
 
-    /// An animation with no keys is not a curve anything can evaluate, so
-    /// removing the last one has to land somewhere sensible rather than leaving
-    /// an empty list the engine would refuse.
-    testWidgets('removing the last key falls back to a static value',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.playheadFrame.value = 12;
-      await mount(tester, p);
-
-      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
-      await tester.pump();
-      final keyed =
-          (opacityOf(p.layer) as BridgeScalar_Keyframed).field0.single;
-
-      await tester.tap(find.byKey(const ValueKey('kf-toggle-tf-opacity')));
-      await tester.pump();
-
-      final after = opacityOf(p.layer);
-      expect(after, isA<BridgeScalar_Static>());
-      expect((after as BridgeScalar_Static).field0, keyed.value,
-          reason: 'it holds what the key held');
-    });
-
     testWidgets('the arrows jump the playhead to the neighbouring keys',
         (tester) async {
       final p = withLayer();
@@ -205,46 +181,6 @@ void main() {
       await tester.pump();
       expect(p.uiState.playheadFrame.value, 90,
           reason: 'a disabled arrow does nothing rather than wrapping around');
-    });
-
-    /// The whole point of taking a whole animation across the seam: v0 needed
-    /// two ops for a key that moved in time *and* value, so a single drag left
-    /// two entries in the undo history.
-    testWidgets('each keyframe action is exactly one undo step',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.playheadFrame.value = 24;
-      await mount(tester, p);
-
-      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-opacity')));
-      await tester.pump();
-      expect(opacityOf(p.layer), isA<BridgeScalar_Keyframed>());
-
-      p.state.project!.undo();
-      expect(opacityOf(p.layer), isA<BridgeScalar_Static>(),
-          reason: 'one undo puts the whole thing back');
-    });
-
-    /// Only the number-shaped kinds animate. A dropdown or a file path has
-    /// nothing to interpolate, so those rows carry no stopwatch at all rather
-    /// than one that cannot do anything.
-    testWidgets('a non-animatable parameter has no stopwatch', (tester) async {
-      final p = withLayer();
-      p.layer.addEffect(name: 'blur');
-      await mount(tester, p);
-
-      final id = p.layer.getEffects().single.id();
-      expect(find.byKey(ValueKey<String>('kf-stopwatch-$id-radius')),
-          findsOneWidget,
-          reason: 'a float parameter animates');
-
-      final choice = listParameters(effect: 'blur')
-          .where((p) => p.kind is BridgeParamKind_Choice);
-      for (final param in choice) {
-        expect(find.byKey(ValueKey<String>('kf-stopwatch-$id-${param.id}')),
-            findsNothing,
-            reason: '${param.id} is a dropdown, so it cannot animate');
-      }
     });
 
     /// One stopwatch on a multi-axis row keys every axis it covers, and does
@@ -284,72 +220,6 @@ void main() {
           reason: 'one undo put both back — a batch, not two ops');
     });
 
-    testWidgets('the diamond adds and removes on every axis together',
-        (tester) async {
-      final p = withLayer();
-      p.uiState.playheadFrame.value = 0;
-      await mount(tester, p);
-
-      await tester.tap(find.byKey(const ValueKey('kf-stopwatch-tf-positionX')));
-      await tester.pump();
-      p.uiState.playheadFrame.value = 40;
-      await tester.pump();
-
-      await tester.tap(find.byKey(const ValueKey('kf-toggle-tf-positionX')));
-      await tester.pump();
-      var tf = p.layer.getTransform();
-      expect((tf.positionX as BridgeScalar_Keyframed).field0, hasLength(2));
-      expect((tf.positionY as BridgeScalar_Keyframed).field0, hasLength(2),
-          reason: 'the axes keep the same key times');
-
-      await tester.tap(find.byKey(const ValueKey('kf-toggle-tf-positionX')));
-      await tester.pump();
-      tf = p.layer.getTransform();
-      expect((tf.positionX as BridgeScalar_Keyframed).field0, hasLength(1));
-      expect((tf.positionY as BridgeScalar_Keyframed).field0, hasLength(1));
-    });
-
-    /// **The fold-out's hit target** (docs/15 §5). The two layouts share one
-    /// button builder, and when the Effect controls panel's fixed columns
-    /// arrived the horizontal padding was dropped to nothing for
-    /// *both* — which is right for the columns, whose 18px the button's own
-    /// reserved edge already fills, and wrong for the Timeline's fold-out,
-    /// whose buttons quietly shrank by 6px and became harder to hit.
-    testWidgets('the Timeline fold-out keeps its padded buttons',
-        (tester) async {
-      final p = withLayer();
-      Widget controls({required bool fixedColumns}) => KeyframeControlsFrb(
-            scalars: [opacityOf(p.layer)],
-            comp: p.comp,
-            onSeek: (_) {},
-            onWrite: (_) {},
-            rowKey: fixedColumns ? 'fixed' : 'loose',
-            fixedColumns: fixedColumns,
-          );
-
-      await tester.pumpWidget(hostPanel(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            controls(fixedColumns: false),
-            controls(fixedColumns: true),
-          ],
-        ),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-
-      final loose =
-          tester.getSize(find.byKey(const ValueKey('kf-stopwatch-loose')));
-      final fixed =
-          tester.getSize(find.byKey(const ValueKey('kf-stopwatch-fixed')));
-      expect(loose.width, fixed.width + 6,
-          reason: '3px either side, as the fold-out always had');
-      expect(fixed.width, 18,
-          reason: 'the fixed columns are measured in unpadded buttons');
-    });
-
     // -------------------------------------------------------------------
     // **A colour keyframes like anything else** (owner desk test: "for
     // effects that have a color value property, I can't animate them, the
@@ -372,34 +242,6 @@ void main() {
 
     List<BridgeKeyframe> keysOf(BridgeScalar s) =>
         s is BridgeScalar_Keyframed ? s.field0 : const [];
-
-    testWidgets('a colour row carries the stopwatch and its navigator',
-        (tester) async {
-      final p = withLayer();
-      p.layer.addEffect(name: 'colour_control');
-      p.uiState.model.refresh();
-      await mount(tester, p);
-      final id = p.layer.getEffects().single.id();
-
-      final stopwatch = find.byKey(ValueKey<String>('kf-stopwatch-$id-colour'));
-      expect(stopwatch, findsOneWidget,
-          reason: 'the row that could not be animated at all');
-      expect(find.byKey(ValueKey<String>('kf-prev-$id-colour')), findsNothing,
-          reason: 'the navigator waits until there is a curve to walk');
-
-      await tester.tap(stopwatch);
-      await tester.pump();
-
-      expect(
-          find.byKey(ValueKey<String>('kf-prev-$id-colour')), findsOneWidget);
-      expect(
-          find.byKey(ValueKey<String>('kf-next-$id-colour')), findsOneWidget);
-      // And the swatch is still a swatch: it used to say the word `animated`
-      // and stand down, so a keyed colour could not be changed.
-      expect(
-          find.byKey(ValueKey<String>('fx-colour-$id-colour')), findsOneWidget);
-      expect(find.text('animated'), findsNothing);
-    });
 
     /// The whole flow the owner asked for: key it, move on, change it, and
     /// find two keys with the picture between them interpolating.

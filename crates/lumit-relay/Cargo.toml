@@ -1,0 +1,15 @@
+[package]
+name = "lumit-relay"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+# Nothing but the standard library, so it builds in seconds on whatever
+# server someone has, with none of Lumit beside it.
+[dependencies]
+
+[lints]
+workspace = true

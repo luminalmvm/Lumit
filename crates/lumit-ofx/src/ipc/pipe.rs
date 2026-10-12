@@ -34,10 +34,10 @@ use serde::Serialize;
 use thiserror::Error;
 
 /// The largest control message either side will send or accept. Control traffic
-/// is descriptors and parameter values; the biggest thing that crosses is a
-/// bundle's worth of descriptors, and a Sapphire-sized bundle is still small
-/// beside this.
-pub const MAX_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
+/// is descriptors and parameter values, and the biggest thing that crosses is a
+/// bundle's worth of descriptors. Sapphire's 291 effects come to about 22 MiB
+/// in one message, so this leaves room for a bundle three times that size.
+pub const MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
 
 /// What can go wrong on the wire.
 #[derive(Debug, Error)]

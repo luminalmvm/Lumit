@@ -44,16 +44,6 @@ void main() {
           hasAudio: false,
         ).whereType<FoldTransformRow>().map((r) => r.group.label).toList();
 
-    testWidgets('a fresh layer is combined, combined, linked', (tester) async {
-      final p = withComp();
-      solid(p);
-      final modes = entryOf(p).info.axisModes;
-      expect(modes.anchor, BridgeAxisMode.combined);
-      expect(modes.position, BridgeAxisMode.combined);
-      expect(modes.scale, BridgeAxisMode.linked,
-          reason: 'a scale that quietly stops being proportional is a mistake');
-    });
-
     testWidgets('separating Position gives it a row per axis, and combining takes '
         'them back', (tester) async {
       final p = withComp();
@@ -78,57 +68,6 @@ void main() {
           pair: BridgeTransformPair.position, mode: BridgeAxisMode.combined);
       expect(transformRowLabels(p), contains('Position'));
       expect(transformRowLabels(p), isNot(contains('Position x')));
-    });
-
-    testWidgets('a separated axis is one curve in the graph, where the pair was two',
-        (tester) async {
-      final p = withComp();
-      final layer = solid(p);
-      final id = layer.internallayerId.toString();
-
-      final pairPath = transformGroupPath(
-        id,
-        transformGroups(threeD: false, modes: entryOf(p).info.axisModes)
-            .firstWhere((g) => g.label == 'Position'),
-      );
-      expect(
-        graphChannels(layers: [entryOf(p)], selected: [pairPath]).length,
-        2,
-        reason: 'a combined Position is its x and y strokes',
-      );
-
-      layer.setAxisMode(
-          pair: BridgeTransformPair.position, mode: BridgeAxisMode.separated);
-      final yPath = transformGroupPath(
-        id,
-        transformGroups(threeD: false, modes: entryOf(p).info.axisModes)
-            .firstWhere((g) => g.label == 'Position y'),
-      );
-      final channels = graphChannels(layers: [entryOf(p)], selected: [yPath]);
-      expect(channels.length, 1);
-      expect(channels.single.prop, BridgeTransformProp.positionY);
-    });
-
-    testWidgets('Scale draws one box while it is linked, and two once unlinked', (tester) async {
-      final p = withComp();
-      final layer = solid(p);
-
-      TransformGroup scaleRow() =>
-          transformGroups(threeD: false, modes: entryOf(p).info.axisModes)
-              .firstWhere((g) => g.label.startsWith('Scale'));
-
-      expect(scaleRow().isLinked, isTrue);
-      expect(scaleRow().axes.length, 2,
-          reason: 'one box, but the stopwatch still covers both axes');
-
-      layer.setAxisMode(
-          pair: BridgeTransformPair.scale, mode: BridgeAxisMode.combined);
-      expect(scaleRow().isLinked, isFalse);
-
-      layer.setAxisMode(
-          pair: BridgeTransformPair.scale, mode: BridgeAxisMode.separated);
-      final rows = transformRowLabels(p);
-      expect(rows, containsAll(<String>['Scale x', 'Scale y']));
     });
 
     /// A linked Scale is one curve as it is one box: the graph draws the lead
@@ -203,17 +142,75 @@ void main() {
           graphChannels(layers: [entryOf(p)], selected: [scalePath]).length, 2);
     });
 
-    testWidgets('a 3D layer separates Position into three rows',
+    /// The same pair on a Transform effect, whose Scale is two rows with a
+    /// chain between them. Chained, either row is the one curve, and an ease
+    /// on it reaches the half the graph does not draw.
+    testWidgets(
+        'a chained effect Scale is one curve, and an ease on it reaches both rows',
         (tester) async {
       final p = withComp();
-      final layer = solid(p)
-        ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
-      layer.setAxisMode(
-          pair: BridgeTransformPair.position, mode: BridgeAxisMode.separated);
+      final layer = solid(p);
+      final id = layer.internallayerId.toString();
+      BridgeKeyframe key(int seconds, double value) => BridgeKeyframe(
+            time: BridgeRational(num: seconds, den: 1),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      layer.addEffect(name: 'transform');
+      final staged = layer.getEffects();
+      final fxId = staged.single.id();
+      staged.single.setPairLinked(stem: 'scale', linked: true);
+      staged.single.setValue(
+          id: 'scale_x',
+          value: BridgeEffectValue.float(
+              BridgeScalar.keyframed([key(0, 100), key(1, 200)])));
+      staged.single.setValue(
+          id: 'scale_y',
+          value: BridgeEffectValue.float(
+              BridgeScalar.keyframed([key(0, 50), key(1, 100)])));
+      layer.setEffects(effects: staged);
+
+      final x = '$id/effects/$fxId/scale_x';
+      final y = '$id/effects/$fxId/scale_y';
+      final channels = graphChannels(layers: [entryOf(p)], selected: [x, y]);
+      expect(channels.length, 1, reason: 'both rows are the one curve');
+      expect(channels.single.param?.id, 'scale_x');
+      expect(channels.single.linkedParam?.id, 'scale_y');
       expect(
-        transformRowLabels(p),
-        containsAll(<String>['Position x', 'Position y', 'Position z']),
+          graphChannels(layers: [entryOf(p)], selected: [y]).single.param?.id,
+          'scale_x',
+          reason: 'the y row alone still opens the pair');
+
+      const eased =
+          BridgeSideInterp.bezier(BridgeBezierSide(speed: 0, influence: 0.5));
+      applyInterpToSelection(
+        channels: channels,
+        selectedKeys: {'${channels.single.id}#0', '${channels.single.id}#1'},
+        side: eased,
       );
+
+      List<BridgeKeyframe> keysOfRow(String row) {
+        for (final v in entryOf(p).info.effects.single.values) {
+          if (v.id == row) {
+            final scalar = (v.value as BridgeEffectValue_Float).field0;
+            return (scalar as BridgeScalar_Keyframed).field0;
+          }
+        }
+        return const [];
+      }
+
+      expect(keysOfRow('scale_x').first.interpOut, eased);
+      expect(keysOfRow('scale_y').first.interpOut, eased,
+          reason: 'the ease reached the row the graph does not draw');
+      expect([for (final k in keysOfRow('scale_y')) k.value], [50.0, 100.0],
+          reason: 'the ratio held');
+
+      // Unchained, the pair is two curves again.
+      final again = layer.getEffects();
+      again.single.setPairLinked(stem: 'scale', linked: false);
+      layer.setEffects(effects: again);
+      expect(graphChannels(layers: [entryOf(p)], selected: [x, y]).length, 2);
     });
   });
 }

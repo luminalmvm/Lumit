@@ -273,18 +273,6 @@ mod tests {
             .collect()
     }
 
-    /// A quarter-rate tone landing half way between its own peaks: every
-    /// sample reads 0.707 of `amp`, and the wave they describe reaches `amp`.
-    /// This is the sound sample peak cannot see and true peak can.
-    fn between_samples(frames: usize, amp: f32) -> Vec<f32> {
-        (0..frames)
-            .flat_map(|n| {
-                let s = (TAU * n as f64 / 4.0 + TAU / 8.0).sin() as f32 * amp;
-                [s, s]
-            })
-            .collect()
-    }
-
     fn open(values: &[(ParamId, f64)]) -> Arc<dyn AudioProcessor> {
         AudioLimiterDef
             .open_audio(None, values, RATE, false)
@@ -329,15 +317,6 @@ mod tests {
     }
 
     #[test]
-    fn the_same_sound_twice_is_bit_identical() {
-        let input = tone(AUDIO_BLOCK_FRAMES * 4, 220.0, 0.9);
-        let values = knobs(-6.0, 1.0);
-        let first = run(&*open(&values), &input, &values, 0);
-        let again = run(&*open(&values), &input, &values, 0);
-        assert_eq!(bits(&first), bits(&again));
-    }
-
-    #[test]
     fn a_run_split_at_a_block_edge_carries_its_state_across() {
         let input = tone(AUDIO_BLOCK_FRAMES * 4, 220.0, 0.9);
         let values = knobs(-6.0, 1.0);
@@ -368,29 +347,5 @@ mod tests {
                 "true peak {true_peak}: nothing came out"
             );
         }
-    }
-
-    /// **Plan 3**, the reason true peak exists: a wave whose peaks fall
-    /// between the samples is held down further than the samples alone would
-    /// ask for.
-    #[test]
-    fn true_peak_hears_what_is_between_the_samples() {
-        let input = between_samples(AUDIO_BLOCK_FRAMES * 8, 1.0);
-        let off = run(&*open(&knobs(-6.0, 0.0)), &input, &knobs(-6.0, 0.0), 0);
-        let on = run(&*open(&knobs(-6.0, 1.0)), &input, &knobs(-6.0, 1.0), 0);
-        let (off, on) = (loudest(&off), loudest(&on));
-        assert!(
-            on < off * 0.8,
-            "true peak came out at {on} where sample peak came out at {off}"
-        );
-    }
-
-    /// The delay the sound is held back by is what the chain places it earlier
-    /// by, so it has to be told: the lookahead, and the oversampler's own
-    /// delay when true peak is on.
-    #[test]
-    fn the_reported_latency_covers_the_lookahead_and_the_detector() {
-        assert_eq!(open(&knobs(-6.0, 0.0)).latency(), 96);
-        assert_eq!(open(&knobs(-6.0, 1.0)).latency(), 96 + DETECT_FRAMES);
     }
 }

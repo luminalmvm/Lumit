@@ -10,6 +10,8 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart' show BridgeColourItem;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/share.dart'
+    show BridgeFootageHere, BridgeFootageShare;
 import 'package:provider/provider.dart';
 
 import '../l10n/engine_labels.dart';
@@ -26,10 +28,13 @@ enum _ProjectMenuAction {
   compSettings,
   rename,
   relink,
+  reveal,
   findMissing,
   addAudioOnly,
   setProxy,
   makeProxy,
+  shareStandIn,
+  shareOriginal,
   useProxy,
   clearProxy,
   moveToRoot,
@@ -96,6 +101,31 @@ Future<void> showProjectMenuFrb({
   List<ItemReference>? targets,
 }) async {
   final isFootage = item is ItemReference_Footage;
+  // Where this footage is in a shared project, and who has it. Read once,
+  // as the menu opens, and null when the project is not shared.
+  BridgeFootageShare? shared;
+  if (item case ItemReference_Footage(:final field0)) {
+    final sharing =
+        Provider.of<LumitState>(context, listen: false).share.active;
+    try {
+      if (sharing) shared = field0.shareState();
+    } catch (_) {
+      // The project closed as the menu opened.
+    }
+  }
+  // In a project kept online the footage is on Lumit's server, and what it
+  // holds is what the mover last heard. Read once, as the menu opens.
+  final online = shared != null &&
+      Provider.of<LumitState>(context, listen: false).share.online != null;
+  final footageOnline =
+      Provider.of<LumitUiState>(context, listen: false).onlineFootage;
+  final (standInOnline, originalOnline) = switch (item) {
+    ItemReference_Footage(:final field0) when online => (
+        footageOnline.standInOnline(field0),
+        footageOnline.originalOnline(field0),
+      ),
+    _ => (false, null),
+  };
   final isComp = item is ItemReference_Composition;
   // The comp the sound would land in. Read once, here, rather than in
   // the row's build: the menu is a gesture, not a rebuild path.
@@ -151,11 +181,21 @@ Future<void> showProjectMenuFrb({
             onPressed: () => close(_ProjectMenuAction.rename),
             child: Text(l10n.rename),
           ),
-          // Relink is offered only on a row that is actually broken.
-          if (isFootage && missing)
+          // One command under two names: a broken row is relinked, and a row
+          // whose file is there is pointed at another one. The engine takes
+          // either, so the menu only chooses the word.
+          if (isFootage)
             MenuRow(
+              key: const ValueKey('project-menu-relink'),
               onPressed: () => close(_ProjectMenuAction.relink),
-              child: Text(l10n.relinkEllipsis),
+              child: Text(
+                  missing ? l10n.relinkEllipsis : l10n.replaceFootageEllipsis),
+            ),
+          if (isFootage && !missing)
+            MenuRow(
+              key: const ValueKey('project-menu-reveal'),
+              onPressed: () => close(_ProjectMenuAction.reveal),
+              child: Text(l10n.projectShowInFolder),
             ),
           // **The rate of a run of stills** (docs/07 §3.1). Stills carry no
           // rate of their own, so an imported run plays at 25 until this
@@ -198,6 +238,50 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.findMissing),
               child: Text(l10n.findMissingFootage),
             ),
+          // Footage this computer has not got, in a project kept online: it
+          // comes from Lumit's server, when the server has it.
+          if (shared != null &&
+              online &&
+              shared.here != BridgeFootageHere.original) ...[
+            if (shared.here == BridgeFootageHere.missing && standInOnline)
+              MenuRow(
+                key: const ValueKey('project-menu-share-stand-in'),
+                onPressed: () => close(_ProjectMenuAction.shareStandIn),
+                child: Text(l10n.shareGetStandIn),
+              ),
+            if (originalOnline != null)
+              MenuRow(
+                key: const ValueKey('project-menu-share-original'),
+                onPressed: () => close(_ProjectMenuAction.shareOriginal),
+                child: Text(
+                    l10n.shareGetOriginal((originalOnline / (1 << 20)).ceil())),
+              )
+            else
+              MenuRow(
+                key: const ValueKey('project-menu-share-original'),
+                onPressed: () {},
+                child: Text(l10n.shareOnlineNoOriginal,
+                    style: TextStyle(color: menuTheme.textDisabled)),
+              ),
+          ],
+          // Footage this computer has not got, in a shared project where
+          // someone has: ask them for a stand-in to cut with, or the file.
+          if (shared != null &&
+              shared.holders.isNotEmpty &&
+              shared.here != BridgeFootageHere.original) ...[
+            if (shared.here == BridgeFootageHere.missing)
+              MenuRow(
+                key: const ValueKey('project-menu-share-stand-in'),
+                onPressed: () => close(_ProjectMenuAction.shareStandIn),
+                child: Text(l10n.shareGetStandIn),
+              ),
+            MenuRow(
+              key: const ValueKey('project-menu-share-original'),
+              onPressed: () => close(_ProjectMenuAction.shareOriginal),
+              child: Text(l10n.shareGetOriginal(
+                  (shared.bytes.toInt() / (1 << 20)).ceil())),
+            ),
+          ],
           // The sound of this clip, on its own row. Offered only with a
           // comp open to put it in — placing a layer nowhere is not an action.
           if (isFootage && openComp != null)
@@ -212,6 +296,13 @@ Future<void> showProjectMenuFrb({
           // have no media reference for a stand-in to stand in for — and the
           // last two only once there is a proxy, so the menu never lists a
           // word that would do nothing.
+          // A folder offers the one that makes sense for everything in it.
+          if (item is ItemReference_Folder)
+            MenuRow(
+              key: const ValueKey('project-menu-make-proxies'),
+              onPressed: () => close(_ProjectMenuAction.makeProxy),
+              child: Text(l10n.makeProxies),
+            ),
           if (isFootage) ...[
             MenuRow(
               key: const ValueKey('project-menu-set-proxy'),
@@ -447,11 +538,14 @@ Future<void> showProjectMenuFrb({
       onStartRename?.call();
     case _ProjectMenuAction.relink:
       await onRelink?.call();
+    case _ProjectMenuAction.reveal:
+      if (item case ItemReference_Footage(:final field0)) field0.reveal();
     case _ProjectMenuAction.findMissing:
       onFindMissing();
     case _ProjectMenuAction.addAudioOnly:
       if (item case ItemReference_Footage(:final field0)) {
-        openComp?.addAudioLayer(footage: field0);
+        openComp?.addAudioLayer(
+            footage: field0, arrival: ui.streamsArrival);
         onLocalEdit();
       }
     case _ProjectMenuAction.setProxy:
@@ -464,29 +558,58 @@ Future<void> showProjectMenuFrb({
         field0.setProxy(path: path);
         onLocalEdit();
       }
-    case _ProjectMenuAction.makeProxy:
-      // **The one command here that stays singular**: the engine runs
-      // one transcode at a time by design, so starting four would be three
-      // refusals and a notice apiece. The clicked row's, and only that.
+    case _ProjectMenuAction.shareStandIn || _ProjectMenuAction.shareOriginal:
       if (item case ItemReference_Footage(:final field0)) {
-        // The engine's own refusals — one transcode at a time, and nothing to
-        // read from on this machine — reach the status line as its notice,
-        // rather than as an exception out of a menu handler.
+        final original = action == _ProjectMenuAction.shareOriginal;
         try {
-          field0.makeProxy();
-        } catch (e) {
-          if (context.mounted) {
-            Provider.of<LumitState>(context, listen: false)
-                .postNotice(l10n.proxyFailed('$e'), error: true);
-          }
-          return;
+          online
+              ? footageOnline.fetch(field0, original: original)
+              : field0.shareFetch(original: original);
+        } catch (_) {
+          // The project closed between the menu and the click.
         }
-        // The transcode reports on the status line, where every other piece of
-        // background work does; this is the start signal that gets the strip
-        // polling. The finished file attaches itself on the poll that sees it
-        // land, and the item scope of that op is what brings this panel back.
-        proxyJobChanged.value++;
       }
+    case _ProjectMenuAction.makeProxy:
+      // Every picked footage item, and everything inside a picked folder. The
+      // engine runs one transcode at a time and queues the rest, so each
+      // starts as the one before it lands.
+      final wanted = <FootageReference>[];
+      void gather(ItemReference from) {
+        switch (from) {
+          case ItemReference_Footage(:final field0):
+            wanted.add(field0);
+          case ItemReference_Folder(:final field0):
+            try {
+              field0.getChildren().forEach(gather);
+            } catch (_) {
+              // The folder went away under the menu.
+            }
+          default:
+        }
+      }
+      acts.forEach(gather);
+      var started = false;
+      Object? refused;
+      for (final footage in wanted) {
+        // The engine's own refusal, nothing to read from on this machine,
+        // reaches the status line as its notice rather than as an exception
+        // out of a menu handler. One missing file does not stop the rest.
+        try {
+          footage.makeProxy();
+          started = true;
+        } catch (e) {
+          refused = e;
+        }
+      }
+      if (refused != null && !started && context.mounted) {
+        Provider.of<LumitState>(context, listen: false)
+            .postNotice(l10n.proxyFailed('$refused'), error: true);
+      }
+      // The transcode reports on the status line, where every other piece of
+      // background work does; this is the start signal that gets the strip
+      // polling. Each finished file attaches itself on the poll that sees it
+      // land, and the item scope of that op is what brings this panel back.
+      if (started) proxyJobChanged.value++;
     case _ProjectMenuAction.useProxy:
       // The clicked row's new state, for every picked footage item that has a
       // proxy to read from; one that has none is passed over rather than

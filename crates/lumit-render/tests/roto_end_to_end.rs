@@ -61,6 +61,7 @@ fn layer(name: &str, kind: LayerKind) -> Layer {
         volume_db: lumit_core::anim::Property::zero(),
         pan: lumit_core::anim::Property::zero(),
         audio_only: false,
+        audio_streams: Default::default(),
         adjustment: false,
         retime: None,
         interpolation: Default::default(),
@@ -216,102 +217,88 @@ fn a_propagated_matte_cuts_the_layer_it_sits_on_and_passes_through_outside_its_s
     lumit_render::roto::clear();
 }
 
-/// **A layer read as another effect's matte source runs its own Roto brush**
-/// (docs/impl/addons.md §13's last trap).
+/// **A Roto brush box in a node graph cuts by the matte of the file its picture
+/// comes from**, the planes tier's own test one tier along.
 ///
-/// A referenced layer's stack used to run through `run_ops` with every side
-/// carriage empty, so a Roto brush on the layer somebody pointed a Matte row at
-/// rendered as a passthrough and the consumer read the plain footage instead.
-/// The fold that gave the planes tier its carriage threads the roto one through
-/// the same door, and this is the picture that says so: the source layer is a
-/// white solid wearing a Roto brush whose matte is solid on the left and empty
-/// on the right, and Set matte reads its alpha, so the consuming layer is kept
-/// on the left and cut away on the right. Without the carriage the source reads
-/// as plain opaque white and the consumer is untouched.
+/// A box has no layer, so nothing used to carry a propagated matte to it and a
+/// brush in a graph passed its picture through. Here a white solid is read
+/// straight into a stroked brush box, and the matte filed under that box cuts
+/// it exactly as it cuts the layer above.
 #[test]
-fn a_layer_read_as_a_matte_source_runs_its_own_roto_brush() {
+fn a_brush_box_in_a_node_graph_cuts_by_the_matte_filed_under_it() {
+    use lumit_core::comp_graph::{CompGraph, GraphEdge, GraphNode};
+
     let Ok(mut r) = HeadlessRenderer::shared() else {
         lumit_gpu::no_adapter();
         return;
     };
     lumit_render::roto::clear();
 
-    let white = Uuid::now_v7();
-    let red = Uuid::now_v7();
-    let mut doc = Document::new();
-    for (id, name, colour) in [
-        (white, "white", LinearColour([1.0, 1.0, 1.0, 1.0])),
-        (red, "red", LinearColour([1.0, 0.0, 0.0, 1.0])),
-    ] {
-        doc.items.push(ProjectItem::Solid(SolidDef {
-            id,
-            name: name.into(),
-            colour,
-            width: COMP,
-            height: COMP,
-            extra: serde_json::Map::new(),
-        }));
-    }
-
-    let mut brush = lumit_core::fx::instantiate("roto_brush").expect("roto brush is a built-in");
-    brush.roto = Some(RotoBlock {
-        base_frame: Some(0),
-        strokes: vec![RotoStroke {
-            id: Uuid::now_v7(),
-            points: vec![(4.0, 32.0), (20.0, 32.0)],
-            radius: 3.0,
-            kind: RotoStrokeKind::Foreground,
-            frame: 0,
-        }],
-        prompts: Vec::new(),
+    // The layer project's own solid and brush, taken off the layer and put on
+    // a canvas instead.
+    let (layered, _, instance) = project();
+    let mut doc = (*layered).clone();
+    let (white, brush) = doc
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ProjectItem::Composition(c) => match c.layers[0].kind {
+                LayerKind::Solid { def } => Some((def, c.layers[0].effects[0].clone())),
+                _ => None,
+            },
+            _ => None,
+        })
+        .expect("the layer project holds one solid layer");
+    let (read, out) = (Uuid::now_v7(), Uuid::now_v7());
+    let wire = |from: Uuid, to: Uuid| GraphEdge {
+        from,
+        from_port: "output".into(),
+        to,
+        to_port: "input".into(),
+    };
+    let mut graph = comp_of("Graph", Vec::new());
+    graph.graph = Some(CompGraph {
+        nodes: vec![
+            GraphNode::Read {
+                id: read,
+                item: white,
+                custom_name: None,
+            },
+            GraphNode::Fx(brush),
+            GraphNode::Output { id: out },
+        ],
+        edges: vec![wire(read, instance), wire(instance, out)],
+        layout: Vec::new(),
+        exposed: Vec::new(),
+        groups: Vec::new(),
     });
-    let instance = brush.id;
-    let mut source = layer("the matte", LayerKind::Solid { def: white });
-    source.effects = vec![brush];
-    let source_id = source.id;
-
-    let mut set_matte = lumit_core::fx::instantiate("set_matte").expect("a built-in");
-    // The alpha, not the luminance: a cut white solid is white where it is
-    // kept and *nothing at all* where it is not, so only the alpha tells the
-    // two apart.
-    for p in &mut set_matte.params {
-        match p.id.as_str() {
-            "matte" => {
-                p.value = lumit_core::model::EffectValue::Layer(Some(source_id));
-            }
-            "channel" => p.value = lumit_core::model::EffectValue::Choice(1),
-            _ => {}
-        }
-    }
-    assert_eq!(set_matte.layer_ref("matte"), Some(source_id));
-    let mut consumer = layer("the consumer", LayerKind::Solid { def: red });
-    consumer.effects = vec![set_matte];
-
-    let comp = comp_of("Comp", vec![consumer, source]);
-    let comp_id = comp.id;
-    doc.items.push(ProjectItem::Composition(comp));
+    let comp = graph.id;
+    doc.items.push(ProjectItem::Composition(graph));
     let doc = Arc::new(doc);
 
+    let (before, w, _) = r.render_rgba(&doc, comp, 0, 1.0).expect("the plain render");
+    assert_eq!(
+        px(&before, w, CUT)[0],
+        255,
+        "with nothing propagated the brush box changes no pixel"
+    );
+
     let run =
-        lumit_render::roto::run_from_planes(COMP, COMP, 60.0, 1, &[(0, [3u8; 32], half_matte())])
+        lumit_render::roto::run_from_planes(COMP, COMP, 60.0, 1, &[(0, [1u8; 32], half_matte())])
             .expect("a run");
     lumit_render::roto::publish(instance, run);
-
-    let (cut, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("the render");
+    let (cut, w, _) = r
+        .render_rgba(&doc, comp, 0, 1.0)
+        .expect("the matted render");
     assert_eq!(
-        px(&cut, w, KEPT),
-        [255, 0, 0, 255],
-        "where the source's matte is solid the consumer is kept"
+        px(&cut, w, KEPT)[0],
+        255,
+        "where the matte is solid the picture is untouched"
     );
-    // Cut away, and the source layer behind it is cut away there too, so the
-    // comp's own background shows. Red here would mean the consumer was kept
-    // on both sides.
     assert_eq!(
         px(&cut, w, CUT),
         [0, 0, 0, 255],
-        "the consumer is still red on the right, so the referenced layer's \
-         own matte did not reach its stack"
+        "where the matte is empty the picture is cut away"
     );
-
     lumit_render::roto::clear();
 }

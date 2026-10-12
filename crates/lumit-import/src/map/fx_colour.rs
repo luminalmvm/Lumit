@@ -540,8 +540,8 @@ pub(super) fn map_values(p: LumProperty, f: impl Fn(f64) -> f64) -> (LumProperty
 
 /// "Gaussian Blur" → **Gaussian blur** (docs/08 §3.8). One control carries the
 /// look — AE's pixels are Lumit's px@comp, so the number is the same — and
-/// both of the others are switches Lumit's Gaussian does not have: it always
-/// blurs on both axes, and its edge policy is fixed at Repeat.
+/// Repeat Edge Pixels is the same switch on both sides. Blur Dimensions has
+/// nowhere to go: Lumit's Gaussian always blurs on both axes.
 fn gaussian_blur(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -550,13 +550,15 @@ fn gaussian_blur(
 ) -> Option<EffectInstance> {
     let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Gaussian Blur 2-0001", "radius", 1.0, 0.0);
-    fx.drop_params(conv, &["Blur Dimensions", "Repeat Edge Pixels"]);
+    fx.toggle(conv, "ADBE Gaussian Blur 2-0003", "repeat_edge_pixels");
+    fx.drop_params(conv, &["Blur Dimensions"]);
     fx.done()
 }
 
 /// "Directional Blur" → **Directional blur** (docs/08 §3.9). Both controls
 /// carry unchanged: the angle is degrees from straight up clockwise on both
-/// sides, and the length is pixels on both (px@comp in Lumit).
+/// sides, and the length is pixels on both (px@comp in Lumit). AE's streak
+/// always runs past the layer's edge, so Repeat edge pixels comes in off.
 fn directional_blur(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -566,6 +568,7 @@ fn directional_blur(
     let mut fx = Fx::new(path, node, row)?;
     fx.float(conv, "ADBE Motion Blur-0001", "angle", 1.0, 0.0);
     fx.float(conv, "ADBE Motion Blur-0002", "length", 1.0, 0.0);
+    fx.set("repeat_edge_pixels", EffectValue::Bool(false));
     fx.done()
 }
 
@@ -681,6 +684,8 @@ fn glow(
     }
     fx.float(conv, "ADBE Glo2-0003", "radius", 1.0, 0.0);
     fx.float(conv, "ADBE Glo2-0004", "intensity", 1.0, 0.0);
+    // AE's halo always spreads past the layer's edge.
+    fx.set("repeat_edge_pixels", EffectValue::Bool(false));
     fx.differs(
         conv,
         "its halo is built from scene-linear light rather than from an eight-bit copy of the \

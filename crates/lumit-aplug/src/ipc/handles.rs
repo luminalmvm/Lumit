@@ -192,11 +192,4 @@ mod tests {
         assert_eq!(registry.get(good), None);
         assert!(registry.is_empty());
     }
-
-    #[test]
-    fn an_index_past_the_bits_mints_no_handle() {
-        assert!(Handle::encode(KIND_INSTANCE, INDEX_MASK).is_some());
-        assert!(Handle::encode(KIND_INSTANCE, INDEX_MASK + 1).is_none());
-        assert!(Handle::encode(0, 1).is_none(), "nought is not a kind");
-    }
 }

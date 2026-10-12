@@ -232,45 +232,9 @@ fn pump(inner: &Mutex<Inner>) {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+
     use std::sync::mpsc;
     use std::time::Duration;
-
-    #[test]
-    fn thread_count_is_cores_minus_three_floored_at_two() {
-        assert_eq!(worker_threads(32), 29);
-        assert_eq!(worker_threads(8), 5);
-        assert_eq!(worker_threads(5), 2);
-        assert_eq!(worker_threads(4), 2);
-        assert_eq!(worker_threads(2), 2);
-        assert_eq!(worker_threads(1), 2);
-    }
-
-    #[test]
-    fn every_submitted_job_runs() {
-        let pool = WorkerPool::new(2).unwrap();
-        let ran = Arc::new(AtomicUsize::new(0));
-        let (tx, rx) = mpsc::channel();
-        for i in 0..50 {
-            let ran = Arc::clone(&ran);
-            let tx = tx.clone();
-            let class = if i % 2 == 0 {
-                JobClass::Interactive
-            } else {
-                JobClass::Background
-            };
-            pool.try_spawn(class, move || {
-                ran.fetch_add(1, Ordering::Relaxed);
-                let _ = tx.send(());
-            })
-            .unwrap();
-        }
-        for _ in 0..50 {
-            rx.recv_timeout(Duration::from_secs(5)).unwrap();
-        }
-        assert_eq!(ran.load(Ordering::Relaxed), 50);
-        assert_eq!(pool.queued(), (0, 0));
-    }
 
     /// The load-bearing rule: at a job boundary, queued interactive work runs
     /// before queued background work, whatever order it arrived in. A

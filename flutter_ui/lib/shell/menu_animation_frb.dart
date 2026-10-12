@@ -26,8 +26,10 @@ import '../l10n/strings.dart';
 import '../panels/graph_channels.dart';
 import '../panels/graph_edits.dart';
 import '../panels/graph_maths.dart';
-import '../panels/layer_fold_frb.dart' show asOneUndoStep;
+import '../panels/layer_fold_frb.dart'
+    show asOneUndoStep, transformGroupPath;
 import '../panels/text_animator_rows_frb.dart' show addTextAnimator;
+import '../panels/transform_rows_frb.dart' show transformGroups;
 import '../state/file_dialogs.dart';
 import 'expression_dialog_frb.dart';
 import 'keyframe_dialogs_frb.dart';
@@ -145,31 +147,117 @@ BridgeKeyframe _keyWith(
       interpOut: outSide ?? key.interpOut,
     );
 
-/// Animation ▸ Set keyframe: plant one at the playhead on every picked row.
+/// The channels of [channels] a number key can go on. A mask's shape holds a
+/// whole path, which its own row keys, an expression works its value out, and
+/// a locked layer takes no edits.
+List<GraphChannel> _keyable(List<GraphChannel> channels) => [
+      for (final channel in channels)
+        if (!channel.isMaskPath &&
+            channel.scalar is! BridgeScalar_Expression &&
+            !channel.entry.info.switches.locked)
+          channel,
+    ];
+
+/// Whether every one of [channels] already has a key on the playhead, which is
+/// when the keyframe command takes them away instead of adding any.
+bool _allKeyedAtPlayhead(LumitUiState ui, List<GraphChannel> channels) {
+  final fps = ui.model.fps;
+  final frame = ui.playheadFrame.value;
+  return channels.isNotEmpty &&
+      channels.every((channel) =>
+          channel.keys.any((key) => keyFrame(key, fps).round() == frame));
+}
+
+/// Add a key at the playhead on every one of [channels], each holding what its
+/// property already reads there, so the picture does not move. When they all
+/// have one there already, those keys go instead.
 ///
-/// A row with nothing keyed is left alone — turning a static property into an
-/// animated one is the stopwatch's job (there is no auto-key, and the
-/// stopwatch is the whole model) — and so is a row that already has a key
-/// there, because two keys at one time is not a curve the engine will take.
+/// The diamond on a property row does the same to its own row. A property with
+/// nothing keyed starts animating, as it would from its stopwatch, and one that
+/// loses its last key keeps the value that key held. One undo step however
+/// many layers it reaches. Returns whether anything was written.
+bool toggleKeysAtPlayhead(
+    LumitState app, LumitUiState ui, List<GraphChannel> channels) {
+  final keyable = _keyable(channels);
+  if (keyable.isEmpty) return false;
+  final fps = ui.model.fps;
+  final (fpsNum, fpsDen) = ui.model.fpsExact;
+  final frame = ui.playheadFrame.value;
+  final seconds = frame / (fps <= 0 ? 1 : fps);
+  bool here(BridgeKeyframe key) => keyFrame(key, fps).round() == frame;
+
+  final removing = _allKeyedAtPlayhead(ui, keyable);
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in keyable) {
+    final keys = channel.keys;
+    if (removing) {
+      final rest = [
+        for (final key in keys)
+          if (!here(key)) key,
+      ];
+      // A Retime is a curve or nothing, so its last key stays.
+      if (rest.isEmpty && channel.retime) continue;
+      edits[channel] = rest.isEmpty
+          ? BridgeScalar.static_(evaluateKeys(keys, seconds))
+          : BridgeScalar.keyframed(rest);
+    } else if (!keys.any(here)) {
+      edits[channel] = BridgeScalar.keyframed(withKeyAt(
+        keys,
+        frame.toDouble(),
+        evaluateScalar(channel.scalar, seconds),
+        fps,
+        fpsNum,
+        fpsDen,
+      ));
+    }
+  }
+  if (edits.isEmpty) return false;
+  asOneUndoStep(app.project, () => commitChannelEdits(edits));
+  app.notifyDocumentChanged();
+  return true;
+}
+
+/// Animation ▸ Set keyframe: a key at the playhead on every picked row, or the
+/// ones already there taken away, which is when the row says so.
 MenuEntry setKeyframeRow(LumitState app, LumitUiState ui) {
-  final channels = selectedChannels(ui);
+  final channels = _keyable(selectedChannels(ui));
   return MenuEntry(
-    l10n.menuSetKeyframe,
-    channels.isEmpty
-        ? null
-        : () {
-            final (fpsNum, fpsDen) = ui.model.fpsExact;
-            if (plantKeyOnChannels(
-              channels: channels,
-              frame: ui.playheadFrame.value.toDouble(),
-              fps: ui.model.fps,
-              fpsNum: fpsNum,
-              fpsDen: fpsDen,
-            )) {
-              app.notifyDocumentChanged();
-            }
-          },
+    _allKeyedAtPlayhead(ui, channels)
+        ? l10n.tipRemoveKeyframe
+        : l10n.menuSetKeyframe,
+    channels.isEmpty ? null : () => toggleKeysAtPlayhead(app, ui, channels),
+    action: 'keyframe.toggle',
   );
+}
+
+/// The keyframe command for one Transform property of the selected layers:
+/// [property] is `position`, `scale`, `rotation`, `opacity` or `anchor`, the
+/// names the reveal keys use. The rows it keyed are opened in the Timeline, as
+/// After Effects' own Alt+Shift chords do. Returns whether it wrote anything.
+bool toggleTransformKeys(LumitState app, LumitUiState ui, String property) {
+  final ids = ui.selectedLayerIds;
+  final paths = <String>[];
+  for (final entry in ui.model.layers) {
+    if (!ids.contains(entry.layer.internallayerId)) continue;
+    for (final group in transformGroups(
+      threeD: entry.info.switches.threeD,
+      modes: entry.info.axisModes,
+      kind: entry.info.kind,
+      twoNode: entry.info.camera?.twoNode ?? false,
+    )) {
+      if (group.cameraOption) continue;
+      if (!group.axes.first.prop.name.startsWith(property)) continue;
+      paths.add(
+          transformGroupPath(entry.layer.internallayerId.toString(), group));
+    }
+  }
+  final channels = graphChannels(layers: ui.model.layers, selected: paths);
+  if (!toggleKeysAtPlayhead(app, ui, channels)) return false;
+  for (final channel in channels) {
+    ui.requestRevealProperty(
+        channel.entry.layer.internallayerId, 'reveal.$property');
+  }
+  return true;
 }
 
 /// Animation ▸ Toggle hold keyframe: the key under the playhead holds its
@@ -196,6 +284,7 @@ MenuEntry toggleHoldRow(LumitState app, LumitUiState ui) {
               app.notifyDocumentChanged();
             }
           },
+    action: 'keyframe.hold.toggle',
     checked: at != null && at.keys[at.index].interpOut is BridgeSideInterp_Hold,
   );
 }
@@ -228,6 +317,7 @@ MenuEntry keyframeInterpolationRow(
               app.notifyDocumentChanged();
             }
           },
+    action: 'keyframe.interpolation',
   );
 }
 
@@ -257,6 +347,7 @@ MenuEntry keyframeSpeedRow(
               app.notifyDocumentChanged();
             }
           },
+    action: 'keyframe.speed',
   );
 }
 
@@ -273,8 +364,9 @@ MenuEntry animateTextRow(LumitState app, LumitUiState ui) => MenuEntry(
       ),
     );
 
-/// Animation ▸ Add expression: a Rhai expression on every picked property row,
-/// replacing whatever it held.
+/// Animation ▸ Add expression: an expression on every picked property row,
+/// replacing whatever it held. It opens in the language the first row's
+/// expression is in, or the one Settings names for a new expression.
 MenuEntry addExpressionRow(
     BuildContext context, LumitState app, LumitUiState ui) {
   final channels = [
@@ -290,17 +382,21 @@ MenuEntry addExpressionRow(
             final asked = await showExpressionDialogFrb(
               context: context,
               initial: was is BridgeScalar_Expression ? was.field0 : '',
+              language: was is BridgeScalar_Expression
+                  ? was.field1
+                  : ui.workspace.defaultExpressionLanguage,
             );
             // Blank changes nothing. Taking an expression *off* a property is
             // the row's own control (docs/07 §4.3, still owed), not a menu row
             // that would have to invent a value to put back.
-            if (asked == null || asked.trim().isEmpty) return;
+            if (asked == null || asked.text.trim().isEmpty) return;
             commitChannelEdits({
               for (final channel in channels)
-                channel: BridgeScalar.expression(asked),
+                channel: BridgeScalar.expression(asked.text, asked.language),
             });
             app.notifyDocumentChanged();
           },
+    action: 'expression.add',
   );
 }
 
@@ -377,8 +473,8 @@ MenuEntry saveAnimationPresetRow(LumitUiState ui) {
   );
 }
 
-/// Animation ▸ Apply animation preset: a saved `.lumfx` onto the primary
-/// layer only, as one undo step.
+/// Animation ▸ Apply animation preset: a saved `.lumfx`, or an After Effects
+/// `.ffx`, onto the primary layer only, as one undo step.
 ///
 /// A file that is not a preset at all is a normal thing for a picker to hand
 /// back rather than something to shout about.
@@ -393,7 +489,7 @@ MenuEntry applyAnimationPresetRow(LumitState app, LumitUiState ui) {
             if (path == null) return;
             final String text;
             try {
-              text = File(path).readAsStringSync();
+              text = await readEffectPreset(path: path);
             } catch (_) {
               return;
             }

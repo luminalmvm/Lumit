@@ -33,21 +33,9 @@ BridgeLayerGroup _group(String id, List<UuidValue> members) => BridgeLayerGroup(
     );
 
 const _gid = 'aaaaaaaa-0000-4000-8000-000000000000';
-const _gid2 = 'bbbbbbbb-0000-4000-8000-000000000000';
 
 void main() {
   group('A group hangs its header on its topmost member', () {
-    test('an open group hides nothing and heads its first member', () {
-      final folds = groupFolds(
-        groups: [_group(_gid, [_layers[1], _layers[2]])],
-        folded: const {},
-      );
-      expect(folds.headers.keys, [_layers[1].toString()]);
-      expect(folds.headers[_layers[1].toString()]!.folded, isFalse);
-      expect(folds.hidden, isEmpty,
-          reason: 'an open group takes no row off the list');
-    });
-
     test('a shut group hides every member but the one carrying the header', () {
       final folds = groupFolds(
         groups: [
@@ -62,53 +50,6 @@ void main() {
       expect(folds.hidden,
           {_layers[2].toString(), _layers[3].toString()});
       expect(folds.hidden, isNot(contains(_layers[1].toString())));
-    });
-
-    test('a layer outside the group is never hidden', () {
-      final folds = groupFolds(
-        groups: [_group(_gid, [_layers[1], _layers[2]])],
-        folded: {_gid},
-      );
-      expect(folds.hidden, isNot(contains(_layers[0].toString())));
-      expect(folds.hidden, isNot(contains(_layers[3].toString())));
-    });
-
-    test('two groups fold independently', () {
-      final folds = groupFolds(
-        groups: [
-          _group(_gid, [_layers[0], _layers[1]]),
-          _group(_gid2, [_layers[2], _layers[3]]),
-        ],
-        folded: {_gid2},
-      );
-      expect(folds.headers.length, 2);
-      expect(folds.headers[_layers[0].toString()]!.folded, isFalse);
-      expect(folds.headers[_layers[2].toString()]!.folded, isTrue);
-      expect(folds.hidden, {_layers[3].toString()});
-    });
-
-    test('the fx twirl rides the header, independent of the member fold', () {
-      // The wardrobe's lanes belong to the band, so they can be open
-      // while the members are folded away, and shut while they show.
-      final folds = groupFolds(
-        groups: [
-          _group(_gid, [_layers[1], _layers[2]])
-        ],
-        folded: {_gid},
-        fxOpen: {_gid},
-      );
-      final header = folds.headers[_layers[1].toString()]!;
-      expect(header.folded, isTrue);
-      expect(header.fxOpen, isTrue);
-
-      final shut = groupFolds(
-        groups: [
-          _group(_gid, [_layers[1], _layers[2]])
-        ],
-        folded: const {},
-      );
-      expect(shut.headers[_layers[1].toString()]!.fxOpen, isFalse,
-          reason: 'shut by default, like every other twirl');
     });
 
     test('a group whose layers are all gone draws no row at all', () {

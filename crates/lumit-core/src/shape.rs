@@ -159,6 +159,27 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_zero"
     )]
     pub gradient_end_y: Property,
+    /// How opaque each end of the ramp is, per cent, with everything between
+    /// fading evenly from one to the other. Colour and opacity ramp separately
+    /// as After Effects does, so a red fading into a clear blue is a half-clear
+    /// purple half way along.
+    #[serde(
+        default = "crate::paint::full",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub gradient_start_opacity: Property,
+    #[serde(
+        default = "crate::paint::full",
+        with = "crate::mask::still_or_keyed",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub gradient_end_opacity: Property,
+    /// The colours the ramp passes through between its two ends, in any
+    /// order, as a stop that animates can pass another. Empty is the plain
+    /// two-colour ramp, and is absent from the file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gradient_stops: Vec<GradientStop>,
     /// **A morphing path**: the shapes this item's path is keyed to,
     /// in the layer's own time. Empty is the still [`path`](Self::path) above,
     /// which is what every shape is until somebody keys its shape, and is
@@ -284,6 +305,24 @@ fn full_opacity() -> f64 {
     100.0
 }
 
+/// A colour part way along a gradient, between the fill at its start and the
+/// gradient colour at its end.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GradientStop {
+    /// How far along the ramp it sits, per cent. Two stops at one place make
+    /// a hard edge.
+    #[serde(with = "crate::mask::still_or_keyed")]
+    pub position: Property,
+    pub colour: LinearColour,
+    /// 0..100, like the two ends.
+    #[serde(default = "crate::paint::full", with = "crate::mask::still_or_keyed")]
+    pub opacity: Property,
+}
+
+/// The most stops a gradient carries between its two ends. Past what a ramp
+/// needs, and it keeps a wild number out of the document.
+pub const MAX_GRADIENT_STOPS: usize = 16;
+
 /// serde default for [`ShapeItem::repeat_copies`]: one copy, which is no
 /// repeater at all.
 fn one() -> Property {
@@ -335,6 +374,9 @@ impl ShapeItem {
             gradient_start_y: Property::zero(),
             gradient_end_x: Property::zero(),
             gradient_end_y: Property::zero(),
+            gradient_start_opacity: crate::paint::full(),
+            gradient_end_opacity: crate::paint::full(),
+            gradient_stops: Vec::new(),
             path_keys: Vec::new(),
             combine: 0,
             offset_amount: Property::zero(),
@@ -461,14 +503,52 @@ impl ShapeItem {
         // reading degenerate at exactly the same point — the Gradient effect's
         // rule, and for the same reason.
         let len2 = (axis.0 * axis.0 + axis.1 * axis.1).max(1e-6);
+        // Each end's opacity goes into its colour's alpha, so the table fades
+        // as it mixes.
+        let faded = |p: &Property| (p.value_at(t).clamp(0.0, 100.0) / 100.0) as f32;
+        let from_alpha = from.0[3] * faded(&self.gradient_start_opacity);
+        let to_alpha = to.0[3] * faded(&self.gradient_end_opacity);
+        // The ramp's colours in order: the fill, the stops between, then the
+        // gradient colour.
+        let mut between: Vec<(f64, &GradientStop)> = self
+            .gradient_stops
+            .iter()
+            .take(MAX_GRADIENT_STOPS)
+            .map(|s| (s.position.value_at(t), s))
+            .filter(|(at, _)| at.is_finite())
+            .collect();
+        between.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut points = Vec::with_capacity(between.len() + 2);
+        points.push((0.0f32, [from.0[0], from.0[1], from.0[2], from_alpha]));
+        for (at, stop) in between {
+            let c = stop.colour.0;
+            let alpha = c[3] * faded(&stop.opacity);
+            let at = (at.clamp(0.0, 100.0) / 100.0) as f32;
+            points.push((at, [c[0], c[1], c[2], alpha]));
+        }
+        points.push((1.0, [to.0[0], to.0[1], to.0[2], to_alpha]));
         let mut lut = [[0u8; 4]; RAMP_STEPS];
+        let mut piece = 0;
         for (i, cell) in lut.iter_mut().enumerate() {
             let u = i as f32 / (RAMP_STEPS - 1) as f32;
+            // The piece of the ramp this step falls in. Stepping past a stop
+            // as soon as it is reached is what makes two at one place an edge.
+            while piece + 2 < points.len() && u >= points[piece + 1].0 {
+                piece += 1;
+            }
+            let (a_at, a) = points[piece];
+            let (b_at, b) = points[piece + 1];
+            let span = b_at - a_at;
+            let v = if span > 0.0 {
+                ((u - a_at) / span).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
             let mix = crate::model::LinearColour([
-                from.0[0] + (to.0[0] - from.0[0]) * u,
-                from.0[1] + (to.0[1] - from.0[1]) * u,
-                from.0[2] + (to.0[2] - from.0[2]) * u,
-                from.0[3] + (to.0[3] - from.0[3]) * u,
+                a[0] + (b[0] - a[0]) * v,
+                a[1] + (b[1] - a[1]) * v,
+                a[2] + (b[2] - a[2]) * v,
+                a[3] + (b[3] - a[3]) * v,
             ]);
             *cell = crate::pixels::solid_rgba(mix);
         }
@@ -646,6 +726,41 @@ pub fn contents_bounds(contents: &[ShapeItem], t: f64) -> Option<(f64, f64, f64,
     out
 }
 
+/// The outlines a layer's art draws at `t`, as one run for an effect to walk
+/// in the pixels of the layer's own picture: every line the picture strokes,
+/// in list order, once a combine, an offset, a trim and the dashes have had
+/// it, with each copy its repeater draws. An item with no paint is followed
+/// too, which is how a guide path for points is drawn.
+///
+/// A line's vertices are its two ends and the item's own vertices that fall on
+/// it. An offset or a combine leaves no telling which those were, so there a
+/// vertex is wherever the line turns, and a curve has one at every joint.
+#[must_use]
+pub fn outline_at(contents: &[ShapeItem], t: f64) -> crate::mask::MaskPolyline {
+    let mut out = crate::mask::MaskPolyline::default();
+    // The picture's corner is the corner of the art's box.
+    let Some((x0, y0, ..)) = contents_bounds(contents, t) else {
+        return out;
+    };
+    let to_box = Affine::translation(-x0, -y0);
+    for run in runs(contents) {
+        let Some(art) = Art::at(contents, run, t) else {
+            continue;
+        };
+        for (copy, _) in art.item.copies_at(t) {
+            let place = copy.then(&to_box);
+            let own = art.own(&place, t);
+            for line in art.stroked(&art.placed(&place), copy.scale(), t) {
+                if out.points.len() >= crate::fx::points::CAP_HARD as usize {
+                    return out;
+                }
+                out.append(&walked(line, own.as_deref()));
+            }
+        }
+    }
+    out
+}
+
 /// The layer's contents split into the pieces that draw as **one**.
 ///
 /// An item whose [`combine`](ShapeItem::combine) is 0 starts a run of its own;
@@ -730,6 +845,191 @@ fn combined_at(run: &[ShapeItem], t: f64) -> Vec<Vec<(f64, f64)>> {
         .collect()
 }
 
+/// One run of a layer's contents as it is drawn at `t`, before the repeater
+/// places it. The picture and an effect walking the outline both start here,
+/// so a combine, an offset and a trim mean the same thing to each.
+struct Art<'a> {
+    /// The run's first item, whose paint and modifiers the whole run takes.
+    item: &'a ShapeItem,
+    /// The item's own shape this instant, which a keyed path moves.
+    drawn: std::borrow::Cow<'a, BezierPath>,
+    /// What a combine, an offset or a trim made of it. `None` is "nothing
+    /// has changed it", which draws the bezier itself.
+    lines: Option<Vec<Vec<(f64, f64)>>>,
+    /// A combined run, whose contours close on themselves.
+    ring: bool,
+}
+
+impl<'a> Art<'a> {
+    /// The art of `run`, or `None` when none is left to draw: trimmed away
+    /// to nothing (the first frame of a write-on), or a combine that left no
+    /// art at all.
+    fn at(contents: &'a [ShapeItem], run: std::ops::Range<usize>, t: f64) -> Option<Self> {
+        let members = contents.get(run)?;
+        let item = members.first()?;
+        let ring = members.len() > 1;
+        let lines: Option<Vec<Vec<(f64, f64)>>> = if ring {
+            Some(
+                combined_at(members, t)
+                    .into_iter()
+                    .map(|c| item.shaped(c, true, t))
+                    .collect(),
+            )
+        } else {
+            item.trimmed_at(t).map(|p| vec![p])
+        };
+        let lines = match lines {
+            Some(lines) => {
+                let lines: Vec<_> = lines.into_iter().filter(|p| p.len() >= 2).collect();
+                if lines.is_empty() {
+                    return None;
+                }
+                Some(lines)
+            }
+            None => None,
+        };
+        Some(Self {
+            item,
+            drawn: item.path_at(t),
+            lines,
+            ring,
+        })
+    }
+
+    /// The paths one copy draws, placed by `to_box`.
+    fn placed(&self, to_box: &Affine) -> Vec<BezierPath> {
+        // A boolean's contours close on themselves; a trimmed piece has two
+        // ends whatever the path it was cut from had.
+        let closed = self.ring || self.drawn.closed;
+        match &self.lines {
+            // A trimmed piece or a boolean's contour is a polyline, and a
+            // polyline is a bezier whose handles are all zero — one path
+            // type, still. Closed so the fill has something to
+            // fill: a half-trimmed circle fills as a half circle, exactly
+            // as AE draws it.
+            Some(lines) => lines
+                .iter()
+                .map(|points| {
+                    polyline_path(
+                        &points.iter().map(|&p| to_box.apply(p)).collect::<Vec<_>>(),
+                        closed,
+                    )
+                })
+                .collect(),
+            None => vec![transform_path(&self.drawn, to_box)],
+        }
+    }
+
+    /// The lines the outline's brush runs along for one copy's `placed`
+    /// paths, cut into their dashes. `scale` is how much bigger the copy
+    /// draws, which its dashes grow with.
+    fn stroked(&self, placed: &[BezierPath], scale: f64, t: f64) -> Vec<Vec<(f64, f64)>> {
+        let item = self.item;
+        // Dashes cut the outline into pieces, each of which is a brush run
+        // of its own. A solid outline is one piece, which is the
+        // same single run it always was. An item with no outline has no
+        // dashes to cut it.
+        let pattern: Vec<f64> = if item.stroke.is_some() && item.stroke_width > 0.0 {
+            item.dash_pattern_at(t).iter().map(|d| d * scale).collect()
+        } else {
+            Vec::new()
+        };
+        placed
+            .iter()
+            .flat_map(|path| {
+                let mut points: Vec<(f64, f64)> = match &self.lines {
+                    Some(_) => path.vertices.iter().map(|v| v.pos).collect(),
+                    None => flatten_path(path),
+                };
+                if let (true, Some(&first)) = (self.ring, points.first()) {
+                    points.push(first);
+                }
+                if pattern.is_empty() {
+                    vec![points]
+                } else {
+                    dashed(&points, &pattern, item.dash_offset.value_at(t) * scale)
+                }
+            })
+            .collect()
+    }
+
+    /// The item's own vertices where `to_box` places them, sorted by x, while
+    /// the outline still runs through them. An offset moves it off them and a
+    /// combine cuts it elsewhere, and then there are none to name.
+    fn own(&self, to_box: &Affine, t: f64) -> Option<Vec<(f64, f64)>> {
+        if self.ring || self.item.offset_amount.value_at(t) != 0.0 {
+            return None;
+        }
+        let mut own: Vec<(f64, f64)> = self
+            .drawn
+            .vertices
+            .iter()
+            .map(|v| to_box.apply(v.pos))
+            .collect();
+        own.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        Some(own)
+    }
+}
+
+/// One stroked line as a path for an effect to walk: closed where it comes
+/// back to its start, with a vertex at each end and at each of `own`, the
+/// item's own vertices. With no `own` to go by a vertex is wherever the line
+/// turns. The joints along a straight run are never vertices.
+fn walked(mut points: Vec<(f64, f64)>, own: Option<&[(f64, f64)]>) -> crate::mask::MaskPolyline {
+    points.dedup();
+    if points.len() < 2 {
+        return crate::mask::MaskPolyline::default();
+    }
+    let closed = points.len() > 2 && points.first() == points.last();
+    // A closed line ends on its first point again, which is no second vertex.
+    let n = points.len() - usize::from(closed);
+    let at = |j: usize| points.get(j % n).copied().unwrap_or_default();
+    let corners = (0..n)
+        .filter(|&i| {
+            if !closed && (i == 0 || i + 1 == n) {
+                return true;
+            }
+            let b = at(i);
+            match own {
+                // Cutting a line moves a point by a rounding error, so near
+                // enough is the same place.
+                Some(own) => {
+                    const NEAR: f64 = 1e-6;
+                    let from = own.partition_point(|v| v.0 < b.0 - NEAR);
+                    own.iter()
+                        .skip(from)
+                        .take_while(|v| v.0 <= b.0 + NEAR)
+                        .any(|v| (v.1 - b.1).abs() <= NEAR)
+                }
+                None => {
+                    let (a, c) = (at(i + n - 1), at(i + 1));
+                    let (u, v) = ((b.0 - a.0, b.1 - a.1), (c.0 - b.0, c.1 - b.1));
+                    // The sine of the turn, with a doubling back counted too.
+                    let straight = u.0.hypot(u.1) * v.0.hypot(v.1) * 1e-3;
+                    (u.0 * v.1 - u.1 * v.0).abs() > straight || u.0 * v.0 + u.1 * v.1 < 0.0
+                }
+            }
+        })
+        .collect();
+    let points: Vec<[f32; 2]> = points.iter().map(|p| [p.0 as f32, p.1 as f32]).collect();
+    let mut arc = Vec::with_capacity(points.len());
+    let mut far = 0.0f32;
+    arc.push(far);
+    for pair in points.windows(2) {
+        if let [a, b] = pair {
+            far += (b[0] - a[0]).hypot(b[1] - a[1]);
+        }
+        arc.push(far);
+    }
+    crate::mask::MaskPolyline {
+        points,
+        arc,
+        closed,
+        corners,
+        ..Default::default()
+    }
+}
+
 /// Draw `contents` into a fresh `w`×`h` RGBA buffer whose extent is the box
 /// `(min_x, min_y)`–`(max_x, max_y)` in layer coordinates.
 ///
@@ -767,7 +1067,6 @@ pub fn rasterise_contents(
         // A combined run is drawn once, with the paint and the modifiers of the
         // **first** item in it; the ones after it lend their path and
         // nothing else. A run of one is every shape nobody has combined.
-        let ring = run.len() > 1;
         let Some(item) = contents.get(run.start) else {
             continue;
         };
@@ -775,34 +1074,8 @@ pub fn rasterise_contents(
         if opacity <= 0.0 {
             continue;
         }
-        // The art at this instant, once the combine and the modifiers have had
-        // it. `None` is "nothing has changed it", which draws the bezier itself.
-        let lines: Option<Vec<Vec<(f64, f64)>>> = if ring {
-            Some(
-                combined_at(&contents[run.clone()], t)
-                    .into_iter()
-                    .map(|c| item.shaped(c, true, t))
-                    .collect(),
-            )
-        } else {
-            item.trimmed_at(t).map(|p| vec![p])
-        };
-        // The shape this instant, which a keyed path moves.
-        let drawn = item.path_at(t);
-        // A boolean's contours close on themselves; a trimmed piece has two
-        // ends whatever the path it was cut from had.
-        let closed = ring || drawn.closed;
-        let lines = match lines {
-            Some(lines) => {
-                let lines: Vec<_> = lines.into_iter().filter(|p| p.len() >= 2).collect();
-                if lines.is_empty() {
-                    // Trimmed away to nothing (the first frame of a write-on),
-                    // or a combine that left no art at all.
-                    continue;
-                }
-                Some(lines)
-            }
-            None => None,
+        let Some(art) = Art::at(contents, run, t) else {
+            continue;
         };
 
         // The copies the repeater asks for, drawn **last first** so the
@@ -820,23 +1093,7 @@ pub fn rasterise_contents(
             // placed. An item nobody has repeated is placed by the identity, so
             // this is exactly the subtraction it has always been.
             let to_box = copy.then(&Affine::translation(-min_x, -min_y));
-            let placed: Vec<BezierPath> = match &lines {
-                // A trimmed piece or a boolean's contour is a polyline, and a
-                // polyline is a bezier whose handles are all zero — one path
-                // type, still. Closed so the fill has something to
-                // fill: a half-trimmed circle fills as a half circle, exactly
-                // as AE draws it.
-                Some(lines) => lines
-                    .iter()
-                    .map(|points| {
-                        polyline_path(
-                            &points.iter().map(|&p| to_box.apply(p)).collect::<Vec<_>>(),
-                            closed,
-                        )
-                    })
-                    .collect(),
-                None => vec![transform_path(&drawn, &to_box)],
-            };
+            let placed = art.placed(&to_box);
 
             if let Some(fill) = item.fill {
                 // All the contours at once, so a boolean's hole is a hole: the
@@ -883,28 +1140,7 @@ pub fn rasterise_contents(
                 // A copy is a scaled **drawing**, not a scaled path: its outline
                 // and its dashes grow with it, or a copy at half size would be a
                 // shape with an outline twice as heavy.
-                let scale = copy.scale();
-                // Dashes cut the outline into pieces, each of which is a brush run
-                // of its own. A solid outline is one piece, which is the
-                // same single run it always was.
-                let pattern: Vec<f64> = item.dash_pattern_at(t).iter().map(|d| d * scale).collect();
-                let pieces: Vec<Vec<(f64, f64)>> = placed
-                    .iter()
-                    .flat_map(|path| {
-                        let mut points: Vec<(f64, f64)> = match &lines {
-                            Some(_) => path.vertices.iter().map(|v| v.pos).collect(),
-                            None => flatten_path(path),
-                        };
-                        if let (true, Some(&first)) = (ring, points.first()) {
-                            points.push(first);
-                        }
-                        if pattern.is_empty() {
-                            vec![points]
-                        } else {
-                            dashed(&points, &pattern, item.dash_offset.value_at(t) * scale)
-                        }
-                    })
-                    .collect();
+                let pieces = art.stroked(&placed, copy.scale(), t);
                 let brushes: Vec<crate::paint::PaintStroke> = pieces
                     .into_iter()
                     .filter(|p| p.len() >= 2)
@@ -916,7 +1152,7 @@ pub fn rasterise_contents(
                         // behind it and its width is the item's own.
                         pressures: Vec::new(),
                         colour: stroke,
-                        width: item.stroke_width * scale,
+                        width: item.stroke_width * copy.scale(),
                         // A vector outline has a hard edge; the rasteriser keeps
                         // half a pixel of falloff whatever this says, which is the
                         // anti-aliasing rather than a soft brush.
@@ -1388,27 +1624,6 @@ mod tests {
     }
 
     #[test]
-    fn a_stroke_widens_the_box_by_half_its_width() {
-        let mut it = item(square(0.0, 0.0, 10.0));
-        it.stroke = Some(LinearColour::BLACK);
-        it.stroke_width = 4.0;
-        assert_eq!(it.bounds(0.0), Some((-2.0, -2.0, 12.0, 12.0)));
-    }
-
-    #[test]
-    fn the_box_holds_the_whole_curve_not_just_its_ends() {
-        // One vertex with a long handle: the control point is outside the
-        // straight line between the vertices, and the box has to hold it.
-        let mut path = square(0.0, 0.0, 10.0);
-        path.vertices[0].tan_out = (0.0, -20.0);
-        let bounds = item(path).bounds(0.0).expect("bounds");
-        assert!(
-            bounds.1 <= -20.0,
-            "the handle reaches above the box: {bounds:?}"
-        );
-    }
-
-    #[test]
     fn a_filled_shape_draws_its_colour_inside_and_nothing_outside() {
         let contents = vec![item(square(0.0, 0.0, 20.0))];
         // Rasterised into its own bounding box at 1:1.
@@ -1421,34 +1636,6 @@ mod tests {
         let rgba = rasterise_contents(&contents, 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
         assert_eq!(alpha_at(&rgba, 20, 7, 7), 255);
         assert_eq!(alpha_at(&rgba, 20, 18, 18), 0, "outside the art");
-    }
-
-    /// The whole reason a shape layer is vector: the same art at twice the
-    /// resolution is the same picture, twice as big.
-    #[test]
-    fn a_shape_is_drawn_at_whatever_resolution_it_is_asked_for() {
-        let contents = vec![item(square(0.0, 0.0, 10.0))];
-        let small = rasterise_contents(&contents, 10, 10, 0.0, 0.0, 10.0, 10.0, 0.0);
-        let big = rasterise_contents(&contents, 40, 40, 0.0, 0.0, 10.0, 10.0, 0.0);
-        assert_eq!(alpha_at(&small, 10, 5, 5), 255);
-        assert_eq!(alpha_at(&big, 40, 20, 20), 255);
-        assert_eq!(big.len(), small.len() * 16);
-    }
-
-    #[test]
-    fn an_outline_is_drawn_round_the_path() {
-        let mut it = item(square(4.0, 4.0, 12.0));
-        it.fill = None;
-        it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-        it.stroke_width = 3.0;
-        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
-
-        assert!(alpha_at(&rgba, 20, 4, 10) > 200, "on the left edge");
-        assert_eq!(
-            alpha_at(&rgba, 20, 10, 10),
-            0,
-            "and nothing in the middle: this item has no fill"
-        );
     }
 
     #[test]
@@ -1464,15 +1651,6 @@ mod tests {
             [0, 255, 0],
             "the stroke on the edge"
         );
-    }
-
-    #[test]
-    fn opacity_fades_the_item() {
-        let mut it = item(square(0.0, 0.0, 20.0));
-        it.opacity = 50.0;
-        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
-        let a = alpha_at(&rgba, 20, 10, 10);
-        assert!((120..=136).contains(&a), "half opaque, got {a}");
     }
 
     #[test]
@@ -1506,21 +1684,6 @@ mod tests {
             .all(|&b| b == 0));
     }
 
-    #[test]
-    fn flattening_walks_the_curve_and_closes_a_closed_path() {
-        let path = square(0.0, 0.0, 10.0);
-        let points = flatten_path(&path);
-        // Four segments, sixteen steps each, plus the first point.
-        assert_eq!(points.len(), 4 * FLATTEN_STEPS + 1);
-        assert_eq!(points.first(), points.last(), "a closed path comes home");
-
-        let open = BezierPath {
-            vertices: path.vertices.clone(),
-            closed: false,
-        };
-        assert_eq!(flatten_path(&open).len(), 3 * FLATTEN_STEPS + 1);
-    }
-
     /// Total length of a polyline, for the trim tests below.
     fn length(points: &[(f64, f64)]) -> f64 {
         points
@@ -1531,29 +1694,6 @@ mod tests {
 
     fn ink(rgba: &[u8]) -> u32 {
         rgba.chunks_exact(4).map(|p| u32::from(p[3])).sum()
-    }
-
-    /// The ink in one vertical band of the picture, for telling two copies of
-    /// the same art apart by how much of it there is.
-    fn ink_in(rgba: &[u8], w: u32, xs: std::ops::Range<u32>) -> u32 {
-        rgba.chunks_exact(4)
-            .enumerate()
-            .filter(|(i, _)| xs.contains(&(*i as u32 % w)))
-            .map(|(_, p)| u32::from(p[3]))
-            .sum()
-    }
-
-    #[test]
-    fn an_untrimmed_shape_is_drawn_from_its_curve_and_not_a_polyline_of_it() {
-        let it = item(square(0.0, 0.0, 20.0));
-        assert!(!it.trims_at(0.0));
-        assert!(it.trimmed_at(0.0).is_none(), "nothing to cut");
-
-        // The whole path asked for explicitly is still the whole path.
-        let mut whole = item(square(0.0, 0.0, 20.0));
-        whole.trim_start = Property::fixed(0.0);
-        whole.trim_end = Property::fixed(100.0);
-        assert!(whole.trimmed_at(0.0).is_none());
     }
 
     #[test]
@@ -1569,69 +1709,6 @@ mod tests {
         );
         // It starts where the path starts.
         assert_eq!(half.first().copied(), Some(it.path.vertices[0].pos));
-    }
-
-    #[test]
-    fn a_trimmed_fill_closes_the_piece_that_is_left() {
-        let mut it = item(square(0.0, 0.0, 20.0));
-        it.trim_end = Property::fixed(50.0);
-        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
-        // Half a square's perimeter, closed, is a triangle over two corners —
-        // it covers less than the whole square and more than nothing.
-        let full = rasterise_contents(
-            &[item(square(0.0, 0.0, 20.0))],
-            20,
-            20,
-            0.0,
-            0.0,
-            20.0,
-            20.0,
-            0.0,
-        );
-        assert!(ink(&rgba) > 0, "something is left");
-        assert!(ink(&rgba) < ink(&full), "and less than the whole square");
-    }
-
-    #[test]
-    fn an_end_at_or_below_the_start_draws_nothing() {
-        let mut it = item(square(0.0, 0.0, 20.0));
-        it.trim_start = Property::fixed(60.0);
-        it.trim_end = Property::fixed(40.0);
-        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
-        assert_eq!(ink(&rgba), 0, "the first frame of a write-on");
-    }
-
-    #[test]
-    fn the_offset_slides_the_piece_round_a_closed_path_without_shortening_it() {
-        let quarter = |offset: f64| {
-            let mut it = item(square(0.0, 0.0, 20.0));
-            it.trim_end = Property::fixed(25.0);
-            it.trim_offset = Property::fixed(offset);
-            it.trimmed_at(0.0).expect("a piece")
-        };
-        let (a, b) = (quarter(0.0), quarter(90.0));
-        assert!(
-            (length(&a) - length(&b)).abs() < 1e-6,
-            "the same length, slid: {} vs {}",
-            length(&a),
-            length(&b)
-        );
-        assert_ne!(a.first(), b.first(), "and it starts somewhere else");
-        // 360 degrees is once round: back where it began.
-        let round = quarter(360.0);
-        assert!((round[0].0 - a[0].0).abs() < 1e-6 && (round[0].1 - a[0].1).abs() < 1e-6);
-    }
-
-    #[test]
-    fn an_open_paths_offset_runs_the_window_off_the_end_rather_than_wrapping() {
-        let mut path = square(0.0, 0.0, 20.0);
-        path.closed = false;
-        let mut it = item(path);
-        it.trim_start = Property::fixed(0.0);
-        it.trim_end = Property::fixed(50.0);
-        it.trim_offset = Property::fixed(360.0); // a whole path's worth
-        let piece = it.trimmed_at(0.0).expect("a piece");
-        assert!(piece.len() < 2, "slid clean off: {piece:?}");
     }
 
     #[test]
@@ -1661,66 +1738,6 @@ mod tests {
     }
 
     #[test]
-    fn an_untrimmed_item_is_absent_from_the_file() {
-        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
-        assert!(!json.contains("trim"), "nothing about a trim: {json}");
-        let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
-        assert_eq!(back.trim_end.value_at(0.0), 100.0, "the default comes back");
-    }
-
-    fn outlined(item: &ShapeItem, t: f64) -> Vec<u8> {
-        rasterise_contents(std::slice::from_ref(item), 40, 40, 0.0, 0.0, 40.0, 40.0, t)
-    }
-
-    /// A dashed outline is on, off, on, off along its own length — so it puts
-    /// down less ink than the solid one and more than none.
-    #[test]
-    fn a_dashed_outline_leaves_gaps_in_itself() {
-        let mut solid = item(square(5.0, 5.0, 30.0));
-        solid.fill = None;
-        solid.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-        solid.stroke_width = 2.0;
-
-        let mut dashed_item = solid.clone();
-        dashed_item.dashes = vec![Property::fixed(6.0), Property::fixed(6.0)];
-
-        let (a, b) = (
-            ink(&outlined(&solid, 0.0)),
-            ink(&outlined(&dashed_item, 0.0)),
-        );
-        assert!(b > 0, "something is drawn");
-        assert!(b < a, "and less of it than solid: {b} of {a}");
-    }
-
-    #[test]
-    fn a_dash_of_nothing_is_a_solid_outline() {
-        let mut it = item(square(5.0, 5.0, 30.0));
-        it.fill = None;
-        it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-        it.stroke_width = 2.0;
-        let solid = outlined(&it, 0.0);
-
-        // An empty list, and a list of zeros, are both "no dashes".
-        assert!(it.dash_pattern_at(0.0).is_empty());
-        it.dashes = vec![Property::zero(), Property::zero()];
-        assert!(it.dash_pattern_at(0.0).is_empty());
-        assert_eq!(outlined(&it, 0.0), solid, "byte for byte the solid one");
-    }
-
-    #[test]
-    fn an_odd_dash_list_repeats_itself() {
-        let mut it = item(square(0.0, 0.0, 10.0));
-        it.dashes = vec![Property::fixed(4.0)];
-        assert_eq!(it.dash_pattern_at(0.0), vec![4.0, 4.0], "four on, four off");
-        it.dashes = vec![
-            Property::fixed(4.0),
-            Property::fixed(2.0),
-            Property::fixed(1.0),
-        ];
-        assert_eq!(it.dash_pattern_at(0.0), vec![4.0, 2.0, 1.0, 4.0, 2.0, 1.0]);
-    }
-
-    #[test]
     fn the_dashes_are_cut_by_length_and_the_offset_slides_them() {
         // A straight line 100 long: 10 on, 10 off gives five dashes of ten.
         let line: Vec<(f64, f64)> = vec![(0.0, 0.0), (100.0, 0.0)];
@@ -1745,43 +1762,6 @@ mod tests {
         let pieces = dashed(&line, &[1.0, 1.0], 0.0);
         assert_eq!(pieces.len(), 1, "one solid piece, not half a million");
         assert_eq!(pieces[0], line);
-    }
-
-    #[test]
-    fn a_keyed_dash_is_read_on_the_layers_clock() {
-        let mut it = item(square(5.0, 5.0, 30.0));
-        it.fill = None;
-        it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-        it.stroke_width = 2.0;
-        let key = |secs: i64, value: f64| crate::anim::Keyframe {
-            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
-            value,
-            interp_in: crate::anim::SideInterp::Linear,
-            interp_out: crate::anim::SideInterp::Linear,
-        };
-        let mut gap = Property::fixed(0.0);
-        gap.animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 20.0)]);
-        it.dashes = vec![Property::fixed(6.0), gap];
-        assert!(
-            ink(&outlined(&it, 1.0)) < ink(&outlined(&it, 0.0)),
-            "a gap that opens takes ink away as it plays"
-        );
-    }
-
-    #[test]
-    fn an_undashed_item_is_absent_from_the_file() {
-        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
-        assert!(!json.contains("dash"), "nothing about dashes: {json}");
-        let mut it = item(square(0.0, 0.0, 4.0));
-        it.dashes = vec![Property::fixed(6.0), Property::fixed(3.0)];
-        let json = serde_json::to_string(&it).expect("json");
-        assert!(
-            json.contains("[6.0,3.0]"),
-            "bare numbers while still: {json}"
-        );
-        let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
-        assert_eq!(back.dashes.len(), 2);
-        assert_eq!(back.dashes[1].value_at(0.0), 3.0);
     }
 
     /// A linear ramp runs from the fill at one point to the gradient colour at
@@ -1844,101 +1824,71 @@ mod tests {
         }
     }
 
-    /// The gradient belongs to the art, so a repeated copy carries it.
+    /// An end faded to nothing is clear there, and the colour stays the same
+    /// on the way.
     #[test]
-    fn a_repeated_copy_carries_its_gradient_with_it() {
-        let mut it = item(square(0.0, 0.0, 10.0));
+    fn a_gradient_end_fades_to_clear() {
+        let mut it = item(square(0.0, 0.0, 20.0));
         it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
         it.gradient = 1;
-        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
-        it.gradient_end_x = Property::fixed(10.0);
-        it.repeat_copies = Property::fixed(2.0);
-        it.repeat_position_x = Property::fixed(10.0);
-        let rgba = rasterise_contents(&[it], 20, 10, 0.0, 0.0, 20.0, 10.0, 0.0);
-        assert!(
-            rgb_at(&rgba, 20, 0, 5)[0] > 200,
-            "the first copy starts red"
-        );
-        assert!(
-            rgb_at(&rgba, 20, 10, 5)[0] > 200,
-            "and so does the copy, ten along: the ramp moved with it"
-        );
+        it.gradient_colour = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
+        it.gradient_start_x = Property::fixed(0.0);
+        it.gradient_end_x = Property::fixed(20.0);
+        it.gradient_end_opacity = Property::fixed(0.0);
+        let rgba = rasterise_contents(&[it.clone()], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+
+        assert!(alpha_at(&rgba, 20, 0, 10) > 240, "solid at the start");
+        assert!(alpha_at(&rgba, 20, 19, 10) < 15, "clear at the end");
+        let middle = alpha_at(&rgba, 20, 10, 10);
+        assert!((100..160).contains(&middle), "half way between: {middle}");
+        assert!(rgb_at(&rgba, 20, 10, 10)[0] > 200, "and still the colour");
+
+        // The other end fades the same way, so the ramp can run clear to solid.
+        it.gradient_end_opacity = Property::fixed(100.0);
+        it.gradient_start_opacity = Property::fixed(0.0);
+        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        assert!(alpha_at(&rgba, 20, 0, 10) < 15, "clear at the start");
+        assert!(alpha_at(&rgba, 20, 19, 10) > 240, "solid at the end");
     }
 
-    /// A flat fill is what every shape has until somebody ramps it, and it
-    /// draws exactly the pixels it drew before there were gradients.
+    /// A stop between the ends is the colour at its own place, and the ramp
+    /// runs to it and away from it.
     #[test]
-    fn a_flat_fill_is_untouched_by_the_gradient_machinery() {
-        let plain = item(square(2.0, 3.0, 9.0));
-        let mut off = item(square(2.0, 3.0, 9.0));
-        off.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
-        off.gradient_end_x = Property::fixed(9.0);
-        assert!(off.ramp_at(0.0, &Affine::IDENTITY, 1.0, 1.0).is_none());
-        assert_eq!(
-            rasterise_contents(&[plain], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
-            rasterise_contents(&[off], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
-        );
-    }
-
-    /// Both points in the same place is no axis at all: one flat colour rather
-    /// than a division by zero (docs/14 §4).
-    #[test]
-    fn a_gradient_with_no_axis_draws_one_flat_colour_and_never_panics() {
-        let mut it = item(square(0.0, 0.0, 10.0));
-        it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
-        it.gradient = 1;
-        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
-        let rgba = rasterise_contents(&[it.clone()], 10, 10, 0.0, 0.0, 10.0, 10.0, 0.0);
-        assert_eq!(rgb_at(&rgba, 10, 2, 2), rgb_at(&rgba, 10, 8, 8));
-        it.gradient = 2;
-        let _ = rasterise_contents(&[it], 10, 10, 0.0, 0.0, 10.0, 10.0, 0.0);
-    }
-
-    #[test]
-    fn a_keyed_gradient_point_is_read_on_the_layers_clock() {
+    fn a_gradient_passes_through_the_stops_between_its_ends() {
         let mut it = item(square(0.0, 0.0, 20.0));
         it.fill = Some(LinearColour([1.0, 0.0, 0.0, 1.0]));
         it.gradient = 1;
         it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
+        it.gradient_start_x = Property::fixed(0.0);
+        it.gradient_end_x = Property::fixed(20.0);
+        it.gradient_stops = vec![GradientStop {
+            position: Property::fixed(50.0),
+            colour: LinearColour([0.0, 1.0, 0.0, 1.0]),
+            opacity: Property::fixed(0.0),
+        }];
+        let rgba = rasterise_contents(&[it.clone()], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
+        assert!(rgb_at(&rgba, 20, 0, 10)[0] > 200, "the fill at the start");
+        assert!(
+            rgb_at(&rgba, 20, 19, 10)[2] > 200,
+            "the far colour at the end"
+        );
+        assert!(alpha_at(&rgba, 20, 10, 10) < 40, "and clear at the stop");
+
+        // Keyed solid, the stop is its own colour where it sits by then.
         let key = |secs: i64, value: f64| crate::anim::Keyframe {
             time: crate::time::Rational::new(secs, 1).expect("a whole second"),
             value,
             interp_in: crate::anim::SideInterp::Linear,
             interp_out: crate::anim::SideInterp::Linear,
         };
-        let mut end = Property::fixed(0.0);
-        end.animation = crate::anim::Animation::Keyframed(vec![key(0, 4.0), key(1, 40.0)]);
-        it.gradient_end_x = end;
-        let blue = |t: f64| {
-            rgb_at(
-                &rasterise_contents(&[it.clone()], 20, 20, 0.0, 0.0, 20.0, 20.0, t),
-                20,
-                10,
-                10,
-            )[2]
-        };
+        it.gradient_stops[0].opacity.animation =
+            crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 100.0)]);
+        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 1.0);
+        let middle = rgb_at(&rgba, 20, 10, 10);
         assert!(
-            blue(0.0) > blue(1.0),
-            "a ramp stretched out is less far along in the middle"
+            middle[1] > 200 && middle[0] < 120 && middle[2] < 120,
+            "green in the middle: {middle:?}"
         );
-    }
-
-    #[test]
-    fn a_flat_filled_item_is_absent_from_the_file() {
-        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
-        assert!(!json.contains("gradient"), "nothing about ramps: {json}");
-        let mut it = item(square(0.0, 0.0, 4.0));
-        it.gradient = 2;
-        it.gradient_colour = Some(LinearColour([0.0, 0.0, 1.0, 1.0]));
-        it.gradient_end_x = Property::fixed(4.0);
-        let back: ShapeItem =
-            serde_json::from_str(&serde_json::to_string(&it).expect("json")).expect("round trip");
-        assert_eq!(back.gradient, 2);
-        assert_eq!(
-            back.gradient_colour,
-            Some(LinearColour([0.0, 0.0, 1.0, 1.0]))
-        );
-        assert_eq!(back.gradient_end_x.value_at(0.0), 4.0);
     }
 
     /// The outline pushed out of the path: art where the path is not, filled
@@ -1969,120 +1919,6 @@ mod tests {
         );
     }
 
-    /// The corner of a grown square is a quarter circle, not a square corner:
-    /// round is the one join this crate draws.
-    #[test]
-    fn an_offset_corner_is_rounded_rather_than_mitred() {
-        let mut it = item(square(6.0, 6.0, 8.0));
-        it.offset_amount = Property::fixed(4.0);
-        let rgba = rasterise_contents(&[it], 24, 24, 0.0, 0.0, 24.0, 24.0, 0.0);
-        // Straight out from the top edge, right to the offset's edge, is
-        // inside. The pixel a mitred corner would reach — the corner of the
-        // grown box — is nearly five away from the path's own corner, so a
-        // round join of four leaves it outside.
-        assert_eq!(alpha_at(&rgba, 24, 10, 2), 255, "square out from the edge");
-        assert_eq!(alpha_at(&rgba, 24, 2, 2), 0, "and the corner is cut round");
-    }
-
-    /// A path written the other way round is the same shape, so a positive
-    /// offset has to grow it either way.
-    #[test]
-    fn an_offset_grows_a_path_written_either_way_round() {
-        let mut backwards = square(5.0, 5.0, 10.0);
-        backwards.vertices.reverse();
-        let mut it = item(backwards);
-        it.offset_amount = Property::fixed(3.0);
-        let rgba = rasterise_contents(&[it], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
-        assert_eq!(alpha_at(&rgba, 20, 3, 10), 255, "grown, not shrunk");
-    }
-
-    #[test]
-    fn the_box_holds_the_grown_outline() {
-        let mut it = item(square(5.0, 5.0, 10.0));
-        assert_eq!(it.bounds(0.0), Some((5.0, 5.0, 15.0, 15.0)));
-        it.offset_amount = Property::fixed(3.0);
-        assert_eq!(it.bounds(0.0), Some((2.0, 2.0, 18.0, 18.0)));
-        // Pulled in, the art never needs more room than the path did.
-        it.offset_amount = Property::fixed(-3.0);
-        assert_eq!(it.bounds(0.0), Some((5.0, 5.0, 15.0, 15.0)));
-    }
-
-    /// The identity case: an item nobody has offset draws from its bezier,
-    /// exactly as it did before there was an offset at all.
-    #[test]
-    fn an_offset_of_nothing_is_the_path_itself() {
-        let plain = item(square(2.0, 3.0, 9.0));
-        let mut zero = item(square(2.0, 3.0, 9.0));
-        zero.offset_amount = Property::fixed(0.0);
-        assert!(zero.trimmed_at(0.0).is_none(), "nothing to reshape");
-        assert_eq!(
-            rasterise_contents(&[plain], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
-            rasterise_contents(&[zero], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
-        );
-    }
-
-    /// Offset first, then trim: the trim cuts whatever outline the offset made,
-    /// which is longer than the path it came from.
-    #[test]
-    fn the_trim_cuts_the_offset_outline_and_not_the_path() {
-        let mut it = item(square(5.0, 5.0, 10.0));
-        it.offset_amount = Property::fixed(3.0);
-        it.trim_end = Property::fixed(50.0);
-        let piece = it.trimmed_at(0.0).expect("a piece");
-        let whole = offset_polyline(&flatten_path(&it.path), 3.0, true);
-        let length = |p: &[(f64, f64)]| -> f64 {
-            p.windows(2)
-                .map(|w| ((w[1].0 - w[0].0).powi(2) + (w[1].1 - w[0].1).powi(2)).sqrt())
-                .sum()
-        };
-        let (cut, all) = (length(&piece), length(&whole));
-        assert!(
-            (cut - all / 2.0).abs() < all * 0.01,
-            "half of the grown outline: {cut} of {all}"
-        );
-    }
-
-    #[test]
-    fn a_keyed_offset_is_read_on_the_layers_clock() {
-        let mut it = item(square(5.0, 5.0, 10.0));
-        let key = |secs: i64, value: f64| crate::anim::Keyframe {
-            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
-            value,
-            interp_in: crate::anim::SideInterp::Linear,
-            interp_out: crate::anim::SideInterp::Linear,
-        };
-        let mut grow = Property::fixed(0.0);
-        grow.animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 4.0)]);
-        it.offset_amount = grow;
-        let at = |t: f64| {
-            ink(&rasterise_contents(
-                &[it.clone()],
-                24,
-                24,
-                0.0,
-                0.0,
-                24.0,
-                24.0,
-                t,
-            ))
-        };
-        assert!(at(1.0) > at(0.0), "the shape swells as it plays");
-    }
-
-    #[test]
-    fn an_unoffset_item_is_absent_from_the_file() {
-        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
-        assert!(
-            !json.contains("offset_amount"),
-            "nothing about offsets: {json}"
-        );
-        let mut it = item(square(0.0, 0.0, 4.0));
-        it.offset_amount = Property::fixed(2.5);
-        let back: ShapeItem =
-            serde_json::from_str(&serde_json::to_string(&it).expect("json")).expect("round trip");
-        assert_eq!(back.offset_amount.value_at(0.0), 2.5);
-    }
-
     /// A repeated square is drawn where the step puts it, and nowhere else.
     #[test]
     fn a_repeater_draws_a_copy_at_every_step() {
@@ -2100,102 +1936,6 @@ mod tests {
         }
     }
 
-    /// The layer has to be big enough to hold what the repeater made, or the
-    /// copies would be drawn off the edge of their own raster.
-    #[test]
-    fn the_box_grows_to_hold_the_copies() {
-        let mut it = item(square(0.0, 0.0, 6.0));
-        assert_eq!(it.bounds(0.0), Some((0.0, 0.0, 6.0, 6.0)));
-        it.repeat_copies = Property::fixed(3.0);
-        it.repeat_position_x = Property::fixed(10.0);
-        assert_eq!(it.bounds(0.0), Some((0.0, 0.0, 26.0, 6.0)));
-
-        // Behind the original as well, when the offset says so.
-        it.repeat_offset = Property::fixed(-1.0);
-        assert_eq!(it.bounds(0.0), Some((-10.0, 0.0, 16.0, 6.0)));
-    }
-
-    /// The identity case, which is every shape until somebody repeats one: the
-    /// pixels are the ones drawn before there was a repeater at all.
-    #[test]
-    fn one_copy_is_no_repeater_at_all() {
-        let plain = item(square(2.0, 3.0, 9.0));
-        let mut one_copy = item(square(2.0, 3.0, 9.0));
-        one_copy.repeat_copies = Property::fixed(1.0);
-        one_copy.repeat_position_x = Property::fixed(40.0);
-        one_copy.repeat_rotation = Property::fixed(30.0);
-        assert_eq!(plain.bounds(0.0), one_copy.bounds(0.0));
-        assert_eq!(
-            rasterise_contents(&[plain], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
-            rasterise_contents(&[one_copy], 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0),
-            "one copy draws the very same bytes"
-        );
-    }
-
-    /// Start and end opacity ramp across the copies drawn — the first at one
-    /// end of the ramp, the last at the other.
-    #[test]
-    fn the_copies_fade_from_the_first_to_the_last() {
-        let mut it = item(square(0.0, 0.0, 6.0));
-        it.repeat_copies = Property::fixed(3.0);
-        it.repeat_position_x = Property::fixed(10.0);
-        it.repeat_end_opacity = Property::fixed(0.0);
-        let rgba = rasterise_contents(&[it], 40, 10, 0.0, 0.0, 40.0, 10.0, 0.0);
-        let (first, middle, last) = (
-            alpha_at(&rgba, 40, 3, 3),
-            alpha_at(&rgba, 40, 13, 3),
-            alpha_at(&rgba, 40, 23, 3),
-        );
-        assert_eq!(first, 255, "the first copy is the item's own opacity");
-        assert!(
-            middle > 100 && middle < 200,
-            "the middle is half way down the ramp: {middle}"
-        );
-        assert_eq!(last, 0, "and the last has faded out");
-    }
-
-    /// A copy at half size is a *drawing* at half size: its outline thins with
-    /// it, or the copy would look like a different shape.
-    #[test]
-    fn a_scaled_copy_carries_a_scaled_outline() {
-        let mut it = item(square(2.0, 2.0, 8.0));
-        it.fill = None;
-        it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-        it.stroke_width = 4.0;
-        it.repeat_copies = Property::fixed(2.0);
-        it.repeat_position_x = Property::fixed(20.0);
-        it.repeat_scale = Property::fixed(50.0);
-        // The second copy is half the size *and* half the outline, so it puts
-        // down less than half the first one's ink.
-        let rgba = rasterise_contents(&[it], 40, 20, 0.0, 0.0, 40.0, 20.0, 0.0);
-        let left: u32 = ink_in(&rgba, 40, 0..20);
-        let right: u32 = ink_in(&rgba, 40, 20..40);
-        assert!(right > 0, "the copy is drawn");
-        assert!(
-            right * 2 < left,
-            "and it is drawn smaller in both ways: {left} against {right}"
-        );
-    }
-
-    /// Rotation turns each copy about the anchor, so a step of 90° puts the
-    /// fourth copy back where the first one started.
-    #[test]
-    fn a_rotated_copy_turns_about_the_anchor() {
-        let mut it = item(square(8.0, 2.0, 4.0));
-        it.repeat_copies = Property::fixed(4.0);
-        it.repeat_rotation = Property::fixed(90.0);
-        it.repeat_anchor_x = Property::fixed(10.0);
-        it.repeat_anchor_y = Property::fixed(10.0);
-        let (x0, y0, x1, y1) = it.bounds(0.0).expect("a box");
-        // Four quarter turns about (10, 10) put the copies on all four sides of
-        // it, so the box is square and centred on the anchor.
-        assert!((x1 - x0 - (y1 - y0)).abs() < 1e-9, "a square box");
-        assert!(
-            ((x0 + x1) / 2.0 - 10.0).abs() < 1e-9 && ((y0 + y1) / 2.0 - 10.0).abs() < 1e-9,
-            "centred on the anchor: {x0},{y0} to {x1},{y1}"
-        );
-    }
-
     /// A count nobody could draw is held at the ceiling rather than refused —
     /// and a fractional one is a count of things, so it rounds.
     #[test]
@@ -2208,42 +1948,6 @@ mod tests {
         assert_eq!(it.copies_at(0.0).len(), 1, "never fewer than the original");
         it.repeat_copies = Property::fixed(2.6);
         assert_eq!(it.copies_at(0.0).len(), 3);
-    }
-
-    #[test]
-    fn a_keyed_repeater_is_read_on_the_layers_clock() {
-        let mut it = item(square(0.0, 0.0, 6.0));
-        it.repeat_copies = Property::fixed(3.0);
-        let key = |secs: i64, value: f64| crate::anim::Keyframe {
-            time: crate::time::Rational::new(secs, 1).expect("a whole second"),
-            value,
-            interp_in: crate::anim::SideInterp::Linear,
-            interp_out: crate::anim::SideInterp::Linear,
-        };
-        let mut step = Property::fixed(0.0);
-        step.animation = crate::anim::Animation::Keyframed(vec![key(0, 0.0), key(1, 10.0)]);
-        it.repeat_position_x = step;
-        // Stacked at the head, spread out a second later — and the box knows.
-        assert_eq!(it.bounds(0.0), Some((0.0, 0.0, 6.0, 6.0)));
-        assert_eq!(it.bounds(1.0), Some((0.0, 0.0, 26.0, 6.0)));
-    }
-
-    #[test]
-    fn an_unrepeated_item_is_absent_from_the_file() {
-        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).expect("json");
-        assert!(!json.contains("repeat"), "nothing about copies: {json}");
-        let mut it = item(square(0.0, 0.0, 4.0));
-        it.repeat_copies = Property::fixed(5.0);
-        it.repeat_position_x = Property::fixed(12.0);
-        let json = serde_json::to_string(&it).expect("json");
-        let back: ShapeItem = serde_json::from_str(&json).expect("round trip");
-        assert_eq!(back.repeat_copies.value_at(0.0), 5.0);
-        assert_eq!(back.repeat_position_x.value_at(0.0), 12.0);
-        assert_eq!(
-            back.repeat_scale.value_at(0.0),
-            100.0,
-            "the default is kept"
-        );
     }
 
     /// Two overlapping squares — A at 0..20, B at 10..30 — combined by `kind`
@@ -2263,16 +1967,6 @@ mod tests {
     }
 
     #[test]
-    fn a_union_covers_what_either_path_covered() {
-        assert_eq!(combined(1), (255, 255, 255));
-    }
-
-    #[test]
-    fn a_subtract_takes_the_second_path_out_of_the_first() {
-        assert_eq!(combined(2), (255, 0, 0));
-    }
-
-    #[test]
     fn an_intersect_keeps_only_what_both_paths_covered() {
         assert_eq!(combined(3), (0, 255, 0));
     }
@@ -2280,12 +1974,6 @@ mod tests {
     #[test]
     fn an_exclude_keeps_what_exactly_one_path_covered() {
         assert_eq!(combined(4), (255, 0, 255));
-    }
-
-    #[test]
-    fn a_reading_nobody_wrote_down_leaves_the_art_it_was_joining() {
-        // 99 is no combine at all, so the run draws its first item alone.
-        assert_eq!(combined(99), (255, 255, 0));
     }
 
     #[test]
@@ -2304,30 +1992,6 @@ mod tests {
     }
 
     #[test]
-    fn a_run_is_painted_by_the_item_that_starts_it() {
-        // The first item is red and the second green; the combined run is red.
-        assert_eq!(combined(1), (255, 255, 255));
-        let mut b = item(square(10.0, 10.0, 20.0));
-        b.combine = 1;
-        b.fill = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
-        let contents = vec![item(square(0.0, 0.0, 20.0)), b];
-        let rgba = rasterise_contents(&contents, 30, 30, 0.0, 0.0, 30.0, 30.0, 0.0);
-        assert_eq!(
-            rgb_at(&rgba, 30, 25, 25),
-            [255, 0, 0],
-            "the first item's red"
-        );
-    }
-
-    #[test]
-    fn a_combine_on_the_first_item_has_nothing_to_join_and_draws_alone() {
-        let mut only = item(square(0.0, 0.0, 20.0));
-        only.combine = 2;
-        let rgba = rasterise_contents(&[only], 20, 20, 0.0, 0.0, 20.0, 20.0, 0.0);
-        assert_eq!(alpha_at(&rgba, 20, 10, 10), 255);
-    }
-
-    #[test]
     fn a_run_folds_left_to_right_so_three_items_read_in_order() {
         // (A ∪ B) − C: the union covers 0..30, and C takes 10..20 back out.
         let mut b = item(square(15.0, 0.0, 15.0));
@@ -2339,89 +2003,6 @@ mod tests {
         assert_eq!(alpha_at(&rgba, 30, 5, 5), 255, "A survives");
         assert_eq!(alpha_at(&rgba, 30, 15, 5), 0, "C cut the middle out");
         assert_eq!(alpha_at(&rgba, 30, 25, 5), 255, "B survives");
-    }
-
-    /// A pentagram: five points, drawn in one stroke so the path crosses itself
-    /// twice on the way round. Even-odd leaves the pentagon in the middle
-    /// empty; non-zero would fill it.
-    fn pentagram(cx: f64, cy: f64, r: f64) -> BezierPath {
-        let points: Vec<(f64, f64)> = (0..5)
-            .map(|i| {
-                // Two fifths of a turn each step is what makes it one stroke.
-                let a =
-                    -std::f64::consts::FRAC_PI_2 + (i as f64) * 4.0 * std::f64::consts::PI / 5.0;
-                (cx + r * a.cos(), cy + r * a.sin())
-            })
-            .collect();
-        polyline_path(&points, true)
-    }
-
-    #[test]
-    fn a_path_that_crosses_itself_combines_the_way_it_already_filled() {
-        let hollow = |contents: &[ShapeItem]| {
-            let rgba = rasterise_contents(contents, 60, 60, 0.0, 0.0, 60.0, 60.0, 0.0);
-            (alpha_at(&rgba, 60, 30, 30), alpha_at(&rgba, 60, 30, 12))
-        };
-        let star = item(pentagram(30.0, 30.0, 28.0));
-        let alone = hollow(std::slice::from_ref(&star));
-        // Union with a square far outside the star: the star's own pixels are
-        // decided by the boolean now rather than by the rasteriser alone.
-        let mut away = item(square(0.0, 0.0, 2.0));
-        away.combine = 1;
-        let joined = hollow(&[star, away]);
-        assert_eq!(alone.0, 0, "the middle is empty on its own");
-        assert_eq!(joined.0, 0, "and empty after the union");
-        assert_eq!(alone.1, 255, "a point is solid on its own");
-        assert_eq!(joined.1, 255, "and solid after the union");
-    }
-
-    #[test]
-    fn a_combined_outline_is_drawn_all_the_way_round_the_ring() {
-        // The seam a trim leaves open, a boolean closes: the contour comes back
-        // to its first point, so there is ink on every side of the result.
-        let mut a = item(square(0.0, 0.0, 20.0));
-        a.fill = None;
-        a.stroke = Some(LinearColour([1.0, 1.0, 1.0, 1.0]));
-        a.stroke_width = 2.0;
-        let mut b = item(square(10.0, 10.0, 20.0));
-        b.combine = 1;
-        let contents = vec![a, b];
-        let rgba = rasterise_contents(&contents, 30, 30, 0.0, 0.0, 30.0, 30.0, 0.0);
-        for (x, y) in [(10u32, 0u32), (0, 10), (25, 29), (29, 25)] {
-            assert!(
-                alpha_at(&rgba, 30, x, y) > 0,
-                "the outline reaches {x},{y}: {}",
-                alpha_at(&rgba, 30, x, y)
-            );
-        }
-        assert_eq!(alpha_at(&rgba, 30, 5, 5), 0, "and the inside is not filled");
-    }
-
-    #[test]
-    fn the_box_holds_every_member_of_a_combined_run() {
-        // Intersect draws far less than either square, and the box is still
-        // both of them — never too small, and never worked out twice.
-        let mut b = item(square(10.0, 10.0, 20.0));
-        b.combine = 3;
-        let contents = vec![item(square(0.0, 0.0, 20.0)), b];
-        assert_eq!(
-            contents_bounds(&contents, 0.0),
-            Some((0.0, 0.0, 30.0, 30.0))
-        );
-    }
-
-    #[test]
-    fn an_uncombined_item_is_absent_from_the_file() {
-        let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).unwrap();
-        assert!(!json.contains("combine"), "{json}");
-        let back: ShapeItem = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.combine, 0);
-
-        let mut joined = item(square(0.0, 0.0, 4.0));
-        joined.combine = 4;
-        let json = serde_json::to_string(&joined).unwrap();
-        assert!(json.contains("\"combine\":4"), "{json}");
-        assert_eq!(serde_json::from_str::<ShapeItem>(&json).unwrap().combine, 4);
     }
 
     #[test]
@@ -2444,33 +2025,6 @@ mod tests {
     }
 
     #[test]
-    fn a_shape_with_no_keys_is_its_still_path_at_every_time() {
-        let it = item(square(0.0, 0.0, 10.0));
-        for t in [-5.0, 0.0, 1.5, 900.0] {
-            assert_eq!(*it.path_at(t), it.path, "at t={t}");
-        }
-        assert!(!it.path_is_animated());
-    }
-
-    #[test]
-    fn a_keyed_shape_morphs_from_one_drawn_path_to_the_other() {
-        let (from, to) = (square(0.0, 0.0, 10.0), square(20.0, 0.0, 10.0));
-        let mut it = item(from.clone());
-        it.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
-        assert!(it.path_is_animated());
-
-        // At the keys, exactly the shapes that were drawn.
-        assert_eq!(*it.path_at(0.0), from);
-        assert_eq!(*it.path_at(2.0), to);
-        // Half way, half way — and the still path is not what is drawn.
-        let mid = it.path_at(1.0);
-        assert!((mid.vertices[0].pos.0 - 10.0).abs() < 1e-9, "{mid:?}");
-        // Outside the keys the ends hold, as every other property does.
-        assert_eq!(*it.path_at(-3.0), from);
-        assert_eq!(*it.path_at(9.0), to);
-    }
-
-    #[test]
     fn the_morph_is_what_the_picture_and_the_box_both_read() {
         let (from, to) = (square(0.0, 0.0, 10.0), square(20.0, 0.0, 10.0));
         let mut it = item(from.clone());
@@ -2490,56 +2044,25 @@ mod tests {
     }
 
     #[test]
-    fn two_paths_with_different_point_counts_still_morph() {
-        // A triangle to a square: the sparser path is cut into as many pieces
-        // as the denser one has, without moving the curve, so the shape at the
-        // first key is still the triangle that was drawn.
-        let triangle = polyline_path(&[(0.0, 0.0), (10.0, 0.0), (5.0, 10.0)], true);
-        let sq = square(0.0, 0.0, 10.0);
-        let mut it = item(triangle.clone());
-        it.path_keys = vec![shape_key(0, &triangle), shape_key(1, &sq)];
-        assert_eq!(*it.path_at(0.0), triangle, "the key holds what was drawn");
-        assert_eq!(*it.path_at(1.0), sq);
-        let mid = it.path_at(0.5);
-        assert_eq!(mid.vertices.len(), 4, "reconciled to the denser count");
-        assert!(mid.closed);
-    }
-
-    #[test]
-    fn a_morphing_path_is_combined_at_the_moment_it_is_drawn() {
-        // The cutter is keyed to slide across the base; early it takes the left
-        // half out, late it takes the right half out.
-        let (from, to) = (square(-10.0, 0.0, 10.0), square(10.0, 0.0, 10.0));
-        let mut cutter = item(from.clone());
-        cutter.combine = 2;
-        cutter.path_keys = vec![shape_key(0, &from), shape_key(2, &to)];
-        let contents = vec![item(square(0.0, 0.0, 20.0)), cutter];
-        let early = rasterise_contents(&contents, 20, 10, 0.0, 0.0, 20.0, 10.0, 0.0);
-        let late = rasterise_contents(&contents, 20, 10, 0.0, 0.0, 20.0, 10.0, 2.0);
-        assert_eq!(alpha_at(&early, 20, 5, 5), 255, "the base is whole early");
-        assert_eq!(alpha_at(&late, 20, 15, 5), 0, "and cut on the right late");
-        assert_eq!(alpha_at(&late, 20, 5, 5), 255);
-    }
-
-    #[test]
     fn an_unkeyed_shape_is_absent_from_the_file() {
         let json = serde_json::to_string(&item(square(0.0, 0.0, 4.0))).unwrap();
         assert!(!json.contains("path_keys"), "{json}");
+        assert!(!json.contains("gradient"), "{json}");
 
         let mut keyed = item(square(0.0, 0.0, 4.0));
         keyed.path_keys = vec![shape_key(1, &square(2.0, 2.0, 4.0))];
+        // A faded gradient with a stop between its ends comes back as it went.
+        keyed.gradient = 1;
+        keyed.gradient_end_opacity = Property::fixed(0.0);
+        keyed.gradient_stops = vec![GradientStop {
+            position: Property::fixed(40.0),
+            colour: LinearColour([0.0, 1.0, 0.0, 1.0]),
+            opacity: Property::fixed(50.0),
+        }];
         let json = serde_json::to_string(&keyed).unwrap();
         assert!(json.contains("path_keys"), "{json}");
         let back: ShapeItem = serde_json::from_str(&json).unwrap();
         assert_eq!(back.path_keys.len(), 1);
         assert_eq!(back, keyed);
-    }
-
-    #[test]
-    fn drawing_a_shape_is_deterministic() {
-        let contents = vec![item(square(2.0, 3.0, 9.0))];
-        let once = rasterise_contents(&contents, 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0);
-        let twice = rasterise_contents(&contents, 16, 16, 0.0, 0.0, 16.0, 16.0, 0.0);
-        assert_eq!(once, twice);
     }
 }

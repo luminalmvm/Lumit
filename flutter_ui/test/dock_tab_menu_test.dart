@@ -1,6 +1,6 @@
-// The right-click menu on a panel's tab: Close panel, and the pop-out
-// that is honestly greyed out because real operating-system windows are not
-// available to us yet (docs/impl/multi-window.md).
+// The right-click menu on a panel's tab: Close panel, and no pop-out row
+// until real operating-system windows are available to us
+// (docs/impl/multi-window.md).
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
@@ -65,7 +65,8 @@ void main() {
 
     await rightClickTab(tester, Panel.hierarchy.title);
     expect(find.text(l10n.closePanel), findsOneWidget);
-    expect(find.text(l10n.popOutPanel), findsOneWidget);
+    expect(find.text(l10n.popOutPanel), findsNothing,
+        reason: 'not built, so not offered');
 
     await tester.tap(find.byKey(const ValueKey('tab-menu-close')));
     await tester.pump();
@@ -74,22 +75,5 @@ void main() {
     expect(panelsIn(root), contains(Panel.project));
     expect(layoutChanges, 1, reason: 'and the arrangement is persisted');
     expect(lumitPopupOpen, isFalse);
-  });
-
-  testWidgets('Pop out is listed but cannot be pressed', (tester) async {
-    final root = layout();
-    var layoutChanges = 0;
-    await tester
-        .pumpWidget(harness(root, onLayoutChanged: () => layoutChanges++));
-
-    await rightClickTab(tester, Panel.project.title);
-    // Not a MenuRow at all: it is drawn disabled, so there is nothing to press
-    // and nothing that could look pressable.
-    expect(find.byKey(const ValueKey('tab-menu-pop-out')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('tab-menu-pop-out')));
-    await tester.pump();
-    expect(panelsIn(root), contains(Panel.project),
-        reason: 'a disabled row does nothing at all');
-    expect(layoutChanges, 0);
   });
 }

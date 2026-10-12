@@ -5,10 +5,10 @@
 //!
 //! A driver makes a *value* rather than a picture, and a wire from a driver
 //! into an effect's socket makes that parameter follow the value instead of its
-//! keyframes. This module holds the eleven of them — Wiggle, Audio level,
+//! keyframes. This module holds the twelve of them — Wiggle, Audio level,
 //! Colour cycle, Math, Remap, Smooth, Split, Combine, Points sample, Layer
-//! points, Expression — and the small walk that works out, at one frame, what
-//! every wire is carrying.
+//! points, Expression, Clone index — and the small walk that works out, at
+//! one frame, what every wire is carrying.
 //!
 //! **One of them carries no value at all.** Layer points is a *source*:
 //! it names another layer and hands out that layer's points stream, so what
@@ -55,6 +55,7 @@ use crate::graph::{InputRef, LayerGraph, NodeRef, OutputRef};
 use crate::model::EffectInstance;
 
 pub mod audio_level;
+pub mod clone_index;
 pub mod colour_cycle;
 pub mod combine;
 pub mod expression;
@@ -166,7 +167,15 @@ pub fn resolve_drivers_in(
     audio: Option<&dyn AudioTap>,
     stack: Option<&[EffectInstance]>,
 ) -> ResolvedDrivers {
-    resolved(graph, lt, context, audio, points::Projection::FLAT, stack)
+    resolved(
+        graph,
+        lt,
+        context,
+        audio,
+        points::Projection::FLAT,
+        stack,
+        NO_CLONE,
+    )
 }
 
 /// [`resolve_drivers`], told where the composition's camera puts a particle
@@ -190,10 +199,29 @@ pub fn resolve_drivers_projected(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> ResolvedDrivers {
-    resolved(graph, lt, context, audio, projection, None)
+    resolved(graph, lt, context, audio, projection, None, NO_CLONE)
 }
 
-/// The one body behind [`resolve_drivers`] and its two twins.
+/// [`resolve_drivers_projected`] for a layer being rendered as one copy of
+/// several, so its Clone index drivers read that copy's number. `clone` is
+/// the copy's index and how many copies there are.
+#[must_use]
+pub fn resolve_drivers_cloned(
+    graph: &LayerGraph,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+    projection: points::Projection,
+    clone: (u32, u32),
+) -> ResolvedDrivers {
+    resolved(graph, lt, context, audio, projection, None, clone)
+}
+
+/// What a Clone index driver reads outside a per-clone render: the first copy
+/// of one.
+pub const NO_CLONE: (u32, u32) = (0, 1);
+
+/// The one body behind [`resolve_drivers`] and its twins.
 #[must_use]
 fn resolved(
     graph: &LayerGraph,
@@ -202,6 +230,7 @@ fn resolved(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
     stack: Option<&[EffectInstance]>,
+    clone: (u32, u32),
 ) -> ResolvedDrivers {
     if graph.edges.is_empty() {
         return ResolvedDrivers::default();
@@ -216,6 +245,7 @@ fn resolved(
         arenas: RefCell::new(ArenaPool::default()),
         cross: true,
         stack,
+        clone,
     };
     let mut out = ResolvedDrivers::default();
     // Document order in, sorted order out: the wires a layer carries are a
@@ -288,6 +318,7 @@ pub fn driven_volume_db(
         arenas: RefCell::new(ArenaPool::default()),
         cross: true,
         stack: None,
+        clone: NO_CLONE,
     };
     match ev.output(*node, port, lt, 0)? {
         // The Volume property's own hard range (docs/09 §6: −∞ knee at −100,
@@ -325,12 +356,17 @@ pub fn effect_stream(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> Option<PointsStream> {
-    effect_stream_in(graph, effect, t, context, audio, projection, None)
+    effect_stream_in(graph, effect, t, context, audio, projection, None, NO_CLONE)
 }
 
 /// [`effect_stream`] over a **node graph's** boxes: the producer is found in
 /// `stack` rather than through the context's layer (§5.1).
+///
+/// `clone` is which copy of how many the layer is being rendered as, so a
+/// Clone index wired into the producer reads in the stream what it reads in
+/// the picture. [`NO_CLONE`] everywhere else.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn effect_stream_in(
     graph: &LayerGraph,
     effect: Uuid,
@@ -339,6 +375,7 @@ pub fn effect_stream_in(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
     stack: Option<&[EffectInstance]>,
+    clone: (u32, u32),
 ) -> Option<PointsStream> {
     // The `Eval` is dropped before the stream is unwrapped, so its own memo is
     // not a second owner and the common case moves rather than copies eight
@@ -354,6 +391,7 @@ pub fn effect_stream_in(
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack,
+            clone,
         };
         ev.stream(effect, t, 0)
     }?;
@@ -384,14 +422,17 @@ pub fn driver_stream(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
 ) -> Option<PointsStream> {
-    driver_stream_in(graph, node, t, context, audio, projection, None)
+    driver_stream_in(graph, node, t, context, audio, projection, None, NO_CLONE)
 }
 
 /// [`driver_stream`] over a **node graph's** boxes. A graph has no layers to
 /// tap, so a Layer points box hand-edited into one reads the empty stream; the
 /// slice is carried all the same, because the wires the tap's own parameters
 /// take are resolved through the same walk.
+///
+/// `clone` is as [`effect_stream_in`] takes it.
 #[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn driver_stream_in(
     graph: &LayerGraph,
     node: Uuid,
@@ -400,6 +441,7 @@ pub fn driver_stream_in(
     audio: Option<&dyn AudioTap>,
     projection: points::Projection,
     stack: Option<&[EffectInstance]>,
+    clone: (u32, u32),
 ) -> Option<PointsStream> {
     // The `Eval` is dropped before the stream is unwrapped, as `effect_stream`
     // does and for the same reason: the common case moves rather than copies
@@ -415,6 +457,7 @@ pub fn driver_stream_in(
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack,
+            clone,
         };
         ev.tap_stream(node, t, 0)
     }?;
@@ -528,6 +571,9 @@ struct Eval<'a> {
     /// instances are taken as they are: a box has no fx switch and no mask
     /// list to gate it.
     stack: Option<&'a [EffectInstance]>,
+    /// Which copy of how many this layer is being rendered as, for the Clone
+    /// index driver. [`NO_CLONE`] on every walk but a per-clone render's.
+    clone: (u32, u32),
 }
 
 impl Eval<'_> {
@@ -624,7 +670,8 @@ impl Eval<'_> {
             );
             let fx = bag.get(0)?;
             let sample = |socket: &str, at: f64| self.input(node, socket, at, depth + 1);
-            let points = |socket: &str| self.points_input(node, socket, t, depth + 1);
+            let points =
+                |socket: &str| self.points_input(NodeRef::Driver(node), socket, t, depth + 1);
             let cx = DriverCx {
                 node,
                 inst,
@@ -634,6 +681,7 @@ impl Eval<'_> {
                 audio: self.audio,
                 sample_input: &sample,
                 points_input: &points,
+                clone: self.clone,
             };
             let mut found = None;
             def.eval_driver(&cx, &mut |id, value| {
@@ -668,11 +716,18 @@ impl Eval<'_> {
         }
     }
 
-    /// The **points stream** feeding driver `node`'s data input `port`, or
-    /// `None` where the socket is unwired — the documented empty stream.
-    fn points_input(&self, node: Uuid, port: &str, t: f64, depth: u32) -> Option<Rc<PointsStream>> {
+    /// The **points stream** feeding `node`'s data input `port`, or `None`
+    /// where the socket is unwired, which reads as the empty stream. `node` is
+    /// a driver, or a stack effect that changes a stream and hands it on.
+    fn points_input(
+        &self,
+        node: NodeRef,
+        port: &str,
+        t: f64,
+        depth: u32,
+    ) -> Option<Rc<PointsStream>> {
         let from = self.graph.wire_into(&InputRef::Param {
-            node: NodeRef::Driver(node),
+            node,
             port: port.to_owned(),
         })?;
         match from {
@@ -732,8 +787,33 @@ impl Eval<'_> {
             e.enabled
                 && super::BUILTIN_DEFS
                     .get(&e.effect.match_name)
-                    .is_some_and(|def| points::wants_schedule(def.signature()))
+                    .is_some_and(|def| {
+                        points::wants_schedule(def.signature())
+                            && !points::consumes_points(def.signature())
+                    })
         })?;
+        // Then whatever is wired after it that changes the stream, so a tap
+        // reads the points that layer ends up with.
+        let mut tapped = producer.id;
+        for _ in 0..layer.effects.len() {
+            let reads_tapped = |e: &EffectInstance| {
+                let Some(def) = super::BUILTIN_DEFS.get(&e.effect.match_name) else {
+                    return false;
+                };
+                points::wants_schedule(def.signature())
+                    && def.signature().inputs().iter().any(|p| {
+                        let wire = layer.graph.wire_into(&InputRef::Param {
+                            node: NodeRef::Effect(e.id),
+                            port: p.id.to_owned(),
+                        });
+                        matches!(wire, Some(OutputRef::EffectData { effect, .. }) if *effect == tapped)
+                    })
+            };
+            match layer.effects.iter().find(|e| e.enabled && reads_tapped(e)) {
+                Some(next) => tapped = next.id,
+                None => break,
+            }
+        }
         // A fresh walk over **that** layer's graph and context, so the stream a
         // tap reads is the stream that layer draws — its producer's own wires
         // applied. The camera stays this layer's: the consumer draws into its
@@ -753,8 +833,9 @@ impl Eval<'_> {
             cross: false,
             // The far side is a layer, whatever this side is.
             stack: None,
+            clone: self.clone,
         };
-        let stream = far.stream(producer.id, t, 0);
+        let stream = far.stream(tapped, t, 0);
         self.budget.set(far.budget.get());
         let stream = stream?;
         self.streams.borrow_mut().push((node, Rc::clone(&stream)));
@@ -792,15 +873,15 @@ impl Eval<'_> {
         // and no fx switch or mask list to gate them.
         let doc = &self.context.document;
         let comp = doc.comp(self.context.comp?)?;
-        let (inst, masks): (&EffectInstance, &[crate::mask::Mask]) = match self.stack {
-            Some(boxes) => (boxes.iter().find(|e| e.id == effect)?, &[]),
+        let (inst, layer): (&EffectInstance, Option<&crate::model::Layer>) = match self.stack {
+            Some(boxes) => (boxes.iter().find(|e| e.id == effect)?, None),
             None => {
                 let layer_id = self.context.layer?;
                 let layer = comp.layers.iter().find(|l| l.id == layer_id)?;
                 if !layer.switches.fx {
                     return None;
                 }
-                (layer.effects.iter().find(|e| e.id == effect)?, &layer.masks)
+                (layer.effects.iter().find(|e| e.id == effect)?, Some(layer))
             }
         };
         // A bypassed producer draws nothing, so it hands out nothing: the
@@ -849,10 +930,82 @@ impl Eval<'_> {
             source_matte: Vec::new(),
         };
 
+        // A Bake points reading its bake hands that out and asks nothing of
+        // the wire. So a stream that is only made during the render can be
+        // read here once it is baked.
+        if inst.effect.match_name == super::effects::bake_points::MATCH_NAME {
+            let read = layer.and_then(|layer| {
+                super::effects::bake_points::reading(doc, comp, layer, inst, t)
+                    .stream(self.projection)
+            });
+            if let Some(stream) = read {
+                let stream = Rc::new(stream);
+                self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+                return Some(stream);
+            }
+        }
+
+        // An effect that changes a stream makes its own from the one wired
+        // into it. Nothing wired is no stream.
+        if points::consumes_points(def.signature()) {
+            // One stream per Points input. An input with nothing wired reads
+            // as empty. One that is wired to a stream this walk cannot make
+            // leaves the whole stream to be made on the card, so a point
+            // that depends on a picture is never quietly missing.
+            let mut inputs: Vec<Rc<PointsStream>> = Vec::new();
+            let mut any = false;
+            for port in def.signature().inputs() {
+                if port.ty != super::PortType::Points {
+                    continue;
+                }
+                let to = InputRef::Param {
+                    node: NodeRef::Effect(effect),
+                    port: port.id.to_owned(),
+                };
+                if self.graph.wire_into(&to).is_none() {
+                    inputs.push(Rc::new(PointsStream::default()));
+                    continue;
+                }
+                inputs.push(self.points_input(NodeRef::Effect(effect), port.id, t, depth + 1)?);
+                any = true;
+            }
+            if !any {
+                return None;
+            }
+            let inputs: Vec<&PointsStream> = inputs.iter().map(|s| &**s).collect();
+            let stream = Rc::new(self.with_arena(|bag| {
+                resolve_into_arena(
+                    def,
+                    inst,
+                    NodeRef::Effect(effect),
+                    t,
+                    0.0,
+                    1.0,
+                    &MarkerContext::NONE,
+                    bag,
+                    self.context.clone(),
+                    &wired,
+                );
+                // No picture exists during this walk, so a modifier that
+                // reads one answers `None` here and is made on the card.
+                def.modify_points(
+                    bag.get(0)?.params,
+                    &super::ModifyCx {
+                        inputs: &inputs,
+                        t,
+                        sampled: None,
+                    },
+                )
+            })?);
+            self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+            return Some(stream);
+        }
+
         // Resolve into a checked-out arena, but reduce the borrowed parameters
         // to owned stream inputs before returning it to the reentrant pool.
         enum Producer {
             Grid(Box<PointsStream>),
+            AlongPath(super::effects::points_along_path::PointsAlongPath),
             Particulate {
                 points: Box<points::PointsParams>,
                 window_frames: i64,
@@ -877,6 +1030,18 @@ impl Eval<'_> {
                 "grid" => Some(Producer::Grid(Box::new(
                     super::effects::grid::Grid::read(params).stream(self.projection),
                 ))),
+                "points_along_path" => Some(Producer::AlongPath(
+                    super::effects::points_along_path::PointsAlongPath::read(params),
+                )),
+                // Read back from the analysis, so it is finished here as a
+                // lattice is.
+                "track_points" => Some(Producer::Grid(Box::new(
+                    super::effects::track_points::TrackPoints::stream(
+                        params,
+                        effect,
+                        self.projection,
+                    ),
+                ))),
                 "particulate" => {
                     let particulate = super::effects::particulate::Particulate::read(params);
                     Some(Producer::Particulate {
@@ -884,6 +1049,12 @@ impl Eval<'_> {
                         window_frames: particulate.window_frames(dt),
                     })
                 }
+                // Scatter and Emit from image fall out here: their points
+                // depend on a picture, and none exists when this walk runs.
+                // The wire reads the empty stream, and nothing is memoised.
+                // The render walk makes their stream on the card for the
+                // effects below them. Anything else this build cannot
+                // evaluate falls out here too.
                 _ => None,
             }
         })?;
@@ -898,33 +1069,25 @@ impl Eval<'_> {
             self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
             return Some(stream);
         }
-        // **The picture-dependent producers cannot be sampled here, and that is
-        // the recorded answer** to points-stream.md §2.2's constraint:
-        // Scatter's stream is a function of the input picture and Emit
-        // from image's is a function of a Source layer's, and at resolve time —
-        // which is when this walk runs — no picture exists. The wire reads the
-        // documented empty stream rather than a guess at one, and nothing is
-        // memoised, so a future carriage that can answer will not find a wrong
-        // answer cached in front of it. Anything else this build does not know
-        // how to evaluate falls out here too, which is the same calm.
-        let Producer::Particulate {
-            points,
-            window_frames,
-        } = producer
-        else {
-            return None;
-        };
-
-        // The mask-path emitter's polyline, flattened at composition scale, by
-        // the rule the draw builder applies: a row the panel does not show, or
-        // shows greyed, is a row nobody meant.
+        // The path's polyline, flattened at composition scale, by the one
+        // rule the draw builder also asks.
         let path = match def.schema().mask_path() {
-            Some((param, self_default))
-                if super::param_visible(inst, param) && super::param_enabled(inst, param) =>
-            {
-                crate::mask::mask_path_at(masks, inst.mask_ref(param), self_default, t)
+            Some((param, self_default)) => {
+                crate::mask::effect_path_at(inst, param, self_default, layer, t)
             }
-            _ => crate::mask::MaskPolyline::default(),
+            None => crate::mask::MaskPolyline::default(),
+        };
+        let (points, window_frames) = match producer {
+            Producer::Particulate {
+                points,
+                window_frames,
+            } => (points, window_frames),
+            Producer::AlongPath(along) => {
+                let stream = Rc::new(along.stream(&path, self.projection));
+                self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+                return Some(stream);
+            }
+            Producer::Grid(_) => return None,
         };
 
         // **The birth schedule follows the authored Emit rate track**, which is
@@ -1294,59 +1457,6 @@ mod tests {
             .param(NodeRef::Effect(target.id), ParamId::new("radius"))
             .expect("wired")
             .as_f32()
-    }
-
-    /// **The Source row is what the node listens to** (docs/impl/audio-nodes.md
-    /// §3, plan 3): the comp's mix, one layer of it, or one clip of that
-    /// layer - and on a row of two clips it follows the one it names. A clip
-    /// somebody deleted, or a row naming nothing, is the same silence a
-    /// dangling reference has always given.
-    #[test]
-    fn audio_level_reads_what_the_source_row_names() {
-        let tap = Strips {
-            layer: Uuid::now_v7(),
-            head: Uuid::now_v7(),
-            tail: Uuid::now_v7(),
-        };
-        let mut node = inst("audio_level");
-        set(&mut node, "window", 0.1);
-        set_ref(&mut node, "audio", EffectValue::Layer(Some(tap.layer)));
-
-        set_choice(&mut node, "source", audio_level::SOURCE_THIS_COMP);
-        assert!(
-            (heard(&node, &tap) - MIX).abs() < 1e-4,
-            "This comp reads the whole mix, named layer or not"
-        );
-
-        set_choice(&mut node, "source", audio_level::SOURCE_LAYER);
-        assert!(
-            (heard(&node, &tap) - ROW).abs() < 1e-4,
-            "Layer reads that layer's own share of the mix"
-        );
-
-        set_choice(&mut node, "source", audio_level::SOURCE_CLIP);
-        for (clip, want) in [(tap.head, HEAD), (tap.tail, TAIL)] {
-            set_ref(&mut node, "clip", EffectValue::Clip(Some(clip)));
-            assert!(
-                (heard(&node, &tap) - want).abs() < 1e-4,
-                "two clips on one row are two readings"
-            );
-        }
-
-        // The clip somebody deleted, and the row that never named one.
-        for gone in [Some(Uuid::now_v7()), None] {
-            set_ref(&mut node, "clip", EffectValue::Clip(gone));
-            assert_eq!(
-                heard(&node, &tap),
-                0.0,
-                "a clip that is not there is silence"
-            );
-        }
-
-        // And so is Layer with no layer: the row said which sound it wanted.
-        set_choice(&mut node, "source", audio_level::SOURCE_LAYER);
-        set_ref(&mut node, "audio", EffectValue::Layer(None));
-        assert_eq!(heard(&node, &tap), 0.0);
     }
 
     /// **An instance older than the Source row keeps the reading it had**
@@ -1729,99 +1839,6 @@ mod tests {
         );
     }
 
-    /// A driven px@comp parameter travels through the same preview-raster
-    /// conversion a typed one does, so a wire cannot land in the wrong units.
-    #[test]
-    fn a_driven_distance_is_still_pixels_at_composition_size() {
-        let blur = inst("blur");
-        let mut w = inst("wiggle");
-        set(&mut w, "amount", 0.0);
-        // Amount nought so the value is exactly nought... use Remap instead to
-        // get a known non-zero number out.
-        let mut r = inst("remap");
-        set(&mut r, "value", 1.0);
-        set(&mut r, "in_low", 0.0);
-        set(&mut r, "in_high", 1.0);
-        set(&mut r, "out_low", 0.0);
-        set(&mut r, "out_high", 20.0);
-
-        let graph = LayerGraph {
-            edges: vec![edge(&r, "value", NodeRef::Effect(blur.id), "radius")],
-            nodes: vec![r],
-            ..LayerGraph::default()
-        };
-        let drivers = resolve_drivers(&graph, 0.0, ctx(), None);
-        let at = |px_scale: f32| {
-            crate::fx::resolve_stack_temporal_named(
-                std::slice::from_ref(&blur),
-                &drivers,
-                0.0,
-                0.0,
-                1000.0,
-                px_scale,
-                &MarkerContext::NONE,
-                ctx(),
-            )
-            .1
-            .get(0)
-            .expect("one op")
-            .params
-            .float(ParamId::new("radius"), -1.0)
-        };
-        assert_eq!(at(1.0), 20.0);
-        assert_eq!(at(0.5), 10.0, "half resolution halves the radius");
-    }
-
-    /// §1.4: bypass is the ordinary `enabled` flag, and a bypassed driver hands
-    /// the parameter back to its keyframes.
-    #[test]
-    fn a_bypassed_driver_carries_nothing() {
-        let blur = inst("blur");
-        let mut r = inst("remap");
-        set(&mut r, "value", 1.0);
-        set(&mut r, "out_high", 20.0);
-        r.enabled = false;
-
-        let graph = LayerGraph {
-            edges: vec![edge(&r, "value", NodeRef::Effect(blur.id), "radius")],
-            nodes: vec![r],
-            ..LayerGraph::default()
-        };
-        assert!(resolve_drivers(&graph, 0.0, ctx(), None).is_empty());
-    }
-
-    /// The walk is topological by construction: a chain evaluates back to front
-    /// whatever order the nodes are written in.
-    #[test]
-    fn a_chain_evaluates_in_dependency_order() {
-        let blur = inst("blur");
-        let mut a = inst("math");
-        set_choice(&mut a, "operation", 0); // Add
-        set(&mut a, "a", 2.0);
-        set(&mut a, "b", 3.0);
-        let mut b = inst("math");
-        set_choice(&mut b, "operation", 2); // Multiply
-        set(&mut b, "b", 10.0);
-
-        // a (=5) into b's A, b (=50) into the blur.
-        let graph = LayerGraph {
-            edges: vec![
-                edge(&a, "value", NodeRef::Driver(b.id), "a"),
-                edge(&b, "value", NodeRef::Effect(blur.id), "radius"),
-            ],
-            // Deliberately the reverse of evaluation order.
-            nodes: vec![b.clone(), a],
-            ..LayerGraph::default()
-        };
-        assert_eq!(
-            resolve_drivers(&graph, 0.0, ctx(), None)
-                .param(NodeRef::Effect(blur.id), ParamId::new("radius"))
-                .expect("wired")
-                .as_f32(),
-            50.0
-        );
-    }
-
     /// A loop is refused at commit, but a hand-edited file can still carry one:
     /// the walk must bottom out rather than spin.
     #[test]
@@ -1841,23 +1858,6 @@ mod tests {
         let first = resolve_drivers(&graph, 0.0, ctx(), None);
         let second = resolve_drivers(&graph, 0.0, ctx(), None);
         assert_eq!(first, second);
-    }
-
-    /// §1.4 again, from the evaluation side: a SourceMatte wire is reported as
-    /// itself rather than as a value.
-    #[test]
-    fn a_source_matte_wire_is_reported_not_evaluated() {
-        let blur = inst("blur");
-        let graph = LayerGraph {
-            edges: vec![Edge {
-                from: OutputRef::SourceMatte,
-                to: InputRef::Matte { effect: blur.id },
-            }],
-            ..LayerGraph::default()
-        };
-        let drivers = resolve_drivers(&graph, 0.0, ctx(), None);
-        assert!(drivers.source_matte(blur.id));
-        assert_eq!(drivers.iter().count(), 0);
     }
 
     /// §2.3: the two temporal drivers declare how far they reach, and the
@@ -1948,6 +1948,7 @@ mod tests {
             volume_db: crate::anim::Property::zero(),
             pan: crate::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             blend: Default::default(),
@@ -2152,54 +2153,6 @@ mod tests {
         );
     }
 
-    /// **A second producer, on the same wire**: a Grid's lattice reads
-    /// through the Points sample exactly as a particle field does, because the
-    /// walk asks the *signature* who emits points rather than carrying a name.
-    /// The count is the lattice, cell for cell, and the nearest distance is a
-    /// spacing away from a point sat on the lattice's own centre.
-    #[test]
-    fn a_grids_lattice_reads_through_the_points_sample() {
-        let mut producer = inst("grid");
-        set(&mut producer, "columns", 5.0);
-        set(&mut producer, "rows", 3.0);
-        set(&mut producer, "spacing_x", 100.0);
-        set(&mut producer, "spacing_y", 100.0);
-
-        let sampler = inst("points_sample");
-        let target = inst("blur");
-        let wired = LayerGraph {
-            nodes: vec![sampler.clone()],
-            edges: vec![
-                stream_edge(&producer, &sampler),
-                edge(
-                    &sampler,
-                    points_sample::COUNT_PORT,
-                    NodeRef::Effect(target.id),
-                    "radius",
-                ),
-                edge(
-                    &sampler,
-                    points_sample::NEAREST_PORT,
-                    NodeRef::Effect(target.id),
-                    "mix",
-                ),
-            ],
-            ..LayerGraph::default()
-        };
-        let context = staged(vec![producer.clone(), target.clone()], wired.clone());
-        let resolved = resolve_drivers(&wired, 1.0, context, None);
-        let read = |id: &str| {
-            resolved
-                .param(NodeRef::Effect(target.id), ParamId::new(id))
-                .expect("the wire carries something")
-                .as_f32()
-        };
-        assert_eq!(read("radius"), 15.0, "five columns of three rows");
-        // The sampler's default Position is the comp's centre, and an odd
-        // lattice has a cell sat exactly on it.
-        assert_eq!(read("mix"), 0.0, "the centre cell is where the query is");
-    }
-
     /// **A node graph's boxes** (node-graph-comp.md §5.1): the producer is
     /// found in the slice handed to the walk, with no layer in the context at
     /// all, and it is evaluated once however many wires read it.
@@ -2263,6 +2216,7 @@ mod tests {
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack: Some(&stack),
+            clone: NO_CLONE,
         };
         assert!(ev.stream(producer.id, 1.0, 0).is_some());
         let spent = EVAL_BUDGET - ev.budget.get();
@@ -2272,146 +2226,6 @@ mod tests {
             EVAL_BUDGET - ev.budget.get(),
             spent,
             "the second ask costs nothing"
-        );
-    }
-
-    /// The refusals travel with the walk: a picture-dependent producer hands
-    /// out nothing in a graph as it hands out nothing on a layer, and a
-    /// bypassed box hands out nothing either.
-    #[test]
-    fn a_graphs_scatter_and_a_bypassed_producer_hand_out_no_stream() {
-        let sampler = inst("points_sample");
-        let target = inst("blur");
-        let wire_up = |producer: &EffectInstance| LayerGraph {
-            nodes: vec![sampler.clone()],
-            edges: vec![
-                stream_edge(producer, &sampler),
-                edge(
-                    &sampler,
-                    points_sample::COUNT_PORT,
-                    NodeRef::Effect(target.id),
-                    "radius",
-                ),
-            ],
-            ..LayerGraph::default()
-        };
-        let context = Arc::new(ExpressionContext {
-            layer: None,
-            ..(*staged(Vec::new(), LayerGraph::default())).clone()
-        });
-        let count = |producer: EffectInstance| {
-            let wired = wire_up(&producer);
-            let stack = vec![producer, target.clone()];
-            resolve_drivers_in(&wired, 1.0, context.clone(), None, Some(&stack))
-                .param(NodeRef::Effect(target.id), ParamId::new("radius"))
-                .expect("the wire carries something")
-                .as_f32()
-        };
-
-        assert_eq!(
-            count(inst("scatter")),
-            0.0,
-            "a stream that depends on a picture is not sampled at resolve time"
-        );
-        let mut off = inst("grid");
-        off.enabled = false;
-        assert_eq!(count(off), 0.0, "a bypassed producer draws nothing");
-    }
-
-    /// **Scatter's stream cannot be sampled by a driver**, which is the
-    /// recorded answer to points-stream.md §2.2's constraint: the stream is a
-    /// function of the input picture, and at resolve time there is no picture.
-    /// The wire reads the documented empty stream — nothing alive, nothing
-    /// anywhere near — rather than a guess at one.
-    #[test]
-    fn a_scatters_stream_reads_as_empty_in_the_driver_walk() {
-        let producer = inst("scatter");
-        let sampler = inst("points_sample");
-        let target = inst("blur");
-        let wired = LayerGraph {
-            nodes: vec![sampler.clone()],
-            edges: vec![
-                stream_edge(&producer, &sampler),
-                edge(
-                    &sampler,
-                    points_sample::COUNT_PORT,
-                    NodeRef::Effect(target.id),
-                    "radius",
-                ),
-                edge(
-                    &sampler,
-                    points_sample::NEAREST_PORT,
-                    NodeRef::Effect(target.id),
-                    "mix",
-                ),
-            ],
-            ..LayerGraph::default()
-        };
-        let context = staged(vec![producer.clone(), target.clone()], wired.clone());
-        let resolved = resolve_drivers(&wired, 1.0, context, None);
-        let read = |id: &str| {
-            resolved
-                .param(NodeRef::Effect(target.id), ParamId::new(id))
-                .expect("the wire carries something")
-                .as_f32()
-        };
-        assert_eq!(read("radius"), 0.0, "a picture-less stream counted points");
-        // Clamped to the parameter's own hard range at the socket, as
-        // every driven value is, so this is the far value held to Mix's top.
-        assert!(
-            read("mix") > 0.0,
-            "nearness read as 'a point is right here'"
-        );
-    }
-
-    /// The documented no-ops (§2.2): an unwired socket and an empty stream both
-    /// read as "nothing alive, nothing anywhere near" — and the far value is a
-    /// large distance rather than nought, because a Remap from nearness reads
-    /// nought as "a particle is right here".
-    #[test]
-    fn an_unwired_or_empty_stream_reads_as_nothing_near() {
-        use crate::fx::points::PointsStream;
-
-        let sampler = inst("points_sample");
-        let target = inst("blur");
-        let unwired = LayerGraph {
-            nodes: vec![sampler.clone()],
-            edges: vec![
-                edge(
-                    &sampler,
-                    points_sample::COUNT_PORT,
-                    NodeRef::Effect(target.id),
-                    "radius",
-                ),
-                edge(
-                    &sampler,
-                    points_sample::NEAREST_PORT,
-                    NodeRef::Effect(target.id),
-                    "mix",
-                ),
-            ],
-            ..LayerGraph::default()
-        };
-        let context = staged(vec![target.clone()], unwired.clone());
-        let resolved = resolve_drivers(&unwired, 1.0, context, None);
-        let read = |port: &str| {
-            resolved
-                .param(NodeRef::Effect(target.id), ParamId::new(port))
-                .expect("an unwired data input still makes numbers")
-                .as_f32()
-        };
-        assert_eq!(read("radius"), 0.0, "nothing wired is nothing alive");
-        assert_eq!(read("mix"), points_sample::NOTHING_NEAR);
-
-        // The same two numbers from the sampler itself, over no stream and over
-        // an empty one — the two ways of having no particles.
-        assert_eq!(
-            points_sample::sample(None, [0.0, 0.0]),
-            (0.0, points_sample::NOTHING_NEAR)
-        );
-        assert_eq!(
-            points_sample::sample(Some(&PointsStream::default()), [0.0, 0.0]),
-            (0.0, points_sample::NOTHING_NEAR)
         );
     }
 
@@ -2441,120 +2255,6 @@ mod tests {
         assert_eq!(points_sample::sample(Some(&s), [30.0, 40.0]).1, 0.0);
     }
 
-    /// **Nearest distance is measured where the picture draws**: the
-    /// projected position, not the three axes.
-    ///
-    /// Position is a point on the frame, so the honest answer to "how far is
-    /// the nearest particle" is how far it is in the frame — and a particle
-    /// pushed away from the camera is *seen* nearer the centre, so the number
-    /// has to follow it there. The port declares itself 2D
-    /// ([`Port::three_d`] false); this is what that declaration buys.
-    #[test]
-    fn nearest_distance_measures_in_the_projected_frame() {
-        use crate::fx::points::{PointsStream, Projection};
-
-        // A head-on camera 400 back from the plane, about the origin: a
-        // particle 400 deep is seen at half its distance from the centre.
-        let proj = Projection {
-            m: [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0 / 400.0, 1.0],
-            ],
-        };
-        let mut s = PointsStream {
-            projection: proj,
-            ..PointsStream::default()
-        };
-        s.position.push([100.0, 0.0, 400.0]);
-        s.id.push(0);
-        // Unprojected it is 100 out; seen, it is 50.
-        assert!((points_sample::sample(Some(&s), [0.0, 0.0]).1 - 50.0).abs() < 1e-3);
-        // And the same stream on a 2D layer reads the plane distance, which is
-        // the number this driver has always answered.
-        s.projection = Projection::FLAT;
-        assert_eq!(points_sample::sample(Some(&s), [0.0, 0.0]).1, 100.0);
-    }
-
-    /// The wire stays one type: the v1 consumer does **not** declare 3D
-    /// awareness, so what it reads is the projected pair. A test rather than a
-    /// comment because the flag is what the family package builds on, and a
-    /// port that quietly flipped would change what every 2D consumer measures.
-    #[test]
-    fn the_points_sample_port_is_not_three_d_aware() {
-        let def = super::super::BUILTIN_DEFS
-            .get("points_sample")
-            .expect("Points sample is declared");
-        let crate::fx::Signature::Data { inputs, .. } = def.signature() else {
-            panic!("Points sample is a driver");
-        };
-        let port = inputs.first().expect("it declares its Points input");
-        assert_eq!(port.ty, crate::fx::PortType::Points);
-        assert!(!port.three_d, "the v1 driver reads projected positions");
-    }
-
-    /// §3.3's memo: **one evaluation per producer per frame**, however many
-    /// wires read it — and the walk's budget bounds what a frame can spend.
-    #[test]
-    fn one_producer_is_evaluated_once_a_frame() {
-        let mut producer = inst("particulate");
-        set(&mut producer, "emit_rate", 60.0);
-        let (a, b) = (inst("points_sample"), inst("points_sample"));
-        let target = inst("blur");
-
-        let graph = LayerGraph {
-            nodes: vec![a.clone(), b.clone()],
-            edges: vec![
-                stream_edge(&producer, &a),
-                stream_edge(&producer, &b),
-                edge(
-                    &a,
-                    points_sample::COUNT_PORT,
-                    NodeRef::Effect(target.id),
-                    "radius",
-                ),
-                edge(
-                    &b,
-                    points_sample::NEAREST_PORT,
-                    NodeRef::Effect(target.id),
-                    "mix",
-                ),
-            ],
-            ..LayerGraph::default()
-        };
-        let context = staged(vec![producer.clone(), target.clone()], graph.clone());
-
-        let ev = Eval {
-            graph: &graph,
-            context,
-            audio: None,
-            projection: points::Projection::FLAT,
-            budget: Cell::new(EVAL_BUDGET),
-            streams: RefCell::new(Vec::new()),
-            arenas: RefCell::new(ArenaPool::default()),
-            cross: true,
-            stack: None,
-        };
-        assert!(ev.output(a.id, points_sample::COUNT_PORT, 1.0, 0).is_some());
-        assert!(ev
-            .output(b.id, points_sample::NEAREST_PORT, 1.0, 0)
-            .is_some());
-        assert_eq!(
-            ev.arenas.borrow().arenas.len(),
-            2,
-            "the nested scalar-to-stream evaluation returns both arenas for reuse"
-        );
-        assert_eq!(
-            ev.streams.borrow().len(),
-            1,
-            "two wires out of one Particulate must cost one stream"
-        );
-        assert!(
-            EVAL_BUDGET - ev.budget.get() < 16,
-            "a two-driver graph must not spend a frame's budget"
-        );
-    }
-
     /// P-001: scalar resolutions return a cleared arena, including the normal
     /// repeated-output and early-`None` paths.
     #[test]
@@ -2574,6 +2274,7 @@ mod tests {
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack: None,
+            clone: NO_CLONE,
         };
         for _ in 0..64 {
             assert!(ev.output(remap.id, "value", 0.0, 0).is_some());
@@ -2584,70 +2285,6 @@ mod tests {
         assert!(pool.reuses >= 64);
         assert_eq!(pool.high_water, 1);
         assert_eq!(pool.arenas.len(), 1);
-        assert!(pool.arenas.iter().all(|arena| arena.is_empty()));
-    }
-
-    /// P-001: stream resolution reduces its borrowed parameters before return,
-    /// so repeated streams can reuse the same cleared arena.
-    #[test]
-    fn stream_arena_pool_reuses_owned_stream_inputs_and_bounds_retention() {
-        let grid = inst("grid");
-        let graph = LayerGraph::default();
-        let ev = Eval {
-            graph: &graph,
-            context: staged(vec![grid.clone()], graph.clone()),
-            audio: None,
-            projection: points::Projection::FLAT,
-            budget: Cell::new(EVAL_BUDGET),
-            streams: RefCell::new(Vec::new()),
-            arenas: RefCell::new(ArenaPool::default()),
-            cross: true,
-            stack: None,
-        };
-        for _ in 0..64 {
-            assert!(ev.stream(grid.id, 0.0, 0).is_some());
-            ev.streams.borrow_mut().clear();
-        }
-        let pool = ev.arenas.borrow();
-        assert_eq!(pool.allocations, 1);
-        assert!(pool.reuses >= 63);
-        assert_eq!(pool.high_water, 1);
-        assert!(pool.arenas.iter().all(|arena| arena.is_empty()));
-    }
-
-    /// P-001: checking out another arena while an outer scalar/stream resolve
-    /// holds one is reentrant and cannot retain stale state or a RefCell borrow.
-    #[test]
-    fn nested_arena_checkout_is_reentrant_and_returns_both_arenas() {
-        let graph = LayerGraph::default();
-        let ev = Eval {
-            graph: &graph,
-            context: ctx(),
-            audio: None,
-            projection: points::Projection::FLAT,
-            budget: Cell::new(EVAL_BUDGET),
-            streams: RefCell::new(Vec::new()),
-            arenas: RefCell::new(ArenaPool::default()),
-            cross: true,
-            stack: None,
-        };
-        ev.with_arena(|outer| {
-            outer.begin(
-                super::super::BUILTIN_DEFS.get("blur").expect("blur"),
-                Uuid::nil(),
-            );
-            ev.with_arena(|inner| {
-                assert_eq!(inner.len(), 0, "nested checkout starts clear");
-                inner.begin(
-                    super::super::BUILTIN_DEFS.get("grid").expect("grid"),
-                    Uuid::nil(),
-                );
-            });
-            assert_eq!(outer.len(), 1, "inner clear cannot touch outer state");
-        });
-        let pool = ev.arenas.borrow();
-        assert_eq!(pool.allocations, 2);
-        assert_eq!(pool.high_water, 2);
         assert!(pool.arenas.iter().all(|arena| arena.is_empty()));
     }
 
@@ -2702,6 +2339,7 @@ mod tests {
             arenas: RefCell::new(ArenaPool::default()),
             cross: true,
             stack: None,
+            clone: NO_CLONE,
         };
         let _ = ev.output(sampler.id, points_sample::COUNT_PORT, 1.0, 0);
         assert!(
@@ -2711,44 +2349,6 @@ mod tests {
         assert_eq!(
             resolve_drivers(&looped, 1.0, context.clone(), None),
             resolve_drivers(&looped, 1.0, context, None),
-        );
-    }
-
-    /// A bypassed producer draws nothing, so it hands out nothing: the picture
-    /// and the stream agree about an off switch.
-    #[test]
-    fn a_bypassed_producer_hands_out_no_stream() {
-        let mut producer = inst("particulate");
-        set(&mut producer, "emit_rate", 200.0);
-        let sampler = inst("points_sample");
-        let target = inst("blur");
-        let graph = LayerGraph {
-            nodes: vec![sampler.clone()],
-            edges: vec![
-                stream_edge(&producer, &sampler),
-                edge(
-                    &sampler,
-                    points_sample::COUNT_PORT,
-                    NodeRef::Effect(target.id),
-                    "radius",
-                ),
-            ],
-            ..LayerGraph::default()
-        };
-        let count = |p: &EffectInstance| {
-            let context = staged(vec![p.clone(), target.clone()], graph.clone());
-            resolve_drivers(&graph, 1.0, context, None)
-                .param(NodeRef::Effect(target.id), ParamId::new("radius"))
-                .expect("wired")
-                .as_f32()
-        };
-        assert!(count(&producer) > 0.0);
-        let mut off = producer.clone();
-        off.enabled = false;
-        assert_eq!(
-            count(&off),
-            0.0,
-            "a bypassed producer emits nothing to read"
         );
     }
 
@@ -2792,48 +2392,6 @@ mod tests {
         m
     }
 
-    /// **An unwired Points sample's `1e9` arrives clamped**.
-    ///
-    /// This is the case that raised the question: the driver answers a
-    /// deliberately enormous distance over an empty stream, and before the
-    /// clamp that number went straight into the parameter — a Blur radius sat
-    /// at a billion pixels, past a hard maximum a typed value can never reach.
-    /// The panel's *"no stream"* mark still says why; this is what
-    /// stops the picture being nonsense while it does.
-    #[test]
-    fn an_empty_streams_enormous_distance_clamps_to_the_hard_range() {
-        let sampler = inst("points_sample");
-        let target = inst("blur");
-        let graph = LayerGraph {
-            nodes: vec![sampler.clone()],
-            edges: vec![edge(
-                &sampler,
-                points_sample::NEAREST_PORT,
-                NodeRef::Effect(target.id),
-                "radius",
-            )],
-            ..LayerGraph::default()
-        };
-        // The wire itself still carries the honest constant: the driver is not
-        // told what it is plugged into, and the frame key hashes what it said.
-        let raw = resolve_drivers(
-            &graph,
-            1.0,
-            staged(vec![target.clone()], graph.clone()),
-            None,
-        )
-        .param(NodeRef::Effect(target.id), ParamId::new("radius"))
-        .expect("the wire carries something")
-        .as_f32();
-        assert_eq!(raw, points_sample::NOTHING_NEAR);
-        // What the kernel is handed is the parameter's own maximum.
-        assert_eq!(
-            resolved_param(&target, "radius", &graph, 1.0),
-            2000.0,
-            "a driven radius must stop where a typed one stops"
-        );
-    }
-
     /// **A wild driver cannot push past either bound**, the parameter's hard
     /// range — and the clamp is in schema space, before the raster scaling,
     /// so it is the same number at every preview resolution.
@@ -2854,83 +2412,6 @@ mod tests {
         // In between, the wire's number is untouched: this is a backstop, not
         // a second opinion about what a driver means.
         assert_eq!(at(37.5), 37.5);
-    }
-
-    /// **A whole-number parameter is clamped too**, at its own bounds: Sprite
-    /// flare's Ghosts runs 0..=16, and rounds after the clamp rather than
-    /// before it.
-    #[test]
-    fn a_driven_integer_is_held_to_its_own_bounds() {
-        let target = inst("sprite_flare");
-        let at = |v: f64| {
-            let driver = constant(v);
-            let graph = LayerGraph {
-                nodes: vec![driver.clone()],
-                edges: vec![edge(&driver, "value", NodeRef::Effect(target.id), "ghosts")],
-                ..LayerGraph::default()
-            };
-            resolved_param(&target, "ghosts", &graph, 1.0)
-        };
-        assert_eq!(at(-40.0), 0.0);
-        assert_eq!(at(900.0), 16.0);
-        assert_eq!(at(5.0), 5.0);
-    }
-
-    /// **An unbounded-above parameter still takes big values** (a hard range
-    /// may be one-sided): the clamp is the *declared* range, not a range
-    /// invented for it. Radial blur's Amount clamps at nought below and runs
-    /// free above, and a driver may take it anywhere the user could type it.
-    #[test]
-    fn an_unbounded_parameter_still_takes_a_large_driven_value() {
-        let target = inst("radial_blur");
-        let at = |v: f64| {
-            let driver = constant(v);
-            let graph = LayerGraph {
-                nodes: vec![driver.clone()],
-                edges: vec![edge(&driver, "value", NodeRef::Effect(target.id), "amount")],
-                ..LayerGraph::default()
-            };
-            resolved_param(&target, "amount", &graph, 1.0)
-        };
-        assert_eq!(at(50_000.0), 50_000.0, "nothing bounds it above");
-        assert_eq!(at(-1.0), 0.0, "and it still stops at nought below");
-    }
-
-    /// **A driver's own socket is not clamped**, and this is the case
-    /// that decides it: Remap exists to take a wide number and narrow it. Its
-    /// Value row declares a 0..=1 slider, which is a sensible thing to *type*
-    /// into and a nonsense bound on a **wire** — clamping there would leave the
-    /// one driver written for out-of-range numbers unable to see them, and
-    /// would make Nearest distance (pixels) unusable through the very
-    /// driver points-stream.md §2.2 names for it.
-    ///
-    /// A hard bound says what a *kernel* was written for. A chain of drivers
-    /// ends at an effect socket, and that is where the clamp is.
-    #[test]
-    fn a_drivers_own_socket_takes_the_number_it_is_handed() {
-        let feed = constant(400.0);
-        let mut remap = inst("remap");
-        set(&mut remap, "in_low", 0.0);
-        set(&mut remap, "in_high", 800.0);
-        set(&mut remap, "out_low", 0.0);
-        set(&mut remap, "out_high", 100.0);
-        let target = inst("blur");
-        let graph = LayerGraph {
-            nodes: vec![feed.clone(), remap.clone()],
-            edges: vec![
-                edge(&feed, "value", NodeRef::Driver(remap.id), "value"),
-                edge(&remap, "value", NodeRef::Effect(target.id), "radius"),
-            ],
-            ..LayerGraph::default()
-        };
-        // 400 of 0..800 is halfway, so 50 of 0..100. Clamped at the Value
-        // row's 0..=1 slider it would have been 100 — the top of the range,
-        // for every input above one.
-        let got = resolved_param(&target, "radius", &graph, 1.0);
-        assert!(
-            (got - 50.0).abs() < 1e-3,
-            "Remap saw a clamped input: {got} rather than 50"
-        );
     }
 
     // -----------------------------------------------------------------------
@@ -2971,6 +2452,7 @@ mod tests {
                 volume_db: crate::anim::Property::zero(),
                 pan: crate::anim::Property::zero(),
                 audio_only: false,
+                audio_streams: Default::default(),
                 adjustment: false,
                 retime: None,
                 blend: Default::default(),
@@ -3093,58 +2575,6 @@ mod tests {
         (context, built, node_id)
     }
 
-    /// **A tap hands out the points of the layer it names**: the stream
-    /// the *other* layer's producer makes, reaching this layer's graph as an
-    /// ordinary wire out of a derived source node — no edge crosses anything.
-    #[test]
-    fn a_tap_reads_the_points_of_the_layer_it_names() {
-        let (context, graph, node) = one_tap(None, vec![lattice()], LayerGraph::default(), true);
-        let stream = tapped(&context, &graph, node).expect("the tap answered nothing");
-        assert_eq!(stream.len(), 15, "not the other layer's 5 × 3 lattice");
-        assert_eq!(stream.id, (0..15).collect::<Vec<u64>>());
-    }
-
-    /// **Every absence is the empty stream** — the labelled no-op a
-    /// dangling layer reference has always been, over the five ways a tap can
-    /// come to nothing. None of them is a refusal: a tap that answers nothing
-    /// leaves its consumer drawing the picture it was handed.
-    #[test]
-    fn a_tap_that_names_nothing_useful_hands_over_nothing() {
-        let mut bypassed = lattice();
-        bypassed.enabled = false;
-        let cases: Vec<(&str, Option<Uuid>, Vec<EffectInstance>, bool)> = vec![
-            // A row nobody set.
-            ("an unset row", Some(Uuid::nil()), vec![lattice()], true),
-            // A layer somebody deleted: an id that names nothing in the comp.
-            (
-                "a dangling reference",
-                Some(Uuid::now_v7()),
-                vec![lattice()],
-                true,
-            ),
-            // A layer with no producer on it at all.
-            ("no producer", None, vec![inst("blur")], true),
-            // A bypassed producer draws nothing, so it hands out nothing.
-            ("a bypassed producer", None, vec![bypassed], true),
-            // A bypassed tap — the `B` badge, as on every other driver.
-            ("a bypassed tap", None, vec![lattice()], false),
-        ];
-        for (what, row, effects, enabled) in cases {
-            // `Uuid::nil` stands for the unset row, which stores no id at all.
-            let row = row.filter(|id| !id.is_nil());
-            let unset_row = matches!(what, "an unset row");
-            let (context, graph, node) = if unset_row {
-                one_tap(Some(Uuid::nil()), effects, LayerGraph::default(), enabled)
-            } else {
-                one_tap(row, effects, LayerGraph::default(), enabled)
-            };
-            assert!(
-                tapped(&context, &graph, node).is_none(),
-                "{what} answered a stream"
-            );
-        }
-    }
-
     /// **A tap reaches one layer, never two** — the recursion argument,
     /// asserted rather than reasoned about. The source layer's own graph
     /// carries a tap of its own and no producer; the far tap answers nothing,
@@ -3163,33 +2593,6 @@ mod tests {
             true,
         );
         assert!(tapped(&context, &graph, node).is_none());
-    }
-
-    /// **What a tap reads is what the other layer draws** (points-stream.md
-    /// §1.3): the far layer's producer is resolved with its *own* graph's
-    /// substitutions applied, so a wire over there moves the points a tap hands
-    /// over here.
-    #[test]
-    fn a_tap_reads_the_far_layers_own_driver_wires() {
-        let feed = constant(9.0);
-        let producer = lattice();
-        let far_graph = LayerGraph {
-            nodes: vec![feed.clone()],
-            edges: vec![edge(
-                &feed,
-                "value",
-                NodeRef::Effect(producer.id),
-                "columns",
-            )],
-            ..LayerGraph::default()
-        };
-        let (context, graph, node) = one_tap(None, vec![producer], far_graph, true);
-        let stream = tapped(&context, &graph, node).expect("the tap answered nothing");
-        assert_eq!(
-            stream.len(),
-            27,
-            "the far layer's wire on Columns was not applied"
-        );
     }
 
     /// **A driver reads a tap the same way it reads a producer**:
@@ -3274,6 +2677,49 @@ mod tests {
         .collect()
     }
 
+    /// An input is a number the text reads by name: what its wire carries
+    /// where it has one, its own row's value where it does not. Removing one
+    /// takes its stored value with it.
+    #[test]
+    fn an_expression_reads_its_inputs_by_name() {
+        let mut e = expression("(input_1 + input_2) * input_3");
+        for _ in 0..3 {
+            expression::add_input(&mut e);
+        }
+        // `input_1` and `input_3` hold typed values; `input_2` follows a wire.
+        for (id, value) in [("input_1", 2.0), ("input_3", 4.0)] {
+            e.params.push(crate::model::EffectParam {
+                id: id.to_owned(),
+                value: EffectValue::Float(crate::anim::Property::fixed(value)),
+                extra: serde_json::Map::new(),
+            });
+        }
+        // Math multiplies by default, so this box hands out 3.
+        let mut three = inst("math");
+        set(&mut three, "a", 3.0);
+        set(&mut three, "b", 1.0);
+        let target = inst("blur");
+        let graph = LayerGraph {
+            edges: vec![
+                edge(&three, "value", NodeRef::Driver(e.id), "input_2"),
+                edge(&e, "value", NodeRef::Effect(target.id), "radius"),
+            ],
+            nodes: vec![three, e.clone()],
+            ..LayerGraph::default()
+        };
+        assert_eq!(graph.validate(std::slice::from_ref(&target)), Ok(()));
+        assert_eq!(
+            resolve_drivers(&graph, 0.0, ctx(), None)
+                .param(NodeRef::Effect(target.id), ParamId::new("radius")),
+            Some(Value::Float(20.0)),
+            "(2 + 3) * 4"
+        );
+
+        assert_eq!(expression::remove_input(&mut e), Some("input_3"));
+        assert_eq!(expression::input_count(&e), 2);
+        assert!(e.params.iter().all(|p| p.id != "input_3"));
+    }
+
     /// A number fills Value and nothing else (node-graph.md §1.3).
     #[test]
     fn an_expression_returning_a_number_carries_only_its_value_port() {
@@ -3288,37 +2734,25 @@ mod tests {
         );
     }
 
-    /// A pair fills Point x and Point y and nothing else.
+    /// A box runs its text in the language it was given, Rhai until told
+    /// otherwise, and the choice sits beside the text without disturbing it.
     #[test]
-    fn an_expression_returning_a_point_carries_x_and_y_and_nothing_else() {
-        assert_eq!(
-            sockets_of(&expression("[3, 4.5]")),
-            vec![
-                ("value", None),
-                ("colour", None),
-                ("point_x", Some(Value::Float(3.0))),
-                ("point_y", Some(Value::Float(4.5))),
-            ]
-        );
-    }
+    fn an_expression_box_runs_in_the_language_it_was_given() {
+        use crate::expression::Language;
 
-    /// Three or four numbers fill Colour and nothing else, alpha defaulting to
-    /// opaque exactly as `evaluate_value` documents.
-    #[test]
-    fn an_expression_returning_a_colour_carries_only_its_colour_port() {
-        assert_eq!(
-            sockets_of(&expression("[1.0, 0.5, 0.25]")),
-            vec![
-                ("value", None),
-                ("colour", Some(Value::Colour([1.0, 0.5, 0.25, 1.0]))),
-                ("point_x", None),
-                ("point_y", None),
-            ]
-        );
-        assert_eq!(
-            carried(&expression("[0.5, 2.0, 0.0, 0.5]"), "colour", 0.0, ctx()),
-            Some(Value::Colour([0.5, 2.0, 0.0, 0.5])),
-            "four numbers are a colour with its own alpha, unclamped"
+        let mut e = expression("Math.max(20, 1.5) / 8");
+        assert_eq!(expression::language_of(&e), Language::Rhai);
+        assert_eq!(sockets_of(&e)[0], ("value", None), "Rhai has no Math");
+
+        expression::set_language(&mut e, Language::JavaScript);
+        assert_eq!(expression::language_of(&e), Language::JavaScript);
+        assert_eq!(sockets_of(&e)[0], ("value", Some(Value::Float(2.5))));
+        assert_eq!(expression::source_of(&e), "Math.max(20, 1.5) / 8");
+
+        expression::set_language(&mut e, Language::Rhai);
+        assert!(
+            e.extra["expression"].get("language").is_none(),
+            "Rhai is stored as nothing at all"
         );
     }
 

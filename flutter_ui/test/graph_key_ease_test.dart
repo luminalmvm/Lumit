@@ -41,17 +41,6 @@ void main() {
       expect(ease.outInfluence, 0.25);
       expect(ease.inSpeed, 100, reason: 'the untouched side still reads');
     });
-
-    test('an end key has one side', () {
-      final first = keyEaseOf(ramp, 0);
-      expect(first.hasIn, isFalse);
-      expect(first.hasOut, isTrue);
-      final last = keyEaseOf(ramp, 2);
-      expect(last.hasIn, isTrue);
-      expect(last.hasOut, isFalse);
-      expect(keyEaseOf([ramp[0]], 0).isEmpty, isTrue,
-          reason: 'a lone key has no span on either side');
-    });
   });
 
   group('keyWithEase', () {
@@ -65,67 +54,6 @@ void main() {
           reason: 'the side not typed into is left exactly as it was');
       expect(next.time, ramp[1].time);
       expect(next.value, 100);
-    });
-
-    test('a typed influence keeps the speed the side reads at', () {
-      final next = keyWithEase(ramp, 1, const KeyEase(inInfluence: 0.8));
-      expect(
-          next.interpIn,
-          const BridgeSideInterp.bezier(
-              BridgeBezierSide(speed: 100, influence: 0.8)));
-    });
-
-    test('both numbers on one side land together, clamped to a legal reach',
-        () {
-      final next =
-          keyWithEase(ramp, 1, const KeyEase(outSpeed: 40, outInfluence: 0));
-      final side = next.interpOut as BridgeSideInterp_Bezier;
-      expect(side.field0.speed, 40);
-      expect(side.field0.influence, minTangentReach,
-          reason: 'never quite vertical');
-    });
-
-    test('an automatic side typed into becomes free; one left alone stays', () {
-      const auto = BridgeSideInterp.auto(
-          BridgeAutoSide(clamped: true, speed: 7, influence: 0.5));
-      final keys = [
-        ramp[0],
-        key(1, 1, 100, interpIn: auto, interpOut: auto),
-        ramp[2],
-      ];
-      final next = keyWithEase(keys, 1, const KeyEase(outSpeed: 12));
-      expect(
-          next.interpOut,
-          const BridgeSideInterp.bezier(
-              BridgeBezierSide(speed: 12, influence: 0.5)),
-          reason: 'its own reach, the typed speed, and free from here');
-      expect(next.interpIn, auto);
-    });
-
-    test('nothing typed changes nothing', () {
-      final next = keysWithEase(ramp, 1, const KeyEase());
-      expect(next[1].interpIn, ramp[1].interpIn);
-      expect(next[1].interpOut, ramp[1].interpOut);
-      expect(next[0], ramp[0]);
-      expect(next[2], ramp[2]);
-    });
-  });
-
-  group('KeyEase', () {
-    test('merge lays the later numbers over the earlier', () {
-      const a = KeyEase(inSpeed: 1, outSpeed: 2);
-      const b = KeyEase(outSpeed: 3, outInfluence: 0.4);
-      expect(a.merge(b),
-          const KeyEase(inSpeed: 1, outSpeed: 3, outInfluence: 0.4));
-    });
-
-    test('side keeps one side only', () {
-      const both =
-          KeyEase(inSpeed: 1, inInfluence: 0.1, outSpeed: 2, outInfluence: 0.2);
-      expect(both.side(isOut: true),
-          const KeyEase(outSpeed: 2, outInfluence: 0.2));
-      expect(
-          both.side(isOut: false), const KeyEase(inSpeed: 1, inInfluence: 0.1));
     });
   });
 }

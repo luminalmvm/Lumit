@@ -223,8 +223,20 @@ impl Session {
                 // This call is as long as the plugin wants it to be. Looks
                 // stays in here until its editor is closed.
                 match live.instance.press(plugin, &name, time, &frame) {
-                    Ok(params) => self.reply(&BrokerMessage::Pressed { params }),
+                    Ok(settled) => self.reply(&BrokerMessage::Settled { settled }),
                     Err(status) => self.failed("press", &format!("{status:?}")),
+                }
+            }
+            HostMessage::Settle { instance, time } => {
+                let Some(live) = self.instances.get(&instance) else {
+                    return self.failed("settle", "no such instance");
+                };
+                let Some(plugin) = self.bundle.plugins().get(live.plugin) else {
+                    return self.failed("settle", "no such plugin in this bundle");
+                };
+                match live.instance.settle(plugin, time) {
+                    Ok(settled) => self.reply(&BrokerMessage::Settled { settled }),
+                    Err(status) => self.failed("settle", &format!("{status:?}")),
                 }
             }
             HostMessage::Render {
@@ -365,13 +377,8 @@ impl Session {
 
         let rendered =
             render_with_prefetch(plugin, &live.instance, &request, &token, &mut prefetch);
-        let (frame, frames_needed, identity_of, secret) = match rendered {
-            Ok(rendered) => (
-                rendered.frame,
-                rendered.frames_needed,
-                rendered.identity_of,
-                rendered.secret,
-            ),
+        let (frame, frames_needed, identity_of) = match rendered {
+            Ok(rendered) => (rendered.frame, rendered.frames_needed, rendered.identity_of),
             Err(error) => return self.failed("render", &error.to_string()),
         };
 
@@ -386,7 +393,6 @@ impl Session {
             slot: output,
             frames_needed,
             identity_of,
-            secret,
         })
     }
 

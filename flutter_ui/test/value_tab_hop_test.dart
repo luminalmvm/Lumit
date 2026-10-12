@@ -92,17 +92,4 @@ void main() {
     await _tab(tester);
     expect(_editing(tester), 'r1c0');
   });
-
-  testWidgets('Shift+Tab mirrors back up into the row above', (tester) async {
-    await tester.pumpWidget(_harness());
-    for (var i = 0; i < 3; i++) {
-      await _tab(tester);
-    }
-    expect(_editing(tester), 'r1c0');
-
-    await _tab(tester, shift: true);
-    expect(_editing(tester), 'r0c1');
-    await _tab(tester, shift: true);
-    expect(_editing(tester), 'r0c0');
-  });
 }

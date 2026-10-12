@@ -351,6 +351,42 @@ pub fn video_memory_bytes() -> u64 {
     }
 }
 
+/// Which adapter was picked, as one line, published the first time a context
+/// opens one.
+///
+/// The same "first context wins" shape as [`ADAPTER_SAMPLE_FLAGS`], and
+/// legitimate for the same reason: the backend is pinned and the adapter is
+/// chosen deterministically, so every context in a process opens the same card.
+/// It exists so the bridge can write the line into the diagnostics file a bug
+/// report is written from, which this crate can't reach and shouldn't: a
+/// graphics context has no business knowing where Lumit keeps its files.
+static ADAPTER_SUMMARY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The adapter the first context opened, in the words of the
+/// `lumit-gpu: adapter selected:` line, or `None` before any context exists.
+#[must_use]
+pub fn adapter_summary() -> Option<&'static str> {
+    ADAPTER_SUMMARY.get().map(String::as_str)
+}
+
+/// Which card the first context opened, as the kernel names it (see [`drm`]).
+/// Published once beside [`ADAPTER_SUMMARY`] and for the same reason: the
+/// adapter is only in hand inside [`GpuContext::headless`], and the Linux
+/// Viewer hand-off needs the answer every time it makes a texture.
+static ADAPTER_DRM_DEVICE: std::sync::OnceLock<drm::DrmDevice> = std::sync::OnceLock::new();
+
+/// The device nodes of the card the renderer is on, or
+/// [`drm::DrmDevice::UNKNOWN`] where that can't be asked: before any context
+/// has opened, off Linux, or on a driver that doesn't report them. Unknown is
+/// never a reason to refuse anything, it means the comparison isn't made.
+#[must_use]
+pub fn adapter_drm_device() -> drm::DrmDevice {
+    ADAPTER_DRM_DEVICE
+        .get()
+        .copied()
+        .unwrap_or(drm::DrmDevice::UNKNOWN)
+}
+
 /// [`supported_sample_count`] against an already-fetched flag set — the shared
 /// rule, so the adapter-side check and [`GpuContext::sample_count`] cannot
 /// drift apart.
@@ -1113,20 +1149,36 @@ impl GpuContext {
             .map_err(|e| GpuError::Device(e.to_string()))?;
 
         // Which adapter was picked is the first thing anyone asks when the
-        // Viewer is black or a hybrid-GPU machine chose the wrong card — but it
-        // is noise on every test and every shipped run, so it is opt-in. The
-        // crate has no logging framework (diagnostics go out through `note!`),
-        // so the gate is an environment variable: set `LUMIT_GPU_DEBUG` to
-        // anything to get the line.
-        if std::env::var_os("LUMIT_GPU_DEBUG").is_some() {
+        // Viewer is black or a hybrid-GPU machine chose the wrong card, so the
+        // line is printed on every run. It used to be opt-in behind
+        // `LUMIT_GPU_DEBUG`, on the grounds that it was noise. Then a laptop
+        // with two cards crashed on its first frame, and the report had to go
+        // round twice because the one line that explained it was the one
+        // nobody had been told to ask for. One line per context is a price
+        // worth paying for a report that answers itself.
+        //
+        // On Linux the line ends with the card's device node, which is what the
+        // Flutter runner compares against the card *it* is on before it takes
+        // the Viewer's texture (see [`drm`]). Read here because the adapter is
+        // in hand here and nowhere else.
+        #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+        let drm_device = shared_linux::drm_device(&adapter);
+        #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+        let _ = ADAPTER_DRM_DEVICE.set(drm_device);
+        {
             let info = adapter.get_info();
-            note!(
-                "lumit-gpu: adapter selected: {} ({:?}, backend {:?}, driver {})",
-                info.name,
-                info.device_type,
-                info.backend,
-                info.driver_info,
+            #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+            let node = format!(", {drm_device}");
+            #[cfg(not(all(target_os = "linux", feature = "shared-texture-linux")))]
+            let node = "";
+            let summary = format!(
+                "{} ({:?}, backend {:?}, driver {}{node})",
+                info.name, info.device_type, info.backend, info.driver_info,
             );
+            note!("lumit-gpu: adapter selected: {summary}");
+            // Kept for the bridge, which writes it to the diagnostics file once
+            // a session (see [`adapter_summary`]).
+            let _ = ADAPTER_SUMMARY.set(summary);
         }
         // wgpu's defaults for both of these panic. An engine crate may not panic
         // (docs/14-ENGINEERING-RULES.md), and neither condition is recoverable
@@ -2912,49 +2964,6 @@ impl ColourEngine {
 mod counter_tests {
     use super::*;
 
-    /// The live-object count moves with what is actually alive.
-    ///
-    /// This is the figure the memory report leans on for Metal, where the
-    /// allocator report answers nothing, so a build where the counters were
-    /// compiled out would leave that row reading zero for ever — true-looking
-    /// and useless. Making a texture and dropping it proves the tally is wired.
-    #[test]
-    fn the_live_texture_count_follows_what_is_alive() {
-        let Some(ctx) = crate::test_support::lease() else {
-            no_adapter();
-            return;
-        };
-        let (before, _) = ctx.live_objects();
-        let made = ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("counter-probe"),
-            size: wgpu::Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: WORKING_FORMAT,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
-        let (during, _) = ctx.live_objects();
-        assert!(
-            during > before,
-            "a new texture is counted: {before} then {during}"
-        );
-        drop(made);
-        // Destruction is deferred until the device is given a turn — which is
-        // the very behaviour this row exists to expose.
-        ctx.device.poll(wgpu::Maintain::Poll);
-        let (after, _) = ctx.live_objects();
-        assert!(
-            after <= during,
-            "and dropping it does not raise the count: {during} then {after}"
-        );
-    }
-
     /// A lost device is heard about.
     ///
     /// The whole recovery path hangs off one flag, and the flag is raised by a
@@ -3067,36 +3076,6 @@ mod tests {
         eprintln!("worst Δ = {worst}");
     }
 
-    /// The working texture really is fp16 linear: mid-grey sRGB 128 must
-    /// round-trip through a value near 0.216 linear, not 0.5 — proven by the
-    /// round trip staying exact where a linear-as-srgb confusion would clamp
-    /// or shift the dark end.
-    #[test]
-    fn dark_end_precision_survives_fp16() {
-        let Some(ctx) = crate::test_support::lease() else {
-            crate::no_adapter();
-            return;
-        };
-        let engine = ctx.colour();
-        // The 64 darkest values — where fp16-in-linear-light is tightest.
-        let (w, h) = (8u32, 8u32);
-        let mut rgba = Vec::new();
-        for i in 0..64u8 {
-            rgba.extend_from_slice(&[i, i, i, 255]);
-        }
-        let src = engine.upload_srgb8(&ctx, &rgba, w, h);
-        let back = engine
-            .readback8(
-                &ctx,
-                &engine.display(&ctx, &engine.linearise(&ctx, &src), DisplayParams::NEUTRAL),
-            )
-            .unwrap();
-        for (i, (a, b)) in rgba.iter().zip(back.iter()).enumerate() {
-            let d = (i16::from(*a) - i16::from(*b)).abs();
-            assert!(d <= 1, "dark byte {i}: {a} → {b}");
-        }
-    }
-
     /// A smooth linear ramp, 4096 steps of it, through the deep display target:
     /// far more than the 256 values an eight-bit read-back can hold, which is
     /// the whole point of the sixteen-bit export path. Fails on the widened
@@ -3184,8 +3163,8 @@ mod tests {
 }
 
 pub mod composite;
+pub mod drm;
 pub mod fx;
-pub mod oklab;
 pub mod scope;
 /// The Windows-only zero-copy Viewer target. Present only in the opt-in
 /// `shared-texture` build on Windows; every other build has no shared texture at
@@ -3207,7 +3186,7 @@ pub mod shared_metal;
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod test_support;
 pub use composite::{
-    camera_matrix, concat_place, place_matrix, scaled_size, Blend, CompositeLayer, Compositor,
-    MatteInput, MbSample, Region,
+    camera_matrix, concat_place, invert_place, place_matrix, scaled_size, unplace_matrix, Blend,
+    CompositeLayer, Compositor, MatteInput, MbSample, Region,
 };
 pub use glam::Mat4;

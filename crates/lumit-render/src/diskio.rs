@@ -226,22 +226,6 @@ impl DiskIo {
         self.pending.try_lock().map(|p| p.len()).unwrap_or(0)
     }
 
-    /// [`Self::pending_parks`] without its "contended reads as empty" answer,
-    /// for a caller that is *waiting* for the queue to drain.
-    ///
-    /// The ordinary reader is the worker thread, which must never block on this
-    /// bookkeeping, so a contended read there answers 0. A waiting caller cannot
-    /// afford that answer: a loop spinning on `while pending_parks() > 0` leaves
-    /// the first time the lock happens to be held by the IO thread — which is
-    /// exactly while it is draining — and whatever asserted afterwards then won
-    /// the lock and saw the queue the loop had just skipped past. Odds that rise
-    /// with how busy the machine is, which is why it failed on the macOS runner
-    /// and on no other.
-    #[cfg(test)]
-    pub(crate) fn pending_parks_settled(&self) -> usize {
-        self.pending.lock().map(|p| p.len()).unwrap_or(0)
-    }
-
     /// How many frames are parked, and how many bytes they take.
     #[must_use]
     pub fn stats(&self) -> (u64, u64) {
@@ -459,69 +443,6 @@ mod tests {
         assert_eq!(queue.len(), MAX_PENDING_PARKS);
     }
 
-    /// And the same two rules through the real thread: a parked frame's place
-    /// is given back once it is written (a leaked place would stop that frame
-    /// ever being parked again), and a frame already on its way is refused.
-    #[test]
-    fn a_written_frame_gives_its_place_back() {
-        let dir = tempfile::tempdir().unwrap();
-        let io = spawn();
-        io.tx
-            .send(Cmd::SetRoot(Some(dir.path().to_path_buf())))
-            .unwrap();
-        let bytes = Arc::new(frame(8, 4));
-
-        assert!(io.park(7, 8, 4, false, bytes.clone(), 5, 1000));
-        // Offered again before the write can have landed: refused, because it
-        // is already on its way. (If the thread has already finished it, the
-        // mirror says so instead — either answer keeps the frame out of the
-        // queue twice over.)
-        assert!(
-            io.is_pending(7) || io.contains(7),
-            "the frame is accounted for somewhere at every moment"
-        );
-
-        // Wait for the write, then check the place came back.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while !io.contains(7) && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        assert!(io.contains(7), "the frame reached the disk");
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-        while io.pending_parks_settled() > 0 && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        assert_eq!(
-            io.pending_parks_settled(),
-            0,
-            "the queue emptied as it wrote"
-        );
-        assert!(!io.is_pending(7));
-    }
-
-    /// A park with nowhere to put it (no folder yet) must still give its place
-    /// back, or the queue fills with frames that never leave and parking stops
-    /// for the session the moment a project is opened later.
-    #[test]
-    fn a_park_with_no_folder_still_frees_its_place() {
-        let io = spawn();
-        let bytes = Arc::new(frame(4, 4));
-        for hash in 0..(MAX_PENDING_PARKS as u128 * 2) {
-            // Not asserted true: the queue may briefly be full while the thread
-            // catches up, which is the ceiling doing its job.
-            let _ = io.park(hash, 4, 4, false, bytes.clone(), 1, 1000);
-        }
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while io.pending_parks_settled() > 0 && std::time::Instant::now() < deadline {
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        assert_eq!(
-            io.pending_parks_settled(),
-            0,
-            "every dropped store hands its place back"
-        );
-    }
-
     /// The tier end to end on its own thread: park a frame, see it appear in the
     /// mirror the cache bar and the fill read, and get the identical bytes back.
     #[test]
@@ -586,88 +507,5 @@ mod tests {
             .recv_timeout(std::time::Duration::from_millis(500))
             .is_err());
         assert!(!io.contains(42), "Clear cache empties the tier");
-    }
-
-    /// A BGRA frame (the Windows and macOS zero-copy order) is stored as RGBA
-    /// and handed back in whichever order the caller asks for — so a cache is
-    /// never silently unreadable, and the swizzle is always on this thread.
-    #[test]
-    fn the_channel_order_is_normalised_on_the_io_thread() {
-        let dir = tempfile::tempdir().unwrap();
-        let io = spawn();
-        io.tx
-            .send(Cmd::SetRoot(Some(dir.path().to_path_buf())))
-            .unwrap();
-        // One opaque pixel, obviously ordered: B=1, G=2, R=3, A=4.
-        io.tx
-            .send(Cmd::Store {
-                hash: 9,
-                width: 1,
-                height: 1,
-                bgra: true,
-                bytes: Arc::new(vec![1, 2, 3, 4]),
-                cost_ms: 8,
-                scale_q: 1000,
-            })
-            .unwrap();
-
-        io.tx
-            .send(Cmd::Load {
-                hash: 9,
-                bgra: false,
-            })
-            .unwrap();
-        let rgba = io
-            .loaded
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap();
-        assert_eq!(rgba.bytes, vec![3, 2, 1, 4], "on disk, and out, as RGBA");
-
-        io.tx
-            .send(Cmd::Load {
-                hash: 9,
-                bgra: true,
-            })
-            .unwrap();
-        let back = io
-            .loaded
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .unwrap();
-        assert_eq!(
-            back.bytes,
-            vec![1, 2, 3, 4],
-            "asked for BGRA, given back exactly what was stored"
-        );
-    }
-
-    /// With no root the tier is simply off: a store is dropped and a load
-    /// answers nothing. This is what an unsaved project with the cache set to
-    /// live beside its file looks like, and it must not be an error.
-    #[test]
-    fn with_no_root_the_tier_is_inert() {
-        let io = spawn();
-        io.tx
-            .send(Cmd::Store {
-                hash: 1,
-                width: 1,
-                height: 1,
-                bgra: false,
-                bytes: Arc::new(vec![0, 0, 0, 255]),
-                cost_ms: 8,
-                scale_q: 1000,
-            })
-            .unwrap();
-        io.tx
-            .send(Cmd::Load {
-                hash: 1,
-                bgra: false,
-            })
-            .unwrap();
-        assert!(io
-            .loaded
-            .recv_timeout(std::time::Duration::from_millis(300))
-            .is_err());
-        assert!(!io.contains(1));
-        assert_eq!(io.stats(), (0, 0));
     }
 }

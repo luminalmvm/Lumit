@@ -35,6 +35,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/marquee.dart';
+import '../widgets/share_marks.dart';
 import 'graph_maths.dart';
 import 'key_block.dart';
 import 'layer_fold_frb.dart';
@@ -117,6 +118,10 @@ class GraphEditorFrb extends StatefulWidget {
   /// nobody has to hold a tool to edit a curve.
   final bool penArmed;
 
+  /// The strip's Break handles toggle. On, a handle drag moves its own side
+  /// and leaves the other where it was, with no modifier held.
+  final bool breakHandles;
+
   /// Settings ▸ Interface ▸ Editing ▸ *Retime opens to Velocity*.
   ///
   /// On, a **Retime** channel's speed view becomes the Vegas envelope: one
@@ -130,6 +135,12 @@ class GraphEditorFrb extends StatefulWidget {
   /// The selected keys, as `channelId#index` — owned by the Timeline panel so
   /// the bottom bar and the shortcuts act on the same set.
   final Set<String> selectedKeys;
+
+  /// The keys the other people in a shared project have selected, as
+  /// `channelId#index`, with the colour of each person who holds it. Each
+  /// is drawn with a ring in that colour, one outside the other when it is
+  /// several people. Empty outside a shared project.
+  final Map<String, List<int>> otherKeys;
   final VoidCallback onSelectionChanged;
   final VoidCallback onChanged;
 
@@ -153,7 +164,9 @@ class GraphEditorFrb extends StatefulWidget {
     required this.autoFit,
     this.vegas = false,
     this.penArmed = false,
+    this.breakHandles = false,
     required this.selectedKeys,
+    this.otherKeys = const {},
     required this.onSelectionChanged,
     required this.onChanged,
     required this.onWheelTime,
@@ -299,6 +312,16 @@ class _HandleDrag {
   final (double, double) range;
   final double height;
 
+  /// Where this side's endpoint stood on screen when the gesture began.
+  final Offset startPx;
+
+  /// The same side of every other selected key. Each travels as far from its
+  /// own start as this one has from its, so one drag shapes the whole
+  /// selection by the same amount.
+  final List<_HandleDrag> followers = [];
+
+  Iterable<_HandleDrag> get all => [this, ...followers];
+
   /// Pixels the dot has travelled sideways (speed lens dot drags only),
   /// before the `Shift` constraint — see [dxPx].
   double rawDx = 0;
@@ -335,6 +358,7 @@ class _HandleDrag {
     required this.partnerLenPx,
     required this.range,
     required this.height,
+    required this.startPx,
     this.dotOnly = false,
   });
 }
@@ -375,8 +399,27 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     if (mounted) setState(() {});
   }
 
+  // Every drag in the graph begins and ends with a `setState` here, so
+  // this hears them all. The properties on show are in this person's hand
+  // while one is under way, which the others in a shared project are told.
+  // One that someone else is changing is not dragged.
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    final rows = _keyDrag == null && _boxDrag == null && _handleDrag == null
+        ? const <String>[]
+        : {for (final channel in widget.channels) channel.path}.toList();
+    if (rows.isNotEmpty &&
+        !rows.every(valuesInHand.value.contains) &&
+        heldByOthers(rows)) {
+      return _abandonDrag();
+    }
+    sayInHand(this, rows);
+  }
+
   @override
   void dispose() {
+    sayInHand(this, const []);
     rowValueDrag.removeListener(_rowDragChanged);
     _preview.cancel();
     _escape.dispose();
@@ -1272,13 +1315,37 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   void _startHandleDrag(GraphChannel channel, int index, bool isOut,
       bool dotOnly, (double, double) range, double height) {
+    final drag = _handleDragOf(channel, index, isOut, dotOnly, range, height);
+    // A handle on a selected key takes the same handle of every other selected
+    // key with it. A speed dot moves its key as well, so it goes alone.
+    if (!dotOnly && widget.selectedKeys.contains('${channel.id}#$index')) {
+      for (final c in widget.channels) {
+        for (var i = 0; i < c.keys.length; i++) {
+          if (c.id == channel.id && i == index) continue;
+          if (!widget.selectedKeys.contains('${c.id}#$i')) continue;
+          if (_handleEndpointFor(c, c.keys, i, isOut) == null) continue;
+          drag.followers.add(_handleDragOf(c, i, isOut, false, range, height));
+        }
+      }
+    }
+    setState(() {
+      _handleDrag = drag;
+      _frozen = _range();
+    });
+    _escape.begin(_abandonDrag);
+  }
+
+  /// The drag one side starts from: how it stands now, and whether its partner
+  /// follows.
+  _HandleDrag _handleDragOf(GraphChannel channel, int index, bool isOut,
+      bool dotOnly, (double, double) range, double height) {
     final keys = channel.keys;
     final key = keys[index];
     final side = isOut ? key.interpOut : key.interpIn;
     final other = isOut ? key.interpIn : key.interpOut;
     // Joined when both sides have a tangent and it moves at the same speed;
-    // `Alt` held as the drag begins flips it — break them apart, or join them
-    // back. A side with no span on the other flank has nothing to join to.
+    // the keymap's modifier (`Alt` as shipped) held as the drag begins flips
+    // it — break them apart, or join them back. A side with no span on the other flank has nothing to join to.
     // A pair of automatic sides is joined by construction: the neighbours give
     // both of them the same aim.
     bool eased(BridgeSideInterp s) =>
@@ -1289,34 +1356,36 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     sideSpeedAtKey(keys, index, isOut: !isOut))
                 .abs() <
             1e-9;
-    final alt = altActuallyHeld();
+    final alt = Provider.of<LumitUiState>(context, listen: false)
+        .keymap
+        .breakHandlesHeld;
     final hasOther = _neighbour(keys, index, !isOut) != null;
     final speed = sideSpeedAtKey(keys, index, isOut: isOut);
+    final end = _handleEndpointFor(channel, keys, index, isOut);
 
-    setState(() {
-      _handleDrag = _HandleDrag(
-        channel: channel,
-        index: index,
-        isOut: isOut,
-        mirrored: hasOther && (alt ? !joined : joined),
-        speed: speed,
-        influence: sideInfluence(side),
-        partnerSpeed: sideSpeedAtKey(keys, index, isOut: !isOut),
-        partnerInfluence: sideInfluence(other),
-        partnerLenPx: _handleLength(channel, index, !isOut, range, height),
-        range: range,
-        height: height,
-        dotOnly: dotOnly,
-      );
-      _frozen = _range();
-    });
-    _escape.begin(_abandonDrag);
+    return _HandleDrag(
+      channel: channel,
+      index: index,
+      isOut: isOut,
+      mirrored: hasOther && !widget.breakHandles && (alt ? !joined : joined),
+      speed: speed,
+      influence: sideInfluence(side),
+      partnerSpeed: sideSpeedAtKey(keys, index, isOut: !isOut),
+      partnerInfluence: sideInfluence(other),
+      partnerLenPx: _handleLength(channel, index, !isOut, range, height),
+      range: range,
+      height: height,
+      startPx: end == null
+          ? Offset.zero
+          : Offset(_xOfSeconds(end.$1), _yOf(end.$2, range, height)),
+      dotOnly: dotOnly,
+    );
   }
 
-  void _updateHandleDrag(Offset local, (double, double) range, double height,
+  /// One side put where [local] asks for it.
+  void _aimHandle(
+      _HandleDrag drag, Offset local, (double, double) range, double height,
       {double dx = 0, double dy = 0}) {
-    final drag = _handleDrag;
-    if (drag == null) return;
     final keys = drag.channel.keys;
     final key = keys[drag.index];
     final nb = _neighbour(keys, drag.index, drag.isOut);
@@ -1377,6 +1446,16 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       drag.influence = r.influence;
       _mirrorPartner(drag, key, r.speed, r.influence, range, height);
     });
+  }
+
+  void _updateHandleDrag(Offset local, (double, double) range, double height,
+      {double dx = 0, double dy = 0}) {
+    final drag = _handleDrag;
+    if (drag == null) return;
+    _aimHandle(drag, local, range, height, dx: dx, dy: dy);
+    for (final f in drag.followers) {
+      _aimHandle(f, f.startPx + (local - drag.startPx), range, height);
+    }
     // The shaped curve, exactly as the release will commit it: an ease
     // or an envelope point changes which source moment every frame between two
     // keys reads, so it is as much a picture edit as moving the key itself.
@@ -1388,9 +1467,11 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // the frame already on screen. A key drag is not like this — it moves the
     // key, so the span it changes moves with the pointer — which is why the
     // guard sits here rather than inside [_previewDrag].
-    if (!_handleDragShowsAtPlayhead(drag)) return;
-    _previewDrag(
-        {drag.channel: BridgeScalar.keyframed(_shownKeys(drag.channel))});
+    _previewDrag({
+      for (final d in drag.all)
+        if (_handleDragShowsAtPlayhead(d))
+          d.channel: BridgeScalar.keyframed(_shownKeys(d.channel)),
+    });
   }
 
   /// Whether the frame on screen is one this handle drag can change: the span
@@ -1484,31 +1565,33 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     // As in [_commitKeyDrag]: the write is the last word, so no held preview
     // tick may land after it.
     _preview.cancel();
-    final shown = _keysWithHandleDrag(drag, drag.channel.keys);
+    final shown = _keysWithHandleDrags(drag, drag.channel);
 
     // Both sides keep the length they were left at: the dragged one wherever
     // the pointer put it, the partner exactly the length it started with. Held
     // against the scale they were drawn under, so a later zoom re-measures
     // rather than shrinking them.
     if (widget.lens == GraphLens.value && !drag.dotOnly) {
-      final key = shown[drag.index];
-      final keyPx = Offset(_xOfSeconds(rationalSeconds(key.time)),
-          _yOf(key.value, drag.range, drag.height));
-      final end = _sideEndpoint(shown, drag.index, drag.isOut);
-      _rememberLength(
-        drag.channel,
-        key,
-        drag.isOut,
-        (Offset(_xOfSeconds(end.time),
-                    _yOf(end.value, drag.range, drag.height)) -
-                keyPx)
-            .distance,
-        drag.range,
-        drag.height,
-      );
-      if (drag.mirrored) {
-        _rememberLength(drag.channel, key, !drag.isOut, drag.partnerLenPx,
-            drag.range, drag.height);
+      for (final d in drag.all) {
+        final keys = _keysWithHandleDrags(drag, d.channel);
+        final key = keys[d.index];
+        final keyPx = Offset(_xOfSeconds(rationalSeconds(key.time)),
+            _yOf(key.value, d.range, d.height));
+        final end = _sideEndpoint(keys, d.index, d.isOut);
+        _rememberLength(
+          d.channel,
+          key,
+          d.isOut,
+          (Offset(_xOfSeconds(end.time), _yOf(end.value, d.range, d.height)) -
+                  keyPx)
+              .distance,
+          d.range,
+          d.height,
+        );
+        if (d.mirrored) {
+          _rememberLength(
+              d.channel, key, !d.isOut, d.partnerLenPx, d.range, d.height);
+        }
       }
     }
 
@@ -1527,8 +1610,24 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       widget.onChanged();
       return;
     }
-    commitChannelEdits({drag.channel: BridgeScalar.keyframed(shown)});
+    commitChannelEdits({
+      for (final d in drag.all)
+        d.channel:
+            BridgeScalar.keyframed(_keysWithHandleDrags(drag, d.channel)),
+    });
     widget.onChanged();
+  }
+
+  /// [channel]'s keys with every side [drag] carries there written in.
+  // ponytail: one list copy per carried key on every read. Write them in one
+  // pass if a big selection ever drags slowly.
+  List<BridgeKeyframe> _keysWithHandleDrags(
+      _HandleDrag drag, GraphChannel channel) {
+    var keys = channel.keys;
+    for (final d in drag.all) {
+      if (d.channel.id == channel.id) keys = _keysWithHandleDrag(d, keys);
+    }
+    return keys;
   }
 
   /// [keys] with a speed-lens dot's sideways travel applied to its keyframe,
@@ -1748,8 +1847,9 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       }
     }
     final drag = _handleDrag;
-    if (drag == null || drag.channel.id != channel.id) return channel.keys;
-    final shaped = _keysWithHandleDrag(drag, channel.keys);
+    if (drag == null) return channel.keys;
+    final shaped = _keysWithHandleDrags(drag, channel);
+    if (drag.channel.id != channel.id) return shaped;
     // A dot carries its keyframe sideways as well as up, and the curve has to
     // go with it: the dot is drawn at the pointer either way, so a curve left
     // at the committed time simply comes adrift from the dot until the gesture
@@ -2110,6 +2210,8 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               // that drops the selection also takes the handles away.
               // Speed lens: the dot is on top — it is the keyframe itself, and
               // its influence bar runs out sideways from underneath it.
+              if (widget.otherKeys.isNotEmpty)
+                ..._otherKeyRings(t, range, height),
               if (widget.lens == GraphLens.value) ...[
                 ..._keyHandles(t, range, height),
                 ..._tangentHandles(range, height),
@@ -2381,6 +2483,40 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       ];
     }
     return const [];
+  }
+
+  /// A ring round each key someone else in a shared project has selected,
+  /// in their colour. Under the key glyphs, and never in the pointer's way.
+  List<Widget> _otherKeyRings(
+      LumitTheme t, (double, double) range, double height) {
+    final out = <Widget>[];
+    for (final channel in widget.channels) {
+      for (var i = 0; i < channel.keys.length; i++) {
+        final colours = widget.otherKeys['${channel.id}#$i'];
+        if (colours == null) continue;
+        final point = _keyPoint(channel, i, range, height, isOut: true);
+        for (var held = 0; held < colours.length; held++) {
+          final ring = _keyGrab + 2 + 6.0 * held;
+          out.add(Positioned(
+            key: ValueKey<String>('graph-share-key-${channel.id}#$i-$held'),
+            left: point.dx - ring / 2,
+            top: point.dy - ring / 2,
+            width: ring,
+            height: ring,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: t.personColour(colours[held]), width: 1.5),
+                ),
+              ),
+            ),
+          ));
+        }
+      }
+    }
+    return out;
   }
 
   /// The grabbable key glyphs.

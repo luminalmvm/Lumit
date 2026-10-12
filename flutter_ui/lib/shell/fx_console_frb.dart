@@ -125,10 +125,44 @@ Future<void> showFxConsoleFrb({
   // 100% — so it is converted here, exactly as a popup's is.
   final at = anchor == null ? null : overlayLocal(context, anchor);
   entry = OverlayEntry(
-    builder: (_) => _FxConsole(model: model, anchor: at, onClose: close),
+    // It fades up where the pointer is and takes the keyboard from its first
+    // frame. Closing it is immediate (docs/15 §8).
+    builder: (context) => Entrance(
+      spec: ThemeScope.of(context).motion.popup,
+      leads: true,
+      child: _FxConsole(model: model, anchor: at, onClose: close),
+    ),
   );
   overlay.insert(entry);
   return completer.future;
+}
+
+/// Put the console on screen as a thing to look at, and answer what takes it
+/// down again.
+///
+/// It is the same popover with the same list, but it is shown and not used:
+/// it takes no key, no click and no rung of the Escape ladder, and the panels'
+/// own keys are not stood down for it. The guided tour shows the node search
+/// this way (shell/tour_frb.dart), so the user sees the real one without the
+/// tour and the console both wanting the keyboard.
+VoidCallback showFxConsoleExhibitFrb({
+  required BuildContext context,
+  required FxConsoleModel model,
+  Offset? anchor,
+}) {
+  final at = anchor == null ? null : overlayLocal(context, anchor);
+  final entry = OverlayEntry(
+    builder: (context) => Entrance(
+      spec: ThemeScope.of(context).motion.popup,
+      leads: true,
+      child:
+          _FxConsole(model: model, anchor: at, onClose: () {}, exhibit: true),
+    ),
+  );
+  Overlay.of(context).insert(entry);
+  return () {
+    if (entry.mounted) entry.remove();
+  };
 }
 
 /// How well `needle` matches `haystack` as a subsequence, or null for no
@@ -179,10 +213,14 @@ class _FxConsole extends StatefulWidget {
   final FxConsoleModel model;
   final Offset? anchor;
   final VoidCallback onClose;
+
+  /// Shown and not used: see [showFxConsoleExhibitFrb].
+  final bool exhibit;
   const _FxConsole({
     required this.model,
     required this.anchor,
     required this.onClose,
+    this.exhibit = false,
   });
 
   @override
@@ -217,6 +255,8 @@ class _FxConsoleState extends State<_FxConsole> {
   void initState() {
     super.initState();
     _query.addListener(() => setState(() => _highlighted = 0));
+    // One that is only being shown claims nothing.
+    if (widget.exhibit) return;
     // Escape has to work with focus anywhere. A handler on the search field's
     // node covers only the field, so this claims the ladder's dialogue rung
     // for the console's lifetime (widgets/escape_ladder.dart): one press is
@@ -243,7 +283,7 @@ class _FxConsoleState extends State<_FxConsole> {
   void dispose() {
     _escapeRelease?.call();
     _escapeRelease = null;
-    markModalUnmounted();
+    if (!widget.exhibit) markModalUnmounted();
     _queryFocus
       ..removeListener(_keepFocus)
       ..dispose();
@@ -353,7 +393,7 @@ class _FxConsoleState extends State<_FxConsole> {
     final matches = _matches;
     final width = _width(t);
 
-    return Focus(
+    final console = Focus(
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         switch (event.logicalKey) {
@@ -429,6 +469,7 @@ class _FxConsoleState extends State<_FxConsole> {
         },
       ),
     );
+    return widget.exhibit ? IgnorePointer(child: console) : console;
   }
 
   static double _fit(double v, double lo, double hi) =>
@@ -443,32 +484,37 @@ class _FxConsoleState extends State<_FxConsole> {
           border: Border.all(color: t.hairline, width: 1),
           boxShadow: t.floatShadow,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _searchRow(t, matches),
-            if (_groups.isNotEmpty) ...[
+        child: Entrance.content(
+          spec: ThemeScope.of(context).motion.content,
+          rise: ThemeScope.of(context).motion.contentRise,
+          blur: ThemeScope.of(context).motion.contentBlur,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _searchRow(t, matches),
+              if (_groups.isNotEmpty) ...[
+                Container(height: 1, color: t.hairline),
+                _categoryStrip(t),
+              ],
               Container(height: 1, color: t.hairline),
-              _categoryStrip(t),
-            ],
-            Container(height: 1, color: t.hairline),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: _list(t, matches, room),
-            ),
-            if (widget.model.footer case final footer?) ...[
-              Container(height: 1, color: t.hairline),
-              Container(
-                height: _footHeight,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                alignment: Alignment.centerLeft,
-                child: Text(footer,
-                    key: const ValueKey('fx-console-foot'),
-                    style: t.kicker.copyWith(letterSpacing: 0.54)),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: _list(t, matches, room),
               ),
+              if (widget.model.footer case final footer?) ...[
+                Container(height: 1, color: t.hairline),
+                Container(
+                  height: _footHeight,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  alignment: Alignment.centerLeft,
+                  child: Text(footer,
+                      key: const ValueKey('fx-console-foot'),
+                      style: t.kicker.copyWith(letterSpacing: 0.54)),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       );
 

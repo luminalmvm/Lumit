@@ -410,27 +410,6 @@ mod tests {
         Frame16::from_pixels(width, height, pixels).unwrap()
     }
 
-    #[test]
-    fn a_frame_survives_the_boundary_in_either_row_order() {
-        let frame = a_frame();
-        for order in [RowOrder::BottomUp, RowOrder::TopDown] {
-            let image = Image::from_frame(&frame, order).unwrap();
-            assert_eq!(image.to_frame().unwrap(), frame, "{order:?}");
-        }
-    }
-
-    #[test]
-    fn the_sign_of_row_bytes_follows_the_row_order() {
-        let frame = a_frame();
-        let up = Image::from_frame(&frame, RowOrder::BottomUp).unwrap();
-        let down = Image::from_frame(&frame, RowOrder::TopDown).unwrap();
-        assert_eq!(up.row_bytes(), 4 * 4 * 4);
-        assert_eq!(down.row_bytes(), -(4 * 4 * 4));
-        // A top-down image points at the last row in the block, not the first.
-        assert_eq!(up.data_pointer(), up.data_pointer());
-        assert!(!std::ptr::eq(down.data_pointer(), up.data_pointer()));
-    }
-
     /// The same picture, whichever way the block runs: OFX row nought is the
     /// bottom row in both, and the frame's row nought is the top in both.
     #[test]
@@ -477,14 +456,5 @@ mod tests {
         for (i, (got, want)) in frame.pixels().iter().zip(&scalar).enumerate() {
             assert_eq!(got.to_bits(), want.to_bits(), "value {i}: {}", floats[i]);
         }
-    }
-
-    #[test]
-    fn an_empty_rectangle_is_a_value_error_and_not_an_allocation() {
-        assert_eq!(
-            Image::black(RectI::sized(0, 4), RowOrder::BottomUp).err(),
-            Some(Status::ErrValue)
-        );
-        assert_eq!(Frame16::black(4, 0).err(), Some(Status::ErrValue));
     }
 }

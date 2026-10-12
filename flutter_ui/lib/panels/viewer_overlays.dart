@@ -117,38 +117,8 @@ class ViewerGuidesMenu extends StatelessWidget {
       context: context,
       position: under,
       rows: (close) => [
-        for (final row
-            in <({String key, String text, bool on, void Function() pick})>[
-          (
-            key: 'viewer-guides-grid',
-            text: l10n.viewerOverlayGrid,
-            on: ui.viewerOverlays.grid,
-            pick: () => ui.setViewerOverlays(grid: !ui.viewerOverlays.grid),
-          ),
-          (
-            key: 'viewer-guides-safe',
-            text: l10n.viewerOverlaySafeAreas,
-            on: ui.viewerOverlays.safeAreas,
-            pick: () =>
-                ui.setViewerOverlays(safeAreas: !ui.viewerOverlays.safeAreas),
-          ),
-          // The rulers, and the magnet that decides whether a drag reaches for
-          // what they put on the picture. The magnet is the toolbar's
-          // own switch under a second name, exactly as the layer-controls row
-          // is the View menu's: one switch, two places to find it.
-          (
-            key: 'viewer-guides-rulers',
-            text: l10n.viewerOverlayRulers,
-            on: ui.viewerOverlays.rulers,
-            pick: () =>
-                ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers),
-          ),
-          (
-            key: 'viewer-guides-snap',
-            text: l10n.viewerOverlaySnap,
-            on: ui.tools.snapping,
-            pick: () => ui.tools.snapping = !ui.tools.snapping,
-          ),
+        for (final row in <ViewerToggle>[
+          ...viewerOverlayToggles(ui),
           (
             key: 'viewer-wireframes',
             text: l10n.viewerOverlayLayerControls,
@@ -168,19 +138,7 @@ class ViewerGuidesMenu extends StatelessWidget {
                 : ui.armingRegion = !ui.armingRegion,
           ),
         ])
-          MenuRow(
-            key: ValueKey<String>(row.key),
-            onPressed: () {
-              close(null);
-              row.pick();
-            },
-            child: Row(
-              children: [
-                menuTick(row.on),
-                Text(row.text),
-              ],
-            ),
-          ),
+          viewerToggleRow(row, () => close(null)),
         // Taking every guide off this comp at once. Only offered when
         // there is something to take off, and no tick: it is a command, not a
         // state you can be in.
@@ -236,6 +194,64 @@ class ViewerGuidesMenu extends StatelessWidget {
     );
   }
 }
+
+/// One ticked row of a Viewer menu: what it reads, whether it is on, and what
+/// picking it does.
+typedef ViewerToggle = ({
+  String key,
+  String text,
+  bool on,
+  void Function() pick,
+});
+
+/// The marks over the picture that the view menu and the picture's own
+/// right-click menu both switch, so the two cannot drift apart.
+List<ViewerToggle> viewerOverlayToggles(LumitUiState ui) => [
+      (
+        key: 'viewer-guides-grid',
+        text: l10n.viewerOverlayGrid,
+        on: ui.viewerOverlays.grid,
+        pick: () => ui.setViewerOverlays(grid: !ui.viewerOverlays.grid),
+      ),
+      (
+        key: 'viewer-guides-safe',
+        text: l10n.viewerOverlaySafeAreas,
+        on: ui.viewerOverlays.safeAreas,
+        pick: () =>
+            ui.setViewerOverlays(safeAreas: !ui.viewerOverlays.safeAreas),
+      ),
+      // The rulers, and the magnet that decides whether a drag reaches for
+      // what they put on the picture. The magnet is the toolbar's
+      // own switch under a second name, exactly as the layer-controls row
+      // is the View menu's: one switch, two places to find it.
+      (
+        key: 'viewer-guides-rulers',
+        text: l10n.viewerOverlayRulers,
+        on: ui.viewerOverlays.rulers,
+        pick: () => ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers),
+      ),
+      (
+        key: 'viewer-guides-snap',
+        text: l10n.viewerOverlaySnap,
+        on: ui.tools.snapping,
+        pick: () => ui.tools.snapping = !ui.tools.snapping,
+      ),
+    ];
+
+/// [row] as a menu row: its tick and its name. Picking it closes the menu.
+Widget viewerToggleRow(ViewerToggle row, VoidCallback close) => MenuRow(
+      key: ValueKey<String>(row.key),
+      onPressed: () {
+        close();
+        row.pick();
+      },
+      child: Row(
+        children: [
+          menuTick(row.on),
+          Text(row.text),
+        ],
+      ),
+    );
 
 /// The grid and the safe rectangles, over the picture.
 ///

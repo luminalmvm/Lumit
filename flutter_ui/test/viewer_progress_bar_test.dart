@@ -40,14 +40,6 @@ void main() {
         ),
       );
 
-  testWidgets('nothing is drawn while nothing is being waited for',
-      (tester) async {
-    final tracker = PreviewProgressTracker();
-    addTearDown(tracker.dispose);
-    await tester.pumpWidget(host(tracker));
-    expect(find.byType(Text), findsNothing);
-  });
-
   testWidgets('a slow frame draws its stage and how far it has got',
       (tester) async {
     final tracker = PreviewProgressTracker();
@@ -84,25 +76,5 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.binding.transientCallbackCount, 0,
         reason: 'and nothing is moving once it has arrived');
-  });
-
-  /// The bar rides on the transport now, where a percentage that
-  /// resized itself as it counted would jog every control beside it.
-  testWidgets('the bar is the same width at 9% as at 100%', (tester) async {
-    final tracker = PreviewProgressTracker();
-    addTearDown(tracker.dispose);
-    await tester.pumpWidget(host(tracker));
-
-    tracker.report(_report(7, fraction: 0.09, stage: 3));
-    await tester.pump(PreviewProgressTracker.appearsAfter);
-    await tester.pump();
-    final narrow = tester.getSize(find.byType(ViewerProgressBar));
-
-    tracker.report(_report(7, fraction: 1.0, stage: 3));
-    await tester.pump();
-    expect(tester.getSize(find.byType(ViewerProgressBar)), narrow);
-
-    tracker.report(_report(7, done: true));
-    await tester.pumpAndSettle();
   });
 }

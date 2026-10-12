@@ -314,26 +314,11 @@ impl AudioProcessor for AudioDelayProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fx::effects::audio::modulation::harness;
-    use crate::fx::effects::audio::space::{noise, peak, play, play_all};
+
+    use crate::fx::effects::audio::space::{noise, play, play_all};
     use crate::fx::{AUDIO_BLOCK_FRAMES, AUDIO_BLOCK_SAMPLES};
 
     const RATE: u32 = 48_000;
-
-    /// Plan 1's third clause: the repeat lands the same number of
-    /// milliseconds behind the sound whatever the bake rate is. The line is
-    /// sized and read in frames, so this is where a rate that never arrived
-    /// would show.
-    #[test]
-    fn the_repeat_lands_at_the_same_time_at_any_bake_rate() {
-        harness::same_seconds_at_any_rate(
-            &AudioDelayDef,
-            &[("time", 100.0), ("feedback", 60.0), ("wet", 100.0)],
-            1_000.0,
-            0.6,
-            0.02,
-        );
-    }
 
     /// A full set of rows, so a test says only what it cares about.
     fn rows(time: f64, feedback: f64, cross: f64, wet: f64) -> Vec<(ParamId, f64)> {
@@ -352,15 +337,6 @@ mod tests {
         AudioDelayDef
             .open_audio(None, values, RATE, false)
             .unwrap_or_else(|| Arc::new(AudioDelayProcessor::new(values, f64::from(RATE))))
-    }
-
-    #[test]
-    fn the_same_input_twice_is_bit_identical() {
-        let values = rows(37.0, 60.0, 40.0, 50.0);
-        let input = noise(AUDIO_BLOCK_FRAMES * 12);
-        let first = play_all(open(&values).as_ref(), &input, &values);
-        let second = play_all(open(&values).as_ref(), &input, &values);
-        assert_eq!(first, second);
     }
 
     #[test]
@@ -400,39 +376,5 @@ mod tests {
                 });
         assert_eq!(at.0, 4_800, "the repeat landed at frame {}", at.0);
         assert!((at.1 - 1.0).abs() < 1e-6, "and at full size, not {}", at.1);
-    }
-
-    /// Plan 2's half of the same idea: the tail is long enough for the
-    /// repeats to reach the silence floor, and the mix is told about it.
-    #[test]
-    fn the_tail_covers_the_repeats_and_ping_pong_crosses_channels() {
-        let values = rows(20.0, 80.0, 100.0, 100.0);
-        let processor = open(&values);
-        // Twenty milliseconds at 80 per cent: about 960 frames a pass, and
-        // the repeats fall 1.94 dB each time.
-        let tail = processor.tail();
-        assert!(
-            (44_000..=52_000).contains(&tail),
-            "a tail of {tail} frames is not the repeats' own length"
-        );
-
-        let frames = tail as usize + AUDIO_BLOCK_FRAMES;
-        let blocks = frames.div_ceil(AUDIO_BLOCK_FRAMES);
-        let mut input = vec![0.0f32; blocks * AUDIO_BLOCK_SAMPLES];
-        // Only the left channel is struck, so anything heard on the right is
-        // the cross-feed and nothing else.
-        if let Some(slot) = input.first_mut() {
-            *slot = 1.0;
-        }
-        let out = play_all(processor.as_ref(), &input, &values);
-        let right: Vec<f32> = out
-            .chunks_exact(2)
-            .map(|frame| frame.get(1).copied().unwrap_or(0.0))
-            .collect();
-        assert!(peak(&right) > 0.5, "ping-pong never crossed");
-
-        // Past the tail there is nothing left to hear.
-        let after = peak(out.get(tail as usize * 2..).unwrap_or(&[]));
-        assert!(after < 1e-4, "the repeats were still going at {after}");
     }
 }

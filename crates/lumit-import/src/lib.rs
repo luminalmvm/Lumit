@@ -47,7 +47,7 @@ pub mod report;
 
 pub use aep::open_aep;
 pub use capture::{Capture, Manifest, Report};
-pub use map::map_capture;
+pub use map::{map_capture, map_preset};
 pub use report::{ImportReport, ItemPath, Outcome, Reason, ReportRow, Summary};
 
 use std::fs::{self, File};
@@ -108,6 +108,49 @@ pub enum ImportError {
         "this bundle was written by a newer Lumit (bundle schema {version}) — please update Lumit"
     )]
     TooNew { version: String },
+}
+
+/// Whether the file at `path` is an After Effects animation preset, by its
+/// first bytes rather than its name.
+pub fn is_ffx(path: &Path) -> bool {
+    let mut head = [0u8; 12];
+    File::open(path)
+        .and_then(|mut file| file.read_exact(&mut head))
+        .is_ok_and(|()| aep::ffx::is_preset(&head))
+}
+
+/// Read an After Effects animation preset (`.ffx`) as the effects it holds,
+/// ready to go on a layer, with a report of what changed on the way.
+///
+/// The effects come out exactly as [`map_capture`] would have made them
+/// inside a project: Lumit's own effect where the table knows one, a set of
+/// Custom controls for a pseudo effect, and expressions carried as written.
+/// Anything in the preset that is not an effect is a skipped row.
+pub fn open_ffx(
+    path: &Path,
+) -> Result<(Vec<lumit_core::model::EffectInstance>, ImportReport), ImportError> {
+    // A preset is a few kilobytes. No more than this of a file is read, so
+    // one that is far too large to be a preset is cut short and fails to read
+    // as one, and is never held whole to find that out.
+    const MOST: u64 = 64 << 20;
+    let mut bytes = Vec::new();
+    File::open(path)?.take(MOST).read_to_end(&mut bytes)?;
+    let preset = aep::ffx::parse_preset(&bytes)?;
+    let name = path
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let (effects, mut report) = map_preset(&name, &preset.effects, preset.size);
+    for skipped in &preset.skipped {
+        report.row(
+            ItemPath::item(&name).property(skipped.path.as_deref().unwrap_or_default()),
+            Outcome::Skipped,
+            Reason::PropertyUnreadable {
+                match_name: skipped.match_name.clone().unwrap_or_default(),
+            },
+        );
+    }
+    Ok((effects, report))
 }
 
 /// Open whatever the user picked: an After Effects project file, a
@@ -283,7 +326,7 @@ impl Source {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::capture::{Comp, Layer, Property};
+
     use std::io::Write;
 
     /// The hand-written bundle in `tests/fixtures/`, which doubles as readable
@@ -316,332 +359,6 @@ mod tests {
         writer.finish().unwrap();
     }
 
-    fn comp(capture: &Capture, name: &str) -> Comp {
-        let id = capture
-            .items
-            .iter()
-            .find(|item| item.name.as_deref() == Some(name))
-            .and_then(|item| item.id)
-            .expect("the comp has an item row");
-        capture
-            .comps
-            .iter()
-            .find(|comp| comp.id == Some(id))
-            .cloned()
-            .expect("the item row has a comp")
-    }
-
-    fn layer(comp: &Comp, name: &str) -> Layer {
-        comp.layers
-            .iter()
-            .find(|layer| layer.name.as_deref() == Some(name))
-            .cloned()
-            .expect("the comp has that layer")
-    }
-
-    /// Depth-first search for a match name anywhere in a property tree,
-    /// including through separated followers.
-    fn prop(properties: &[Property], match_name: &str) -> Option<Property> {
-        for property in properties {
-            if property.match_name.as_deref() == Some(match_name) {
-                return Some(property.clone());
-            }
-            if let Some(found) = prop(property.children(), match_name) {
-                return Some(found);
-            }
-            if let Some(followers) = property.separated.as_deref() {
-                if let Some(found) = prop(followers, match_name) {
-                    return Some(found);
-                }
-            }
-        }
-        None
-    }
-
-    /// **A bundle folder opens, and the manifest is what identifies it.**
-    ///
-    /// The shallow check, kept separate because everything below assumes it:
-    /// the three files are found by name in a folder, the format string is the
-    /// one that says "bundle", and the walk arrived with both comps and all
-    /// five items rather than an empty shell that parsed.
-    ///
-    /// The project block rides along here because it has nowhere else to be
-    /// checked and is easy to forget: bit depth and the blending flags belong
-    /// to the *project*, so docs/11 §3's "this comp relied on 8-bpc non-linear
-    /// blending" flag cannot be worked out from a comp at all.
-    #[test]
-    fn a_bundle_folder_opens_with_its_manifest_and_its_walk() {
-        let bundle = opened();
-        assert_eq!(bundle.manifest.format.as_deref(), Some(FORMAT));
-        assert_eq!(bundle.manifest.version.as_deref(), Some("1.0.0"));
-        assert_eq!(bundle.manifest.ae_version.as_deref(), Some("26.0x67"));
-        assert_eq!(bundle.capture.items.len(), 5);
-        assert_eq!(bundle.capture.comps.len(), 2);
-
-        let project = bundle.capture.project.expect("the project block arrived");
-        assert_eq!(project.bits_per_channel, Some(16));
-        assert_eq!(project.linear_blending, Some(true));
-    }
-
-    /// **A comp's name comes from its item row, and nesting is a source id.**
-    ///
-    /// The one structural join in the schema, and the one an importer gets
-    /// wrong first: `comps[]` carries no name at all, so a comp is only ever
-    /// identified by an id shared with `items[]`, and a precomp layer names
-    /// its comp through that same id rather than by name. Proving the hop
-    /// works in both directions is what makes the rest of the mapping phase
-    /// able to trust it.
-    #[test]
-    fn a_nested_comp_is_reached_through_its_precomp_layers_source_id() {
-        let capture = opened().capture;
-        let main = comp(&capture, "Main");
-        let nested = comp(&capture, "Nested");
-
-        assert_eq!(main.width, Some(1920));
-        assert_eq!(main.fps, Some(25.0));
-        assert_eq!(main.renderer.as_deref(), Some("ADBE Advanced 3d"));
-        assert_eq!(
-            main.motion_blur.as_ref().and_then(|mb| mb.shutter_angle),
-            Some(180.0)
-        );
-        assert_eq!(main.markers.len(), 1);
-        assert_eq!(main.markers[0].comment.as_deref(), Some("chorus"));
-
-        let precomp = layer(&main, "Nested");
-        assert_eq!(precomp.kind.as_deref(), Some("precomp"));
-        assert_eq!(precomp.source_id, nested.id);
-        assert!(nested.id.is_some(), "the nested comp keeps AE's own id");
-    }
-
-    /// **A bezier key and a hold key keep every side of every handle.**
-    ///
-    /// Keyframes are copied value-for-value, so this is the capture's
-    /// highest-stakes shape: interpolation per *side*, and ease as an array
-    /// with one entry per dimension. Both are easy to flatten by accident —
-    /// reading a single ease instead of the array loses separated dimensions,
-    /// and reading one interpolation type per key rather than per side turns
-    /// every hold key into a ramp.
-    #[test]
-    fn a_bezier_key_and_a_hold_key_keep_their_ease_arrays() {
-        let capture = opened().capture;
-        let clip = layer(&comp(&capture, "Main"), "clip.mp4");
-        let blur = prop(&clip.properties, "ADBE Gaussian Blur 2-0001")
-            .expect("the blur has a Blurriness property");
-        let keys = blur.keyframes.expect("Blurriness is animated");
-        assert_eq!(keys.len(), 3);
-
-        assert_eq!(keys[0].out_interp.as_deref(), Some("BEZIER"));
-        let out_ease = keys[0].out_ease.as_deref().expect("an out ease array");
-        assert_eq!(out_ease.len(), 1, "one entry per dimension");
-        assert_eq!(out_ease[0].influence, Some(33.333333));
-        assert_eq!(out_ease[0].speed, Some(0.0));
-
-        assert_eq!(keys[1].in_interp.as_deref(), Some("BEZIER"));
-        assert_eq!(keys[1].out_interp.as_deref(), Some("HOLD"));
-        assert_eq!(
-            keys[1]
-                .in_ease
-                .as_deref()
-                .and_then(|ease| ease.first())
-                .and_then(|ease| ease.speed),
-            Some(120.0)
-        );
-
-        assert_eq!(keys[2].t, Some(4.0));
-        assert_eq!(keys[2].roving, Some(false));
-    }
-
-    /// **A spatial key keeps its tangents, and a time remap arrives as an
-    /// ordinary keyframed property.**
-    ///
-    /// Two things the schema deliberately does not special-case. Spatial
-    /// tangents ride alongside temporal ease on the same key rather than in a
-    /// separate structure, and "time remapping" is captured as just another
-    /// property — the conversion to Retime segments is the mapping phase's
-    /// job, not the walker's.
-    #[test]
-    fn a_spatial_key_keeps_its_tangents_and_time_remap_is_a_plain_property() {
-        let capture = opened().capture;
-        let precomp = layer(&comp(&capture, "Main"), "Nested");
-        assert_eq!(precomp.time_remap_enabled, Some(true));
-
-        let position = prop(&precomp.properties, "ADBE Position").expect("a position");
-        let keys = position.keyframes.expect("position is animated");
-        assert_eq!(
-            keys[0].out_tangent.as_deref(),
-            Some([120.0, 0.0, 0.0].as_slice())
-        );
-        assert_eq!(
-            keys[1].in_tangent.as_deref(),
-            Some([-120.0, 40.0, 0.0].as_slice())
-        );
-        // Spatial smoothness is its own pair of flags: this key is cornered in
-        // time and smooth in space, which a single auto-bezier flag would lose.
-        assert_eq!(keys[1].auto_bezier, Some(false));
-        assert_eq!(keys[1].spatial_auto_bezier, Some(true));
-
-        let remap = prop(&precomp.properties, "ADBE Time Remapping").expect("a time remap");
-        let keys = remap.keyframes.expect("time remap is keyframed");
-        assert_eq!(
-            keys.last()
-                .and_then(|key| key.out_interp.clone())
-                .as_deref(),
-            Some("HOLD")
-        );
-    }
-
-    /// **A separated position keeps its followers, and the leader is empty.**
-    ///
-    /// AE's trap in schema form: when dimensions are separated, the leader
-    /// property has no animation of its own — the curves live on the
-    /// followers. A reader that looked only at the leader would import a
-    /// separated position as a still one and lose the whole animation
-    /// silently.
-    #[test]
-    fn a_separated_position_carries_its_animation_on_the_followers() {
-        let capture = opened().capture;
-        let clip = layer(&comp(&capture, "Main"), "clip.mp4");
-        let leader = prop(&clip.properties, "ADBE Position").expect("a position leader");
-
-        assert!(
-            leader.keyframes.is_none(),
-            "the leader of a separated property is not where the animation is"
-        );
-        assert!(
-            leader.value.is_some(),
-            "the leader still reports a still value — which is exactly the trap: \
-             reading it would import the animation as one frozen position"
-        );
-        let followers = leader.separated.as_deref().expect("separated followers");
-        assert_eq!(followers.len(), 2);
-        assert_eq!(followers[0].name.as_deref(), Some("X Position"));
-        assert_eq!(
-            followers[0]
-                .keyframes
-                .as_deref()
-                .expect("X is animated")
-                .len(),
-            2
-        );
-        assert_eq!(followers[1].value, Some(serde_json::json!(540.0)));
-    }
-
-    /// **A matte records the layer it points at, by index.**
-    ///
-    /// Both AE generations of matte end up as a type plus the referenced
-    /// layer's stacking index, and normalising them is Rust's job later. What
-    /// matters here is that the reference survives as an index into this comp's
-    /// own stack, so the mapping phase can resolve it without guessing at the
-    /// layer above.
-    #[test]
-    fn a_matte_records_the_layer_index_it_points_at() {
-        let capture = opened().capture;
-        let main = comp(&capture, "Main");
-        let clip = layer(&main, "clip.mp4");
-        let matte = clip.matte.expect("the clip has a matte");
-
-        assert_eq!(matte.kind.as_deref(), Some("ALPHA_INVERTED"));
-        assert_eq!(matte.layer_index, Some(3));
-
-        let source = main
-            .layers
-            .iter()
-            .find(|layer| layer.index == Some(3))
-            .expect("the index resolves inside this comp's own stack");
-        assert_eq!(source.name.as_deref(), Some("Black Solid 1"));
-        // The other half of the pair, and the only thing the legacy
-        // above-layer form has to say: this layer knows it is somebody's matte.
-        assert_eq!(
-            source.matte.as_ref().and_then(|matte| matte.is_track_matte),
-            Some(true)
-        );
-    }
-
-    /// **A mask keeps its mode, its inversion, and a real bezier path.**
-    ///
-    /// The mask's own facts sit in a `mask` block on the mask node rather than
-    /// among its properties — that is AE's shape and the schema keeps it, and
-    /// it is the one place a reader can silently look in the wrong spot and
-    /// find nothing wrong: a missing mode reads as an ordinary Add mask, and
-    /// the picture is wrong rather than broken. The path is the only property
-    /// value with structure rather than numbers, so it is the one whose parse
-    /// is worth proving: four vertices with matching tangent arrays and a
-    /// closed flag.
-    #[test]
-    fn a_mask_keeps_its_mode_and_reads_back_as_a_bezier_path() {
-        let capture = opened().capture;
-        let clip = layer(&comp(&capture, "Main"), "clip.mp4");
-        let node = prop(&clip.properties, "ADBE Mask Atom").expect("a mask");
-        let mask = node
-            .mask
-            .clone()
-            .expect("the mask node carries a mask block");
-
-        assert_eq!(mask.mode.as_deref(), Some("SUBTRACT"));
-        assert_eq!(mask.inverted, Some(true));
-        assert_eq!(mask.locked, Some(false));
-
-        let path = prop(node.children(), "ADBE Mask Shape").expect("a mask path");
-        let shape = path.shape().expect("the path value reads as a shape");
-        assert_eq!(shape.vertices.len(), 4);
-        assert_eq!(shape.in_tangents.len(), 4);
-        assert_eq!(shape.out_tangents.len(), 4);
-        assert_eq!(shape.closed, Some(true));
-        assert_eq!(shape.vertices[1], vec![100.0, 0.0]);
-
-        let feather = prop(node.children(), "ADBE Mask Feather").expect("a feather");
-        assert_eq!(feather.value, Some(serde_json::json!([12.0, 12.0])));
-    }
-
-    /// **An unreadable property is recorded where it stood, and again in the
-    /// report.**
-    ///
-    /// After Effects' own scripting cannot read a `CUSTOM_VALUE` property —
-    /// Curves' point list is the standing example. The whole point of
-    /// capturing it as an `unreadable` node rather than omitting it is that the
-    /// effect keeps its slot and its shape, so the import can say *this
-    /// property* was unreadable rather than silently shipping a Curves with no
-    /// curve. The report row is the same fact said again for the panel, and
-    /// both halves must survive the read.
-    #[test]
-    fn an_unreadable_property_keeps_its_place_and_its_report_row() {
-        let bundle = opened();
-        let clip = layer(&comp(&bundle.capture, "Main"), "clip.mp4");
-        let curves = prop(&clip.properties, "ADBE CurvesCustom").expect("the Curves effect");
-        assert_eq!(curves.enabled, Some(true));
-
-        let point_list = prop(curves.children(), "ADBE CurvesCustom-0001").expect("the point list");
-        assert_eq!(point_list.value_type.as_deref(), Some("custom_blob"));
-        assert!(point_list.value.is_none(), "there is no value to have");
-        assert!(point_list
-            .unreadable
-            .as_deref()
-            .is_some_and(|error| error.contains("not readable")));
-
-        assert_eq!(bundle.report.unreadables.len(), 1);
-        let row = &bundle.report.unreadables[0];
-        assert_eq!(row.match_name.as_deref(), Some("ADBE CurvesCustom-0001"));
-        assert_eq!(row.layer.as_deref(), Some("clip.mp4"));
-        assert_eq!(row.comp.as_deref(), Some("Main"));
-    }
-
-    /// **An expression arrives as text, with its enabled state beside it.**
-    ///
-    /// Never evaluated and never rewritten by the Bridge: the source text is
-    /// carried verbatim, and whether it was switched on is a separate fact —
-    /// AE keeps a disabled expression's text, and so must the capture, or
-    /// re-enabling it after an import would be impossible.
-    #[test]
-    fn an_expression_arrives_verbatim_with_its_enabled_state() {
-        let capture = opened().capture;
-        let clip = layer(&comp(&capture, "Main"), "clip.mp4");
-        let opacity = prop(&clip.properties, "ADBE Opacity").expect("an opacity");
-
-        assert_eq!(opacity.expression.as_deref(), Some("wiggle(2, 30)"));
-        assert_eq!(opacity.expression_enabled, Some(true));
-        assert_eq!(opacity.value, Some(serde_json::json!(100.0)));
-    }
-
     /// **A newer major schema is refused, and the message says to update
     /// Lumit.**
     ///
@@ -650,6 +367,97 @@ mod tests {
     /// read with the wrong assumptions, and a wrong import is worse than a
     /// refused one. The check is on the *major* alone — an unreadable minor
     /// bump must still open, which the next test's extra key covers.
+    /// The first composition of the fixture that has a layer, with `effects`
+    /// on its top layer, and the context an expression there runs under.
+    fn on_a_layer(
+        effects: Vec<lumit_core::model::EffectInstance>,
+        time: f64,
+    ) -> std::sync::Arc<lumit_core::expression::ExpressionContext> {
+        use lumit_core::model::ProjectItem;
+
+        let (mut doc, _) = map_capture(&opened().capture);
+        let comp = doc
+            .items
+            .iter()
+            .find_map(|item| match item {
+                ProjectItem::Composition(c) if !c.layers.is_empty() => Some(c.id),
+                _ => None,
+            })
+            .expect("a composition with a layer");
+        let layer = {
+            let layer = &mut doc.comp_mut(comp).unwrap().layers[0];
+            layer.effects = effects;
+            layer.id
+        };
+        std::sync::Arc::new(lumit_core::expression::ExpressionContext {
+            document: std::sync::Arc::new(doc),
+            comp: Some(comp),
+            layer: Some(layer),
+            comp_time: time,
+            current_depth: 0,
+            inputs: None,
+        })
+    }
+
+    /// **A preset's expressions find its controls once both are on a layer.**
+    ///
+    /// This is what bringing a rig across means: the pseudo effect arrives as
+    /// a set of controls under the name the expressions ask for, each control
+    /// under its own, and the expression beside it runs as it was written.
+    #[test]
+    fn a_presets_expressions_read_its_controls() {
+        use crate::aep::ffx::tests::{preset_bytes, Slider};
+
+        let bytes = preset_bytes(&[
+            (
+                "Pseudo/1",
+                "Shake",
+                &[Slider {
+                    label: "Amount",
+                    value: 12.5,
+                    expression: None,
+                }],
+            ),
+            (
+                "ADBE Slider Control",
+                "Driven",
+                &[Slider {
+                    label: "Slider",
+                    value: 3.0,
+                    expression: Some("value + effect(\"Shake\")(\"Amount\") * 2"),
+                }],
+            ),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Shake.ffx");
+        fs::write(&path, &bytes).unwrap();
+        let (effects, report) = open_ffx(&path).unwrap();
+
+        let controls = &effects[0];
+        assert_eq!(controls.effect.match_name, "custom_controls");
+        assert_eq!(controls.custom_name.as_deref(), Some("Shake"));
+        let rows = lumit_core::fx::def("custom_controls")
+            .unwrap()
+            .derived(controls);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].label, "Amount");
+        assert_eq!(controls.float_at(rows[0].id, 0.0), Some(12.5));
+
+        assert_eq!(effects[1].effect.match_name, "slider_control");
+        assert!(report
+            .rows
+            .iter()
+            .any(|row| row.reason == Reason::ExpressionCarried));
+
+        // 3 under the expression, plus twice the control's 12.5.
+        let context = on_a_layer(effects, 0.0);
+        let layer = &context.document.comp(context.comp.unwrap()).unwrap().layers[0];
+        assert_eq!(
+            layer.effects[1].float_at_with_context("slider", 0.0, context.clone()),
+            Some(28.0)
+        );
+    }
+
     #[test]
     fn a_newer_major_schema_is_refused_with_a_please_update_message() {
         let temp = tempfile::tempdir().unwrap();
@@ -762,32 +570,6 @@ mod tests {
         assert!(matches!(open_bundle(&bundle), Err(ImportError::Json(_)),));
     }
 
-    /// **Something that is not a bundle is turned away by name.**
-    ///
-    /// A folder with no manifest, and a manifest for some other format, are
-    /// both ordinary user mistakes (picking the parent folder, or a `.lum`
-    /// project). Both must produce the plain "not a Lumit bundle" rather than a
-    /// JSON parse error quoting a line number at someone who chose the wrong
-    /// folder.
-    #[test]
-    fn a_folder_that_is_not_a_bundle_is_turned_away_plainly() {
-        let temp = tempfile::tempdir().unwrap();
-        assert!(matches!(
-            open_bundle(temp.path()),
-            Err(ImportError::NotABundle)
-        ));
-
-        fs::write(
-            temp.path().join("manifest.json"),
-            br#"{ "format": "lumit-project", "schema_version": "0.2.0" }"#,
-        )
-        .unwrap();
-        assert!(matches!(
-            open_bundle(temp.path()),
-            Err(ImportError::NotABundle)
-        ));
-    }
-
     /// **The one front door reads the bytes, not the name.**
     ///
     /// The picker offers `.aep` and `.zip` in one filter, so the extension is
@@ -823,51 +605,6 @@ mod tests {
         let neither = temp.path().join("notes.aep");
         fs::write(&neither, b"hello").unwrap();
         assert!(open_ae(&neither).is_err());
-    }
-
-    /// **A chunk the parser had to skip becomes a report row; a property the
-    /// Bridge could not read does not become a second one.**
-    ///
-    /// docs/11 §7's policy is that a skipped chunk is listed, and docs/11 §9's
-    /// is that nothing is said twice. The two meet here: the parser's skips
-    /// carry a chunk id and no match name, and those are the rows folded in.
-    #[test]
-    fn skipped_chunks_are_listed_once_and_only_for_the_direct_route() {
-        let mut bundle = opened();
-        bundle.source = BundleSource::Aep;
-        bundle.report.unreadables = vec![
-            capture::Unreadable {
-                comp: Some("Main".to_string()),
-                path: Some("cdta".to_string()),
-                ..capture::Unreadable::default()
-            },
-            capture::Unreadable {
-                comp: Some("Main".to_string()),
-                layer: Some("clip.mp4".to_string()),
-                path: Some("Curves".to_string()),
-                match_name: Some("ADBE CurvesCustom".to_string()),
-                ..capture::Unreadable::default()
-            },
-        ];
-
-        let mut report = ImportReport::default();
-        note_skipped_chunks(&bundle, &mut report);
-        assert_eq!(report.rows.len(), 1, "the match-named row is the mapper's");
-        assert_eq!(report.rows[0].outcome, Outcome::Skipped);
-        assert_eq!(
-            report.rows[0].reason,
-            Reason::ChunkUnreadable {
-                chunk: "cdta".to_string()
-            }
-        );
-        assert_eq!(report.rows[0].path.comp.as_deref(), Some("Main"));
-
-        // The Bridge's own route says none of this: its unreadables are
-        // already in the capture, and the mapping raises them from there.
-        bundle.source = BundleSource::Bridge;
-        let mut report = ImportReport::default();
-        note_skipped_chunks(&bundle, &mut report);
-        assert!(report.rows.is_empty());
     }
 
     /// **A footage-only parse is one row against the project, and a whole

@@ -18,8 +18,7 @@ After Effects' depth, Vegas' retiming, one application. Free and open source.
 [Website](https://lumitlab.com) ·
 [Download](https://lumitlab.com/download) ·
 [Documentation](https://docs.lumitlab.com) ·
-[Releases](https://lumitlab.com/releases) ·
-[Roadmap](docs/16-ROADMAP.md)
+[Releases](https://lumitlab.com/releases)
 
 </div>
 
@@ -68,8 +67,9 @@ Lumit can check for updates and installs them automatically or when you want.
 ## Building from source
 
 Rust stable (pinned by `rust-toolchain.toml`) plus two external dependencies:
-**FFmpeg 8.x** for media, and **LLVM 18** for the binding generator — newer LLVM
-silently generates broken bindings, so 18 is pinned on every platform.
+**FFmpeg 8.x** for media, and **LLVM 18** for the binding generator. It has to be
+FFmpeg 8, the build stops on 7 or 9. Newer LLVM silently generates broken
+bindings, so 18 is pinned on Windows and Linux.
 
 <details>
 <summary><b>Windows</b> (my primary development platform)</summary>
@@ -87,39 +87,59 @@ cargo test --workspace
 <details>
 <summary><b>macOS</b></summary>
 
+Homebrew's plain `ffmpeg` is 9.x, so install `ffmpeg@8`. It isn't linked into
+your `PATH`, so point the build at it in the shell you build from:
+
 ```sh
-brew install ffmpeg  # see docs/TODO.md: Homebrew has no ffmpeg@8 yet, and plain ffmpeg is 9.x
-# Point the build at it:
-export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg)/lib/pkgconfig"
+brew install ffmpeg@8
+export FFMPEG_PKG_CONFIG_PATH="$(brew --prefix ffmpeg@8)/lib/pkgconfig"
+export PATH="$(brew --prefix ffmpeg@8)/bin:$PATH"   # the tests make their media with the ffmpeg CLI
 cargo test --workspace
 ```
+
+Xcode's own libclang works here, so there's no LLVM to install.
 </details>
 
 <details>
 <summary><b>Linux</b></summary>
 
-FFmpeg needs no environment variable here — the development packages put their
-`.pc` files where the build already looks.
+Ubuntu 26.04 ships FFmpeg 8, so there it's only packages:
 
 ```sh
-# Debian 13 / Ubuntu 24.10 or newer
-sudo apt install pkg-config clang libavcodec-dev libavformat-dev libavutil-dev \
-  libswscale-dev libswresample-dev libavfilter-dev libavdevice-dev
-
-# Arch / Artix — the unversioned clang is LLVM 19+ and produces broken bindings
-sudo pacman -S ffmpeg pkgconf clang18 llvm18
+sudo apt install pkg-config libclang-18-dev libasound2-dev libgl-dev libegl-dev \
+  libxkbcommon-dev libxkbcommon-x11-dev libx11-dev libxcursor-dev libxi-dev \
+  libxrandr-dev libxcb1-dev libwayland-dev \
+  libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev \
+  libavfilter-dev libavdevice-dev
 ```
 
-If your default `clang` is newer than 18, point the build at 18 in the shell you
-build from:
+Everywhere else the distro's FFmpeg is the wrong one (7 on Debian 13 and older
+Ubuntu, 9 on Arch), so leave its FFmpeg development packages out and unpack a
+[BtbN FFmpeg 8.1 shared/GPL build](https://github.com/BtbN/FFmpeg-Builds/releases)
+instead:
 
 ```sh
-export LIBCLANG_PATH=/usr/lib/llvm18/lib          # Debian/Ubuntu: /usr/lib/llvm-18/lib
+# Arch / Artix: sudo pacman -S pkgconf clang18 llvm18
+mkdir -p ~/ffmpeg8
+# The same dated build CI uses, checked against the same hash
+f=ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1.tar.xz
+curl -fsSLO https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/$f
+echo "35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24  $f" | sha256sum -c -
+tar -xJf $f -C ~/ffmpeg8 --strip-components=1
+# The .pc files carry the prefix of the machine that built them
+sed -i "s|^prefix=.*|prefix=$HOME/ffmpeg8|" ~/ffmpeg8/lib/pkgconfig/*.pc
+export PKG_CONFIG_PATH="$HOME/ffmpeg8/lib/pkgconfig:$PKG_CONFIG_PATH"
+export LD_LIBRARY_PATH="$HOME/ffmpeg8/lib:$LD_LIBRARY_PATH"
+export PATH="$HOME/ffmpeg8/bin:$PATH"
+```
+
+Then point the build at LLVM 18 in the shell you build from, since the default
+`clang` is newer on all of them:
+
+```sh
+export LIBCLANG_PATH=/usr/lib/llvm-18/lib          # Arch: /usr/lib/llvm18/lib
 cargo test --workspace
 ```
-
-FFmpeg **7.x** is required; distributions still on FFmpeg 6 (including Ubuntu
-24.04 LTS) need a newer release or a self-built FFmpeg first.
 </details>
 
 
@@ -131,10 +151,8 @@ in [docs/GUIDE.md](docs/GUIDE.md).
 
 | | |
 |---|---|
-| [docs/README.md](docs/README.md) | The index — start here. Seventeen numbered specs, from the vision to the roadmap. |
-| [docs/GUIDE.md](docs/GUIDE.md) | The contributor guide. What each crate does, the rules code has to follow, and how to build and run it. |
-| [docs/impl/](docs/impl/) | The implementation notes for more difficult area's. |
-| [docs/TODO.md](docs/TODO.md) | What is left to work on, most important first. |
+| [docs/GUIDE.md](docs/GUIDE.md) | Start here. How to build and run it, the rules code has to follow, and what each crate does. |
+| [docs/](docs/) | The glossary, architecture, performance and engineering rules, and the bridge contract. |
 
 The engine is a Cargo workspace under `crates/`; the interface is
 `flutter_ui/`; they meet at `crates/lumit-bridge`

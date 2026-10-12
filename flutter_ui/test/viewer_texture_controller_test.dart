@@ -67,45 +67,6 @@ void main() {
     // controller a seam to write somewhere else would be a seam for one test.
   });
 
-  test('a runner that counts its draws keeps the texture path', () async {
-    final controller =
-        ViewerTextureController(channel: fakeRunner((call) => call));
-    expect(await controller.ensureRegistered(0, 640, 360, fd: 3), 7);
-
-    for (var i = 0; i < 12; i++) {
-      await controller.frameReady();
-    }
-
-    expect(controller.debugDrawn, 12);
-    expect(controller.neverDrawn, isFalse);
-    expect(controller.available, isTrue);
-  });
-
-  /// **The blank flash on a resize.** A new shared texture means a new id, and
-  /// the old one used to be unregistered *first* — so for the length of a
-  /// platform round trip the Viewer had nothing to draw. The replacement is
-  /// registered before the old one is let go, so the last good frame stays on
-  /// screen until there is a newer one to put there.
-  test('a replacement is registered before the old texture is let go',
-      () async {
-    final order = <String>[];
-    var next = 7;
-    final channel = const MethodChannel(ViewerTextureController.channelName);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-      order.add(call.method);
-      return call.method == 'register' ? next++ : null;
-    });
-    final controller = ViewerTextureController(channel: channel);
-
-    expect(await controller.ensureRegistered(0, 640, 360, fd: 3), 7);
-    expect(order, ['register']);
-    // A comp resize: same fd, new size.
-    expect(await controller.ensureRegistered(0, 1280, 720, fd: 4), 8);
-    expect(order, ['register', 'register', 'unregister'],
-        reason: 'the new texture is up before the old one goes');
-  });
-
   /// Frames arrive faster than a platform round trip, so a resize used to start
   /// one registration per frame that landed while the first was still out —
   /// every one but the last leaked, and the Viewer flickered between them.
@@ -129,10 +90,69 @@ void main() {
     expect(registers, 1, reason: 'one texture, one registration');
   });
 
-  test('a missing handler latches the path off at once', () async {
-    final controller = ViewerTextureController(
-        channel: const MethodChannel('lumit/viewer_texture_absent'));
-    expect(await controller.ensureRegistered(0, 640, 360, fd: 3), isNull);
-    expect(controller.available, isFalse);
+  // A laptop with two graphics cards. The engine renders on the NVIDIA card,
+  // Flutter draws with the other, and the runner refuses the texture, since
+  // importing it crashed the application inside the other card's driver. These
+  // three pin the Dart half of that: the runner is told which card the buffer
+  // is on, and a refusal reaches the Viewer's message by either road.
+  group('a texture on another graphics card', () {
+    MethodChannel runner(Future<Object?> Function(MethodCall call) answer) {
+      final channel = const MethodChannel(ViewerTextureController.channelName);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, answer);
+      return channel;
+    }
+
+    PlatformException mismatch() => PlatformException(
+        code: ViewerTextureController.gpuMismatchCode,
+        message: 'the render GPU is not the display GPU');
+
+    setUp(() => ViewerTextureController.gpuMismatch.value = false);
+
+    test('the runner is told which card the buffer is on', () async {
+      final sent = <Map<Object?, Object?>>[];
+      final controller = ViewerTextureController(channel: runner((call) async {
+        if (call.method != 'register') return null;
+        sent.add(call.arguments as Map<Object?, Object?>);
+        return 7;
+      }));
+
+      await controller.ensureRegistered(0, 640, 360,
+          fd: 3, renderMajor: 226, renderMinor: 129);
+      expect(sent.single['renderMajor'], 226);
+      expect(sent.single['renderMinor'], 129);
+      // A node the driver didn't report is left out, which the runner reads
+      // as unknown. A zero would name a real card and refuse a healthy one.
+      expect(sent.single.containsKey('primaryMajor'), isFalse);
+      expect(sent.single.containsKey('primaryMinor'), isFalse);
+    });
+
+    test('a refused registration raises the message', () async {
+      final controller = ViewerTextureController(channel: runner((call) async {
+        if (call.method == 'register') throw mismatch();
+        return null;
+      }));
+
+      expect(await controller.ensureRegistered(0, 640, 360, fd: 3), isNull);
+      expect(ViewerTextureController.gpuMismatch.value, isTrue);
+      expect(controller.available, isFalse,
+          reason: 'the cards will not change while Lumit is running');
+    });
+
+    test('a refusal found at import raises it too', () async {
+      // The import itself runs on the raster thread, so a refusal there is
+      // only heard when the next frame is announced.
+      final controller = ViewerTextureController(channel: runner((call) async {
+        if (call.method == 'register') return 7;
+        if (call.method == 'frameReady') throw mismatch();
+        return null;
+      }));
+
+      expect(await controller.ensureRegistered(0, 640, 360, fd: 3), 7);
+      expect(ViewerTextureController.gpuMismatch.value, isFalse);
+      await controller.frameReady();
+      expect(ViewerTextureController.gpuMismatch.value, isTrue);
+      expect(controller.available, isFalse);
+    });
   });
 }

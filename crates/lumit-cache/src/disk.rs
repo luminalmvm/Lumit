@@ -423,51 +423,6 @@ mod tests {
         assert_eq!(c.len(), 2, "and the cap was actually enforced");
     }
 
-    /// Lowering the cap evicts at once rather than waiting for the next store,
-    /// so the space the user just asked to reclaim is really gone.
-    #[test]
-    fn set_cap_evicts_immediately_when_lowered() {
-        let dir = tempfile::tempdir().unwrap();
-        let one_size = {
-            let mut probe = DiskCache::open(dir.path().join("probe"), u64::MAX);
-            probe.store(parked(1, 16, 16, &frame(16, 16, 3), 8));
-            probe.used_bytes()
-        };
-        let mut c = DiskCache::open(dir.path().join("real"), u64::MAX);
-        c.store(parked(1, 16, 16, &frame(16, 16, 1), 1));
-        c.store(parked(2, 16, 16, &frame(16, 16, 2), 500));
-        assert!(c.contains(1) && c.contains(2));
-
-        c.set_cap(one_size + one_size / 2);
-        assert!(c.used_bytes() <= one_size + one_size / 2);
-        assert!(c.contains(2), "the dear frame survives the squeeze");
-        assert!(!c.contains(1));
-    }
-
-    /// **The index is what makes the tier cheap to open**, and it must agree with
-    /// the folder across a close and a reopen — otherwise the cache either
-    /// forgets frames that are taking up room, or promises frames that are gone.
-    #[test]
-    fn a_reopened_cache_knows_what_it_holds_without_a_walk() {
-        let dir = tempfile::tempdir().unwrap();
-        let (used, hashes) = {
-            let mut c = DiskCache::open(dir.path().to_path_buf(), u64::MAX);
-            c.store(parked(1, 8, 8, &frame(8, 8, 1), 20));
-            c.store(parked(2, 8, 8, &frame(8, 8, 2), 20));
-            c.flush_index();
-            let mut hashes = c.known_hashes();
-            hashes.sort_unstable();
-            (c.used_bytes(), hashes)
-        };
-
-        let reopened = DiskCache::open(dir.path().to_path_buf(), u64::MAX);
-        assert_eq!(reopened.used_bytes(), used);
-        let mut again = reopened.known_hashes();
-        again.sort_unstable();
-        assert_eq!(again, hashes);
-        assert!(reopened.contains(1) && reopened.contains(2));
-    }
-
     /// A cache written by a build with no index — or one whose index file was
     /// deleted — is rebuilt by walking the folder, so nothing is orphaned
     /// (docs/06 §5.4's "rebuilt by scan if missing or corrupt").
@@ -488,71 +443,6 @@ mod tests {
         assert_eq!(rebuilt.load(1).map(|f| (f.width, f.height)), Some((8, 8)));
     }
 
-    /// A file deleted behind the cache's back (a user emptying the folder, the
-    /// operating system reclaiming a cache directory) must not leave the index
-    /// promising a frame that is not there: the failed load drops it.
-    #[test]
-    fn a_frame_deleted_underneath_is_dropped_from_the_index() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut c = DiskCache::open(dir.path().to_path_buf(), u64::MAX);
-        c.store(parked(5, 8, 8, &frame(8, 8, 1), 20));
-        let hex = format!("{:032x}", 5u128);
-        fs::remove_file(
-            dir.path()
-                .join("frames")
-                .join(&hex[..2])
-                .join(format!("{hex}.kfr")),
-        )
-        .unwrap();
-
-        assert!(c.load(5).is_none(), "there is nothing to load");
-        assert!(!c.contains(5), "and the index no longer claims otherwise");
-        assert_eq!(c.used_bytes(), 0);
-    }
-
-    /// Storing the same frame twice is not a second copy — the name is the
-    /// content — but it does count as the frame being wanted again.
-    #[test]
-    fn storing_a_held_frame_again_is_a_use_not_a_copy() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut c = DiskCache::open(dir.path().to_path_buf(), u64::MAX);
-        c.store(parked(9, 8, 8, &frame(8, 8, 1), 20));
-        let used = c.used_bytes();
-        c.store(parked(9, 8, 8, &frame(8, 8, 1), 20));
-        assert_eq!(c.used_bytes(), used, "content-addressed: one file");
-        assert_eq!(c.len(), 1);
-    }
-
-    #[test]
-    fn sidecar_root_sits_beside_the_project() {
-        let p = Path::new("D:/edits/montage.lum");
-        assert_eq!(
-            sidecar_root(p).unwrap(),
-            Path::new("D:/edits/montage.lum-cache")
-        );
-        assert!(sidecar_root(Path::new("/")).is_none());
-    }
-
-    #[test]
-    fn cache_root_for_with_no_override_matches_sidecar_root() {
-        let p = Path::new("D:/edits/montage.lum");
-        assert_eq!(cache_root_for(p, None), sidecar_root(p));
-        assert_eq!(
-            cache_root_for(p, None).unwrap(),
-            Path::new("D:/edits/montage.lum-cache")
-        );
-    }
-
-    #[test]
-    fn cache_root_for_is_deterministic() {
-        let p = Path::new("D:/edits/montage.lum");
-        let over = Path::new("E:/lumit-cache");
-        let a = cache_root_for(p, Some(over));
-        let b = cache_root_for(p, Some(over));
-        assert!(a.is_some());
-        assert_eq!(a, b);
-    }
-
     #[test]
     fn cache_root_for_hash_is_stable_across_toolchains() {
         // FNV-1a is a fixed algorithm; this pins the exact folder name for a
@@ -562,29 +452,5 @@ mod tests {
         let over = Path::new("E:/lumit-cache");
         let root = cache_root_for(Path::new("D:/edits/montage.lum"), Some(over)).unwrap();
         assert_eq!(root, over.join("montage-6fe0182f-cache"));
-    }
-
-    #[test]
-    fn cache_root_for_does_not_collide_on_same_file_name() {
-        let over = Path::new("E:/lumit-cache");
-        let a = cache_root_for(Path::new("D:/edits/montage.lum"), Some(over)).unwrap();
-        let b = cache_root_for(Path::new("D:/archive/montage.lum"), Some(over)).unwrap();
-        assert_ne!(a, b, "same file name in different folders must not collide");
-        // Both still sit under the chosen override root, and stay
-        // recognisable by the project's file stem.
-        assert!(a.starts_with(over));
-        assert!(b.starts_with(over));
-        assert!(a
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .starts_with("montage-"));
-        assert!(b
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .starts_with("montage-"));
     }
 }

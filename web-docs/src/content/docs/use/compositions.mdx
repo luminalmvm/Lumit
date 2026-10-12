@@ -42,7 +42,8 @@ Precompose when you want to:
 - Apply one effect to several layers at once.
 - Retime a whole group of layers together.
 
-Select the layers and choose **Layer ▸ Precompose**. The shortcut by default is `Ctrl+Shift+C`.
+Select the layers and choose **Layer ▸ Precompose**, or right-click one of them in the
+timeline and choose **Precompose**. The shortcut by default is `Ctrl+Shift+C`.
 
 A Precomp layer supports [Retime](/use/retime/), so the speed of a nested
 composition can be ramped.
@@ -52,6 +53,21 @@ A composition holds a layer stack or a [node graph](/use/node-graphs/), never bo
 Precomp layer in another composition, and as a Read box in another node graph.
 
 Lumit refuses to place a composition inside itself.
+
+## The flowchart
+
+The flowchart draws the open composition between the compositions it is used in, on the
+left, and the compositions it contains, on the right. Press `Tab`, or choose
+**Composition ▸ Flowchart**. It opens at the pointer.
+
+| Gesture | Result |
+| --- | --- |
+| Click a composition, or press `Enter` | Front that composition. |
+| Arrow keys | Move between compositions. |
+| Arrow past a composition with a stub, or click the stub | Move the chart along to that composition. |
+| `Tab`, `Esc`, or a click outside | Close the flowchart. |
+
+`Tab` opens the flowchart only while no control has focus.
 
 ## Related
 

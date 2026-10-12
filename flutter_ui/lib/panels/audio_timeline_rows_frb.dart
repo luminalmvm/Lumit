@@ -144,10 +144,15 @@ List<LayerFoldRow> audioTimelineFoldRows({
     switch (row) {
       case FoldVolumeRow(:final scalar):
         volume.add(FoldVolumeRow(scalar: scalar, depth: 1));
-      case FoldGroupRow(:final path, :final label, open: final isOpen)
+      case FoldGroupRow(
+            :final path,
+            :final label,
+            open: final isOpen,
+            :final named
+          )
           when audio.contains(effectIdOfPath(path)):
-        effects.add(
-            FoldGroupRow(path: path, label: label, open: isOpen, depth: 2));
+        effects.add(FoldGroupRow(
+            path: path, label: label, open: isOpen, depth: 2, named: named));
       case FoldEffectParamRow(
             :final info,
             :final param,
@@ -408,10 +413,13 @@ class AudioTrackOutlineRow extends StatelessWidget {
               width: 16,
               height: t.density.laneRow,
               child: Center(
-                child: glyph.LumitIcon(
-                  track.open ? LumitIcons.collapse : LumitIcons.expand,
-                  size: iconSize,
-                  colour: track.open ? t.textPrimary : t.textMuted,
+                child: TwirlTurn(
+                  open: track.open,
+                  child: glyph.LumitIcon(
+                    track.open ? LumitIcons.collapse : LumitIcons.expand,
+                    size: iconSize,
+                    colour: track.open ? t.textPrimary : t.textMuted,
+                  ),
                 ),
               ),
             ),

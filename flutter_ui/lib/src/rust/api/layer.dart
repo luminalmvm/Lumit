@@ -20,11 +20,12 @@ import 'retime.dart';
 import 'roto.dart';
 import 'solid.dart';
 import 'state.dart';
+import 'streams.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `graph_inputs_for`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `graph_inputs_for`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// Where a fixed view looks from, for a comp of this size
@@ -437,6 +438,19 @@ class BridgeClip {
   /// when the document no longer holds that source.
   final String sourceName;
 
+  /// The link this clip shares with the clips that move, trim and cut with
+  /// it, a picture clip and the clip that carries its sound. `None` for a
+  /// clip on its own.
+  final UuidValue? link;
+
+  /// The trim into the source, in seconds of source time: the first moment
+  /// the clip shows and the moment it stops before.
+  final BridgeRational sourceIn;
+  final BridgeRational sourceOut;
+
+  /// Whether the clip plays a composition and not a footage item.
+  final bool sourceIsComp;
+
   const BridgeClip({
     required this.id,
     required this.placeStart,
@@ -454,6 +468,10 @@ class BridgeClip {
     required this.fx,
     required this.gainDb,
     required this.sourceName,
+    this.link,
+    required this.sourceIn,
+    required this.sourceOut,
+    required this.sourceIsComp,
   });
 
   @override
@@ -473,7 +491,11 @@ class BridgeClip {
       effects.hashCode ^
       fx.hashCode ^
       gainDb.hashCode ^
-      sourceName.hashCode;
+      sourceName.hashCode ^
+      link.hashCode ^
+      sourceIn.hashCode ^
+      sourceOut.hashCode ^
+      sourceIsComp.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -495,7 +517,11 @@ class BridgeClip {
           effects == other.effects &&
           fx == other.fx &&
           gainDb == other.gainDb &&
-          sourceName == other.sourceName;
+          sourceName == other.sourceName &&
+          link == other.link &&
+          sourceIn == other.sourceIn &&
+          sourceOut == other.sourceOut &&
+          sourceIsComp == other.sourceIsComp;
 }
 
 /// One end of a clip's fade: how long it takes, and the curve it takes. Zero
@@ -563,6 +589,32 @@ enum BridgeFadeShape {
   /// where it was and then falls away.
   exponential,
   ;
+}
+
+/// A colour part way along a shape's gradient: where it sits as a per cent of
+/// the ramp, and how opaque it is, 0..100. Both animate.
+class BridgeGradientStop {
+  final BridgeScalar position;
+  final BridgeColourRgba colour;
+  final BridgeScalar opacity;
+
+  const BridgeGradientStop({
+    required this.position,
+    required this.colour,
+    required this.opacity,
+  });
+
+  @override
+  int get hashCode => position.hashCode ^ colour.hashCode ^ opacity.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeGradientStop &&
+          runtimeType == other.runtimeType &&
+          position == other.position &&
+          colour == other.colour &&
+          opacity == other.opacity;
 }
 
 /// Everything the Timeline outline, its bars, and the Hierarchy draw for one
@@ -1571,12 +1623,20 @@ class BridgeShapeItem {
   /// from it linearly to `gradient_colour` and 2 ramps radially, the end
   /// point sitting on the outer edge. The two points are in layer pixels —
   /// the art's own coordinates — and animate; what a ramp *is* does not.
+  /// Each end has an opacity of its own, 0..100, and the ramp fades evenly
+  /// from `gradient_start_opacity` to `gradient_end_opacity`.
   final int gradient;
   final BridgeColourRgba? gradientColour;
   final BridgeScalar gradientStartX;
   final BridgeScalar gradientStartY;
   final BridgeScalar gradientEndX;
   final BridgeScalar gradientEndY;
+  final BridgeScalar gradientStartOpacity;
+  final BridgeScalar gradientEndOpacity;
+
+  /// The colours the ramp passes through between its two ends, in the order
+  /// they were made. Empty is the plain two-colour ramp.
+  final List<BridgeGradientStop> gradientStops;
 
   /// **A boolean combine**: how this item joins the item **before**
   /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
@@ -1639,6 +1699,9 @@ class BridgeShapeItem {
     required this.gradientStartY,
     required this.gradientEndX,
     required this.gradientEndY,
+    required this.gradientStartOpacity,
+    required this.gradientEndOpacity,
+    required this.gradientStops,
     required this.combine,
     required this.pathKeys,
     required this.offsetAmount,
@@ -1675,6 +1738,9 @@ class BridgeShapeItem {
       gradientStartY.hashCode ^
       gradientEndX.hashCode ^
       gradientEndY.hashCode ^
+      gradientStartOpacity.hashCode ^
+      gradientEndOpacity.hashCode ^
+      gradientStops.hashCode ^
       combine.hashCode ^
       pathKeys.hashCode ^
       offsetAmount.hashCode ^
@@ -1713,6 +1779,9 @@ class BridgeShapeItem {
           gradientStartY == other.gradientStartY &&
           gradientEndX == other.gradientEndX &&
           gradientEndY == other.gradientEndY &&
+          gradientStartOpacity == other.gradientStartOpacity &&
+          gradientEndOpacity == other.gradientEndOpacity &&
+          gradientStops == other.gradientStops &&
           combine == other.combine &&
           pathKeys == other.pathKeys &&
           offsetAmount == other.offsetAmount &&
@@ -2326,6 +2395,18 @@ class LayerReference {
           endSeconds: endSeconds,
           columns: columns);
 
+  /// The audio streams this layer has to choose from and the ones it
+  /// sounds.
+  ///
+  /// A Footage layer answers for its file. A Sequence layer keeps the choice
+  /// on each clip, so it answers for its clips together: the file's streams
+  /// and every place any clip sounds where the clips are all of one file,
+  /// and no list where they are of several. Any other kind sounds no file.
+  BridgeAudioStreams audioStreams() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceAudioStreams(
+        that: this,
+      );
+
   /// This camera's evaluated placement at `frame`: the eye, the effective
   /// rotation with a two-node camera's aim already in it, and the zoom, with
   /// a solve link followed (docs/impl/camera.md §2). What the camera tools
@@ -2410,6 +2491,12 @@ class LayerReference {
           startSeconds: startSeconds,
           endSeconds: endSeconds,
           columns: columns);
+
+  /// The audio streams one clip of this Sequence layer has to choose from
+  /// and the ones it sounds. Nothing for a clip of a composition.
+  BridgeAudioStreams clipAudioStreams({required UuidValue clip}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceClipAudioStreams(that: this, clip: clip);
 
   /// A thumbnail of the **first frame this clip shows**.
   ///
@@ -3032,6 +3119,25 @@ class LayerReference {
   void loadPreset({required String text}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceLoadPreset(that: this, text: text);
 
+  /// **Merge audio streams**, the way back from a split: this row sounds
+  /// the streams mixed and the rows split off beside it go.
+  ///
+  /// The rows folded are the Audio layers of the same file that start it at
+  /// the same moment, so no sound moves in time. What each carried of its
+  /// own, a Volume ride or an effect, goes with it: the row kept is heard
+  /// through its own. Asked of a split-off row while the layer with the
+  /// picture is sounding beside it, that layer is the one kept. A layer with
+  /// nothing split off beside it is set to every stream its file has.
+  ///
+  /// A Sequence layer is merged clip by clip
+  /// ([`CompositionReference::cut_merge_audio_streams`]).
+  ///
+  /// One undo step. `false` when it changes nothing.
+  bool mergeAudioStreams() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceMergeAudioStreams(
+        that: this,
+      );
+
   /// This layer's **motion path** (docs/07 §2.4), or `None` while its
   /// Position is still — see [`motion_path_of`].
   ///
@@ -3334,6 +3440,15 @@ class LayerReference {
   void setAdjustment({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAdjustment(that: this, on_: on_);
 
+  /// Choose which audio streams this layer sounds, mixed. One undo step.
+  ///
+  /// On a Sequence layer every footage clip takes the choice. An empty
+  /// list is the first stream, which is what a layer sounds until it is
+  /// told otherwise. [`BridgeError::NotFootage`] on a layer that sounds no
+  /// file of its own.
+  void setAudioStreams({required List<int> streams}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetAudioStreams(that: this, streams: streams);
+
   /// Set how one two-axis property is shown and edited: combined on
   /// one row, linked (Scale), or separated onto a row per axis.
   ///
@@ -3365,6 +3480,13 @@ class LayerReference {
   /// every other curve-capable value.
   void setCameraZoom({required BridgeScalar zoom}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetCameraZoom(that: this, zoom: zoom);
+
+  /// Choose which audio streams one clip of this Sequence layer sounds,
+  /// mixed. One undo step.
+  void setClipAudioStreams(
+          {required UuidValue clip, required List<int> streams}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipAudioStreams(
+          that: this, clip: clip, streams: streams);
 
   /// Set the fade at one end of a clip, or at both
   /// (docs/impl/audio-timeline.md §3).
@@ -3579,8 +3701,13 @@ class LayerReference {
   /// A self-parent, an unknown layer, or one that would close a cycle is
   /// refused by the op — a parent loop has no defined transform, so unlike a
   /// dangling matte it cannot be allowed to exist and be ignored later.
-  void setParent({UuidValue? parent}) => BridgeLib.instance.api
-      .crateApiLayerLayerReferenceSetParent(that: this, parent: parent);
+  ///
+  /// **The layer does not move.** Its transform is rewritten in the same
+  /// undo step so it sits where it sat at `frame`, the playhead. Only what
+  /// the parent does afterwards carries it.
+  void setParent({UuidValue? parent, required PlatformInt64 frame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetParent(
+          that: this, parent: parent, frame: frame);
 
   /// Give this layer a puppet, replace the one it has, or take it away.
   ///
@@ -3692,6 +3819,11 @@ class LayerReference {
   /// arrived. Removing the last one puts it back. One `Op::Batch`, so it is
   /// one undo step: the same rule as typing, where committing the document
   /// and the pivot separately made `Ctrl+Z` undo a pivot nobody had moved.
+  ///
+  /// A change of size, style or paragraph moves the anchor the same way, so
+  /// the first baseline stays where it is on screen, at the side the lines
+  /// line up on. An outline then grows round the letters, and centred text
+  /// that is tracked out grows both ways.
   void setText({required BridgeTextDocument document}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetText(that: this, document: document);
 
@@ -3787,6 +3919,27 @@ class LayerReference {
   LayerReference splitAt({required PlatformInt64 frame}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceSplitAt(that: this, frame: frame);
+
+  /// **Split audio streams**: give every audio stream this layer sounds a
+  /// row of its own.
+  ///
+  /// **In plain terms.** A recording with the game on one stream and the
+  /// microphone on another arrives as one row that sounds the first. Split,
+  /// it is a row to a stream: this layer keeps the picture and the first
+  /// stream, and each of the others is an Audio layer directly below with
+  /// the same span, Volume and effects, named for what the file calls the
+  /// stream. Each can then be turned down, cut or muted by itself.
+  ///
+  /// A layer that sounds several streams mixed is split into those. A
+  /// Sequence layer is split clip by clip, each stream a linked clip on a
+  /// sound row ([`CompositionReference::cut_split_audio_streams`]).
+  ///
+  /// One undo step. `false` when the layer sounds one stream and there is
+  /// nothing to split.
+  bool splitAudioStreams() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSplitAudioStreams(
+        that: this,
+      );
 
   /// **Stretch** the layer (docs/04 §11.2): play it at `speed_percent` of the
   /// rate it plays at now, and give it the length that implies — 50% is half

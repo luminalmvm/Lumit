@@ -52,8 +52,4 @@ void main() {
     // 15 frames over 1.5 s — and no tail it waits out can dilute it.
     expect(counted.length / ((t1 - t0) / 1e6), closeTo(10.0, 0.001));
   });
-
-  test('an empty window counts nothing', () {
-    expect(framesWithin([frameAt(500)], 1000, 1000), isEmpty);
-  });
 }

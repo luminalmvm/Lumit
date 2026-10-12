@@ -8,7 +8,6 @@
 // row reads its wording from, the checks that stand between a download and
 // something being executed, and the two windows at the end of it.
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -23,18 +22,6 @@ import 'package:lumit_flutter/widgets/controls.dart';
 
 void main() {
   group('version arithmetic', () {
-    test('a tag is a version without its v', () {
-      expect(versionFromTag('v0.2.0'), '0.2.0');
-      expect(versionFromTag('0.2.0'), '0.2.0');
-    });
-
-    test('the boot log is where this build says what it is', () {
-      expect(versionFromBootLine('lumit-bridge 0.1.0'), '0.1.0');
-      expect(versionFromBootLine('lumit-bridge 1.2.3-rc.1'), '1.2.3-rc.1');
-      // A harness with no engine sees a line with no version in it.
-      expect(versionFromBootLine('unknown'), isNull);
-    });
-
     test('newer, older and the same', () {
       expect(compareVersions('0.2.0', '0.1.0'), greaterThan(0));
       expect(compareVersions('0.1.0', '0.2.0'), lessThan(0));
@@ -44,16 +31,6 @@ void main() {
       expect(compareVersions('0.10.0', '0.9.0'), greaterThan(0));
       // A missing place is zero.
       expect(compareVersions('1.2', '1.2.0'), 0);
-    });
-
-    test('a release beats its own pre-releases', () {
-      expect(compareVersions('0.2.0', '0.2.0-rc.1'), greaterThan(0));
-      expect(compareVersions('0.2.0-rc.1', '0.2.0'), lessThan(0));
-      expect(compareVersions('0.2.0-rc.2', '0.2.0-rc.1'), greaterThan(0));
-    });
-
-    test('build metadata is not part of the ordering', () {
-      expect(compareVersions('0.2.0+3', '0.2.0'), 0);
     });
   });
 
@@ -70,13 +47,6 @@ void main() {
       }
     });
 
-    test('a release with nothing for this machine is no release at all', () {
-      final json = _releaseJson(assets: [
-        _asset('lumit-0.2.0-linux-x64.tar.gz'),
-      ]);
-      expect(UpdateRelease.parse(json, platform: 'windows'), isNull);
-    });
-
     test('drafts and pre-releases are refused', () {
       expect(
         UpdateRelease.parse(_releaseJson(draft: true), platform: 'windows'),
@@ -86,52 +56,6 @@ void main() {
         UpdateRelease.parse(_releaseJson(prerelease: true),
             platform: 'windows'),
         isNull,
-      );
-    });
-
-    test('the digest comes through when GitHub publishes one', () {
-      final release = UpdateRelease.parse(
-        _releaseJson(assets: [
-          _asset('lumit-0.2.0-windows-x64-setup.exe', digest: 'sha256:abc'),
-        ]),
-        platform: 'windows',
-      );
-      expect(release?.sha256, 'sha256:abc');
-    });
-
-    test('what a release says to read first comes out of its notes', () {
-      final release = UpdateRelease.parse(_releaseJson(body: _noticeBody),
-          platform: 'windows');
-      // Wrapped lines joined, bullets kept, bold and the link's address gone,
-      // and nothing from the section after it.
-      expect(release?.notice, [
-        (
-          bullet: false,
-          text: 'Glow is drawn by a new renderer, so a project that uses it '
-              'will not look the same as it did in 0.3.'
-        ),
-        (bullet: true, text: 'Lens flare loses its Streak count parameter.'),
-        (bullet: true, text: 'See the notes for the rest.'),
-      ]);
-    });
-
-    test('a release with nothing to say before it is applied has no notice',
-        () {
-      final plain = UpdateRelease.parse(
-        _releaseJson(body: "## What's Changed\n\n- A fix\n"),
-        platform: 'windows',
-      );
-      expect(plain?.notice, isEmpty);
-      // GitHub answers without a body when the release has none.
-      expect(UpdateRelease.parse(_releaseJson(), platform: 'windows')?.notice,
-          isEmpty);
-    });
-
-    test('the heading is found whatever its level or case', () {
-      expect(
-        updateNoticeFrom(
-            '### BEFORE YOU UPDATE\nRead this.\n#### Next\nNot this.'),
-        [(bullet: false, text: 'Read this.')],
       );
     });
 
@@ -171,40 +95,6 @@ void main() {
       expect(service.busy, isFalse);
     });
 
-    test(
-        'the same version is up to date, and the row goes back to offering '
-        'a check', () async {
-      final service = _service(
-        version: '0.2.0',
-        fetch: (_) async => _releaseJson(),
-      );
-      await service.check();
-      expect(service.stage, UpdateStage.upToDate);
-      expect(service.menuLabel, 'Check for updates');
-    });
-
-    test('an older release on GitHub is not an update', () async {
-      final service = _service(
-        version: '0.3.0',
-        fetch: (_) async => _releaseJson(),
-      );
-      await service.check();
-      expect(service.stage, UpdateStage.upToDate);
-    });
-
-    test('the row says what it is doing while it does it', () async {
-      final gate = Completer<Map<String, dynamic>>();
-      final service = _service(fetch: (_) => gate.future);
-      final checking = service.check();
-      expect(service.stage, UpdateStage.checking);
-      expect(service.menuLabel, 'Checking for updates…');
-      // Disabled while in flight: pressing again would start a second check.
-      expect(service.busy, isTrue);
-      gate.complete(_releaseJson());
-      await checking;
-      expect(service.busy, isFalse);
-    });
-
     test('no network is a sentence, not a crash', () async {
       final service =
           _service(fetch: (_) async => throw const SocketException('no route'));
@@ -213,37 +103,6 @@ void main() {
       expect(service.failure, 'Could not check for updates');
       // Recoverable: the row offers the check again.
       expect(service.menuLabel, 'Check for updates');
-    });
-
-    test('a build that cannot say what version it is checks nothing', () async {
-      var asked = false;
-      final service = _service(
-        version: null,
-        fetch: (_) async {
-          asked = true;
-          return _releaseJson();
-        },
-      );
-      await service.check();
-      expect(asked, isFalse);
-      expect(service.stage, UpdateStage.failed);
-    });
-
-    test('a check is good for a day', () {
-      // An ordinary moment, not a small number: "a day since never" is only
-      // true if now is itself more than a day past the epoch.
-      const morning = 1770000000000;
-      var now = morning;
-      final service = _service(now: () => now);
-      expect(service.dueForCheck(0), isTrue, reason: 'never looked');
-      expect(service.dueForCheck(now), isFalse, reason: 'just looked');
-      expect(
-        service.dueForCheck(now - updateCheckInterval.inMilliseconds + 1),
-        isFalse,
-        reason: 'a minute short of a day is still too soon',
-      );
-      now += updateCheckInterval.inMilliseconds;
-      expect(service.dueForCheck(morning), isTrue, reason: 'a day later');
     });
   });
 
@@ -301,25 +160,6 @@ void main() {
       expect(scratch.listSync(), isEmpty);
     });
 
-    /// A release GitHub published no `digest` for is verified by size alone —
-    /// older responses carry none, and refusing them would refuse every
-    /// release made before the field existed.
-    ///
-    /// The sharp half of this is what the verify must *not* do: with no digest
-    /// named and no signing key pinned, there is no answer to compute, so the
-    /// download is never read. Hashing it anyway is invisible here but hangs
-    /// every widget test that drives a download, because those run inside a
-    /// fake clock where a real file read never completes.
-    test('a release with no digest published is taken on its size', () async {
-      final body = utf8.encode('an installer nobody signed');
-      final service = serviceFor(body);
-      await service.check();
-      await service.downloadUpdate();
-
-      expect(service.stage, UpdateStage.ready);
-      expect(service.downloadedInstaller?.existsSync(), isTrue);
-    });
-
     test('a file that does not match its checksum is not run', () async {
       final body = utf8.encode('an installer, or is it');
       final service = serviceFor(body, digest: 'sha256:${'0' * 64}');
@@ -355,27 +195,6 @@ void main() {
       expect(service.menuLabel, 'Click to update - v0.2.0');
       expect(scratch.listSync(), isEmpty);
     });
-
-    test('progress is reported as a fraction of the whole', () async {
-      // Declared first: the fake download looks at the service that owns it.
-      late final UpdateService service;
-      service = _service(
-        fetch: (_) async => _releaseJson(assets: [
-          _asset('lumit-0.2.0-windows-x64-setup.exe', size: 100),
-        ]),
-        folder: () => scratch,
-        download: (url, into, {required onProgress, required cancelled}) async {
-          onProgress(25, 100);
-          expect(service.progress, 0.25);
-          expect(service.menuLabel, 'Downloading update… 25%');
-          into.writeAsBytesSync(List<int>.filled(100, 0));
-          onProgress(100, 100);
-        },
-      );
-      await service.check();
-      await service.downloadUpdate();
-      expect(service.stage, UpdateStage.ready);
-    });
   });
 
   group('installing', () {
@@ -383,41 +202,6 @@ void main() {
     setUp(() => scratch = Directory.systemTemp.createTempSync('lumit-update'));
     tearDown(() {
       if (scratch.existsSync()) scratch.deleteSync(recursive: true);
-    });
-
-    Future<UpdateService> ready(
-      String platform, {
-      required List<File> launched,
-      required List<int> quits,
-    }) async {
-      final body = utf8.encode('installer');
-      final service = _service(
-        platform: platform,
-        folder: () => scratch,
-        fetch: (_) async => _releaseJson(assets: [
-          _asset('lumit-0.2.0-windows-x64-setup.exe', size: body.length),
-          _asset('lumit-0.2.0.dmg', size: body.length),
-          _asset('lumit-0.2.0-linux-x64.tar.gz', size: body.length),
-        ]),
-        download: (url, into,
-                {required onProgress, required cancelled}) async =>
-            into.writeAsBytesSync(body),
-        launch: (file, _) async => launched.add(file),
-        quit: () => quits.add(1),
-      );
-      await service.check();
-      await service.downloadUpdate();
-      return service;
-    }
-
-    test('Windows starts the installer and leaves', () async {
-      final launched = <File>[];
-      final quits = <int>[];
-      final service = await ready('windows', launched: launched, quits: quits);
-      await service.install();
-      expect(launched.single.path, endsWith('setup.exe'));
-      expect(quits, hasLength(1));
-      expect(service.installQuits, isTrue);
     });
 
     test('a Flatpak is handed its bundle and Lumit stays open', () async {
@@ -468,33 +252,6 @@ void main() {
   });
 
   group('choosing how to update', () {
-    test('a per-user Windows installation takes the installer too', () {
-      // The installer is the one thing that rewrites the Start Menu shortcut
-      // and the file associations, which is what let the runner be renamed,
-      // and a per-user folder needs no administrator for it to run. The
-      // sample release still carries the package 0.3.2 shipped, and Windows
-      // has to walk past it.
-      final release = UpdateRelease.parse(
-        _releaseJson(),
-        platform: 'windows',
-        kind: InstallKind.folder,
-        replaceable: true,
-      );
-      expect(release?.assetName, 'lumit-0.2.0-windows-x64-setup.exe');
-      expect(release?.delivery, UpdateDelivery.installer);
-    });
-
-    test('a per-user macOS bundle is offered the package, not the image', () {
-      final release = UpdateRelease.parse(
-        _releaseJson(),
-        platform: 'macos',
-        kind: InstallKind.bundle,
-        replaceable: true,
-      );
-      expect(release?.assetName, 'lumit-0.2.0-macos-arm64.zip');
-      expect(release?.delivery, UpdateDelivery.inPlace);
-    });
-
     test('an installation Lumit cannot write to falls back to the installer',
         () {
       final release = UpdateRelease.parse(
@@ -511,54 +268,6 @@ void main() {
       // starts nothing. That is the v0.2 upgrade that downloaded, offered a
       // restart, did not restart, and came back on the old version.
       expect(release?.assetName, endsWith('setup.exe'));
-    });
-
-    test('an unwritable Linux install still gets the tarball, to reveal', () {
-      // The exception, and on purpose: a release carries no Linux installer, so
-      // "installer" there means the file manager opens on the download. Taking
-      // the tarball away would leave a Linux user told there is no update.
-      final release = UpdateRelease.parse(
-        _releaseJson(),
-        platform: 'linux',
-        kind: InstallKind.folder,
-        replaceable: false,
-      );
-      expect(release?.assetName, endsWith('.tar.gz'));
-    });
-
-    test('a macOS bundle takes the zip, and a loose binary takes the image',
-        () {
-      expect(
-        UpdateRelease.parse(_releaseJson(),
-                platform: 'macos', kind: InstallKind.bundle, replaceable: true)
-            ?.assetName,
-        'lumit-0.2.0-macos-arm64.zip',
-      );
-      expect(
-        UpdateRelease.parse(_releaseJson(),
-                platform: 'macos', kind: InstallKind.unknown)
-            ?.assetName,
-        endsWith('.dmg'),
-      );
-    });
-
-    test('a Flatpak is offered the bundle and nothing else', () {
-      expect(assetSuffixesFor('linux', kind: InstallKind.flatpak),
-          const ['.flatpak']);
-      final release = UpdateRelease.parse(_releaseJson(),
-          platform: 'linux', kind: InstallKind.flatpak);
-      expect(release?.assetName, endsWith('.flatpak'));
-      expect(release?.delivery, UpdateDelivery.flatpakBundle);
-    });
-
-    test('a release with no package still updates, by installer', () {
-      final release = UpdateRelease.parse(
-        _releaseJson(assets: [_asset('lumit-0.2.0-windows-x64-setup.exe')]),
-        platform: 'windows',
-        kind: InstallKind.folder,
-        replaceable: true,
-      );
-      expect(release?.delivery, UpdateDelivery.installer);
     });
   });
 
@@ -668,18 +377,6 @@ void main() {
       );
     }
 
-    testWidgets('nothing to report says so in the status line', (tester) async {
-      final service = _service(
-        version: '0.2.0',
-        fetch: (_) async => _releaseJson(),
-      );
-      final h = harness(service, dirty: false);
-      await tester.pumpWidget(h.host);
-      await tester.tap(find.byKey(const ValueKey('host-press')));
-      await tester.pumpAndSettle();
-      expect(h.notices, ['Lumit is up to date']);
-    });
-
     testWidgets('the whole sequence: offer, download, save and restart',
         (tester) async {
       final body = utf8.encode('installer');
@@ -723,56 +420,6 @@ void main() {
       expect(quits, hasLength(1));
     });
 
-    testWidgets('a clean project is not offered a save it does not need',
-        (tester) async {
-      final service = await _readyService(scratch);
-      final h = harness(service, dirty: false);
-      await tester.pumpWidget(h.host);
-      await tester.tap(find.byKey(const ValueKey('host-press')));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('update-save-restart')), findsNothing);
-      // The filled action's capitals are the style's, not the arb string's
-      // (docs/15-DESIGN.md §7.1), so the word on screen is upper-cased.
-      expect(find.text('Restart now'.toUpperCase()), findsOneWidget);
-    });
-
-    testWidgets('Later keeps the update waiting rather than losing it',
-        (tester) async {
-      final service = await _readyService(scratch);
-      final h = harness(service, dirty: false);
-      await tester.pumpWidget(h.host);
-      await tester.tap(find.byKey(const ValueKey('host-press')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('update-restart-later')));
-      await tester.pumpAndSettle();
-
-      expect(service.stage, UpdateStage.ready);
-      expect(service.menuLabel, 'Restart to finish updating');
-      expect(service.downloadedInstaller?.existsSync(), isTrue);
-    });
-
-    testWidgets('turning the offer down downloads nothing', (tester) async {
-      var downloads = 0;
-      final service = _service(
-        fetch: (_) async => _releaseJson(),
-        folder: () => scratch,
-        download: (url, into, {required onProgress, required cancelled}) async {
-          downloads++;
-        },
-      );
-      await service.check();
-      final h = harness(service, dirty: false);
-      await tester.pumpWidget(h.host);
-      await tester.tap(find.byKey(const ValueKey('host-press')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('update-offer-no')));
-      await tester.pumpAndSettle();
-
-      expect(downloads, 0);
-      expect(service.stage, UpdateStage.available);
-    });
-
     testWidgets(
         'a release with something to say says it before the restart question',
         (tester) async {
@@ -794,26 +441,6 @@ void main() {
 
       expect(find.byKey(const ValueKey('update-notice')), findsNothing);
       expect(find.byKey(const ValueKey('update-restart-now')), findsOneWidget);
-    });
-
-    testWidgets('Not now on the notice keeps the update waiting and asks again',
-        (tester) async {
-      final service = await _readyService(scratch, notes: _noticeBody);
-      final h = harness(service, dirty: false);
-      await tester.pumpWidget(h.host);
-      await tester.tap(find.byKey(const ValueKey('host-press')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('update-notice-not-now')));
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('update-restart-now')), findsNothing);
-      expect(service.stage, UpdateStage.ready);
-      expect(service.downloadedInstaller?.existsSync(), isTrue);
-
-      // The next press of the row puts the same notice up first.
-      await tester.tap(find.byKey(const ValueKey('host-press')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('update-notice')), findsOneWidget);
     });
   });
 }

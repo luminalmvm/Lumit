@@ -37,6 +37,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/track.dart' show fireEffectAction;
 import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
@@ -47,10 +48,16 @@ import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
 import '../widgets/controls.dart';
 import 'comp_graph_panel.dart'
-    show compInputKindWord, compInputKinds, compItemKindWord;
+    show compInputKindWord, compInputKinds, compItemKindWord, pressGraphBox;
 import 'effect_param_row_frb.dart';
-import 'graph_panel.dart' show graphNodeKey, graphNoStream, graphToolbarHeight;
+import 'graph_panel.dart'
+    show graphCompById, graphNodeKey, graphNoStream, graphToolbarHeight;
 import 'placeholder.dart';
+import 'plane_display_frb.dart';
+import 'roto_display_frb.dart';
+import 'shader_editor.dart'
+    show InstanceHome, editExpressionOn, pressShaderButton;
+import 'shader_graph.dart' show ShaderGraphThumb;
 
 /// The box the panel is drawing: which instance it is, whether it lives in the
 /// graph's driver list rather than in the effect stack, and the read model it
@@ -110,7 +117,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   /// its commit is `setGraph` rather than `setEffects` — and its preview is
   /// `renderFrameWithDriverPreview`, which stages the graph's nodes exactly as
   /// the stack preview stages the effect list.
-  ({String param, BridgeEffectValue value})? _stagedDriver;
+  ///
+  /// A map rather than one edit, for [EffectStackEditor]'s reason: a chained
+  /// pair moves two parameters in one gesture, and a single slot showed one
+  /// half of it moving.
+  final Map<String, BridgeEffectValue> _stagedDriver = {};
 
   /// The Input label being edited, so typing is not fought by a reload. Its
   /// text is set when the picked box changes, and again when the document's
@@ -202,7 +213,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       _picked = picked;
       _box = null;
       _input = null;
-      _stagedDriver = null;
+      _stagedDriver.clear();
       if (!mapEquals(driven, _driven)) _driven = driven;
     });
   }
@@ -254,7 +265,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       _picked = row;
       _box = box;
       _input = input;
-      _stagedDriver = null;
+      _stagedDriver.clear();
       if (!mapEquals(driven, _driven)) _driven = driven;
     });
   }
@@ -325,14 +336,21 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   // --- Writing -------------------------------------------------------------
 
   /// A release, or a typed value: one op, one undo step.
-  void _write(UuidValue effect, String param, BridgeEffectValue value) {
+  void _write(UuidValue effect, String param, BridgeEffectValue value) =>
+      _writeAll(effect, {param: value});
+
+  /// Several of the box's parameters as one op, which is what a chained pair's
+  /// release is: both halves moved, and one undo puts both back.
+  void _writeAll(UuidValue effect, Map<String, BridgeEffectValue> values) {
     if (_picked?.graph ?? false) {
       // A node graph box: the same staged-instance path, committed by the
       // graph's own op with the wiring exactly as it stands.
       final comp = _ui?.selectedComp;
       if (comp == null) return;
       _driverPreview.cancel();
-      _stagedDriver = (param: param, value: value);
+      _stagedDriver
+        ..clear()
+        ..addAll(values);
       try {
         comp.setNodeGraph(
           instances: _graphInstancesWith(comp, effect),
@@ -342,7 +360,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         // The graph changed under us, or the edit was refused; re-reading is
         // the recovery.
       }
-      _stagedDriver = null;
+      _stagedDriver.clear();
       _ui?.model.refresh();
       return;
     }
@@ -352,7 +370,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       // A release ends the drag: a held preview tick would render provisional
       // values *after* the commit, putting the pre-commit picture back up.
       _driverPreview.cancel();
-      _stagedDriver = (param: param, value: value);
+      _stagedDriver
+        ..clear()
+        ..addAll(values);
       try {
         layer.setGraph(
           drivers: _driversWith(layer, effect),
@@ -362,9 +382,9 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         // The graph changed under us, or the edit was refused (§1.5);
         // re-reading is the recovery.
       }
-      _stagedDriver = null;
+      _stagedDriver.clear();
     } else {
-      _stack.write(layer, effect, param, value);
+      _stack.writeAll(layer, effect, values);
     }
     _ui?.model.refresh();
   }
@@ -374,7 +394,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     final ui = _ui;
     if (ui == null) return;
     if (_picked?.graph ?? false) {
-      setState(() => _stagedDriver = (param: param, value: value));
+      setState(() => _stagedDriver[param] = value);
       final graph = ui.selectedComp;
       if (graph == null) return;
       // Read inside the closure: a held tick must send the newest staged
@@ -390,7 +410,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     if (layer == null) return;
     final comp = ui.selectedComp;
     if (_picked?.driver ?? false) {
-      setState(() => _stagedDriver = (param: param, value: value));
+      setState(() => _stagedDriver[param] = value);
       if (comp == null) return;
       // The drivers are read *inside* the closure: a held tick must send the
       // newest staged value, not the one that was current when it was held.
@@ -407,17 +427,162 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         frame: ui.playheadFrame.value, scale: ui.viewerScale));
   }
 
+  /// A press on one of the picked box's buttons, the same press Effect controls
+  /// makes. A driver has no engine event to send, so there only the frontend's
+  /// own buttons answer; a box in a node graph sends its own through the graph.
+  void _press(_Picked picked, UuidValue effect, String param) {
+    final ui = _ui;
+    if (ui == null) return;
+    final comp = ui.selectedComp;
+    final layer = _layer;
+    final frame = BigInt.from(ui.playheadFrame.value);
+    final home = picked.graph
+        ? comp == null
+            ? null
+            : InstanceHome.graph(comp,
+                draw: (staged) => comp.renderFrameWithGraphPreview(
+                    frame: frame, scale: ui.viewerScale, instances: staged))
+        : layer == null
+            ? null
+            : picked.driver
+                ? InstanceHome.drivers(layer)
+                : InstanceHome.layer(layer,
+                    draw: comp == null
+                        ? null
+                        : (staged) => comp.renderFrameWithPreview(
+                            frame: frame,
+                            scale: ui.viewerScale,
+                            layer: layer,
+                            effects: staged));
+    if (picked.info.name == 'expression' &&
+        home != null &&
+        editExpressionOn(
+          context: context,
+          home: home,
+          effect: effect,
+          param: param,
+          onApplied: ui.model.refresh,
+        )) {
+      return;
+    }
+    if (picked.info.name == 'custom_shader' &&
+        home != null &&
+        pressShaderButton(
+          context: context,
+          home: home,
+          effect: effect,
+          param: param,
+          onApplied: ui.model.refresh,
+        )) {
+      return;
+    }
+    if (picked.info.name == 'node_graph' && param == 'open') {
+      final project = Provider.of<LumitState>(context, listen: false).project;
+      final inner = graphCompById(project, picked.info.nodeGraphComp);
+      if (inner != null) ui.setSelectedComp(inner);
+      return;
+    }
+    if (picked.graph) {
+      if (comp != null) pressGraphBox(context, comp, effect, param);
+      setState(() => _pressed += 1);
+      return;
+    }
+    if (picked.driver || layer == null) return;
+    try {
+      fireEffectAction(
+          layer: layer, effect: effect, param: param, frame: frame);
+    } catch (_) {
+      // Refused; the effect's own status line says why.
+    }
+    setState(() => _pressed += 1);
+  }
+
+  /// Bumped on every press of one of the box's buttons, so its status card
+  /// reads again: a press moves no document revision to refresh against.
+  int _pressed = 0;
+
+  /// The status card under the rows of a box that reads a file through an
+  /// analysis: how far the reading reaches and how it is getting on. The card
+  /// Effect controls draws, asked about the box rather than a layer's effect.
+  Widget? _statusCard(
+      LumitUiState ui, _Picked picked, LayerReference? layer, int playhead) {
+    if (picked.driver || (layer == null && !picked.graph)) return null;
+    final id = picked.info.id;
+    final graph = picked.graph ? ui.selectedComp : null;
+    final card = switch (picked.info.name) {
+      'roto_brush' => RotoDisplayFrb(
+          key: ValueKey<String>('node-roto-display-$id'),
+          layer: layer,
+          graph: graph,
+          effectId: id,
+          playheadFrame: playhead,
+          onChanged: ui.model.refresh,
+          pressed: _pressed,
+        ),
+      'depth' || 'remove_background' => PlaneDisplayFrb(
+          key: ValueKey<String>('node-plane-display-$id'),
+          card: picked.info.name == 'depth' ? PlaneCard.depth : PlaneCard.matte,
+          layer: layer,
+          graph: graph,
+          effectId: id,
+          onChanged: ui.model.refresh,
+          pressed: _pressed,
+        ),
+      _ => null,
+    };
+    return card == null
+        ? null
+        : Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: card,
+          );
+  }
+
+  /// Chain or unchain a pair on the picked box: one op, as a value edit is,
+  /// through whichever commit the box's own edits take.
+  void _togglePairLink(_Picked picked, String stem) {
+    final id = picked.info.id;
+    final linked = !picked.info.linkedPairs.contains(stem);
+    try {
+      if (picked.graph) {
+        final comp = _ui?.selectedComp;
+        if (comp == null) return;
+        final instances = comp.getNodeGraphInstances();
+        // The engine answers whether anything moved, so a toggle that would
+        // undo to itself commits nothing.
+        if (!instances
+            .where((i) => i.id() == id)
+            .any((i) => i.setPairLinked(stem: stem, linked: linked))) {
+          return;
+        }
+        comp.setNodeGraph(
+            instances: instances, wiring: comp.getNodeGraph().wiring);
+      } else {
+        final layer = _layer;
+        if (layer == null) return;
+        final stack = layer.getEffects();
+        if (!stack
+            .where((i) => i.id() == id)
+            .any((i) => i.setPairLinked(stem: stem, linked: linked))) {
+          return;
+        }
+        layer.setEffects(effects: stack);
+      }
+    } catch (_) {
+      // The box changed under us; re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+  }
+
   /// The layer's driver nodes, freshly read, with the drag in progress written
   /// into the one being dragged — what both the preview and the commit send.
   List<BridgeEffectInstance> _driversWith(
       LayerReference layer, UuidValue node) {
     final drivers = layer.getGraphDrivers();
-    final staged = _stagedDriver;
-    if (staged != null) {
-      for (final instance in drivers) {
-        if (instance.id() == node) {
-          instance.setValue(id: staged.param, value: staged.value);
-        }
+    for (final instance in drivers) {
+      if (instance.id() != node) continue;
+      for (final staged in _stagedDriver.entries) {
+        instance.setValue(id: staged.key, value: staged.value);
       }
     }
     return drivers;
@@ -428,12 +593,10 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   List<BridgeEffectInstance> _graphInstancesWith(
       CompositionReference comp, UuidValue node) {
     final instances = comp.getNodeGraphInstances();
-    final staged = _stagedDriver;
-    if (staged != null) {
-      for (final instance in instances) {
-        if (instance.id() == node) {
-          instance.setValue(id: staged.param, value: staged.value);
-        }
+    for (final instance in instances) {
+      if (instance.id() != node) continue;
+      for (final staged in _stagedDriver.entries) {
+        instance.setValue(id: staged.key, value: staged.value);
       }
     }
     return instances;
@@ -441,9 +604,8 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
 
   /// What a row should *show*, which during a drag is the staged value.
   BridgeEffectValue? _staged(UuidValue effect, String param) {
-    final driver = _stagedDriver;
     if ((_picked?.driver ?? false) || (_picked?.graph ?? false)) {
-      return driver != null && driver.param == param ? driver.value : null;
+      return _stagedDriver[param];
     }
     return _stack.stagedValue(effect, param);
   }
@@ -557,11 +719,33 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     // wanting it in this panel is what a driver's parameters have always
     // wanted: the same row Effect controls draws.
     //
-    // The **chain** between the halves is deliberately absent rather than
-    // dead: tying a pair is a write on the instance's `linkedPairs`, which is
-    // the effect stack's own op, and a driver commits through `setGraph`. A
-    // query point's two channels are a place, not a size — nothing here scales.
-    final rows = <Widget>[];
+    // The **chain** between the halves is the instance's own `linkedPairs`,
+    // so an effect box and a node graph box both wear it and a Transform's
+    // Scale holds its shape here as it does in Effect controls. A driver box
+    // has none: its pairs are places, not sizes, and nothing there scales.
+    final rows = <Widget>[
+      // A Custom shader's inner graph, small, and the way into it.
+      if (picked.info.name == 'custom_shader')
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: ShaderGraphThumb(
+            home: layer == null
+                ? InstanceHome.graph(ui.selectedComp!)
+                : InstanceHome.layer(layer),
+            effect: id,
+            onOpen: () {
+              final name =
+                  picked.info.customName ?? engineLabel(picked.info.name);
+              if (layer == null) {
+                ui.enterShaderGraphInComp(ui.selectedComp!, id,
+                    effectName: name);
+              } else {
+                ui.enterShaderGraph(layer, id, effectName: name);
+              }
+            },
+          ),
+        ),
+    ];
     for (var i = 0; i < params.length; i++) {
       final param = params[i];
       final next = i + 1 < params.length ? params[i + 1] : null;
@@ -570,6 +754,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           next.id == '${param.id.substring(0, param.id.length - 2)}_y' &&
           param.kind is BridgeParamKind_Float &&
           next.kind is BridgeParamKind_Float) {
+        final stem = pairStemOf(picked.info.name, param.id);
         rows.add(EffectPointRowFrb(
           key: ValueKey<String>('node-row-$id-${param.id}-pair'),
           effectId: id,
@@ -582,7 +767,12 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
           onSeek: (frame) => ui.playheadFrame.value = frame,
           onWrite: _write,
           onLive: _live,
+          onWritePair: _writeAll,
           twoColumn: true,
+          linked: stem != null && picked.info.linkedPairs.contains(stem),
+          onToggleLink: stem == null || picked.driver
+              ? null
+              : () => _togglePairLink(picked, stem),
         ));
         i += 1;
         continue;
@@ -602,7 +792,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
         twoColumn: true,
         siblings: values,
         driven: _driven[param.id],
+        onAction: (e, p) => _press(picked, e, p),
       ));
+    }
+    if (_statusCard(ui, picked, layer, playhead) case final card?) {
+      rows.add(card);
     }
     // A **wire-only** input draws no row at all, and needs no code to say so:
     // it is a signature port, never a schema parameter, so it is not in the

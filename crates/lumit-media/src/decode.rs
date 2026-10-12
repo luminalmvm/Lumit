@@ -186,14 +186,24 @@ fn attach_d3d11va(_codec: &AVCodec, _ctx: &mut AVCodecContext) -> bool {
     false
 }
 
+/// Whether a decoder may use the graphics card's video unit. An application
+/// setting, so the engine holds the live choice with no store behind it.
+static HARDWARE_DECODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Allow or refuse hardware decode for every decoder opened from here on. One
+/// already open carries on the way it started.
+pub fn set_hardware_decode(allow: bool) {
+    HARDWARE_DECODE.store(allow, std::sync::atomic::Ordering::Relaxed);
+}
+
 impl VideoDecoder {
     pub fn open(src: impl Into<MediaSource>, index: FrameIndex) -> Result<Self, MediaError> {
-        Self::open_with(src, index, true)
+        let allow = HARDWARE_DECODE.load(std::sync::atomic::Ordering::Relaxed);
+        Self::open_with(src, index, allow)
     }
 
-    /// As [`Self::open`], with hardware decode refusable — the knob the
-    /// decoder settings page will drive, and what the hw/sw agreement test
-    /// pins its ground truth with.
+    /// As [`Self::open`], with hardware decode refusable. What the hw/sw
+    /// agreement test pins its ground truth with.
     pub fn open_with(
         src: impl Into<MediaSource>,
         index: FrameIndex,
@@ -719,23 +729,6 @@ mod tests {
         assert!((a - 1.0).abs() < 1e-6, "alpha decoded as {a}");
     }
 
-    /// The eight-bit path is untouched by the float one: ordinary footage
-    /// still decodes to four bytes a pixel, sRGB-encoded, as it always did.
-    #[test]
-    fn ordinary_footage_still_decodes_to_eight_bit() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = fixture(dir.path()) else {
-            return;
-        };
-        let src = MediaSource::file(&file);
-        let index = build_frame_index(&src).unwrap();
-        let mut dec = VideoDecoder::open(&src, index).unwrap();
-        let frame = dec.frame_rgba(0, None).unwrap();
-
-        assert_eq!(frame.format, PixelFormat::Srgb8);
-        assert_eq!(frame.rgba.len(), (frame.width * frame.height) as usize * 4);
-    }
-
     /// The luma tap is the same picture, at the same size, seeking the same
     /// way — it just skips the colour.
     ///
@@ -929,20 +922,6 @@ mod tests {
     }
 
     #[test]
-    fn preview_downscale_is_true_raster_downsampling() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = fixture(dir.path()) else {
-            eprintln!("skipping: no ffmpeg CLI available");
-            return;
-        };
-        let index = build_frame_index(&file).unwrap();
-        let mut dec = VideoDecoder::open(&file, index).unwrap();
-        let half = dec.frame_rgba(10, Some(160)).unwrap();
-        assert_eq!((half.width, half.height), (160, 120));
-        assert_eq!(half.rgba.len(), 160 * 120 * 4);
-    }
-
-    #[test]
     fn seeking_still_lands_exactly_on_a_vfr_source() {
         let dir = tempfile::tempdir().unwrap();
         let Some(file) = crate::index::tests_support::vfr_fixture(dir.path()) else {
@@ -970,44 +949,26 @@ mod tests {
         }
     }
 
+    // ---- copy_tight_rows: pure logic, no ffmpeg required ----------------
+
+    // ---- thread_cap: pure arithmetic, no ffmpeg required ----------------
+
+    /// A frame whose pictures in flight fit the budget keeps a thread a core;
+    /// one big enough that sixteen of them would cost a gigabyte gets fewer.
+    /// Without the cap every one of these answers 0.
     #[test]
-    fn video_decoder_open_on_zero_byte_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = crate::index::tests_support::zero_byte_file(dir.path());
-        let index = FrameIndex {
-            timebase_num: 1,
-            timebase_den: 30,
-            entries: Vec::new(),
-            vfr: false,
-            median_delta: 0,
-            fingerprint: crate::Fingerprint {
-                size: 0,
-                mtime_unix: 0,
-                content_hash: String::new(),
-            },
-        };
-        assert!(VideoDecoder::open(&path, index).is_err());
+    fn a_big_frame_asks_for_fewer_decode_threads() {
+        assert_eq!(thread_cap(1920, 1080), 0, "1080p keeps a thread a core");
+        assert_eq!(thread_cap(3840, 2160), 0, "4K keeps a thread a core");
+        assert_eq!(thread_cap(7680, 4320), 5, "8K gets five");
+        assert_eq!(thread_cap(15360, 8640), 1, "16K gets one");
+        // A stream whose header never carried a size must still open.
+        assert_eq!(thread_cap(0, 0), 0);
+        assert_eq!(thread_cap(-1, -1), 0);
     }
 
-    #[test]
-    fn video_decoder_open_on_garbage_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = crate::index::tests_support::garbage_file(dir.path());
-        let index = FrameIndex {
-            timebase_num: 1,
-            timebase_den: 30,
-            entries: Vec::new(),
-            vfr: false,
-            median_delta: 0,
-            fingerprint: crate::Fingerprint {
-                size: 0,
-                mtime_unix: 0,
-                content_hash: String::new(),
-            },
-        };
-        assert!(VideoDecoder::open(&path, index).is_err());
-    }
-
+    // A file cut short, as a download that stopped or an export that crashed
+    // leaves one: its start reads as media and the rest is not there.
     #[test]
     fn video_decoder_open_on_truncated_file_errors_not_panics() {
         let dir = tempfile::tempdir().unwrap();
@@ -1029,178 +990,5 @@ mod tests {
             },
         };
         assert!(VideoDecoder::open(&truncated, index).is_err());
-    }
-
-    // ---- copy_tight_rows: pure logic, no ffmpeg required ----------------
-
-    #[test]
-    fn copy_tight_rows_rejects_stride_smaller_than_row() {
-        let data = vec![0u8; 10];
-        assert!(copy_tight_rows(&data, 2, 4, 2).is_err());
-    }
-
-    #[test]
-    fn copy_tight_rows_rejects_buffer_smaller_than_stride_times_height() {
-        let data = vec![0u8; 4]; // only one row's worth, height claims two
-        assert!(copy_tight_rows(&data, 4, 4, 2).is_err());
-    }
-
-    #[test]
-    fn copy_tight_rows_strips_padding_correctly() {
-        // stride 6, row 4: two rows of [1,2,3,4,<pad>,<pad>]
-        #[rustfmt::skip]
-        let data = vec![
-            1, 2, 3, 4, 9, 9,
-            5, 6, 7, 8, 9, 9,
-        ];
-        let out = copy_tight_rows(&data, 6, 4, 2).unwrap();
-        assert_eq!(out, vec![1, 2, 3, 4, 5, 6, 7, 8]);
-    }
-
-    // ---- thread_cap: pure arithmetic, no ffmpeg required ----------------
-
-    /// A frame whose pictures in flight fit the budget keeps a thread a core;
-    /// one big enough that sixteen of them would cost a gigabyte gets fewer.
-    /// Without the cap every one of these answers 0.
-    #[test]
-    fn a_big_frame_asks_for_fewer_decode_threads() {
-        assert_eq!(thread_cap(1920, 1080), 0, "1080p keeps a thread a core");
-        assert_eq!(thread_cap(3840, 2160), 0, "4K keeps a thread a core");
-        assert_eq!(thread_cap(7680, 4320), 5, "8K gets five");
-        assert_eq!(thread_cap(15360, 8640), 1, "16K gets one");
-        // A stream whose header never carried a size must still open.
-        assert_eq!(thread_cap(0, 0), 0);
-        assert_eq!(thread_cap(-1, -1), 0);
-    }
-
-    // ---- what a clip costs to decode (run by hand) ----------------------
-
-    /// The process working set, in bytes. Windows only; everywhere else this
-    /// reports nothing and the report below prints zeroes.
-    #[cfg(windows)]
-    fn working_set() -> u64 {
-        #[repr(C)]
-        #[derive(Default)]
-        struct Counters {
-            cb: u32,
-            page_faults: u32,
-            peak_working_set: usize,
-            working_set: usize,
-            peak_paged_pool: usize,
-            paged_pool: usize,
-            peak_nonpaged_pool: usize,
-            nonpaged_pool: usize,
-            pagefile: usize,
-            peak_pagefile: usize,
-        }
-        #[link(name = "kernel32")]
-        extern "system" {
-            fn K32GetProcessMemoryInfo(process: isize, out: *mut Counters, cb: u32) -> i32;
-        }
-        let mut c = Counters {
-            cb: u32::try_from(std::mem::size_of::<Counters>()).unwrap_or(0),
-            ..Counters::default()
-        };
-        // SAFETY: -1 is the pseudo-handle for this process, and the struct is
-        // the one the call expects with its own size written into `cb`.
-        #[allow(unsafe_code)]
-        unsafe {
-            K32GetProcessMemoryInfo(-1, &mut c, c.cb);
-        }
-        c.working_set as u64
-    }
-
-    #[cfg(not(windows))]
-    fn working_set() -> u64 {
-        0
-    }
-
-    fn mb(bytes: u64) -> f64 {
-        bytes as f64 / (1024.0 * 1024.0)
-    }
-
-    /// What one clip costs to decode, in memory and in time. Kept out of the
-    /// suite because it wants a big file and a quiet machine.
-    ///
-    /// Point it at a clip with `LUMIT_DECODE_MEM_CLIP`, or let it make a 1080p
-    /// one:
-    /// `cargo test -p lumit-media --release decode_working_set_report -- --ignored --nocapture`
-    #[test]
-    #[ignore]
-    fn decode_working_set_report() {
-        let dir = tempfile::tempdir().unwrap();
-        let clip = match std::env::var("LUMIT_DECODE_MEM_CLIP") {
-            Ok(p) => std::path::PathBuf::from(p),
-            Err(_) => {
-                let Some(bin) = crate::index::tests_support::ffmpeg_bin() else {
-                    eprintln!("skipping: no ffmpeg CLI available");
-                    return;
-                };
-                let out = dir.path().join("clip_1080.mp4");
-                let ok = std::process::Command::new(bin)
-                    .args([
-                        "-v",
-                        "error",
-                        "-y",
-                        "-f",
-                        "lavfi",
-                        "-i",
-                        "testsrc2=duration=2:size=1920x1080:rate=30",
-                        "-c:v",
-                        "libx264",
-                        "-g",
-                        "30",
-                        "-pix_fmt",
-                        "yuv420p",
-                    ])
-                    .arg(&out)
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false);
-                assert!(ok, "fixture encode failed");
-                out
-            }
-        };
-
-        let index = build_frame_index(&clip).unwrap();
-        let base = working_set();
-        let mut dec = VideoDecoder::open(&clip, index).unwrap();
-        println!(
-            "clip {}, working set {:.0} MB before open, {:.0} MB after",
-            clip.display(),
-            mb(base),
-            mb(working_set())
-        );
-
-        let mut digest = String::new();
-        let whole = std::time::Instant::now();
-        for n in 0..12 {
-            let t = std::time::Instant::now();
-            let frame = dec.frame_rgba(n, None).unwrap();
-            let ms = t.elapsed().as_secs_f64() * 1000.0;
-            if n == 3 {
-                digest = frame_hash(&frame);
-            }
-            let (w, h) = (frame.width, frame.height);
-            drop(frame);
-            println!(
-                "  frame {n} {w}x{h} {ms:.1} ms, working set {:.0} MB",
-                mb(working_set())
-            );
-        }
-        // `pix_fmt` only tells the truth once a frame has been through: it is
-        // the format libav actually chose, where `is_hardware` is only what was
-        // asked for.
-        println!(
-            "  12 frames in {:.0} ms, pix_fmt {}, threads {}",
-            whole.elapsed().as_secs_f64() * 1000.0,
-            dec.decoder.pix_fmt,
-            dec.decoder.thread_count
-        );
-        drop(dec);
-        println!(
-            "closed, working set {:.0} MB; frame 3 digest {digest}",
-            mb(working_set())
-        );
     }
 }

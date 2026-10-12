@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../state/drag_payloads.dart';
 import '../state/timeline_columns.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -626,6 +627,7 @@ class TimelineSelection {
     this.properties = const [],
     this.highlighted,
     this.colours = const {},
+    this.others = const {},
   });
 
   /// The selected **layers**, as their ids in string form — the shell's list
@@ -646,6 +648,11 @@ class TimelineSelection {
 
   /// Each selected path's graph line colours, for tinting its label.
   final Map<String, List<Color>> colours;
+
+  /// What the other people in a shared project have selected: by layer id
+  /// or property path, the colour of each person who has it selected. A
+  /// layer is here too when it is a property or a keyframe on it they hold.
+  final Map<String, List<int>> others;
 }
 
 /// One layer's share of [TimelineSelection] — everything its row and its fold
@@ -656,6 +663,8 @@ class LayerSelection {
     required this.highlighted,
     required this.properties,
     required this.colours,
+    this.others = const [],
+    this.otherProperties = const {},
   });
 
   /// Whether this layer is one of the selected ones — what its row and its bar
@@ -664,6 +673,13 @@ class LayerSelection {
   final bool highlighted;
   final List<String> properties;
   final Map<String, List<Color>> colours;
+
+  /// The colour of each other person who has this layer selected, or
+  /// something on it.
+  final List<int> others;
+
+  /// The same for this layer's property rows, by path.
+  final Map<String, List<int>> otherProperties;
 
   static LayerSelection of(TimelineSelection all, String layerId) {
     final mine = [
@@ -680,6 +696,11 @@ class LayerSelection {
         for (final path in mine)
           if (all.colours[path] case final line?) path: line,
       },
+      others: all.others[layerId] ?? const [],
+      otherProperties: {
+        for (final held in all.others.entries)
+          if (isUnderPath(layerId, held.key)) held.key: held.value,
+      },
     );
   }
 
@@ -690,6 +711,13 @@ class LayerSelection {
     if (selected != other.selected) return false;
     if (highlighted != other.highlighted) return false;
     if (!listEquals(properties, other.properties)) return false;
+    if (!listEquals(others, other.others)) return false;
+    if (otherProperties.length != other.otherProperties.length) return false;
+    for (final held in otherProperties.entries) {
+      if (!listEquals(held.value, other.otherProperties[held.key])) {
+        return false;
+      }
+    }
     if (colours.length != other.colours.length) return false;
     for (final entry in colours.entries) {
       if (!listEquals(entry.value, other.colours[entry.key])) return false;
@@ -712,11 +740,17 @@ class LayerBlock extends StatefulWidget {
     required this.layerId,
     required this.builder,
     this.onlyLit = false,
+    this.onEffectDropped,
   });
 
   final ValueListenable<TimelineSelection> selection;
   final String layerId;
   final Widget Function(BuildContext context, LayerSelection mine) builder;
+
+  /// An effect dragged from Effects & presets and let go on this layer, by
+  /// the name `addEffect` takes. Both halves of the table take the drop, so
+  /// the row and its bar are the same target.
+  final ValueChanged<String>? onEffectDropped;
 
   /// Watch the lit state alone, not the whole slice — what the lane half
   /// wants: a bar draws a layer's span and whether the layer is chosen, and a
@@ -774,8 +808,29 @@ class _LayerBlockState extends State<LayerBlock> {
   /// (docs/impl/ui-performance.md §4.3). With a layer per block the click
   /// re-records the two blocks whose light moved and the rest translate.
   @override
-  Widget build(BuildContext context) =>
-      RepaintBoundary(child: widget.builder(context, _mine));
+  Widget build(BuildContext context) {
+    final block = RepaintBoundary(child: widget.builder(context, _mine));
+    final dropped = widget.onEffectDropped;
+    if (dropped == null) return block;
+    return DragTarget<EffectDragData>(
+      onAcceptWithDetails: (details) => dropped(details.data.name),
+      builder: (context, candidate, _) {
+        final t = ThemeScope.of(context).theme;
+        // Always there, lit or not: a box that came and went with the drag
+        // would rebuild the row under the pointer from nothing.
+        return DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: candidate.isEmpty
+              ? const BoxDecoration()
+              : BoxDecoration(
+                  border: Border.all(color: t.accent),
+                  color: t.accent.withValues(alpha: 0.06),
+                ),
+          child: block,
+        );
+      },
+    );
+  }
 }
 
 /// The left column: one row per layer, with its switches and columns.
@@ -786,6 +841,11 @@ class Outline extends StatelessWidget {
   /// area draws from, so a row's fold-out, its open Sequence view and its
   /// height are one answer rather than two that agree.
   final List<LayerRow> rows;
+
+  /// Every layer in the comp, top of the stack first. The rows are numbered
+  /// from this, so a layer keeps its number while a search or the shy filter
+  /// hides the rows around it.
+  final List<BridgeLayerEntry> stack;
 
   /// The column groups in their current order and at their current widths
   /// (docs/07 §4.2) — rows draw their cells to match the header's.
@@ -814,7 +874,7 @@ class Outline extends StatelessWidget {
 
   /// The drag in flight and the block heights it slides by — the panel's, so
   /// the lanes are working from the same two values.
-  final ValueNotifier<LayerDrag?> layerDrag;
+  final LayerDragState layerDrag;
   final List<double> blockHeights;
 
   /// The layer `Enter` has just asked to rename.
@@ -834,6 +894,7 @@ class Outline extends StatelessWidget {
     super.key,
     required this.comp,
     required this.rows,
+    required this.stack,
     required this.groupOrder,
     required this.widths,
     required this.matteToggles,
@@ -862,10 +923,14 @@ class Outline extends StatelessWidget {
     final valueColumn = valueColumnFor(groupOrder, widths);
     final timingsColumn = timingsColumnFor(groupOrder, widths);
     final baseIndent = identityStart(groupOrder, widths);
-    // The layer entries, for the parent picker's menu — every layer is on
-    // offer as a parent, and they come from the row list rather than from a
-    // second list handed in beside it.
+    // The rows on screen, which is what a drag and a multi-row command act
+    // on.
     final layers = [for (final row in rows) row.entry];
+    // Each layer's number, looked up once here and not once a row.
+    final numbers = {
+      for (var i = 0; i < stack.length; i++)
+        stack[i].layer.internallayerId.toString(): i + 1,
+    };
     // Only the blocks in view are built; the rest are two blanks holding the
     // stack open, so the outline costs what is on screen rather than what the
     // comp has.
@@ -877,16 +942,28 @@ class Outline extends StatelessWidget {
       controller: vScroll,
       heights: blockHeights,
       viewport: viewport,
+      raised: layerDrag.raised,
       builder: (context, i) => LayerDragSlide(
         drag: layerDrag,
         heights: blockHeights,
         index: i,
+        // The left end of the one card a layer in hand is drawn as.
+        side: LiftSide.leading,
         // **The selection is listened to here, one layer at a time.** A
         // click that lights a row must not redraw the layers it did not
         // touch, and this is the seam that decides that.
         child: LayerBlock(
           selection: selection,
           layerId: rows[i].id,
+          onEffectDropped: (name) {
+            try {
+              rows[i].entry.layer.addEffect(name: name);
+            } catch (_) {
+              // A name this build does not know: the engine refused calmly
+              // and the drop did nothing.
+            }
+            onChanged();
+          },
           builder: (context, mine) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -920,6 +997,9 @@ class Outline extends StatelessWidget {
                     timingsColumn: timingsColumn,
                     baseIndent: baseIndent,
                     path: foldRowPath(rows[i].id, row),
+                    others: mine.otherProperties[
+                            foldRowPath(rows[i].id, row)] ??
+                        const [],
                     selectedProperties: mine.properties,
                     graphColours: mine.colours,
                     onSelectProperty: onSelectProperty,
@@ -940,6 +1020,8 @@ class Outline extends StatelessWidget {
                   entry: rows[i].entry,
                   onOpenSequence: () => onOpenSequence?.call(rows[i].entry),
                   layers: layers,
+                  stack: stack,
+                  number: numbers[rows[i].id] ?? i + 1,
                   groupOrder: groupOrder,
                   widths: widths,
                   matteToggles: matteToggles,
@@ -947,6 +1029,7 @@ class Outline extends StatelessWidget {
                   count: rows.length,
                   selected: mine.selected,
                   highlighted: mine.highlighted,
+                  others: mine.others,
                   open: rows[i].open,
                   hasAudio: rows[i].hasAudio,
                   hasPicture: rows[i].hasPicture,
@@ -989,6 +1072,9 @@ class Outline extends StatelessWidget {
                       timingsColumn: timingsColumn,
                       baseIndent: baseIndent,
                       path: foldRowPath(rows[i].id, row),
+                      others: mine.otherProperties[
+                              foldRowPath(rows[i].id, row)] ??
+                          const [],
                       selectedProperties: mine.properties,
                       graphColours: mine.colours,
                       onSelectProperty: onSelectProperty,

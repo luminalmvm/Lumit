@@ -992,8 +992,13 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           clip: clip,
           tip: open ? l10n.tipHideProperties : l10n.tipProperties,
           on: open,
-          icon: glyph.LumitIcon(open ? LumitIcons.collapse : LumitIcons.expand,
-              size: _headerIcon, colour: open ? t.textPrimary : t.textMuted),
+          icon: TwirlTurn(
+            open: open,
+            child: glyph.LumitIcon(
+                open ? LumitIcons.collapse : LumitIcons.expand,
+                size: _headerIcon,
+                colour: open ? t.textPrimary : t.textMuted),
+          ),
           onPressed: widget.onToggleOpen,
         ),
         const Spacer(),

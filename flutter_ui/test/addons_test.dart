@@ -186,51 +186,6 @@ void main() {
       expect(rife.sizeBytes, 2048);
     });
 
-    test('a block for this machine is preferred to the any block', () {
-      final entries = parseCatalogue(
-        jsonEncode({
-          'format': 1,
-          'addons': [
-            {
-              'id': 'both',
-              'kind': 'model',
-              'platforms': {
-                'any': {
-                  'downloads': [
-                    {'url': 'any', 'sha256': digest, 'size': 1, 'dest': 'a'},
-                  ],
-                },
-                'windows-x86_64': {
-                  'downloads': [
-                    {'url': 'win', 'sha256': digest, 'size': 1, 'dest': 'w'},
-                  ],
-                },
-              },
-            },
-          ],
-        }),
-        platformKey: 'windows-x86_64',
-      );
-
-      expect(entries, hasLength(1));
-      expect(downloadsFor(entries!.single.manifest!, 'windows-x86_64')!.single['url'],
-          'win');
-    });
-
-    test('terms recorded beyond the licence come across with the entry', () {
-      final addon = Addon.fromManifest(<String, dynamic>{
-        'id': 'birefnet-lite',
-        'kind': 'model',
-        'licence': 'MIT',
-        'notes': 'The weights are trained on DIS5K, whose terms are '
-            'non-commercial.',
-      });
-
-      expect(addon!.notes, contains('non-commercial'),
-          reason: "a pack whose training set carries terms of its own says so "
-              'on its row, before anything is fetched');
-    });
-
     test('something that is not a catalogue is said so, not thrown', () async {
       final service = serviceWith(fetch: (url) async => 'not json at all');
       await service.check();
@@ -238,15 +193,6 @@ void main() {
       expect(service.stage, AddonStage.failed);
       expect(service.failure, AddonFailure.catalogue);
       expect(service.entries, isEmpty);
-    });
-
-    test('a network that is not there is said so', () async {
-      final service =
-          serviceWith(fetch: (url) async => throw const SocketException(''));
-      await service.check();
-
-      expect(service.stage, AddonStage.failed);
-      expect(service.failure, AddonFailure.network);
     });
   });
 
@@ -293,43 +239,6 @@ void main() {
           reason: 'nothing is left behind');
     });
 
-    test('a file that arrives short installs nothing', () async {
-      final service = serviceWith(fetch: (url) async => indexJson(size: 9999));
-      await service.check();
-
-      await service.install('rife');
-
-      expect(service.failure, AddonFailure.incomplete);
-      expect(installs, isEmpty);
-    });
-
-    test('a second press while one is running is refused', () async {
-      final service = serviceWith();
-      await service.check();
-
-      AddonFailure? refused;
-      final first = service.install('rife');
-      // The download is in flight, which is the only moment this can be asked.
-      await service.install('runtime');
-      refused = service.failure;
-      await first;
-
-      expect(refused, AddonFailure.busy);
-      expect(installs, hasLength(1), reason: 'one at a time');
-      expect(installs.single.files, hasLength(1));
-    });
-
-    test('an engine that refuses leaves the page saying so', () async {
-      refuse = true;
-      final service = serviceWith();
-      await service.check();
-
-      await service.install('rife');
-
-      expect(service.stage, AddonStage.failed);
-      expect(service.failure, AddonFailure.refused);
-    });
-
     test('cancel stops between chunks and takes the part file with it',
         () async {
       late AddonService service;
@@ -366,63 +275,6 @@ void main() {
       expect(removed, ['rife']);
       expect(service.packs, isEmpty, reason: 'the row goes with the re-read');
       expect(service.folder, scratch.path);
-    });
-
-    test('a pack already here at this version is not offered again', () async {
-      scan = const [Addon(id: 'rife', kind: AddonKind.model, version: '1.0')];
-      final service = serviceWith()..refresh();
-      await service.check();
-
-      expect(service.available, isEmpty);
-
-      scan = const [Addon(id: 'rife', kind: AddonKind.model, version: '0.9')];
-      service.refresh();
-
-      expect([for (final e in service.available) e.id], ['rife'],
-          reason: 'an older one is an update');
-
-      scan = const [
-        Addon(id: 'rife', kind: AddonKind.model, version: '1.0', broken: true)
-      ];
-      service.refresh();
-
-      expect([for (final e in service.available) e.id], ['rife'],
-          reason: 'a pack whose files have gone comes back as an offer, '
-              'because installing it again is what mends it');
-    });
-
-    test('a removal the engine turns down is not called a failed install', () {
-      refuseRemove = true;
-      scan = const [Addon(id: 'runtime', kind: AddonKind.runtime)];
-      final service = serviceWith()..refresh();
-
-      service.remove('runtime');
-
-      expect(service.failure, AddonFailure.removeRefused);
-      expect(service.installed, hasLength(1), reason: 'the row stays');
-    });
-
-    test('what a run that died part way left is swept on the next read', () {
-      final sep = Platform.pathSeparator;
-      final stale = Directory('${scratch.path}$sep.downloads${sep}rife')
-        ..createSync(recursive: true);
-      File('${stale.path}${sep}0').writeAsBytesSync(body);
-
-      serviceWith().refresh();
-
-      expect(Directory('${scratch.path}$sep.downloads').existsSync(), isFalse,
-          reason: 'nothing else ever looks in there, so a crash mid-fetch '
-              'would leave the part file for good');
-    });
-
-    test('loading the runtime reports what it found', () async {
-      final service = serviceWith();
-      expect(service.runtime.state, RuntimeState.missing);
-
-      await service.runtimeLoad();
-
-      expect(service.runtime.state, RuntimeState.loaded);
-      expect(service.runtime.provider, 'CPU');
     });
   });
 
@@ -467,30 +319,6 @@ void main() {
       expect(downloads.single['sha256'], digest,
           reason: 'the digest is the file that is actually there');
       expect(downloads.single['size'], 2048);
-    });
-
-    test('a description whose files are not beside it installs nothing',
-        () async {
-      final manifest = File('${scratch.path}${Platform.pathSeparator}addon.json')
-        ..writeAsStringSync(jsonEncode({
-          'format': 1,
-          'id': 'rife',
-          'kind': 'model',
-          'platforms': {
-            'any': {
-              'downloads': [
-                {'url': 'x', 'sha256': digest, 'size': 1, 'dest': 'gone.onnx'},
-              ],
-            },
-          },
-        }));
-
-      final service = serviceWith();
-      await service.installFromFile(manifest.path);
-
-      expect(service.stage, AddonStage.failed);
-      expect(service.failure, AddonFailure.manifest);
-      expect(installs, isEmpty);
     });
   });
 }

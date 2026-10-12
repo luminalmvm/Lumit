@@ -1,9 +1,16 @@
 //! The `.lum` project container, autosave, and the crash-recovery journal —
 //! docs/10-FILE-FORMAT.md, Phase 0 scope (no thumbnails yet).
 
+pub mod bring;
 pub mod fixtures;
+pub mod pack;
 pub mod plugins;
 
+pub use bring::{bring, Brought};
+pub use pack::{
+    autosave_owner, hold_read_out, restore_packed, save_packed, unpack, PackSource, Packed,
+    Unpacked,
+};
 pub use plugins::{plugin_prefs_path, PluginPrefs};
 
 use lumit_core::model::{Fingerprint, MediaRef, ProjectItem};
@@ -49,6 +56,13 @@ pub enum ProjectError {
         "this project has a {width} by {height} composition; Lumit composes up to {limit} a side"
     )]
     CompTooLarge { width: u32, height: u32, limit: u32 },
+    /// A pack or an unpack was told to stop. Nothing half-written is left.
+    #[error("cancelled")]
+    Cancelled,
+    /// A composition was asked for out of a project file that has none by
+    /// that id.
+    #[error("that composition is not in the project file")]
+    UnknownComposition,
 }
 
 /// manifest.json — MUST be the archive's first entry and parse standalone.
@@ -74,7 +88,10 @@ impl Manifest {
     }
 }
 
-fn semver_triple(s: &str) -> Option<(u64, u64, u64)> {
+/// A version as its three numbers, so that two are held against each other as
+/// versions and not as text. `None` for anything that is not three numbers.
+#[must_use]
+pub fn semver_triple(s: &str) -> Option<(u64, u64, u64)> {
     let mut it = s.split('.').map(|p| p.parse::<u64>().ok());
     match (it.next(), it.next(), it.next()) {
         (Some(Some(a)), Some(Some(b)), Some(Some(c))) => Some((a, b, c)),
@@ -559,14 +576,34 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
         // §1). A current-schema file takes the direct path unchanged, so nothing
         // routes through `Value` needlessly.
         match semver_triple(&manifest.schema_version) {
-            Some(v) if manifest.schema_version != SCHEMA_VERSION && !MIGRATIONS.is_empty() => {
-                let value = run_migrations(MIGRATIONS, serde_json::from_str(&s)?, v);
+            Some(_) if manifest.schema_version != SCHEMA_VERSION && !MIGRATIONS.is_empty() => {
+                let value = migrate(serde_json::from_str(&s)?, &manifest.schema_version);
                 serde_json::from_value(value)?
             }
             _ => serde_json::from_str(&s)?,
         }
     };
     let mut doc = doc;
+    forward_migrate(&mut doc)?;
+    Ok((doc, manifest))
+}
+
+/// A document as raw JSON written at `schema_version`, walked up to this
+/// Lumit's schema, ready to be typed. The first half of the road [`open`]
+/// takes a file's `project.json` down, for a document that is not in a file:
+/// a project kept online is one, when a newer Lumit takes it over from an
+/// older. [`forward_migrate`] is the other half.
+#[must_use]
+pub fn migrate(value: serde_json::Value, schema_version: &str) -> serde_json::Value {
+    match semver_triple(schema_version) {
+        Some(v) if schema_version != SCHEMA_VERSION => run_migrations(MIGRATIONS, value, v),
+        _ => value,
+    }
+}
+
+/// What every document from outside is put through once it is typed, whatever
+/// schema it was written at. Doing it again changes nothing.
+pub fn forward_migrate(doc: &mut Document) -> Result<(), ProjectError> {
     // Forward-migrate effect stacks: a built-in whose schema grew
     // since this file was saved gains the new parameters at their defaults,
     // so the panel has values to draw and edits have ids to write.
@@ -610,8 +647,7 @@ pub fn open(path: &Path) -> Result<(Document, Manifest), ProjectError> {
             }
         }
     }
-
-    Ok((doc, manifest))
+    Ok(())
 }
 
 /// Rotating autosaves beside the project: `<stem>.autosave-1.lum` is newest.
@@ -655,15 +691,172 @@ pub fn latest_autosave(project_path: &Path) -> Option<PathBuf> {
     slot1.is_file().then_some(slot1)
 }
 
-/// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4).
+/// Lumit's own folders on this machine, which every path below is built from.
+///
+/// `LUMIT_USER_DIRS` moves all of them under one folder. `cargo test` sets it
+/// in `.cargo/config.toml`, so tests never write into the real ones.
+fn project_dirs() -> Option<directories::ProjectDirs> {
+    // This crate's own tests check the real layout and write nothing there.
+    let moved = std::env::var_os("LUMIT_USER_DIRS")
+        .map(PathBuf::from)
+        .filter(|root| root.is_absolute() && !cfg!(test));
+    match moved {
+        // Joining an absolute path replaces the platform's base folder.
+        Some(root) => directories::ProjectDirs::from_path(root),
+        None => directories::ProjectDirs::from("dev", "Lumit", "Lumit"),
+    }
+}
+
+/// Where a document's sidecar journal lives (docs/10-FILE-FORMAT.md §3–4)
+/// while it has no file of its own.
 pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    journal_path_for(doc_id, None)
+}
+
+/// [`journal_path`] for a document saved as `project`.
+pub fn journal_path_for(doc_id: Uuid, project: Option<&Path>) -> Option<PathBuf> {
+    Some(journal_in(project_dirs()?.cache_dir(), doc_id, project))
+}
+
+/// The journal of the document `doc_id` saved as `project`, under `cache`.
+///
+/// **In plain terms.** The journal is the edits made since the last save, kept
+/// so a crash loses none of them. They only make sense on top of the file they
+/// were made on. Save As keeps a document's id, and so does a copy made in a
+/// file manager, so each file has a journal of its own: the edits a crash left
+/// beside one are never offered to the other.
+#[must_use]
+pub fn journal_in(cache: &Path, doc_id: Uuid, project: Option<&Path>) -> PathBuf {
+    let name = match project {
+        None => "ops.jsonl".to_owned(),
+        Some(project) => format!("ops-{}.jsonl", path_key(project)),
+    };
+    cache.join(doc_id.to_string()).join("journal").join(name)
+}
+
+/// What the cache names a saved project's own files by: a hash of where the
+/// project is on disk.
+fn path_key(project: &Path) -> String {
+    // The file as the disk names it, so two spellings of one path are one
+    // name. Case is folded for the same reason, which costs two files that
+    // differ only by case sharing one.
+    let named = fs::canonicalize(project).unwrap_or_else(|_| project.to_path_buf());
+    let key = blake3::hash(named.to_string_lossy().to_lowercase().as_bytes());
+    let key = key.to_hex();
+    key.get(..16).unwrap_or("0").to_owned()
+}
+
+/// The note this machine keeps when it has switched on packing every save
+/// for the document `doc_id` saved as `project`.
+///
+/// **In plain terms.** A `.lum` says for itself whether every save packs its
+/// footage, and the files its effects read go in with it. A file from somebody
+/// else can arrive saying so, with an effect pointed at something private on
+/// this machine, and the next save would put that in the file. So the file's
+/// word counts only when this note is here, and the note is only ever written
+/// by a choice made on this machine. It is named the way a journal is, since
+/// a copy of the file somewhere else is another file.
+///
+/// The local data folder, and not the cache: the cache can be deleted at any
+/// time, and this is something somebody chose.
+pub fn auto_pack_note(doc_id: Uuid, project: &Path) -> Option<PathBuf> {
+    let name = format!("{doc_id}-{}", path_key(project));
     Some(
-        dirs.cache_dir()
-            .join(doc_id.to_string())
-            .join("journal")
-            .join("ops.jsonl"),
+        project_dirs()?
+            .data_local_dir()
+            .join("auto-pack")
+            .join(name),
     )
+}
+
+/// A saved project held open by one Lumit, so that a second does not open it
+/// as well.
+///
+/// **In plain terms.** Two windows on one file write the same journal, and a
+/// recovery then replays a mix of both. So whoever opens a project first
+/// claims it, and the claim goes when that Lumit does, however it ends.
+///
+/// The claim is a file in the cache, named for the project's path as its
+/// journal is, holding the process id of whoever has it. On Windows nobody
+/// else can open the file for writing while it is held, and it is deleted as
+/// its handle closes. Elsewhere it is a lock on the file, which the system
+/// lets go of with the process. The file stays behind there and means
+/// nothing without its lock.
+pub struct OpenClaim {
+    // Held for as long as the claim is.
+    _file: File,
+    key: String,
+}
+
+impl OpenClaim {
+    /// Claim the project saved at `project` for this process.
+    ///
+    /// `Ok(None)` when no claim can be made here, for want of a cache folder
+    /// or the right to write in it. That is no reason to refuse an open.
+    /// `Err` when somebody holds it, with the process id they wrote, or 0
+    /// when that can't be read.
+    pub fn take(project: &Path) -> Result<Option<Self>, u32> {
+        match project_dirs() {
+            Some(dirs) => Self::take_in(&dirs.cache_dir().join("open"), project),
+            None => Ok(None),
+        }
+    }
+
+    /// [`Self::take`], with the claims kept in `dir`.
+    pub fn take_in(dir: &Path, project: &Path) -> Result<Option<Self>, u32> {
+        let key = path_key(project);
+        let path = dir.join(format!("{key}.lock"));
+        let _ = fs::create_dir_all(dir);
+        let holder = || {
+            let id = fs::read_to_string(&path).ok();
+            id.and_then(|id| id.trim().parse().ok()).unwrap_or(0)
+        };
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).truncate(false);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            const FILE_SHARE_READ: u32 = 0x1;
+            const FILE_SHARE_DELETE: u32 = 0x4;
+            const GENERIC_WRITE: u32 = 0x4000_0000;
+            const DELETE: u32 = 0x0001_0000;
+            const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+            // Others may read the file and nothing more, and it is deleted
+            // when this handle closes.
+            options
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
+                .access_mode(GENERIC_WRITE | DELETE)
+                .custom_flags(FILE_FLAG_DELETE_ON_CLOSE);
+        }
+        let mut file = match options.open(&path) {
+            Ok(file) => file,
+            // ERROR_SHARING_VIOLATION, which is the holder's handle saying no.
+            Err(e) if cfg!(windows) && e.raw_os_error() == Some(32) => return Err(holder()),
+            Err(_) => return Ok(None),
+        };
+        #[cfg(not(windows))]
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(fs::TryLockError::WouldBlock) => return Err(holder()),
+            Err(_) => return Ok(None),
+        }
+        let _ = file.set_len(0);
+        let _ = write!(file, "{}", std::process::id());
+        Ok(Some(Self { _file: file, key }))
+    }
+
+    /// Whether this is the claim on the project saved at `project`.
+    #[must_use]
+    pub fn covers(&self, project: &Path) -> bool {
+        self.key == path_key(project)
+    }
+}
+
+/// Where a shared project keeps what closing Lumit must not lose: a host's
+/// edits since its last save, and the edits a guest made while its host was
+/// away. With the journals, and for the same reason.
+pub fn shared_dir() -> Option<PathBuf> {
+    Some(project_dirs()?.cache_dir().join("shared"))
 }
 
 /// Where a document's parked frames live when the disk frame cache is kept in
@@ -698,14 +891,36 @@ pub fn journal_path(doc_id: Uuid) -> Option<PathBuf> {
 /// `None` only when the platform has no home directory; the caller then runs
 /// with no disk tier rather than failing.
 pub fn frame_cache_dir(doc_id: Uuid) -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("frames").join(doc_id.to_string()))
+}
+
+/// Where a packed project's footage is read out to when the file on disk has
+/// gone (docs/01-GLOSSARY.md: Packed project), one folder per document.
+///
+/// The cache, because the `.lum` still holds every byte: deleting this costs
+/// the next open the time to read them out again and nothing else.
+pub fn packed_media_dir(doc_id: Uuid) -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.cache_dir().join("packed").join(doc_id.to_string()))
+}
+
+/// Where footage sent by someone else in a shared project is kept: the
+/// stand-ins this machine cuts with for files it has not got, and any
+/// originals it fetched. One folder for each file, named by `key`, which is
+/// worked out from the file's fingerprint so every project that uses the
+/// file finds the same one.
+///
+/// The cache, because all of it can be sent again by whoever has the file.
+pub fn shared_footage_dir() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.cache_dir().join("shared-footage"))
 }
 
 /// The application's own cache directory, the parent of every folder below,
 /// which unlike `/tmp` belongs to one user on every platform.
 pub fn cache_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().to_path_buf())
 }
 
@@ -719,7 +934,7 @@ pub fn cache_dir() -> Option<PathBuf> {
 /// its solves already there. Rebuildable and deletable at any time, like every
 /// tier under this root.
 pub fn track_cache_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("track"))
 }
 
@@ -732,7 +947,7 @@ pub fn track_cache_dir() -> Option<PathBuf> {
 /// happened to ask, so one shot's mattes serve every composition that cuts it.
 /// Rebuildable and deletable at any time, like every tier under this root.
 pub fn roto_cache_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("roto"))
 }
 
@@ -744,7 +959,7 @@ pub fn roto_cache_dir() -> Option<PathBuf> {
 /// rebuildable and deletable at any time the same way: throwing it away costs
 /// an Analyse and nothing else.
 pub fn planes_cache_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("planes"))
 }
 
@@ -770,14 +985,29 @@ pub fn planes_cache_dir() -> Option<PathBuf> {
 /// when the platform has no home directory; the Addons page then says so
 /// rather than failing.
 pub fn addons_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_local_dir().join("addons"))
+}
+
+/// Where installed extensions live: each in a folder named by its id,
+/// holding an `extension.json` and the page it names. Beside the addons, and
+/// for the same reason: it is nothing Lumit could rebuild.
+pub fn extensions_dir() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_local_dir().join("extensions"))
+}
+
+/// Where the extension `id` keeps what its page stores, such as a sign-in.
+/// Not in its own folder, which an update replaces whole.
+pub fn extension_data_dir(id: &str) -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_local_dir().join("extension-data").join(id))
 }
 
 /// Media frame-index cache directory (docs/10-FILE-FORMAT.md §3) — global,
 /// keyed by content fingerprint, so shared across projects and machines-safe.
 pub fn media_index_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.cache_dir().join("media-index"))
 }
 
@@ -787,7 +1017,7 @@ pub fn media_index_dir() -> Option<PathBuf> {
 /// in the platform's roaming app-data area beside the config. `None` only when
 /// the platform has no home directory; callers create it lazily.
 pub fn presets_dir() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_dir().join("presets"))
 }
 
@@ -801,7 +1031,7 @@ pub fn presets_dir() -> Option<PathBuf> {
 /// platform has no home directory; the library then lives for the session and
 /// says so rather than failing.
 pub fn export_presets_path() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_dir().join("export-presets.json"))
 }
 
@@ -815,7 +1045,7 @@ pub fn export_presets_path() -> Option<PathBuf> {
 /// `.lum`. `None` only when the platform has no home directory, in which case
 /// the dialogue simply opens on its built-in defaults.
 pub fn export_defaults_path() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_dir().join("export-defaults.json"))
 }
 
@@ -828,7 +1058,7 @@ pub const EXPORT_DONE_SOUND: &str = "export-done.wav";
 /// one without touching an installed build. `None` when the platform has no
 /// home directory; the hook is then simply silent.
 pub fn export_done_sound_path() -> Option<PathBuf> {
-    let dirs = directories::ProjectDirs::from("dev", "Lumit", "Lumit")?;
+    let dirs = project_dirs()?;
     Some(dirs.data_dir().join("sounds").join(EXPORT_DONE_SOUND))
 }
 
@@ -1032,7 +1262,17 @@ pub fn rebase_for_save(doc: &Document, project_dir: &Path) -> Document {
     if let Some(config) = doc.colour.config.as_mut() {
         rebase_one(config, project_dir);
     }
+    keep_original_paths(&mut doc);
     doc
+}
+
+/// Give each file an effect reads the path it had, and not the copy's in this
+/// machine's cache that an open pointed its parameter at. For anything that
+/// leaves the open project: a save, the clipboard, a preset.
+pub fn keep_original_paths(doc: &mut Document) {
+    if let Some(cache) = cache_dir() {
+        pack::keep_original_paths(doc, &cache.join("packed"));
+    }
 }
 
 /// One media reference rebased against `project_dir`: the relative path
@@ -1052,6 +1292,17 @@ fn rebase_one(media: &mut lumit_core::model::MediaRef, project_dir: &Path) {
     let Some(located) = located else {
         return; // missing: keep the reference untouched for relinking
     };
+    // A copy read out of a packed project lives in this machine's cache. The
+    // path the file keeps is still the original's, which is where an unpacked
+    // copy of the project would look for it.
+    if cache_dir().is_some_and(|cache| located.starts_with(cache.join("packed"))) {
+        return;
+    }
+    // A file sent by someone else in a shared project is in the cache too,
+    // and the path the file keeps is likewise the original's.
+    if shared_footage_dir().is_some_and(|sent| located.starts_with(sent)) {
+        return;
+    }
     // Footage on another drive has no relative path, so it keeps the whole
     // path, otherwise it goes missing on the next open.
     media.relative_path = relative_between(project_dir, &located)
@@ -1079,6 +1330,12 @@ pub fn resolve_all_media(
         let ProjectItem::Footage(f) = item else {
             continue;
         };
+        // A packed item `restore_packed` has already placed stays where it
+        // was put. The relative path may name a different file of the same
+        // name on this machine.
+        if doc.packed.contains_key(&f.id) && Path::new(&f.media.absolute_path).is_file() {
+            continue;
+        }
         // An image sequence imported from After Effects arrives pointing at the
         // *folder* the run lives in, because that is what the .aep records — a
         // folder is not a file, so every step below would call it missing. One
@@ -1138,7 +1395,17 @@ pub fn resolve_all_media(
     // this list would open the relink dialogue over footage that is perfectly
     // present. It also does not count as a relink, which is a count of the
     // project's real media.
-    for proxy in doc.proxies.values_mut() {
+    // A packed proxy or config that `restore_packed` has placed stays where it
+    // was put, as a packed item does above.
+    let packed = &doc.packed;
+    let placed = |id: Uuid, media: &MediaRef| {
+        packed.contains_key(&lumit_core::model::packed_id(id))
+            && Path::new(&media.absolute_path).is_file()
+    };
+    for (item, proxy) in &mut doc.proxies {
+        if placed(*item, &proxy.media) {
+            continue;
+        }
         if let Resolved::Found { path, .. } = resolve_media(&proxy.media, project_dir, search_roots)
         {
             proxy.media.absolute_path = path.to_string_lossy().into_owned();
@@ -1149,7 +1416,7 @@ pub fn resolve_all_media(
     // still keeps every colour space name it was given, and simply previews
     // through the built-in family until the file comes back. Opening the
     // relink dialogue over it would be a lie about what is wrong.
-    if let Some(config) = doc.colour.config.as_mut() {
+    if let Some(config) = doc.colour.config.as_mut().filter(|c| !placed(doc.id, c)) {
         if let Resolved::Found { path, .. } = resolve_media(config, project_dir, search_roots) {
             config.absolute_path = path.to_string_lossy().into_owned();
         }
@@ -1379,6 +1646,31 @@ impl JournalFile {
         journal_path(doc_id).map(|path| Self { path })
     }
 
+    /// The journal of a document saved as `project` ([`journal_in`]).
+    pub fn for_project(doc_id: Uuid, project: Option<&Path>) -> Option<Self> {
+        journal_path_for(doc_id, project).map(|path| Self { path })
+    }
+
+    /// Whether two handles are the one journal.
+    #[must_use]
+    pub fn same_as(&self, other: &JournalFile) -> bool {
+        self.path == other.path
+    }
+
+    /// Carry what this journal holds over to `other`, for a document that has
+    /// just been saved under another name. Whatever `other` held belonged to
+    /// the file the save has replaced.
+    pub fn hand_to(&self, other: &JournalFile) {
+        let _ = other.clear();
+        if self.size() > 0 {
+            if let Some(parent) = other.path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let _ = fs::rename(&self.path, &other.path);
+        }
+        let _ = self.clear();
+    }
+
     pub fn at_path(path: PathBuf) -> Self {
         Self { path }
     }
@@ -1386,6 +1678,14 @@ impl JournalFile {
     pub fn append(&self, op: &Op) -> Result<(), ProjectError> {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)?;
+        }
+        // The first edit after a clean close starts the journal afresh. What
+        // was left in it are edits somebody chose not to save, and they must
+        // not come back underneath new ones.
+        let closed = self.closed_marker();
+        if closed.exists() {
+            let _ = fs::remove_file(&self.path);
+            let _ = fs::remove_file(&closed);
         }
         let mut f = OpenOptions::new()
             .create(true)
@@ -1421,12 +1721,71 @@ impl JournalFile {
         Ok(ops)
     }
 
-    pub fn clear(&self) -> Result<(), ProjectError> {
-        match fs::remove_file(&self.path) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.into()),
+    /// How many bytes are journalled so far.
+    #[must_use]
+    pub fn size(&self) -> u64 {
+        fs::metadata(&self.path).map_or(0, |m| m.len())
+    }
+
+    /// Drop the first `bytes` of the journal, which a save has just written
+    /// into the project file, and keep the edits made after them.
+    pub fn forget(&self, bytes: u64) -> Result<(), ProjectError> {
+        let mut all = match File::open(&self.path) {
+            Ok(all) => all,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e.into()),
+        };
+        if bytes >= all.metadata()?.len() {
+            drop(all);
+            return self.clear();
         }
+        // Written beside the journal and moved over it, so a crash part way
+        // leaves the old journal and not half of the new one. Copied across
+        // and never read whole: a long day's journal is a long file.
+        let beside = self.path.with_extension("tmp");
+        all.seek(SeekFrom::Start(bytes))?;
+        std::io::copy(&mut all, &mut File::create(&beside)?)?;
+        drop(all);
+        fs::rename(&beside, &self.path)?;
+        Ok(())
+    }
+
+    /// Note that the project was closed on purpose. The edits still in the
+    /// journal are then ones somebody chose not to save, and not what a crash
+    /// left behind.
+    pub fn mark_closed(&self) {
+        if self.size() > 0 {
+            let _ = fs::write(self.closed_marker(), b"");
+        }
+    }
+
+    /// Whether the journal holds edits from a run that never closed the
+    /// project, which is a crash or a power cut.
+    #[must_use]
+    pub fn ended_badly(&self) -> bool {
+        self.size() > 0 && !self.closed_marker().exists()
+    }
+
+    fn closed_marker(&self) -> PathBuf {
+        self.path.with_extension("closed")
+    }
+
+    pub fn clear(&self) -> Result<(), ProjectError> {
+        let _ = fs::remove_file(self.closed_marker());
+        match fs::remove_file(&self.path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+        // The journal folder and the document's folder above it go too, or the
+        // cache keeps an empty pair for every project. `remove_dir` only takes
+        // an empty folder, so anything else in there stays.
+        for dir in self.path.ancestors().skip(1).take(2) {
+            if fs::remove_dir(dir).is_err() {
+                break;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1450,6 +1809,7 @@ mod tests {
                 fingerprint: None,
                 extra: serde_json::Map::new(),
             },
+            source_layer: None,
         }
     }
 
@@ -1523,6 +1883,24 @@ mod tests {
         };
         apply(&mut doc, &op).unwrap();
         doc
+    }
+
+    /// The same bargain for a file layer: nothing in a project that has
+    /// none, and the pick carried back in one that does.
+    #[test]
+    fn a_source_layer_saves_only_when_there_is_one() {
+        let plain = footage("art.psd");
+        let json = serde_json::to_string(&plain).unwrap();
+        assert!(
+            !json.contains("source_layer"),
+            "a flat file must not grow a file layer field: {json}"
+        );
+
+        let mut layer = footage("Hat/art.psd");
+        layer.source_layer = Some(3);
+        let back: lumit_core::model::FootageItem =
+            serde_json::from_str(&serde_json::to_string(&layer).unwrap()).unwrap();
+        assert_eq!(back.source_layer, Some(3));
     }
 
     /// TF-36: what a saved project carries. The written clone's
@@ -1692,137 +2070,6 @@ mod tests {
         assert_eq!(abs(1), moved.to_string_lossy(), "found by content");
     }
 
-    /// **An image sequence imported from After Effects opens on its first
-    /// frame**.
-    ///
-    /// The .aep names the folder a run lives in — that is what its file alias
-    /// targets — and a folder is not a file, so every resolution step would
-    /// call an imported sequence missing and send the user to relink something
-    /// that is sitting right there. One look inside answers it. The stray
-    /// `readme.txt` in the fixture is the reason "the first numbered file"
-    /// rather than "the first file": it sorts ahead of the frames.
-    #[test]
-    fn an_imported_sequence_folder_resolves_to_the_runs_first_frame() {
-        let dir = tempfile::tempdir().unwrap();
-        let folder = dir.path().join("Depth");
-        fs::create_dir_all(&folder).unwrap();
-        fs::write(folder.join("readme.txt"), b"notes").unwrap();
-        for n in 0..4u32 {
-            fs::write(folder.join(format!("Depth{n:06}_depth.exr")), b"frame").unwrap();
-        }
-
-        let mut doc = Document::default();
-        let item = FootageItem {
-            colour_space: None,
-            id: Uuid::now_v7(),
-            name: "Depth".into(),
-            media: MediaRef {
-                relative_path: "Depth".into(),
-                absolute_path: folder.to_string_lossy().into_owned(),
-                fingerprint: None,
-                extra: serde_json::Map::new(),
-            },
-            sequence: Some(lumit_core::model::SequenceRef::default()),
-            extra: serde_json::Map::new(),
-        };
-        lumit_core::ops::apply(
-            &mut doc,
-            &Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Footage(item)),
-            },
-        )
-        .unwrap();
-
-        let (_, missing) = resolve_all_media(&mut doc, dir.path(), &[]);
-        assert!(missing.is_empty(), "the run is right there: {missing:?}");
-        let ProjectItem::Footage(f) = &doc.items[0] else {
-            unreachable!()
-        };
-        assert_eq!(
-            f.media.relative_path, "Depth/Depth000000_depth.exr",
-            "the folder became the frame the run starts at"
-        );
-        assert!(
-            Path::new(&f.media.absolute_path).is_file(),
-            "and it resolved to a real file: {}",
-            f.media.absolute_path
-        );
-    }
-
-    /// **An import from another machine finds its footage beside the project.**
-    ///
-    /// The paths written into an After Effects project are the paths of the
-    /// computer it was made on, and there are no fingerprints yet — nothing
-    /// was ever saved — so steps 1 to 3 all come back empty on a second
-    /// machine even when every file is sitting right there in a subfolder.
-    /// Step 3b looks for what is left by file name under the project's own
-    /// folder, which is the one thing that is true about a project someone
-    /// copied across with its media.
-    #[test]
-    fn what_nothing_else_found_is_looked_for_by_name_beside_the_project() {
-        let dir = tempfile::tempdir().unwrap();
-        let buried = dir.path().join("Clips").join("Cine1");
-        fs::create_dir_all(&buried).unwrap();
-        fs::write(buried.join("Depth.avi"), b"clip").unwrap();
-
-        let mut doc = Document::new();
-        // As an import leaves it: both paths are the other machine's.
-        let mut found = footage("Depth.avi");
-        found.media.relative_path = "D:/Elsewhere/Clips/Cine1/Depth.avi".into();
-        found.media.absolute_path = found.media.relative_path.clone();
-        let mut lost = footage("Missing.avi");
-        lost.media.relative_path = "D:/Elsewhere/Clips/Cine1/Missing.avi".into();
-        lost.media.absolute_path = lost.media.relative_path.clone();
-        for (i, item) in [found, lost].into_iter().enumerate() {
-            apply(
-                &mut doc,
-                &Op::AddItem {
-                    index: i,
-                    item: Box::new(ProjectItem::Footage(item)),
-                },
-            )
-            .unwrap();
-        }
-
-        let (relinked, missing) = resolve_all_media(&mut doc, dir.path(), &[]);
-        assert_eq!(relinked, 1);
-        assert_eq!(missing, vec!["Missing.avi".to_string()]);
-        match &doc.items[0] {
-            ProjectItem::Footage(f) => assert_eq!(
-                f.media.absolute_path,
-                buried.join("Depth.avi").to_string_lossy(),
-                "found by name however deep it sits"
-            ),
-            _ => unreachable!(),
-        }
-    }
-
-    /// The pure relative-path arithmetic behind the rebase.
-    #[test]
-    fn relative_between_walks_up_and_down() {
-        use std::path::Path;
-        let base = Path::new("/projects/film");
-        assert_eq!(
-            relative_between(base, Path::new("/projects/film/media/a.mp4")).as_deref(),
-            Some("media/a.mp4")
-        );
-        assert_eq!(
-            relative_between(base, Path::new("/projects/other/b.mp4")).as_deref(),
-            Some("../other/b.mp4")
-        );
-        assert_eq!(
-            relative_between(base, Path::new("/projects/film/c.mp4")).as_deref(),
-            Some("c.mp4")
-        );
-        #[cfg(windows)]
-        assert_eq!(
-            relative_between(Path::new("C:\\p"), Path::new("D:\\m\\a.mp4")),
-            None,
-            "cross-drive: no relative path exists"
-        );
-    }
-
     /// docs/10 §2: the fingerprint is stable, matches a byte-identical copy by
     /// content (mtime aside), and detects a change in either sampled window or a
     /// size change — the properties relink step 3 depends on.
@@ -1864,25 +2111,6 @@ mod tests {
         assert!(!f1.likely_same_content(&fingerprint_path(&e).unwrap()));
     }
 
-    /// Files smaller than two sample windows are hashed whole and still compare
-    /// by content.
-    #[test]
-    fn fingerprint_handles_small_files() {
-        let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("tiny.bin");
-        fs::write(&p, b"hello").unwrap();
-        let f = fingerprint_path(&p).unwrap();
-        assert_eq!(f.size, 5);
-
-        let same = dir.path().join("tiny2.bin");
-        fs::write(&same, b"hello").unwrap();
-        assert!(f.likely_same_content(&fingerprint_path(&same).unwrap()));
-
-        let diff = dir.path().join("tiny3.bin");
-        fs::write(&diff, b"world").unwrap();
-        assert!(!f.likely_same_content(&fingerprint_path(&diff).unwrap()));
-    }
-
     fn media_ref(rel: &str, abs: &str, fp: Option<Fingerprint>) -> lumit_core::model::MediaRef {
         lumit_core::model::MediaRef {
             relative_path: rel.into(),
@@ -1890,24 +2118,6 @@ mod tests {
             fingerprint: fp,
             extra: serde_json::Map::new(),
         }
-    }
-
-    /// docs/10 §2 step 1: the project-relative path wins when it still resolves.
-    #[test]
-    fn resolve_prefers_the_relative_path() {
-        let dir = tempfile::tempdir().unwrap();
-        let project = dir.path().join("proj");
-        fs::create_dir_all(project.join("footage")).unwrap();
-        let file = project.join("footage/clip.bin");
-        fs::write(&file, b"data").unwrap();
-        let m = media_ref("footage/clip.bin", "/nope/clip.bin", None);
-        assert_eq!(
-            resolve_media(&m, &project, &[]),
-            Resolved::Found {
-                path: file,
-                how: ResolveStep::RelativePath
-            }
-        );
     }
 
     /// docs/10 §2 step 2: fall back to the last absolute path.
@@ -1925,47 +2135,6 @@ mod tests {
                 path: file,
                 how: ResolveStep::AbsolutePath
             }
-        );
-    }
-
-    /// docs/10 §2 step 3: neither path resolves, but a fingerprint search finds
-    /// the file — moved and renamed — under a search root.
-    #[test]
-    fn resolve_finds_a_moved_file_by_fingerprint() {
-        let dir = tempfile::tempdir().unwrap();
-        let project = dir.path().join("proj");
-        fs::create_dir_all(&project).unwrap();
-        let elsewhere = dir.path().join("elsewhere/deep");
-        fs::create_dir_all(&elsewhere).unwrap();
-        let data: Vec<u8> = (0..300_000u32).map(|i| i as u8).collect();
-        let moved = elsewhere.join("renamed.bin");
-        fs::write(&moved, &data).unwrap();
-        let fp = fingerprint_path(&moved).unwrap();
-        let m = media_ref("footage/clip.bin", "/nope/clip.bin", Some(fp));
-        assert_eq!(
-            resolve_media(&m, &project, &[dir.path().join("elsewhere")]),
-            Resolved::Found {
-                path: moved,
-                how: ResolveStep::FingerprintSearch
-            }
-        );
-    }
-
-    /// docs/10 §2 step 4: nothing matches → Missing (never an error).
-    #[test]
-    fn resolve_reports_missing_when_nothing_matches() {
-        let dir = tempfile::tempdir().unwrap();
-        let project = dir.path().join("proj");
-        fs::create_dir_all(&project).unwrap();
-        // Fingerprint of some content, but no matching file anywhere searched.
-        let orphan = dir.path().join("orphan.bin");
-        fs::write(&orphan, b"only here, not under a search root").unwrap();
-        let fp = fingerprint_path(&orphan).unwrap();
-        fs::remove_file(&orphan).unwrap();
-        let m = media_ref("footage/x.bin", "/nope/x.bin", Some(fp));
-        assert_eq!(
-            resolve_media(&m, &project, std::slice::from_ref(&project)),
-            Resolved::Missing
         );
     }
 
@@ -2017,37 +2186,6 @@ mod tests {
         );
     }
 
-    /// **A whole media tree that moved is one mapping, not one per folder.**
-    ///
-    /// The regression: footage sits in `Clips/scene 1`, `Clips/scene 2`, and
-    /// relinking a clip out of the first folder used to say only that
-    /// `old/Clips/scene 1` had become `new/Clips/scene 1` — leaving every
-    /// sibling in `scene 2` for the user to find by hand. The shared tail is
-    /// the part that did *not* move, so it is peeled off.
-    #[test]
-    fn a_mapping_reaches_the_folder_that_actually_moved() {
-        let mapping = path_mapping(
-            Path::new("/old/Clips/scene 1/a.mov"),
-            Path::new("/new/Clips/scene 1/a.mov"),
-        )
-        .expect("a pure move maps");
-        assert_eq!(mapping, (PathBuf::from("/old"), PathBuf::from("/new")));
-        assert_eq!(
-            apply_mapping(&mapping, Path::new("/old/Clips/scene 2/b.mov")),
-            Some(PathBuf::from("/new/Clips/scene 2/b.mov")),
-            "a sibling in the folder next door relinks under the same move"
-        );
-
-        // The peel stops where the two paths meet: a folder moved *within* one
-        // tree maps that folder, not the tree it is still inside.
-        let inside = path_mapping(
-            Path::new("/proj/a/scene/clip.mov"),
-            Path::new("/proj/b/scene/clip.mov"),
-        )
-        .expect("a pure move maps");
-        assert_eq!(inside, (PathBuf::from("/proj/a"), PathBuf::from("/proj/b")));
-    }
-
     fn footage_item(name: &str, rel: &str, abs: &str) -> lumit_core::model::ProjectItem {
         lumit_core::model::ProjectItem::Footage(lumit_core::model::FootageItem {
             sequence: None,
@@ -2056,6 +2194,7 @@ mod tests {
             media: media_ref(rel, abs, None),
             extra: serde_json::Map::new(),
             colour_space: None,
+            source_layer: None,
         })
     }
 
@@ -2064,38 +2203,6 @@ mod tests {
             lumit_core::model::ProjectItem::Footage(f) => &f.media,
             _ => panic!("expected footage"),
         }
-    }
-
-    /// docs/10 §2: collect copies referenced media into `dest/media/`
-    /// and rewrites the reference project-relative, with nothing machine-specific.
-    #[test]
-    fn collect_copies_media_and_rewrites_refs() {
-        let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("src");
-        fs::create_dir_all(&src).unwrap();
-        let real = dir.path().join("assets/clip.mp4");
-        fs::create_dir_all(real.parent().unwrap()).unwrap();
-        fs::write(&real, b"video-bytes").unwrap();
-
-        let mut doc = Document::new();
-        doc.items.push(footage_item(
-            "Clip",
-            "footage/clip.mp4",
-            real.to_str().unwrap(),
-        ));
-        let dest = dir.path().join("share");
-        let collected = collect_for_sharing(&doc, &src, &dest).unwrap();
-
-        assert!(collected.missing.is_empty());
-        let copied = dest.join("media/clip.mp4");
-        assert!(copied.is_file(), "media copied into the share folder");
-        assert_eq!(fs::read(&copied).unwrap(), b"video-bytes");
-        let m = media_of(&collected.doc.items[0]);
-        assert_eq!(m.relative_path, "media/clip.mp4");
-        assert_eq!(
-            m.absolute_path, "media/clip.mp4",
-            "no machine-specific absolute path is written"
-        );
     }
 
     /// Two references to files that share a basename get distinct collected
@@ -2132,30 +2239,6 @@ mod tests {
         assert_eq!(fs::read(dest.join("media/clip-1.mp4")).unwrap(), b"BBB");
     }
 
-    /// A reference that resolves nowhere is reported and left untouched, so the
-    /// shared project still opens (missing media shows the relink slate).
-    #[test]
-    fn collect_reports_missing_media() {
-        let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("src");
-        fs::create_dir_all(&src).unwrap();
-        let mut doc = Document::new();
-        doc.items.push(footage_item(
-            "Ghost",
-            "footage/ghost.mp4",
-            "/nope/ghost.mp4",
-        ));
-        let dest = dir.path().join("share");
-        let collected = collect_for_sharing(&doc, &src, &dest).unwrap();
-
-        assert_eq!(collected.missing, vec!["Ghost".to_string()]);
-        assert_eq!(
-            media_of(&collected.doc.items[0]).relative_path,
-            "footage/ghost.mp4",
-            "an unlocatable reference is left unchanged"
-        );
-    }
-
     fn add_a(v: &mut serde_json::Value) {
         if let Some(o) = v.as_object_mut() {
             o.insert("a".into(), serde_json::json!(1));
@@ -2171,15 +2254,6 @@ mod tests {
             let n = o.get("n").and_then(serde_json::Value::as_i64).unwrap_or(0);
             o.insert("n".into(), serde_json::json!(n + 1));
         }
-    }
-
-    /// An empty chain is a no-op, and the real chain leaves a document with
-    /// nothing to migrate alone.
-    #[test]
-    fn no_migrations_leaves_json_unchanged() {
-        let v = serde_json::json!({ "x": 5 });
-        assert_eq!(run_migrations(&[], v.clone(), (0, 1, 0)), v);
-        assert_eq!(run_migrations(MIGRATIONS, v.clone(), (0, 1, 0)), v);
     }
 
     /// A `0.1.0` document whose Footage layer carries the old segment store
@@ -2265,49 +2339,6 @@ mod tests {
         ));
         assert!((turned.0.position_x.value_at(0.0) + 500.0).abs() < 1e-6);
         assert!(turned.0.position_z.value_at(0.0).abs() < 1e-6);
-    }
-
-    /// Keyed position with a still aim: every key's value moves by the same
-    /// constant and the keys themselves are kept, tangents and all.
-    #[test]
-    fn a_keyed_position_with_a_still_aim_shifts_every_key_exactly() {
-        use lumit_core::anim::{Animation, Keyframe, Property, EASY_EASE};
-        use lumit_core::time::Rational;
-        let keys = vec![
-            Keyframe {
-                time: Rational::ZERO,
-                value: 100.0,
-                interp_in: EASY_EASE,
-                interp_out: EASY_EASE,
-            },
-            Keyframe {
-                time: Rational::new(2, 1).unwrap(),
-                value: 300.0,
-                interp_in: EASY_EASE,
-                interp_out: EASY_EASE,
-            },
-        ];
-        let (tr, _) = migrated_camera(old_camera(
-            [
-                Property::fixed(0.0),
-                Property::fixed(0.0),
-                Property {
-                    animation: Animation::Keyframed(keys.clone()),
-                    extra: serde_json::Map::new(),
-                },
-            ],
-            [Property::zero(), Property::zero(), Property::zero()],
-            Property::fixed(1000.0),
-        ));
-        let Animation::Keyframed(after) = &tr.position_z.animation else {
-            panic!("still keyed");
-        };
-        assert_eq!(after.len(), 2);
-        for (was, now) in keys.iter().zip(after) {
-            assert_eq!(now.time, was.time);
-            assert!((now.value - (was.value - 1000.0)).abs() < 1e-9);
-            assert_eq!(now.interp_in, was.interp_in, "tangents untouched");
-        }
     }
 
     /// An animated aim has no single shift, so position is resampled at the
@@ -2438,84 +2469,6 @@ mod tests {
         assert!((clip.source_time(3.0) - store.evaluate(3.0)).abs() < 1e-6);
     }
 
-    /// The policy for making in-between frames rides across too — it was never
-    /// part of the map (docs/04 §10), and it is not lost with the store.
-    #[test]
-    fn the_migration_carries_the_interpolation_policy_out() {
-        use lumit_core::retime::{Interpolation, Retime};
-        use lumit_core::time::Rational;
-
-        let mut store = Retime::identity(Rational::new(5, 1).unwrap(), Rational::ZERO);
-        store.interpolation = Interpolation::Blend;
-        let doc = serde_json::json!({
-            "comps": [{
-                "layers": [{
-                    "kind": { "Footage": {
-                        "item": Uuid::now_v7(),
-                        "retime": serde_json::to_value(&store).unwrap(),
-                    }}
-                }]
-            }]
-        });
-
-        let out = run_migrations(MIGRATIONS, doc, (0, 1, 0));
-        let policy: Interpolation =
-            serde_json::from_value(out["comps"][0]["layers"][0]["interpolation"].clone())
-                .expect("a policy");
-        assert_eq!(policy, Interpolation::Blend);
-    }
-
-    /// A layer that already carried the property keeps it: both routes existed
-    /// at once, and the property is the one that was actually evaluating
-    /// (`source_time_at` preferred it), so keeping it is what makes the file
-    /// open looking the way it last rendered.
-    #[test]
-    fn the_property_wins_when_a_layer_carried_both() {
-        use lumit_core::retime::Retime;
-        use lumit_core::time::Rational;
-
-        let segments = Retime::constant_speed(
-            Rational::new(10, 1).unwrap(),
-            Rational::ZERO,
-            Rational::new(1, 2).unwrap(),
-        );
-        // The property says "hold source zero throughout" — nothing like the
-        // segment store beside it, so which one survived is unambiguous.
-        let property = lumit_core::anim::Property::fixed(0.0);
-        let doc = serde_json::json!({
-            "comps": [{
-                "layers": [{
-                    "retime": serde_json::to_value(&property).unwrap(),
-                    "kind": { "Footage": {
-                        "item": Uuid::now_v7(),
-                        "retime": serde_json::to_value(&segments).unwrap(),
-                    }}
-                }]
-            }]
-        });
-
-        let out = run_migrations(MIGRATIONS, doc, (0, 1, 0));
-        let kept: lumit_core::anim::Property =
-            serde_json::from_value(out["comps"][0]["layers"][0]["retime"].clone())
-                .expect("a Retime property");
-        assert!((kept.value_at(4.0) - 0.0).abs() < 1e-9);
-    }
-
-    /// A document with nothing to migrate survives the walk untouched — a
-    /// layer of another kind, and a footage layer that was never retimed.
-    #[test]
-    fn the_migration_leaves_untouched_layers_alone() {
-        let doc = serde_json::json!({
-            "comps": [{
-                "layers": [
-                    { "kind": { "Footage": { "item": Uuid::now_v7() } } },
-                    { "kind": "Adjustment" },
-                ]
-            }]
-        });
-        assert_eq!(run_migrations(MIGRATIONS, doc.clone(), (0, 1, 0)), doc);
-    }
-
     /// docs/10 §1: a file is walked up the chain from its own version — earlier
     /// migrations are skipped, and every step from the file version onward runs
     /// in order.
@@ -2561,154 +2514,6 @@ mod tests {
         );
     }
 
-    /// A MediaRef with no fingerprint serialises without the field, so projects
-    /// saved before fingerprints round-trip byte-for-byte (docs/10 §1.1).
-    #[test]
-    fn absent_fingerprint_is_not_serialised() {
-        let m = lumit_core::model::MediaRef {
-            relative_path: "footage/x.mp4".into(),
-            absolute_path: "/tmp/x.mp4".into(),
-            fingerprint: None,
-            extra: serde_json::Map::new(),
-        };
-        let json = serde_json::to_string(&m).unwrap();
-        assert!(
-            !json.contains("fingerprint"),
-            "unset fingerprint must not appear in the file: {json}"
-        );
-        let back: lumit_core::model::MediaRef = serde_json::from_str(&json).unwrap();
-        // The absolute path is session-state: never serialized, so it
-        // comes back empty; everything else round-trips.
-        assert_eq!(back.absolute_path, "");
-        assert_eq!(back.relative_path, m.relative_path);
-        assert_eq!(back.fingerprint, m.fingerprint);
-    }
-
-    /// **A sequence costs a project that has none nothing at all**. The
-    /// field is skipped when unset, so every project saved before image
-    /// sequences existed round-trips byte-for-byte — and a project that *does*
-    /// have one carries its rate back exactly, because a rate that went through
-    /// a float would not (docs/14 §2).
-    #[test]
-    fn a_sequence_saves_only_when_there_is_one_and_keeps_its_exact_rate() {
-        let plain = footage("clip.mp4");
-        let json = serde_json::to_string(&plain).unwrap();
-        assert!(
-            !json.contains("sequence"),
-            "an ordinary file must not grow a sequence field: {json}"
-        );
-
-        let mut run = footage("shot[0001-0100].exr");
-        run.sequence = Some(lumit_core::model::SequenceRef {
-            frame_rate: lumit_core::time::FrameRate::new(24000, 1001).unwrap(),
-            extra: serde_json::Map::new(),
-        });
-        let back: lumit_core::model::FootageItem =
-            serde_json::from_str(&serde_json::to_string(&run).unwrap()).unwrap();
-        assert_eq!(back.sequence_fps(), Some((24000, 1001)));
-    }
-
-    /// **A project's own cache location travels with it.** The whole reason it
-    /// lives in the document rather than in the settings file: copy the project
-    /// to another machine, or hand it to someone else, and the folder it caches
-    /// to comes along. A project that has not been given one saves nothing at
-    /// all — an absent field, so an older build reads the file unchanged and a
-    /// project's file does not grow a line for a choice nobody made.
-    #[test]
-    fn a_projects_own_cache_location_survives_a_save() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("edit.lum");
-
-        let mut doc = doc_with_item();
-        assert!(doc.cache_location.is_none(), "no override by default");
-        save(&doc, &path).unwrap();
-        assert!(open(&path).unwrap().0.cache_location.is_none());
-
-        doc.cache_location = Some(lumit_core::model::CacheLocation::Custom {
-            folder: "E:/scratch".into(),
-        });
-        save(&doc, &path).unwrap();
-        assert_eq!(
-            open(&path).unwrap().0.cache_location,
-            Some(lumit_core::model::CacheLocation::Custom {
-                folder: "E:/scratch".into()
-            })
-        );
-
-        // The other two carry no folder, and still round-trip as themselves.
-        doc.cache_location = Some(lumit_core::model::CacheLocation::BesideProject);
-        save(&doc, &path).unwrap();
-        assert_eq!(
-            open(&path).unwrap().0.cache_location,
-            Some(lumit_core::model::CacheLocation::BesideProject)
-        );
-    }
-
-    /// **Colour tags travel with the project**. They are organisation
-    /// rather than picture, but organisation is exactly what is lost when a
-    /// project is handed on, so they belong in the file. A project nobody has
-    /// tagged saves no field at all — the serde-default rule docs/10 §1.1 gives
-    /// every additive field — so an older build reads such a file unchanged,
-    /// and a file written before tags existed opens with every item untagged
-    /// rather than failing.
-    #[test]
-    fn item_colour_tags_survive_a_save_and_older_files_open_untagged() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("tagged.lum");
-
-        let mut doc = doc_with_item();
-        let id = doc.items[0].id();
-        assert_eq!(doc.item_label(id), 0, "untagged by default");
-        save(&doc, &path).unwrap();
-        assert!(
-            open(&path).unwrap().0.item_labels.is_empty(),
-            "a project nobody has tagged gains no field"
-        );
-
-        apply(&mut doc, &Op::SetItemLabel { id, label: 5 }).unwrap();
-        save(&doc, &path).unwrap();
-        assert_eq!(open(&path).unwrap().0.item_label(id), 5);
-
-        // The shape a file written before tags existed has: no key at all.
-        let mut older: serde_json::Value =
-            serde_json::from_str(&serde_json::to_string(&doc).unwrap()).unwrap();
-        older
-            .as_object_mut()
-            .expect("a document is an object")
-            .remove("item_labels");
-        let reopened: Document = serde_json::from_value(older).unwrap();
-        assert_eq!(reopened.item_label(id), 0);
-    }
-
-    /// **A project's arrangement travels with it**: hand the file to
-    /// someone else and it opens with the panels where its author left them.
-    /// The engine stores it as the frontend's own JSON without reading inside,
-    /// so it round-trips whole; a project nobody has arranged saves no field at
-    /// all, and an older build reads that file unchanged.
-    #[test]
-    fn the_saved_arrangement_survives_a_save() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("arranged.lum");
-
-        let mut doc = doc_with_item();
-        assert!(doc.ui_state.is_none(), "nothing arranged by default");
-        save(&doc, &path).unwrap();
-        assert!(open(&path).unwrap().0.ui_state.is_none());
-        let bare = std::fs::metadata(&path).unwrap().len();
-
-        let arrangement = serde_json::json!({
-            "dock": { "kind": "tabs", "active": 1 },
-            "session": { "frame": 12, "open_comps": ["a", "b"] },
-        });
-        doc.ui_state = Some(arrangement.clone());
-        save(&doc, &path).unwrap();
-        assert_eq!(open(&path).unwrap().0.ui_state, Some(arrangement));
-        assert!(
-            std::fs::metadata(&path).unwrap().len() > bare,
-            "it is really in the file, not only in the document"
-        );
-    }
-
     #[test]
     fn save_open_round_trip_and_no_temp_litter() {
         let dir = tempfile::tempdir().unwrap();
@@ -2725,76 +2530,6 @@ mod tests {
         assert_eq!(manifest.format, FORMAT);
         save(&doc, &path).unwrap();
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
-    }
-
-    /// The anti-aliasing setting is a project property
-    /// (docs/impl/anti-aliasing.md §5, test 7): a non-default value must
-    /// survive a save and reload, and a `.lum` written before the field existed
-    /// must load at the default rather than failing.
-    #[test]
-    fn the_anti_aliasing_setting_round_trips_and_defaults_when_absent() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("edit.lum");
-        let mut doc = doc_with_item();
-        doc.anti_aliasing = lumit_core::model::AntiAliasing::X8;
-        save(&doc, &path).unwrap();
-        let (loaded, _) = open(&path).unwrap();
-        assert_eq!(loaded.anti_aliasing, lumit_core::model::AntiAliasing::X8);
-
-        // An older file: the same project with the key removed entirely, which
-        // is exactly what a `.lum` written before this field looks like.
-        let older = dir.path().join("older.lum");
-        strip_document_key(&path, &older, "anti_aliasing");
-        let (old, _) = open(&older).unwrap();
-        assert_eq!(
-            old.anti_aliasing,
-            lumit_core::model::AntiAliasing::default(),
-            "a file with no setting must load at the default, not fail"
-        );
-    }
-
-    /// **The colour shelf survives the file, and an empty one writes no line**
-    /// (docs/10 §1.1): a project nobody has kept a colour in must be
-    /// byte-identical to one written before swatches existed, and a shelf must
-    /// come back in the order it was kept, names and all.
-    #[test]
-    fn the_colour_shelf_round_trips_and_an_empty_one_writes_no_line() {
-        use lumit_core::model::{LinearColour, Swatch};
-
-        let dir = tempfile::tempdir().unwrap();
-        let plain = dir.path().join("plain.lum");
-        save(&doc_with_item(), &plain).unwrap();
-        let json = String::from_utf8(entry_bytes(&plain, "project.json")).unwrap();
-        assert!(
-            !json.contains("\"swatches\""),
-            "a project with no swatches must write no line for them:\n{json}"
-        );
-
-        let path = dir.path().join("edit.lum");
-        let mut doc = doc_with_item();
-        doc.swatches = vec![
-            Swatch {
-                colour: LinearColour([1.0, 0.0, 0.0, 1.0]),
-                name: Some("Brand red".into()),
-            },
-            Swatch {
-                colour: LinearColour([0.0, 0.25, 0.5, 0.75]),
-                name: None,
-            },
-        ];
-        save(&doc, &path).unwrap();
-        let (loaded, _) = open(&path).unwrap();
-        assert_eq!(loaded.swatches, doc.swatches);
-
-        // An older file: the same project with the key removed, which is what a
-        // `.lum` written before the shelf existed looks like.
-        let older = dir.path().join("older.lum");
-        strip_document_key(&path, &older, "swatches");
-        let (old, _) = open(&older).unwrap();
-        assert!(
-            old.swatches.is_empty(),
-            "a file with no shelf must load with an empty one, not fail"
-        );
     }
 
     /// **The colour settings survive the file, and cost an older one nothing**
@@ -2878,45 +2613,6 @@ mod tests {
             old.colour,
             lumit_core::model::ColourManagement::default(),
             "a file with no colour block loads at the default, not a failure"
-        );
-    }
-
-    /// **A vanished config never holds the project hostage**
-    /// (docs/impl/ocio.md §3.3). It opens, it keeps every name it was given,
-    /// and — unlike footage — it is not reported missing, because a missing
-    /// config is not a missing clip and opening the relink dialogue over it
-    /// would say the wrong thing.
-    #[test]
-    fn a_config_that_vanished_opens_quietly_and_keeps_its_names() {
-        let dir = tempfile::tempdir().unwrap();
-        let config = dir.path().join("aces/config.ocio");
-        fs::create_dir_all(config.parent().unwrap()).unwrap();
-        fs::write(&config, "ocio_profile_version: 2\n").unwrap();
-
-        let path = dir.path().join("edit.lum");
-        let mut doc = doc_with_item();
-        doc.colour.config = Some(lumit_core::model::MediaRef {
-            relative_path: String::new(),
-            absolute_path: config.to_string_lossy().into_owned(),
-            fingerprint: None,
-            extra: serde_json::Map::new(),
-        });
-        if let ProjectItem::Footage(f) = &mut doc.items[0] {
-            f.colour_space = Some("ACEScct".into());
-        }
-        save(&rebase_for_save(&doc, dir.path()), &path).unwrap();
-        fs::remove_file(&config).unwrap();
-
-        let (loaded, _) = open(&path).unwrap();
-        let held = loaded.colour.config.expect("the reference is kept");
-        assert_eq!(held.relative_path.replace('\\', "/"), "aces/config.ocio");
-        let ProjectItem::Footage(f) = &loaded.items[0] else {
-            panic!("expected footage");
-        };
-        assert_eq!(
-            f.colour_space.as_deref(),
-            Some("ACEScct"),
-            "a name is the user's statement about the file; a missing config never drops it"
         );
     }
 
@@ -3040,155 +2736,6 @@ mod tests {
         );
     }
 
-    /// A collected project ships the originals and **not** the proxies:
-    /// the stand-ins are local convenience files, remade in one action, and a
-    /// copy that carried them would be twice the size and open with references
-    /// to files nobody sent.
-    #[test]
-    fn collecting_for_sharing_leaves_the_proxies_behind() {
-        use lumit_core::model::ProxyRef;
-
-        let src = tempfile::tempdir().unwrap();
-        let dest = tempfile::tempdir().unwrap();
-        let clip = src.path().join("clip.bin");
-        fs::write(&clip, vec![3u8; 2048]).unwrap();
-
-        let mut doc = Document::new();
-        let mut item = footage("clip.bin");
-        item.media.relative_path = "clip.bin".into();
-        item.media.absolute_path = clip.to_string_lossy().into_owned();
-        let id = item.id;
-        doc.items.push(ProjectItem::Footage(item));
-        doc.proxies.insert(
-            id,
-            ProxyRef {
-                media: lumit_core::model::MediaRef {
-                    relative_path: "clip_proxy.mov".into(),
-                    absolute_path: src
-                        .path()
-                        .join("clip_proxy.mov")
-                        .to_string_lossy()
-                        .into_owned(),
-                    fingerprint: None,
-                    extra: serde_json::Map::new(),
-                },
-                enabled: true,
-                extra: serde_json::Map::new(),
-            },
-        );
-
-        let collected = collect_for_sharing(&doc, src.path(), dest.path()).unwrap();
-        assert!(collected.missing.is_empty());
-        assert!(
-            collected.doc.proxies.is_empty(),
-            "the copy carries no proxy references"
-        );
-        assert!(
-            !dest.path().join("media/clip_proxy.mov").exists(),
-            "and no proxy file was copied"
-        );
-        // The original did travel, which is the half that must not break.
-        assert!(dest.path().join("media/clip.bin").is_file());
-    }
-
-    /// **A marker can carry a span, and the span survives the file**
-    /// (docs/15-DESIGN.md §12A.1, docs/03-DATA-MODEL.md §11). The redesigned
-    /// ruler draws a marker as a pill that runs from its frame for its
-    /// duration, so the number has to be in the `.lum` and not merely in the
-    /// session — and a marker that is only a moment must stay a moment,
-    /// written as no span at all rather than as a zero-length one.
-    ///
-    /// The second half is the one that would go unnoticed: a `.lum` written
-    /// before markers could span at all must open with its markers as moments,
-    /// not fail to open. Every additive field owes that (docs/10 §1.1), and a
-    /// marker's is easy to miss because markers arrive inside a composition
-    /// rather than at the top of the document.
-    #[test]
-    fn a_markers_duration_round_trips_and_is_absent_when_it_is_a_moment() {
-        use lumit_core::markers::{Marker, MarkerKind};
-        use lumit_core::model::{Composition, LinearColour};
-        use lumit_core::time::{Duration, FrameRate, Rational};
-
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("marked.lum");
-        let rat = |n: i64, d: i64| Rational::new(n, d).unwrap();
-
-        let moment = Marker::user(Uuid::now_v7(), rat(1, 1));
-        let span = Marker {
-            duration: Some(rat(3, 2)),
-            label: "Chorus".into(),
-            ..Marker::user(Uuid::now_v7(), rat(2, 1))
-        };
-        let comp = Composition {
-            graph: None,
-            master_volume_db: 0.0,
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name: "Comp 1".into(),
-            width: 1920,
-            height: 1080,
-            frame_rate: FrameRate::new(25, 1).unwrap(),
-            duration: Duration(rat(10, 1)),
-            background: LinearColour::BLACK,
-            work_area: None,
-            layers: Vec::new(),
-            markers: vec![moment.clone(), span.clone()],
-            motion_blur: Default::default(),
-            extra: serde_json::Map::new(),
-        };
-        let mut doc = Document::new();
-        apply(
-            &mut doc,
-            &Op::AddItem {
-                index: 0,
-                item: Box::new(ProjectItem::Composition(comp)),
-            },
-        )
-        .unwrap();
-
-        save(&doc, &path).unwrap();
-        let (loaded, _) = open(&path).unwrap();
-        let markers = match &loaded.items[0] {
-            ProjectItem::Composition(c) => c.markers.clone(),
-            other => panic!("expected the composition back, got {other:?}"),
-        };
-        assert_eq!(markers, vec![moment.clone(), span.clone()]);
-        assert_eq!(
-            markers[1].duration,
-            Some(rat(3, 2)),
-            "the span is the point of the test"
-        );
-        assert_eq!(markers[0].duration, None, "and a moment stays a moment");
-
-        // A file written before markers could span: the same project with the
-        // key removed from every marker, which is exactly what such a `.lum`
-        // holds.
-        let older = dir.path().join("older.lum");
-        let mut value = document_json(&path);
-        let items = value["items"].as_array_mut().unwrap();
-        for marker in items[0]["Composition"]["markers"].as_array_mut().unwrap() {
-            assert!(
-                marker.as_object_mut().unwrap().remove("duration").is_some(),
-                "duration was not written, so removing it proves nothing"
-            );
-        }
-        save(&serde_json::from_value::<Document>(value).unwrap(), &older).unwrap();
-
-        let (old, _) = open(&older).unwrap();
-        let markers = match &old.items[0] {
-            ProjectItem::Composition(c) => c.markers.clone(),
-            other => panic!("expected the composition back, got {other:?}"),
-        };
-        assert!(
-            markers.iter().all(|m| m.duration.is_none()),
-            "an older file's markers must open as moments, not fail to open"
-        );
-        assert_eq!(markers[1].label, "Chorus", "and keep everything else");
-        assert_eq!(markers[1].kind, MarkerKind::User);
-    }
-
     /// The document JSON inside a `.lum`, as a value a test can pick apart —
     /// the raw file rather than a re-serialised document, so what is checked is
     /// what was actually written.
@@ -3224,15 +2771,6 @@ mod tests {
         let doc: Document = serde_json::from_value(value).unwrap();
         let _ = manifest;
         save(&doc, to).unwrap();
-    }
-
-    #[test]
-    fn manifest_is_first_entry() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("edit.lum");
-        save(&doc_with_item(), &path).unwrap();
-        let mut zip = ZipArchive::new(File::open(&path).unwrap()).unwrap();
-        assert_eq!(zip.by_index(0).unwrap().name(), "manifest.json");
     }
 
     #[test]
@@ -3326,6 +2864,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: false,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),
@@ -3685,6 +3224,32 @@ mod tests {
         assert_eq!(loaded.extra["gen"], serde_json::json!(42));
     }
 
+    // Two Lumits on one project would write one journal, so the second is
+    // turned away for as long as the first holds its claim.
+    #[test]
+    fn a_project_is_claimed_by_one_holder_at_a_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let claims = dir.path().join("open");
+        let project = dir.path().join("scene.lum");
+        fs::write(&project, b"").unwrap();
+        let take = |project: &Path| OpenClaim::take_in(&claims, project);
+
+        let first = take(&project).ok().flatten().expect("nobody has it yet");
+        assert!(first.covers(&project));
+        assert_eq!(
+            take(&project).err(),
+            Some(std::process::id()),
+            "the holder is named"
+        );
+        // Another file is another project.
+        let other = dir.path().join("other.lum");
+        fs::write(&other, b"").unwrap();
+        assert!(take(&other).is_ok_and(|claim| claim.is_some()));
+
+        drop(first);
+        assert!(take(&project).is_ok_and(|claim| claim.is_some()));
+    }
+
     #[test]
     fn journal_appends_reads_and_tolerates_torn_tail() {
         let dir = tempfile::tempdir().unwrap();
@@ -3724,6 +3289,25 @@ mod tests {
         );
         journal.clear().unwrap();
         assert!(journal.read().unwrap().is_empty());
+    }
+
+    /// The cache used to keep an empty folder pair for every project ever made.
+    #[test]
+    fn clearing_a_journal_removes_the_folders_it_made() {
+        let dir = tempfile::tempdir().unwrap();
+        let doc_dir = dir.path().join("a-document");
+        let journal = JournalFile::at_path(doc_dir.join("journal").join("ops.jsonl"));
+        journal
+            .append(&Op::AddItem {
+                index: 0,
+                item: Box::new(ProjectItem::Footage(footage("a.mp4"))),
+            })
+            .unwrap();
+        assert!(doc_dir.join("journal").join("ops.jsonl").is_file());
+
+        journal.clear().unwrap();
+        assert!(!doc_dir.exists(), "the document's folder went with it");
+        assert!(dir.path().is_dir(), "and nothing above that was touched");
     }
 
     /// **A layer's audio insert chain survives the file**
@@ -3819,6 +3403,7 @@ mod tests {
             volume_db: lumit_core::anim::Property::zero(),
             pan: lumit_core::anim::Property::zero(),
             audio_only: true,
+            audio_streams: Default::default(),
             adjustment: false,
             retime: None,
             interpolation: Default::default(),

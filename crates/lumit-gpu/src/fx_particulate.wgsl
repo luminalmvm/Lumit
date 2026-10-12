@@ -116,6 +116,24 @@ struct Params {
     // Emit from image's Threshold, 0..1: how bright a pixel must be
     // before it stands any chance at all. Unread in the other two modes.
     field_threshold: f32,
+
+    // The size of the "who stood" target, or 0 for an ordinary draw. When set,
+    // point i fills pixel i of that target if the field kept it, so the host
+    // can read the answer back.
+    probe_w: u32,
+    probe_h: u32,
+
+    // How a sprite sits on its point, set by the generic points draw for
+    // Clone to points. Each is the amount past the plain square of the point's
+    // size, so all nought is that square: the stamp's width and height as
+    // multiples of the point's size less 1, the place on it that sits on the
+    // point less a half, and how many times the picture's size the stamp is
+    // less 1.
+    stamp_unit: vec2<f32>,
+    stamp_anchor: vec2<f32>,
+    stamp_uv: vec2<f32>,
+    // Corner radius, px on the stamp of a point whose size is 100.
+    stamp_corner: f32,
 };
 
 // The field-rejection modes, matching `lumit_gpu::fx::FieldTest`.
@@ -191,6 +209,9 @@ fn r_rot(c: u32) -> u32 { return 9u * c; }
 fn r_colour(c: u32) -> u32 { return 10u * c; }
 fn r_id(c: u32) -> u32 { return 12u * c; }
 fn r_tail(c: u32) -> u32 { return 14u * c; }
+// Two words a point: how far its size is stretched across and down, stored
+// as the amount past 1 so a region nobody wrote reads as unstretched.
+fn r_stretch(c: u32) -> u32 { return 17u * c; }
 
 // == lumit_core::fx::points::Projection::apply, given the three rows.
 //
@@ -616,6 +637,7 @@ struct VsOut {
     @location(1) @interpolate(flat) tail: vec2<f32>,
     @location(2) @interpolate(flat) colour: vec4<f32>,
     @location(3) @interpolate(flat) geom: vec4<f32>, // radius, edge, size, rotation
+    @location(4) @interpolate(flat) stretch: vec2<f32>,
 };
 
 // One instanced quad per live particle: a capsule's bounding box for a disc or
@@ -689,6 +711,10 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     if (vi == 2u || vi == 3u) { corner = vec2<f32>(-1.0, 1.0); }
     if (vi == 5u) { corner = vec2<f32>(1.0, 1.0); }
 
+    let stretch = vec2<f32>(
+        1.0 + bitcast<f32>(dstream[r_stretch(cap) + ii * 2u]),
+        1.0 + bitcast<f32>(dstream[r_stretch(cap) + ii * 2u + 1u]),
+    );
     var centre = head;
     var ax = vec2<f32>(1.0, 0.0);
     var half_long = radius;
@@ -698,16 +724,27 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
         // corners reach √2 of the half-side, and the fragment discards what
         // falls outside the sprite's own 0..1 square.
         ax = vec2<f32>(cos(rot), sin(rot));
-        half_long = radius;
-        half_wide = radius;
+        let unit = vec2<f32>(1.0, 1.0) + dp.stamp_unit;
+        half_long = radius * stretch.x * unit.x;
+        half_wide = radius * stretch.y * unit.y;
+        // Moved so the stamp's anchor is what sits on the point, and what it
+        // turns about.
+        centre = head
+            - ax * (dp.stamp_anchor.x * 2.0 * half_long)
+            - vec2<f32>(-ax.y, ax.x) * (dp.stamp_anchor.y * 2.0 * half_wide);
     } else {
         let seg = head - tail;
         let len = length(seg);
         if (len > 1e-6) {
             ax = seg / len;
+        } else if (stretch.x != 1.0 || stretch.y != 1.0) {
+            // A stretched dot is an ellipse in the point's own turned frame.
+            ax = vec2<f32>(cos(rot), sin(rot));
+            half_long = radius * stretch.x;
+            half_wide = radius * stretch.y;
         }
         centre = (head + tail) * 0.5;
-        half_long = len * 0.5 + radius;
+        half_long = len * 0.5 + half_long;
     }
     let ay = vec2<f32>(-ax.y, ax.x);
     // A pixel of slack all round: coverage is measured at pixel centres, and a
@@ -727,6 +764,32 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     // `over` that is the dissolve exactly, so no second pass runs.
     out.colour = vec4<f32>(rg.x, rg.y, ba.x, ba.y) * dp.mix;
     out.geom = vec4<f32>(radius, edge, size, rot);
+    out.stretch = stretch;
+    if (dp.probe_w != 0u) {
+        // One whole pixel per point, by index, white if the point stood.
+        let cell = vec2<f32>(f32(ii % dp.probe_w), f32(ii / dp.probe_w));
+        let at = cell + corner * 0.5 + vec2<f32>(0.5, 0.5);
+        out.clip = vec4<f32>(
+            at.x / f32(dp.probe_w) * 2.0 - 1.0,
+            1.0 - at.y / f32(dp.probe_h) * 2.0,
+            0.0,
+            1.0,
+        );
+        out.head = cell + vec2<f32>(0.5, 0.5);
+        out.tail = out.head;
+        out.colour = vec4<f32>(select(0.0, 1.0, size > 0.0));
+        if (dp.field_mode == FIELD_NONE) {
+            // No test to answer, so the pixel carries the field's own colour
+            // under the point.
+            let at_px = vec2<i32>(
+                clamp(i32(floor(head.x)), 0, i32(dp.target_w) - 1),
+                clamp(i32(floor(head.y)), 0, i32(dp.target_h) - 1),
+            );
+            out.colour = textureLoad(field_src, at_px, 0);
+        }
+        out.geom = vec4<f32>(8.0, 1.0, 1.0, 0.0);
+        out.stretch = vec2<f32>(1.0, 1.0);
+    }
     return out;
 }
 
@@ -773,7 +836,8 @@ fn pt_fs(v: VsOut) -> @location(0) vec4<f32> {
         let s = sin(rot);
         let c = cos(rot);
         let local = vec2<f32>(dxy.x * c + dxy.y * s, -dxy.x * s + dxy.y * c);
-        let uv = local / size + vec2<f32>(0.5, 0.5);
+        let unit = vec2<f32>(1.0, 1.0) + dp.stamp_unit;
+        let uv = local / (size * v.stretch * unit) + vec2<f32>(0.5, 0.5) + dp.stamp_anchor;
         // Outside the sprite's own square contributes nothing — and nothing,
         // under a premultiplied `over`, is a transparent black fragment. No
         // `discard`: the blend already leaves the picture untouched, and a
@@ -781,9 +845,48 @@ fn pt_fs(v: VsOut) -> @location(0) vec4<f32> {
         if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
             return vec4<f32>(0.0, 0.0, 0.0, 0.0);
         }
+        // Rounded corners, measured on the stamp of a point whose size is 100
+        // so they turn and scale with it.
+        var cover = 1.0;
+        if (dp.stamp_corner > 0.0) {
+            let b = 50.0 * unit;
+            let r = min(dp.stamp_corner, min(b.x, b.y));
+            let d = abs(uv - vec2<f32>(0.5, 0.5)) * 100.0 * unit - (b - vec2<f32>(r, r));
+            if (d.x > 0.0 && d.y > 0.0) {
+                // Half a pixel of ramp, as a disc's edge has.
+                let px = size * min(v.stretch.x, v.stretch.y) / 100.0;
+                cover = clamp((r - length(d)) * px + 0.5, 0.0, 1.0);
+            }
+        }
+        // More or less of the picture across the stamp. Past the picture's
+        // own edge the stamp is empty.
+        let at = uv + (uv - vec2<f32>(0.5, 0.5)) * dp.stamp_uv;
+        if (at.x < 0.0 || at.x > 1.0 || at.y < 0.0 || at.y > 1.0) {
+            return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+        }
         // Both are premultiplied, so the tint is the plain product.
-        return pt_sprite_tap(uv.x, uv.y) * v.colour;
+        return pt_sprite_tap(at.x, at.y) * v.colour * cover;
     }
-    let cov = clamp((radius - pt_seg_distance(q, v.tail, v.head)) / v.geom.y, 0.0, 1.0);
+    if (v.stretch.x != 1.0 || v.stretch.y != 1.0) {
+        // The ellipse of a stretched dot, measured in its own turned frame.
+        let rot = v.geom.w;
+        let dxy = q - v.head;
+        let s = sin(rot);
+        let c = cos(rot);
+        let local = vec2<f32>(dxy.x * c + dxy.y * s, -dxy.x * s + dxy.y * c) / v.stretch;
+        let oval = (radius - length(local)) * min(v.stretch.x, v.stretch.y) / v.geom.y;
+        return v.colour * clamp(oval, 0.0, 1.0);
+    }
+    let far = pt_seg_distance(q, v.tail, v.head);
+    var cov = clamp((radius - far) / v.geom.y, 0.0, 1.0);
+    // == lumit_core::fx::points::capsule_cover. A capsule under 2 px wide is
+    // measured as the share of the pixel its width fills, so a 1 px line lying
+    // between two pixel rows puts half its light in each and does not vanish.
+    // A dot, and anything 2 px wide or more, keeps the soft edge above.
+    if (radius < 1.0 && (v.tail.x != v.head.x || v.tail.y != v.head.y)) {
+        let boxed = min(clamp(radius + 0.5 - far, 0.0, 1.0), 2.0 * radius);
+        let blend = clamp(2.0 * radius - 1.0, 0.0, 1.0);
+        cov = boxed + (cov - boxed) * blend;
+    }
     return v.colour * cov;
 }

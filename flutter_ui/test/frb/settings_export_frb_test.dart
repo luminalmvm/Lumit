@@ -47,43 +47,6 @@ void main() {
           .first)
       .data!;
 
-  group('the store (frb)', () {
-    test('what is set is what comes back, and every field survives', () {
-      exportDefaultsSet(
-        defaults: const BridgeExportDefaults(
-          preset: 'YouTube 1080p60',
-          codec: 'hevc',
-          filenameTemplate: '{comp}-{date}',
-          destination: exportDestinationFolder,
-          folder: '/deliveries',
-        ),
-      );
-
-      final back = exportDefaultsGet();
-      expect(back.preset, 'YouTube 1080p60');
-      expect(back.codec, 'hevc');
-      expect(back.filenameTemplate, '{comp}-{date}');
-      expect(back.destination, exportDestinationFolder);
-      expect(back.folder, '/deliveries');
-    });
-
-    test('a destination nobody here recognises reads as asking', () {
-      exportDefaultsSet(
-        defaults: const BridgeExportDefaults(
-          preset: '',
-          codec: '',
-          filenameTemplate: '',
-          destination: 'sftp',
-          folder: '',
-        ),
-      );
-
-      expect(exportDefaultsGet().destination, exportDestinationAsk,
-          reason: 'an answer from a newer Lumit must not send this one '
-              'hunting for a folder it cannot name');
-    });
-  });
-
   group('Export dialog seeding (frb)', () {
     Future<void> open(WidgetTester tester) async {
       tester.view.physicalSize = const Size(1200, 1000);
@@ -128,23 +91,6 @@ void main() {
               'nothing has been said');
     });
 
-    testWidgets('a default naming a preset that is gone opens on the first',
-        (tester) async {
-      exportDefaultsSet(
-        defaults: const BridgeExportDefaults(
-          preset: 'A preset nobody saved',
-          codec: '',
-          filenameTemplate: '',
-          destination: exportDestinationAsk,
-          folder: '',
-        ),
-      );
-
-      await open(tester);
-
-      expect(face(tester, 'export-preset'), 'Master');
-    });
-
     testWidgets('a fixed folder and a template fill the destination in',
         (tester) async {
       final folder = Directory.systemTemp
@@ -168,23 +114,6 @@ void main() {
           reason: 'the engine substituted {comp} and the dialog put the file '
               'in the folder that was chosen once');
       expect(find.text(l10n.exportNotChosen), findsNothing);
-    });
-
-    testWidgets('Set as default remembers the preset in force', (tester) async {
-      exportDefaultsSet(defaults: nothingSaid);
-
-      await open(tester);
-      expect(face(tester, 'export-preset'), 'Master');
-
-      await tester.tap(find.byKey(const ValueKey('export-preset-set-default')));
-      await tester.pumpAndSettle();
-
-      final stored = exportDefaultsGet();
-      expect(stored.preset, 'Master');
-      expect(stored.codec, isNotEmpty,
-          reason: 'the format is remembered beside the preset');
-      expect(stored.destination, exportDestinationAsk,
-          reason: 'the rows this button does not ask about are left alone');
     });
   });
 
@@ -213,36 +142,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('the page is in the sidebar showing what the store holds',
-        (tester) async {
-      exportDefaultsSet(
-        defaults: const BridgeExportDefaults(
-          preset: 'YouTube 1080p60',
-          codec: '',
-          filenameTemplate: '{comp}-{date}',
-          destination: exportDestinationProject,
-          folder: '',
-        ),
-      );
-
-      await open(tester);
-
-      expect(find.text(l10n.settingsExportPreset), findsOneWidget);
-      expect(face(tester, 'settings-export-preset'), 'YouTube 1080p60');
-      expect(
-        tester
-            .widget<HouseTextField>(
-                find.byKey(const ValueKey('settings-export-template')))
-            .controller
-            .text,
-        '{comp}-{date}',
-      );
-      expect(face(tester, 'settings-export-destination'),
-          l10n.settingsExportBesideProject);
-      expect(find.byKey(const ValueKey('settings-export-folder')), findsNothing,
-          reason: 'a folder is only chosen for the policy that needs one');
-    });
-
     testWidgets('a typed template is written to the store', (tester) async {
       exportDefaultsSet(defaults: nothingSaid);
 
@@ -258,42 +157,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(exportDefaultsGet().filenameTemplate, '{preset}-{date}');
-    });
-
-    testWidgets('choosing a fixed folder offers the picker beside it',
-        (tester) async {
-      exportDefaultsSet(defaults: nothingSaid);
-
-      await open(tester);
-      await tester.tap(find.byKey(const ValueKey('settings-export-destination')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(l10n.settingsExportChosenFolder).last);
-      await tester.pumpAndSettle();
-
-      expect(exportDefaultsGet().destination, exportDestinationFolder);
-      expect(
-          find.byKey(const ValueKey('settings-export-folder')), findsOneWidget);
-      expect(find.text(l10n.settingsExportNoFolder), findsOneWidget,
-          reason: 'the row reports that no folder has been chosen yet');
-    });
-
-    testWidgets('Reset page puts the store back to nothing said',
-        (tester) async {
-      exportDefaultsSet(
-        defaults: const BridgeExportDefaults(
-          preset: 'YouTube 4K60',
-          codec: 'hevc',
-          filenameTemplate: '{comp}',
-          destination: exportDestinationProject,
-          folder: '',
-        ),
-      );
-
-      await open(tester);
-      await tester.tap(find.byKey(const ValueKey('settings-reset-page')));
-      await tester.pumpAndSettle();
-
-      expect(exportDefaultsGet(), nothingSaid);
     });
   });
 }

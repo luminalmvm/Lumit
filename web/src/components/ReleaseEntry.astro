@@ -9,8 +9,10 @@ interface Props {
   single?: boolean;
   /** Last entry on the index: the rule under the notes would dangle, so drop it. */
   last?: boolean;
+  /** The newest release on the index, which says so beside its version. */
+  latest?: boolean;
 }
-const { id, versionNumber, date, single = false, last = false } = Astro.props;
+const { id, versionNumber, date, single = false, last = false, latest = false } = Astro.props;
 
 // The version pill and date. On the single-release page they are static text;
 // on the index they are the link into the release's own page.
@@ -19,30 +21,63 @@ const railProps = single ? {} : { href: `/releases/${id}` };
 ---
 
 {/* Starlog's shape: a sticky left rail carrying the version, the notes beside
-    it. Below the tablet breakpoint the rail stacks above its notes instead. */}
-<article class="flex w-full flex-col md:flex-row">
-  <div class="mt-10 shrink-0 grow-0 basis-0 md:mt-16 md:basis-[200px] lg:basis-[240px]">
+    it. The notes hang off one line down the page with a keyframe on it for
+    each release, filled for the newest. Below the tablet breakpoint the rail
+    stacks above its notes instead. */}
+<article id={`v${versionNumber}`} class="entry flex w-full scroll-mt-24 flex-col md:flex-row">
+  <div class="mt-10 shrink-0 grow-0 basis-0 md:mt-14 md:basis-[200px] lg:basis-[240px]">
     <div class="md:sticky md:top-[86px]">
       <Rail {...railProps} class="inline-block no-underline">
-        <span
-          class="inline-block rounded-ctl border border-line bg-ink-2 px-2.5 py-1 font-mono
-                 text-[13px] leading-none text-fg transition-colors hover:border-line-2"
-        >
-          v{versionNumber}
+        <span class="flex items-center gap-2.5">
+          <span
+            class="inline-block rounded-ctl border border-line-2 bg-ink-2 px-2.5 py-1.5 font-mono
+                   text-[13px] leading-none text-fg transition-colors hover:border-accent-2"
+          >
+            v{versionNumber}
+          </span>
+          {latest && <span class="tag text-accent-2">Latest</span>}
         </span>
         <ReleaseDate
           date={date}
-          class="mt-2 block font-mono text-[12.5px] text-fg-3 max-md:mt-0 max-md:ml-3 max-md:inline"
+          class="mt-3 block font-mono text-[12px] text-fg-3"
         />
       </Rail>
     </div>
   </div>
   <div
     class:list={[
-      "release-prose min-w-0 py-6 md:py-16",
-      !single && !last && "border-b border-line",
+      "notes release-prose min-w-0 py-6 md:py-14",
+      !single && !last && "max-md:border-b max-md:border-line",
     ]}
   >
+    <i class:list={["key mark", !latest && !single && "key-hollow"]} aria-hidden="true"></i>
     <slot />
   </div>
 </article>
+
+<style>
+  .mark {
+    display: none;
+  }
+  @media (min-width: 768px) {
+    .notes {
+      position: relative;
+      padding-left: 48px;
+      border-left: 1px solid var(--color-line);
+    }
+    .mark {
+      --k: var(--color-accent-2);
+      position: absolute;
+      top: 64px;
+      left: -5px;
+      display: block;
+      width: 9px;
+      height: 9px;
+      background-color: var(--color-ink);
+    }
+    .mark:not(.key-hollow) {
+      background-color: var(--k);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--k) 18%, transparent);
+    }
+  }
+</style>

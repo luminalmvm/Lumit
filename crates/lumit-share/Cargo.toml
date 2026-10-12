@@ -1,0 +1,59 @@
+[package]
+name = "lumit-share"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[dependencies]
+# What a password to a shared project is hashed with, so that trying a list
+# of them costs memory as well as time. RustCrypto's own, pure Rust, MIT or
+# Apache-2.0, maintained. Only the hash is built, without the password file
+# format its default features bring.
+argon2 = { version = "0.5", default-features = false, features = ["alloc"] }
+lumit-core = { path = "../lumit-core" }
+# Finding this machine's own copy of footage a peer names.
+lumit-project = { path = "../lumit-project" }
+# What a host and a guest say to a relay, and the relay itself for the tests.
+lumit-relay = { path = "../lumit-relay" }
+# The name of a host's room at a relay, worked out from the invite's secret
+# so that the relay cannot work the secret out from it. Already in the lock,
+# and what lumit-peer keys its own proofs with.
+blake3 = "1"
+# Seals what a project kept online stores on Lumit's server, which is not to
+# read it. Noise only covers a connection, and nothing here is one. The same
+# cipher snow uses, so already in the lock. Without its default features,
+# which would bring a second source of randomness in.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+# The secret an invite carries, from the operating system's own source, as
+# lumit-peer takes its own. Already in the lock.
+getrandom = "0.4"
+# An invite's key is written as text. Already in the lock.
+hex = "0.4"
+# Deflate, for the whole document a project kept online stores. Already in
+# the lock, and what lumit-media inflates with.
+miniz_oxide = "0.8"
+parking_lot = "0.12"
+# Reading what a router says about itself when it is asked to open a port.
+# Already in the lock.
+roxmltree = "0.21"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The Noise protocol, for the encrypted channel between a host and its guests.
+# The standard library has no cryptography and this is not the place to write
+# any. Pure Rust, Apache-2.0 or MIT, maintained. Only the one cipher suite the
+# channel uses is built, and without snow's `std` feature, which would bring
+# in ring and its C.
+snow = { version = "0.10", default-features = false, features = [
+    "use-blake2",
+    "use-chacha20poly1305",
+    "use-curve25519",
+    "use-getrandom",
+] }
+thiserror = "2"
+uuid = { version = "1", features = ["v7", "serde"] }
+
+[lints]
+workspace = true

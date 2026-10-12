@@ -4,6 +4,7 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
+import '../../theme/motion.dart';
 import '../../theme/theme.dart';
 
 /// The devices whose drags mean "move this thing" — **the trackpad's
@@ -69,6 +70,15 @@ class ThemeScope extends InheritedWidget {
 
   static ThemeScope of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<ThemeScope>()!;
+
+  /// The scope, or null where there is none above [context]: an overlay entry
+  /// in a test that never mounted one.
+  static ThemeScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ThemeScope>();
+
+  /// How the chrome moves under this shape at this animation level
+  /// (docs/15-DESIGN.md §8). Every animated widget reads its timing here.
+  Motion get motion => Motion.of(theme.shape, animationLevel);
 
   @override
   bool updateShouldNotify(ThemeScope old) =>

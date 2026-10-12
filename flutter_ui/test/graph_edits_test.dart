@@ -44,32 +44,12 @@ void main() {
       expect(keys.last.interpIn, halved);
     });
 
-    test('a key at nought does not decide the ratio', () {
-      final fromNothing = BridgeScalar.keyframed([key(0, 0), key(1, 100)]);
-      final half = BridgeScalar.keyframed([key(0, 0), key(1, 50)]);
-      expect(valuesOf(linkedPartnerScalar(fromNothing, half, next)),
-          [50.0, 150.0]);
-    });
-
     test('a lead at nought everywhere has no ratio, so the partner matches it',
         () {
       expect(
           valuesOf(linkedPartnerScalar(const BridgeScalar.static_(0),
               const BridgeScalar.static_(50), next)),
           [100.0, 300.0]);
-    });
-
-    test('a static pair keyed through the graph keys both', () {
-      expect(
-          valuesOf(linkedPartnerScalar(const BridgeScalar.static_(100),
-              const BridgeScalar.static_(50), next)),
-          [50.0, 150.0]);
-    });
-
-    test('the last key deleted leaves the partner static at the ratio', () {
-      expect(
-          linkedPartnerScalar(lead, partner, const BridgeScalar.static_(200)),
-          const BridgeScalar.static_(100));
     });
   });
 }

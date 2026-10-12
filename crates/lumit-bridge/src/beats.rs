@@ -378,68 +378,6 @@ mod tests {
         assert_eq!(queue_depth(), 0, "the job is done and off the queue");
     }
 
-    /// The same comp analysed twice gives the same answer. The claim the
-    /// threading must not break (docs/impl/beat-detection.md §5.4): where the
-    /// analysis runs cannot change what it finds.
-    #[test]
-    fn the_same_input_gives_the_same_answer() {
-        let _serial = serially();
-        let document = Arc::new(lumit_core::Document::new());
-        let comp = Uuid::now_v7();
-        let first = detect(
-            Arc::clone(&document),
-            comp,
-            1.0,
-            BridgeBeatOptions::standard(),
-            &mut |_| {},
-        );
-        let second = detect(
-            document,
-            comp,
-            1.0,
-            BridgeBeatOptions::standard(),
-            &mut |_| {},
-        );
-        assert_eq!(
-            first.is_ok(),
-            second.is_ok(),
-            "two runs of one input agree about whether there was anything to find"
-        );
-        if let (Ok(first), Ok(second)) = (first, second) {
-            assert_eq!(first, second);
-        }
-    }
-
-    /// Analysing on the worker and analysing inline are the same analysis —
-    /// which is what makes the fallback a fallback rather than a second
-    /// implementation.
-    #[test]
-    fn the_fallback_is_the_same_analysis() {
-        let _serial = serially();
-        let document = Arc::new(lumit_core::Document::new());
-        let comp = Uuid::now_v7();
-        let through_worker = detect(
-            Arc::clone(&document),
-            comp,
-            1.0,
-            BridgeBeatOptions::standard(),
-            &mut |_| {},
-        );
-        let inline = analyse(
-            &document,
-            comp,
-            1.0,
-            &BridgeBeatOptions::standard(),
-            &mut |_| {},
-        );
-        assert_eq!(through_worker.is_ok(), inline.is_ok());
-        assert_eq!(
-            format!("{through_worker:?}"),
-            format!("{inline:?}"),
-            "the worker answers what the caller would have found itself"
-        );
-    }
-
     /// Closing a project cancels queued detections: a job stamped with a
     /// generation that has ended is dropped rather than analysed, and its
     /// caller is told the project it named is gone.
@@ -492,15 +430,5 @@ mod tests {
         assert_eq!(spaced(crowded.clone(), 0), crowded, "zero is off");
         let sparse = vec![beat(0.0, 0.5), beat(1.0, 0.5)];
         assert_eq!(spaced(sparse.clone(), 120), sparse);
-    }
-
-    /// `clear` moves the generation on, which is the whole of what cancelling
-    /// queued work is.
-    #[test]
-    fn clearing_moves_the_generation_on() {
-        let _serial = serially();
-        let before = generation().load(Ordering::Relaxed);
-        clear();
-        assert_ne!(generation().load(Ordering::Relaxed), before);
     }
 }

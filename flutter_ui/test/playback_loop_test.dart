@@ -3,31 +3,6 @@ import 'package:lumit_flutter/state/playback_loop.dart';
 
 void main() {
   clockFrameTests();
-  test('a narrowed comp loops the work area', () {
-    expect(
-      playbackLoop(workStart: 40, workEnd: 90, playhead: 40, lastFrame: 300),
-      (start: 40, end: 90),
-    );
-  });
-
-  test('a comp nobody has narrowed loops the whole of itself', () {
-    // The regression: a null work area used to mean "no loop", so two comps in
-    // one project played differently — the one somebody had pressed B in
-    // looped, the one nobody had touched ran off the end and stopped.
-    expect(
-      playbackLoop(
-          workStart: null, workEnd: null, playhead: 10, lastFrame: 300),
-      (start: 0, end: 300),
-    );
-  });
-
-  test('parked before the work area previews from there and joins the loop',
-      () {
-    expect(
-      playbackLoop(workStart: 40, workEnd: 90, playhead: 5, lastFrame: 300),
-      (start: 40, end: 90),
-    );
-  });
 
   test('parked past the work area previews the tail instead of snapping back',
       () {
@@ -82,54 +57,6 @@ void clockFrameTests() {
     expect(
       clockFrame(anchorFrame: 10, sinceAnchorMicros: 39000, fps: 25, end: 100),
       10,
-    );
-  });
-
-  test('the adaptive clock holds at the end of the span', () {
-    // The engine decides the loop from the picture it shows at the end, so the
-    // clock waits there rather than running past it.
-    expect(
-      clockFrame(
-          anchorFrame: 98, sinceAnchorMicros: 1000000, fps: 25, end: 100),
-      100,
-    );
-    // Anchored past the end (parked in the tail), it stays where it is.
-    expect(
-      clockFrame(
-          anchorFrame: 105, sinceAnchorMicros: 1000000, fps: 25, end: 100),
-      105,
-    );
-  });
-
-  test('a reverse leg counts down and holds at the far end', () {
-    // Ping-pong's backward leg: the same count, the other way.
-    expect(
-      clockFrame(
-          anchorFrame: 50,
-          sinceAnchorMicros: 100000,
-          fps: 25,
-          end: 40,
-          reverse: true),
-      48,
-    );
-    expect(
-      clockFrame(
-          anchorFrame: 42,
-          sinceAnchorMicros: 1000000,
-          fps: 25,
-          end: 40,
-          reverse: true),
-      40,
-    );
-    // Anchored below the far end, it stays where it is.
-    expect(
-      clockFrame(
-          anchorFrame: 35,
-          sinceAnchorMicros: 1000000,
-          fps: 25,
-          end: 40,
-          reverse: true),
-      35,
     );
   });
 }

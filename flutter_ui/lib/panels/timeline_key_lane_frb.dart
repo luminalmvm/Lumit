@@ -52,6 +52,12 @@ class KeyLane extends StatefulWidget {
   final List<SnapTarget> snapTargets;
   final Set<String> selectedKeys;
 
+  /// The keys of this lane that other people in a shared project have
+  /// selected, by index, with the colour of each person who has it. Ringed.
+  /// The layer Timeline rings its lanes from one overlay instead and leaves
+  /// this empty.
+  final Map<int, List<Color>> others;
+
   /// The block stretch in flight. A key this gesture holds draws where
   /// the stretch puts it, so the diamonds travel with the box rather than
   /// waiting for the release — the same live reading a bar drag gives.
@@ -86,6 +92,7 @@ class KeyLane extends StatefulWidget {
     required this.barShift,
     required this.snapTargets,
     required this.selectedKeys,
+    this.others = const {},
     required this.stretch,
     required this.onSelectKey,
     required this.onKeyMenu,
@@ -394,6 +401,11 @@ class _KeyLaneState extends State<KeyLane> {
               // its interpolation wherever it is drawn, and says it at the
               // size it is aimed at.
               shapes: [for (final k in widget.keys) keyShapeOf(k)],
+              rings: [
+                for (final held in widget.others.entries)
+                  for (var i = 0; i < held.value.length; i++)
+                    (held.key, held.value[i], i),
+              ],
             ),
           ),
         ),

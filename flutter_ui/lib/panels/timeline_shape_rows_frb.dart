@@ -21,6 +21,7 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'text_animator_rows_frb.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
+import 'gradient_stops_popover.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_mask_rows_frb.dart';
@@ -328,9 +329,6 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
 
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
 
-  void _commitKeyed(double v) =>
-      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -345,7 +343,7 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(strokeValueLabel(widget.value),
+          child: Text(t.propertyCase(strokeValueLabel(widget.value)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(
@@ -387,15 +385,14 @@ class _StrokeValueRowState extends State<StrokeValueRow> {
     }
     // Animated: the field shows what the curve reads at the playhead, and an
     // edit writes the key there.
-    return KeyedValueField(
+    return PlayheadKeyedField(
       fieldKey: key,
-      value:
-          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      scalar: scalar,
+      comp: widget.comp,
       min: 0,
       max: 100,
-      decimals: 1,
       suffix: '%',
-      onCommit: _commitKeyed,
+      onWrite: _write,
     );
   }
 }
@@ -460,9 +457,6 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
 
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
 
-  void _commitKeyed(double v) =>
-      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
-
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -477,7 +471,7 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
         ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(textAnimatorValueLabel(widget.value),
+          child: Text(t.propertyCase(textAnimatorValueLabel(widget.value)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(
@@ -512,14 +506,13 @@ class _AnimatorValueRowState extends State<AnimatorValueRow> {
     }
     // Animated: the field shows what the curve reads at the playhead, and an
     // edit writes the key there.
-    return KeyedValueField(
+    return PlayheadKeyedField(
       fieldKey: key,
-      value:
-          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      scalar: scalar,
+      comp: widget.comp,
       min: -100000,
       max: 100000,
-      decimals: 1,
-      onCommit: _commitKeyed,
+      onWrite: _write,
     );
   }
 }
@@ -535,6 +528,9 @@ class ShapeValueRow extends StatefulWidget {
   final LayerReference layer;
   final BridgeShapeItem item;
   final ShapeValue value;
+
+  /// Which gradient stop the row is for, on the two values a stop has.
+  final int stop;
   final ValueColumn valueColumn;
   final int playheadFrame;
   final ValueChanged<int> onSeek;
@@ -545,6 +541,7 @@ class ShapeValueRow extends StatefulWidget {
     required this.layer,
     required this.item,
     required this.value,
+    this.stop = 0,
     required this.valueColumn,
     required this.playheadFrame,
     required this.onSeek,
@@ -559,9 +556,11 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   double? _staged;
   final PreviewThrottle _throttle = PreviewThrottle();
 
-  BridgeScalar get _scalar => shapeScalarOf(widget.item, widget.value);
+  BridgeScalar get _scalar =>
+      shapeScalarOf(widget.item, widget.value, stop: widget.stop);
 
-  String get _rowKey => 'tl-shape-${widget.value.name}-${widget.item.id}';
+  String get _rowKey => 'tl-shape-${widget.value.name}-${widget.item.id}'
+      '${isGradientStopValue(widget.value) ? '-${widget.stop}' : ''}';
 
   /// The trim's two ends are a per cent of the path's own length; its offset is
   /// degrees, because degrees go round; the dashes are lengths in layer pixels.
@@ -579,6 +578,12 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientEndX ||
         ShapeValue.gradientEndY =>
           (-10000, 10000, ' px'),
+        // How opaque each end of the ramp is.
+        ShapeValue.gradientStartOpacity ||
+        ShapeValue.gradientEndOpacity ||
+        ShapeValue.gradientStopPosition ||
+        ShapeValue.gradientStopOpacity =>
+          (0, 100, '%'),
         ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
@@ -623,7 +628,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
           contents: [
             for (final i in widget.layer.getShapeContents())
               if (i.id == widget.item.id)
-                shapeWithScalar(i, widget.value, v)
+                shapeWithScalar(i, widget.value, v, stop: widget.stop)
               else
                 i,
           ],
@@ -641,7 +646,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         contents: [
           for (final i in widget.layer.getShapeContents())
             if (i.id == widget.item.id)
-              shapeWithScalar(i, widget.value, v)
+              shapeWithScalar(i, widget.value, v, stop: widget.stop)
             else
               i,
         ],
@@ -655,9 +660,6 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
   }
 
   void _commitStatic(num v) => _write(BridgeScalar.static_(v.toDouble()));
-
-  void _commitKeyed(double v) =>
-      _write(scalarWithValueAt(_scalar, v, widget.comp, widget.playheadFrame));
 
   @override
   Widget build(BuildContext context) {
@@ -686,7 +688,9 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
           ),
         const SizedBox(width: 4),
         Expanded(
-          child: Text(shapeValueLabel(widget.value),
+          child: Text(
+              t.propertyCase(
+                  shapeValueLabel(widget.value, stop: widget.stop)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(
@@ -732,15 +736,44 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
     }
     // Animated: the field shows what the curve reads at the playhead, and an
     // edit writes the key there.
-    return KeyedValueField(
+    return PlayheadKeyedField(
       fieldKey: key,
-      value:
-          sampledScalar(scalar, timeOfFrame(widget.comp, widget.playheadFrame)),
+      scalar: scalar,
+      comp: widget.comp,
       min: _min,
       max: _max,
-      decimals: 1,
       suffix: _suffix,
-      onCommit: _commitKeyed,
+      onWrite: _write,
+    );
+  }
+}
+
+/// A gradient drawn small, as the button that opens its editor.
+class _RampChip extends StatelessWidget {
+  final GradientRamp ramp;
+
+  /// Called with where the editor should open, in window coordinates.
+  final ValueChanged<Offset> onOpen;
+
+  const _RampChip({super.key, required this.ramp, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        final box = context.findRenderObject();
+        if (box is! RenderBox) return;
+        onOpen(box.localToGlobal(Offset(0, box.size.height + 4)));
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: CustomPaint(
+          size: const Size(96, 18),
+          painter: GradientRampPainter(ramp: ramp, theme: t),
+        ),
+      ),
     );
   }
 }
@@ -821,6 +854,143 @@ class ShapePaintRow extends StatelessWidget {
     );
   }
 
+  /// One of the gradient's numbers as it stands: its own value, or what it
+  /// reads at the playhead when it is keyed.
+  double _now(BridgeScalar scalar, LumitUiState ui) {
+    if (scalar is BridgeScalar_Static) return scalar.field0;
+    final comp = ui.selectedComp;
+    if (comp == null) return 100;
+    return sampledScalar(scalar, timeOfFrame(comp, ui.playheadFrame.value));
+  }
+
+  /// The gradient as its editor holds it, each stop named by where it is in
+  /// the item's list.
+  GradientRamp _rampOf(BridgeShapeItem i, LumitUiState ui) => GradientRamp(
+        startColour: i.fill ?? _defaultEnd,
+        startOpacity: _now(i.gradientStartOpacity, ui),
+        endColour: i.gradientColour ?? _defaultEnd,
+        endOpacity: _now(i.gradientEndOpacity, ui),
+        between: [
+          for (final (index, s) in i.gradientStops.indexed)
+            RampStop(
+              id: index,
+              position: _now(s.position, ui),
+              colour: s.colour,
+              opacity: _now(s.opacity, ui),
+            ),
+        ],
+      );
+
+  /// [was] holding [to] now. A keyed number takes a key at the playhead, and
+  /// one an expression drives is left to the expression.
+  BridgeScalar _held(BridgeScalar was, double to, LumitUiState ui) {
+    if (was is BridgeScalar_Static) return BridgeScalar.static_(to);
+    final comp = ui.selectedComp;
+    if (was is! BridgeScalar_Keyframed || comp == null) return was;
+    if ((_now(was, ui) - to).abs() < 0.05) return was;
+    return scalarWithValueAt(was, to, comp, ui.playheadFrame.value);
+  }
+
+  /// [i] with the editor's ramp written into it. [known] is each of the
+  /// editor's stops as it was last written, which is where a stop's keys are.
+  BridgeShapeItem _withRamp(BridgeShapeItem i, GradientRamp ramp,
+          LumitUiState ui, Map<int, BridgeGradientStop> known) =>
+      shapeItemWith(
+        i,
+        fill: ramp.startColour,
+        gradientColour: ramp.endColour,
+        gradientStartOpacity:
+            _held(i.gradientStartOpacity, ramp.startOpacity, ui),
+        gradientEndOpacity: _held(i.gradientEndOpacity, ramp.endOpacity, ui),
+        gradientStops: [
+          for (final s in ramp.between)
+            switch (known[s.id]) {
+              final was? => BridgeGradientStop(
+                  position: _held(was.position, s.position, ui),
+                  colour: s.colour,
+                  opacity: _held(was.opacity, s.opacity, ui),
+                ),
+              null => BridgeGradientStop(
+                  position: BridgeScalar.static_(s.position),
+                  colour: s.colour,
+                  opacity: BridgeScalar.static_(s.opacity),
+                ),
+            },
+        ],
+      );
+
+  /// The ramp on the row. It follows the playhead only where one of the
+  /// gradient's numbers is keyed, as a still one has nothing to follow.
+  Widget _rampChip(BuildContext context, String key) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    Widget chip() => _RampChip(
+          key: ValueKey<String>(key),
+          ramp: _rampOf(item, ui),
+          onOpen: (at) => _editStops(context, at),
+        );
+    final still = [
+      item.gradientStartOpacity,
+      item.gradientEndOpacity,
+      for (final s in item.gradientStops) ...[s.position, s.opacity],
+    ].every((s) => s is BridgeScalar_Static);
+    if (still) return chip();
+    return ValueListenableBuilder<int>(
+      valueListenable: ui.playheadFrame,
+      builder: (context, _, __) => chip(),
+    );
+  }
+
+  /// Open the gradient editor under the ramp. A drag in it previews, and
+  /// letting go writes the whole list back as one step.
+  void _editStops(BuildContext context, Offset at) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final throttle = PreviewThrottle();
+    final known = {
+      for (final (index, s) in item.gradientStops.indexed) index: s,
+    };
+    List<BridgeShapeItem> contents(GradientRamp ramp) => [
+          for (final other in layer.getShapeContents())
+            if (other.id == item.id)
+              _withRamp(other, ramp, ui, known)
+            else
+              other,
+        ];
+    showGradientStopsPopover(
+      context: context,
+      position: at,
+      ramp: _rampOf(item, ui),
+      onPreview: (ramp) => throttle.request(() {
+        try {
+          ui.selectedComp?.renderFrameWithShapePreview(
+            frame: BigInt.from(ui.playheadFrame.value),
+            scale: ui.viewerScale,
+            layer: layer,
+            contents: contents(ramp),
+          );
+        } catch (_) {
+          // A preview is a courtesy; the drag carries on without it.
+        }
+      }),
+      onCommit: (ramp) {
+        throttle.cancel();
+        try {
+          final written = contents(ramp);
+          layer.setShapeContents(contents: written, at: null);
+          // What each stop is now, for the next edit to start from.
+          final stops =
+              written.firstWhere((i) => i.id == item.id).gradientStops;
+          known.clear();
+          for (final (index, s) in ramp.between.indexed) {
+            known[s.id] = stops[index];
+          }
+          onChanged();
+        } catch (_) {
+          // The item or its layer went away while the editor was open.
+        }
+      },
+    ).whenComplete(throttle.cancel);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -831,7 +1001,7 @@ class ShapePaintRow extends StatelessWidget {
         // labels line up down the fold.
         const SizedBox(width: 24),
         Expanded(
-          child: Text(shapePaintLabel(which),
+          child: Text(t.propertyCase(shapePaintLabel(which)),
               style: t.body, overflow: TextOverflow.ellipsis),
         ),
         SizedBox(
@@ -886,6 +1056,7 @@ class ShapePaintRow extends StatelessWidget {
                   onPicked: (p) => _write((i) => shapeItemWith(i,
                       gradientColour: _picked(p, i.gradientColour?.a ?? 1))),
                 ),
+              ShapePaint.gradientStops => _rampChip(context, key),
             },
           ),
         ),

@@ -156,6 +156,16 @@ pub struct BridgeVertex {
     pub tan_out_y: f64,
 }
 
+/// A colour part way along a shape's gradient: where it sits as a per cent of
+/// the ramp, and how opaque it is, 0..100. Both animate.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeGradientStop {
+    pub position: BridgeScalar,
+    pub colour: crate::api::assets::BridgeColourRgba,
+    pub opacity: BridgeScalar,
+}
+
 impl BridgeVertex {
     /// One engine vertex, read across the seam.
     #[frb(ignore)]
@@ -219,12 +229,19 @@ pub struct BridgeShapeItem {
     /// from it linearly to `gradient_colour` and 2 ramps radially, the end
     /// point sitting on the outer edge. The two points are in layer pixels —
     /// the art's own coordinates — and animate; what a ramp *is* does not.
+    /// Each end has an opacity of its own, 0..100, and the ramp fades evenly
+    /// from `gradient_start_opacity` to `gradient_end_opacity`.
     pub gradient: u32,
     pub gradient_colour: Option<crate::api::assets::BridgeColourRgba>,
     pub gradient_start_x: BridgeScalar,
     pub gradient_start_y: BridgeScalar,
     pub gradient_end_x: BridgeScalar,
     pub gradient_end_y: BridgeScalar,
+    pub gradient_start_opacity: BridgeScalar,
+    pub gradient_end_opacity: BridgeScalar,
+    /// The colours the ramp passes through between its two ends, in the order
+    /// they were made. Empty is the plain two-colour ramp.
+    pub gradient_stops: Vec<BridgeGradientStop>,
     /// **A boolean combine**: how this item joins the item **before**
     /// it in the list — 0 draws it on its own, 1 unions, 2 subtracts this one
     /// from that one, 3 keeps only what both cover, 4 keeps only what one of
@@ -291,6 +308,17 @@ impl BridgeShapeItem {
             gradient_start_y: BridgeScalar::read_at(&item.gradient_start_y, offset),
             gradient_end_x: BridgeScalar::read_at(&item.gradient_end_x, offset),
             gradient_end_y: BridgeScalar::read_at(&item.gradient_end_y, offset),
+            gradient_start_opacity: BridgeScalar::read_at(&item.gradient_start_opacity, offset),
+            gradient_end_opacity: BridgeScalar::read_at(&item.gradient_end_opacity, offset),
+            gradient_stops: item
+                .gradient_stops
+                .iter()
+                .map(|s| BridgeGradientStop {
+                    position: BridgeScalar::read_at(&s.position, offset),
+                    colour: crate::api::assets::colour_of(s.colour),
+                    opacity: BridgeScalar::read_at(&s.opacity, offset),
+                })
+                .collect(),
             combine: item.combine,
             path_keys: item
                 .path_keys
@@ -376,6 +404,27 @@ impl BridgeShapeItem {
             )?,
             gradient_end_x: clamped_property(&self.gradient_end_x, offset, -100_000.0, 100_000.0)?,
             gradient_end_y: clamped_property(&self.gradient_end_y, offset, -100_000.0, 100_000.0)?,
+            gradient_start_opacity: clamped_property(
+                &self.gradient_start_opacity,
+                offset,
+                0.0,
+                100.0,
+            )?,
+            gradient_end_opacity: clamped_property(&self.gradient_end_opacity, offset, 0.0, 100.0)?,
+            // Held inside the ramp, every key of them, and left in the order
+            // they came in: a stop's rows are found by where it is in the list.
+            gradient_stops: self
+                .gradient_stops
+                .iter()
+                .take(lumit_core::shape::MAX_GRADIENT_STOPS)
+                .map(|s| {
+                    Ok(lumit_core::shape::GradientStop {
+                        position: clamped_property(&s.position, offset, 0.0, 100.0)?,
+                        colour: crate::api::assets::linear_of(s.colour),
+                        opacity: clamped_property(&s.opacity, offset, 0.0, 100.0)?,
+                    })
+                })
+                .collect::<Result<_, BridgeError>>()?,
             // Five readings and no sixth: a number naming none of them draws
             // the art on its own, which is the answer that shows something.
             combine: if self.combine <= 4 { self.combine } else { 0 },
@@ -1448,6 +1497,16 @@ pub struct BridgeClip {
     /// Carried so the clip's header strip draws with no bridge call; empty
     /// when the document no longer holds that source.
     pub source_name: String,
+    /// The link this clip shares with the clips that move, trim and cut with
+    /// it, a picture clip and the clip that carries its sound. `None` for a
+    /// clip on its own.
+    pub link: Option<Uuid>,
+    /// The trim into the source, in seconds of source time: the first moment
+    /// the clip shows and the moment it stops before.
+    pub source_in: BridgeRational,
+    pub source_out: BridgeRational,
+    /// Whether the clip plays a composition and not a footage item.
+    pub source_is_comp: bool,
 }
 
 /// How long a clip's source runs, which is the one thing
@@ -1458,7 +1517,7 @@ pub struct BridgeClip {
 /// `None` — a source this document no longer has, or a file that will not probe
 /// — is the honest "no reach", and that is exactly how the reach is drawn.
 #[frb(ignore)]
-fn clip_source_duration(
+pub(crate) fn clip_source_duration(
     state: &LumitBridgeState,
     doc: &lumit_core::Document,
     source: lumit_core::sequence::ClipSource,
@@ -1478,7 +1537,10 @@ fn clip_source_duration(
             }
             #[cfg(feature = "media")]
             {
-                let probed = crate::probe::ensure_probed(&_path)?;
+                // The answer already held, not a fresh look at the disk: this
+                // runs for every clip of the comp each time the read model is
+                // built.
+                let probed = crate::probe::held_or_probed(&_path)?;
                 // The only sanctioned route back from the container's
                 // floating-point duration is an explicit grid
                 // (docs/impl/rational-time.md §4) — the same millisecond grid
@@ -1544,6 +1606,10 @@ fn bridge_clip(
                 .map(|i| i.name().to_string())
                 .unwrap_or_default(),
         },
+        link: clip.link,
+        source_in: rational_of(clip.source_in),
+        source_out: rational_of(clip.source_out),
+        source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
     }
 }
 
@@ -2614,17 +2680,38 @@ impl BridgeTransform {
         target: &mut lumit_core::model::TransformGroup,
         offset: Rational,
     ) -> Result<(), BridgeError> {
-        target.anchor_x.animation = self.anchor_x.animation_at(offset)?;
-        target.anchor_y.animation = self.anchor_y.animation_at(offset)?;
-        target.position_x.animation = self.position_x.animation_at(offset)?;
-        target.position_y.animation = self.position_y.animation_at(offset)?;
-        target.position_z.animation = self.position_z.animation_at(offset)?;
-        target.scale_x.animation = self.scale_x.animation_at(offset)?;
-        target.scale_y.animation = self.scale_y.animation_at(offset)?;
-        target.rotation.animation = self.rotation.animation_at(offset)?;
-        target.rotation_x.animation = self.rotation_x.animation_at(offset)?;
-        target.rotation_y.animation = self.rotation_y.animation_at(offset)?;
-        target.opacity.animation = self.opacity.animation_at(offset)?;
+        self.anchor_x
+            .put(&mut target.anchor_x, self.anchor_x.animation_at(offset)?);
+        self.anchor_y
+            .put(&mut target.anchor_y, self.anchor_y.animation_at(offset)?);
+        self.position_x.put(
+            &mut target.position_x,
+            self.position_x.animation_at(offset)?,
+        );
+        self.position_y.put(
+            &mut target.position_y,
+            self.position_y.animation_at(offset)?,
+        );
+        self.position_z.put(
+            &mut target.position_z,
+            self.position_z.animation_at(offset)?,
+        );
+        self.scale_x
+            .put(&mut target.scale_x, self.scale_x.animation_at(offset)?);
+        self.scale_y
+            .put(&mut target.scale_y, self.scale_y.animation_at(offset)?);
+        self.rotation
+            .put(&mut target.rotation, self.rotation.animation_at(offset)?);
+        self.rotation_x.put(
+            &mut target.rotation_x,
+            self.rotation_x.animation_at(offset)?,
+        );
+        self.rotation_y.put(
+            &mut target.rotation_y,
+            self.rotation_y.animation_at(offset)?,
+        );
+        self.opacity
+            .put(&mut target.opacity, self.opacity.animation_at(offset)?);
         Ok(())
     }
 }
@@ -2705,12 +2792,38 @@ impl LayerReference {
         Ok(proj.store.snapshot())
     }
 
+    /// This layer, cloned out of the current snapshot. Only the layer: nearly
+    /// every edit starts here, and copying the whole composition to pick one
+    /// layer out of it was most of what a clip edit cost on a long cut.
     #[frb(ignore)]
     pub(crate) fn item(&self) -> Result<Layer, BridgeError> {
-        self.composition()?
-            .layers
-            .into_iter()
+        let doc = self.document()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidItem)?;
+        comp.layers
+            .iter()
             .find(|l| l.id == self.layer_id)
+            .cloned()
+            .ok_or(BridgeError::InvalidLayer)
+    }
+
+    /// This layer as it leaves the project, on the clipboard or in a preset.
+    /// A file an effect reads has the path it had, and not its copy's in this
+    /// machine's cache.
+    fn leaving(&self) -> Result<Layer, BridgeError> {
+        let doc = {
+            let project = self.project()?;
+            let project = project.read().map_err(|_| BridgeError::ReadFailed)?;
+            project.store.snapshot()
+        };
+        // Only a packed project that was opened here holds such a path.
+        if doc.packed.values().all(|entry| entry.original.is_none()) {
+            return self.item();
+        }
+        let mut doc = (*doc).clone();
+        lumit_project::keep_original_paths(&mut doc);
+        doc.comp(self.comp_id)
+            .and_then(|comp| comp.layers.iter().find(|l| l.id == self.layer_id))
+            .cloned()
             .ok_or(BridgeError::InvalidLayer)
     }
 
@@ -2777,7 +2890,7 @@ impl LayerReference {
     /// that knows whether the layer being pointed at is there.
     #[frb(sync)]
     pub fn copy_layer(&self) -> Result<String, BridgeError> {
-        let layer = self.item()?;
+        let layer = self.leaving()?;
         serde_json::to_string(&serde_json::json!({
             "format": 1,
             "kind": "layer",
@@ -2804,7 +2917,7 @@ impl LayerReference {
     /// effect — one shape, not two that drift.
     #[frb(sync)]
     pub fn copy_effects(&self, effects: Vec<Uuid>) -> Result<String, BridgeError> {
-        let stack = self.item()?.effects;
+        let stack = self.leaving()?.effects;
         let taken: Vec<_> = if effects.is_empty() {
             stack
         } else {
@@ -2875,7 +2988,7 @@ impl LayerReference {
     /// unexciting, document.
     #[frb(sync)]
     pub fn save_preset(&self, name: String) -> Result<String, BridgeError> {
-        let effects = self.item()?.effects;
+        let effects = self.leaving()?.effects;
         serde_json::to_string_pretty(&serde_json::json!({
             "format": 1,
             "name": name,
@@ -4209,18 +4322,7 @@ impl LayerReference {
         // own clock, so the row's zero comes off before either is used.
         let start = self.layer_time_of_frame(&comp, &layer, start_frame)?;
         let end = self.layer_time_of_frame(&comp, &layer, end_frame)?;
-        let mut next = clips[index].clone();
-        if end < next.place_end() {
-            next = next.trim_end(end).ok_or(BridgeError::InvalidTime)?;
-        } else if end > next.place_end() {
-            next = next.extend_end(end).ok_or(BridgeError::InvalidTime)?;
-        }
-        if start > next.place_start {
-            next = next.trim_start(start).ok_or(BridgeError::InvalidTime)?;
-        } else if start < next.place_start {
-            next = next.extend_start(start).ok_or(BridgeError::InvalidTime)?;
-        }
-        clips[index] = next;
+        clips[index] = trimmed(&clips[index], start, end).ok_or(BridgeError::InvalidTime)?;
         self.commit_clips(clips)
     }
 
@@ -4356,6 +4458,7 @@ impl LayerReference {
 
         let mut converted = layer.clone();
         converted.kind = LayerKind::Footage { item };
+        converted.audio_streams = clip.audio_streams.clone();
         converted.interpolation = clip.interpolation.clone();
         // The clip's own map becomes the layer's, which is exact: the clip
         // spans the whole layer, so clip time and layer time are the same
@@ -4628,6 +4731,9 @@ impl LayerReference {
         let source_out = local.checked_add(duration).unwrap_or(duration);
 
         let mut converted = layer.clone();
+        // The choice of audio streams moves onto the clip, which is where a
+        // Sequence layer keeps one.
+        converted.audio_streams = Default::default();
         converted.kind = LayerKind::Sequence {
             clips: vec![Clip {
                 id: Uuid::now_v7(),
@@ -4646,6 +4752,8 @@ impl LayerReference {
                 effects: Vec::new(),
                 fx: true,
                 gain_db: 0.0,
+                link: None,
+                audio_streams: layer.audio_streams.clone(),
                 extra: serde_json::Map::new(),
             }],
         };
@@ -4800,20 +4908,28 @@ impl LayerReference {
     /// one `Batch` and therefore one undo step, with both rows' clips and both
     /// rows' bars inside it.
     #[frb(ignore)]
-    fn clip_ops(
+    pub(crate) fn clip_ops(
         &self,
         clips: Vec<lumit_core::sequence::Clip>,
         start_offset: lumit_core::time::CompTime,
     ) -> Result<Vec<lumit_core::Op>, BridgeError> {
-        let layer = self.item()?;
+        // The bar as it stands, read where it is: the layer is not copied
+        // out, and the clips go into the op without being copied either.
+        let doc = self.document()?;
+        let comp = doc.comp(self.comp_id).ok_or(BridgeError::InvalidItem)?;
+        let layer = comp.layers.iter().find(|l| l.id == self.layer_id);
+        let was = layer
+            .map(|l| (l.in_point.0, l.out_point.0))
+            .ok_or(BridgeError::InvalidLayer)?;
+        // Clip places are in layer time; a span is in comp time, and the two
+        // differ by the layer's own zero.
+        let span = lumit_core::sequence::clips_span(&clips);
         let set_clips = lumit_core::Op::SetSequenceClips {
             comp: self.comp_id,
             layer: self.layer_id,
-            clips: clips.clone(),
+            clips,
         };
-        // Clip places are in layer time; a span is in comp time, and the two
-        // differ by the layer's own zero.
-        let Some((start, end)) = lumit_core::sequence::clips_span(&clips) else {
+        let Some((start, end)) = span else {
             return Ok(vec![set_clips]);
         };
         let offset = start_offset.0;
@@ -4821,7 +4937,7 @@ impl LayerReference {
         else {
             return Ok(vec![set_clips]);
         };
-        if in_point == layer.in_point.0 && out_point == layer.out_point.0 {
+        if (in_point, out_point) == was {
             return Ok(vec![set_clips]);
         }
         Ok(vec![
@@ -5141,14 +5257,52 @@ impl LayerReference {
     /// A self-parent, an unknown layer, or one that would close a cycle is
     /// refused by the op — a parent loop has no defined transform, so unlike a
     /// dangling matte it cannot be allowed to exist and be ignored later.
+    ///
+    /// **The layer does not move.** Its transform is rewritten in the same
+    /// undo step so it sits where it sat at `frame`, the playhead. Only what
+    /// the parent does afterwards carries it.
     #[frb(sync)]
-    pub fn set_parent(&self, parent: Option<Uuid>) -> Result<(), BridgeError> {
+    pub fn set_parent(&self, parent: Option<Uuid>, frame: i64) -> Result<(), BridgeError> {
         let (comp, layer) = (self.comp_id, self.layer_id);
-        self.commit(lumit_core::Op::SetLayerParent {
+        let doc = self.document()?;
+        let c = doc.comp(comp).ok_or(BridgeError::InvalidItem)?;
+        let l = c
+            .layers
+            .iter()
+            .find(|l| l.id == layer)
+            .ok_or(BridgeError::InvalidLayer)?;
+        let t = c
+            .frame_rate
+            .time_of_frame(frame)
+            .map_err(|_| BridgeError::InvalidTime)?
+            .0
+            .to_f64();
+        let context = std::sync::Arc::new(lumit_core::expression::ExpressionContext {
+            document: doc.clone(),
+            comp: Some(comp),
+            layer: Some(layer),
+            comp_time: t,
+            current_depth: 0,
+            inputs: None,
+        });
+        // The parent goes first: it names the undo step, and a refused one
+        // takes the transform edits down with it.
+        let mut ops = vec![lumit_core::Op::SetLayerParent {
             comp,
             layer,
             parent,
-        })
+        }];
+        ops.extend(
+            lumit_render::build::reparented(c, l, parent, t, context)
+                .into_iter()
+                .map(|(prop, animation)| lumit_core::Op::SetTransformProperty {
+                    comp,
+                    layer,
+                    prop,
+                    animation,
+                }),
+        );
+        self.commit(lumit_core::Op::Batch { ops })
     }
 
     /// Move this layer to `new_index` in the stack (0 = top).
@@ -5443,7 +5597,9 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeAudioPeaks::empty());
             };
-            let Some(pyramid) = crate::peaks::pyramid_for(&path) else {
+            // The streams this layer sounds are the ones its wave is of.
+            let sound = lumit_media::SoundSource::streams_of(path, layer.audio_streams.places());
+            let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
                 return Ok(BridgeAudioPeaks::empty());
             };
 
@@ -5541,7 +5697,8 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeSpectrogram::empty());
             };
-            let Some(grid) = crate::peaks::spectrogram_for(&path) else {
+            let sound = lumit_media::SoundSource::streams_of(path, layer.audio_streams.places());
+            let Some(grid) = crate::peaks::spectrogram_for(&sound) else {
                 return Ok(BridgeSpectrogram::empty());
             };
 
@@ -5629,7 +5786,9 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeAudioPeaks::empty());
             };
-            let Some(pyramid) = crate::peaks::pyramid_for(&path) else {
+            // The streams this clip sounds are the ones its wave is of.
+            let sound = lumit_media::SoundSource::streams_of(path, clip.audio_streams.places());
+            let Some(pyramid) = crate::peaks::pyramid_for(&sound) else {
                 return Ok(BridgeAudioPeaks::empty());
             };
 
@@ -5725,7 +5884,8 @@ impl LayerReference {
             let Some(path) = path else {
                 return Ok(BridgeSpectrogram::empty());
             };
-            let Some(grid) = crate::peaks::spectrogram_for(&path) else {
+            let sound = lumit_media::SoundSource::streams_of(path, clip.audio_streams.places());
+            let Some(grid) = crate::peaks::spectrogram_for(&sound) else {
                 return Ok(BridgeSpectrogram::empty());
             };
 
@@ -5973,7 +6133,7 @@ impl LayerReference {
     /// every generated kind, for media that will not read, and in builds
     /// without the `media` feature — "no length" is never a guessed length.
     #[frb(ignore)]
-    fn source_length(&self, layer: &Layer) -> Option<Duration> {
+    pub(crate) fn source_length(&self, layer: &Layer) -> Option<Duration> {
         let proj = self.project().ok()?;
         let proj = proj.read().ok()?;
         let doc = proj.store.snapshot();
@@ -6412,16 +6572,11 @@ impl LayerReference {
         if props.is_empty() {
             return Ok(());
         }
-        let offset = self.item()?.start_offset.0;
+        let layer = self.item()?;
 
         let mut ops = Vec::with_capacity(props.len());
         for (prop, value) in props.into_iter().zip(values) {
-            ops.push(lumit_core::Op::SetTransformProperty {
-                comp: self.comp_id,
-                layer: self.layer_id,
-                prop: prop.core(),
-                animation: value.animation_at(offset)?,
-            });
+            ops.extend(self.transform_ops(&layer, prop, &value)?);
         }
         // One op stays one op; a batch of one would undo the same but reads
         // worse in the journal.
@@ -6449,19 +6604,52 @@ impl LayerReference {
         // Confirm the layer is there before committing, so a stale reference is
         // a calm error rather than a failed op — and its offset is what carries
         // the keys back onto its own clock.
-        let animation = value.animation_at(self.item()?.start_offset.0)?;
+        let mut ops = self.transform_ops(&self.item()?, prop, &value)?;
+        // An expression's note rides with it as a second op, and the two are
+        // one step.
+        let op = match ops.len() {
+            1 => ops.pop().ok_or(BridgeError::InvalidLayer)?,
+            _ => lumit_core::Op::Batch { ops },
+        };
+        self.commit(op)
+    }
 
-        let proj = self.project()?;
-        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        proj.store
-            .commit(lumit_core::Op::SetTransformProperty {
-                comp: self.comp_id,
-                layer: self.layer_id,
-                prop: prop.core(),
-                animation,
-            })
-            .map_err(BridgeError::OpError)?;
-        Ok(())
+    /// The ops that put `value` on one transform property: its animation, and
+    /// beside it what an expression knows about the property (its language,
+    /// the value underneath, its seed) whenever that changes.
+    ///
+    /// The note is worked out here and carried whole in the op, so undo puts
+    /// back the one that was there and a replayed journal writes the same seed.
+    #[frb(ignore)]
+    fn transform_ops(
+        &self,
+        layer: &lumit_core::model::Layer,
+        prop: BridgeTransformProp,
+        value: &BridgeScalar,
+    ) -> Result<Vec<lumit_core::Op>, BridgeError> {
+        use lumit_core::expression::SLOT_KEY;
+
+        let animation = value.animation_at(layer.start_offset.0)?;
+        let mut ops = vec![lumit_core::Op::SetTransformProperty {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            prop: prop.core(),
+            animation: animation.clone(),
+        }];
+        if let Some(held) = layer.prop(prop.core()) {
+            let mut next = held.clone();
+            value.put(&mut next, animation);
+            let slot = next.extra.get(SLOT_KEY).cloned();
+            if slot.as_ref() != held.extra.get(SLOT_KEY) {
+                ops.push(lumit_core::Op::SetTransformExpressionSlot {
+                    comp: self.comp_id,
+                    layer: self.layer_id,
+                    prop: prop.core(),
+                    slot,
+                });
+            }
+        }
+        Ok(ops)
     }
 
     /// Set how one two-axis property is shown and edited: combined on
@@ -6572,6 +6760,14 @@ impl LayerReference {
         home: InstanceHome,
         edit: impl FnOnce(&mut Vec<EffectInstance>) -> Result<(), BridgeError>,
     ) -> Result<(), BridgeError> {
+        // A plugin on the list answers the edit before it is committed, so
+        // what it wrote lands in the same undo step.
+        let edit = |list: &mut Vec<EffectInstance>| {
+            let before = list.clone();
+            edit(list)?;
+            crate::api::track::settle(&before, list);
+            Ok(())
+        };
         let op = match home {
             InstanceHome::Effects | InstanceHome::Styles => {
                 let layer = self.item()?;
@@ -6727,6 +6923,9 @@ impl LayerReference {
         // flare's Matte source, whose natural reading is "the lights in this
         // picture" — and on an adjustment layer, the composite below.
         lumit_core::fx::point_self_layer_params_at(&mut instance, self.layer_id);
+        // A blur or a glow on a shape or a line of text starts with Repeat
+        // edge pixels off, so it spreads out of the art as it lands.
+        lumit_core::fx::spread_on_art(&mut instance, &self.item()?.kind);
         // An Extract channels lands knowing what its layer's file holds, for
         // the same reason: the useful state is a fact about where it was
         // dropped, and making the user press Reload before the effect can do
@@ -6746,6 +6945,34 @@ impl LayerReference {
                     comp: self.comp_id,
                     layer: self.layer_id,
                     graph: Box::new(graph),
+                })
+                .map_err(BridgeError::OpError)?;
+            return Ok(());
+        }
+
+        // A points effect landing below a producer is wired to it in the same
+        // undo step, so the stack works without a trip to the node graph.
+        let layer = self.item()?;
+        let mut effects = layer.effects;
+        let mut graph = layer.graph;
+        effects.push(instance.clone());
+        if graph.wire_points_from_above(&effects, instance.id) {
+            let proj = self.project()?;
+            let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+            proj.store
+                .commit(lumit_core::Op::Batch {
+                    ops: vec![
+                        lumit_core::Op::SetLayerEffects {
+                            comp: self.comp_id,
+                            layer: self.layer_id,
+                            effects,
+                        },
+                        lumit_core::Op::SetLayerGraph {
+                            comp: self.comp_id,
+                            layer: self.layer_id,
+                            graph: Box::new(graph),
+                        },
+                    ],
                 })
                 .map_err(BridgeError::OpError)?;
             return Ok(());
@@ -7455,7 +7682,7 @@ pub struct BridgeRevealGroups {
 /// rule a picture row keeps: `sequence::resolve` shows one clip at a time and
 /// cannot dissolve, so two clips over one frame there would simply hide one.
 #[frb(ignore)]
-fn placed(
+pub(crate) fn placed(
     clips: Vec<lumit_core::sequence::Clip>,
     dropped: Uuid,
     overlap: bool,
@@ -7465,6 +7692,30 @@ fn placed(
     } else {
         lumit_core::sequence::overwrite_with(&clips, dropped)
     }
+}
+
+/// A clip with its edges moved to `start` and `end`, both in the time its
+/// place is in: an edge moving inward crops the map there, one moving outward
+/// carries it on at the speed it was going. `None` when either edge cannot
+/// go where it was asked.
+#[frb(ignore)]
+pub(crate) fn trimmed(
+    clip: &lumit_core::sequence::Clip,
+    start: Rational,
+    end: Rational,
+) -> Option<lumit_core::sequence::Clip> {
+    let mut next = clip.clone();
+    if end < next.place_end() {
+        next = next.trim_end(end)?;
+    } else if end > next.place_end() {
+        next = next.extend_end(end)?;
+    }
+    if start > next.place_start {
+        next = next.trim_start(start)?;
+    } else if start < next.place_start {
+        next = next.extend_start(start)?;
+    }
+    Some(next)
 }
 
 /// The last source position a map reaches — what the clip asks of its source.

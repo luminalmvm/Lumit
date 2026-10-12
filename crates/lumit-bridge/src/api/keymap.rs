@@ -25,7 +25,9 @@
 //! export a user mails to a friend — one format, two reasons to write it.
 
 use flutter_rust_bridge::frb;
-use lumit_keymap::{ActionId, Chord, KeyContext, Keymap, WheelAction, WheelModifier};
+use lumit_keymap::{
+    ActionId, Chord, HandleModifier, KeyContext, Keymap, WheelAction, WheelModifier,
+};
 use std::sync::{Mutex, OnceLock};
 
 use crate::api::BridgeError;
@@ -42,6 +44,7 @@ pub enum BridgeKeyContext {
     Graph,
     Panels,
     Effects,
+    Cut,
 }
 
 impl From<BridgeKeyContext> for KeyContext {
@@ -55,6 +58,7 @@ impl From<BridgeKeyContext> for KeyContext {
             BridgeKeyContext::Graph => KeyContext::Graph,
             BridgeKeyContext::Panels => KeyContext::Panels,
             BridgeKeyContext::Effects => KeyContext::Effects,
+            BridgeKeyContext::Cut => KeyContext::Cut,
         }
     }
 }
@@ -70,6 +74,7 @@ impl From<KeyContext> for BridgeKeyContext {
             KeyContext::Graph => BridgeKeyContext::Graph,
             KeyContext::Panels => BridgeKeyContext::Panels,
             KeyContext::Effects => BridgeKeyContext::Effects,
+            KeyContext::Cut => BridgeKeyContext::Cut,
         }
     }
 }
@@ -410,6 +415,36 @@ pub fn keymap_set_wheel(
     keymap_wheel()
 }
 
+/// A modifier held as a handle drag begins in the Graph editor. Mirrors
+/// `lumit_keymap::HandleModifier`.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeHandleModifier {
+    Alt,
+    Ctrl,
+}
+
+/// The modifier that breaks or joins a keyframe's handles as a drag begins.
+#[frb(sync)]
+#[must_use]
+pub fn keymap_break_handles() -> BridgeHandleModifier {
+    with_keymap(|km| match km.break_handles {
+        HandleModifier::Alt => BridgeHandleModifier::Alt,
+        HandleModifier::Ctrl => BridgeHandleModifier::Ctrl,
+    })
+}
+
+/// Choose the modifier that breaks or joins handles and hand back what is set.
+pub fn keymap_set_break_handles(modifier: BridgeHandleModifier) -> BridgeHandleModifier {
+    with_keymap(|km| {
+        km.break_handles = match modifier {
+            BridgeHandleModifier::Alt => HandleModifier::Alt,
+            BridgeHandleModifier::Ctrl => HandleModifier::Ctrl,
+        };
+    });
+    keymap_break_handles()
+}
+
 /// The whole keymap as JSON — what the frontend stores between sessions and
 /// what "Export keymap…" writes to a file the user can share. One format for
 /// both, so a keymap that survives a restart is the same keymap that travels.
@@ -442,4 +477,36 @@ pub fn keymap_from_json(json: String) -> Result<Vec<BridgeKeymapGroup>, BridgeEr
     }
     with_keymap(|km| *km = lumit_keymap::with_new_defaults(parsed));
     Ok(keymap_groups())
+}
+
+/// What reading an After Effects shortcut file gave the keymap.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeAfterEffectsKeymap {
+    /// The table as it now stands.
+    pub groups: Vec<BridgeKeymapGroup>,
+    /// How many actions took their keys from the file.
+    pub actions: u32,
+}
+
+/// Take the shortcuts from an After Effects shortcut file, the `.txt` it keeps
+/// in its `aeks` folder, and hand back the table.
+///
+/// Laid over the After Effects preset, so an action the file has no command
+/// for keeps the preset's chord. Text with no After Effects command in it is
+/// refused and the current map is left alone.
+pub fn keymap_import_after_effects(text: String) -> Result<BridgeAfterEffectsKeymap, BridgeError> {
+    let import = lumit_keymap::import_after_effects_shortcuts(&text)
+        .map_err(|e| BridgeError::InvalidKeymapFile(e.to_string()))?;
+    // The file says which keys do what. The modifiers for the wheel and for
+    // breaking handles are not in it, and stay as they were set.
+    with_keymap(|km| {
+        let was = std::mem::replace(km, import.keymap);
+        km.wheel = was.wheel;
+        km.break_handles = was.break_handles;
+    });
+    Ok(BridgeAfterEffectsKeymap {
+        groups: keymap_groups(),
+        actions: u32::try_from(import.actions).unwrap_or(u32::MAX),
+    })
 }

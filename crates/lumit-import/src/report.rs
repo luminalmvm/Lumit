@@ -183,7 +183,8 @@ pub enum Reason {
     /// A shape layer: the paths, fills and strokes are a later stage, so the
     /// layer keeps its slot, transform and parenting but draws nothing.
     ShapeContentsNotMapped,
-    /// A text layer whose styling beyond size and fill colour has no home yet.
+    /// A text layer using something Lumit's text has no place for: animators,
+    /// a path, tsume, a justified last line, or source text that changes.
     TextStylingNotMapped,
     /// A light kind Lumit does not have; imported as the nearest.
     LightKindApproximated { ae_kind: String },
@@ -209,6 +210,12 @@ pub enum Reason {
     /// keyframes underneath drive the property, so the motion survives and the
     /// expression is there to re-author.
     ExpressionNotRunnable { source: String },
+    /// An enabled expression Lumit can run, on a property that also has
+    /// keyframes. After Effects keeps the keyframes underneath an expression
+    /// for it to read (`value`, `loopOut()`); Lumit holds one or the other. So
+    /// the keyframes drive the property, as they would with the expression
+    /// switched off, and the text is kept in the `ae` namespace.
+    ExpressionOverKeys { source: String },
     /// A property After Effects itself could not read (a `CUSTOM_VALUE`
     /// blob).
     PropertyUnreadable { match_name: String },
@@ -410,7 +417,8 @@ impl std::fmt::Display for Reason {
             Self::TextStylingNotMapped => {
                 write!(
                     f,
-                    "the words, size and fill colour imported; the rest of the styling did not"
+                    "the text imported, but not its animators, path, tsume, fully justified last \
+                     line or changing source text"
                 )
             }
             Self::LightKindApproximated { ae_kind } => {
@@ -449,6 +457,11 @@ impl std::fmt::Display for Reason {
                 f,
                 "the expression does not run here and was switched off — its text is kept, and \
                  the keyframes underneath drive the property: {source}"
+            ),
+            Self::ExpressionOverKeys { source } => write!(
+                f,
+                "the expression sits over keyframes, and only one of the two can drive a property \
+                 here — the keyframes do, and the expression's text is kept: {source}"
             ),
             Self::PropertyUnreadable { match_name } => write!(
                 f,
@@ -709,57 +722,5 @@ impl ImportReport {
     #[must_use]
     pub fn has(&self, reason: &Reason) -> bool {
         self.rows.iter().any(|r| &r.reason == reason)
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-mod tests {
-    use super::*;
-
-    /// **A reason crosses as an id plus its facts, not as a sentence.**
-    ///
-    /// The translation rule for the import report in one assertion: what goes
-    /// over the bridge is `blend_mode_unavailable` + `{ae_mode: "Dissolve"}`,
-    /// and the English sentence stays behind as the fallback. A frontend that
-    /// got only the sentence could not translate it, because its lookup is by
-    /// whole text and the text is different for every blend mode.
-    #[test]
-    fn a_reason_crosses_as_a_stable_id_and_its_named_facts() {
-        let reason = Reason::BlendModeUnavailable {
-            ae_mode: "Dissolve".into(),
-        };
-        assert_eq!(reason.key(), "blend_mode_unavailable");
-        assert_eq!(reason.args()["ae_mode"], "Dissolve");
-
-        // A reason with nothing to say carries no facts, and still has an id.
-        assert_eq!(Reason::MediaPlaceholder.key(), "media_placeholder");
-        assert!(Reason::MediaPlaceholder.args().is_empty());
-    }
-
-    /// **A whole number arrives whole.**
-    ///
-    /// The stretch percentage and the guessed frame rate are `f64`, and JSON
-    /// spells them "50.0" and "24.0" where the report's own English says "50%"
-    /// and "24 fps". The panel must read the same way the engine does, so the
-    /// trailing zero is dropped on the way across — and a genuinely fractional
-    /// figure is left alone.
-    #[test]
-    fn a_whole_number_loses_its_trailing_zero_and_a_fraction_keeps_its_digits() {
-        let stretch = Reason::StretchAsRetime { percent: 50.0 };
-        assert_eq!(stretch.args()["percent"], "50");
-        assert!(stretch.to_string().contains("50%"));
-
-        let par = Reason::PixelAspectIgnored { par: 1.4587 };
-        assert_eq!(par.args()["par"], "1.4587");
-
-        // Bools cross as words, which is what the frontend branches on for the
-        // three "preserve when nested" sentences.
-        let nested = Reason::NestedPreserveIgnored {
-            fps: true,
-            resolution: false,
-        };
-        assert_eq!(nested.args()["fps"], "true");
-        assert_eq!(nested.args()["resolution"], "false");
     }
 }

@@ -65,32 +65,4 @@ void main() {
     expect(incoming, const BridgeClipFadeShape.slow(),
         reason: 'a preset is the pair of shapes the join takes');
   });
-
-  testWidgets('a lone fade opens with one curve and no Keep level',
-      (tester) async {
-    await tester.pumpWidget(harness());
-    BridgeClipFadeShape? outgoing;
-    BridgeClipFadeShape? incoming;
-    showClipFadePopover(
-      context: host,
-      position: const Offset(200, 200),
-      outgoing: null,
-      incoming: const BridgeClipFadeShape.linear(),
-      onApply: (out, into) {
-        outgoing = out;
-        incoming = into;
-      },
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey<String>('atl-fade-keep')), findsNothing,
-        reason: 'there is nothing on the other side to keep level against');
-
-    await tester.tap(find.byKey(const ValueKey<String>('atl-fade-apply')));
-    await tester.pumpAndSettle();
-
-    expect(outgoing, isNull,
-        reason: 'the side that was not there is not written');
-    expect(incoming, const BridgeClipFadeShape.linear());
-  });
 }

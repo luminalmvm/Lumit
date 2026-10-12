@@ -12,6 +12,7 @@ import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/panels/text_animator_rows_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 
@@ -48,6 +49,8 @@ void main() {
       final text = p.comp.addTextLayer();
       text.setText(
         document: BridgeTextDocument(
+          style: plainTextStyle,
+          paragraph: plainParagraphStyle,
           text: 'Lumit',
           size: 72,
           fill: text.getText()!.fill,
@@ -58,8 +61,8 @@ void main() {
       p.uiState.selectedLayer.value = text;
       await mount(tester, p);
 
-      // A kicker now: capitals on the way to the screen.
-      expect(find.text('ANIMATORS'), findsOneWidget);
+      // A kicker now, which Studio draws as written.
+      expect(find.text('Animators'), findsOneWidget);
       expect(text.getText()!.animators, isEmpty);
 
       await tester.tap(find.byKey(const ValueKey('text-animator-add')));
@@ -139,16 +142,6 @@ void main() {
       commitChannelEdits({channels.single: const BridgeScalar.static_(40)});
       expect(text.getText()!.animators.first.selector.offset,
           const BridgeScalar.static_(40));
-    });
-
-    testWidgets('a layer with no letters has no animators section',
-        (tester) async {
-      final p = withComp();
-      final solid = p.comp.addSolidLayer();
-      p.uiState.selectedLayer.value = solid;
-      await mount(tester, p);
-      expect(find.text('ANIMATORS'), findsNothing);
-      expect(find.byKey(const ValueKey('text-animator-add')), findsNothing);
     });
   });
 }

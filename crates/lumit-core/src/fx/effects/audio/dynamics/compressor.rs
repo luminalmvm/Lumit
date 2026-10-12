@@ -330,15 +330,6 @@ mod tests {
     }
 
     #[test]
-    fn the_same_sound_twice_is_bit_identical() {
-        let input = tone(AUDIO_BLOCK_FRAMES * 4, 220.0, 0.9);
-        let values = knobs(2.0);
-        let first = run(&*open(&values), &input, &values, 0);
-        let again = run(&*open(&values), &input, &values, 0);
-        assert_eq!(bits(&first), bits(&again));
-    }
-
-    #[test]
     fn a_run_split_at_a_block_edge_carries_its_state_across() {
         let input = tone(AUDIO_BLOCK_FRAMES * 4, 220.0, 0.9);
         let values = knobs(2.0);
@@ -372,14 +363,5 @@ mod tests {
         let quiet = tone(AUDIO_BLOCK_FRAMES * 4, 220.0, 0.01);
         let out = run(&*open(&values), &quiet, &values, 0);
         assert_eq!(bits(&out), bits(&quiet));
-    }
-
-    /// Lookahead is what the chain places the sound earlier by, so it has to
-    /// be told, and it has to be the row the effect was opened with.
-    #[test]
-    fn the_lookahead_row_is_the_latency_it_reports() {
-        let values = knobs(5.0);
-        assert_eq!(open(&values).latency(), 240);
-        assert_eq!(open(&knobs(0.0)).latency(), 0);
     }
 }

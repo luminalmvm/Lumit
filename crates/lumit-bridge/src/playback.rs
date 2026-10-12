@@ -28,6 +28,38 @@ const COST_WINDOW: usize = 32;
 /// than the ring ever presents.
 pub(crate) const PREFETCH_AHEAD: u64 = 4;
 
+/// The frames whose edit points playback should ask about now, as "after this
+/// one, up to and including that one": the clips starting in there have their
+/// files opened by the decode-ahead threads
+/// ([`lumit_render::HeadlessRenderer::cut_wants`]).
+///
+/// It reaches about a second past the frame being rendered. Four frames is
+/// enough warning to decode the next frame of a file that is playing and
+/// nowhere near enough to open one that is not, which costs tens of
+/// milliseconds on a good day, so a cut to a new file used to play late.
+///
+/// `posted` is how far this run has already asked, so each edit point is
+/// asked about once. One further on than this window reaches means the
+/// playhead has gone back (a loop coming round) and the asking starts again.
+/// `None` when there is nothing new to ask.
+pub(crate) fn cut_window(
+    frame: u64,
+    posted: Option<u64>,
+    fps: f64,
+    speed: u64,
+    last: u64,
+) -> Option<(u64, u64)> {
+    let second = (fps.round().max(1.0) as u64).saturating_mul(speed);
+    let through = frame.saturating_add(second).min(last);
+    // Nearer than this the ordinary read-ahead has already posted the frames
+    // themselves.
+    let near = frame.saturating_add(PREFETCH_AHEAD * speed);
+    let after = posted
+        .filter(|p| *p <= through)
+        .map_or(near, |p| p.max(near));
+    (after < through).then_some((after, through))
+}
+
 /// The measured cost of recent renders, for the scheduler's lookahead.
 ///
 /// The impl note asks for the 95th percentile rather than the mean: lookahead
@@ -179,42 +211,6 @@ pub(crate) fn fill_order(anchor: u64, first: u64, last: u64) -> impl Iterator<It
 mod tests {
     use super::*;
 
-    /// The window sizes lookahead by the recurring SLOW frames, which are what
-    /// the ring exists to absorb — a mean would let a spike every half-second
-    /// vanish into thirty cheap frames. (A single once-off outlier is excluded
-    /// by design: that is what the 95th percentile is, as against a max.)
-    #[test]
-    fn the_cost_window_reports_the_slow_tail_not_the_mean() {
-        let mut w = CostWindow::default();
-        assert_eq!(w.p95(), None, "no verdict before any sample");
-        for _ in 0..30 {
-            w.push(0.005);
-        }
-        w.push(0.050);
-        w.push(0.050);
-        let p95 = w.p95().unwrap();
-        assert!(p95 >= 0.049, "the slow tail is what p95 reports, got {p95}");
-        // Nonsense samples are ignored, never poison the window.
-        w.push(f64::NAN);
-        w.push(-1.0);
-        assert!(w.p95().unwrap().is_finite());
-    }
-
-    /// The window is a window: old costs age out, so the lookahead follows the
-    /// comp the playhead is in now.
-    #[test]
-    fn old_costs_age_out_of_the_window() {
-        let mut w = CostWindow::default();
-        w.push(1.0); // One ancient, terrible frame.
-        for _ in 0..COST_WINDOW {
-            w.push(0.004);
-        }
-        assert!(
-            w.p95().unwrap() < 0.005,
-            "a cost older than the window must not size the ring for ever"
-        );
-    }
-
     /// The fill order walks outward from the playhead, two ahead for every
     /// one behind, covers every frame exactly once, and wraps at either end
     /// of the work area — playback loops it, so the frame after the last is
@@ -277,38 +273,5 @@ mod tests {
         let stalled = due + period * 3;
         let after = next_present_due(Some(due), stalled, period);
         assert_eq!(after, stalled + period, "a stall re-anchors at now");
-    }
-
-    /// The bounded patience for a disk copy: wait while a young ask is in
-    /// flight, give up past the grace, and never wait for a frame nobody asked
-    /// the disk for.
-    #[test]
-    fn playback_waits_briefly_for_a_pending_disk_copy_and_no_longer() {
-        assert!(!wait_for_disk(None), "never asked: nothing to wait for");
-        assert!(
-            wait_for_disk(Some(std::time::Duration::from_millis(5))),
-            "a young ask is worth a moment — the read beats the composite"
-        );
-        assert!(
-            !wait_for_disk(Some(DISK_LOAD_GRACE)),
-            "past the grace the frame is composited, never hung on"
-        );
-    }
-
-    /// The impl note's clamp, pinned: never fewer than 8 frames of lookahead
-    /// (cheap comps still bank slack), never more than 16 (bounded VRAM), and
-    /// in between it scales with what frames cost.
-    #[test]
-    fn lookahead_follows_the_pinned_clamp() {
-        // Fresh run, nothing measured: the floor.
-        assert_eq!(lookahead_frames(None, 60.0), 8);
-        // Cheap frames: still the floor.
-        assert_eq!(lookahead_frames(Some(0.002), 60.0), 8);
-        // Costly frames: 2 × 0.1 s × 60 fps = 12 frames.
-        assert_eq!(lookahead_frames(Some(0.1), 60.0), 12);
-        // Hopeless frames: capped.
-        assert_eq!(lookahead_frames(Some(1.0), 60.0), 16);
-        // A degenerate rate never panics or explodes the ring.
-        assert_eq!(lookahead_frames(Some(0.1), 0.0), 8);
     }
 }

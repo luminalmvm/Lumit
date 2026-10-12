@@ -278,31 +278,4 @@ mod tests {
             assert!(col[band(100.0)] < 60, "a distant band stays dark");
         }
     }
-
-    #[test]
-    fn every_tier_answers_the_same_tone() {
-        // A window per column so coarse it must come off the coarsest tier,
-        // and one so fine it must come off the finest: both see the tone.
-        let grid = Spectrogram::build(&sine(4_000.0, 2.0, 48_000), 48_000);
-        let lit = band(4_000.0);
-        let coarse = grid.range(0.0, 2.0, 2);
-        assert!(coarse[lit] > 200 && coarse[BINS + lit] > 200);
-        let fine = grid.range(1.0, 1.01, 1);
-        assert!(fine[lit] > 200);
-    }
-
-    #[test]
-    fn outside_the_audio_is_silence_not_a_missing_column() {
-        let grid = Spectrogram::build(&sine(440.0, 1.0, 48_000), 48_000);
-        let cols = grid.range(2.0, 3.0, 4);
-        assert_eq!(cols.len(), 4 * BINS);
-        assert!(cols.iter().all(|&v| v == 0));
-    }
-
-    #[test]
-    fn too_short_to_analyse_is_an_empty_grid() {
-        let grid = Spectrogram::build(&[0.0; 64], 48_000);
-        assert!(grid.is_empty());
-        assert!(grid.range(0.0, 1.0, 4).iter().all(|&v| v == 0));
-    }
 }

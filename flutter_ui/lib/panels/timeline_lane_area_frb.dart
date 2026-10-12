@@ -32,6 +32,7 @@ import 'timeline_bar_frb.dart';
 import 'timeline_key_lane_frb.dart';
 import 'timeline_key_block_frb.dart';
 import 'timeline_group_row_frb.dart';
+import 'timeline_toolbar_frb.dart' show showTimelineMoreMenu;
 
 /// One selected keyframe, and where it sits: which row's curve it belongs to,
 /// which key of that curve it is, what frame it reads and where its lane is in
@@ -108,10 +109,14 @@ bool commitKeyGesture({
 /// work-area edges and markers, and the graph's key drags all reach for the
 /// same things, and a target that only some of them can see would be a second
 /// answer to "what is there".
+///
+/// [playhead] is read when a drag asks, not here: nothing rebuilds this list
+/// when the playhead moves, so the frame it was on at build time is stale by
+/// the first scrub.
 List<SnapTarget> timelineSnapTargets({
   required List<LayerRow> rows,
   required CompositionReference comp,
-  required int playheadFrame,
+  required ValueListenable<int> playhead,
   required ({int start, int end, bool whole}) work,
   required double fps,
 }) =>
@@ -138,7 +143,8 @@ List<SnapTarget> timelineSnapTargets({
               frames: laneKeysOf(row).map((k) => laneKeyFrame(k, fps)),
             ),
       ],
-      playheadFrame: playheadFrame,
+      playheadFrame: playhead.value,
+      playhead: playhead,
       work: work,
       fps: fps,
     );
@@ -239,6 +245,14 @@ class LayerArea extends StatelessWidget {
   final ValueListenable<Set<String>> selectedKeys;
   final ValueChanged<Set<String>> onKeysSelected;
 
+  /// The marquee's box while it is being dragged. The gesture sits behind the
+  /// bars and the box is drawn over the row lines, so the two meet here.
+  final ValueNotifier<Rect?> marquee;
+
+  /// Whether the project is shared. The marks for what other people are
+  /// doing are only in the tree while it is.
+  final bool sharing;
+
   /// A right-click on a lane key, by id and at the pointer in global
   /// coordinates — the panel opens the menu, because the rows it acts on
   /// reach past this lane.
@@ -277,10 +291,15 @@ class LayerArea extends StatelessWidget {
   /// (see [WorkAreaGround]).
   final ValueListenable<({int start, int end, bool whole})?> workPreview;
 
+  /// The marker a drag on the ruler has staged, held by the panel for the same
+  /// reason: the ruler writes it and the regions' ground listens to it, so a
+  /// region's band follows its flag without anything here rebuilding.
+  final ValueNotifier<MarkerPreview?> markerPreview;
+
   /// The layer drag in flight, and the block heights it slides by — the
   /// outline makes the gesture, and these are what let this side move with it
   /// rather than sit still while its layers are reordered.
-  final ValueNotifier<LayerDrag?> layerDrag;
+  final LayerDragState layerDrag;
   final List<double> blockHeights;
 
   /// The comp's exact rate, for the times a key drag commits.
@@ -337,7 +356,9 @@ class LayerArea extends StatelessWidget {
     required this.groupActions,
     required this.vScroll,
     required this.selectedKeys,
+    this.sharing = false,
     required this.onKeysSelected,
+    required this.marquee,
     required this.onKeyMenu,
     required this.stretch,
     required this.project,
@@ -346,6 +367,7 @@ class LayerArea extends StatelessWidget {
     required this.work,
     required this.onWorkPreview,
     required this.workPreview,
+    required this.markerPreview,
     required this.layerDrag,
     required this.blockHeights,
     required this.fpsNum,
@@ -491,15 +513,19 @@ class LayerArea extends StatelessWidget {
   /// box that no longer fits what it holds.
   ///
   /// Ordered top to bottom, which is the order Stagger's *top down* means.
-  List<SelectedKey> _selectedKeyPlaces() {
-    final held = selectedKeys.value;
+  List<SelectedKey> _selectedKeyPlaces() =>
+      _keyPlaces(selectedKeys.value.contains);
+
+  /// Every key [held] answers for, with where it sits. The selection's walk,
+  /// and the one the keyframes someone else has selected are found by.
+  List<SelectedKey> _keyPlaces(bool Function(String id) held) {
     final out = <SelectedKey>[];
     var y = 0.0;
     void placesOf(LayerRow layer, LayerFoldRow row, double step, double top) {
       final rowId = foldRowPath(layer.id, row);
       final keys = laneKeysOf(row);
       for (var i = 0; i < keys.length; i++) {
-        if (!held.contains('$rowId#$i')) continue;
+        if (!held('$rowId#$i')) continue;
         out.add(SelectedKey(
           entry: layer.entry,
           row: row,
@@ -601,6 +627,7 @@ class LayerArea extends StatelessWidget {
                   },
                   onWorkPreview: onWorkPreview,
                   onMarkersChanged: onChanged,
+                  onMarkerPreview: (staged) => markerPreview.value = staged,
                   // The work-area edges and the markers snap to the same
                   // shared list the keys and the bars do (docs/07 §4.5).
                   snapTargets: snap,
@@ -689,6 +716,7 @@ class LayerArea extends StatelessWidget {
                             Positioned.fill(
                               child: MarqueeSelect(
                                 key: const ValueKey('tl-lane-marquee'),
+                                box: marquee,
                                 // **Additive with `Shift` or `Ctrl`** held when
                                 // the drag began: the box adds to what was
                                 // already in hand rather than replacing it,
@@ -714,6 +742,38 @@ class LayerArea extends StatelessWidget {
                                 onTapAt: _tapGround,
                               ),
                             ),
+                            // A right-click on the ground opens the bottom
+                            // strip's menu, and "here" is the frame under the
+                            // pointer. Translucent, so the marquee behind it
+                            // still gets every press; the bars and keys above
+                            // take their own.
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.translucent,
+                                onSecondaryTapUp: (d) => showTimelineMoreMenu(
+                                  context,
+                                  comp: comp,
+                                  playhead: playhead,
+                                  position: d.globalPosition,
+                                  frame: axis.frameAt(d.localPosition.dx),
+                                  onChanged: onChanged,
+                                ),
+                              ),
+                            ),
+                            // The ground inside the block box moves the block.
+                            // Behind the bars and keys, like the marquee.
+                            Positioned.fill(
+                              child: ValueListenableBuilder<Set<String>>(
+                                valueListenable: selectedKeys,
+                                builder: (context, _, __) => KeyBlockMoveGrab(
+                                  places: _selectedKeyPlaces(),
+                                  axis: axis,
+                                  stretch: stretch,
+                                  magnet: magnet,
+                                  onMove: _moveHeldKeys,
+                                ),
+                              ),
+                            ),
                             // Only the blocks in view are built, the rest
                             // held open by two blanks — so the stack keeps
                             // the height every overlay around it is drawn
@@ -727,6 +787,7 @@ class LayerArea extends StatelessWidget {
                               controller: vScroll,
                               heights: blockHeights,
                               viewport: box.maxHeight,
+                              raised: layerDrag.raised,
                               builder: (context, i) =>
                                   // The block slides by the same rule and
                                   // the same heights the outline's does, so
@@ -736,6 +797,9 @@ class LayerArea extends StatelessWidget {
                                 drag: layerDrag,
                                 heights: blockHeights,
                                 index: i,
+                                // The right end of the card the outline's
+                                // block starts.
+                                side: LiftSide.trailing,
                                 child: Container(
                                   // One outline around the layer's own
                                   // bar row and everything its open
@@ -834,6 +898,15 @@ class LayerArea extends StatelessWidget {
                                           // selection moves: picking a key row
                                           // must not redraw the bar above it.
                                           onlyLit: true,
+                                          onEffectDropped: (name) {
+                                            try {
+                                              rows[i]
+                                                  .entry
+                                                  .layer
+                                                  .addEffect(name: name);
+                                            } catch (_) {}
+                                            onChanged();
+                                          },
                                           builder: (context, mine) => Bar(
                                             key: ValueKey<String>(
                                                 'tl-bar-${rows[i].id}'),
@@ -965,6 +1038,16 @@ class LayerArea extends StatelessWidget {
                               outside:
                                   t.timelineOutOfRange.withValues(alpha: 0.55),
                             ),
+                            // The markers' regions, over the bars for the same
+                            // reason: a region is there to line a layer up
+                            // against, and behind the bars it would be hidden
+                            // by the very rows it is being read on.
+                            MarkerRegionsGround(
+                              key: const ValueKey<String>('tl-lane-regions'),
+                              comp: comp,
+                              axis: axis,
+                              preview: markerPreview,
+                            ),
                             // The row hairlines, over everything and touching
                             // nothing: they run the full width of the lane
                             // area so the eye can track a row across the table,
@@ -983,10 +1066,32 @@ class LayerArea extends StatelessWidget {
                             Positioned.fill(
                               child: IgnorePointer(
                                 child: AnimatedBuilder(
-                                  animation: vScroll,
+                                  // The drag's band as well: this overlay is
+                                  // above every block, so a layer in hand is
+                                  // lifted over the seams by the seams
+                                  // standing clear of it.
+                                  animation: Listenable.merge([
+                                    vScroll,
+                                    layerDrag.band,
+                                    layerDrag.mark,
+                                  ]),
                                   builder: (context, _) => CustomPaint(
+                                    // The line marking a drop's place, for a
+                                    // drag that is not carried. This overlay
+                                    // rides the rows, so the mark is in its
+                                    // pixels already.
+                                    foregroundPainter:
+                                        switch (layerDrag.mark.value) {
+                                      final y? => DropMarkPainter(
+                                          y: y, colour: t.accent),
+                                      null => null,
+                                    },
                                     painter: RowDividerPainter(
-                                      step: t.density.laneRow,
+                                      // No rows, no rules: an empty
+                                      // composition is a clear ground.
+                                      step: rows.isEmpty
+                                          ? 0
+                                          : t.density.laneRow,
                                       colour: rowSeamColour(t),
                                       // Only the fraction: rounding is
                                       // invariant under whole-pixel shifts,
@@ -995,12 +1100,20 @@ class LayerArea extends StatelessWidget {
                                       origin:
                                           -((positionOf(vScroll)?.pixels ?? 0) %
                                               1.0),
-                                      blanks: sequenceBlanks,
+                                      blanks: [
+                                        ...sequenceBlanks,
+                                        if (layerDrag.band.value
+                                            case final band?)
+                                          band.blank,
+                                      ],
                                     ),
                                   ),
                                 ),
                               ),
                             ),
+                            // The marquee's box, over the bars and the seams
+                            // it is dragged across.
+                            MarqueeOverlay(box: marquee),
                             // The block-selection box, over the keys it holds
                             // and over the seams that cross it: it is
                             // the one thing here that describes the *whole*
@@ -1009,6 +1122,25 @@ class LayerArea extends StatelessWidget {
                             // thing here that cannot be gated per layer, for
                             // the same reason — so it listens whole, being a
                             // single overlay.
+                            // The keyframes the others in a shared project
+                            // have selected, each ringed in its person's
+                            // colour, under this person's own block.
+                            if (sharing)
+                              Positioned.fill(
+                              child: ShareKeys(
+                                comp: comp,
+                                places: (held) => [
+                                  for (final key
+                                      in _keyPlaces(held.containsKey))
+                                    (
+                                      Offset(axis.xOf(key.frame),
+                                          key.top + key.height / 2),
+                                      held['${key.rowId}#${key.index}'] ??
+                                          const <int>[],
+                                    ),
+                                ],
+                              ),
+                            ),
                             Positioned.fill(
                                 child: ValueListenableBuilder<Set<String>>(
                                     valueListenable: selectedKeys,
@@ -1036,6 +1168,11 @@ class LayerArea extends StatelessWidget {
                 )),
               ],
             ),
+            // Where the others in a shared project have their playheads,
+            // under this person's own.
+            if (sharing) SharePlayheads(comp: comp, xOf: axis.xOf),
+            // And the notes left in this composition, each at its frame.
+            if (sharing) ShareNotes(comp: comp, xOf: axis.xOf),
             // The playhead rides above every bar so it is never hidden behind
             // one, and it is the only thing here that redraws when it moves —
             // on its own layer, so that is true of the *painting* and not only
@@ -1053,7 +1190,7 @@ class LayerArea extends StatelessWidget {
   List<SnapTarget> _snapTargets() => timelineSnapTargets(
         rows: rows,
         comp: comp,
-        playheadFrame: playhead.value,
+        playhead: playhead,
         work: work,
         fps: fps,
       );
@@ -1101,7 +1238,7 @@ class LayerArea extends StatelessWidget {
                     child: SpectralLane(
                       grid: summaries.spectra[id],
                       originSeconds:
-                          -startOffset - TimelineAxis.pad * secondsPerPixel,
+                          -startOffset - axis.inset * secondsPerPixel,
                       secondsPerPixel: secondsPerPixel,
                       left: axis.xOf(inFrame),
                       right: axis.xOf(outFrame),
@@ -1120,7 +1257,7 @@ class LayerArea extends StatelessWidget {
                   // padding's width in, and the source's own clock runs from
                   // there less wherever the layer starts it.
                   originSeconds:
-                      -startOffset - TimelineAxis.pad * secondsPerPixel,
+                      -startOffset - axis.inset * secondsPerPixel,
                   secondsPerPixel: secondsPerPixel,
                   left: axis.xOf(inFrame),
                   right: axis.xOf(outFrame),

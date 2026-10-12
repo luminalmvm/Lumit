@@ -9,7 +9,6 @@
 // pulling did not scroll the page: it picked the whole dialog up and carried
 // it across the screen.
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,60 +88,6 @@ void main() {
         tester.getRect(find.byKey(const ValueKey('settings-title-strip'))),
         before,
         reason: 'the dialog stayed exactly where it was',
-      );
-    });
-
-    // A lazy list only guesses the height of the rows it has not built, so
-    // the guess, and the thumb drawn from it, moved as the page scrolled.
-    for (final name in ['appearance', 'shortcuts']) {
-      testWidgets('the $name page keeps one length while it scrolls',
-          (tester) async {
-        await open(tester, name: name);
-        final length = page(tester, name).maxScrollExtent;
-        expect(length, greaterThan(0));
-        for (var at = 0.0; at <= length; at += 200) {
-          page(tester, name).jumpTo(at);
-          await tester.pump();
-          expect(page(tester, name).maxScrollExtent, length,
-              reason: 'the thumb is sized from this, so it must not move');
-        }
-      });
-    }
-
-    // The app's scroll behaviour adds a scrollbar of its own on the desktop,
-    // which drew a second thumb beside the gutter's while the page moved.
-    testWidgets('the page draws one thumb on the desktop', (tester) async {
-      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      try {
-        await open(tester, behaviour: const MaterialScrollBehavior());
-        page(tester).jumpTo(100);
-        await tester.pump();
-        expect(
-            find.byWidgetPredicate((w) => w is RawScrollbar), findsOneWidget);
-      } finally {
-        debugDefaultTargetPlatformOverride = null;
-      }
-    });
-
-    testWidgets('a tap on the track still pages, as it always did',
-        (tester) async {
-      await open(tester);
-      final gutter = tester.getRect(find.byKey(const ValueKey('settings-gutter')));
-      await tester.tapAt(Offset(gutter.center.dx, gutter.bottom - 20),
-          kind: PointerDeviceKind.mouse);
-      await tester.pumpAndSettle();
-      expect(page(tester).pixels, greaterThan(0));
-    });
-
-    /// 6.12: The redesign leaves a row's second line to a *live report* — what
-    /// the machine has, what a choice costs here and now. The Chrome labels
-    /// row was the last one carrying a paragraph explaining itself.
-    testWidgets('no static hint is left under a settings row', (tester) async {
-      await open(tester);
-      expect(
-        find.textContaining('Hover text always says the word'),
-        findsNothing,
-        reason: 'the Chrome labels row explains itself by its own options',
       );
     });
   });

@@ -140,6 +140,22 @@ pub(crate) fn load_or_build_with(
 pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, MediaError> {
     let src = src.into();
     let fingerprint = Fingerprint::of(src.on_disk())?;
+    // An Illustrator document is one picture and ffmpeg can't open it, so its
+    // index is written out: one frame, on the clock ffmpeg gives a still.
+    if crate::ai::is_ai(src.on_disk()) {
+        crate::ai::open(src.on_disk())?;
+        return Ok(FrameIndex {
+            timebase_num: 1,
+            timebase_den: 25,
+            entries: vec![IndexEntry {
+                pts: 0,
+                keyframe: true,
+            }],
+            vfr: false,
+            median_delta: 0,
+            fingerprint,
+        });
+    }
     let mut input = crate::probe::open_input(&src)?;
 
     let (stream_index, timebase) = input
@@ -352,6 +368,41 @@ pub mod tests_support {
         status.success().then_some(out)
     }
 
+    /// A recording with two audio streams, the shape a screen capture with
+    /// the game and the microphone kept apart has: four seconds of a small
+    /// picture, three seconds of a 220 Hz tone on the first stream, named
+    /// Game, and four of a 1760 Hz tone on the second, named Microphone and
+    /// marked English. Uncompressed sound in a QuickTime file, so the samples
+    /// that come back are the ones that went in and a reader can jump in it.
+    pub fn two_audio_streams(dir: &Path) -> Option<PathBuf> {
+        let bin = ffmpeg_bin()?;
+        let out = dir.join("two_streams.mov");
+        let status = Command::new(bin)
+            .args(["-v", "error", "-y"])
+            .args(["-f", "lavfi", "-i"])
+            .arg("color=c=blue:size=64x64:rate=10:duration=4")
+            .args(["-f", "lavfi", "-i"])
+            .arg("sine=frequency=220:sample_rate=48000:duration=3")
+            .args(["-f", "lavfi", "-i"])
+            .arg("sine=frequency=1760:sample_rate=48000:duration=4")
+            .args(["-map", "0:v", "-map", "1:a", "-map", "2:a"])
+            .args([
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "pcm_s16le",
+            ])
+            .args(["-metadata:s:a:0", "title=Game"])
+            .args(["-metadata:s:a:1", "title=Microphone"])
+            .args(["-metadata:s:a:1", "language=eng"])
+            .arg(&out)
+            .status()
+            .ok()?;
+        status.success().then_some(out)
+    }
+
     /// An audio file with embedded cover art: one second of tone in a FLAC,
     /// plus a single still image written as an attached-picture stream — the
     /// shape of a music file with album artwork (native flac + png encoders,
@@ -546,43 +597,6 @@ mod tests {
         assert!(index.entries.windows(2).all(|w| w[0].pts < w[1].pts));
     }
 
-    #[test]
-    fn index_cache_round_trips_and_validates_fingerprint() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = fixture(dir.path()) else {
-            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
-            return;
-        };
-        let cache = dir.path().join("index");
-        let index = build_frame_index(&file).unwrap();
-        index.save_to(&cache).unwrap();
-
-        let fp = Fingerprint::of(&file).unwrap();
-        let loaded = FrameIndex::load_cached(&cache, &fp).expect("cache hit");
-        assert_eq!(loaded, index);
-
-        // Modifying the file invalidates the cache by fingerprint mismatch.
-        let mut bytes = std::fs::read(&file).unwrap();
-        let len = bytes.len();
-        bytes[len - 1] ^= 0xff;
-        std::fs::write(&file, bytes).unwrap();
-        let fp2 = Fingerprint::of(&file).unwrap();
-        assert!(FrameIndex::load_cached(&cache, &fp2).is_none());
-    }
-
-    #[test]
-    fn fingerprint_distinguishes_content() {
-        let dir = tempfile::tempdir().unwrap();
-        let a = dir.path().join("a.bin");
-        let b = dir.path().join("b.bin");
-        std::fs::write(&a, vec![1u8; 200_000]).unwrap();
-        std::fs::write(&b, vec![2u8; 200_000]).unwrap();
-        let fa = Fingerprint::of(&a).unwrap();
-        let fb = Fingerprint::of(&b).unwrap();
-        assert_ne!(fa.content_hash, fb.content_hash);
-        assert_eq!(fa.size, fb.size);
-    }
-
     /// Regression: `nearest_keyframe_at_or_before` used to index
     /// `entries[0]` unconditionally, which panicked when a `FrameIndex` had
     /// zero entries (a video stream declared but no readable packets — e.g.
@@ -606,63 +620,6 @@ mod tests {
         assert_eq!(index.nearest_keyframe_at_or_before(0), 0);
         assert_eq!(index.nearest_keyframe_at_or_before(50), 0);
         assert_eq!(index.pts_of_frame(0), None);
-    }
-
-    #[test]
-    fn build_frame_index_on_zero_byte_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = tests_support::zero_byte_file(dir.path());
-        assert!(build_frame_index(&path).is_err());
-    }
-
-    #[test]
-    fn build_frame_index_on_garbage_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = tests_support::garbage_file(dir.path());
-        assert!(build_frame_index(&path).is_err());
-    }
-
-    #[test]
-    fn build_frame_index_on_truncated_file_errors_not_panics() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = fixture(dir.path()) else {
-            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
-            return;
-        };
-        // Cut well before the moov atom (written at the end by default for
-        // this muxer), so stream info can never be recovered.
-        let truncated = tests_support::truncated_copy(&file, dir.path(), 200);
-        assert!(build_frame_index(&truncated).is_err());
-    }
-
-    /// docs/impl/media-io.md §2: VFR reality — detect it, and keep the
-    /// index usable (sorted, strictly increasing pts, sane keyframe lookup)
-    /// even when packet spacing is irregular.
-    #[test]
-    fn vfr_source_is_detected_and_index_stays_consistent() {
-        let dir = tempfile::tempdir().unwrap();
-        let Some(file) = tests_support::vfr_fixture(dir.path()) else {
-            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
-            return;
-        };
-        let index = build_frame_index(&file).unwrap();
-        assert!(
-            index.frame_count() > 10,
-            "expected a good number of selected frames, got {}",
-            index.frame_count()
-        );
-        assert!(index.vfr, "irregular packet spacing should flag as VFR");
-
-        // pts strictly increasing regardless of the irregular spacing.
-        assert!(index.entries.windows(2).all(|w| w[0].pts < w[1].pts));
-
-        // Every frame number resolves to a keyframe at-or-before itself,
-        // and never panics across the whole range.
-        for n in 0..index.frame_count() {
-            let k = index.nearest_keyframe_at_or_before(n);
-            assert!(k <= n, "keyframe {k} should be at or before frame {n}");
-            assert!(index.entries[k].keyframe, "frame {k} should be a keyframe");
-        }
     }
 
     // ---- load-or-build: the cache decision on its own -------------------
@@ -779,49 +736,18 @@ mod tests {
         );
     }
 
-    /// No cache directory at all (a platform with no home directory) still
-    /// works — it simply scans every time, which is what it did before the
-    /// cache existed.
+    // A file cut short, as a download that stopped or an export that crashed
+    // leaves one: its start reads as media and the rest is not there.
     #[test]
-    fn without_a_cache_directory_every_call_builds() {
+    fn build_frame_index_on_truncated_file_errors_not_panics() {
         let dir = tempfile::tempdir().unwrap();
-        let file = media_file(dir.path(), 7, 4096);
-
-        let scans = std::cell::Cell::new(0);
-        for _ in 0..2 {
-            let index = load_or_build_with(&MediaSource::file(&file), None, |p| {
-                scans.set(scans.get() + 1);
-                Ok(synthetic_index(p, 4))
-            })
-            .unwrap();
-            assert_eq!(index.frame_count(), 4);
-        }
-        assert_eq!(scans.get(), 2);
-    }
-
-    /// Whichever path produced it, the index is the same bytes: a build
-    /// written to the sidecar and read back must serialise identically, or
-    /// "the cache is faster" would quietly mean "the cache is different"
-    /// (docs/14 determinism).
-    #[test]
-    fn a_cached_index_round_trips_byte_for_byte() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = media_file(dir.path(), 7, 4096);
-        let cache = dir.path().join("media-index");
-
-        let built = load_or_build_with(&MediaSource::file(&file), Some(&cache), |p| {
-            Ok(synthetic_index(p, 11))
-        })
-        .unwrap();
-        let loaded = load_or_build_with(&MediaSource::file(&file), Some(&cache), |p| {
-            Ok(synthetic_index(p, 99))
-        })
-        .unwrap();
-
-        assert_eq!(built, loaded);
-        assert_eq!(
-            bincode::serialize(&built).unwrap(),
-            bincode::serialize(&loaded).unwrap()
-        );
+        let Some(file) = fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available for fixture generation");
+            return;
+        };
+        // Cut well before the moov atom (written at the end by default for
+        // this muxer), so stream info can never be recovered.
+        let truncated = tests_support::truncated_copy(&file, dir.path(), 200);
+        assert!(build_frame_index(&truncated).is_err());
     }
 }

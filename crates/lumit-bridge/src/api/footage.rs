@@ -57,6 +57,10 @@ pub struct BridgeMediaInfo {
     /// sound — the panel says nothing rather than "0 channels".
     pub channels: u32,
     pub sample_rate: u32,
+    /// How many audio streams the file carries. The codec, channels and rate
+    /// above are the first one's, which is the one a layer sounds until it is
+    /// told another ([`FootageReference::audio_streams`] lists them all).
+    pub audio_streams: u32,
     /// Whether the picture is a **still** rather than something that runs.
     /// A still probes with a video stream too — one frame of it — so
     /// the question is whether the stream lasts, and the engine
@@ -165,6 +169,7 @@ impl FootageReference {
                 .sequence
                 .as_ref()
                 .map(|s| (s.frame_rate.num(), s.frame_rate.den())),
+            source_layer: f.source_layer,
         })
     }
 
@@ -334,6 +339,7 @@ impl FootageReference {
                 repointed.push(lumit_media::MediaSource {
                     path: candidate,
                     sequence_fps: other.sequence_fps(),
+                    source_layer: other.source_layer,
                 });
                 ops.push(lumit_core::Op::SetMediaRef {
                     id: other.id,
@@ -412,6 +418,7 @@ impl FootageReference {
                     .map(|path| lumit_media::MediaSource {
                         path,
                         sequence_fps: Some((fps_num, fps_den)),
+                        source_layer: None,
                     }),
                 _ => None,
             }
@@ -523,6 +530,7 @@ impl FootageReference {
     /// Play this file's own sound from the top — the Project panel's preview
     /// (docs/07 §3.1). `false` when the file cannot be found on this machine,
     /// so the panel can hush the button rather than offer a play that is silent.
+    /// [`Self::preview_audio_from`] starts part way in.
     ///
     /// There is no composition behind it and no layer made: the file is decoded
     /// and heard as it is. Stopping is [`crate::api::audio::audio_stop`] and
@@ -535,15 +543,45 @@ impl FootageReference {
     ///
     /// A build with no decoder can open nothing, so it says so and the button
     /// never appears.
+    ///
+    /// **A file with several audio streams is heard as it would be placed.**
+    /// `arrival` is the setting *Several audio streams arrive as*: left out
+    /// or the first stream, the preview is the first stream; mixed or a layer
+    /// each, it is every stream together, which is what the layers it would
+    /// become sound like.
+    #[frb(sync)]
+    pub fn preview_audio(
+        &self,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
+    ) -> Result<bool, BridgeError> {
+        self.preview_audio_from(0.0, arrival)
+    }
+
+    /// [`Self::preview_audio`] from `start_seconds` into the file, which is
+    /// what the Source viewer plays from its own playhead.
+    ///
+    /// `audio_clock` then reads **the file's own time**: seconds from the top
+    /// of the file, so it starts at `start_seconds` and not at zero. A start
+    /// past the end of the file is held to the end, and a negative one is
+    /// the top.
     #[cfg(not(feature = "media"))]
     #[frb(sync)]
-    pub fn preview_audio(&self) -> Result<bool, BridgeError> {
+    pub fn preview_audio_from(
+        &self,
+        start_seconds: f64,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
+    ) -> Result<bool, BridgeError> {
+        let _ = (start_seconds, arrival);
         Ok(false)
     }
 
     #[cfg(feature = "media")]
     #[frb(sync)]
-    pub fn preview_audio(&self) -> Result<bool, BridgeError> {
+    pub fn preview_audio_from(
+        &self,
+        start_seconds: f64,
+        arrival: Option<crate::api::streams::BridgeStreamsArrival>,
+    ) -> Result<bool, BridgeError> {
         let project = self.project()?;
         let proj = project.read().map_err(|_| BridgeError::ReadFailed)?;
         let doc = proj.store.snapshot();
@@ -553,10 +591,19 @@ impl FootageReference {
         let Some(src) = Self::resolve_source(&proj, footage) else {
             return Ok(false);
         };
+        // Every stream the file would be placed with, heard together.
+        let arrival = arrival.unwrap_or(crate::api::streams::BridgeStreamsArrival::First);
+        let count = crate::streams::of_item(&proj, footage).len();
+        let places: Vec<u32> = arrival
+            .sounds(count)
+            .iter()
+            .flat_map(|plays| plays.places().to_vec())
+            .collect();
+        let sound = lumit_media::SoundSource::streams_of(src.path, &places);
         // The lock goes before the decode does: `preview` spawns and returns,
         // so nothing slow happens under the project guard (docs/14 §1).
         drop(proj);
-        crate::audio::preview(self.id, src.path);
+        crate::audio::preview(self.id, sound, start_seconds);
         Ok(true)
     }
 
@@ -669,6 +716,7 @@ impl FootageReference {
                 .as_ref()
                 .and_then(|a| u32::try_from(a.sample_rate).ok())
                 .unwrap_or(0),
+            audio_streams: info.audio_streams().count() as u32,
             // Has a picture, but it does not run.
             is_still: info.has_picture() && !info.runs_as_video(),
         }))
@@ -682,6 +730,24 @@ impl FootageReference {
     /// Display data — the Project panel's Path column. It says where the
     /// reference points, not whether anything is there; `get_status` is the
     /// question about the disk, and this deliberately touches none.
+    /// Show this footage's file in the desktop's own file manager. False when
+    /// the file can't be found, or no window could be opened.
+    #[frb(sync)]
+    #[must_use]
+    pub fn reveal(&self) -> bool {
+        let path = self.project().ok().and_then(|proj| {
+            let proj = proj.read().ok()?;
+            let snapshot = proj.store.snapshot();
+            match snapshot.item(self.id) {
+                Some(lumit_core::model::ProjectItem::Footage(footage)) => {
+                    Self::resolve_path(&proj, footage)
+                }
+                _ => None,
+            }
+        });
+        path.is_some_and(|path| crate::export::reveal_in_folder(&path.to_string_lossy()))
+    }
+
     #[frb(sync)]
     pub fn file_path(&self) -> Result<String, BridgeError> {
         let proj = self.project()?;
@@ -882,8 +948,8 @@ impl FootageReference {
     /// the result when it lands.
     ///
     /// Returns as soon as the job is *running*; ask [`proxy_poll`] how it is
-    /// getting on. A second one while the first runs is a calm refusal — two
-    /// transcodes share one disk.
+    /// getting on. One asked for while another runs waits its turn, since two
+    /// transcodes share one disk, and starts when the one before it lands.
     #[frb(sync)]
     pub fn make_proxy(&self) -> Result<(), BridgeError> {
         let source = self.source_path()?;

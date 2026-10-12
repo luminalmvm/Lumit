@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
+mod after_effects;
+pub use after_effects::{import_after_effects_shortcuts, AfterEffectsImport, NotAfterEffects};
+
 /// Something a chord can be bound to, identified by a stable string (e.g.
 /// `"playback.toggle"`). A string — not a giant enum — so new commands never
 /// force a breaking change and a keymap file stays readable.
@@ -80,6 +83,50 @@ impl ActionId {
             "keyframe.next" => "Next keyframe",
             "edit.point.prev" => "Previous edit point",
             "edit.point.next" => "Next edit point",
+            // Keyframes. The plain one acts on the picked property rows, the
+            // five named ones on the selected layers.
+            "keyframe.toggle" => "Add or remove a keyframe at the playhead",
+            "keyframe.toggle.position" => "Add or remove a Position keyframe",
+            "keyframe.toggle.scale" => "Add or remove a Scale keyframe",
+            "keyframe.toggle.rotation" => "Add or remove a Rotation keyframe",
+            "keyframe.toggle.opacity" => "Add or remove an Opacity keyframe",
+            "keyframe.toggle.anchor" => "Add or remove an Anchor point keyframe",
+            "keyframe.hold.toggle" => "Hold or release the keyframe",
+            "keyframe.interpolation" => "Set the keyframe's interpolation",
+            "keyframe.speed" => "Set the keyframe's speed",
+            "expression.add" => "Add an expression",
+            "cut.mark.in" => "Mark in",
+            "cut.mark.out" => "Mark out",
+            "cut.insert" => "Insert at the playhead",
+            "cut.overwrite" => "Overwrite at the playhead",
+            "cut.delete.ripple" => "Ripple delete",
+            "cut.tool.select" => "Select clips",
+            "cut.tool.razor" => "Cut clips with the razor",
+            "cut.tool.ripple" => "Ripple trim",
+            "cut.tool.roll" => "Roll an edit point",
+            "cut.tool.slip" => "Slip a clip",
+            "cut.tool.slide" => "Slide a clip",
+            "cut.trim.start.ripple" => "Ripple trim the start to the playhead",
+            "cut.trim.end.ripple" => "Ripple trim the end to the playhead",
+            "cut.trim.start" => "Trim the start to the playhead",
+            "cut.trim.end" => "Trim the end to the playhead",
+            "cut.roll.prev" => "Roll the previous edit point to the playhead",
+            "cut.roll.next" => "Roll the next edit point to the playhead",
+            "cut.add.edit" => "Cut at the playhead",
+            "cut.add.edit.all" => "Cut every track at the playhead",
+            "cut.nudge.left" => "Nudge clips one frame earlier",
+            "cut.nudge.right" => "Nudge clips one frame later",
+            "cut.nudge.left.many" => "Nudge clips five frames earlier",
+            "cut.nudge.right.many" => "Nudge clips five frames later",
+            "cut.nudge.up" => "Move clips up a track",
+            "cut.nudge.down" => "Move clips down a track",
+            "cut.select.at.playhead" => "Select the clip at the playhead",
+            "cut.snap.toggle" => "Turn snapping on or off",
+            "cut.linked.toggle" => "Turn linked selection on or off",
+            "cut.lift" => "Lift the work area",
+            "cut.extract" => "Extract the work area",
+            "cut.match.frame" => "Match frame",
+            "cut.transition.default" => "Add the default transition",
             "workarea.set.start" => "Set work-area start to the playhead",
             "workarea.set.end" => "Set work-area end to the playhead",
             "marker.add" => "Add a marker at the playhead",
@@ -89,8 +136,12 @@ impl ActionId {
             "edit.paste" => "Paste",
             "palette.open" => "Open the command palette",
             "console.open" => "Open the FX console",
+            "comp.flowchart" => "Open the flowchart",
             "export.queue.add" => "Add to the export queue",
             "comp.settings" => "Composition settings",
+            "comp.trim.workarea" => "Trim the composition to the work area",
+            "export.queue.open" => "Open the export queue",
+            "help.open" => "Open Lumit help",
             "edit.undo" => "Undo",
             "edit.redo" => "Redo",
             "edit.select.all" => "Select every layer",
@@ -99,6 +150,7 @@ impl ActionId {
             "file.open" => "Open a project",
             "file.save" => "Save the project",
             "file.save.as" => "Save the project somewhere else",
+            "file.save.version" => "Save a version with a name",
             "file.import" => "Import footage",
             "file.export" => "Export the composition",
             "comp.new" => "New composition",
@@ -148,6 +200,24 @@ impl ActionId {
             "layer.new.light.point" => "New Point light layer",
             "layer.new.adjustment" => "New Adjustment layer",
             "layer.new.null" => "New Null layer",
+            "layer.settings" => "Layer settings",
+            "layer.blend.next" => "Next blend mode",
+            "layer.blend.prev" => "Previous blend mode",
+            "layer.lock.toggle" => "Lock or unlock the layer",
+            "layer.unlock.all" => "Unlock every layer",
+            "layer.select.next" => "Select the layer below",
+            "layer.select.prev" => "Select the layer above",
+            "layer.order.up" => "Move the layer up the stack",
+            "layer.order.down" => "Move the layer down the stack",
+            "layer.order.top" => "Move the layer to the top of the stack",
+            "layer.order.bottom" => "Move the layer to the bottom of the stack",
+            "layer.shift.earlier" => "Move the layer a frame earlier",
+            "layer.shift.later" => "Move the layer a frame later",
+            "layer.shift.earlier10" => "Move the layer ten frames earlier",
+            "layer.shift.later10" => "Move the layer ten frames later",
+            "layer.centre" => "Centre the layer in the composition",
+            "mask.feather" => "Set the mask's feather",
+            "mask.invert" => "Invert the mask",
             "timeline.zoom.in" => "Zoom in",
             "timeline.zoom.out" => "Zoom out",
             "timeline.zoom.fit" => "Zoom to fit",
@@ -179,7 +249,15 @@ impl ActionId {
             "viewer.cinema" => "Fill the window with this view",
             "viewer.compare" => "Compare two views",
             "viewer.preview.always" => "Always preview this view",
+            "viewer.controls.toggle" => "Show or hide the layer controls",
+            "viewer.snap.grid.toggle" => "Turn snapping to the grid on or off",
             // Panels.
+            "panel.toggle.project" => "Show or hide the Project panel",
+            "panel.toggle.effects" => "Show or hide Effect controls",
+            "panel.toggle.presets" => "Show or hide Effects & presets",
+            "panel.toggle.audio" => "Show or hide the Audio panel",
+            "panel.toggle.text" => "Show or hide the Text panel",
+            "panel.toggle.paragraph" => "Show or hide the Paragraph panel",
             "panel.focus.next" => "Focus the next panel",
             "panel.focus.prev" => "Focus the previous panel",
             "panel.search.focus" => "Focus the panel's search box",
@@ -203,12 +281,15 @@ pub enum KeyContext {
     /// Panel focus/search shortcuts (docs/07 §15 "Panels").
     Panels,
     Effects,
+    /// The Cut workspace's timeline, where the editor's own letters shadow
+    /// the app-wide ones.
+    Cut,
 }
 
 impl KeyContext {
     /// Every context, in the order Settings → Keymap lists them: the ones live
     /// everywhere first, then the panels roughly as the workspace reads.
-    pub const ALL: [KeyContext; 8] = [
+    pub const ALL: [KeyContext; 9] = [
         KeyContext::Global,
         KeyContext::Tools,
         KeyContext::Project,
@@ -217,6 +298,7 @@ impl KeyContext {
         KeyContext::Graph,
         KeyContext::Panels,
         KeyContext::Effects,
+        KeyContext::Cut,
     ];
 
     /// The heading Settings → Keymap puts above this context's table. Sentence
@@ -234,6 +316,7 @@ impl KeyContext {
             KeyContext::Graph => "Graph editor",
             KeyContext::Panels => "Panels",
             KeyContext::Effects => "Effect controls",
+            KeyContext::Cut => "Cut timeline",
         }
     }
 }
@@ -297,26 +380,28 @@ impl FromStr for Chord {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut mods = Modifiers::default();
-        let mut key: Option<String> = None;
-        let tokens: Vec<&str> = s.split('+').collect();
-        let last = tokens.len().saturating_sub(1);
-        for (i, tok) in tokens.iter().enumerate() {
-            let t = tok.trim();
-            if i == last {
-                // The final token is always the key, even if it spells a
-                // modifier word (so `Shift` alone is the Shift *key*).
-                key = Some(normalise_key(t));
-                break;
+        // The final token is always the key, even if it spells a modifier
+        // word (so `Shift` alone is the Shift *key*). The plus key is written
+        // with the sign that joins the others, so `+` and `Shift++` are read
+        // for what they are before anything is split on it: otherwise the
+        // chord would not read back, and a stored keymap holding one would
+        // not load at all.
+        let (held, key) = match s.strip_suffix('+') {
+            Some(rest) if rest.is_empty() || rest.ends_with('+') => {
+                (rest.strip_suffix('+').unwrap_or(""), "+")
             }
-            match t.to_ascii_lowercase().as_str() {
+            _ => s.rsplit_once('+').unwrap_or(("", s)),
+        };
+        for tok in held.split('+').filter(|_| !held.is_empty()) {
+            match tok.trim().to_ascii_lowercase().as_str() {
                 "mod" | "cmd" | "command" | "ctrl" | "control" | "primary" => mods.primary = true,
                 "shift" => mods.shift = true,
                 "alt" | "option" | "opt" => mods.alt = true,
                 other => return Err(ChordError::UnknownModifier(other.to_string())),
             }
         }
-        match key {
-            Some(k) if !k.is_empty() => Ok(Chord { mods, key: k }),
+        match normalise_key(key) {
+            k if !k.is_empty() => Ok(Chord { mods, key: k }),
             _ => Err(ChordError::Empty),
         }
     }
@@ -407,6 +492,20 @@ pub struct Keymap {
     /// file without it gets the shipped ones.
     #[serde(default)]
     pub wheel: WheelKeys,
+
+    /// The modifier that breaks or joins a keyframe's handles when it is held as
+    /// a handle drag begins in the Graph editor. An older file without it gets Alt.
+    #[serde(default)]
+    pub break_handles: HandleModifier,
+}
+
+/// A modifier held as a handle drag begins. Shift isn't offered, since it
+/// already constrains the drag.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum HandleModifier {
+    #[default]
+    Alt,
+    Ctrl,
 }
 
 /// A modifier held with the scroll wheel. Ctrl is the Control key on every
@@ -721,7 +820,7 @@ fn row(context: KeyContext, chord: &str, action: &str) -> Option<Binding> {
 /// it to Cmd on macOS. Ships conflict-free (proven in tests).
 #[must_use]
 pub fn default_keymap() -> Keymap {
-    use KeyContext::{Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
+    use KeyContext::{Cut, Effects, Global, Graph, Panels, Project, Timeline, Tools, Viewer};
     let rows = [
         // --- Global: transport, navigation, app-wide commands ---
         row(Global, "Space", "playback.toggle"),
@@ -750,6 +849,23 @@ pub fn default_keymap() -> Keymap {
         row(Global, ".", "keyframe.next"),
         row(Global, "Mod+,", "edit.point.prev"),
         row(Global, "Mod+.", "edit.point.next"),
+        // A keyframe at the playhead on whichever property rows are picked, or
+        // the one already there taken away. After Effects has no key for this,
+        // only the per-property five below, so the chord is Lumit's own.
+        row(Global, "Alt+K", "keyframe.toggle"),
+        // After Effects' own five: the reveal letter with Alt and Shift keys
+        // that property on the selected layers, and shows its row.
+        row(Global, "Alt+Shift+P", "keyframe.toggle.position"),
+        row(Global, "Alt+Shift+S", "keyframe.toggle.scale"),
+        row(Global, "Alt+Shift+R", "keyframe.toggle.rotation"),
+        row(Global, "Alt+Shift+T", "keyframe.toggle.opacity"),
+        row(Global, "Alt+Shift+A", "keyframe.toggle.anchor"),
+        // The rest of the Animation menu's keyframe rows, on After Effects'
+        // chords. They act on the keys under the playhead.
+        row(Global, "Mod+Alt+H", "keyframe.hold.toggle"),
+        row(Global, "Mod+Alt+K", "keyframe.interpolation"),
+        row(Global, "Mod+Shift+K", "keyframe.speed"),
+        row(Global, "Alt+Shift+=", "expression.add"),
         row(Global, "B", "workarea.set.start"),
         row(Global, "N", "workarea.set.end"),
         row(Global, "*", "marker.add"),
@@ -775,8 +891,13 @@ pub fn default_keymap() -> Keymap {
         // The FX console: Video Copilot's own chord, and the one the
         // owner asked for.
         row(Global, "Mod+Space", "console.open"),
+        // The flowchart: After Effects' own key for its mini-flowchart.
+        row(Global, "Tab", "comp.flowchart"),
         row(Global, "Mod+M", "export.queue.add"),
         row(Global, "Mod+K", "comp.settings"),
+        row(Global, "Mod+Shift+X", "comp.trim.workarea"),
+        row(Global, "Mod+Alt+0", "export.queue.open"),
+        row(Global, "F1", "help.open"),
         row(Global, "Mod+Z", "edit.undo"),
         row(Global, "Mod+Shift+Z", "edit.redo"),
         row(Global, "Mod+S", "file.save"),
@@ -788,6 +909,7 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+Alt+N", "file.new"),
         row(Global, "Mod+O", "file.open"),
         row(Global, "Mod+Shift+S", "file.save.as"),
+        row(Global, "Mod+Alt+S", "file.save.version"),
         row(Global, "Mod+I", "file.import"),
         row(Global, "Mod+Alt+M", "file.export"),
         row(Global, "Mod+N", "comp.new"),
@@ -816,6 +938,29 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Mod+Alt+Shift+L", "layer.new.light.point"),
         row(Global, "Mod+Alt+Y", "layer.new.adjustment"),
         row(Global, "Mod+Alt+Shift+Y", "layer.new.null"),
+        // What else After Effects does to the selected layers from the
+        // keyboard, on its own chords. App-wide like the ones above, since a
+        // layer picked in the Viewer is as selected as one picked in the
+        // Timeline.
+        row(Global, "Mod+Shift+Y", "layer.settings"),
+        row(Global, "Shift+=", "layer.blend.next"),
+        row(Global, "Shift+-", "layer.blend.prev"),
+        row(Global, "Mod+L", "layer.lock.toggle"),
+        row(Global, "Mod+Shift+L", "layer.unlock.all"),
+        row(Global, "Mod+ArrowDown", "layer.select.next"),
+        row(Global, "Mod+ArrowUp", "layer.select.prev"),
+        row(Global, "Mod+]", "layer.order.up"),
+        row(Global, "Mod+[", "layer.order.down"),
+        row(Global, "Mod+Shift+]", "layer.order.top"),
+        row(Global, "Mod+Shift+[", "layer.order.bottom"),
+        row(Global, "Alt+PageUp", "layer.shift.earlier"),
+        row(Global, "Alt+PageDown", "layer.shift.later"),
+        row(Global, "Alt+Shift+PageUp", "layer.shift.earlier10"),
+        row(Global, "Alt+Shift+PageDown", "layer.shift.later10"),
+        row(Global, "Mod+Home", "layer.centre"),
+        // The mask whose row is picked in the Timeline.
+        row(Global, "Mod+Shift+F", "mask.feather"),
+        row(Global, "Mod+Shift+I", "mask.invert"),
         // --- Tools ---
         row(Tools, "V", "tool.select"),
         row(Tools, "H", "tool.hand"),
@@ -903,10 +1048,66 @@ pub fn default_keymap() -> Keymap {
         row(Viewer, "Mod+Alt+F", "viewer.cinema"),
         row(Viewer, "Mod+Alt+C", "viewer.compare"),
         row(Viewer, "Mod+Alt+P", "viewer.preview.always"),
+        row(Viewer, "Mod+Shift+H", "viewer.controls.toggle"),
+        row(Viewer, "Mod+Shift+'", "viewer.snap.grid.toggle"),
         // --- Panels ---
         row(Panels, "Mod+F6", "panel.focus.next"),
         row(Panels, "Mod+Shift+F6", "panel.focus.prev"),
         row(Panels, "Mod+F", "panel.search.focus"),
+        // Putting a panel up and taking it down, on the numbers After Effects
+        // gives its own.
+        row(Panels, "Mod+0", "panel.toggle.project"),
+        row(Panels, "F3", "panel.toggle.effects"),
+        row(Panels, "Mod+5", "panel.toggle.presets"),
+        row(Panels, "Mod+4", "panel.toggle.audio"),
+        row(Panels, "Mod+6", "panel.toggle.text"),
+        row(Panels, "Mod+7", "panel.toggle.paragraph"),
+        // --- Cut timeline ---
+        // An editor's own keys, the ones Premiere uses. I, O and the two
+        // punctuation keys are spoken for app-wide, by the layer's in and out
+        // points and the keyframe steps, so they are bound here and shadow
+        // those inside the Cut timeline and nowhere else, the way `L` does
+        // in the Timeline.
+        row(Cut, "I", "cut.mark.in"),
+        row(Cut, "O", "cut.mark.out"),
+        row(Cut, ",", "cut.insert"),
+        row(Cut, ".", "cut.overwrite"),
+        row(Cut, "Shift+Delete", "cut.delete.ripple"),
+        // The tools, the trims to the playhead and the nudges, on the
+        // letters editors already have under their fingers. Each shadows an
+        // app-wide key inside the Cut timeline alone.
+        row(Cut, "V", "cut.tool.select"),
+        row(Cut, "C", "cut.tool.razor"),
+        row(Cut, "B", "cut.tool.ripple"),
+        row(Cut, "N", "cut.tool.roll"),
+        row(Cut, "Y", "cut.tool.slip"),
+        row(Cut, "U", "cut.tool.slide"),
+        row(Cut, "Q", "cut.trim.start.ripple"),
+        row(Cut, "W", "cut.trim.end.ripple"),
+        row(Cut, "Alt+Q", "cut.trim.start"),
+        row(Cut, "Alt+W", "cut.trim.end"),
+        row(Cut, "Shift+Q", "cut.roll.prev"),
+        row(Cut, "Shift+W", "cut.roll.next"),
+        row(Cut, "Mod+K", "cut.add.edit"),
+        row(Cut, "Mod+Shift+K", "cut.add.edit.all"),
+        row(Cut, "Alt+ArrowLeft", "cut.nudge.left"),
+        row(Cut, "Alt+ArrowRight", "cut.nudge.right"),
+        row(Cut, "Alt+Shift+ArrowLeft", "cut.nudge.left.many"),
+        row(Cut, "Alt+Shift+ArrowRight", "cut.nudge.right.many"),
+        row(Cut, "Alt+ArrowUp", "cut.nudge.up"),
+        row(Cut, "Alt+ArrowDown", "cut.nudge.down"),
+        row(Cut, "D", "cut.select.at.playhead"),
+        row(Cut, "S", "cut.snap.toggle"),
+        row(Cut, "Shift+L", "cut.linked.toggle"),
+        row(Cut, ";", "cut.lift"),
+        row(Cut, "'", "cut.extract"),
+        row(Cut, "F", "cut.match.frame"),
+        row(Cut, "Mod+D", "cut.transition.default"),
+        row(Cut, "=", "timeline.zoom.in"),
+        row(Cut, "-", "timeline.zoom.out"),
+        row(Cut, "\\", "timeline.zoom.fit"),
+        row(Cut, "ArrowUp", "edit.point.prev"),
+        row(Cut, "ArrowDown", "edit.point.next"),
     ];
     let mut bindings: Vec<Binding> = rows.into_iter().flatten().collect();
     // Alt+Shift+1…9 switch workspace.
@@ -935,6 +1136,7 @@ pub fn default_keymap() -> Keymap {
         bindings,
         unbound: Vec::new(),
         wheel: WheelKeys::default(),
+        break_handles: HandleModifier::default(),
     }
 }
 
@@ -992,11 +1194,12 @@ pub fn with_new_defaults(stored: Keymap) -> Keymap {
 #[must_use]
 pub fn after_effects_preset() -> Keymap {
     let mut km = default_keymap();
-    // AE has no J/K/L shuttle; the letters go back to their AE meanings.
-    for k in ["J", "K", "L"] {
-        if let Ok(chord) = k.parse::<Chord>() {
-            km.unbind(KeyContext::Global, &chord);
-        }
+    // AE has no J/K/L shuttle; the letters go back to their AE meanings. Unbound
+    // by action, so the stored file remembers it and a restart doesn't put the
+    // shuttle back.
+    for direction in ["reverse", "pause", "forward"] {
+        let action = ActionId(format!("playback.shuttle.{direction}"));
+        km.unbind_action(KeyContext::Global, &action);
     }
     // `bind`, not `rebind_action`, for the keyframe pair: `,` / `.` stay as a
     // second way in, exactly as the default keeps `*` beside `Shift+M`.
@@ -1043,7 +1246,15 @@ mod tests {
         let shift_key = chord("Shift");
         assert!(!shift_key.mods.shift && shift_key.key == "Shift");
         // Display is canonical and re-parses to the same chord.
-        for s in ["Space", "Mod+D", "Shift+F3", "Mod+Alt+Shift+K", "="] {
+        for s in [
+            "Space",
+            "Mod+D",
+            "Shift+F3",
+            "Mod+Alt+Shift+K",
+            "=",
+            "+",
+            "Shift++",
+        ] {
             let c = chord(s);
             assert_eq!(chord(&c.to_string()), c, "round-trip failed for {s}");
         }
@@ -1056,59 +1267,17 @@ mod tests {
     }
 
     #[test]
-    fn the_fx_console_has_its_own_chord_and_does_not_clash() {
-        // Ctrl+Space opens the console. Video Copilot's own chord, and
-        // the shipped map must stay conflict-free with it in.
+    fn tab_opens_the_flowchart_from_any_panel() {
         let km = default_keymap();
-        assert_eq!(
-            km.lookup(KeyContext::Global, &"Mod+Space".parse().unwrap()),
-            Some(&ActionId::from("console.open"))
-        );
-        // The bare space bar still plays; the console took the modified one.
-        assert_eq!(
-            km.lookup(KeyContext::Global, &"Space".parse().unwrap()),
-            Some(&ActionId::from("playback.toggle"))
-        );
+        let tab: Chord = "Tab".parse().unwrap();
+        for context in KeyContext::ALL {
+            assert_eq!(
+                km.lookup(context, &tab),
+                Some(&ActionId::from("comp.flowchart")),
+                "{context:?}"
+            );
+        }
         assert!(km.conflicts().is_empty(), "the shipped map ships clean");
-    }
-
-    #[test]
-    fn enter_renames_the_selection_in_each_panel_that_has_one() {
-        // The same key the Timeline always used for its layers is
-        // bound for the Project panel's items and Effect controls' effects.
-        let km = default_keymap();
-        let enter: Chord = "Enter".parse().unwrap();
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &enter),
-            Some(&ActionId::from("layer.rename"))
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Project, &enter),
-            Some(&ActionId::from("item.rename"))
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Effects, &enter),
-            Some(&ActionId::from("effect.rename"))
-        );
-    }
-
-    #[test]
-    fn lookup_prefers_the_active_context_then_falls_back_to_global() {
-        let mut km = Keymap::default();
-        km.bind(KeyContext::Global, chord("Mod+K"), "global.k".into());
-        km.bind(KeyContext::Timeline, chord("Mod+K"), "timeline.k".into());
-        // In the timeline, the scoped binding wins.
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("Mod+K")),
-            Some(&"timeline.k".into())
-        );
-        // Elsewhere, the global one is the fallback.
-        assert_eq!(
-            km.lookup(KeyContext::Viewer, &chord("Mod+K")),
-            Some(&"global.k".into())
-        );
-        // Unbound chord resolves to nothing.
-        assert_eq!(km.lookup(KeyContext::Viewer, &chord("Mod+J")), None);
     }
 
     #[test]
@@ -1162,31 +1331,9 @@ mod tests {
         assert!(km.shadows().is_empty());
     }
 
-    /// Stepping a frame is `Mod`+arrow, and the bare arrows are free.
-    #[test]
-    fn a_frame_step_takes_the_primary_modifier() {
-        let km = default_keymap();
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("Mod+ArrowRight")),
-            Some(&ActionId::from("playback.frame.next"))
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("Mod+ArrowLeft")),
-            Some(&ActionId::from("playback.frame.prev"))
-        );
-        assert_eq!(km.lookup(KeyContext::Global, &chord("ArrowRight")), None);
-        assert_eq!(km.lookup(KeyContext::Timeline, &chord("ArrowLeft")), None);
-        // The page keys still step a frame unmodified — the chord moved, the
-        // other way of doing it did not.
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("PageDown")),
-            Some(&ActionId::from("playback.frame.next"))
-        );
-    }
-
     /// `L` reveals a layer's Audio in the Timeline and shuttles forward
-    /// everywhere else — the one shadow the default ships with, and it
-    /// is deliberate.
+    /// everywhere else. That and the Cut timeline's editing keys are the
+    /// shadows the default ships with, and they are deliberate.
     #[test]
     fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         let km = default_keymap();
@@ -1209,35 +1356,9 @@ mod tests {
                 .iter()
                 .map(|s| s.chord.to_string())
                 .collect::<Vec<_>>(),
-            vec!["L".to_string()],
-            "one deliberate shadow, and it is named in the docs"
+            ["L", "I", "O", ",", ".", "B", "N", "Mod+K", "Mod+Shift+K"],
+            "the deliberate shadows, and no others"
         );
-    }
-
-    #[test]
-    fn bind_replaces_and_unbind_removes_the_exact_entry() {
-        let mut km = Keymap::default();
-        km.bind(KeyContext::Global, chord("Mod+D"), "one".into());
-        km.bind(KeyContext::Global, chord("Mod+D"), "two".into());
-        assert_eq!(km.bindings.len(), 1, "rebind replaces, not duplicates");
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("Mod+D")),
-            Some(&"two".into())
-        );
-        assert!(km.unbind(KeyContext::Global, &chord("Mod+D")));
-        assert!(!km.unbind(KeyContext::Global, &chord("Mod+D")));
-        assert!(km.lookup(KeyContext::Global, &chord("Mod+D")).is_none());
-    }
-
-    #[test]
-    fn search_matches_action_and_chord_text() {
-        let km = default_keymap();
-        assert!(km.search("undo").iter().any(|b| b.action.0 == "edit.undo"));
-        assert!(km
-            .search("shift+f3")
-            .iter()
-            .any(|b| b.action.0 == "graph.toggle"));
-        assert!(km.search("nonexistent-xyz").is_empty());
     }
 
     #[test]
@@ -1275,34 +1396,6 @@ mod tests {
                 .iter()
                 .any(|b| b.context == KeyContext::Global));
         }
-    }
-
-    /// The numbered markers. `Shift+N` sets and the bare `N` returns, for
-    /// all ten digits including zero — and `M` must still reveal Masks in the
-    /// Timeline, which is the whole reason the marker key is `Shift+M`.
-    #[test]
-    fn numbered_markers_bind_set_and_return_for_every_digit() {
-        let km = default_keymap();
-        for d in 0..=9u8 {
-            assert_eq!(
-                km.lookup(KeyContext::Global, &chord(&format!("Shift+{d}"))),
-                Some(&ActionId(format!("marker.add.{d}"))),
-                "Shift+{d} should set marker {d}"
-            );
-            assert_eq!(
-                km.lookup(KeyContext::Global, &chord(&format!("{d}"))),
-                Some(&ActionId(format!("marker.goto.{d}"))),
-                "{d} should return to marker {d}"
-            );
-        }
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord("Shift+M")),
-            Some(&"marker.add".into())
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("M")),
-            Some(&"reveal.masks".into())
-        );
     }
 
     /// **A keymap stored by an older build must not hide a new action**. This
@@ -1353,103 +1446,18 @@ mod tests {
         assert!(after_effects_preset().conflicts().is_empty());
     }
 
-    /// The After Effects preset re-points the default's deviations — J/K to
-    /// keyframe navigation with the shuttle gone, the camera/razor letter swap
-    /// — and leaves the chords the two programs already agree on alone.
+    /// The preset takes the shuttle off J/K/L, and a restart must not hand it
+    /// back on top of the keyframe keys.
     #[test]
-    fn the_after_effects_preset_repoints_the_ae_habits() {
-        let km = after_effects_preset();
-        // J/K are AE's keyframe navigation, app-wide; the shuttle is gone.
+    fn the_after_effects_preset_survives_the_stored_file() {
+        let restored = with_new_defaults(after_effects_preset());
+        assert!(restored.conflicts().is_empty());
         assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("J")),
-            Some(&"keyframe.prev".into())
+            restored.lookup(KeyContext::Viewer, &chord("L")),
+            None,
+            "the shuttle stays off"
         );
-        assert_eq!(
-            km.lookup(KeyContext::Viewer, &chord("K")),
-            Some(&"keyframe.next".into())
-        );
-        assert!(!km
-            .bindings
-            .iter()
-            .any(|b| b.action.0.starts_with("playback.shuttle")));
-        // `,` / `.` still work as the second way in.
-        assert_eq!(
-            km.lookup(KeyContext::Global, &chord(",")),
-            Some(&"keyframe.prev".into())
-        );
-        // The camera/razor swap: AE's `C` cycles cameras.
-        assert_eq!(
-            km.lookup(KeyContext::Tools, &chord("C")),
-            Some(&"tool.camera".into())
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Tools, &chord("Shift+C")),
-            Some(&"tool.razor".into())
-        );
-        // `L` still reveals a layer's Audio in the Timeline — AE's `L` too —
-        // and no longer shadows anything, since the shuttle is gone.
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("L")),
-            Some(&"reveal.audio".into())
-        );
-        assert!(km.shadows().is_empty());
-        // Chords the two programs agree on are untouched.
-        for (context, chord_text, action) in [
-            (KeyContext::Global, "Space", "playback.toggle"),
-            (KeyContext::Tools, "V", "tool.select"),
-            (KeyContext::Tools, "Y", "tool.anchor"),
-            (KeyContext::Tools, "G", "tool.pen"),
-            (KeyContext::Timeline, "Mod+D", "layer.duplicate"),
-            (KeyContext::Timeline, "[", "layer.move.in"),
-            (KeyContext::Timeline, "Alt+]", "layer.trim.out"),
-            (KeyContext::Global, "Home", "playback.comp.start"),
-            (KeyContext::Global, "Mod+Alt+T", "layer.retime.enable"),
-            (KeyContext::Graph, "F9", "graph.ease"),
-        ] {
-            assert_eq!(
-                km.lookup(context, &chord(chord_text)),
-                Some(&action.into()),
-                "{chord_text} should still run {action}"
-            );
-        }
-    }
-
-    /// Layer ▸ New rows carry a chord each, so the menu shows one beside
-    /// the label, and the six take nothing another row already has.
-    #[test]
-    fn new_layer_rows_ship_with_after_effects_chords() {
-        let km = default_keymap();
-        for (chord_text, action) in [
-            ("Mod+Y", "layer.new.solid"),
-            ("Mod+Alt+Shift+T", "layer.new.text"),
-            ("Mod+Alt+Shift+C", "layer.new.camera"),
-            ("Mod+Alt+Shift+L", "layer.new.light.point"),
-            ("Mod+Alt+Y", "layer.new.adjustment"),
-            ("Mod+Alt+Shift+Y", "layer.new.null"),
-        ] {
-            assert_eq!(
-                km.lookup(KeyContext::Global, &chord(chord_text)),
-                Some(&action.into()),
-                "{chord_text} should run {action}"
-            );
-        }
-        assert!(km.conflicts().is_empty());
-        assert!(
-            !km.shadows()
-                .iter()
-                .any(|s| s.shadowed.0.starts_with("layer.new.")),
-            "no panel takes a new-layer chord away"
-        );
-    }
-
-    #[test]
-    fn a_keymap_serialises_to_a_shareable_file_and_back() {
-        let km = default_keymap();
-        let json = serde_json::to_string_pretty(&km).unwrap();
-        // Chords serialise as their readable string form.
-        assert!(json.contains("\"Shift+F3\""));
-        let back: Keymap = serde_json::from_str(&json).unwrap();
-        assert_eq!(back, km);
+        assert_eq!(restored, after_effects_preset());
     }
 
     #[test]
@@ -1488,32 +1496,20 @@ mod tests {
     }
 
     #[test]
-    fn taking_a_wheel_modifier_swaps_with_whatever_shares_the_panel() {
-        let mut wheel = WheelKeys::default();
-        // Alt+wheel for zooming time, the way After Effects does it.
-        wheel.set(WheelAction::ZoomTime, WheelModifier::Alt);
-        assert_eq!(wheel.modifier(WheelAction::ZoomTime), WheelModifier::Alt);
-        assert_eq!(
-            wheel.modifier(WheelAction::ZoomValues),
-            WheelModifier::Ctrl,
-            "the Graph editor's value zoom takes the freed Ctrl"
-        );
-        assert_eq!(
-            wheel.modifier(WheelAction::ScrollSideways),
-            WheelModifier::Shift
-        );
-        // The dropper lives in the Viewer, so it can share Shift with the lanes.
-        wheel.set(WheelAction::ScrollSideways, WheelModifier::Ctrl);
-        assert_eq!(
-            wheel.modifier(WheelAction::ZoomValues),
-            WheelModifier::Shift
-        );
-        assert_eq!(
-            wheel.modifier(WheelAction::DropperSample),
-            WheelModifier::Shift
-        );
-        wheel.set(WheelAction::DropperSample, WheelModifier::Alt);
-        assert_eq!(wheel.modifier(WheelAction::ZoomTime), WheelModifier::Alt);
+    fn the_handle_modifier_ships_as_alt_and_travels_in_the_file() {
+        let mut km = default_keymap();
+        assert_eq!(km.break_handles, HandleModifier::Alt);
+
+        km.break_handles = HandleModifier::Ctrl;
+        let json = serde_json::to_string(&km).unwrap();
+        let back: Keymap = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.break_handles, HandleModifier::Ctrl);
+
+        // A file from before the modifier could be chosen still reads.
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value.as_object_mut().unwrap().remove("break_handles");
+        let older: Keymap = serde_json::from_value(value).unwrap();
+        assert_eq!(older.break_handles, HandleModifier::Alt);
     }
 
     /// Settings → Keymap shows a description, never a raw id, so every action
@@ -1583,57 +1579,6 @@ mod tests {
         );
     }
 
-    /// Taking a chord another action already holds is never refused — refusing
-    /// would make swapping two actions' keys impossible, since the swap needs a
-    /// moment where one chord is claimed twice. What happens to the old owner
-    /// depends on whether it could still fire, and both halves are pinned here
-    /// because the settings table has to show the difference.
-    #[test]
-    fn taking_a_held_chord_evicts_within_a_context_and_conflicts_across_them() {
-        // Same context: the old owner loses the key and its row goes blank.
-        // Visible in the table, so nothing is lost silently.
-        let mut km = Keymap::default();
-        km.bind(KeyContext::Timeline, chord("D"), "a".into());
-        km.bind(KeyContext::Timeline, chord("F"), "b".into());
-        km.rebind_action(KeyContext::Timeline, &"b".into(), chord("D"));
-        assert_eq!(
-            km.binding_for(KeyContext::Timeline, &"a".into()),
-            None,
-            "the previous owner shows as unbound rather than answering invisibly"
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("D")),
-            Some(&ActionId::from("b"))
-        );
-        assert!(
-            km.conflicts().is_empty(),
-            "one owner, so nothing to resolve"
-        );
-
-        // Across contexts: a Global binding stays live everywhere else, so both
-        // survive — and the panel taking the chord over is reported as a shadow
-        // rather than a clash, because which action fires is never in
-        // doubt.
-        let mut km = Keymap::default();
-        km.bind(KeyContext::Global, chord("D"), "global.thing".into());
-        km.bind(KeyContext::Timeline, chord("F"), "timeline.thing".into());
-        km.rebind_action(KeyContext::Timeline, &"timeline.thing".into(), chord("D"));
-        assert!(km.conflicts().is_empty(), "nothing ambiguous to resolve");
-        let shadows = km.shadows();
-        assert_eq!(shadows.len(), 1, "the takeover is still said out loud");
-        assert_eq!(shadows[0].chord, chord("D"));
-        assert_eq!(
-            km.lookup(KeyContext::Timeline, &chord("D")),
-            Some(&ActionId::from("timeline.thing")),
-            "and the focused panel still gets first refusal meanwhile"
-        );
-        assert_eq!(
-            km.lookup(KeyContext::Viewer, &chord("D")),
-            Some(&ActionId::from("global.thing")),
-            "while the app-wide meaning is untouched everywhere else"
-        );
-    }
-
     /// The search box sits above a table of descriptions, so it has to match
     /// what the reader can see, not only the ids underneath.
     #[test]
@@ -1651,23 +1596,5 @@ mod tests {
             .search("tool.pen")
             .iter()
             .any(|b| b.action.0 == "tool.pen"));
-    }
-
-    /// Every context the settings page can head a table with is one the default
-    /// keymap actually uses, and vice versa — a heading with nothing under it,
-    /// or bindings with no heading, are both bugs the page cannot show.
-    #[test]
-    fn the_context_list_matches_what_the_default_keymap_uses() {
-        let km = default_keymap();
-        for context in KeyContext::ALL {
-            assert!(!context.label().is_empty());
-        }
-        for b in &km.bindings {
-            assert!(
-                KeyContext::ALL.contains(&b.context),
-                "{:?} is bound but not listed in KeyContext::ALL",
-                b.context
-            );
-        }
     }
 }

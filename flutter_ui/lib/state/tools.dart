@@ -22,6 +22,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeBrushShape;
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import 'keymap.dart' show chordLabel;
+import 'text_documents.dart';
 
 /// A cluster of tools that share one toolbar button, in the order the button's
 /// flyout lists them.
@@ -48,10 +50,9 @@ enum ToolGroup {
 /// One tool.
 ///
 /// [ready] is honest bookkeeping rather than decoration: it says whether
-/// choosing this tool changes what a drag does *today*. The toolbar draws the
-/// unbuilt ones the same as the rest — they are the specified tool set, not a
-/// wish list — and only its tooltip mentions that the behaviour is still to
-/// come.
+/// choosing this tool changes what a drag does *today*. The unbuilt ones stay
+/// in this list, because they are the specified tool set and not a wish list,
+/// but a flyout leaves them out until they work.
 enum ToolMode {
   select(ToolGroup.select, LumitIcon.pointer, ready: true),
   hand(ToolGroup.hand, LumitIcon.move, ready: true),
@@ -163,6 +164,42 @@ enum ToolMode {
         ToolMode.cameraDolly => l10n.toolCameraDolly,
       };
 
+  /// What its modifiers and keys do, for the status line's hint, or null for a
+  /// tool with nothing to add. Every claim here is one the tool's own handler
+  /// keeps today: change the handler and this line changes with it.
+  String? get hint => switch (this) {
+        ToolMode.select => l10n.statusHintSelect,
+        ToolMode.zoom => l10n.statusHintZoom,
+        ToolMode.rotate => l10n.statusHintRotate,
+        // The snap is on the platform's primary modifier, spelt as a chord
+        // spells it: Ctrl here, the command key on a Mac.
+        ToolMode.anchor =>
+          l10n.statusHintAnchor(chordLabel('Mod+').replaceAll('+', '')),
+        ToolMode.razor => l10n.statusHintRazor,
+        ToolMode.shapeRectangle ||
+        ToolMode.shapeRoundedRectangle ||
+        ToolMode.shapeEllipse ||
+        ToolMode.shapePolygon ||
+        ToolMode.shapeStar =>
+          l10n.statusHintShape,
+        ToolMode.pen => l10n.statusHintPen,
+        ToolMode.typeHorizontal => l10n.statusHintType,
+        ToolMode.brush || ToolMode.eraser => l10n.statusHintPaint,
+        ToolMode.cloneStamp => l10n.statusHintCloneStamp,
+        ToolMode.rotoBrush => l10n.statusHintRotoBrush,
+        ToolMode.puppetPosition ||
+        ToolMode.puppetStarch ||
+        ToolMode.puppetOverlap =>
+          l10n.statusHintPuppet,
+        ToolMode.puppetBend => l10n.statusHintPuppetBend,
+        ToolMode.cameraUnified => l10n.statusHintCameraUnified,
+        ToolMode.cameraOrbit => l10n.statusHintCameraOrbit,
+        ToolMode.cameraPan => l10n.statusHintCameraPan,
+        // The Hand, Refine edge and the dolly have no modifier, and the rest
+        // cannot be armed.
+        _ => null,
+      };
+
   final LumitIcon icon;
 
   /// Whether arming it changes what a drag does yet.
@@ -245,6 +282,25 @@ class ToolsState extends ChangeNotifier {
   /// The armed tool.
   ToolMode get tool => _tool;
 
+  /// This machine can only look at the shared project it is in, so what
+  /// changes the project is held still. The one flag for it: the Hand is the
+  /// tool in hand, only it and Zoom can be armed ([arms]), and the panels of
+  /// controls are dimmed and take no input (`LookHeld`). Selection is in
+  /// hand again when it ends.
+  bool get lookOnly => _lookOnly;
+  bool _lookOnly = false;
+  set lookOnly(bool now) {
+    if (now == _lookOnly) return;
+    _lookOnly = now;
+    _tool = now ? ToolMode.hand : ToolMode.select;
+    notifyListeners();
+  }
+
+  /// Whether [group] can be armed now: every one, but on a machine that can
+  /// only look, which keeps the two that look.
+  bool arms(ToolGroup group) =>
+      !_lookOnly || group == ToolGroup.hand || group == ToolGroup.zoom;
+
   /// The member each group last had armed, so a group button keeps showing the
   /// variant you chose rather than snapping back to the first one.
   final Map<ToolGroup, ToolMode> _lastUsed = {};
@@ -305,6 +361,27 @@ class ToolsState extends ChangeNotifier {
     final next = value.clamp(1.0, 2000.0);
     if (_textSize == next) return;
     _textSize = next;
+    notifyListeners();
+  }
+
+  /// The style new text is set in: what the Text panel was last set to with
+  /// no text layer selected. It starts kerned, and only a layer from an older
+  /// project is unkerned.
+  BridgeTextStyle _textStyle =
+      plainTextStyle.copyWith(kerning: BridgeKerning.metrics);
+  BridgeTextStyle get textStyle => _textStyle;
+  set textStyle(BridgeTextStyle value) {
+    if (_textStyle == value) return;
+    _textStyle = value;
+    notifyListeners();
+  }
+
+  /// The paragraph new text is set in, kept the same way.
+  BridgeParagraphStyle _paragraphStyle = plainParagraphStyle;
+  BridgeParagraphStyle get paragraphStyle => _paragraphStyle;
+  set paragraphStyle(BridgeParagraphStyle value) {
+    if (_paragraphStyle == value) return;
+    _paragraphStyle = value;
     notifyListeners();
   }
 
@@ -452,7 +529,7 @@ class ToolsState extends ChangeNotifier {
   /// application; but arming one would have handed the user a pointer that does
   /// nothing, which is worse than a button that visibly cannot be pressed.
   void select(ToolMode tool) {
-    if (!tool.ready) return;
+    if (!tool.ready || !arms(tool.group)) return;
     _lastUsed[tool.group] = tool;
     if (_tool == tool) return;
     _tool = tool;

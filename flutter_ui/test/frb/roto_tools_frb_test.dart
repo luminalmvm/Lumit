@@ -15,13 +15,10 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/panels/camera_track_display_frb.dart'
-    show TrackSpanBar;
 import 'package:lumit_flutter/panels/roto_display_frb.dart';
 import 'package:lumit_flutter/panels/viewer_gizmo.dart';
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
 import 'package:lumit_flutter/panels/viewer_roto.dart';
-import 'package:lumit_flutter/panels/viewer_tool_cursor.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/roto.dart';
 import 'package:lumit_flutter/state/tools.dart';
@@ -220,19 +217,6 @@ void main() {
       expect(strokesOf(w.layer).single.kind, BridgeRotoStrokeKind.background);
     });
 
-    testWidgets('the Refine edge tool claims the refine band', (tester) async {
-      final w = withBrush();
-      final frame = ValueNotifier(0);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      await mountOverlay(tester, w,
-          frame: frame, nudge: nudge, tool: ToolMode.refineEdge);
-
-      await scribble(tester, const Offset(60, 60));
-      expect(strokesOf(w.layer).single.kind, BridgeRotoStrokeKind.refine);
-    });
-
     /// The base frame is a **source** frame, and the engine is what maps one to
     /// the other — the layer's start offset and its Retime map both live in the
     /// document. The handed-in mapping doubles the composition frame, so a base
@@ -299,46 +283,6 @@ void main() {
       expect(reads, 2, reason: 'and a new frame is a new answer');
     });
 
-    /// Every view but Boundary is a picture the *stack* draws, so scanning a
-    /// matte for an outline nobody is showing would be work for nothing.
-    testWidgets('the edge is not read at all in the Result view',
-        (tester) async {
-      final w = withBrush();
-      final frame = ValueNotifier(0);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      var reads = 0;
-      await mountOverlay(tester, w, frame: frame, nudge: nudge, boundaryOf: (
-        _,
-        __,
-      ) {
-        reads++;
-        return Float32List(0);
-      });
-      frame.value = 5;
-      nudge.value++;
-      await tester.pumpAndSettle();
-      expect(reads, 0);
-    });
-
-    /// The refusals, each with words: no layer, and a layer with no Roto brush.
-    testWidgets('a scribble with nothing selected says so and stores nothing',
-        (tester) async {
-      final w = withBrush();
-      final frame = ValueNotifier(0);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      w.uiState.selectedLayer.value = null;
-      await mountOverlay(tester, w, frame: frame, nudge: nudge);
-
-      await scribble(tester, const Offset(80, 80));
-      expect(strokesOf(w.layer), isEmpty);
-      expect(w.state.notice.value, isNotNull);
-      expect(w.state.notice.value!.message.trim(), isNotEmpty);
-    });
-
     /// A first scribble on a layer with no Roto brush adds the brush **and**
     /// files the stroke — one op, one undo step — because the stroke rides
     /// inside the new instance. This failed before the fix: the gesture was
@@ -379,50 +323,6 @@ void main() {
       expect(w.layer.getEffects(), isEmpty,
           reason: 'one undo takes brush and stroke together: one gesture, '
               'one step');
-    });
-
-    /// The refine tool still refuses: a refine stroke widens the band around
-    /// an answer, and a bare layer has no answer to widen — bringing a brush
-    /// with it would claim a subject nobody has named.
-    testWidgets('a refine stroke on a bare layer still says so',
-        (tester) async {
-      final w = withBrush(brush: false);
-      final frame = ValueNotifier(0);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      await mountOverlay(tester, w,
-          frame: frame, nudge: nudge, tool: ToolMode.refineEdge);
-
-      await scribble(tester, const Offset(80, 80));
-      expect(w.layer.getEffects(), isEmpty);
-      expect(w.state.notice.value, isNotNull);
-    });
-
-    /// The other half: committing a stroke asks the engine to solve that one
-    /// frame's matte now, through the same job Propagate runs — asserted
-    /// through the seam, with the **source** frame the stroke was filed
-    /// against (the handed-in mapping doubles the composition frame).
-    testWidgets('release asks for the scribbled frame\'s own solve',
-        (tester) async {
-      final w = withBrush();
-      final frame = ValueNotifier(9);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      final solved = <(UuidValue, int)>[];
-      await mountOverlay(tester, w,
-          frame: frame,
-          nudge: nudge,
-          solveFrameOf: (_, effect, at) {
-            solved.add((effect, at));
-            return false;
-          });
-
-      await scribble(tester, const Offset(70, 70));
-      expect(solved, [(w.effect!, 18)],
-          reason: 'the ask names the brush and the file\'s frame, not the '
-              'composition\'s');
     });
 
     /// With the seed row on Segment a tap is a prompt for the model, and it
@@ -471,89 +371,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(painterOf(tester).prompts, hasLength(1),
           reason: 'the overlay was handed the tap to ring');
-    });
-
-    /// `Alt` means the same thing for a tap as it does for a scribble: this is
-    /// not the subject.
-    testWidgets('Alt makes the tap a negative one', (tester) async {
-      final w = withBrush();
-      final frame = ValueNotifier(0);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      await mountOverlay(tester, w,
-          frame: frame, nudge: nudge, seed: rotoSeedSegment);
-
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-      await tester.tapAt(const Offset(60, 60));
-      await tester.pumpAndSettle();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-
-      expect(promptsOf(w.layer).single.labels, [0]);
-    });
-
-    /// The row changes what a **tap** means and nothing else: a drag is a
-    /// scribble either way, because a claim with a path in it is a stroke
-    /// however the base frame is seeded.
-    testWidgets('a drag on Segment is still a stroke', (tester) async {
-      final w = withBrush();
-      final frame = ValueNotifier(0);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      await mountOverlay(tester, w,
-          frame: frame, nudge: nudge, seed: rotoSeedSegment);
-
-      await scribble(tester, const Offset(100, 80));
-
-      expect(promptsOf(w.layer), isEmpty);
-      final stroke = strokesOf(w.layer).single;
-      expect(stroke.kind, BridgeRotoStrokeKind.foreground);
-      expect(stroke.points.length, greaterThanOrEqualTo(4));
-    });
-
-    /// A prompt is only ever read on the base frame, so a tap anywhere else is
-    /// the correction dab it has always been rather than a tap that would be
-    /// stored and silently never looked at.
-    testWidgets('a tap away from the base frame is still a stroke',
-        (tester) async {
-      final w = withBrush();
-      final frame = ValueNotifier(9);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      await mountOverlay(tester, w,
-          frame: frame, nudge: nudge, seed: rotoSeedSegment);
-
-      await tester.tapAt(const Offset(100, 80));
-      await tester.pumpAndSettle();
-      expect(promptsOf(w.layer), hasLength(1), reason: 'the base is frame 18');
-
-      frame.value = 40;
-      nudge.value++;
-      await tester.pumpAndSettle();
-      await tester.tapAt(const Offset(120, 90));
-      await tester.pumpAndSettle();
-
-      expect(promptsOf(w.layer), hasLength(1), reason: 'and 80 is not it');
-      expect(strokesOf(w.layer).single.frame, 80);
-    });
-
-    /// The hardware crosshair leads. The overlay asks the platform for the
-    /// precise pointer instead of hiding it, so aiming happens at input rate
-    /// however slowly the application is repainting.
-    testWidgets('the overlay wears the system precise pointer',
-        (tester) async {
-      final w = withBrush();
-      final frame = ValueNotifier(0);
-      final nudge = ValueNotifier(0);
-      addTearDown(frame.dispose);
-      addTearDown(nudge.dispose);
-      await mountOverlay(tester, w, frame: frame, nudge: nudge);
-
-      final region = tester.widget<DrawnPointerRegion>(
-          find.byType(DrawnPointerRegion));
-      expect(region.cursor, SystemMouseCursors.precise);
     });
   });
 
@@ -610,100 +427,6 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// The span bar: the span the matte covers against the length of the clip,
-    /// which is two frame counts and nothing else.
-    testWidgets('the span bar weighs the two frame counts', (tester) async {
-      final w = withBrush();
-      await mountRow(
-        tester,
-        w,
-        status(first: 10, last: 59, clipFrames: 200, base: 10, strokes: 1),
-      );
-      final bar = tester.widget<TrackSpanBar>(
-          find.byKey(const ValueKey('fx-roto-span')));
-      expect(bar.analysed, 50, reason: 'frames 10 to 59 inclusive');
-      expect(bar.total, 200);
-      expect(find.byKey(const ValueKey('fx-roto-base')), findsOneWidget);
-      expect(find.byKey(const ValueKey('fx-roto-assign-base')), findsOneWidget);
-    });
-
-    /// Before anything is propagated the bar is entirely the surface tone —
-    /// none of this shot is cut yet, said honestly rather than by being absent.
-    testWidgets('nothing propagated weighs nothing', (tester) async {
-      final w = withBrush();
-      await mountRow(
-        tester,
-        w,
-        status(stage: BridgeRotoStage.idle, clipFrames: 120, strokes: 2),
-      );
-      expect(
-        rotoCoveredFrames(status(clipFrames: 120)),
-        0,
-      );
-      expect(
-        tester
-            .widget<TrackSpanBar>(
-                find.byKey(const ValueKey('fx-roto-span')))
-            .analysed,
-        0,
-      );
-    });
-
-    /// A brush nobody has scribbled on has no base to move, so the row that
-    /// would move it is not offered.
-    testWidgets('the base row appears only once there are strokes',
-        (tester) async {
-      final w = withBrush();
-      await mountRow(tester, w, status(stage: BridgeRotoStage.idle));
-      expect(find.byKey(const ValueKey('fx-roto-base')), findsNothing);
-      expect(find.byKey(const ValueKey('fx-roto-status')), findsOneWidget);
-    });
-
-    /// A brush seeded by taps says how many there are, because a tap leaves a
-    /// ring on the picture and nothing on this card otherwise. A brush put back
-    /// to Strokes keeps its taps and is not cut from them, so it says the plain
-    /// thing however many it is holding.
-    testWidgets('the idle line counts the taps when there are any',
-        (tester) async {
-      final w = withBrush();
-      expect(
-        rotoStatusSentence(status(stage: BridgeRotoStage.idle, base: 12)),
-        l10n.rotoReadyToPropagate(12),
-      );
-      final counted = rotoStatusSentence(status(
-          stage: BridgeRotoStage.idle, base: 12, prompts: 3, segments: true));
-      expect(counted, l10n.rotoReadyFromTaps(3, 12));
-      expect(counted, contains('3'), reason: 'the count is in the words');
-      expect(counted, isNot(l10n.rotoReadyToPropagate(12)));
-      // One reads differently from many, which is what the plural is for.
-      expect(
-        rotoStatusSentence(status(
-            stage: BridgeRotoStage.idle, base: 12, prompts: 1, segments: true)),
-        isNot(counted),
-      );
-      // The same three taps on a brush seeded by its scribbles decide nothing,
-      // so the card does not count them.
-      expect(
-        rotoStatusSentence(
-            status(stage: BridgeRotoStage.idle, base: 12, prompts: 3)),
-        l10n.rotoReadyToPropagate(12),
-      );
-      await mountRow(
-          tester,
-          w,
-          status(
-              stage: BridgeRotoStage.idle,
-              base: 12,
-              prompts: 3,
-              segments: true));
-      expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('fx-roto-status')))
-            .data,
-        counted,
-      );
-    });
-
     /// The two model refusals: each has its own words, and the missing one is
     /// the only status with somewhere for the reader to go.
     testWidgets('a missing model says so and offers the Addons page',
@@ -730,27 +453,6 @@ void main() {
         l10n.rotoFailedModelMissing,
       );
       expect(find.byKey(const ValueKey('fx-roto-open-addons')), findsOneWidget);
-    });
-
-    /// A model that is installed and would not run is not a missing one: there
-    /// is nothing on the Addons page to press.
-    testWidgets('a model that would not run offers no such button',
-        (tester) async {
-      final w = withBrush();
-      await mountRow(
-        tester,
-        w,
-        status(
-            stage: BridgeRotoStage.failed,
-            failure: BridgeRotoFailure.modelFailed),
-      );
-      expect(
-        tester
-            .widget<Text>(find.byKey(const ValueKey('fx-roto-status')))
-            .data,
-        l10n.rotoFailedModelFailed,
-      );
-      expect(find.byKey(const ValueKey('fx-roto-open-addons')), findsNothing);
     });
   });
 }

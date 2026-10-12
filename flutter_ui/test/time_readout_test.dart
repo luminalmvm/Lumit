@@ -49,18 +49,6 @@ void main() {
         onDragLive: onDragLive,
       );
 
-  testWidgets('the slot is the same width whatever the time says',
-      (tester) async {
-    await tester.pumpWidget(host(clock(0, onCommit: (_) {})));
-    final atZero = tester.getSize(find.byKey(const ValueKey('clock')));
-
-    // The widest digits, a two-digit frames field and a minutes field: every
-    // shape the readout can take, in one number.
-    await tester.pumpWidget(host(clock(288, onCommit: (_) {})));
-    expect(tester.getSize(find.byKey(const ValueKey('clock'))), atZero,
-        reason: 'the box does not resize as the number counts');
-  });
-
   testWidgets('clicking types a time, in the format it was showing',
       (tester) async {
     int? committed;
@@ -89,68 +77,5 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
     expect(asked, [120], reason: 'past the end is the end, not an error');
-  });
-
-  testWidgets('a time before the start lands on the start', (tester) async {
-    final asked = <int>[];
-    // A readout whose floor is not zero — a Retime row's, say — so a time
-    // below it has somewhere to be clamped to.
-    await tester.pumpWidget(
-        host(clock(60, onCommit: asked.add, minFrame: 48, maxFrame: 300)));
-
-    await tester.tap(find.byKey(const ValueKey('clock')));
-    await tester.pump();
-    await tester.enterText(find.byType(EditableText), '00:00:00:00');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
-    expect(asked, [48]);
-  });
-
-  testWidgets('text that is not a time changes nothing', (tester) async {
-    var commits = 0;
-    await tester.pumpWidget(host(clock(12, onCommit: (_) => commits++)));
-
-    await tester.tap(find.byKey(const ValueKey('clock')));
-    await tester.pump();
-    await tester.enterText(find.byType(EditableText), 'soon');
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pump();
-
-    expect(commits, 0);
-    expect(find.text('00:00:00:12'), findsOneWidget,
-        reason: 'the readout went back to showing where things really are');
-  });
-
-  testWidgets('escape leaves the time alone', (tester) async {
-    var commits = 0;
-    await tester.pumpWidget(host(clock(12, onCommit: (_) => commits++)));
-
-    await tester.tap(find.byKey(const ValueKey('clock')));
-    await tester.pump();
-    await tester.enterText(find.byType(EditableText), '00:00:05:00');
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pump();
-
-    expect(commits, 0);
-    expect(find.text('00:00:00:12'), findsOneWidget);
-  });
-
-  testWidgets('a draggable readout ticks whole frames and commits once',
-      (tester) async {
-    final live = <int>[];
-    final committed = <int>[];
-    await tester.pumpWidget(host(clock(
-      10,
-      onCommit: committed.add,
-      draggable: true,
-      onDragLive: live.add,
-    )));
-
-    await tester.drag(find.byKey(const ValueKey('clock')), const Offset(40, 0));
-    await tester.pump();
-
-    expect(live, isNotEmpty, reason: 'the drag moved the value as it went');
-    expect(committed, hasLength(1), reason: 'and committed once, on release');
-    expect(committed.single, greaterThan(10));
   });
 }

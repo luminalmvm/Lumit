@@ -20,6 +20,7 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/layer_fold_frb.dart';
 import 'package:lumit_flutter/panels/transform_rows_frb.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -77,7 +78,7 @@ Future<void> main() async {
   comp.addFootageLayer(footage: gameplay, asSequence: true);
   final title = comp.addTextLayer();
   title.setText(
-    document: const BridgeTextDocument(animators: [], pathOffset: BridgeScalar.static_(0), 
+    document: const BridgeTextDocument(style: plainTextStyle, paragraph: plainParagraphStyle, animators: [], pathOffset: BridgeScalar.static_(0), 
       text: 'Chapter two',
       size: 120,
       fill: BridgeColourRgba(r: 1, g: 1, b: 1, a: 1),

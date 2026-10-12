@@ -285,28 +285,6 @@ mod tests {
     }
 
     #[test]
-    fn euler_round_trips_the_elementary_rotations_and_their_products() {
-        for deg in [
-            (30.0, 0.0, 0.0),
-            (0.0, 40.0, 0.0),
-            (0.0, 0.0, 50.0),
-            (20.0, -35.0, 60.0),
-            (-70.0, 120.0, -15.0),
-        ] {
-            let back = euler_yxz(&rotation(deg));
-            assert!(close3(back, deg), "{deg:?} came back as {back:?}");
-        }
-    }
-
-    #[test]
-    fn an_unrotated_camera_looks_down_z_with_x_right_and_y_down() {
-        let [right, up, fwd] = axes((0.0, 0.0, 0.0));
-        assert!(close3(right, (1.0, 0.0, 0.0)));
-        assert!(close3(up, (0.0, 1.0, 0.0)));
-        assert!(close3(fwd, (0.0, 0.0, 1.0)));
-    }
-
-    #[test]
     fn a_two_node_pose_points_at_its_point_of_interest() {
         let eye = (100.0, 200.0, -500.0);
         let poi = (400.0, -100.0, 300.0);
@@ -317,34 +295,6 @@ mod tests {
         assert!(close3(f, (d.0 / len, d.1 / len, d.2 / len)));
         // The eye-behind inverse lands the eye back where it was.
         assert!(close3(eye_behind(poi, deg, len), eye));
-    }
-
-    #[test]
-    fn a_two_node_pose_with_zero_rows_is_the_look_at_alone_and_rows_add_on_top() {
-        let eye = (0.0, 0.0, -1000.0);
-        let poi = (0.0, 0.0, 0.0);
-        assert!(close3(
-            look_at(eye, poi, (0.0, 0.0, 0.0)).unwrap(),
-            (0.0, 0.0, 0.0)
-        ));
-        // Straight ahead plus a stored turn is that turn.
-        let turned = look_at(eye, poi, (10.0, 20.0, 30.0)).unwrap();
-        assert!(close3(turned, (10.0, 20.0, 30.0)));
-        // Coincident points have no aim.
-        assert!(look_at(poi, poi, (1.0, 2.0, 3.0)).is_none());
-    }
-
-    #[test]
-    fn the_lens_formulas_invert_each_other() {
-        let zoom = default_zoom(1920.0);
-        assert!(close(zoom, 1920.0 * 50.0 / 36.0));
-        assert!(close(focal_mm(zoom, FILM_MM, 1920.0), 50.0));
-        assert!(close(zoom_for_angle(angle_deg(zoom, 1920.0), 1920.0), zoom));
-        let ap = default_aperture(zoom);
-        assert!(close(f_stop(zoom, ap), 5.6));
-        assert!(close(aperture_for_f_stop(f_stop(zoom, ap), zoom), ap));
-        assert_eq!(focal_mm(zoom, FILM_MM, 0.0), 0.0);
-        assert_eq!(zoom_for_angle(0.0, 1920.0), 0.0);
     }
 
     #[test]

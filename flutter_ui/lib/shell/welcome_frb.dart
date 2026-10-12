@@ -30,13 +30,18 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../main.dart';
 import '../panels/placeholder.dart';
+import '../state/account.dart' show CloudError;
+import '../state/backup.dart';
 import '../state/external_links.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 import 'about_window_frb.dart';
+import 'backups_window.dart';
 import 'menu_bar_frb.dart';
+import 'project_history_window.dart'
+    show BackupStill, backupErrorText, noticeMissingFootage;
 import 'wordmark.dart';
 
 // --- The drawing's measurements -------------------------------------------
@@ -156,6 +161,49 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
     }
   }
 
+  late final LumitUiState _ui = context.read<LumitUiState>();
+
+  /// The backed-up projects offered under the recents: the newest five that
+  /// are not among them already. Worked out as the list arrives and never in
+  /// a build, since it asks the disk where each one is.
+  List<BackupProject> _backedUp = const [];
+
+  /// The one being fetched.
+  String? _fetching;
+
+  void _sortBackedUp() {
+    if (!mounted) return;
+    final backup = _ui.backup;
+    final recent = {
+      for (final path in _ui.workspace.recentProjects)
+        Workspace.thumbnailKey(path),
+    };
+    bool listed(BackupProject project) {
+      final here = backup.localPath(project.id);
+      return here != null && recent.contains(Workspace.thumbnailKey(here));
+    }
+
+    setState(() => _backedUp = _ui.account.pro
+        ? backup.projects.where((p) => !listed(p)).take(5).toList()
+        : const []);
+  }
+
+  Future<void> _openBackedUp(LumitState app, BackupProject project) async {
+    if (_fetching != null) return;
+    setState(() => _fetching = project.id);
+    try {
+      final path = await bringBackedUp(_ui, project);
+      if (path == null) return;
+      final ui = _ui;
+      app.openProject(path).then((_) => noticeMissingFootage(app, ui));
+      widget.onDone();
+    } on CloudError catch (e) {
+      app.postNotice(backupErrorText(e), error: true);
+    } finally {
+      if (mounted) setState(() => _fetching = null);
+    }
+  }
+
   /// Escape closes the screen with nothing open — the standard way out
   /// of anything that has taken the window, and the reason the shell behind it
   /// has something to show. On the ladder's dialogue rung, as every
@@ -166,10 +214,15 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
   void initState() {
     super.initState();
     _escapeRelease = EscapeLadder.register(EscapeRung.dialog, _escapeCloses);
+    _ui.backup.addListener(_sortBackedUp);
+    _ui.workspace.addListener(_sortBackedUp);
+    _sortBackedUp();
   }
 
   @override
   void dispose() {
+    _ui.backup.removeListener(_sortBackedUp);
+    _ui.workspace.removeListener(_sortBackedUp);
     _escapeRelease?.call();
     _escapeRelease = null;
     super.dispose();
@@ -224,6 +277,10 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                     _cards(),
                     const SizedBox(height: welcomeBlockGap),
                     _recents(app, workspace),
+                    if (_backedUp.isNotEmpty) ...[
+                      const SizedBox(height: welcomeBlockGap),
+                      _backups(app),
+                    ],
                     const SizedBox(height: welcomeBlockGap),
                     _footer(t, app),
                   ],
@@ -316,6 +373,70 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
                       },
                       onForget: () => workspace.forgetProject(paths[i]),
                     ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Backed-up projects that are not among the recents, in the recents' own
+  /// rows, with the way to the rest of them. Only there for an account with
+  /// Lumit Pro that has some.
+  Widget _backups(LumitState app) {
+    final t = ThemeScope.of(context).theme;
+    return SizedBox(
+      key: const ValueKey('welcome-backups'),
+      width: welcomeColumnWidth,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: welcomeRecentHeaderHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Row(
+                children: [
+                  Text(t.kickerCase(l10n.backupWelcomeTitle), style: t.kicker),
+                  const Spacer(),
+                  _Quiet(
+                    id: 'welcome-all-backups',
+                    label: l10n.backupWelcomeAll,
+                    onTap: () async {
+                      await showBackups(context);
+                      if (app.project?.path() != null) widget.onDone();
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: t.surface1,
+              borderRadius: BorderRadius.circular(t.tokens.sectionRadius),
+              border: Border.all(color: t.hairline),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (i, project) in _backedUp.indexed)
+                  _RecentRow(
+                    key: ValueKey<String>('welcome-backup-row-$i'),
+                    index: i,
+                    path: '',
+                    name: project.name,
+                    detail: _fetching == project.id
+                        ? l10n.backupFetching
+                        : project.head?.device ?? '',
+                    picture: BackupStill(_ui.backup, project.id, project.head,
+                        width: welcomeThumbWidth, height: welcomeThumbHeight),
+                    openedAt: project.updated,
+                    last: i == _backedUp.length - 1,
+                    onOpen: () => _openBackedUp(app, project),
+                  ),
               ],
             ),
           ),
@@ -552,7 +673,14 @@ class _RecentRow extends StatefulWidget {
   final DateTime? openedAt;
   final bool last;
   final VoidCallback onOpen;
-  final VoidCallback onForget;
+
+  /// Null for a row there is nothing to forget about.
+  final VoidCallback? onForget;
+
+  /// For a row that is not a file on this machine, a backed-up project: what
+  /// it is called, the line under that, and its picture.
+  final String? name, detail;
+  final Widget? picture;
 
   const _RecentRow({
     super.key,
@@ -561,7 +689,10 @@ class _RecentRow extends StatefulWidget {
     required this.openedAt,
     required this.last,
     required this.onOpen,
-    required this.onForget,
+    this.onForget,
+    this.name,
+    this.detail,
+    this.picture,
   });
 
   @override
@@ -600,10 +731,12 @@ class _RecentRowState extends State<_RecentRow> {
           ),
           child: Row(
             children: [
-              _RecentThumb(
-                key: ValueKey<String>('welcome-recent-thumb-${widget.index}'),
-                file: _thumb,
-              ),
+              widget.picture ??
+                  _RecentThumb(
+                    key: ValueKey<String>(
+                        'welcome-recent-thumb-${widget.index}'),
+                    file: _thumb,
+                  ),
               const SizedBox(width: welcomeThumbGap),
               Expanded(
                 child: Column(
@@ -612,14 +745,14 @@ class _RecentRowState extends State<_RecentRow> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      projectDisplayName(widget.path),
+                      widget.name ?? projectDisplayName(widget.path),
                       style: t.bodyPrimary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      shortenHomePath(widget.path),
+                      widget.detail ?? shortenHomePath(widget.path),
                       style: t.mono.copyWith(
                         fontSize: 9,
                         color: t.textDisabled,
@@ -641,10 +774,13 @@ class _RecentRowState extends State<_RecentRow> {
                 ),
               ),
               const SizedBox(width: welcomeForgetGap),
-              _Forget(
-                id: 'welcome-recent-close-${widget.index}',
-                onTap: widget.onForget,
-              ),
+              if (widget.onForget case final forget?)
+                _Forget(
+                  id: 'welcome-recent-close-${widget.index}',
+                  onTap: forget,
+                )
+              else
+                const SizedBox(width: welcomeForgetColumnWidth),
             ],
           ),
         ),

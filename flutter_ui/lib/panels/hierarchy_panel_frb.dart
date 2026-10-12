@@ -184,10 +184,13 @@ class _HierarchyRow extends StatelessWidget {
                   ? GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: onToggle,
-                      child: lumitIcon(
-                        open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
-                        size: iconSize,
-                        color: t.textMuted,
+                      child: TwirlTurn(
+                        open: open,
+                        child: lumitIcon(
+                          open ? LumitIcon.twirlOpen : LumitIcon.twirlClosed,
+                          size: iconSize,
+                          color: t.textMuted,
+                        ),
                       ),
                     )
                   : null,

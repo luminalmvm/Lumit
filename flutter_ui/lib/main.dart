@@ -8,8 +8,7 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/data/expressions_metadata.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
-import 'package:lumit_flutter/src/rust/api/effect.dart'
-    show BridgePluginScan, rescanPlugins;
+import 'package:lumit_flutter/src/rust/api/effect.dart' show rescanPlugins;
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/install_site.dart';
 import 'package:lumit_flutter/probe/perf_probe.dart';
@@ -76,27 +75,48 @@ Future<void> _start(List<String> args) async {
   // dead and no way to make it live: the first thing a user does needs
   // something to do it *to*.
   state.newProject();
+  // macOS says what a double-click or a clicked link asked for in an event,
+  // not on the command line. What has come so far joins the arguments.
+  args = [...args, ...await takeOpenRequests()];
   // A document on the command line opens over the empty project. On failure
   // openProject posts its notice and the empty project stands — the same
   // degraded-but-alive behaviour as a failed File → Open.
   final fromArgs = projectPathFromArgs(args) ??
       (probeProjectPath.isEmpty ? null : probeProjectPath);
-  if (fromArgs != null) state.openProject(fromArgs);
+  if (fromArgs != null) state.openProject(fromArgs, launch: true);
+  // An invite link clicked in a browser starts Lumit with the link, and the
+  // Shared project window opens on it once there is a window to open it in.
+  state.launchInvite = inviteFromArgs(args);
+  final ui = LumitUiState(state);
+  // The account and its sync, which a test never starts: nothing else at
+  // start-up speaks to a server of Lumit's.
+  unawaited(ui.profiles.start());
+  ui.reviews.start();
   // The one start-up plugin scan (docs/12 §2.6). Not awaited: opening
   // other people's bundles and spawning a broker apiece takes as long as it
   // takes, and the shell must come up whether the machine has eighty plugins on
   // it or none. The effects added arrive in the browser's next read, and a
   // bundle that would not load is a line in the report rather than anything the
   // user is stopped by.
-  unawaited(rescanPlugins().catchError((_) => BridgePluginScan(
-        registered: const [],
-        skipped: const [],
-      )));
+  unawaited(_scanPlugins(ui));
   // Somebody who double-clicked a `.lum` has already answered the welcome
   // screen's question, so it is not put to them.
-  final ui = LumitUiState(state);
-  runApp(LumitAppNew(state, ui, welcome: fromArgs == null));
+  runApp(LumitAppNew(state, ui,
+      welcome: fromArgs == null && state.launchInvite == null));
   // The probe drives the measured gestures and writes its table, only when
   // asked for by the define — an ordinary build compiles all of it out of reach.
   if (probeProjectPath.isNotEmpty) startPerfProbe(state, ui, probeBridge);
+}
+
+/// Scan for plugins, then redraw the comp if any were found, since a project
+/// opened while the scan was running drew its plugins as missing.
+Future<void> _scanPlugins(LumitUiState ui) async {
+  try {
+    final scan = await effectSchema.scanned(rescanPlugins);
+    if (scan.registered.isEmpty) return;
+    ui.model.refresh();
+    ui.requestFrame();
+  } catch (_) {
+    // A scan that failed found nothing, and Lumit runs without plugins.
+  }
 }

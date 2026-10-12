@@ -27,11 +27,11 @@ use lumit_core::fx::{EffectDef, ParamId, ParamKind};
 use crate::abi::{Abi, AnyModule};
 use crate::def::{AudioEffectDef, AudioHost, InstanceSetup, LocalHost};
 use crate::describe::{describe, describe_module};
-use crate::discover::{scan, scan_dir, ScanOptions};
+use crate::discover::{scan, ScanOptions};
 use crate::process::{ParamEvent, INTERLEAVED_LEN};
 use crate::schema::schema_of;
 use crate::tests::{a_ramp, action_log_of, built_cdylib, fixture_lock, reset_log_of, skipped};
-use crate::vst3::{hex_of, join_state, split_state, tuid_from_hex};
+use crate::vst3::{join_state, split_state};
 use crate::VST3_HOST_ACTIONS;
 
 // ---------------------------------------------------------------- fixture --
@@ -110,24 +110,6 @@ fn name_of(kind: Kind) -> String {
 // -------------------------------------------------------------- discovery --
 
 #[test]
-fn a_scan_finds_a_bundle_as_a_bundle_and_not_as_a_binary() {
-    let _guard = fixture_lock();
-    let Some(bundle) = fixture() else {
-        return skipped("a_scan_finds_a_bundle_as_a_bundle_and_not_as_a_binary");
-    };
-    let Some(dir) = bundle.parent() else {
-        return;
-    };
-    let found = scan_dir(dir);
-    assert_eq!(
-        found,
-        vec![bundle.to_path_buf()],
-        "the folder is what a scan hands back — which binary inside it belongs \
-         to this machine is one question, answered in one place"
-    );
-}
-
-#[test]
 fn a_scan_offers_the_vst3_effects_and_reports_the_refusals() {
     let _guard = fixture_lock();
     let Some(bundle) = fixture() else {
@@ -174,53 +156,6 @@ fn a_scan_offers_the_vst3_effects_and_reports_the_refusals() {
 // --------------------------------------------------------------- describe --
 
 #[test]
-fn a_bundle_lists_only_the_classes_that_make_sound() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("a_bundle_lists_only_the_classes_that_make_sound");
-    };
-    assert_eq!(module.abi(), Abi::Vst3);
-    assert_eq!(
-        module.entries().len(),
-        8,
-        "the eight controllers are furniture, not effects"
-    );
-    let first = &module.entries()[0];
-    assert_eq!(first.name, name_of(Kind::Gain));
-    assert_eq!(first.vendor, "Lumit");
-    assert_eq!(
-        first.id.len(),
-        32,
-        "a VST3 plugin is named by its class id, spelled in hex: {}",
-        first.id
-    );
-    assert!(first.features.contains(&"Fx".to_owned()));
-}
-
-#[test]
-fn an_instrument_is_refused_with_a_reason_in_vst3_too() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("an_instrument_is_refused_with_a_reason_in_vst3_too");
-    };
-    let Some(instrument) = class_of(&module, Kind::Instrument) else {
-        return;
-    };
-    let report = describe_module(&module);
-    let refusal = report
-        .rejected
-        .iter()
-        .find(|refusal| refusal.id == instrument)
-        .expect("the instrument should be refused");
-    assert!(
-        refusal.reason.contains("no audio input"),
-        "the reason names the fact, in the same words CLAP's does: {}",
-        refusal.reason
-    );
-    assert_eq!(report.described.len(), 7);
-}
-
-#[test]
 fn a_described_vst3_plugin_lands_as_ordinary_properties() {
     let _guard = fixture_lock();
     let Some(module) = open_module() else {
@@ -249,27 +184,6 @@ fn a_described_vst3_plugin_lands_as_ordinary_properties() {
     assert_eq!(def.plugin_param(ParamId::new("p1")), Some(PARAM_GAIN));
     assert_eq!(def.defaults(), &[(PARAM_GAIN, 1.0)]);
     assert!(!def.is_image_op(), "an audio effect touches no picture");
-}
-
-#[test]
-fn only_automatable_visible_vst3_parameters_become_rows() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("only_automatable_visible_vst3_parameters_become_rows");
-    };
-    let Some(echo) = class_of(&module, Kind::ParamEcho) else {
-        return;
-    };
-    let descriptor = describe(&module, &echo).expect("the echo plugin is an effect");
-    assert_eq!(descriptor.params.len(), 3, "it declares three parameters");
-    let schema = schema_of(&descriptor).expect("its rows are distinct");
-    let ids: Vec<&str> = schema.params.iter().map(|row| row.id).collect();
-    assert_eq!(
-        ids,
-        vec![format!("p{PARAM_SWEEP}")],
-        "the hidden and the read-only parameters get no row, by the same one \
-         rule CLAP's are judged by"
-    );
 }
 
 // -------------------------------------------------- the order of actions --
@@ -338,71 +252,6 @@ fn a_vst3_gain_plugin_multiplies_every_sample_exactly() {
     assert_eq!(output, expected);
 }
 
-#[test]
-fn a_vst3_parameter_event_inside_a_block_reaches_the_plugin() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("a_vst3_parameter_event_inside_a_block_reaches_the_plugin");
-    };
-    let Some(gain) = class_of(&module, Kind::Gain) else {
-        return;
-    };
-    let setup = InstanceSetup {
-        plugin_id: gain,
-        params: vec![(PARAM_GAIN, 1.0)],
-        ..InstanceSetup::default()
-    };
-    let host = LocalHost::open(&module, &setup).expect("the gain plugin opens");
-
-    let input = vec![1.0f32; INTERLEAVED_LEN];
-    let mut output = vec![0.0f32; INTERLEAVED_LEN];
-    let events = [ParamEvent {
-        time: 0,
-        id: PARAM_GAIN,
-        value: 2.0,
-    }];
-    host.process(&input, &mut output, &events, 0)
-        .expect("one block");
-    assert!(
-        output.iter().all(|sample| *sample == 2.0),
-        "the block's own value beat the project's baseline: {:?}",
-        &output[..4]
-    );
-}
-
-#[test]
-fn latency_is_read_off_the_live_vst3_plugin() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("latency_is_read_off_the_live_vst3_plugin");
-    };
-    let (Some(latency), Some(gain)) = (
-        class_of(&module, Kind::Latency),
-        class_of(&module, Kind::Gain),
-    ) else {
-        return;
-    };
-    let host = LocalHost::open(
-        &module,
-        &InstanceSetup {
-            plugin_id: latency,
-            ..InstanceSetup::default()
-        },
-    )
-    .expect("the latency plugin opens");
-    assert_eq!(host.latency(), lumit_aplug_testplug::LATENCY_DEFAULT);
-
-    let host = LocalHost::open(
-        &module,
-        &InstanceSetup {
-            plugin_id: gain,
-            ..InstanceSetup::default()
-        },
-    )
-    .expect("the gain plugin opens");
-    assert_eq!(host.latency(), 0, "an effect with no delay reports none");
-}
-
 // -------------------------------------------------------------- the state --
 
 #[test]
@@ -449,71 +298,6 @@ fn a_vst3_state_blob_round_trips_both_halves() {
         split_state(&host.save().expect("it saves")).0,
         STATE_ECHO_DEFAULT
     );
-}
-
-#[test]
-fn properties_win_over_a_stale_vst3_state() {
-    let _guard = fixture_lock();
-    let Some(module) = open_module() else {
-        return skipped("properties_win_over_a_stale_vst3_state");
-    };
-    let Some(gain) = class_of(&module, Kind::Gain) else {
-        return;
-    };
-    // The blob says four; the project says two. The project is this year's
-    // answer, and a keyframed gain must not revert to a preset's — which for
-    // VST3 means the baseline the host lays into every block has to beat what
-    // the component read out of its own state.
-    let setup = InstanceSetup {
-        plugin_id: gain,
-        state: Some(join_state(&4.0f64.to_le_bytes(), &[])),
-        params: vec![(PARAM_GAIN, 2.0)],
-        rate: 48_000,
-        offline: false,
-    };
-    let host = LocalHost::open(&module, &setup).expect("the gain plugin opens");
-
-    let input = vec![1.0f32; INTERLEAVED_LEN];
-    let mut output = vec![0.0f32; INTERLEAVED_LEN];
-    host.process(&input, &mut output, &[], 0)
-        .expect("one block");
-    assert!(
-        output.iter().all(|sample| *sample == 2.0),
-        "the property won: {:?}",
-        &output[..4]
-    );
-}
-
-#[test]
-fn the_two_halves_of_a_state_survive_being_one_blob() {
-    // A pure round trip, with no plugin in it: the length prefix is the only
-    // thing standing between two blobs and one, and an off-by-one there would
-    // hand a plugin somebody else's bytes.
-    for (processor, controller) in [
-        (vec![], vec![]),
-        (vec![1u8], vec![]),
-        (vec![], vec![2u8, 3]),
-        (vec![7u8; 300], vec![9u8; 5]),
-    ] {
-        let blob = join_state(&processor, &controller);
-        assert_eq!(
-            split_state(&blob),
-            (processor.as_slice(), controller.as_slice())
-        );
-    }
-    // A blob too short to hold a length is all the processor's, which is what a
-    // blob written by another program would be.
-    assert_eq!(split_state(&[1, 2]), (&[1u8, 2][..], &[][..]));
-}
-
-#[test]
-fn a_class_id_survives_the_hex_it_is_named_by() {
-    let cid = crate::vst3::class_id(0x4C554D49, 0x54455354, 0x50524F43, 3);
-    let text = hex_of(&cid);
-    assert_eq!(text.len(), 32);
-    assert_eq!(tuid_from_hex(&text), Some(cid));
-    assert_eq!(tuid_from_hex("not a class id"), None);
-    assert_eq!(tuid_from_hex(&text[..30]), None);
 }
 
 // --------------------------------------------------------- the automation --

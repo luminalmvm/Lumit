@@ -2,9 +2,9 @@
 Type=Application
 Name=Lumit
 Comment=Motion graphics and compositing
-Exec=lumit_flutter %f
+Exec=lumit_flutter %u
 Icon=lumit
 Terminal=false
 Categories=AudioVideo;Video;Graphics;
-MimeType=application/x-lumit-project;application/x-lumit-preset;
+MimeType=application/x-lumit-project;application/x-lumit-preset;x-scheme-handler/lumit;
 StartupWMClass=lumit_flutter

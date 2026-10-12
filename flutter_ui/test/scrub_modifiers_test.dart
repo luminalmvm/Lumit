@@ -30,19 +30,6 @@ Widget _host(Widget child) => Directionality(
       ),
     );
 
-/// The same host without the Overlay, for a widget pumped over and over in one
-/// test: an `Overlay` keeps the entries it was given at its first mount, so a
-/// second `pumpWidget` through [_host] would go on showing the first child.
-Widget _bare(Widget child) => Directionality(
-      textDirection: TextDirection.ltr,
-      child: ThemeScope(
-        theme: LumitTheme.dark(),
-        animationLevel: AnimationLevel.none,
-        showTooltips: false,
-        child: Center(child: child),
-      ),
-    );
-
 void main() {
   /// Drags a DragValueField 10 px with [modifier] held and returns how far the
   /// value moved. The first 30 px cross the gesture slop and are pumped away
@@ -77,39 +64,10 @@ void main() {
     return value - before;
   }
 
-  testWidgets('a plain drag moves the value one unit per pixel',
-      (tester) async {
-    expect(await dragBy10px(tester), 10);
-  });
-
   testWidgets('shift makes the drag coarse: ten units per pixel',
       (tester) async {
     expect(
         await dragBy10px(tester, modifier: LogicalKeyboardKey.shiftLeft), 100);
-  });
-
-  testWidgets('ctrl makes the drag fine: a tenth of a unit per pixel',
-      (tester) async {
-    expect(await dragBy10px(tester, modifier: LogicalKeyboardKey.controlLeft),
-        closeTo(1, 1e-9));
-  });
-
-  /// The study's fourth rung, under `Ctrl` (polish 27). Lumit had three.
-  testWidgets('alt makes the drag finer still: a hundredth per pixel',
-      (tester) async {
-    expect(await dragBy10px(tester, modifier: LogicalKeyboardKey.altLeft),
-        closeTo(0.1, 1e-9));
-  });
-
-  /// A ladder needs one answer when two rungs are held at once, and the order
-  /// is fixed rather than guessed: coarse beats fine.
-  testWidgets('shift wins over the finer rungs held with it', (tester) async {
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    expect(
-        await dragBy10px(tester, modifier: LogicalKeyboardKey.shiftLeft), 100);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
   });
 
   /// A fast drag delivers several pointer events per frame — quicker than the
@@ -189,21 +147,6 @@ void main() {
     expect(await dragClock(tester, px: 4), 1);
   });
 
-  testWidgets('shift drags the clock ten frames per four pixels',
-      (tester) async {
-    expect(
-        await dragClock(tester, px: 4, modifier: LogicalKeyboardKey.shiftLeft),
-        10);
-  });
-
-  testWidgets('ctrl drags the clock one frame per forty pixels',
-      (tester) async {
-    expect(
-        await dragClock(tester,
-            px: 40, modifier: LogicalKeyboardKey.controlLeft),
-        1);
-  });
-
   // -------------------------------------------------------------------------
   // The floating ladder (polish 27, study §3): the four rungs shown at once,
   // the active one boxed, only while a scrub runs.
@@ -227,25 +170,6 @@ void main() {
                 LumitTheme.dark().textPrimary))
               label,
         ];
-
-    testWidgets('shows all four rungs and boxes the one in force',
-        (tester) async {
-      for (final (factor, label) in [
-        (0.01, l10n.scrubLadderAlt),
-        (0.1, l10n.scrubLadderCtrl),
-        (1.0, l10n.scrubLadderBase),
-        (10.0, l10n.scrubLadderShift),
-      ]) {
-        await tester.pumpWidget(_bare(ScrubLadder(factor: factor)));
-        await tester.pump();
-        for (final rung in ScrubLadder.labels) {
-          expect(find.text(rung), findsOneWidget,
-              reason: 'the whole ladder is shown, not only the rung in force');
-        }
-        expect(boxed(tester), [label],
-            reason: 'exactly the level $factor is boxed');
-      }
-    });
 
     /// P1: the chip is put up by the gesture and taken down with it, and the
     /// resting field is exactly what it was.

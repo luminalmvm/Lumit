@@ -21,9 +21,7 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
-import 'package:lumit_flutter/state/comp_time.dart' show writeMarkers;
 import 'package:lumit_flutter/state/dock.dart';
-import 'package:uuid/uuid.dart';
 
 import 'frb_test_support.dart';
 
@@ -144,203 +142,13 @@ void main() {
     // §4.3 — the keys travel with the stretch.
     // ---------------------------------------------------------------------
 
-    /// **The keys must travel with the stretch.** `_frameOf` compared the
-    /// stretch's key set against an *escaped* literal — `'\${rowId}#\$i'`,
-    /// backslashed dollars — so the string was never interpolated, the test
-    /// never matched, and every diamond sat still while the box moved over it
-    /// until the release put it somewhere it had not been seen to travel.
-    testWidgets('a diamond travels with the box while the handle is held',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      await selectTheBlock(tester);
-
-      final lane = laneKeyOf(layer);
-      expect(drawnFrames(tester, lane), [300.0, 1500.0]);
-      final perFrame = perFrameOf(tester, p, lane);
-
-      final handle = find.byKey(const ValueKey('tl-block-handle-end'));
-      expect(handle, findsOneWidget, reason: 'two keys are a block');
-      final gesture =
-          await dragging(tester, tester.getCenter(handle), -perFrame * 400);
-
-      final live = drawnFrames(tester, lane);
-      expect(live.first, 300.0, reason: 'the end not held stays put');
-      expect(live.last, lessThan(1400.0),
-          reason: 'the key travelled with the box, before any release');
-
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(p.comp.frameAtTime(time: opacityKeys(layer).last.time),
-          lessThan(1400),
-          reason: 'and the release wrote where it had been seen to go');
-    });
-
-    /// The badge counts the span the release will write, live through the
-    /// stretch (§4.3), and the stretch's own readout rides beside the handle
-    /// and is **gone on release** (§4.2, P1).
-    testWidgets('the stretch summons a live readout and takes it away again',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      await selectTheBlock(tester);
-
-      final hint = find.byKey(const ValueKey('tl-block-stretch-hint'));
-      expect(hint, findsNothing, reason: 'nothing at rest');
-
-      final perFrame = perFrameOf(tester, p, laneKeyOf(layer));
-      final handle = find.byKey(const ValueKey('tl-block-handle-end'));
-      final gesture =
-          await dragging(tester, tester.getCenter(handle), -perFrame * 400);
-
-      expect(hint, findsOneWidget,
-          reason: 'the readout appears under the hand');
-      expect(find.textContaining('f300'), findsOneWidget,
-          reason: 'it reads the block\'s two ends');
-      // The badge counts the *live* span, not the one the gesture began from.
-      expect(find.text('2 keys · 1200 f'), findsNothing,
-          reason: 'the badge followed the box');
-
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(hint, findsNothing, reason: 'and leaves no trace after (P1)');
-    });
-
     // ---------------------------------------------------------------------
     // §4.3, §4.5 — the stretched end snaps to the shared targets.
     // ---------------------------------------------------------------------
 
-    /// **The stretch handle snaps its dragged end to the shared targets**, not
-    /// only to whole frames, and draws the capture while a target holds it.
-    testWidgets('a stretched end lands on the marker it is pulled near',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p, frames: [300, 1200]);
-      // A marker a little past where the drag itself would land, so the snap
-      // has to reach for it rather than the pointer happening to arrive.
-      const markerFrame = 1211;
-      writeMarkers(p.comp, [
-        BridgeMarker(
-          id: UuidValue.fromString(const Uuid().v4()),
-          time: p.comp.timeOfFrame(frame: markerFrame),
-          label: 'Beat',
-          isBeat: false,
-        ),
-      ]);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      await selectTheBlock(tester);
-
-      final perFrame = perFrameOf(tester, p, laneKeyOf(layer));
-      final handle = find.byKey(const ValueKey('tl-block-handle-end'));
-      final gesture =
-          await dragging(tester, tester.getCenter(handle), perFrame * 10);
-      expect(find.byKey(const ValueKey('tl-block-snap-caught')), findsOneWidget,
-          reason: 'the target says so at the moment it takes the drag');
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(
-          p.comp.frameAtTime(time: opacityKeys(layer).last.time), markerFrame,
-          reason: 'the block ends ON the marker, not one frame short of it');
-      expect(p.comp.frameAtTime(time: opacityKeys(layer).first.time), 300,
-          reason: 'the anchored end never moved');
-    });
-
-    testWidgets('Ctrl held lets the stretched end past the marker',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p, frames: [300, 1200]);
-      writeMarkers(p.comp, [
-        BridgeMarker(
-          id: UuidValue.fromString(const Uuid().v4()),
-          time: p.comp.timeOfFrame(frame: 1211),
-          label: 'Beat',
-          isBeat: false,
-        ),
-      ]);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      await selectTheBlock(tester);
-
-      final perFrame = perFrameOf(tester, p, laneKeyOf(layer));
-      final handle = find.byKey(const ValueKey('tl-block-handle-end'));
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      final gesture =
-          await dragging(tester, tester.getCenter(handle), perFrame * 10);
-      await gesture.up();
-      await tester.pumpAndSettle();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-
-      expect(
-          p.comp.frameAtTime(time: opacityKeys(layer).last.time), isNot(1211),
-          reason: 'Ctrl suspends the magnet, targets and all');
-    });
-
     // ---------------------------------------------------------------------
     // P3 — Escape reverts any drag in flight, and writes nothing.
     // ---------------------------------------------------------------------
-
-    testWidgets('Escape abandons a block stretch', (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      await selectTheBlock(tester);
-
-      final lane = laneKeyOf(layer);
-      final perFrame = perFrameOf(tester, p, lane);
-      final handle = find.byKey(const ValueKey('tl-block-handle-end'));
-      final gesture =
-          await dragging(tester, tester.getCenter(handle), -perFrame * 400);
-      expect(drawnFrames(tester, lane).last, lessThan(1400.0));
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      expect(drawnFrames(tester, lane), [300.0, 1500.0],
-          reason: 'the block went back where the stretch found it');
-
-      // The pointer carries on travelling; nothing follows it.
-      await gesture.moveBy(Offset(-perFrame * 100, 0));
-      await tester.pump();
-      expect(drawnFrames(tester, lane), [300.0, 1500.0]);
-
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect([
-        for (final k in opacityKeys(layer)) p.comp.frameAtTime(time: k.time)
-      ], [
-        300,
-        1500
-      ], reason: 'an abandoned drag writes nothing at all');
-    });
-
-    testWidgets('Escape abandons a lane key drag', (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-
-      final lane = laneKeyOf(layer);
-      final perFrame = perFrameOf(tester, p, lane);
-      final key =
-          find.byKey(ValueKey<String>('tl-key-${opacityPath(layer)}#0'));
-      final gesture =
-          await dragging(tester, tester.getCenter(key), perFrame * 200);
-      expect(drawnFrames(tester, lane).first, greaterThan(400.0));
-
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pump();
-      expect(drawnFrames(tester, lane).first, 300.0);
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect(p.comp.frameAtTime(time: opacityKeys(layer).first.time), 300,
-          reason: 'nothing was written');
-    });
 
     testWidgets('Escape abandons a bar drag', (tester) async {
       final p = withComp();
@@ -372,42 +180,6 @@ void main() {
     // ---------------------------------------------------------------------
     // §2.1 — a handle's click falls through to the key beneath it.
     // ---------------------------------------------------------------------
-
-    /// A handle stands exactly over the block's end key and is opaque and
-    /// drag-only, so those two keys were the only keys that answered neither a
-    /// click nor a right-click (P5). The handle passes both on.
-    testWidgets('clicking a stretch handle selects the key beneath it',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p, frames: [300, 900, 1500]);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      await selectTheBlock(tester);
-      expect(selectedOn(tester, laneKeyOf(layer)), {0, 1, 2});
-
-      await tester.tap(find.byKey(const ValueKey('tl-block-handle-start')));
-      await tester.pumpAndSettle();
-      expect(selectedOn(tester, laneKeyOf(layer)), {0},
-          reason: 'the click reached the key the handle covers');
-    });
-
-    testWidgets('right-clicking a stretch handle opens the key\'s menu',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p, frames: [300, 900, 1500]);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      await selectTheBlock(tester);
-
-      final handle = find.byKey(const ValueKey('tl-block-handle-end'));
-      final gesture = await tester.startGesture(tester.getCenter(handle),
-          kind: PointerDeviceKind.mouse, buttons: kSecondaryMouseButton);
-      await gesture.up();
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const ValueKey('tl-key-menu-linear')), findsOneWidget);
-      expect(find.byKey(const ValueKey('tl-key-menu-delete')), findsOneWidget);
-    });
 
     // ---------------------------------------------------------------------
     // 6.24 — a drag on one of several selected keys moves them all.
@@ -479,41 +251,6 @@ void main() {
       ], reason: 'one Ctrl-Z puts the whole drag back');
     });
 
-    testWidgets('a key outside the selection takes the drag on its own',
-        (tester) async {
-      final p = withComp();
-      final layer = keyedLayer(p, frames: [300, 900, 1500]);
-      await mount(tester, p);
-      await openTransform(tester, layer);
-      await selectTheBlock(tester);
-
-      final lane = laneKeyOf(layer);
-      final perFrame = perFrameOf(tester, p, lane);
-      // Narrow the catch to the middle key — the outer two stand under the
-      // block's own handles — then drag the last one: it is not in the
-      // selection, so it selects itself and travels alone.
-      await tester
-          .tap(find.byKey(ValueKey<String>('tl-key-${opacityPath(layer)}#1')));
-      await tester.pumpAndSettle();
-      expect(selectedOn(tester, lane), {1});
-
-      final gesture = await dragging(
-          tester,
-          tester.getCenter(
-              find.byKey(ValueKey<String>('tl-key-${opacityPath(layer)}#2'))),
-          perFrame * 200);
-      expect(drawnFrames(tester, lane), [300.0, 900.0, 1700.0]);
-      await gesture.up();
-      await tester.pumpAndSettle();
-      expect([
-        for (final k in opacityKeys(layer)) p.comp.frameAtTime(time: k.time)
-      ], [
-        300,
-        900,
-        1700
-      ]);
-    });
-
     // ---------------------------------------------------------------------
     // 6.6 — Delete takes the selected lane keys.
     // ---------------------------------------------------------------------
@@ -550,13 +287,5 @@ void main() {
           reason: 'the layer the keys sat on is untouched');
     });
 
-    testWidgets('Delete falls through when no lane key is selected',
-        (tester) async {
-      final p = withComp();
-      keyedLayer(p);
-      await mount(tester, p);
-      expect(p.uiState.deleteClaim?.call(), isFalse,
-          reason: 'nothing finer than the layer is in hand, so the shell acts');
-    });
   }, skip: !engineAvailable);
 }

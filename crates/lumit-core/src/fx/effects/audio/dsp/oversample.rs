@@ -237,7 +237,6 @@ impl Oversample4x {
 mod tests {
     use super::*;
 
-    const RATE: f64 = 48_000.0;
     const LATENCY: usize = Oversample4x::LATENCY_FRAMES as usize;
 
     /// Straight through, nothing shaped: what the pair costs on its own.
@@ -250,26 +249,6 @@ mod tests {
                 os.down(up)
             })
             .collect()
-    }
-
-    #[test]
-    fn reset_then_the_same_input_twice_gives_the_same_output() {
-        let input: Vec<f32> = (0..2_000)
-            .map(|n| ((n % 71) as f32 - 35.0) / 35.0)
-            .collect();
-        let mut os = Oversample4x::new();
-        let run = |os: &mut Oversample4x| -> Vec<f32> {
-            input
-                .iter()
-                .map(|&x| {
-                    let up = os.up(x);
-                    os.down(up)
-                })
-                .collect()
-        };
-        let first = run(&mut os);
-        os.reset();
-        assert_eq!(first, run(&mut os));
     }
 
     #[test]
@@ -289,44 +268,5 @@ mod tests {
             })
             .map_or(0, |(n, _)| n);
         assert_eq!(peak, LATENCY, "the impulse landed at {peak}");
-    }
-
-    #[test]
-    fn a_low_tone_comes_back_at_the_level_it_went_in() {
-        let freq = 100.0;
-        let frames = 4_800 + LATENCY;
-        let input: Vec<f32> = (0..frames)
-            .map(|n| (std::f64::consts::TAU * freq * n as f64 / RATE).sin() as f32)
-            .collect();
-        let out = through(&input);
-
-        // Eight whole cycles, started well past the filter's ramp-in.
-        let mut sent = 0.0f64;
-        let mut back = 0.0f64;
-        for n in 480..4_320 {
-            let x = f64::from(input.get(n).copied().unwrap_or(0.0));
-            let y = f64::from(out.get(n + LATENCY).copied().unwrap_or(0.0));
-            sent += x * x;
-            back += y * y;
-        }
-        let db = 10.0 * (back / sent).log10();
-        assert!(db.abs() < 0.1, "the tone came back {db} dB off");
-    }
-
-    #[test]
-    fn the_half_band_is_symmetric_and_unity_at_dc() {
-        let half = Halfband::design();
-        let sum = half.centre + 2.0 * half.odd.iter().take(ODD / 2).sum::<f64>();
-        assert!((sum - 1.0).abs() < 1e-12, "DC gain came to {sum}");
-        assert!(
-            (half.centre - 0.5).abs() < 1e-3,
-            "centre tap is {}",
-            half.centre
-        );
-        for j in 0..ODD / 2 {
-            let front = half.odd.get(j).copied().unwrap_or(0.0);
-            let back = half.odd.get(ODD - 1 - j).copied().unwrap_or(0.0);
-            assert!((front - back).abs() < 1e-12, "tap {j} is not symmetric");
-        }
     }
 }

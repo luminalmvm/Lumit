@@ -46,7 +46,7 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `viewer-bar.png` | [/panels/viewer/](/panels/viewer/) | The Viewer bar. |
 | `viewer.png` | [/panels/viewer/](/panels/viewer/) | The Viewer, with a layer selected and its transform gizmo showing. |
 | `export-queue.png` | [/use/export/](/use/export/) | The export queue, with one composition waiting. |
-| `welcome.png` | [/start/install/](/start/install/) | The welcome screen: the three cards and the RECENT well. |
+| `welcome.png` | [/start/install/](/start/install/) | The welcome screen: the two cards and the Recent list. |
 | `nodes-workspace.png` | [/use/nodes/](/use/nodes/) | The Nodes workspace: the graph across the window, Viewer beside it. |
 | `graph-panel.png` | [/use/nodes/](/use/nodes/), [/tutorials/node-graph/](/tutorials/node-graph/) | The Node graph panel: a wired image chain and a driver. |
 | `effects-presets-ofx.png` | [/panels/effects-presets/](/panels/effects-presets/), [/use/plugins/](/use/plugins/) | An OFX plugin's own heading in the panel, under the folded built-in categories. |
@@ -55,6 +55,9 @@ application at; the page scales it down, so oversized shots only cost bytes.
 | `layers-selected.png` | [/panels/timeline/](/panels/timeline/), [/tutorials/many-keyframes/](/tutorials/many-keyframes/) | The same, with one keyframe picked. |
 | `graph-mode.png` | [/panels/timeline/](/panels/timeline/) | Graph mode: the opacity curve of the picked property. |
 | `node-graph-comp.png` | [/use/node-graphs/](/use/node-graphs/) | A node graph composition: a Read forked through two effects, merged, and wired to the Output. |
+| `viewer-menu.png` | [/panels/viewer/](/panels/viewer/) | The Viewer picture's right-click menu, with Select open on the layers under the pointer. |
+| `effect-compositing.png` | [/use/effects/](/use/effects/) | Effect Controls with Compositing shut on one effect, reading its mix, and open on the next. |
+| `command-palette.png` | [/use/workspaces/](/use/workspaces/) | The command palette with a search typed, a badge on each row. |
 
 ## Waiting on the feature
 

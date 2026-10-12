@@ -3,6 +3,8 @@
 // cannot open in a widget test, so tests supply their own stubs and never touch
 // a plugin channel; this file is only ever exercised in the running app.
 
+import 'dart:io';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
 
@@ -36,6 +38,8 @@ const List<String> footageExtensions = [
   // Stills, mirroring the engine's STILL_EXTENSIONS
   'png', 'jpg', 'jpeg', 'tif', 'tiff', 'exr', 'tga', 'targa', 'dpx', 'bmp',
   'webp', 'ppm', 'pgm', 'pnm', 'pbm',
+  // Layered documents, which import as a composition of their layers
+  'psd', 'ai',
   // Sound
   'wav', 'mp3', 'flac', 'aac', 'm4a', 'ogg', 'opus', 'aiff', 'aif', 'wma',
 ];
@@ -56,18 +60,26 @@ Future<String?> pickProjectToOpen() async {
 
 /// Choose where to save a project, defaulting the name to `untitled.lum` (as
 /// the egui Save dialogue does), or null when cancelled.
-Future<String?> pickProjectSaveLocation() async {
+Future<String?> pickProjectSaveLocation(
+    {String suggestedName = 'untitled.lum', String? initialDirectory}) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [_projectGroup()],
-    suggestedName: 'untitled.lum',
+    suggestedName: suggestedName,
+    initialDirectory: initialDirectory,
   );
   return location?.path;
 }
 
-/// Pick one or more footage files, or an empty list when cancelled.
-Future<List<String>> pickFootage() async {
+/// Pick one or more footage files, or an empty list when cancelled. With
+/// [projects] a Lumit project is offered too, which an import brings one
+/// composition in from.
+Future<List<String>> pickFootage({bool projects = false}) async {
   final files = await openFiles(
-    acceptedTypeGroups: [_footageGroup(), _anyGroup()],
+    acceptedTypeGroups: [
+      _footageGroup(),
+      if (projects) _projectGroup(),
+      _anyGroup(),
+    ],
   );
   return [for (final f in files) f.path];
 }
@@ -77,19 +89,39 @@ Future<List<String>> pickFootage() async {
 /// when cancelled. The generic save seam the export dialogue and the share
 /// exports both drive. `extension`/`label` follow the chosen format:
 /// `.mp4` for video, the image extension for a sequence — where the picked
-/// name is the sequence's stem, and the frames land numbered beside it.
+/// name is the sequence's stem, and the frames land numbered beside it
+/// ([numbered]), so the name itself is never written.
 Future<String?> pickExportSaveLocation(
   String suggestedName, {
   String extension = 'mp4',
   String label = 'MP4 video',
+  bool numbered = false,
+  String? initialDirectory,
 }) async {
   final location = await getSaveLocation(
     acceptedTypeGroups: [
       XTypeGroup(label: label, extensions: [extension])
     ],
     suggestedName: suggestedName,
+    initialDirectory: initialDirectory,
   );
-  return location?.path;
+  final path = location?.path;
+  if (path == null) return null;
+  // The Windows dialogue hands back a typed name as it is, so the extension is
+  // added here and the Destination row shows the file that will be written.
+  if (path.toLowerCase().endsWith('.$extension')) return path;
+  final whole = '$path.$extension';
+  // The dialogue asked about the name as it was typed. If the name with its
+  // extension is a file already, nobody has been asked about that one, so the
+  // dialogue comes back with the whole name and asks.
+  if (numbered || !File(whole).existsSync()) return whole;
+  final file = File(whole);
+  return pickExportSaveLocation(
+    file.uri.pathSegments.last,
+    extension: extension,
+    label: label,
+    initialDirectory: file.parent.path,
+  );
 }
 
 /// The `.lumfx` effect-preset type group, mirroring the egui Effects panel's
@@ -97,9 +129,15 @@ Future<String?> pickExportSaveLocation(
 XTypeGroup _presetGroup() =>
     XTypeGroup(label: l10n.fileTypePreset, extensions: const ['lumfx']);
 
-/// Pick one `.lumfx` preset file to load, or null when cancelled.
+/// What a preset picker opens: Lumit's own `.lumfx`, and an After Effects
+/// `.ffx`, which the engine converts as it reads it. One group, so both kinds
+/// show without changing the dialogue's filter.
+XTypeGroup _presetOpenGroup() => XTypeGroup(
+    label: l10n.fileTypePresetToOpen, extensions: const ['lumfx', 'ffx']);
+
+/// Pick one preset file to load, or null when cancelled.
 Future<String?> pickPresetToOpen() async {
-  final file = await openFile(acceptedTypeGroups: [_presetGroup()]);
+  final file = await openFile(acceptedTypeGroups: [_presetOpenGroup()]);
   return file?.path;
 }
 
@@ -168,6 +206,30 @@ Future<String?> pickKeymapToOpen() async {
   return file?.path;
 }
 
+/// After Effects' shortcut files, which are plain `.txt`.
+XTypeGroup _afterEffectsShortcutsGroup() => XTypeGroup(
+    label: l10n.fileTypeAfterEffectsShortcuts, extensions: const ['txt']);
+
+/// Where After Effects keeps its settings on this machine, or null when it
+/// isn't there. The shortcut files sit in an `aeks` folder under each version
+/// in here, which is not a place anyone finds by browsing.
+Future<String?> _afterEffectsSettingsFolder() async {
+  final env = Platform.environment;
+  final path = Platform.isWindows
+      ? '${env['APPDATA']}\\Adobe\\After Effects'
+      : '${env['HOME']}/Library/Preferences/Adobe/After Effects';
+  return await Directory(path).exists() ? path : null;
+}
+
+/// Pick an After Effects shortcut file to read, or null when cancelled.
+Future<String?> pickAfterEffectsShortcuts() async {
+  final file = await openFile(
+    acceptedTypeGroups: [_afterEffectsShortcutsGroup()],
+    initialDirectory: await _afterEffectsSettingsFolder(),
+  );
+  return file?.path;
+}
+
 /// The shared-theme type group, the theme's counterpart of the
 /// keymap's. Lumit's own extension rather than a plain `.json`, so the picker
 /// can offer just themes.
@@ -209,6 +271,31 @@ Future<String?> pickWorkspaceSaveLocation(String suggestedName) async {
     suggestedName: suggestedName,
   );
   return location?.path;
+}
+
+/// The saved expressions type group.
+XTypeGroup _expressionsGroup() => XTypeGroup(
+    label: l10n.fileTypeExpressions, extensions: const ['lumexpressions']);
+
+/// Pick an expressions file to import, or null when the dialogue was cancelled.
+Future<String?> pickExpressionsToOpen() async {
+  final file = await openFile(acceptedTypeGroups: [_expressionsGroup()]);
+  return file?.path;
+}
+
+/// Choose where to write the saved expressions, or null when cancelled.
+Future<String?> pickExpressionsSaveLocation() async {
+  final location = await getSaveLocation(
+    acceptedTypeGroups: [_expressionsGroup()],
+    suggestedName: 'expressions.lumexpressions',
+  );
+  final path = location?.path;
+  if (path == null) return null;
+  // The Windows dialogue hands back a typed name as it is, and Import only
+  // lists files that end this way.
+  return path.toLowerCase().endsWith('.lumexpressions')
+      ? path
+      : '$path.lumexpressions';
 }
 
 /// The After Effects import's own type group: the project file itself,

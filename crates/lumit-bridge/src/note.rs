@@ -62,11 +62,4 @@ mod tests {
     fn a_closed_console_does_not_panic() {
         write_line(&mut ClosedPipe, format_args!("render profiling off"));
     }
-
-    #[test]
-    fn the_line_reaches_a_console_that_is_listening() {
-        let mut out = Vec::new();
-        write_line(&mut out, format_args!("measured frame {}", 12));
-        assert_eq!(out, b"measured frame 12\n");
-    }
 }

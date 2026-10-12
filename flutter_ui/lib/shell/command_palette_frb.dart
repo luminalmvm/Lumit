@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../l10n/strings.dart';
+import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/escape_ladder.dart';
 
@@ -29,15 +30,28 @@ class PaletteCommand {
   /// caller reads it from the live keymap, so a rebound chord is the chord the
   /// palette teaches.
   final String? shortcut;
+
+  /// Whether the row wears a tick: a menu toggle or option that is on now.
+  final bool ticked;
+
+  /// Why the row cannot be run just now, shown greyed in the shortcut's place.
+  /// Null for a row that can.
+  final String? disabled;
   final VoidCallback run;
 
   const PaletteCommand({
     required this.label,
     required this.category,
     this.shortcut,
+    this.ticked = false,
+    this.disabled,
     required this.run,
   });
 }
+
+/// What stands between the steps of a path in a label, as in
+/// "Layer › New › Solid".
+const String palettePathSeparator = ' › ';
 
 /// Open the palette over [context].
 ///
@@ -103,12 +117,17 @@ class _Palette extends StatefulWidget {
 class _PaletteState extends State<_Palette> {
   final TextEditingController _query = TextEditingController();
   final FocusNode _focus = FocusNode();
+  final ScrollController _scroll = ScrollController();
   int _highlighted = 0;
 
   @override
   void initState() {
     super.initState();
-    _query.addListener(() => setState(() => _highlighted = 0));
+    _query.addListener(() {
+      // A new list starts from its top, highlight and all.
+      if (_scroll.hasClients) _scroll.jumpTo(0);
+      setState(() => _highlighted = 0);
+    });
     _focus.requestFocus();
     // Escape closes the palette from the ladder's dialogue rung
     // (widgets/escape_ladder.dart) rather than from the field's focus node:
@@ -129,34 +148,100 @@ class _PaletteState extends State<_Palette> {
     _escapeRelease = null;
     _query.dispose();
     _focus.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
   List<PaletteCommand> get _matches {
     final needle = _query.text.trim();
-    final scored = <(int, int, PaletteCommand)>[];
-    for (final command in widget.commands) {
-      final score = paletteScore(needle, command.label);
-      if (score == null) continue;
-      final recency = widget.recent.indexOf(command.label);
-      scored
-          .add((score, recency < 0 ? widget.recent.length : recency, command));
+    final scored = <(int, int, int)>[];
+    for (var i = 0; i < widget.commands.length; i++) {
+      final label = widget.commands[i].label;
+      final whole = paletteScore(needle, label);
+      if (whole == null) continue;
+      // A menu command is known by its last step, so "solid" ranks
+      // "Layer › New › Solid" as it would rank "Solid", not as a match that
+      // starts fourteen letters in.
+      final leaf =
+          paletteScore(needle, label.split(palettePathSeparator).last) ?? whole;
+      final recency = widget.recent.indexOf(label);
+      scored.add((
+        leaf < whole ? leaf : whole,
+        recency < 0 ? widget.recent.length : recency,
+        i,
+      ));
     }
     // Relevance first, recency breaking ties — which, for the empty query
-    // where every score is zero, is exactly "recently used rank first".
+    // where every score is zero, is exactly "recently used rank first". Then
+    // the order the caller listed them in, because the sort keeps no order of
+    // its own.
     scored.sort((a, b) {
       final byScore = a.$1.compareTo(b.$1);
-      return byScore != 0 ? byScore : a.$2.compareTo(b.$2);
+      if (byScore != 0) return byScore;
+      final byRecency = a.$2.compareTo(b.$2);
+      return byRecency != 0 ? byRecency : a.$3.compareTo(b.$3);
     });
-    return [for (final entry in scored) entry.$3];
+    return [for (final entry in scored) widget.commands[entry.$3]];
+  }
+
+  void _run(PaletteCommand command) {
+    if (command.disabled != null) return;
+    widget.onRun(command.label);
+    widget.onClose();
+    command.run();
   }
 
   void _runHighlighted(List<PaletteCommand> matches) {
     if (matches.isEmpty) return;
-    final command = matches[_highlighted.clamp(0, matches.length - 1)];
-    widget.onRun(command.label);
-    widget.onClose();
-    command.run();
+    _run(matches[_highlighted.clamp(0, matches.length - 1)]);
+  }
+
+  /// Move the highlight to row [to] of [count] and scroll it into view. Every
+  /// row is the height of the list's prototype, so the whole list divided by
+  /// the count is one row.
+  void _highlight(int to, int count) {
+    setState(() => _highlighted = to);
+    if (!_scroll.hasClients || count == 0) return;
+    final position = _scroll.position;
+    final row =
+        (position.maxScrollExtent + position.viewportDimension) / count;
+    final top = to * row;
+    final bottom = top + row - position.viewportDimension;
+    if (position.pixels > top) _scroll.jumpTo(top);
+    if (position.pixels < bottom) _scroll.jumpTo(bottom);
+  }
+
+  /// One result row. Also the list's prototype, so it is always one line.
+  Widget _row(LumitTheme t, PaletteCommand command, {bool selected = false}) {
+    final off = command.disabled != null;
+    return MenuRow(
+      selected: selected,
+      onPressed: () => _run(command),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              command.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: off ? t.body.copyWith(color: t.textDisabled) : null,
+            ),
+          ),
+          // After the name, so ticked and unticked names start in line.
+          if (command.ticked) ...[
+            menuTick(true, colour: t.textMuted),
+            const SizedBox(width: 8),
+          ],
+          if (command.disabled ?? command.shortcut case final note?) ...[
+            Text(note,
+                style: off ? t.small.copyWith(color: t.textDisabled) : t.mono),
+            const SizedBox(width: 8),
+          ],
+          Text(command.category,
+              style: t.small.copyWith(color: t.textMuted)),
+        ],
+      ),
+    );
   }
 
   @override
@@ -170,13 +255,16 @@ class _PaletteState extends State<_Palette> {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         switch (event.logicalKey) {
           case LogicalKeyboardKey.arrowDown:
-            setState(() => _highlighted =
-                matches.isEmpty ? 0 : (_highlighted + 1) % matches.length);
+            _highlight(
+                matches.isEmpty ? 0 : (_highlighted + 1) % matches.length,
+                matches.length);
             return KeyEventResult.handled;
           case LogicalKeyboardKey.arrowUp:
-            setState(() => _highlighted = matches.isEmpty
-                ? 0
-                : (_highlighted - 1 + matches.length) % matches.length);
+            _highlight(
+                matches.isEmpty
+                    ? 0
+                    : (_highlighted - 1 + matches.length) % matches.length,
+                matches.length);
             return KeyEventResult.handled;
           case LogicalKeyboardKey.enter:
             _runHighlighted(matches);
@@ -208,32 +296,16 @@ class _PaletteState extends State<_Palette> {
             else
               ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 300),
-                child: ListView(
+                child: ListView.builder(
                   shrinkWrap: true,
-                  children: [
-                    for (var i = 0; i < matches.length; i++)
-                      MenuRow(
-                        key: ValueKey<String>(
-                            'palette-item-${matches[i].label}'),
-                        selected: i == _highlighted,
-                        onPressed: () {
-                          widget.onRun(matches[i].label);
-                          widget.onClose();
-                          matches[i].run();
-                        },
-                        child: Row(
-                          children: [
-                            Expanded(child: Text(matches[i].label)),
-                            if (matches[i].shortcut != null) ...[
-                              Text(matches[i].shortcut!, style: t.mono),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(matches[i].category,
-                                style: t.small.copyWith(color: t.textMuted)),
-                          ],
-                        ),
-                      ),
-                  ],
+                  controller: _scroll,
+                  padding: EdgeInsets.zero,
+                  prototypeItem: _row(t, matches.first),
+                  itemCount: matches.length,
+                  itemBuilder: (context, i) => KeyedSubtree(
+                    key: ValueKey<String>('palette-item-${matches[i].label}'),
+                    child: _row(t, matches[i], selected: i == _highlighted),
+                  ),
                 ),
               ),
           ],

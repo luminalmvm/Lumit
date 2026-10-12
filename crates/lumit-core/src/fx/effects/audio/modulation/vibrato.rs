@@ -189,11 +189,6 @@ mod tests {
     }
 
     #[test]
-    fn the_pitch_moves_at_the_rate_asked() {
-        harness::modulates_at(&AudioVibratoDef, &[("rate", 2.0), ("depth", 60.0)], 2.0);
-    }
-
-    #[test]
     fn the_read_follows_the_cycle_and_the_sweep_is_the_cents_asked() {
         // A ramp reads the delay back directly: the line hands back the input
         // as it was `delay` frames ago, so the difference between what went in

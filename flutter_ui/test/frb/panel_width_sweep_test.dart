@@ -19,12 +19,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/effect_controls_panel_frb.dart';
 import 'package:lumit_flutter/panels/effects_presets_panel_frb.dart';
+import 'package:lumit_flutter/panels/expressions_panel_frb.dart';
 import 'package:lumit_flutter/panels/audio_panel_frb.dart';
 import 'package:lumit_flutter/panels/audio_timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/graph_panel.dart';
 import 'package:lumit_flutter/panels/mixer_panel_frb.dart';
 import 'package:lumit_flutter/panels/node_panel.dart';
+import 'package:lumit_flutter/panels/paragraph_panel_frb.dart';
 import 'package:lumit_flutter/panels/project_panel_frb.dart';
+import 'package:lumit_flutter/panels/text_panel_frb.dart';
 import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
@@ -226,6 +229,33 @@ void main() {
       await sweepWidths(tester,
           panel: Panel.audio,
           build: () => const AudioPanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
+    testWidgets('Text', (tester) async {
+      final p = populated();
+      await sweepWidths(tester,
+          panel: Panel.text,
+          build: () => const TextPanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
+    testWidgets('Paragraph', (tester) async {
+      final p = populated();
+      await sweepWidths(tester,
+          panel: Panel.paragraph,
+          build: () => const ParagraphPanelFrb(),
+          state: p.state,
+          uiState: p.uiState);
+    });
+
+    testWidgets('Expressions', (tester) async {
+      final p = populated();
+      await sweepWidths(tester,
+          panel: Panel.expressions,
+          build: () => const ExpressionsPanelFrb(),
           state: p.state,
           uiState: p.uiState);
     });

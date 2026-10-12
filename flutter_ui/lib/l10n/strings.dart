@@ -94,6 +94,7 @@ const Map<String, String> languageNames = {
   'ar': 'العربية',
   'de': 'Deutsch',
   'es': 'Español',
+  'it': 'Italiano',
   'kk': 'Қазақша',
   'pl': 'Polski',
   'pt': 'Português (Brasil)',

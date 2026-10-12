@@ -17,6 +17,7 @@
 import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show LayerReference;
 
 /// Frame → comp time, per composition. Keyed by the reference itself, which
 /// compares by project and comp id, so two panels holding their own handle to
@@ -182,6 +183,23 @@ double sampledScalar(BridgeScalar scalar, BridgeRational time) {
   _markHot(scalar, time);
   return values.isEmpty ? 0 : values.first;
 }
+
+/// What an expression on [layer] reads at [time]. An expression can read
+/// anything in the document, so its answers are only held until [revision]
+/// moves.
+double sampledExpression(BridgeScalar scalar, BridgeRational time,
+    LayerReference layer, BigInt? revision) {
+  if (_expressionRevision != revision || _expressionSamples.length >= 2048) {
+    _expressionSamples.clear();
+    _expressionRevision = revision;
+  }
+  return _expressionSamples[(scalar, layer.internallayerId, time)] ??=
+      sampleScalarWithContext(scalar: scalar, time: time, layer: layer);
+}
+
+final Map<(BridgeScalar, Object, BridgeRational), double> _expressionSamples =
+    {};
+BigInt? _expressionRevision;
 
 /// Note that [scalar] was wanted at [time], starting the set over when the time
 /// has moved on.

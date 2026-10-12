@@ -31,7 +31,7 @@ rather than guessing.
 ## Build the test fixture
 
 `make-fixture.jsx` builds one deterministic project covering every row of the coverage
-checklist in `docs/impl/ae-import.md` §5 — nested comps, the keyframe variety, both
+checklist: nested comps, the keyframe variety, both
 generations of matte, masks, markers, retiming, text, shapes, a camera and a light,
 expressions, and the effect spread including the unreadable one and one match name Lumit
 does not ship. Its bundle **is** the Rust importer's golden fixture:
@@ -61,4 +61,4 @@ property must never abort an export.
 Enum values go into the capture as **AE's own constant names, verbatim** — `SCREEN`,
 `ALPHA_INVERTED`, `BEZIER`, `PIXEL_MOTION`. Do not lower-case or tidy them: re-spelling
 is a conversion, conversions belong on the Rust side where tests can watch them, and the
-Rust reader matches on these strings exactly (`docs/impl/ae-import.md` §2).
+Rust reader matches on these strings exactly.

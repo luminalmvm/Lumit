@@ -1,6 +1,6 @@
 ---
 title: Markers
-description: Flags on the ruler, numbered markers, and beat detection.
+description: Flags on the ruler, colours, regions, numbered markers, and beat detection.
 sidebar:
   order: 5.5
 ---
@@ -21,7 +21,39 @@ dragging a marker on top of another does the same.
 | --- | --- |
 | Add at the playhead | **Composition ▸ Add marker at playhead**, or `*`, `Shift+NUMBER`, or `Shift+M` |
 | Move | Drag the marker along the ruler |
-| Rename or delete | Right-click the flag: *Edit marker…* or *Delete marker* |
+| Edit | Double-click the flag, or right-click it: *Edit marker…* |
+| Delete | Right-click the flag: *Delete marker* |
+
+Pressing or dragging a marker does not move the playhead.
+
+## Colour
+
+Right-click a flag and pick a chip to set the marker's colour. The first chip is the plain
+grey. **Edit marker…** carries the same chips. Layer markers take a colour the same way.
+
+## Regions
+
+A **region** is a comp marker with a duration. It draws as a bar on the ruler, from the flag
+to a handle at its end, and shades that stretch of time down through the lanes and the graph
+editor in the marker's colour.
+
+| Action | How |
+| --- | --- |
+| Make a region | Right-click the flag: **Make region**. It starts one second long. |
+| Resize | Drag the handle at the region's end, or set **Duration** in *Edit marker…* |
+| Move | Drag the flag |
+| Remove | Right-click the flag: **Remove region**, or set **Duration** to 0 |
+
+A region is at least one frame long and stops at the composition's end. Layer markers and
+beat markers have no region.
+
+## Snapping
+
+With the **magnet** on, a dragged bar, keyframe, work-area edge or marker snaps to the
+markers, the playhead, layer ends, keyframes and work-area edges. `Ctrl` suspends it.
+
+Hold `Shift` while dragging the playhead on the ruler and it lands on the nearest of the
+same targets.
 
 ## Numbered markers
 

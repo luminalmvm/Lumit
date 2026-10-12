@@ -22,11 +22,13 @@
 //!   sound, and nothing retries or errors per call.
 //! - **The prepare worker** builds a comp's mix in the background: walk the
 //!   document for audio jobs (the GPU-free [`lumit_render::headless::AudioJobsBuilder`]
-//!   seam, so audio never queues behind a slow comp render), decode each
-//!   source at the device rate (cached per item), place the clips, and hand
-//!   the finished [`MixPlan`] to the audio thread. The FFI prepare call only
-//!   *kicks* this worker and returns; one worker runs at a time with a
-//!   one-slot latest-wins mailbox, so a burst of edits coalesces.
+//!   seam, so audio never queues behind a slow comp render), place the clips,
+//!   and hand the finished [`MixPlan`] to the audio thread. It decodes
+//!   nothing but the clips that carry a rack: a plan names its files, and
+//!   the engine decodes the blocks near the playhead as it plays
+//!   ([`lumit_audio::stream`]). The FFI prepare call only *kicks* this worker
+//!   and returns; one worker runs at a time with a one-slot latest-wins
+//!   mailbox, so a burst of edits coalesces.
 //! - **Any caller thread** (Dart's UI isolate) takes the small state lock for
 //!   microseconds — bookkeeping and channel sends only. The per-tick clock
 //!   poll is allocation-free: a lock, two atomic reads, done.
@@ -47,11 +49,6 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, OnceLock};
 use uuid::Uuid;
 
-/// Decoded-audio cache ceiling. When the per-item cache would exceed this,
-/// items the current mix does not reference are dropped (a crude but bounded
-/// budget; the egui side's byte-budgeted cache is the fuller treatment).
-const DECODED_BUDGET_BYTES: usize = 512 * 1024 * 1024;
-
 /// A command for the audio thread — the only code that touches the engine.
 enum Cmd {
     /// Install a plan and rewind, then optionally seek and play — a fresh
@@ -69,6 +66,11 @@ enum Cmd {
     /// The monitor mute: silence at the device, the mix and clock untouched.
     Mute(bool),
     Seek(f64),
+    /// Sound `len` seconds from `at` once, with the transport stopped.
+    Scrub {
+        at: f64,
+        len: f64,
+    },
     Unload,
 }
 
@@ -125,6 +127,10 @@ struct AudioState {
     /// file was still decoding when a comp started playing is dropped rather
     /// than stamped over the comp's mix.
     wanted_preview: Option<Uuid>,
+    /// What the preview in the engine reads, where one is: the file and the
+    /// streams of it. A press that asks for other streams of the same file
+    /// is another preview, not a seek in this one.
+    loaded_preview: Option<lumit_media::SoundSource>,
     /// The comp waiting for the worker, with the document to build it from —
     /// the snapshot is captured at request time so a later edit cannot change
     /// what a queued prepare is about to mix.
@@ -132,9 +138,12 @@ struct AudioState {
     /// The audio-jobs walk with its has-audio probe cache. Taken out of the
     /// state (never probed under the lock) by the worker and put back.
     jobs: AudioJobsBuilder,
-    /// Decoded sources at the device rate, shared into every plan (`Arc`s, so
-    /// a swap re-places without re-decoding).
-    decoded: HashMap<Uuid, Arc<lumit_media::AudioBuffer>>,
+    /// What the racks made of each racked job in the plan that is loaded, so
+    /// the next build runs only the racks an edit changed.
+    bakes: lumit_render::export::RackBakes,
+    /// How much sound the engine had played as silence when it was last
+    /// asked, so each shortfall is noted once ([`clock`]).
+    starved: u64,
     /// Which layer each meter slot of the installed plan belongs to, in the
     /// order the mixer draws its strips. Replaced with the plan, so
     /// a poll can never name a strip the sound is not on.
@@ -143,6 +152,15 @@ struct AudioState {
     /// the Timeline's Sound mix row can summarise the mix ([`mix_peaks`])
     /// without a second mixer. Goes with `loaded_comp`.
     loaded_plan: Option<(Arc<MixPlan>, u32)>,
+    /// The document the last [`scrub`] asked for a mix of. A scrub arrives
+    /// once per frame the playhead crosses, and only the first one after an
+    /// edit has anything new to prepare. Weak, so remembering it does not
+    /// keep a document alive that nothing else is holding.
+    scrub_doc: std::sync::Weak<lumit_core::Document>,
+    /// The burst a [`scrub`] asked for while the mix for it was still being
+    /// prepared: where, and how long. Sounded once that mix lands, so a scrub
+    /// straight after an edit is never the mix from before it.
+    scrub_held: Option<(f64, f64)>,
 }
 
 impl AudioState {
@@ -158,11 +176,15 @@ impl AudioState {
             pending_start: None,
             worker_busy: false,
             wanted_preview: None,
+            loaded_preview: None,
             pending_prepare: None,
             jobs: AudioJobsBuilder::new(),
-            decoded: HashMap::new(),
+            bakes: lumit_render::export::RackBakes::default(),
+            starved: 0,
             meter_strips: Vec::new(),
             loaded_plan: None,
+            scrub_doc: std::sync::Weak::new(),
+            scrub_held: None,
         }
     }
 }
@@ -190,7 +212,7 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
     duration_s.to_bits().hash(&mut h);
     master_db.to_bits().hash(&mut h);
     for j in jobs {
-        j.path.hash(&mut h);
+        j.sound.hash(&mut h);
         j.in_s.to_bits().hash(&mut h);
         j.out_s.to_bits().hash(&mut h);
         j.offset_s.to_bits().hash(&mut h);
@@ -201,6 +223,9 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
             c.offset_s.to_bits().hash(&mut h);
             hash_animation(&mut h, &c.volume.animation);
             hash_animation(&mut h, &c.pan.animation);
+            // The fade of a clip a nested comp plays through, as a job's own
+            // is folded below.
+            format!("{:?}", c.fade).hash(&mut h);
             // A Precomp layer's rack is a stage on the sum arriving through
             // it, so editing that rack changes the mix without touching a
             // keyframe anywhere below.
@@ -281,13 +306,15 @@ fn hash_animation(
     }
 }
 
-/// Place the decoded sources on the comp strip as a live [`MixPlan`] — pure,
-/// so plan-building is a plain deterministic test. A job whose source is not
-/// in `decoded` (a failed or oversized decode) contributes nothing; the same
-/// placement + Volume bake the egui preview and the exporter use, so playback
-/// sounds identical everywhere.
-/// Which mixer strip each meter slot belongs to — [`strips`]'s answer, and
-/// what a plan's `meter` indices point into.
+/// Place buffers already in memory on the comp strip as a live [`MixPlan`],
+/// and say which mixer strip each meter slot belongs to: [`strips`]'s answer,
+/// and what a plan's `meter` indices point into.
+///
+/// [`lumit_render::export::live_plan`] over whole buffers, which is how the
+/// tests hold the plan against the export. A job whose item is not in
+/// `decoded` contributes nothing. The mix the engine plays is built by the
+/// same function over the files themselves ([`prepare_once`]).
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn build_plan(
     jobs: &[AudioJob],
     decoded: &HashMap<Uuid, Arc<lumit_media::AudioBuffer>>,
@@ -295,130 +322,30 @@ pub(crate) fn build_plan(
     duration_s: f64,
     master_db: f64,
 ) -> (Arc<MixPlan>, Vec<Uuid>) {
-    let total_frames = (duration_s * f64::from(rate)).round().max(0.0) as usize;
-    /// One job placed and processed, before the bus stage sees it.
-    struct Ready<'a> {
-        job: &'a AudioJob,
-        buffer: Arc<lumit_media::AudioBuffer>,
-        start_frame: i64,
-        src_start: usize,
-        len: usize,
-    }
-    let ready: Vec<Ready<'_>> = jobs
-        .iter()
-        .filter_map(|job| {
-            let buffer = decoded.get(&job.item).filter(|b| b.rate == rate)?;
-            let (start_frame, src_start, len) = lumit_audio::mix::place_on_timeline(
-                job.in_s,
-                job.out_s,
-                job.offset_s,
-                buffer.samples.len() / 2,
-                rate,
-            )?;
-            // The clip's insert chain and then the layer's, ahead of Volume
-            // and Pan. The processed span **replaces** the decoded buffer in
-            // the plan, so the realtime callback plays finished sound and
-            // never waits on a plugin's process; a job whose stacks open
-            // nothing keeps the shared decoded `Arc` untouched. Realtime
-            // rather than offline here, which is the one thing this path and
-            // the export's say differently - the arithmetic in between is the
-            // same function.
-            let wet = lumit_render::export::job_bake(
-                job,
-                &buffer.samples[src_start * 2..(src_start + len) * 2],
-                start_frame,
-                rate,
-                false,
-            );
-            let (buffer, start_frame, src_start, len) = match wet {
-                // Placed the chain's summed latency earlier, so the wet lands
-                // where the dry did, and as long as the run came back, so a
-                // tail rings on past the out point.
-                Some((samples, latency)) => {
-                    let frames = samples.len() / 2;
-                    (
-                        Arc::new(lumit_media::AudioBuffer { rate, samples }),
-                        start_frame - i64::from(latency),
-                        0,
-                        frames,
-                    )
-                }
-                None => (Arc::clone(buffer), start_frame, src_start, len),
-            };
-            Some(Ready {
-                job,
-                buffer,
-                start_frame,
-                src_start,
-                len,
-            })
-        })
-        .collect();
-    // Then the bus stage: everything arriving through a Precomp layer that
-    // carries a rack is summed and run through it, and what comes back is one
-    // run of its own on that layer's strip (docs/09 §3.1). The export mixes
-    // through the same function, so the two cannot disagree.
-    let staged: Vec<lumit_render::export::PlacedJob<'_>> = ready
-        .iter()
-        .map(|r| lumit_render::export::PlacedJob {
-            job: r.job,
-            start_frame: r.start_frame,
-            samples: &r.buffer.samples[r.src_start * 2..(r.src_start + r.len) * 2],
-        })
-        .collect();
-    let runs = lumit_render::export::bus_runs(&staged, rate, false);
-    // Meter slots in first-sounding order, one per strip: several
-    // jobs from one Precomp layer share its slot, and past the bank's size
-    // the extras play unmetered rather than being dropped.
-    let mut strips: Vec<Uuid> = Vec::new();
-    let clips = runs
-        .into_iter()
-        .map(|run| {
-            let (buffer, src_start, len) = match run.of {
-                lumit_render::export::RunOf::Job(at) => (
-                    Arc::clone(&ready[at].buffer),
-                    ready[at].src_start,
-                    ready[at].len,
-                ),
-                lumit_render::export::RunOf::Bus(samples) => {
-                    let frames = samples.len() / 2;
-                    (
-                        Arc::new(lumit_media::AudioBuffer { rate, samples }),
-                        0,
-                        frames,
-                    )
-                }
-            };
-            let slot = match strips.iter().position(|s| *s == run.layer) {
-                Some(at) => at,
-                None => {
-                    strips.push(run.layer);
-                    strips.len() - 1
-                }
-            };
-            lumit_audio::mix::PlacedClip {
-                buffer,
-                start_frame: run.start_frame,
-                src_start,
-                len,
-                gain: run.gain,
-                envelope: run.envelope.map(Arc::new),
-                meter: u8::try_from(slot)
-                    .ok()
-                    .filter(|s| usize::from(*s) < lumit_audio::meter::MAX_STRIPS)
-                    .unwrap_or(lumit_audio::mix::NO_METER),
-            }
-        })
-        .collect();
-    strips.truncate(lumit_audio::meter::MAX_STRIPS);
-    (
-        Arc::new(MixPlan {
-            clips,
-            total_frames,
-            master_gain: lumit_audio::mix::db_to_gain(master_db),
-        }),
-        strips,
+    lumit_render::export::live_plan(
+        jobs,
+        &|job| {
+            decoded
+                .get(&job.item)
+                .map(|b| lumit_audio::stream::Source::whole(Arc::clone(b)))
+        },
+        rate,
+        duration_s,
+        master_db,
+        &mut lumit_render::export::RackBakes::default(),
     )
+}
+
+/// What a rack's sound depends on that its job does not carry: which plugins
+/// are switched off for now (AP5). A change here empties the bakes,
+/// so flicking the switch runs the racks again.
+fn rack_stamp() -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    if let Ok(disabled) = lumit_aplug::session_disabled().lock() {
+        format!("{disabled:?}").hash(&mut h);
+    }
+    h.finish()
 }
 
 /// One strip's bars, or the master's — see [`meters`].
@@ -520,6 +447,7 @@ fn ensure_device() -> Option<(Sender<Cmd>, u32, u64)> {
                 Cmd::Pause => engine.pause(),
                 Cmd::Mute(m) => engine.set_muted(m),
                 Cmd::Seek(s) => engine.seek_seconds(s),
+                Cmd::Scrub { at, len } => engine.scrub(at, len),
                 Cmd::Unload => engine.unload(),
             }
         }
@@ -587,6 +515,13 @@ fn run_prepare(mut comp: Uuid, mut doc: Arc<lumit_core::Document>) {
                 Some(next) => Some(next),
                 None => {
                     st.worker_busy = false;
+                    // The mix a scrub was waiting on is in, if it is going
+                    // to be: sound where the playhead got to meanwhile.
+                    if let Some((at, len)) = st.scrub_held.take() {
+                        if st.loaded_comp == Some(comp) {
+                            send(&st, Cmd::Scrub { at, len });
+                        }
+                    }
                     None
                 }
             }
@@ -660,40 +595,38 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
         return;
     };
 
-    // Decode what the mix needs, without the lock; cached items are re-used
-    // as shared buffers. A failed decode simply contributes nothing (calm).
-    let mut decoded: HashMap<Uuid, Arc<lumit_media::AudioBuffer>> = HashMap::new();
-    for job in &jobs {
-        if decoded.contains_key(&job.item) {
-            continue;
-        }
-        let hit = {
-            let st = lock();
-            st.decoded
-                .get(&job.item)
-                .filter(|b| b.rate == rate)
-                .cloned()
-        };
-        match hit {
-            Some(buffer) => {
-                decoded.insert(job.item, buffer);
-            }
-            None => {
-                if let Ok(buffer) = lumit_media::audio::decode_all(&job.path, rate) {
-                    let buffer = Arc::new(buffer);
-                    decoded.insert(job.item, Arc::clone(&buffer));
-                    let mut st = lock();
-                    st.decoded.insert(job.item, buffer);
-                }
-            }
-        }
+    // The plan names its files and decodes none of them: the engine reads
+    // the blocks near the playhead as it plays. Only a job carrying a rack is
+    // read here, and only if the last build did not already run that rack.
+    // Built without the lock; the bakes are taken out of the state for it, as
+    // the jobs builder was.
+    let mut bakes = {
+        let mut st = lock();
+        std::mem::take(&mut st.bakes)
+    };
+    bakes.stamped(rack_stamp());
+    let pool = lumit_audio::stream::pool();
+    let (plan, strips) = lumit_render::export::live_plan(
+        &jobs,
+        &|job| Some(pool.source(&job.sound, rate)),
+        rate,
+        duration_s,
+        master_db,
+        &mut bakes,
+    );
+    // A mix about to start somewhere has that place decoded before it is
+    // handed over, so it starts with its sound. This worker may wait; the
+    // audio thread it hands to may not.
+    let pending = lock().pending_start;
+    if let Some(start) = pending {
+        let from = (start * f64::from(rate)) as usize;
+        plan.warm(from, from.saturating_add(rate as usize));
     }
-
-    let (plan, strips) = build_plan(&jobs, &decoded, rate, duration_s, master_db);
 
     // Install: swap keeps the clock and play state (the instant-edit
     // contract); a fresh load applies the pending start and transport intent.
     let mut st = lock();
+    st.bakes = bakes;
     // Unless the output device changed while this mix was being built. `tx`
     // then speaks to an engine that is being closed, and recording the comp as
     // loaded would leave the transport thinking it can hear something it
@@ -715,23 +648,6 @@ fn prepare_once(comp: Uuid, doc: &Arc<lumit_core::Document>) {
     st.loaded_sig = Some(sig);
     st.meter_strips = strips;
     st.loaded_plan = Some((plan, rate));
-    trim_decoded(&mut st, &jobs);
-}
-
-/// Hold the decoded-audio cache under its budget: when it grows past
-/// [`DECODED_BUDGET_BYTES`], drop items the current mix does not reference
-/// (their `Arc`s stay alive inside any installed plan until it is replaced).
-fn trim_decoded(st: &mut AudioState, jobs: &[AudioJob]) {
-    let bytes: usize = st
-        .decoded
-        .values()
-        .map(|b| b.samples.len() * std::mem::size_of::<f32>())
-        .sum();
-    if bytes <= DECODED_BUDGET_BYTES {
-        return;
-    }
-    let wanted: Vec<Uuid> = jobs.iter().map(|j| j.item).collect();
-    st.decoded.retain(|item, _| wanted.contains(item));
 }
 
 /// Build (or refresh) `comp`'s mix in the background — called after an edit
@@ -772,8 +688,15 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
     kick_prepare(&mut st, comp, doc);
 }
 
-/// Play one footage file's own sound from the top, with no composition behind
-/// it — the Project panel's preview button (docs/07 §3.1).
+/// Play one footage file's own sound from `start_s` seconds into it, with no
+/// composition behind it: the Project panel's preview button (docs/07 §3.1)
+/// from the top, and the Source viewer from wherever its playhead is.
+///
+/// `sound` is the file and which of its audio streams are heard, mixed.
+///
+/// [`clock`] then reads **the file's own time**, seconds from the top of the
+/// file, and so starts at `start_s` and not at zero. A start past the end of
+/// the file is held to the end, and one that is not a number is the top.
 ///
 /// The mix is a single clip at unity, loaded under the **item's** id. A footage
 /// id is never a comp id, so a preview and a comp's mix cannot be taken for one
@@ -781,9 +704,11 @@ pub(crate) fn play(comp: Uuid, start: f64, doc: Arc<lumit_core::Document>) {
 /// speakers means. Stopping is [`stop`] and where it has got to is [`clock`],
 /// exactly as for a comp.
 ///
-/// Returns at once: the decode runs on its own thread, so a long file does not
-/// hold the press.
-pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
+/// Returns at once: the file is opened on its own thread, so a slow disk does
+/// not hold the press.
+pub(crate) fn preview(item: Uuid, sound: lumit_media::SoundSource, start_s: f64) {
+    // `max` answers zero for a start that is not a number.
+    let start_s = start_s.max(0.0);
     {
         let mut st = lock();
         if matches!(st.device, Device::Unavailable) {
@@ -791,10 +716,14 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
         }
         st.wanted_preview = Some(item);
         // This file's preview is already in the engine: a second press is a
-        // rewind, not a re-decode.
-        if st.loaded_comp == Some(item) {
+        // seek, not a second look at the file.
+        if st.loaded_comp == Some(item) && st.loaded_preview.as_ref() == Some(&sound) {
             st.playing = true;
-            send(&st, Cmd::Seek(0.0));
+            let length = st
+                .loaded_plan
+                .as_ref()
+                .map(|(plan, rate)| plan.total_frames as f64 / f64::from(*rate));
+            send(&st, Cmd::Seek(length.map_or(start_s, |l| start_s.min(l))));
             send(&st, Cmd::Play);
             return;
         }
@@ -805,39 +734,21 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
             return;
         };
 
-        // The same per-item buffer a comp's mix decodes into: previewing a clip
-        // and then dropping it in a comp decodes the file once.
-        let hit = {
-            let st = lock();
-            st.decoded
-                .get(&item)
-                .filter(|b| b.rate == rate)
-                .map(Arc::clone)
-        };
-        let buffer = match hit {
-            Some(buffer) => buffer,
-            None => {
-                let Ok(buffer) = lumit_media::audio::decode_all(&path, rate) else {
-                    return; // a file with no sound in it, or one that will not open
-                };
-                let buffer = Arc::new(buffer);
-                lock().decoded.insert(item, Arc::clone(&buffer));
-                buffer
-            }
-        };
-
-        // How long the preview is, is how long the file is — the buffer that
-        // just came back knows, so nothing has to probe for it.
-        let frames = buffer.samples.len() / 2;
+        // The same source a comp's mix reads: previewing a clip and then
+        // dropping it in a comp decodes each block of it once.
+        let source = lumit_audio::stream::pool().source(&sound, rate);
+        // How long the preview is, is how long the file is. Finding that
+        // reads the end of the file and not the whole of it.
+        let frames = source.frames_exactly();
         if frames == 0 {
-            return;
+            return; // a file with no sound in it, or one that will not open
         }
         let duration_s = frames as f64 / f64::from(rate);
 
         let jobs = vec![AudioJob {
             item,
             layer: item,
-            path,
+            sound: sound.clone(),
             in_s: 0.0,
             out_s: duration_s,
             offset_s: 0.0,
@@ -850,29 +761,40 @@ pub(crate) fn preview(item: Uuid, path: std::path::PathBuf) {
             clip: None,
             clip_chain: None,
         }];
-        let mut decoded = HashMap::new();
-        decoded.insert(item, buffer);
-        let (plan, strips) = build_plan(&jobs, &decoded, rate, duration_s, 0.0);
+        let (plan, strips) = lumit_render::export::live_plan(
+            &jobs,
+            &|_| Some(Arc::clone(&source)),
+            rate,
+            duration_s,
+            0.0,
+            &mut lumit_render::export::RackBakes::default(),
+        );
+        // Decoded where it is about to start, so the press is heard from its
+        // first sample.
+        let start_s = start_s.min(duration_s);
+        let from = (start_s * f64::from(rate)) as usize;
+        plan.warm(from, from.saturating_add(rate as usize));
 
         let mut st = lock();
         // The output moved, or something else took the engine while this file
-        // decoded (a comp played, or another preview was pressed). Drop the
+        // was opened (a comp played, or another preview was pressed). Drop the
         // work rather than stamping it over what the user is listening to now.
         if st.device_gen != generation || st.wanted_preview != Some(item) {
             return;
         }
         let _ = tx.send(Cmd::Load {
-            plan,
-            start: Some(0.0),
+            plan: Arc::clone(&plan),
+            start: Some(start_s),
             play: true,
         });
         st.loaded_comp = Some(item);
+        st.loaded_preview = Some(sound);
         // No signature: a preview is not a comp, so no edit can arrive that
         // would want to be recognised as the same mix.
         st.loaded_sig = None;
         st.playing = true;
         st.meter_strips = strips;
-        trim_decoded(&mut st, &jobs);
+        st.loaded_plan = Some((plan, rate));
     });
 }
 
@@ -918,6 +840,65 @@ pub(crate) fn resume() {
 pub(crate) fn seek(secs: f64) {
     let st = lock();
     send(&st, Cmd::Seek(secs.max(0.0)));
+}
+
+/// How long one scrub burst sounds, in seconds, unless the comp's frame is
+/// longer. A twelfth of a second is what After Effects plays for each move of
+/// its playhead: long enough to tell a kick from a snare, short enough that
+/// the beat is heard on the frame it falls on and not three frames early.
+const SCRUB_BURST_S: f64 = 1.0 / 12.0;
+
+/// Sound `comp`'s mix at `frame` in one short burst, with the transport
+/// stopped: the playhead dragged with Ctrl held.
+///
+/// When the mix is loaded this is one message to the audio thread. When it is
+/// not, it is prepared in the background and the bursts start once it lands,
+/// so the first drag of a session is silent for as long as the decode takes.
+/// The first burst after an edit prepares again too, so scrubbing straight
+/// after moving a clip is never the mix from before the move.
+pub(crate) fn scrub(comp: Uuid, frame: u64, doc: Arc<lumit_core::Document>) {
+    let Some(fps) = doc
+        .comp(comp)
+        .map(|c| c.frame_rate.fps())
+        .filter(|fps| *fps > 0.0)
+    else {
+        return;
+    };
+    let mut st = lock();
+    // The comp is what the user wants to hear now, as in `play`.
+    st.wanted_preview = None;
+    let loaded = st.loaded_comp == Some(comp);
+    let (at, len) = (frame as f64 / fps, (1.0 / fps).max(SCRUB_BURST_S));
+    let seen = Arc::downgrade(&doc);
+    let mut changed = !st.scrub_doc.ptr_eq(&seen);
+    if !loaded {
+        // The transport stays stopped, so this comp's mix does not start
+        // playing by itself when it lands.
+        st.playing = false;
+        if st.loaded_comp.is_some() {
+            // Another comp's mix, or a footage preview, is in the engine.
+            // Silence it, and prepare this one whatever was asked before.
+            send(&st, Cmd::Unload);
+            st.loaded_comp = None;
+            st.loaded_sig = None;
+            st.meter_strips.clear();
+            st.loaded_plan = None;
+            changed = true;
+        }
+    }
+    // The mix for this document is in the engine: one message. Otherwise it
+    // is on its way, or about to be, and the burst waits for it. Only a new
+    // document has anything to prepare, so a comp with no sound in it is
+    // asked about once and not on every frame the playhead crosses.
+    if loaded && !changed && st.scrub_held.is_none() {
+        send(&st, Cmd::Scrub { at, len });
+    } else if changed || st.scrub_held.is_some() {
+        st.scrub_held = Some((at, len));
+    }
+    if changed {
+        st.scrub_doc = seen;
+        kick_prepare(&mut st, comp, doc);
+    }
 }
 
 /// Stop: pause and rewind to the start (the transport's stop semantics).
@@ -999,7 +980,34 @@ pub(crate) fn mix_peaks(
         st.loaded_plan.clone()?
     };
     let duration = plan.total_frames as f64 / f64::from(rate);
-    Some((plan.peaks(rate, start_s, end_s, buckets), duration))
+    Some((mix_peaks_of(&plan, rate, start_s, end_s, buckets), duration))
+}
+
+/// How many frames a bucket of the Sound mix row may cover and still be read
+/// from the samples. Past it the row is drawn from the files' own peaks.
+/// Four thousand buckets of this are under a minute and a half of mix, which
+/// is as much as this ever has decoded for one answer.
+const MIX_READ_FRAMES: f64 = 1024.0;
+
+/// `plan` summarised over `[start_s, end_s)`: read from the samples where the
+/// window is narrow enough to decode for, and put together from each file's
+/// peak pyramid where it is not ([`MixPlan::peaks_wide`]). Waits, for the
+/// decode in the first case and for any pyramid not yet built in the second,
+/// so it is not for a caller that cannot.
+fn mix_peaks_of(plan: &MixPlan, rate: u32, start_s: f64, end_s: f64, buckets: usize) -> Vec<f32> {
+    let rate_f = f64::from(rate);
+    if buckets == 0 || end_s <= start_s {
+        return plan.peaks(rate, start_s, end_s, buckets);
+    }
+    if (end_s - start_s) * rate_f / buckets as f64 <= MIX_READ_FRAMES {
+        let from = (start_s.max(0.0) * rate_f) as usize;
+        let to = (end_s.max(0.0) * rate_f).ceil() as usize;
+        plan.warm(from, to.min(plan.total_frames));
+        return plan.peaks(rate, start_s, end_s, buckets);
+    }
+    plan.peaks_wide(rate, start_s, end_s, buckets, &mut |sound| {
+        crate::peaks::pyramid_for(sound)
+    })
 }
 
 /// The playback clock: `(seconds, is_playing, loaded)`.
@@ -1008,14 +1016,37 @@ pub(crate) fn mix_peaks(
 /// polled every tick. With no device, or nothing loaded, it reads
 /// `(0.0, false, false)` and the caller keeps its own clock.
 pub(crate) fn clock() -> (f64, bool, bool) {
-    let st = lock();
-    match &st.device {
+    let mut st = lock();
+    let (answer, starved) = match &st.device {
         Device::Ready { clock, .. } => {
             let loaded = st.loaded_comp.is_some();
-            (clock.seconds(), clock.is_playing(), loaded)
+            (
+                (clock.seconds(), clock.is_playing(), loaded),
+                clock.starved_frames(),
+            )
         }
-        _ => (0.0, false, false),
+        _ => return (0.0, false, false),
+    };
+    // The engine plays silence where a block was not decoded in time and
+    // counts the frames. Said here, once per shortfall, because this is the
+    // one place that already looks at the engine every tick: nothing is
+    // written unless the count has moved.
+    // ponytail: a line on the error stream, which a release build's user
+    // never sees. The status readout wants this, and reaching it takes a
+    // field on the clock the frontend polls.
+    if starved != st.starved {
+        let rate = match &st.device {
+            Device::Ready { rate, .. } => f64::from(*rate),
+            _ => 48_000.0,
+        };
+        note!(
+            "sound: {:.0} ms played as silence near {:.2} s, the decode fell behind the playhead",
+            (starved.saturating_sub(st.starved)) as f64 * 1000.0 / rate,
+            answer.0
+        );
+        st.starved = starved;
     }
+    answer
 }
 
 #[cfg(test)]
@@ -1023,7 +1054,6 @@ pub(crate) fn clock() -> (f64, bool, bool) {
 mod tests {
     use super::*;
     use lumit_core::anim::Property;
-    use std::path::PathBuf;
 
     /// Tests that write the one shared audio state take this first, so two of
     /// them never see each other's half-set state.
@@ -1040,7 +1070,7 @@ mod tests {
             item,
             layer: item, // one job, one strip: the test's own layer identity
             clip: None,
-            path: PathBuf::from(path),
+            sound: lumit_media::SoundSource::file(path),
             in_s,
             out_s,
             offset_s,
@@ -1154,6 +1184,7 @@ mod tests {
             volume: Property::zero(),
             pan: Property::zero(),
             offset_s: 0.0,
+            fade: None,
             chain: Some(Arc::new(lumit_render::export::AudioChain {
                 doc: Arc::new(lumit_core::model::Document::new()),
                 comp: Uuid::nil(),
@@ -1201,25 +1232,6 @@ mod tests {
             "the limiter heard both sources at once: {l} and {r}"
         );
         assert!(l.abs() > 0.1, "and it is sound, not silence");
-    }
-
-    /// A decoded buffer at the wrong rate is never placed (media is decoded at
-    /// the device rate; a stale entry must not sneak into the mix half-speed).
-    #[test]
-    fn build_plan_rejects_a_wrong_rate_buffer() {
-        let rate = 48_000u32;
-        let j = job("a.mp4", 0.0, 1.0, 0.0);
-        let mut decoded = HashMap::new();
-        decoded.insert(
-            j.item,
-            Arc::new(lumit_media::AudioBuffer {
-                rate: 44_100,
-                samples: vec![0.5; 44_100 * 2],
-            }),
-        );
-        let (plan, strips) = build_plan(&[j], &decoded, rate, 1.0, 0.0);
-        assert!(plan.clips.is_empty());
-        assert!(strips.is_empty());
     }
 
     /// Two rows of the comp are two slots; a Precomp row's several sources
@@ -1271,99 +1283,6 @@ mod tests {
             3,
             "the three past the bank have no bar"
         );
-    }
-
-    /// The meter poll before any engine exists is the calm empty state — a
-    /// mixer with no strips, which is what a device-less CI machine reads
-    /// forever, and resetting the clip lights there is a no-op not a fault.
-    #[test]
-    fn meters_read_empty_before_any_engine_exists() {
-        reset_clip();
-        let strips = meters();
-        // Another test on this shared state may have opened a device; only
-        // assert what is invariant — the master is always the last row when
-        // there is a device at all, and nothing panics either way.
-        assert!(strips.is_empty() || strips.last().is_some_and(|s| s.layer.is_none()));
-    }
-
-    /// A comp nothing has prepared has no mix to summarise: the Sound mix
-    /// row draws an empty lane rather than another comp's sound.
-    #[test]
-    fn mix_peaks_answer_nothing_for_a_comp_that_is_not_loaded() {
-        assert!(mix_peaks(Uuid::now_v7(), 0.0, 1.0, 16).is_none());
-    }
-
-    /// **A loaded mix answers while the next prepare runs.** The row asks for
-    /// a prepare on every poll and a prepare marks the worker busy the moment
-    /// it is kicked, so refusing a busy worker refused every ask there was and
-    /// the lane stayed empty for ever. What is loaded is answered instead: at
-    /// worst the mix as it stood one poll ago.
-    #[test]
-    fn mix_peaks_answer_the_loaded_plan_while_a_prepare_runs() {
-        let _held = state_tests();
-        let rate = 48_000u32;
-        let tone = job("tone.wav", 0.0, 1.0, 0.0);
-        let mut decoded = HashMap::new();
-        decoded.insert(
-            tone.item,
-            Arc::new(lumit_media::AudioBuffer {
-                rate,
-                samples: vec![0.5; rate as usize * 2], // a second of steady tone
-            }),
-        );
-        let (plan, _strips) = build_plan(&[tone], &decoded, rate, 1.0, 0.0);
-        let comp = Uuid::now_v7();
-        {
-            let mut st = lock();
-            st.loaded_comp = Some(comp);
-            st.loaded_plan = Some((plan, rate));
-            st.worker_busy = true; // as it is a moment after every ask
-        }
-
-        let answer = mix_peaks(comp, 0.0, 1.0, 8);
-        {
-            // Put the shared state back before asserting, so a failure here
-            // does not leave a mix loaded for the next test.
-            let mut st = lock();
-            st.loaded_comp = None;
-            st.loaded_plan = None;
-            st.worker_busy = false;
-        }
-
-        let (values, duration) = answer.expect("the mix in hand is answered");
-        assert!((duration - 1.0).abs() < 1e-6, "a second of mix");
-        assert_eq!(values.len(), 8 * 3, "min, max and rms per bucket");
-        assert!(
-            values.chunks(3).all(|b| (b[1] - 0.5).abs() < 1e-3),
-            "every bucket carries the tone: {values:?}"
-        );
-    }
-
-    /// The clock poll before any engine exists is the calm zero state — the
-    /// exact reading a device-less CI machine holds forever.
-    #[test]
-    fn the_clock_reads_zero_before_any_engine_exists() {
-        let (secs, playing, loaded) = clock();
-        // Another test on this shared state may have started an engine; only
-        // assert what is invariant: no panic, and a non-playing, non-negative
-        // clock while nothing has ever been loaded and played here.
-        assert!(secs >= 0.0);
-        assert!(
-            !playing || loaded,
-            "playing without a loaded mix is impossible"
-        );
-        let _ = loaded;
-    }
-
-    /// The mute is state of this module, not of an engine, so it holds on a
-    /// machine with no sound device and is there for the first stream opened.
-    #[test]
-    fn mute_is_remembered_before_any_engine_exists() {
-        let _held = state_tests();
-        set_muted(true);
-        assert!(muted(), "muted with no engine to mute");
-        set_muted(false);
-        assert!(!muted(), "and unmuted again");
     }
 
     /// Choosing an output closes the open stream and forgets what was loaded,
@@ -1555,71 +1474,6 @@ mod tests {
         })
     }
 
-    /// **A layer with no audio effect is the mix it always was** (the
-    /// note's §7 plan 3): the plan holds the *same* decoded buffer, not a copy
-    /// of it, so an empty chain costs no memory, no arithmetic and no chance of
-    /// drift. A stack full of picture effects is the same thing — the catalogue
-    /// opens none of them as audio.
-    #[test]
-    fn an_empty_chain_leaves_the_decoded_buffer_untouched() {
-        let rate = 48_000u32;
-        let source = tone(rate, 1.0, 0.25);
-        let bare = job("a.mp4", 0.0, 1.0, 0.0);
-        let mut blurred = bare.clone();
-        blurred.chain = Some(chain_of(vec![lumit_core::fx::instantiate("blur").unwrap()]));
-        // Both racks bypassed is the same answer: a clip whose own stack opens
-        // nothing costs the mix nothing either.
-        let mut both = blurred.clone();
-        both.clip_chain = Some(chain_of(vec![lumit_core::fx::instantiate("blur").unwrap()]));
-
-        let mut decoded = HashMap::new();
-        decoded.insert(bare.item, Arc::clone(&source));
-        for one in [bare, blurred, both] {
-            let (plan, _) = build_plan(&[one], &decoded, rate, 1.0, 0.0);
-            assert!(
-                Arc::ptr_eq(&plan.clips[0].buffer, &source),
-                "the plan must hold the decoded buffer itself"
-            );
-        }
-    }
-
-    /// **Preview is export** through a plugin (the note's §7 plan 3).
-    ///
-    /// Not "they agree to within a tolerance": the live plan and the baked
-    /// mixdown run the *same* chain over the *same* placement, so the two are
-    /// equal sample for sample — and the sound really did go through the
-    /// plugin, which the clip at ±0.5 proves.
-    #[test]
-    fn a_plugin_sounds_identical_through_the_live_plan_and_the_bake() {
-        let rate = 48_000u32;
-        register_insert("clap:lumit.test.preview", None, 0);
-        let source = tone(rate, 1.0, 0.8);
-        let mut one = job("a.mp4", 0.0, 1.0, 0.0);
-        one.chain = Some(chain_of(vec![insert_instance(
-            "clap:lumit.test.preview",
-            Property::fixed(1.0),
-        )]));
-
-        let mut decoded = HashMap::new();
-        decoded.insert(one.item, Arc::clone(&source));
-        let (plan, _) = build_plan(&[one.clone()], &decoded, rate, 1.0, 0.0);
-        let baked =
-            lumit_render::export::mixdown_prepared(&[(Arc::clone(&source), one)], rate, 1.0, 1.0);
-
-        assert!(
-            (baked[0] - 0.5).abs() < 1e-6,
-            "the insert really ran: 0.8 held at the clipper's ±0.5, got {}",
-            baked[0]
-        );
-        for i in 0..rate as usize {
-            let (l, r) = plan.frame_at(i);
-            assert!(
-                (l - baked[i * 2]).abs() < 1e-9 && (r - baked[i * 2 + 1]).abs() < 1e-9,
-                "frame {i}: the live plan and the export disagree"
-            );
-        }
-    }
-
     /// **The insert sits ahead of Volume** (docs/impl/audio-plugins.md §2, the
     /// decided position).
     ///
@@ -1784,126 +1638,6 @@ mod tests {
         );
     }
 
-    /// The mix signature hears the rack, not only the fader: dropping a
-    /// plugin on the row, nudging one of its knobs, bypassing it or reordering
-    /// the stack each change what the comp sounds like, and each must re-plan.
-    #[test]
-    fn the_signature_changes_when_the_insert_chain_does() {
-        let plain = vec![job("a.mp4", 0.0, 5.0, 0.0)];
-        let sig = jobs_signature(&plain, 10.0, 0.0);
-
-        let eq = insert_instance("clap:lumit.test.sig", Property::fixed(1.0));
-        let comp = insert_instance("clap:lumit.test.sig2", Property::fixed(1.0));
-        let with = |effects: Vec<lumit_core::model::EffectInstance>| {
-            let mut jobs = plain.clone();
-            jobs[0].chain = Some(chain_of(effects));
-            jobs_signature(&jobs, 10.0, 0.0)
-        };
-        let dropped = with(vec![eq.clone(), comp.clone()]);
-        assert_ne!(sig, dropped, "dropping a plugin re-plans");
-        assert_ne!(
-            dropped,
-            with(vec![comp.clone(), eq.clone()]),
-            "reordering the rack re-plans"
-        );
-
-        let mut nudged = eq.clone();
-        nudged.params[0].value = lumit_core::model::EffectValue::Float(Property::fixed(2.0));
-        assert_ne!(
-            dropped,
-            with(vec![nudged, comp.clone()]),
-            "a knob nudge re-plans"
-        );
-
-        let mut bypassed = eq;
-        bypassed.enabled = false;
-        assert_ne!(dropped, with(vec![bypassed, comp]), "a bypass re-plans");
-    }
-
-    /// **The calm badge lands on the plugin that refused** (AP5, docs/12
-    /// §2.3, the OFX badge grammar): a bake that ships any of a link's blocks
-    /// dry files the failure against *that instance*, the bridge's
-    /// `read_instance_info` turns it into `plugin_failed`, and a later bake
-    /// whose every block comes back takes the badge off again.
-    #[test]
-    fn a_dying_plugin_badges_its_own_instance_and_a_clean_bake_heals_it() {
-        let rate = 48_000u32;
-        register_insert("clap:lumit.test.badge.dying", Some(0), 0);
-        register_insert("clap:lumit.test.badge.well", None, 0);
-        let dying = insert_instance("clap:lumit.test.badge.dying", Property::fixed(2.0));
-        let well = insert_instance("clap:lumit.test.badge.well", Property::fixed(1.0));
-
-        // One block of sound, whose one block the dying plugin refuses; the
-        // well one beside it in the same chain processes every block.
-        let seconds = lumit_core::fx::AUDIO_BLOCK_FRAMES as f64 / f64::from(rate);
-        let source = tone(rate, seconds, 0.25);
-        let mut one = job("a.mp4", 0.0, seconds, 0.0);
-        one.chain = Some(chain_of(vec![dying.clone(), well.clone()]));
-        let mut decoded = HashMap::new();
-        decoded.insert(one.item, source);
-        build_plan(&[one.clone()], &decoded, rate, 1.0, 0.0);
-
-        let badged =
-            crate::api::effect::read_instance_info(&dying, lumit_core::time::Rational::ZERO);
-        assert_eq!(badged.badge_reason.as_deref(), Some("plugin_failed"));
-        assert_eq!(
-            badged.badge_detail.as_deref(),
-            Some("the plugin did not process this sound"),
-            "a processor with no sentence of its own still explains itself"
-        );
-        let neighbour =
-            crate::api::effect::read_instance_info(&well, lumit_core::time::Rational::ZERO);
-        assert_eq!(
-            neighbour.badge_reason, None,
-            "the badge lands on the link that refused, not on the rack"
-        );
-
-        // Healing: a bake whose every block comes back clears the note. The
-        // same instance id, moved onto the plugin that answers.
-        let mut healed = well.clone();
-        healed.id = dying.id;
-        let mut again = one;
-        again.chain = Some(chain_of(vec![healed.clone()]));
-        build_plan(&[again], &decoded, rate, 1.0, 0.0);
-        let cleared =
-            crate::api::effect::read_instance_info(&healed, lumit_core::time::Rational::ZERO);
-        assert_eq!(
-            cleared.badge_reason, None,
-            "a clean bake takes the badge off"
-        );
-    }
-
-    /// Flicking a plugin's switch re-plans the comps whose chains hold it, and
-    /// only those (AP5): the switched-off list is not in the document, so the
-    /// signature is where the change is heard.
-    #[test]
-    fn the_signature_hears_the_switched_off_list_for_its_own_chain() {
-        let mut with_chain = vec![job("a.mp4", 0.0, 5.0, 0.0)];
-        with_chain[0].chain = Some(chain_of(vec![insert_instance(
-            "clap:lumit.test.switched",
-            Property::fixed(1.0),
-        )]));
-        let bystander = vec![job("b.mp4", 0.0, 5.0, 0.0)];
-
-        let on = jobs_signature(&with_chain, 10.0, 0.0);
-        let bystander_on = jobs_signature(&bystander, 10.0, 0.0);
-        lumit_aplug::set_enabled("lumit.test.switched", false);
-        let off = jobs_signature(&with_chain, 10.0, 0.0);
-        let bystander_off = jobs_signature(&bystander, 10.0, 0.0);
-        lumit_aplug::set_enabled("lumit.test.switched", true);
-
-        assert_ne!(on, off, "the flick is a mix change for this comp");
-        assert_eq!(
-            bystander_on, bystander_off,
-            "and a no-op for a comp that never plays the plugin"
-        );
-        assert_eq!(
-            on,
-            jobs_signature(&with_chain, 10.0, 0.0),
-            "switching back on restores the signature"
-        );
-    }
-
     // ------------------------------------- the clip's rack and its fades --
 
     /// A clip fade of `head`/`tail` seconds with the two shapes on it.
@@ -1924,64 +1658,6 @@ mod tests {
             tail_shape,
             gain_db: 0.0,
         }
-    }
-
-    /// **The clip's rack runs before the row's** (the note's §4, plan 4).
-    ///
-    /// The stand-in plugin hard clips at ±0.5, so the two orders give
-    /// different numbers and "clip first, then row" is a claim the arithmetic
-    /// can settle: 0.2 through a half and then a four is 0.4, while a four and
-    /// then a half would have been clipped on the way and come out at 0.25.
-    #[test]
-    fn the_clips_rack_runs_before_the_rows() {
-        let rate = 48_000u32;
-        register_insert("clap:lumit.test.clipfirst", None, 0);
-        let source = tone(rate, 1.0, 0.2);
-        let mut one = job("a.mp4", 0.0, 1.0, 0.0);
-        one.clip_chain = Some(chain_of(vec![insert_instance(
-            "clap:lumit.test.clipfirst",
-            Property::fixed(0.5),
-        )]));
-        one.chain = Some(chain_of(vec![insert_instance(
-            "clap:lumit.test.clipfirst",
-            Property::fixed(4.0),
-        )]));
-
-        let baked = lumit_render::export::mixdown_prepared(&[(source, one)], rate, 1.0, 1.0);
-        assert!(
-            (baked[0] - 0.4).abs() < 1e-5,
-            "the clip's rack ran first: expected 0.4, got {}",
-            baked[0]
-        );
-    }
-
-    /// **Two chains, two latencies, one placement** (plan 4): the run is put
-    /// down by the sum of them, so a lookahead limiter on the clip and another
-    /// on the row both land where the dry sound did.
-    #[test]
-    fn the_two_chains_latencies_sum() {
-        let rate = 48_000u32;
-        register_insert("clap:lumit.test.clip.latent", None, 32);
-        register_insert("clap:lumit.test.row.latent", None, 64);
-        let source = tone(rate, 2.0, 0.2);
-        let mut one = job("a.mp4", 1.0, 2.0, 0.0);
-        one.clip_chain = Some(chain_of(vec![insert_instance(
-            "clap:lumit.test.clip.latent",
-            Property::fixed(1.0),
-        )]));
-        one.chain = Some(chain_of(vec![insert_instance(
-            "clap:lumit.test.row.latent",
-            Property::fixed(1.0),
-        )]));
-        let mut decoded = HashMap::new();
-        decoded.insert(one.item, source);
-        let (plan, _) = build_plan(&[one], &decoded, rate, 3.0, 0.0);
-
-        assert_eq!(
-            plan.clips[0].start_frame,
-            i64::from(rate) - 96,
-            "placed earlier by both chains' delay together"
-        );
     }
 
     /// **Preview is export through a shaped crossfade and a clip effect**
@@ -2113,49 +1789,6 @@ mod tests {
         assert_ne!(
             with_clip_fx, with_row_fx,
             "and the same stack on the two racks is not the same mix"
-        );
-    }
-
-    /// **A knob on a built-in re-plans the mix** (docs/impl/audio-effects.md
-    /// §6 plan 4).
-    ///
-    /// The rack goes into the signature whole, so dragging a Gain row changes
-    /// what the comp sounds like without touching a Volume keyframe, and the
-    /// no-op gate has to let the rebake through. The same rack twice still
-    /// agrees, or every idle rebuild would bake the sound again.
-    #[test]
-    fn a_parameter_edit_on_a_built_in_re_plans_the_mix() {
-        let quiet = lumit_core::fx::instantiate("audio_gain").expect("a catalogue entry");
-        let gain_at = |db: f64| {
-            let mut instance = quiet.clone();
-            for param in &mut instance.params {
-                if param.id == "gain" {
-                    param.value = lumit_core::model::EffectValue::Float(Property::fixed(db));
-                }
-            }
-            chain_of(vec![instance])
-        };
-        let one = |chain| {
-            let mut j = job("a.mp4", 0.0, 5.0, 0.0);
-            j.chain = chain;
-            vec![j]
-        };
-
-        let sig = jobs_signature(&one(Some(gain_at(0.0))), 10.0, 0.0);
-        assert_eq!(
-            sig,
-            jobs_signature(&one(Some(gain_at(0.0))), 10.0, 0.0),
-            "the same rack twice is the same mix"
-        );
-        assert_ne!(
-            sig,
-            jobs_signature(&one(Some(gain_at(6.0))), 10.0, 0.0),
-            "a Gain row moved re-plans"
-        );
-        assert_ne!(
-            sig,
-            jobs_signature(&one(None), 10.0, 0.0),
-            "and a bypassed rack re-plans back"
         );
     }
 }

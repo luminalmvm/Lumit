@@ -14,7 +14,8 @@
 /// this one deliberately does not, such as `1e3`. Anything that is not a sum
 /// this understands, and any division by zero, comes back null, which is the
 /// answer a well already had for text it could not read: keep the value it
-/// has, say nothing, punish nobody.
+/// has and punish nobody. The well shows the refusal at its edge for a
+/// moment, so a sum with a slip in it is not taken for one that worked.
 num? parseNumberField(String text) {
   final plain = num.tryParse(text.trim());
   if (plain != null) return plain;

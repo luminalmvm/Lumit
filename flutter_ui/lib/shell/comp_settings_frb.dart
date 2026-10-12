@@ -36,6 +36,8 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:provider/provider.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/streams.dart'
+    show BridgeStreamsArrival;
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
@@ -156,6 +158,10 @@ Future<CompositionReference?> showNewCompositionFrb({
   /// and knows nothing about where settings live.
   bool asSequence = false,
 
+  /// The setting beside it, *Several audio streams arrive as*, forwarded the
+  /// same way and for the same reason.
+  BridgeStreamsArrival? arrival,
+
   /// Make a **node graph** rather than a layer stack
   /// (docs/impl/node-graph-comp.md §4.4). The same dialogue, the same fields:
   /// a node graph is sized and timed like any comp, and only the door it goes
@@ -215,7 +221,8 @@ Future<CompositionReference?> showNewCompositionFrb({
             : project.newComposition(name: settings.name, settings: settings);
         // A node graph has no layers, so nothing is dropped on this door.
         for (final item in footage) {
-          comp.addFootageLayer(footage: item, asSequence: asSequence);
+          comp.addFootageLayer(
+              footage: item, asSequence: asSequence, arrival: arrival);
         }
         close(comp);
       },

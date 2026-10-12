@@ -15,9 +15,11 @@ pub mod cache;
 pub mod colour;
 pub mod comp_graph;
 pub mod composition;
+pub mod cut;
 pub mod effect;
 pub mod export;
 pub mod expressions;
+pub mod extensions;
 pub mod folder;
 pub mod footage;
 pub mod graph;
@@ -29,9 +31,11 @@ pub mod project;
 pub mod project_item;
 pub mod retime;
 pub mod roto;
+pub mod share;
 pub mod shell;
 pub mod solid;
 pub mod state;
+pub mod streams;
 pub mod system;
 pub mod track;
 pub mod wireframes;
@@ -39,7 +43,7 @@ pub mod wireframes;
 mod worker_thread;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 #[derive(Debug)]
 pub enum BridgeError {

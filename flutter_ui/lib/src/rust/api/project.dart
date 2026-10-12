@@ -12,16 +12,74 @@ import 'composition.dart';
 import 'effect.dart';
 import 'folder.dart';
 import 'footage.dart';
+import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'project_item.dart';
+import 'share.dart';
 import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `new_comp_with`, `next_comp_name_in`, `of`, `to_model`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
+
+/// The compositions in the project file at `path`, in the file's own order,
+/// read without opening it as the project. `None` when it is not a project
+/// file this build reads.
+///
+/// Not `#[frb(sync)]`: it reads and parses a whole file.
+Future<List<BridgeFileComp>?> compsInFile({required String path}) =>
+    BridgeLib.instance.api.crateApiProjectCompsInFile(path: path);
+
+/// One composition in a project file that is not the open project, as the
+/// picker that brings one in lists it.
+class BridgeFileComp {
+  /// What [`ProjectReference::bring_comps`] is asked for it by.
+  final UuidValue id;
+  final String name;
+  final int width;
+  final int height;
+  final int fpsNum;
+  final int fpsDen;
+
+  /// How long it is, in frames at its own rate.
+  final PlatformInt64 durationFrames;
+
+  const BridgeFileComp({
+    required this.id,
+    required this.name,
+    required this.width,
+    required this.height,
+    required this.fpsNum,
+    required this.fpsDen,
+    required this.durationFrames,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      fpsNum.hashCode ^
+      fpsDen.hashCode ^
+      durationFrames.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFileComp &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          width == other.width &&
+          height == other.height &&
+          fpsNum == other.fpsNum &&
+          fpsDen == other.fpsDen &&
+          durationFrames == other.durationFrames;
+}
 
 /// Whether undo and redo have anything to do, for greying the menu items.
 class BridgeHistory {
@@ -72,6 +130,99 @@ class BridgeHistoryEntry {
           undone == other.undone;
 }
 
+/// How an import of files ended.
+class BridgeImported {
+  /// True when the import was stopped, which leaves the project as it was.
+  final bool cancelled;
+
+  /// How many layers of the layered files were left out because they hold
+  /// no picture.
+  final int leftOut;
+
+  const BridgeImported({
+    required this.cancelled,
+    required this.leftOut,
+  });
+
+  @override
+  int get hashCode => cancelled.hashCode ^ leftOut.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeImported &&
+          runtimeType == other.runtimeType &&
+          cancelled == other.cancelled &&
+          leftOut == other.leftOut;
+}
+
+/// How a save that packs ended.
+class BridgePackResult {
+  /// The file written. Empty when the save was cancelled, which leaves the
+  /// file on disk as it was.
+  final String path;
+  final bool cancelled;
+
+  /// How many footage items the file now carries.
+  final int packed;
+
+  /// How many it was asked to carry and does not, because their file could
+  /// not be found or read. They stay as they were, referenced by path.
+  final int leftOut;
+
+  const BridgePackResult({
+    required this.path,
+    required this.cancelled,
+    required this.packed,
+    required this.leftOut,
+  });
+
+  @override
+  int get hashCode =>
+      path.hashCode ^ cancelled.hashCode ^ packed.hashCode ^ leftOut.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePackResult &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          cancelled == other.cancelled &&
+          packed == other.packed &&
+          leftOut == other.leftOut;
+}
+
+/// How much of the project's footage its `.lum` carries, for the File menu's
+/// packing rows (docs/01-GLOSSARY.md: Packed project).
+class BridgePackState {
+  /// How many footage items the project holds.
+  final int footage;
+
+  /// How many of them are packed.
+  final int packed;
+
+  /// Whether every save packs the footage imported since the last one.
+  final bool autoPack;
+
+  const BridgePackState({
+    required this.footage,
+    required this.packed,
+    required this.autoPack,
+  });
+
+  @override
+  int get hashCode => footage.hashCode ^ packed.hashCode ^ autoPack.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgePackState &&
+          runtimeType == other.runtimeType &&
+          footage == other.footage &&
+          packed == other.packed &&
+          autoPack == other.autoPack;
+}
+
 /// One colour on the project's shelf: four 0–1 channels and an
 /// optional name. Empty `name` means unnamed, which is the ordinary case — a
 /// shelf is read by eye.
@@ -104,6 +255,44 @@ class BridgeSwatch {
           b == other.b &&
           a == other.a &&
           name == other.name;
+}
+
+/// How an unpack ended.
+class BridgeUnpackResult {
+  /// True when the unpack was stopped. Files already written stay, and the
+  /// project still carries all of its footage.
+  final bool cancelled;
+
+  /// How many files were written beside the project.
+  final int written;
+
+  /// How many items are still packed because their file could not be
+  /// written out.
+  final int kept;
+
+  /// The folder the files were written to.
+  final String folder;
+
+  const BridgeUnpackResult({
+    required this.cancelled,
+    required this.written,
+    required this.kept,
+    required this.folder,
+  });
+
+  @override
+  int get hashCode =>
+      cancelled.hashCode ^ written.hashCode ^ kept.hashCode ^ folder.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeUnpackResult &&
+          runtimeType == other.runtimeType &&
+          cancelled == other.cancelled &&
+          written == other.written &&
+          kept == other.kept &&
+          folder == other.folder;
 }
 
 class ProjectReference {
@@ -184,6 +373,39 @@ class ProjectReference {
         that: this,
       );
 
+  /// Bring compositions out of the project file at `path` and into this
+  /// project, as one undo step. The file is an earlier save of this project,
+  /// from its history, or any other `.lum`.
+  ///
+  /// Each arrives as a new composition with what it places, and footage the
+  /// project already has is used again ([`lumit_project::bring`]). They are
+  /// filed where a composition and a solid made here would be.
+  ///
+  /// `earlier_save` says the file is a save of this project that was fetched
+  /// to somewhere else, so its footage is looked for from this project's own
+  /// folder and not from the file's.
+  ///
+  /// `source` is what the file is called, for a composition whose name the
+  /// project already has: it arrives as "Titles (`source`)", in the same
+  /// step, so there are never two of one name to tell apart.
+  ///
+  /// `None`, with nothing changed, when the file is not a project this build
+  /// reads or has no composition by one of the ids. Otherwise the new
+  /// composition for each id, in the order asked.
+  ///
+  /// Not `#[frb(sync)]`: it reads a whole file and looks for its footage.
+  Future<List<CompositionReference>?> bringComps(
+          {required String path,
+          required List<UuidValue> comps,
+          required bool earlierSave,
+          required String source}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceBringComps(
+          that: this,
+          path: path,
+          comps: comps,
+          earlierSave: earlierSave,
+          source: source);
+
   /// Where *this project* parks its rendered frames, overriding the
   /// application-wide choice — or `None` when it follows that choice, which is
   /// the ordinary case (docs/06-RENDER-PIPELINE.md §5.4).
@@ -209,6 +431,12 @@ class ProjectReference {
   bool canDeliverColourSpace({required String name}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceCanDeliverColourSpace(
           that: this, name: name);
+
+  /// Stop the pack or unpack in flight. Harmless when there is none.
+  void cancelPacking() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceCancelPacking(
+        that: this,
+      );
 
   void close() => BridgeLib.instance.api.crateApiProjectProjectReferenceClose(
         that: this,
@@ -268,10 +496,25 @@ class ProjectReference {
         that: this,
       );
 
+  /// Throw away the edits a crash left in the journal, for somebody who was
+  /// offered them and said no.
+  void discardJournal() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceDiscardJournal(
+        that: this,
+      );
+
   /// Close the group [`Self::begin_undo_group`] opened. Ending one that was
   /// never begun does nothing.
   void endUndoGroup() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceEndUndoGroup(
+        that: this,
+      );
+
+  /// Whether the journal holds edits from a run that never closed this
+  /// project, which is a crash or a power cut. Asked once, as the project
+  /// opens, to decide whether to offer them back.
+  bool endedBadly() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceEndedBadly(
         that: this,
       );
 
@@ -293,6 +536,19 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceHistoryEntries(
         that: this,
       );
+
+  /// Import each of `paths`, as one undo step: a layered file as a
+  /// composition ([`Self::import_layers`]) and any other as footage
+  /// ([`Self::import_footage`]). This is the call the Import command makes.
+  ///
+  /// Not sync. Every file is read before the project is touched, which is
+  /// the slow part. `on_progress` hears the fraction of the files read, and
+  /// [`crate::api::import::cancel_import`] stops it between two files with
+  /// the project left as it was.
+  Future<BridgeImported> importFiles(
+          {required List<String> paths, RustStreamSink<double>? onProgress}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceImportFiles(
+          that: this, paths: paths, onProgress: onProgress);
 
   /// Record `path` as a footage item, as one undo step.
   ///
@@ -321,6 +577,25 @@ class ProjectReference {
   FootageReference importFootage({required String path}) =>
       BridgeLib.instance.api
           .crateApiProjectProjectReferenceImportFootage(that: this, path: path);
+
+  /// Bring a layered image file in as a composition, as one undo step: a
+  /// footage item per layer, filed in a folder named for the file, and a
+  /// composition the document's size holding a layer for each. A group
+  /// that can't be a layer group becomes a composition of its own.
+  ///
+  /// `None` when `path` is not a layered file this build reads, which is
+  /// anything but a Photoshop or Illustrator document, one of a kind that
+  /// is not read, or one with fewer than two layers. The caller then
+  /// imports it as plain footage. Otherwise the number of layers left out
+  /// because they hold no picture, which is what an adjustment layer or a
+  /// gradient fill is.
+  ///
+  /// Only the layer list is read here. The pixels are read when a layer is
+  /// first drawn.
+  ///
+  /// Not sync: reading the layer list of a big file takes a while.
+  Future<int?> importLayers({required String path}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceImportLayers(that: this, path: path);
 
   /// Whether the document has moved since it was last saved (or opened).
   /// The status bar's saved/unsaved readout. An undo after a save reads as
@@ -408,6 +683,66 @@ class ProjectReference {
         that: this,
       );
 
+  /// Note that the project is being left on purpose, for the application
+  /// quitting. Closing or replacing a project notes it by itself.
+  void noteCleanExit() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceNoteCleanExit(
+        that: this,
+      );
+
+  /// Every footage item of a project kept online, with what Lumit's
+  /// server files it under and where it is on this machine. The interface
+  /// holds this against what the server has (`GET
+  /// /v1/online/<id>/footage`) to see what to give and what to fetch.
+  /// Empty when the project is not kept online.
+  List<BridgeOnlineFootage> onlineFootage() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceOnlineFootage(
+        that: this,
+      );
+
+  /// Open the sealed file at `sealed`, which came from Lumit's server,
+  /// into a new file at `out`: [`FootageReference::online_room`] for a
+  /// footage item, and then [`FootageReference::online_arrived`] says it
+  /// is there. A file that is not whole, was changed, or was sealed for
+  /// another project is refused.
+  ///
+  /// `on_progress` and [`online_cancel`] as [`Self::online_seal`] has
+  /// them. False when it was refused, failed or was stopped, and then
+  /// nothing is left at `out`.
+  ///
+  /// Not sync: it is as long as the file is big.
+  Future<bool> onlineOpen(
+          {required String sealed,
+          required String out,
+          RustStreamSink<double>? onProgress}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceOnlineOpen(
+          that: this, sealed: sealed, out: out, onProgress: onProgress);
+
+  /// Seal the file at `source` into a new file at `sealed`, for Lumit's
+  /// server to keep for this project: one of its footage items, as
+  /// [`FootageReference::online_give`] answers it. The interface sends
+  /// the sealed file and deletes it. It is read and written a piece at a
+  /// time, so its size costs no memory.
+  ///
+  /// `on_progress` hears the fraction done, and [`online_cancel`] stops
+  /// it. False when it failed or was stopped, or the project is not kept
+  /// online, and then nothing is left at `sealed`.
+  ///
+  /// Not sync: it is as long as the file is big.
+  Future<bool> onlineSeal(
+          {required String source,
+          required String sealed,
+          RustStreamSink<double>? onProgress}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceOnlineSeal(
+          that: this, source: source, sealed: sealed, onProgress: onProgress);
+
+  /// How much of the project's footage is packed, and whether saves pack
+  /// automatically.
+  BridgePackState packState() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferencePackState(
+        that: this,
+      );
+
   /// Where this project was last saved, or null when it never has been. The
   /// menu bar needs it to decide between Save and Save as.
   String? path() => BridgeLib.instance.api.crateApiProjectProjectReferencePath(
@@ -433,9 +768,15 @@ class ProjectReference {
   /// This is the whole point of the journal: a session that ended badly left
   /// its edits there, and this is what puts them back. The replay stops at the
   /// first op that no longer applies — see [`BridgeRecovery::replayed`].
-  BridgeRecovery restoreJournal({required String projectPath}) =>
+  ///
+  /// Not sync: it reads the whole project again. `on_progress` hears the
+  /// fraction of the edits replayed, and
+  /// [`crate::api::import::cancel_import`] stops it before anything is
+  /// swapped.
+  Future<BridgeRecovery> restoreJournal(
+          {required String projectPath, RustStreamSink<double>? onProgress}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceRestoreJournal(
-          that: this, projectPath: projectPath);
+          that: this, projectPath: projectPath, onProgress: onProgress);
 
   /// Save to `path`, or to wherever the project was last saved when `path` is
   /// empty. Answers the path actually written, so Dart can show it and stop
@@ -448,10 +789,35 @@ class ProjectReference {
   ///
   /// Media paths are rebased against the destination directory before writing,
   /// so a project saved somewhere new keeps relative links that work.
-  /// A successful save clears the crash journal: the journal covers work
-  /// *between* saves, so once the document is on disk it is redundant.
+  /// A successful save drops the edits it wrote from the crash journal, and
+  /// the journal carries on for the edits made after it.
+  ///
+  /// A packed project is saved with its footage still inside
+  /// ([`Self::save_packed`] is the same save with a progress stream).
   Future<String> save({required String path}) => BridgeLib.instance.api
       .crateApiProjectProjectReferenceSave(that: this, path: path);
+
+  /// [`Self::save`], with the footage inside the file (docs/01-GLOSSARY.md:
+  /// Packed project).
+  ///
+  /// `pack_all` packs every footage item, which is what Pack project file
+  /// does. Without it the save packs what the project packs already, and
+  /// everything when the project packs automatically. Footage on disk that
+  /// has changed since it was packed is packed again, so the file holds
+  /// what the project is showing.
+  ///
+  /// The copy is as long as the footage is big. `on_progress` hears how far
+  /// it has got, and [`Self::cancel_packing`] stops it with the file on disk
+  /// left as it was.
+  ///
+  /// Not an undo step. A save is not one, and which items the file carries
+  /// is a fact about the file.
+  Future<BridgePackResult> savePacked(
+          {required String path,
+          required bool packAll,
+          RustStreamSink<double>? onProgress}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSavePacked(
+          that: this, path: path, packAll: packAll, onProgress: onProgress);
 
   /// Set how hard the renderer works at the edges of transformed layers.
   ///
@@ -464,6 +830,16 @@ class ProjectReference {
   void setAntiAliasing({required int samples}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetAntiAliasing(
           that: this, samples: samples);
+
+  /// Set whether every save packs the project's footage. An ordinary op, so
+  /// it is undoable and travels in the `.lum`. Nothing is packed until the
+  /// next save.
+  ///
+  /// This is also what makes the switch this machine's own choice, which is
+  /// the only way it counts (`lumit_project::auto_pack_note`).
+  void setAutoPack({required bool autoPack}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSetAutoPack(
+          that: this, autoPack: autoPack);
 
   /// Give this project its own cache location, or clear it so the project
   /// follows the application-wide choice again (`location: None`).
@@ -534,8 +910,441 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceSetUseProxies(
           that: this, useProxies: useProxies);
 
+  /// Share this project from this machine. Others join with the link
+  /// [`Self::share_link`] gives.
+  ///
+  /// `name` is what the others see this person called. Port 0 takes any
+  /// free one. `key` is what the last [`BridgeShareStarted::Sharing`] for
+  /// this project gave, or `None` for a new invite. `password` is one every
+  /// guest has to give as well as holding the link. Empty or `None` keeps
+  /// whatever `key` was shared with, which is no password for a new
+  /// invite. `outside` asks this
+  /// network's router to send the port here, so people outside the network
+  /// can join without a VPN. It answers later, as a
+  /// [`BridgeShareEvent::Reach`]. `relay` is the `host:port` of a relay to
+  /// keep a room at, for people the router does not let in, and answers as
+  /// a [`BridgeShareEvent::Relayed`]. `events` is optional the way a project's
+  /// change stream is, and for the same reason: nothing about sharing
+  /// depends on someone watching.
+  BridgeShareStarted share(
+          {required String name,
+          required int port,
+          String? key,
+          String? password,
+          required bool outside,
+          String? relay,
+          RustStreamSink<BridgeShareEvent>? events}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShare(
+          that: this,
+          name: name,
+          port: port,
+          key: key,
+          password: password,
+          outside: outside,
+          relay: relay,
+          events: events);
+
+  /// Who changed what in a project kept online, newest sitting first: one
+  /// entry for each run of one person's edits. It covers everyone's
+  /// edits since the project went online, however long ago and whoever
+  /// was there to see them, up to the newest 200 sittings. This machine's
+  /// own edits are in it once Lumit's server has taken them.
+  /// [`BridgeShareEvent::Activity`] says when it has changed.
+  ///
+  /// Empty when the project is not kept online, and for a copy opened
+  /// again until it has found the server.
+  List<BridgeShareSitting> shareActivity() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareActivity(
+        that: this,
+      );
+
+  /// The person has been shown [`Self::share_activity`] and
+  /// [`Self::share_notes`], so nothing in them is new to them any more.
+  /// The copy remembers how far that was, and what is new the next time
+  /// it is opened is what happened after. Does nothing when the project
+  /// is not kept online.
+  ///
+  /// Not sync: it writes that down.
+  Future<void> shareActivitySeen() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareActivitySeen(
+        that: this,
+      );
+
+  /// Answer an export another person asked this machine to do, by the job
+  /// a [`BridgeShareEvent::ExportAsked`] named. Yes puts it in this
+  /// machine's export queue and starts it.
+  void shareAnswerExport({required String job, required bool yes}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareAnswerExport(
+          that: this, job: job, yes: yes);
+
+  /// How the export asked of someone else's machine is getting on.
+  BridgeShareAsking shareAsking() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareAsking(
+        that: this,
+      );
+
+  /// The conflicts a merge left for this guest to choose between, in the
+  /// order [`Self::share_resolve`] indexes them.
+  List<BridgeShareConflict> shareConflicts() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareConflicts(
+        that: this,
+      );
+
+  /// The person chose not to save this project, which is about to close.
+  /// A guest whose host is away then keeps only the edits its file holds,
+  /// so the copy opens next time as it was saved. Does nothing for anyone
+  /// else.
+  void shareDiscardAway() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareDiscardAway(
+        that: this,
+      );
+
+  /// Which doors this project's sharing goes through. The interface opens
+  /// them when a copy is opened again, and again each time the project
+  /// says it is away: the engine gives up a connection by itself when it
+  /// is given a new invite, finds itself out of step or is turned away by
+  /// the server, and a door that shuts with its last connection is then
+  /// one it cannot dial. It dials the moment one opens.
+  BridgeShareDoors shareDoors() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareDoors(
+        that: this,
+      );
+
+  /// Give up fetching what an export lacks. What has arrived is kept.
+  void shareFetchCancel() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareFetchCancel(
+        that: this,
+      );
+
+  /// How fetching what an export lacks is getting on.
+  BridgeShareFetching shareFetching() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareFetching(
+        that: this,
+      );
+
+  /// Whether this machine is a guest of the project. True straight after
+  /// opening a guest's own copy that was closed with its host away: it
+  /// carries on looking for the host, and what it finds comes down the
+  /// events the open was given.
+  bool shareGuest() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareGuest(
+        that: this,
+      );
+
+  /// What this machine knows the project by from one run to the next, to
+  /// file the key of its invite under. Not the same as a guest's copy's.
+  String shareId() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareId(
+        that: this,
+      );
+
+  /// The secret of the invite as it stands, to hand to [`Self::share`] the
+  /// next time this project is shared. `None` when this machine is not
+  /// hosting it.
+  String? shareKey() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareKey(
+        that: this,
+      );
+
+  /// The link to send to whoever is joining. It holds every way to this
+  /// machine the engine knows of just now, so it is asked for again when
+  /// the router or a relay answers. `address` is one more the person
+  /// typed, for a VPN or a port forwarded by hand. `None` when this
+  /// machine is not hosting the project. For a project that is kept
+  /// online it is the invite anyone in it can hand out, and `address`
+  /// means nothing.
+  String? shareLink({String? address}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceShareLink(that: this, address: address);
+
+  /// Leave a note in a project kept online: `text`, with where this
+  /// person is as they write it, which is the composition they have
+  /// open, the frame their playhead is on and the layer they have chosen,
+  /// each when there is one. Everyone in the project gets it, whoever is
+  /// away gets it when they are back, and it stays with the project. It
+  /// is no part of the document, so undo does not take it away.
+  ///
+  /// Written while this machine is away it waits, shows in
+  /// [`Self::share_notes`] as waiting, and is sent when the server is
+  /// found. `text` is cut to five hundred characters.
+  ///
+  /// False when the project is not kept online, `text` is nothing but
+  /// spaces, two hundred notes already wait to be sent, or this machine
+  /// can only look.
+  bool shareNote(
+          {required String text,
+          CompositionReference? comp,
+          PlatformInt64? frame,
+          LayerReference? layer}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareNote(
+          that: this, text: text, comp: comp, frame: frame, layer: layer);
+
+  /// Take a note down from a project kept online, by the `id`
+  /// [`Self::share_notes`] gives it. Its writer may, and the host may take
+  /// down anyone's. Everyone loses it together, whoever is away loses it
+  /// when they are back, and it does not come back.
+  /// [`BridgeShareEvent::Activity`] says when the list has changed, and
+  /// the list then no longer has it. Asked while this machine is away it
+  /// waits to be sent, and the note is gone from the list here at once.
+  ///
+  /// False when the project is not kept online, there is no such note,
+  /// it is someone else's and this is not the host's machine, or this
+  /// machine can only look.
+  bool shareNoteTakeDown({required String id}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceShareNoteTakeDown(that: this, id: id);
+
+  /// The notes people have left in a project kept online, newest first,
+  /// with the ones written here that are still waiting to be sent before
+  /// them. The newest two hundred are kept. [`BridgeShareEvent::Activity`]
+  /// says when the list has changed. Empty when the project is not kept
+  /// online.
+  List<BridgeShareNote> shareNotes() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareNotes(
+        that: this,
+      );
+
+  /// Keep this project online: Lumit's server holds it, sealed so that
+  /// the server cannot read it, and puts everyone's edits in order.
+  /// Nobody's machine has to be on for the others to work. Others join
+  /// with the link this gives, by [`join_shared_project`]. Lumit Pro, for
+  /// the person signed in, who is its host.
+  ///
+  /// `name` is what the others see this person called. `password` is one
+  /// everyone has to give as well as holding the link. Empty or `None`
+  /// is none. The door [`share_online_door`] names has to be open.
+  ///
+  /// From then on the project is shared as any other is: people,
+  /// presence, conflicts and the events are the same calls. What is not
+  /// is in [`Self::share_online_state`].
+  ///
+  /// Not sync: it waits on the whole document being stored.
+  Future<BridgeOnlineStarted> shareOnline(
+          {required String name,
+          String? password,
+          RustStreamSink<BridgeShareEvent>? events}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareOnline(
+          that: this, name: name, password: password, events: events);
+
+  /// For the host, once the person has agreed: move this project forward
+  /// from the older Lumit that keeps it online to this one. Asked when
+  /// [`Self::share_online_versions`] is [`BridgeShareVersions::Movable`].
+  ///
+  /// On [`BridgeOnlineForward::Moved`] this copy joins by itself, with
+  /// [`BridgeShareEvent::Back`], and so does everyone else who runs this
+  /// Lumit. Anyone at work on the older one is cut off and told to
+  /// update, and what they had not had answered is kept for when they
+  /// have.
+  ///
+  /// Not sync: it waits on the whole project being fetched and stored.
+  Future<BridgeOnlineForward> shareOnlineForward() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareOnlineForward(
+        that: this,
+      );
+
+  /// For the host of a project kept online: turn the invite that can
+  /// only look ([`BridgeShareOnline::look_link`]) on or off.
+  ///
+  /// This only makes what to say. The interface sends what it answers to
+  /// Lumit's server as the body of `PUT /v1/online/<id>/look`, with the
+  /// account and what [`Self::share_online_state`] gives, as it sends the
+  /// body [`Self::share_online_move`] makes. On a yes the server tells
+  /// every machine in the project, this one too, and
+  /// [`BridgeShareEvent::LookInvite`] says so here: there is nothing to
+  /// call afterwards.
+  ///
+  /// Turned off, the server forgets that invite, so `look_link` opens
+  /// nothing, and everyone who is looking is put out, each told they were
+  /// removed. `link` is not changed. Turned on again, the same
+  /// `look_link` opens the project again. A new invite
+  /// ([`Self::share_online_move`]) keeps it as it is, on or off, and
+  /// replaces `look_link`.
+  ///
+  /// `None` when the project is not kept online, this copy was opened
+  /// again and has not found the server yet, or this machine can only
+  /// look.
+  String? shareOnlineLook({required bool lookOn}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareOnlineLook(
+          that: this, lookOn: lookOn);
+
+  /// For the host of a project kept online: make a new invite to replace
+  /// the one handed out, taking the person numbered `person` out first
+  /// when one is given. The old invite then finds nothing, and nothing
+  /// stored is sealed again.
+  ///
+  /// This only makes it. The interface sends `body` to Lumit's server as
+  /// `PUT /v1/online/<id>/access`, with the account and what
+  /// [`Self::share_online_state`] gives as it stands now, and on a yes
+  /// calls [`Self::share_online_moved`] with `link`. A server that does
+  /// not read the `seat` in `body` is asked `POST /v1/online/<id>/remove`
+  /// for that person first. Everyone else here is sent the new invite by
+  /// the server. Someone away just then is not, and needs it given.
+  ///
+  /// `None` when the project is not kept online, or this copy was opened
+  /// again and has not found the server yet.
+  BridgeOnlineMove? shareOnlineMove({int? person}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareOnlineMove(
+          that: this, person: person);
+
+  /// Lumit's server moved this project to the invite
+  /// [`Self::share_online_move`] made. It is the invite handed out from
+  /// now on, [`Self::share_link`] gives it, and the project is found by
+  /// it. False when `link` is not such an invite or the project is not
+  /// kept online.
+  bool shareOnlineMoved({required String link}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceShareOnlineMoved(that: this, link: link);
+
+  /// What this project is to this machine while it is kept online: whose
+  /// it is, whether the server is there and taking edits, and what the
+  /// interface needs to make its own calls to the server about it. `None`
+  /// when it is not kept online. There straight after opening a copy of
+  /// one, however that copy was closed.
+  BridgeShareOnline? shareOnlineState() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareOnlineState(
+        that: this,
+      );
+
+  /// How this machine stands to this project while another version of
+  /// Lumit keeps it online, as [`BridgeShareEvent::Versions`] last said.
+  /// `None` when nothing is in the way: the project is not kept online,
+  /// this machine is in it, or this copy has not found the server yet.
+  BridgeShareVersions? shareOnlineVersions() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareOnlineVersions(
+        that: this,
+      );
+
+  /// Everyone in the project right now, this person included. Empty when it
+  /// is not shared. The events carry the same list as it changes.
+  List<BridgeSharePerson> sharePeople() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSharePeople(
+        that: this,
+      );
+
+  /// Tell the others what this person is looking at: the composition open,
+  /// the layers selected in it, the playhead's frame, and the pointer over
+  /// the Viewer in composition pixels. `properties` and `keys` are the
+  /// property rows and the keyframes selected in the Timeline, by whatever
+  /// names the frontend matches its own rows with, which the engine passes
+  /// on unread. Does nothing when the project is not shared. Latest wins,
+  /// so call it as often as any of them changes.
+  ///
+  /// `changing` is the controls this person is dragging or typing in
+  /// right now, by the frontend's own names, passed on unread in the same
+  /// way for the others to hold. Pass it empty the moment they stop. In a
+  /// project kept online there is no need to call again while it stays
+  /// the same: the engine says it again by itself, and the others let go
+  /// of it two seconds after this machine falls silent.
+  void sharePresence(
+          {CompositionReference? comp,
+          required List<LayerReference> layers,
+          PlatformInt64? playhead,
+          double? cursorX,
+          double? cursorY,
+          required List<String> properties,
+          required List<String> keys,
+          required List<String> changing}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceSharePresence(
+          that: this,
+          comp: comp,
+          layers: layers,
+          playhead: playhead,
+          cursorX: cursorX,
+          cursorY: cursorY,
+          properties: properties,
+          keys: keys,
+          changing: changing);
+
+  /// Whether people outside this network can get in, while this machine
+  /// hosts the project. The events carry it as it changes.
+  BridgeShareReach shareReach() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareReach(
+        that: this,
+      );
+
+  /// Give a guest that has lost its host a new invite to look for it by,
+  /// for a host that has moved or made a new one. `password` goes with it
+  /// when the host set one. False when the text is not an invite, it needs
+  /// a password and has none, or this machine is not a guest of the
+  /// project. The same for a project kept online whose host made a new
+  /// invite while this machine was away.
+  bool shareReinvite({required String invite, String? password}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareReinvite(
+          that: this, invite: invite, password: password);
+
+  /// Whether this machine has a room at a relay, while it hosts the
+  /// project. The events carry it as it changes.
+  BridgeShareRelayed shareRelayed() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareRelayed(
+        that: this,
+      );
+
+  /// Take a guest out of the project this machine hosts, by the id the
+  /// people list gives them. Their Lumit is told and stops coming back.
+  /// The invite is replaced, so the one they hold stops working. Everyone
+  /// still here is sent the new one, [`Self::share_link`] gives it, and
+  /// [`Self::share_key`] the key to hand to [`Self::share`] next time.
+  void shareRemove({required int person}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceShareRemove(that: this, person: person);
+
+  /// Settle the conflict at `index`. `mine` applies this guest's held edits
+  /// over the host's version, as one undo step. Otherwise they are dropped
+  /// and the host's version stands. Answers how many of the edits no longer
+  /// applied.
+  int shareResolve({required int index, required bool mine}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareResolve(
+          that: this, index: index, mine: mine);
+
+  /// The project files holding this machine's own document from just
+  /// before a return to this shared project that held back or dropped
+  /// any of its edits: a [`BridgeShareEvent::Back`] whose `held` rose or
+  /// whose `refused` is not 0. Newest first, each with when it was kept
+  /// and what its own return dropped. Everything the person had made by
+  /// then is in each, so they are the way back from a merge that went
+  /// against them, to be opened as copies. Each is a project of its own,
+  /// and opening it joins nothing. Empty when there are none.
+  ///
+  /// There are two at most. The first return that holds or drops
+  /// anything writes one, and it is left alone from then: it alone has
+  /// what that return dropped. Each such return after it writes the
+  /// other, over the one before. So the list is the latest return and
+  /// the earliest the person has not dealt with. A file is written
+  /// before its `Back` is said, and they stay, across Lumit closing,
+  /// until [`Self::share_return_copy_forget`]. They are in Lumit's own
+  /// folder, so each wants saving somewhere else. Footage packed into
+  /// the shared project's file is not in them.
+  List<BridgeShareReturnCopy> shareReturnCopies() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareReturnCopies(
+        that: this,
+      );
+
+  /// The person has dismissed what the returns dropped, or has their
+  /// copies, so [`Self::share_return_copies`] has nothing more to give.
+  /// All of them go.
+  void shareReturnCopyForget() => BridgeLib.instance.api
+          .crateApiProjectProjectReferenceShareReturnCopyForget(
+        that: this,
+      );
+
+  /// Every footage transfer in flight, to and from this machine.
+  List<BridgeShareTransfer> shareTransfers() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceShareTransfers(
+        that: this,
+      );
+
   Stream<WorkerResponse> startWorker() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceStartWorker(
+        that: this,
+      );
+
+  /// Stop sharing this project for everyone, or leave it if someone else
+  /// hosts. The project stays open as it is. A host's invite is finished
+  /// with: sharing again makes a new one.
+  ///
+  /// A project that is kept online is left, by its host too, and stays
+  /// online for everyone else. Its host stops keeping it by asking
+  /// Lumit's server first (`DELETE /v1/online/<id>`, with the account and
+  /// what [`Self::share_online_state`] gives), which tells everyone else
+  /// it is over, and then calling this.
+  void stopSharing() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceStopSharing(
         that: this,
       );
 
@@ -554,6 +1363,20 @@ class ProjectReference {
   void undo() => BridgeLib.instance.api.crateApiProjectProjectReferenceUndo(
         that: this,
       );
+
+  /// Write the packed footage back out as files and save the project
+  /// without it.
+  ///
+  /// An item whose original is still on disk goes back to reading it and
+  /// nothing is written for it. The rest land in a `media` folder beside
+  /// the project file, and their items are pointed there. Packing
+  /// automatically is switched off, or the save that ends this would pack
+  /// everything again.
+  ///
+  /// Not an undo step, for [`Self::save_packed`]'s reason.
+  Future<BridgeUnpackResult> unpack({RustStreamSink<double>? onProgress}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceUnpack(
+          that: this, onProgress: onProgress);
 
   /// The project-wide *use proxies* master switch.
   ///

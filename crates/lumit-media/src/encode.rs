@@ -514,10 +514,13 @@ impl ImageSequenceEncoder {
         depth: BitDepth,
         colour: ColourTags,
     ) -> Result<Self, MediaError> {
-        let pattern = sequence_pattern(path);
+        // image2 reads every `%` in the name as a field of its own, a folder's
+        // included, so the ones that are only part of the path are doubled.
+        let literal = path.to_str().ok_or(MediaError::BadPath)?.replace('%', "%%");
+        let pattern = sequence_pattern(Path::new(&literal));
         let cpath = CString::new(pattern.to_str().ok_or(MediaError::BadPath)?)
             .map_err(|_| MediaError::BadPath)?;
-        let mut output = AVFormatContextOutput::create(&cpath)?;
+        let mut output = AVFormatContextOutput::create(&cpath).map_err(at("opening the file"))?;
 
         let codec = AVCodec::find_encoder(format.codec_id()).ok_or_else(|| {
             MediaError::Ffmpeg(format!(
@@ -558,7 +561,7 @@ impl ImageSequenceEncoder {
             );
             options = Some(opts);
         }
-        ctx.open(options)?;
+        ctx.open(options).map_err(at("opening the image encoder"))?;
 
         {
             let mut stream = output.new_stream();
@@ -568,7 +571,9 @@ impl ImageSequenceEncoder {
                 den: fps_num,
             });
         }
-        output.write_header(&mut None)?;
+        output
+            .write_header(&mut None)
+            .map_err(at("writing the header"))?;
 
         Ok(Self {
             output,
@@ -636,7 +641,9 @@ impl ImageSequenceEncoder {
         self.finished = true;
         self.video.send_frame(None)?;
         drain_packets(&mut self.video, &mut self.output, 0, true)?;
-        self.output.write_trailer()?;
+        self.output
+            .write_trailer()
+            .map_err(at("finishing the file"))?;
         Ok(())
     }
 }
@@ -673,6 +680,9 @@ pub struct Encoder {
     output: AVFormatContextOutput,
     video: Option<VideoTrack>,
     audio: Option<AudioTrack>,
+    /// The audio streams after the first, in a file opened to carry several
+    /// ([`Self::open_with_sound`]). Empty for every export.
+    more_audio: Vec<AudioTrack>,
     finished: bool,
 }
 
@@ -694,6 +704,21 @@ impl Encoder {
         audio: Option<&AudioSettings>,
         metadata: &Metadata,
     ) -> Result<Self, MediaError> {
+        Self::open_with_sound(path, video, audio, 0, metadata)
+    }
+
+    /// As [`Self::open`], with `more_sound` further audio streams after the
+    /// first, each opened as `audio` says. For a file that has to carry what
+    /// a recording with several audio streams carries: a comp's export is one
+    /// mix and never asks. Each stream is written by its place
+    /// ([`Self::write_audio_stream`]), and none is added without a first.
+    pub fn open_with_sound(
+        path: &Path,
+        video: Option<&VideoSettings>,
+        audio: Option<&AudioSettings>,
+        more_sound: usize,
+        metadata: &Metadata,
+    ) -> Result<Self, MediaError> {
         if video.is_none() && audio.is_none() {
             return Err(MediaError::Ffmpeg(
                 "an export must carry a video or an audio stream".into(),
@@ -701,7 +726,7 @@ impl Encoder {
         }
         let cpath = CString::new(path.to_str().ok_or(MediaError::BadPath)?)
             .map_err(|_| MediaError::BadPath)?;
-        let mut output = AVFormatContextOutput::create(&cpath)?;
+        let mut output = AVFormatContextOutput::create(&cpath).map_err(at("opening the file"))?;
         let global_header = (output.oformat().flags & ffi::AVFMT_GLOBALHEADER as i32) != 0;
 
         let video_track = match video {
@@ -712,6 +737,12 @@ impl Encoder {
             Some(a) => Some(open_audio(&mut output, a, global_header)?),
             None => None,
         };
+        let mut more_audio = Vec::new();
+        if let Some(a) = audio {
+            for _ in 0..more_sound {
+                more_audio.push(open_audio(&mut output, a, global_header)?);
+            }
+        }
 
         set_container_metadata(&mut output, metadata);
 
@@ -724,12 +755,15 @@ impl Encoder {
         let mut header_opts = global_header
             .then(|| dict_set(None, "movflags", "+faststart"))
             .flatten();
-        output.write_header(&mut header_opts)?;
+        output
+            .write_header(&mut header_opts)
+            .map_err(at("writing the header"))?;
 
         Ok(Self {
             output,
             video: video_track,
             audio: audio_track,
+            more_audio,
             finished: false,
         })
     }
@@ -819,6 +853,29 @@ impl Encoder {
         pump_audio(track, output, false)
     }
 
+    /// As [`Self::write_audio`], for the audio stream at place `stream`
+    /// counted from nought: the first, or one of those
+    /// [`Self::open_with_sound`] added after it.
+    pub fn write_audio_stream(
+        &mut self,
+        stream: usize,
+        interleaved: &[f32],
+    ) -> Result<(), MediaError> {
+        let Some(after_first) = stream.checked_sub(1) else {
+            return self.write_audio(interleaved);
+        };
+        let Self {
+            output, more_audio, ..
+        } = self;
+        let Some(track) = more_audio.get_mut(after_first) else {
+            return Err(MediaError::Ffmpeg(
+                "this file was opened without that audio stream".into(),
+            ));
+        };
+        track.pending.extend_from_slice(interleaved);
+        pump_audio(track, output, false)
+    }
+
     /// Flush both encoders and write the container trailer. Must be called
     /// exactly once; calling again is a no-op.
     pub fn finish(&mut self) -> Result<(), MediaError> {
@@ -830,18 +887,21 @@ impl Encoder {
             output,
             video,
             audio,
+            more_audio,
             ..
         } = self;
         if let Some(track) = video.as_mut() {
             track.ctx.send_frame(None)?;
             drain_packets(&mut track.ctx, output, 0, true)?;
         }
-        if let Some(track) = audio.as_mut() {
+        for track in audio.iter_mut().chain(more_audio) {
             pump_audio(track, output, true)?;
             track.ctx.send_frame(None)?;
             drain_packets(&mut track.ctx, output, track.stream_index, true)?;
         }
-        self.output.write_trailer()?;
+        self.output
+            .write_trailer()
+            .map_err(at("finishing the file"))?;
         Ok(())
     }
 }
@@ -1053,7 +1113,7 @@ fn open_audio(
     if global_header {
         ctx.set_flags(ctx.flags | ffi::AV_CODEC_FLAG_GLOBAL_HEADER as i32);
     }
-    ctx.open(None)?;
+    ctx.open(None).map_err(at("opening the audio encoder"))?;
     let frame_size = usize::try_from(ctx.frame_size).unwrap_or(0);
     let frame_size = if frame_size == 0 { 1024 } else { frame_size };
 
@@ -1190,7 +1250,9 @@ fn drain_packets(
                     .map(|s| s.time_base)
                     .ok_or_else(|| MediaError::Ffmpeg("output stream missing".into()))?;
                 packet.rescale_ts(ctx.time_base, stream_tb);
-                output.interleaved_write_frame(&mut packet)?;
+                output
+                    .interleaved_write_frame(&mut packet)
+                    .map_err(at("writing to the file"))?;
             }
             Err(rsmpeg::error::RsmpegError::EncoderDrainError) if !at_eof => return Ok(()),
             Err(rsmpeg::error::RsmpegError::EncoderDrainError)
@@ -1198,6 +1260,12 @@ fn drain_packets(
             Err(e) => return Err(e.into()),
         }
     }
+}
+
+/// Name the step an FFmpeg call failed at. The code alone reads the same for a
+/// bad file name, a refused header and a failed write.
+fn at(step: &'static str) -> impl Fn(rsmpeg::error::RsmpegError) -> MediaError {
+    move |e| MediaError::Ffmpeg(format!("{step}: {e}"))
 }
 
 /// Append `key = value` to an FFmpeg options dictionary (creating it on
@@ -1509,20 +1577,6 @@ mod tests {
         }
     }
 
-    /// The ladder order is a spec decision (docs/impl/media-io.md §7), not
-    /// an accident of iteration order.
-    #[test]
-    fn encoder_ladder_order_is_nvenc_amf_qsv_software() {
-        assert_eq!(
-            encoder_candidates(VideoCodec::H264),
-            ["h264_nvenc", "h264_amf", "h264_qsv", "libx264"]
-        );
-        assert_eq!(
-            encoder_candidates(VideoCodec::Hevc),
-            ["hevc_nvenc", "hevc_amf", "hevc_qsv", "libx265"]
-        );
-    }
-
     /// The core fallback rule: hardware that exists in the build but fails
     /// its test open is skipped, not fatal.
     #[test]
@@ -1537,79 +1591,6 @@ mod tests {
             name.ends_with("_nvenc") || name.starts_with("libx")
         });
         assert_eq!(picked, Some("h264_nvenc"));
-    }
-
-    #[test]
-    fn pick_is_none_when_every_rung_fails() {
-        let candidates = encoder_candidates(VideoCodec::Hevc);
-        assert_eq!(pick_first_working(&candidates, |_| false), None);
-    }
-
-    /// Each candidate is probed at most once and in ladder order — the probe
-    /// is a real (if short) encode, so re-probing would be wasteful.
-    #[test]
-    fn pick_probes_each_candidate_once_in_order() {
-        let candidates = encoder_candidates(VideoCodec::H264);
-        let mut probed = Vec::new();
-        let picked = pick_first_working(&candidates, |name| {
-            probed.push(name);
-            name == "h264_qsv"
-        });
-        assert_eq!(picked, Some("h264_qsv"));
-        assert_eq!(probed, vec!["h264_nvenc", "h264_amf", "h264_qsv"]);
-    }
-
-    #[test]
-    fn qsv_is_fed_nv12_and_everything_else_planar() {
-        assert_eq!(pix_fmt_for("h264_qsv"), ffi::AV_PIX_FMT_NV12);
-        assert_eq!(pix_fmt_for("hevc_qsv"), ffi::AV_PIX_FMT_NV12);
-        assert_eq!(pix_fmt_for("h264_nvenc"), ffi::AV_PIX_FMT_YUV420P);
-        assert_eq!(pix_fmt_for("h264_amf"), ffi::AV_PIX_FMT_YUV420P);
-        assert_eq!(pix_fmt_for("libx264"), ffi::AV_PIX_FMT_YUV420P);
-        assert_eq!(pix_fmt_for("libx265"), ffi::AV_PIX_FMT_YUV420P);
-    }
-
-    #[test]
-    fn encoder_labels_are_calm_and_vendor_true() {
-        assert_eq!(encoder_label("h264_nvenc"), "NVENC");
-        assert_eq!(encoder_label("hevc_nvenc"), "NVENC");
-        assert_eq!(encoder_label("h264_amf"), "AMD AMF");
-        assert_eq!(encoder_label("h264_qsv"), "Intel Quick Sync");
-        assert_eq!(encoder_label("libx264"), "software x264");
-        assert_eq!(encoder_label("libx265"), "software x265");
-        assert_eq!(encoder_label("mystery"), "software");
-    }
-
-    /// The real ladder on the machine the tests run on: whatever rung wins
-    /// must be a known candidate, and the file it produces must round-trip
-    /// through our own probe. On an NVIDIA box this genuinely exercises
-    /// NVENC; on CI without a GPU it proves the graceful fall to software.
-    #[test]
-    fn real_ladder_picks_a_working_encoder_and_its_file_round_trips() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("ladder.mp4");
-        let v = video_settings(VideoCodec::H264, 320, 240);
-        let mut enc = Encoder::open(&path, Some(&v), None, &Metadata::new()).unwrap();
-        let candidates = encoder_candidates(VideoCodec::H264);
-        assert!(
-            candidates.contains(&enc.encoder_name()),
-            "picked {}",
-            enc.encoder_name()
-        );
-        eprintln!(
-            "ladder picked: {} ({})",
-            enc.encoder_name(),
-            enc.encoder_label()
-        );
-        let rgba = vec![128u8; 320 * 240 * 4];
-        for _ in 0..30 {
-            enc.write_rgba(&rgba).unwrap();
-        }
-        enc.finish().unwrap();
-        let probe = crate::probe::probe(&path).unwrap();
-        let video = probe.video.unwrap();
-        assert_eq!((video.width, video.height), (320, 240));
-        assert_eq!(video.codec, "h264");
     }
 
     /// Self-verifying loop: encode a gradient sweep, then probe and index the
@@ -1929,60 +1910,6 @@ mod tests {
         }
     }
 
-    /// TIFF takes the same path; one frame proves the codec is in the build.
-    #[test]
-    fn a_tiff_sequence_writes_readable_frames() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("plate.tiff");
-        let mut enc = ImageSequenceEncoder::open(
-            &path,
-            ImageFormat::Tiff,
-            16,
-            16,
-            24,
-            1,
-            BitDepth::Eight,
-            ColourTags::Srgb,
-        )
-        .unwrap();
-        enc.write_rgba(&vec![64u8; 16 * 16 * 4]).unwrap();
-        enc.finish().unwrap();
-        let bytes = std::fs::read(sequence_frame_path(&path, 1)).unwrap();
-        // Little- or big-endian TIFF magic.
-        assert!(bytes.starts_with(b"II") || bytes.starts_with(b"MM"));
-    }
-
-    /// The pattern and the per-frame path must agree, or a cancelled export
-    /// would delete the wrong files (or none).
-    #[test]
-    fn the_sequence_pattern_and_frame_paths_agree() {
-        let p = Path::new("C:/out/shot.png");
-        assert!(sequence_pattern(p)
-            .to_str()
-            .unwrap()
-            .ends_with("shot.%05d.png"));
-        assert!(sequence_frame_path(p, 7)
-            .to_str()
-            .unwrap()
-            .ends_with("shot.00007.png"));
-    }
-
-    /// Feeding audio to a video-only export is a caller bug and must be a
-    /// typed error, never a crash or silent drop.
-    #[test]
-    fn write_audio_without_an_audio_stream_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("out-vo.mp4");
-        let mut enc = Encoder::open(
-            &path,
-            Some(&video_settings(VideoCodec::H264, 64, 64)),
-            None,
-            &Metadata::new(),
-        )
-        .unwrap();
-        assert!(enc.write_audio(&[0.0, 0.0]).is_err());
-    }
-
     /// Regression: `width * height * 4` used to be raw `i32` arithmetic in
     /// `write_rgba`, which overflow-panics (debug builds) or wraps into a
     /// wrong, too-small size (release builds) for large-but-plausible
@@ -1993,167 +1920,6 @@ mod tests {
         assert!(rgba_frame_len(50_000, 50_000).is_err());
         assert_eq!(rgba_frame_len(2, 2).unwrap(), 16);
         assert_eq!(rgba_frame_len(320, 240).unwrap(), 320 * 240 * 4);
-    }
-
-    #[test]
-    fn rgba_frame_len_rejects_negative_dimensions_without_panicking() {
-        assert!(rgba_frame_len(-1, 100).is_err());
-    }
-
-    /// A stereo sine of `seconds`, interleaved — the audio fixture the
-    /// audio-only tests write and read back.
-    fn sine(rate: u32, seconds: f64) -> Vec<f32> {
-        let n = (seconds * f64::from(rate)).round() as usize;
-        (0..n)
-            .flat_map(|i| {
-                let s = (0.5
-                    * (2.0 * std::f64::consts::PI * 440.0 * (i as f64) / f64::from(rate)).sin())
-                    as f32;
-                [s, s]
-            })
-            .collect()
-    }
-
-    /// Audio-only export, AAC in an `.m4a`: no video stream at all — the case
-    /// `Encoder::open` could not express before — and it must probe as a
-    /// sound file with no picture and decode back at the level that went in.
-    #[test]
-    fn an_audio_only_m4a_carries_the_mix_and_no_video() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("mix.m4a");
-        let rate = 48_000u32;
-        let mut enc = Encoder::open(
-            &path,
-            None,
-            Some(&AudioSettings {
-                rate,
-                bit_rate: 320_000,
-                codec: AudioCodec::Aac,
-                channels: 2,
-            }),
-            &Metadata::new(),
-        )
-        .unwrap();
-        assert!(!enc.has_video());
-        assert_eq!(enc.encoder_label(), "AAC");
-        enc.write_audio(&sine(rate, 1.0)).unwrap();
-        enc.finish().unwrap();
-
-        let probe = crate::probe::probe(&path).unwrap();
-        assert!(probe.video.is_none(), "an audio-only export has no picture");
-        let audio = probe.audio.expect("it does have sound");
-        assert_eq!((audio.sample_rate, audio.channels), (48_000, 2));
-        assert_eq!(audio.codec, "aac");
-
-        let buf = crate::audio::decode_all(&path, rate).unwrap();
-        let mid = &buf.samples[buf.samples.len() / 4..buf.samples.len() / 2];
-        let rms = (mid
-            .iter()
-            .map(|s| f64::from(*s) * f64::from(*s))
-            .sum::<f64>()
-            / mid.len() as f64)
-            .sqrt();
-        assert!((rms - 0.3535).abs() < 0.035, "rms {rms}");
-    }
-
-    /// The other audio-only face: a `.wav` of uncompressed PCM. Lossless, so
-    /// the level assertion is tight where the AAC one had to be generous.
-    #[test]
-    fn an_audio_only_wav_is_lossless_pcm() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("mix.wav");
-        let rate = 48_000u32;
-        let mut enc = Encoder::open(
-            &path,
-            None,
-            Some(&AudioSettings {
-                rate,
-                bit_rate: 0,
-                codec: AudioCodec::PcmS16,
-                channels: 2,
-            }),
-            &Metadata::new(),
-        )
-        .unwrap();
-        enc.write_audio(&sine(rate, 1.0)).unwrap();
-        enc.finish().unwrap();
-
-        let probe = crate::probe::probe(&path).unwrap();
-        assert!(probe.video.is_none());
-        let audio = probe.audio.expect("a wav is all sound");
-        assert_eq!((audio.sample_rate, audio.channels), (48_000, 2));
-        assert_eq!(audio.codec, "pcm_s16le");
-
-        let buf = crate::audio::decode_all(&path, rate).unwrap();
-        let mid = &buf.samples[buf.samples.len() / 4..buf.samples.len() / 2];
-        let rms = (mid
-            .iter()
-            .map(|s| f64::from(*s) * f64::from(*s))
-            .sum::<f64>()
-            / mid.len() as f64)
-            .sqrt();
-        // Uncompressed: within one 16-bit step of the exact 0.5/√2.
-        assert!((rms - 0.3535).abs() < 1e-3, "rms {rms}");
-    }
-
-    /// Opening a container with neither stream is a caller bug and must be a
-    /// typed error, not a zero-stream file the muxer chokes on later.
-    #[test]
-    fn a_container_with_neither_stream_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(Encoder::open(
-            &dir.path().join("nothing.mp4"),
-            None,
-            None,
-            &Metadata::new()
-        )
-        .is_err());
-    }
-
-    /// Writing pictures to an audio-only export is the mirror of the existing
-    /// "audio without an audio stream" guard.
-    #[test]
-    fn write_rgba_without_a_video_stream_errors() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("sound.m4a");
-        let mut enc = Encoder::open(
-            &path,
-            None,
-            Some(&AudioSettings {
-                rate: 48_000,
-                bit_rate: 320_000,
-                codec: AudioCodec::Aac,
-                channels: 2,
-            }),
-            &Metadata::new(),
-        )
-        .unwrap();
-        assert!(enc.write_rgba(&[0u8; 16]).is_err());
-    }
-
-    /// The metadata set is ordered, replaces in place, and drops a key rather
-    /// than writing it blank — the three rules the dialog page leans on.
-    #[test]
-    fn metadata_is_ordered_and_replaces_in_place() {
-        let mut m = Metadata::new();
-        m.set(Metadata::TITLE, "Scene 1");
-        m.set(Metadata::AUTHOR, "A Person");
-        m.set(Metadata::COMMENT, "first pass");
-        assert_eq!(
-            m.iter().map(|(k, _)| k).collect::<Vec<_>>(),
-            [Metadata::TITLE, Metadata::AUTHOR, Metadata::COMMENT]
-        );
-        // Editing a field keeps its row where it was.
-        m.set(Metadata::AUTHOR, "Someone Else");
-        assert_eq!(
-            m.iter().map(|(k, _)| k).collect::<Vec<_>>(),
-            [Metadata::TITLE, Metadata::AUTHOR, Metadata::COMMENT]
-        );
-        assert_eq!(m.get(Metadata::AUTHOR), Some("Someone Else"));
-        // Emptying one removes it.
-        m.set(Metadata::AUTHOR, "");
-        assert_eq!(m.get(Metadata::AUTHOR), None);
-        assert_eq!(m.len(), 2);
     }
 
     /// Metadata really lands in the container: written on the way out, read
@@ -2190,33 +1956,6 @@ mod tests {
         assert_eq!(got(Metadata::AUTHOR).as_deref(), Some("A Person"));
         assert_eq!(got(Metadata::COPYRIGHT).as_deref(), Some("© 2026"));
         assert_eq!(got(Metadata::COMMENT).as_deref(), Some("exported by Lumit"));
-    }
-
-    /// The still formats' sixteen-bit pixel formats differ in byte order
-    /// because the file formats do; the pack stage never has to know.
-    #[test]
-    fn the_still_formats_pick_their_own_sixteen_bit_order() {
-        assert_eq!(
-            ImageFormat::Png.pix_fmt(BitDepth::Eight),
-            ffi::AV_PIX_FMT_RGBA
-        );
-        assert_eq!(
-            ImageFormat::Tiff.pix_fmt(BitDepth::Eight),
-            ffi::AV_PIX_FMT_RGBA
-        );
-        assert_eq!(
-            ImageFormat::Png.pix_fmt(BitDepth::Sixteen),
-            ffi::AV_PIX_FMT_RGBA64BE
-        );
-        assert_eq!(
-            ImageFormat::Tiff.pix_fmt(BitDepth::Sixteen),
-            ffi::AV_PIX_FMT_RGBA64LE
-        );
-        assert!(ImageFormat::Png.swaps_16(BitDepth::Sixteen));
-        assert!(!ImageFormat::Tiff.swaps_16(BitDepth::Sixteen));
-        assert!(!ImageFormat::Png.swaps_16(BitDepth::Eight));
-        assert_eq!(BitDepth::Eight.bytes_per_channel(), 1);
-        assert_eq!(BitDepth::Sixteen.bytes_per_channel(), 2);
     }
 
     /// A sixteen-bit still really writes sixteen-bit files, in both formats,

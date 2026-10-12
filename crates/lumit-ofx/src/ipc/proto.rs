@@ -19,13 +19,13 @@
 //! [`PROTOCOL_VERSION`] ends the conversation with a sentence the user can read
 //! rather than a struct deserialised out of somebody else's layout.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 use crate::describe::{Context, PluginDescriptor};
 use crate::image::{RectI, RowOrder};
-use crate::instance::ParamSnapshot;
+use crate::instance::{ParamSnapshot, Settled};
 
 /// The version both sides must agree on. Bump it whenever a message changes
 /// shape: an old broker beside a new host is a mismatch, not a crash.
@@ -33,7 +33,10 @@ use crate::instance::ParamSnapshot;
 /// 5 added the handshake: the broker's first word is now `Ready` rather than
 /// `Hello`, and neither side says anything of substance until each has proved
 /// to the other that it holds the session secret ([`lumit_peer`]).
-pub const PROTOCOL_VERSION: u32 = 5;
+///
+/// 6 added `Settle`, and a press answers with the plugin's controls as well as
+/// its values.
+pub const PROTOCOL_VERSION: u32 = 6;
 
 /// Which instance a message is about. The host mints these; the broker only
 /// ever quotes one back.
@@ -130,6 +133,14 @@ pub enum HostMessage {
         /// The frame, already in the ring.
         source: FrameRef,
     },
+    /// The values the host just handed over are an edit at the panel. The
+    /// plugin is told now, between renders, and answers with what it holds.
+    Settle {
+        /// Which instance.
+        instance: InstanceId,
+        /// The layer time the edit is at.
+        time: f64,
+    },
     /// Render one frame.
     Render {
         /// Which instance.
@@ -208,10 +219,11 @@ pub enum BrokerMessage {
     Created,
     /// The message was carried out and there is nothing to say about it.
     Done,
-    /// The press is over, and this is every value the plugin holds now.
-    Pressed {
-        /// Every control's value, the plugin's own writes included.
-        params: ParamSnapshot,
+    /// The press or the edit is over, and this is what the plugin holds now.
+    Settled {
+        /// Every control's value, the plugin's own writes included, and what
+        /// it is hiding, greying and listing.
+        settled: Settled,
     },
     /// The plugin wants frames the host has not sent. Answered with exactly one
     /// [`HostMessage::Frames`], which is the point of asking for the lot at
@@ -236,8 +248,6 @@ pub enum BrokerMessage {
         frames_needed: BTreeMap<String, (f64, f64)>,
         /// The clip the plugin said this frame simply is, if it said so.
         identity_of: Option<String>,
-        /// The controls the plugin is hiding now, by parameter name.
-        secret: BTreeSet<String>,
     },
     /// Something went wrong, as a sentence rather than a status code: the host
     /// puts it on a badge and the user reads it.

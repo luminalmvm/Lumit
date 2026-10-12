@@ -15,11 +15,12 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 import 'project.dart';
 import 'project_item.dart';
+import 'share.dart';
 import 'solid.dart';
 part 'state.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `adopt`, `forget_streams_except`, `handle_change_callback`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `adopt`, `discard_unsaved_journal`, `forget_streams_except`, `handle_change_callback`, `journal_file`, `journal_for`, `op_scope`, `phase_fraction`, `report_phase`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<LumitBridgeState>>
 abstract class LumitBridgeState implements RustOpaqueInterface {
@@ -39,6 +40,8 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// import **always completes** (docs/11 §9), and what could not be carried
   /// across is in the report rather than in an error.
   ///
+  /// `None` as well when [`cancel_import`] stopped it.
+  ///
   /// The project it leaves open has **no path**: an import is not a file, and
   /// the first save must ask where to put it.
   ///
@@ -48,9 +51,12 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// frozen for as long as it takes.
   static Future<BridgeImportedProject?> importAeBundle(
           {required String path,
-          RustStreamSink<ScopedChange>? onChangeStream}) =>
+          RustStreamSink<ScopedChange>? onChangeStream,
+          RustStreamSink<OpenProgress>? onProgressStream}) =>
       BridgeLib.instance.api.crateApiStateLumitBridgeStateImportAeBundle(
-          path: path, onChangeStream: onChangeStream);
+          path: path,
+          onChangeStream: onChangeStream,
+          onProgressStream: onProgressStream);
 
   static ProjectReference newProject(
           {RustStreamSink<ScopedChange>? onChangeStream}) =>
@@ -67,14 +73,53 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
   /// phase says it has begun, and the frontend draws the share of the whole
   /// open that is behind it. Optional, because nothing about opening a project
   /// depends on someone watching.
-  static Future<ProjectReference?> openProject(
+  ///
+  /// `share_events` is for a file that is a guest's own copy of a shared
+  /// project, closed while its host was away. It opens as it was left and
+  /// carries on looking for the host, and [`ProjectReference::share_guest`]
+  /// says so. It is also for a copy of a project that is kept online,
+  /// which is a member of it again however it was closed, and
+  /// [`ProjectReference::share_online_state`] says so. Either looks for
+  /// its project through a door, which [`ProjectReference::share_doors`]
+  /// names, and finds it once that is open.
+  ///
+  /// Not opened as well when [`crate::api::import::cancel_import`] stopped
+  /// it, which leaves whatever was open as it was.
+  static Future<BridgeOpened> openProject(
           {required String path,
           RustStreamSink<ScopedChange>? onChangeStream,
-          RustStreamSink<OpenProgress>? onProgressStream}) =>
+          RustStreamSink<OpenProgress>? onProgressStream,
+          RustStreamSink<BridgeShareEvent>? shareEvents}) =>
       BridgeLib.instance.api.crateApiStateLumitBridgeStateOpenProject(
           path: path,
           onChangeStream: onChangeStream,
-          onProgressStream: onProgressStream);
+          onProgressStream: onProgressStream,
+          shareEvents: shareEvents);
+}
+
+/// One Linux graphics device node, as the kernel numbers it: what `stat()`
+/// reports for `/dev/dri/renderD128` or `/dev/dri/card0`. It names a graphics
+/// card unambiguously, which a model name can't on a machine with two of the
+/// same card.
+class BridgeDrmNode {
+  final int major;
+  final int minor;
+
+  const BridgeDrmNode({
+    required this.major,
+    required this.minor,
+  });
+
+  @override
+  int get hashCode => major.hashCode ^ minor.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeDrmNode &&
+          runtimeType == other.runtimeType &&
+          major == other.major &&
+          minor == other.minor;
 }
 
 /// One effect's measured cost within its layer, in milliseconds.
@@ -226,6 +271,27 @@ class BridgeLayerTiming {
           layer == other.layer &&
           ms == other.ms &&
           effects == other.effects;
+}
+
+@freezed
+sealed class BridgeOpened with _$BridgeOpened {
+  const BridgeOpened._();
+
+  const factory BridgeOpened.opened({
+    required ProjectReference project,
+  }) = BridgeOpened_Opened;
+
+  /// The file would not open, or the open was cancelled. Whatever was open
+  /// stays.
+  const factory BridgeOpened.notOpened() = BridgeOpened_NotOpened;
+
+  /// Another Lumit window has this project open, so it was not opened here
+  /// as well: two windows on one file would write the same crash journal.
+  /// `focused` says whether that window was brought forward, which only
+  /// Windows does.
+  const factory BridgeOpened.openElsewhere({
+    required bool focused,
+  }) = BridgeOpened_OpenElsewhere;
 }
 
 /// Where the Viewer cuts a layer's effect stack short — the "at effect" chip's
@@ -583,6 +649,22 @@ class BridgeSharedFrameInfoLinux {
   /// The DRM modifier (`DRM_FORMAT_MOD_LINEAR` = 0 on the linear-tiling path).
   final BigInt modifier;
 
+  /// The render node of the card the buffer is on, or `None` when the driver
+  /// does not say.
+  ///
+  /// A laptop with two graphics cards renders on the fast one while Flutter
+  /// draws the window with the other, and NVIDIA's driver can't share a
+  /// buffer with the other card: an Intel and NVIDIA laptop crashed on its
+  /// first frame that way. The runner compares this with the card behind
+  /// its own display before it imports the buffer, and refuses it with a
+  /// message when they differ. `None` means the comparison is not made.
+  final BridgeDrmNode? renderNode;
+
+  /// The same card's primary node, for a display driver that only names its
+  /// own primary node. A render node is only ever compared with a render
+  /// node, and a primary with a primary.
+  final BridgeDrmNode? primaryNode;
+
   /// The preview tier this frame was made at: 1 Full, 2 Half, 3 Third,
   /// 4 Quarter.
   ///
@@ -608,6 +690,8 @@ class BridgeSharedFrameInfoLinux {
     required this.offset,
     required this.drmFourcc,
     required this.modifier,
+    this.renderNode,
+    this.primaryNode,
     required this.tier,
     required this.view,
   });
@@ -622,6 +706,8 @@ class BridgeSharedFrameInfoLinux {
       offset.hashCode ^
       drmFourcc.hashCode ^
       modifier.hashCode ^
+      renderNode.hashCode ^
+      primaryNode.hashCode ^
       tier.hashCode ^
       view.hashCode;
 
@@ -638,6 +724,8 @@ class BridgeSharedFrameInfoLinux {
           offset == other.offset &&
           drmFourcc == other.drmFourcc &&
           modifier == other.modifier &&
+          renderNode == other.renderNode &&
+          primaryNode == other.primaryNode &&
           tier == other.tier &&
           view == other.view;
 }
@@ -653,6 +741,11 @@ class BridgeSharedFrameInfoLinux {
 enum OpenPhase {
   /// Unzipping the `.lum` and typing the document out of its JSON.
   readingFile,
+
+  /// Copying packed footage out of the `.lum`, for the files that are no
+  /// longer on disk. Only reported when there is something to copy, and the
+  /// one phase that says how far through itself it is.
+  readingPackedMedia,
 
   /// Pointing every footage reference at a file on this machine (docs/10 §2),
   /// including the one walk of the project's folder a lost item costs.

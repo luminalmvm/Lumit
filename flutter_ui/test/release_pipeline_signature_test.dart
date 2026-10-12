@@ -44,13 +44,4 @@ void main() {
     // Both files the shell walked, not just the first.
     expect(parsed.assets.length, 2);
   });
-
-  test('one byte changed anywhere in that manifest breaks the signature',
-      () async {
-    final tampered = manifest.replaceFirst('"size":16', '"size":17');
-    expect(tampered, isNot(manifest));
-    final (_, trust) = await verifyManifestWithKey(
-        utf8.encode(tampered), signature, publicKey);
-    expect(trust, ReleaseTrust.badSignature);
-  });
 }

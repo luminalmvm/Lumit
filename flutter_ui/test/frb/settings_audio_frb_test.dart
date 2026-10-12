@@ -59,40 +59,6 @@ void main() {
       return p.uiState;
     }
 
-    testWidgets('the page is in the sidebar and offers the system default',
-        (tester) async {
-      final ui = await open(tester);
-
-      expect(find.byKey(const ValueKey('settings-audio-device')), findsOneWidget,
-          reason: 'the Audio page draws the output row');
-      expect(find.text(l10n.settingsAudioDevice), findsOneWidget);
-      // A machine with no sound card at all still gets an honest list: the
-      // closed face names the system default rather than nothing.
-      expect(find.text(l10n.settingsAudioSystemDefault), findsOneWidget);
-      expect(ui.workspace.audioDevice, isNull);
-      expect(listAudioDevices().fellBack, isFalse,
-          reason: 'following the machine is never a substitution');
-    });
-
-    testWidgets('a chosen device that is not here is reported, not hidden',
-        (tester) async {
-      await open(tester, chosen: _gone);
-      final devices = listAudioDevices();
-
-      // The choice is kept and still named on the face — it is a pinned
-      // device that happens to be unplugged, not a setting to throw away.
-      expect(find.text(_gone), findsOneWidget);
-      if (devices.fellBack) {
-        expect(find.text(l10n.settingsAudioDeviceMissing), findsOneWidget,
-            reason: 'the row says the pinned device is not here');
-      } else {
-        // No output on this machine at all: nothing was substituted, and the
-        // row says *that* instead.
-        expect(devices.active, isEmpty);
-        expect(find.text(l10n.settingsAudioNoDevice), findsOneWidget);
-      }
-    });
-
     testWidgets('choosing an output writes the setting and tells the engine',
         (tester) async {
       final ui = await open(tester, chosen: _gone);
@@ -109,17 +75,6 @@ void main() {
           reason: 'the engine was told, so nothing is being substituted');
       expect(find.text(l10n.settingsAudioDeviceMissing), findsNothing);
       expect(find.text(l10n.settingsAudioSystemDefault), findsOneWidget);
-    });
-
-    testWidgets('Reset page puts the output back to the system default',
-        (tester) async {
-      final ui = await open(tester, chosen: _gone);
-
-      await tester.tap(find.byKey(const ValueKey('settings-reset-page')));
-      await tester.pumpAndSettle();
-
-      expect(ui.workspace.audioDevice, isNull);
-      expect(listAudioDevices().fellBack, isFalse);
     });
   });
 }

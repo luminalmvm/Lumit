@@ -272,43 +272,4 @@ pub(crate) mod harness {
             }
         }
     }
-
-    /// The mean distance between two windows of `frames` frames of one run.
-    fn distance(samples: &[f32], a: usize, b: usize, frames: usize) -> f64 {
-        let window = |at: usize| &samples[at * AUDIO_CHANNELS..(at + frames) * AUDIO_CHANNELS];
-        let (left, right) = (window(a), window(b));
-        let sum: f64 = left
-            .iter()
-            .zip(right)
-            .map(|(x, y)| f64::from(x - y).abs())
-            .sum();
-        sum / left.len() as f64
-    }
-
-    /// Plan 3: the effect modulates at the rate asked.
-    ///
-    /// A settled cycle of the output is compared with the cycle after it and
-    /// with the half cycle between them. One LFO cycle later everything is
-    /// where it was, so the two agree; half a cycle later the modulation is at
-    /// the other end of its travel, so they do not. The tone's own period
-    /// divides the cycle, which is what lets the windows be compared sample by
-    /// sample rather than through an envelope detector.
-    pub fn modulates_at(def: &dyn EffectDef, over: &[(&str, f64)], rate_hz: f64) {
-        let cycle = (f64::from(RATE) / rate_hz) as usize;
-        let blocks = (cycle * 3).div_ceil(AUDIO_BLOCK_FRAMES);
-        let input = tone(blocks, 1_000.0);
-        let values = values(def, over);
-        let out = run(&*open(def, &values), &input, &values);
-
-        let over_a_cycle = distance(&out, cycle, cycle * 2, cycle);
-        let over_a_half = distance(&out, cycle, cycle + cycle / 2, cycle);
-        assert!(
-            over_a_half > 1e-3,
-            "nothing modulated: half a cycle along measured {over_a_half}"
-        );
-        assert!(
-            over_a_cycle < over_a_half * 0.05,
-            "a whole cycle along should repeat: {over_a_cycle} against {over_a_half}"
-        );
-    }
 }

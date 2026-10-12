@@ -22,6 +22,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/assets.dart';
+import 'package:lumit_flutter/state/text_documents.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -134,6 +135,8 @@ Future<void> main() async {
   title.rename(name: 'Title');
   title.setText(
     document: const BridgeTextDocument(
+      style: plainTextStyle,
+      paragraph: plainParagraphStyle,
       animators: [],
       pathOffset: BridgeScalar.static_(0),
       text: 'Northern lights',

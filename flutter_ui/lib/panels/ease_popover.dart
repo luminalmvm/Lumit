@@ -147,50 +147,56 @@ class _EasePopoverState extends State<_EasePopover> {
         boxShadow: t.floatShadow,
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // The header: what this box is, and what it has hold of. A raised
-          // strip, the way every small floating surface's title is.
-          Container(
-            height: t.density.laneRow,
-            decoration: BoxDecoration(
-              color: t.surface2,
-              border: Border(bottom: BorderSide(color: t.hairline)),
+      child: Entrance.content(
+        spec: ThemeScope.of(context).motion.content,
+        rise: ThemeScope.of(context).motion.contentRise,
+        blur: ThemeScope.of(context).motion.contentBlur,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // The header: what this box is, and what it has hold of. A raised
+            // strip, the way every small floating surface's title is.
+            Container(
+              height: t.density.laneRow,
+              decoration: BoxDecoration(
+                color: t.surface2,
+                border: Border(bottom: BorderSide(color: t.hairline)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  Text(t.kickerCase(l10n.easeBlockTitle), style: t.kickerOn),
+                  const Spacer(),
+                  Text(
+                    l10n.easeKeyCount(widget.count),
+                    key: const ValueKey('ease-count'),
+                    // Sentence case and half the tracking: this counts, it does
+                    // not label, so it wears the kicker's size without its
+                    // shout.
+                    style: t.kicker.copyWith(letterSpacing: 0.54),
+                  ),
+                ],
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              children: [
-                Text(t.kickerCase(l10n.easeBlockTitle), style: t.kickerOn),
-                const Spacer(),
-                Text(
-                  l10n.easeKeyCount(widget.count),
-                  key: const ValueKey('ease-count'),
-                  // Sentence case and half the tracking: this counts, it does
-                  // not label, so it wears the kicker's size without its shout.
-                  style: t.kicker.copyWith(letterSpacing: 0.54),
-                ),
-              ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _row(t, l10n.easeCurve, _curvePicker(t)),
+                  const SizedBox(height: 6),
+                  _row(t, l10n.easeInfluence, _influence(t)),
+                  const SizedBox(height: 6),
+                  _row(t, l10n.easeStagger, _staggerRow(t)),
+                  const SizedBox(height: 8),
+                  _buttons(t),
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _row(t, l10n.easeCurve, _curvePicker(t)),
-                const SizedBox(height: 6),
-                _row(t, l10n.easeInfluence, _influence(t)),
-                const SizedBox(height: 6),
-                _row(t, l10n.easeStagger, _staggerRow(t)),
-                const SizedBox(height: 8),
-                _buttons(t),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

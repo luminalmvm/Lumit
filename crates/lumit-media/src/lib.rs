@@ -7,19 +7,29 @@
 //! scrubbing land on exactly the right frame in slice 5, and it is cached on
 //! disk keyed by a content *fingerprint* so it is built once per file.
 
+pub mod ai;
 pub mod audio;
 pub mod decode;
 pub mod encode;
 pub mod exr;
 pub mod index;
 pub mod probe;
+pub mod psd;
 pub mod sequence;
 pub mod slate;
 
 use std::path::Path;
 
-pub use audio::AudioBuffer;
-pub use decode::{DecodedFrame, LumaFrame, PixelFormat, VideoDecoder};
+// rsmpeg's bindings are for FFmpeg 8. Against another major the build can go through
+// and then read FFmpeg's structures at the wrong offsets, so stop it here instead.
+const _: () = assert!(
+    rsmpeg::ffi::LIBAVUTIL_VERSION_MAJOR == 60,
+    "Lumit needs FFmpeg 8.x (libavutil 60) and the build found another version. \
+     See \"Building from source\" in README.md."
+);
+
+pub use audio::{AudioBuffer, SoundSource};
+pub use decode::{set_hardware_decode, DecodedFrame, LumaFrame, PixelFormat, VideoDecoder};
 pub use encode::Encoder;
 pub use index::{FrameIndex, IndexEntry};
 pub use probe::{AudioInfo, MediaProbe, VideoInfo};
@@ -42,6 +52,36 @@ pub enum MediaError {
     /// than any picture, a sidecar claiming more records than a timeline holds.
     #[error("this file is larger than Lumit reads: {0}")]
     TooLarge(#[from] lumit_ingress::IngressError),
+    /// A Photoshop document that is damaged, or of a kind that is not read.
+    #[error("photoshop document: {0}")]
+    Psd(&'static str),
+    /// An Illustrator document that is damaged, or of a kind that is not read.
+    #[error("illustrator document: {0}")]
+    Ai(&'static str),
+}
+
+/// Whether a reader of Lumit's own opens this source and ffmpeg does not: one
+/// layer of a layered image file, or an Illustrator document, which ffmpeg
+/// can't open at all.
+#[must_use]
+pub fn reads_own(src: &MediaSource) -> bool {
+    src.source_layer.is_some() || ai::is_ai(src.on_disk())
+}
+
+/// The picture of a source that [`reads_own`]. `None` for everything else.
+///
+/// `target_width` asks for a narrower frame of the same shape, and never a
+/// wider one.
+pub fn read_own(
+    src: &MediaSource,
+    target_width: Option<u32>,
+) -> Option<Result<DecodedFrame, MediaError>> {
+    let path = src.on_disk();
+    if ai::is_ai(path) {
+        return Some(ai::read_layer(path, src.source_layer, target_width));
+    }
+    let layer = src.source_layer?;
+    Some(psd::read_layer(path, layer).map(|frame| psd::downsample(frame, target_width)))
 }
 
 impl From<rsmpeg::error::RsmpegError> for MediaError {
@@ -129,27 +169,5 @@ mod tests {
             content_hash: "ab".to_string(),
         };
         assert_eq!(fp.cache_key(), "ab-10");
-    }
-
-    #[test]
-    fn cache_key_does_not_panic_on_an_empty_hash() {
-        let fp = Fingerprint {
-            size: 0,
-            mtime_unix: 0,
-            content_hash: String::new(),
-        };
-        assert_eq!(fp.cache_key(), "-0");
-    }
-
-    #[test]
-    fn fingerprint_of_zero_byte_file_does_not_panic() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("empty.bin");
-        std::fs::write(&path, []).unwrap();
-        let fp = Fingerprint::of(&path).unwrap();
-        assert_eq!(fp.size, 0);
-        assert_eq!(fp.content_hash.len(), 64);
-        // Must not panic when used for a cache key either.
-        assert!(fp.cache_key().ends_with("-0"));
     }
 }

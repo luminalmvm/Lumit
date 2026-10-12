@@ -22,6 +22,7 @@
 // (`ParamKind::Action`), drawn by the ordinary parameter row.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/planes.dart';
 import 'package:uuid/uuid.dart';
@@ -134,7 +135,11 @@ class PlaneDisplayFrb extends StatefulWidget {
   final PlaneCard card;
 
   /// The layer the effect sits on. What the reading is asked about.
-  final LayerReference layer;
+  final LayerReference? layer;
+
+  /// The node graph the effect is a box in, where it is one rather than an
+  /// effect on a layer. One of the two is given.
+  final CompositionReference? graph;
 
   /// Which instance on that layer: an answer is filed under the effect, because
   /// two of them on one clip with different models are two answers.
@@ -157,7 +162,8 @@ class PlaneDisplayFrb extends StatefulWidget {
   const PlaneDisplayFrb({
     super.key,
     required this.card,
-    required this.layer,
+    this.layer,
+    this.graph,
     required this.effectId,
     required this.onChanged,
     required this.pressed,
@@ -173,7 +179,8 @@ class _PlaneDisplayFrbState extends State<PlaneDisplayFrb>
   @override
   BridgePlaneStatus fetchStatus() =>
       widget.fetch?.call() ??
-      planeStatus(layer: widget.layer, effect: widget.effectId);
+      widget.graph?.graphPlaneStatus(effect: widget.effectId) ??
+      planeStatus(layer: widget.layer!, effect: widget.effectId);
 
   @override
   VoidCallback get onChanged => widget.onChanged;

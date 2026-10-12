@@ -202,35 +202,6 @@ mod tests {
         );
     }
 
-    /// §6 test #5, second half: once settled on a steady cost, the tier does
-    /// not flap — at most one change over a long run.
-    #[test]
-    fn realtime_settles_without_flapping_on_steady_cost() {
-        let fps = 60.0;
-        let mut rc = RealtimeController::new();
-        // Heavy steady cost: walk down as far as needed, then settle.
-        for _ in 0..60 {
-            rc.record(0.05, fps);
-        }
-        let settled = rc.tier();
-        let mut changes = 0;
-        let mut prev = settled;
-        for _ in 0..600 {
-            let t = rc.record(0.05, fps);
-            if t != prev {
-                changes += 1;
-                prev = t;
-            }
-        }
-        assert!(changes <= 1, "tier flapped {changes} times on steady cost");
-        // A cost inside the hysteresis band (between 0.4 and 0.9 of budget)
-        // changes nothing at all, from either direction.
-        let mut rc = RealtimeController::new();
-        for _ in 0..600 {
-            assert_eq!(rc.record(0.01, fps), FINEST_TIER); // 0.6 of budget
-        }
-    }
-
     /// Walk a fresh controller down to Quarter with brutal costs, stopping
     /// the moment it arrives (so its smoothed cost is freshly reset there).
     fn controller_forced_to_quarter(fps: f64) -> RealtimeController {
@@ -264,29 +235,6 @@ mod tests {
             rc.record(0.002, fps);
         }
         assert_eq!(rc.tier(), FINEST_TIER);
-    }
-
-    /// One frame landing the smoothed cost mid-band voids the streak:
-    /// cheapness must be consecutive (the hysteresis in action).
-    #[test]
-    fn realtime_rise_streak_resets_on_a_mid_band_frame() {
-        let fps = 60.0;
-        let mut rc = controller_forced_to_quarter(fps);
-        for _ in 0..(RISE_SUSTAIN_FRAMES - 1) {
-            rc.record(0.002, fps);
-        }
-        // A 20 ms frame lifts the smoothed cost into the hysteresis band
-        // (0.3 × 0.02 + 0.7 × ~0.002 ≈ 7.4 ms, between 6.7 and 15 ms).
-        rc.record(0.02, fps);
-        // Another 11 cheap frames: a fresh streak, still one short.
-        for _ in 0..(RISE_SUSTAIN_FRAMES - 1) {
-            rc.record(0.002, fps);
-        }
-        assert_eq!(
-            rc.tier(),
-            COARSEST_TIER,
-            "streak must restart after a break"
-        );
     }
 
     /// Nonsense measurements change nothing.

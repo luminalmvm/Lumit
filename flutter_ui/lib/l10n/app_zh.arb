@@ -312,15 +312,6 @@
       }
     }
   },
-  "aeMaskModeUnavailable": "蒙版模式 {aeMode} 尚未实现 — 已按“相加”导入",
-  "@aeMaskModeUnavailable": {
-    "description": "Import report row reason, lower case. Add is one of Lumit's mask combine modes.",
-    "placeholders": {
-      "aeMode": {
-        "type": "String"
-      }
-    }
-  },
   "aeMaskRotoBezierFlattened": "RotoBezier 蒙版的曲线由 After Effects 计算 — 已按它的多边形导入",
   "@aeMaskRotoBezierFlattened": {
     "description": "Import report row reason, lower case. RotoBezier is an After Effects mask option; leave the name as written."
@@ -508,6 +499,14 @@
       }
     }
   },
+  "audioFadeIn": "缓入",
+  "@audioFadeIn": {
+    "description": "Audio panel, Selected layer: the row that writes a volume fade at the layer's start."
+  },
+  "audioFadeOut": "缓出",
+  "@audioFadeOut": {
+    "description": "Audio panel, Selected layer: the row that writes a volume fade at the layer's end."
+  },
   "audioMono": "单声道",
   "@audioMono": {
     "description": "A one-channel sound, in the Project panel's preview card. Lower case on purpose — it sits in a line of facts.",
@@ -537,6 +536,15 @@
   "badgeUnknownEffect": "此版本无法识别该效果",
   "@badgeUnknownEffect": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an effect saved by another or newer version of Lumit. The effect is kept exactly as it was saved and is not lost."
+  },
+  "bitsPerChannel": "{bits} bpc （位/通道）",
+  "@bitsPerChannel": {
+    "description": "A colour depth, shown in the project settings dropdown and the export dialogue. 'bpc' is bits per channel, the standard abbreviation across compositing applications. {bits} is 8, 16 or 32.",
+    "placeholders": {
+      "bits": {
+        "type": "String"
+      }
+    }
   },
   "blendColourBurn": "颜色加深",
   "@blendColourBurn": {
@@ -618,6 +626,75 @@
   "@cacheLocationWithLumit": {
     "description": "Choice of where parked frames live: in Lumit's own application data folder."
   },
+  "cameraAngleOfView": "视场角",
+  "@cameraAngleOfView": {
+    "description": "Camera settings row: how wide a view the lens takes in, in degrees."
+  },
+  "cameraAperture": "光圈",
+  "@cameraAperture": {
+    "description": "A camera's aperture: how wide the lens opens, which decides how strong the depth-of-field blur is."
+  },
+  "cameraBlurLevel": "模糊程度",
+  "@cameraBlurLevel": {
+    "description": "A camera's blur level, a percentage: how much of the depth-of-field blur is applied."
+  },
+  "cameraDepthOfField": "景深",
+  "@cameraDepthOfField": {
+    "description": "Camera settings row: whether layers away from the focus plane are blurred."
+  },
+  "cameraFStop": "光圈值",
+  "@cameraFStop": {
+    "description": "Camera settings row: the aperture written the way a photographer writes it, such as 5.6."
+  },
+  "cameraFilmSize": "胶片尺寸",
+  "@cameraFilmSize": {
+    "description": "Camera settings row: the width of the sensor the focal length is measured against, in millimetres."
+  },
+  "cameraFocalLength": "焦距",
+  "@cameraFocalLength": {
+    "description": "Camera settings row: the lens length in millimetres, such as 50."
+  },
+  "cameraFocusDistance": "焦点距离",
+  "@cameraFocusDistance": {
+    "description": "A camera's focus distance: how far in front of it the sharp plane sits."
+  },
+  "cameraLockToZoom": "锁定到变焦",
+  "@cameraLockToZoom": {
+    "description": "Camera settings tick: keep the focus distance equal to the zoom, so what fills the frame is what is sharp."
+  },
+  "cameraOneNode": "单节点",
+  "@cameraOneNode": {
+    "description": "Camera type: a camera that aims by its own rotation."
+  },
+  "cameraOptions": "摄像机选项",
+  "@cameraOptions": {
+    "description": "Heading in a camera's Transform group, over the rows about the lens rather than about where the camera stands."
+  },
+  "cameraPresetMm": "{mm} mm",
+  "@cameraPresetMm": {
+    "description": "One of the lens presets in the camera settings, named by its focal length.",
+    "placeholders": {
+      "mm": {
+        "type": "String"
+      }
+    }
+  },
+  "cameraSettings": "摄像机设置",
+  "@cameraSettings": {
+    "description": "Layer menu item, and the title of the window it opens: everything about a camera that is not animated."
+  },
+  "cameraTwoNode": "双节点",
+  "@cameraTwoNode": {
+    "description": "Camera type: a camera that aims at its point of interest."
+  },
+  "cameraType": "类型",
+  "@cameraType": {
+    "description": "Camera settings row: whether the camera is one-node or two-node."
+  },
+  "cameraUnits": "单位",
+  "@cameraUnits": {
+    "description": "Camera settings row: which units the distances in the window are shown in."
+  },
   "cancel": "取消",
   "@cancel": {
     "description": "Button that abandons a dialogue or a running job."
@@ -678,10 +755,6 @@
   "clipPasteShape": "将形状粘贴到此图层",
   "@clipPasteShape": {
     "description": "Context-menu item: apply a copied speed curve here."
-  },
-  "clipRamp": "ramp",
-  "@clipRamp": {
-    "description": "Shown on a Sequence clip in place of a speed percentage when the speed changes over the clip. Lower case on purpose — it sits where a number would."
   },
   "clipResetSpeed": "重置速度",
   "@clipResetSpeed": {
@@ -747,6 +820,10 @@
   "@columnModes": {
     "description": "Timeline column heading, over the per-layer render modes (flow, effects, motion blur, 3D). Also the label of that column's show/hide toggle in the Timeline's bottom bar."
   },
+  "columnNumber": "号",
+  "@columnNumber": {
+    "description": "Timeline column heading over the layer numbers. The number sign, or whatever stands for 'number' in this language — one or two characters, it sits in an 18px column."
+  },
   "columnParent": "父级",
   "@columnParent": {
     "description": "Timeline column heading."
@@ -754,6 +831,10 @@
   "columnSwitches": "开关",
   "@columnSwitches": {
     "description": "Timeline column heading, over the per-layer on/off controls."
+  },
+  "columnTrack": "轨道",
+  "@columnTrack": {
+    "description": "Column header in the Audio timeline panel over the track names. The Audio timeline is the one place a row is called a track. One word, sentence case; the panel draws it in capitals."
   },
   "compBackground": "背景",
   "@compBackground": {
@@ -902,6 +983,10 @@
   "@deleteStroke": {
     "description": "Context-menu item: remove one brush stroke."
   },
+  "detachAudioNoSound": "该图层没有可以分离的声音",
+  "@detachAudioNoSound": {
+    "description": "One line in the status bar at the bottom of the window, after Detach audio was asked of a layer whose media carries no sound - a solid colour, a title, or footage with no audio track. Calm, not an error."
+  },
   "detectingBeats": "正在检测节拍",
   "@detectingBeats": {
     "description": "The line on the card covering the shell while beat detection runs."
@@ -945,14 +1030,6 @@
   "duration": "持续时间",
   "@duration": {
     "description": "Field label: how long a composition runs."
-  },
-  "durationFormatNote": "持续时间为上方帧速率下的 HH:MM:SS:FF。",
-  "@durationFormatNote": {
-    "description": "Note under the duration field. HH:MM:SS:FF is a timecode and stays as it is."
-  },
-  "easeBezier": "贝塞尔",
-  "@easeBezier": {
-    "description": "Keyframe easing with adjustable handles. Named after the curve — keep it recognisable."
   },
   "easeBlockTitle": "缓动",
   "@easeBlockTitle": {
@@ -1115,10 +1192,6 @@
   "@exportAudioAuto": {
     "description": "Export dialog, Audio row: include the composition's sound when it has any. The alternative is Off."
   },
-  "exportAudioBitRate": "音频位速率",
-  "@exportAudioBitRate": {
-    "description": "Export dialogue: how many bits per second the sound is given."
-  },
   "exportAudioMono": "单声道",
   "@exportAudioMono": {
     "description": "Export dialog, Audio section, channel-layout list: one channel, the composition's stereo mix folded down. Beside exportAudioStereo."
@@ -1126,14 +1199,6 @@
   "exportAudioOff": "关",
   "@exportAudioOff": {
     "description": "Export dialog: audio: no sound is written."
-  },
-  "exportAudioOn": "开",
-  "@exportAudioOn": {
-    "description": "Export dialog: audio: sound is written with the picture."
-  },
-  "exportAudioReading": "48.000 kHz · 立体声",
-  "@exportAudioReading": {
-    "description": "Export dialog: a factual reading of the sound format every export is mixed to. The number is not translated."
   },
   "exportAudioStereo": "立体声",
   "@exportAudioStereo": {
@@ -1214,10 +1279,6 @@
   "exportColourStated": "该文件会在自己的头信息中声明此空间。",
   "@exportColourStated": {
     "description": "Export dialog, Colour section, factual line under the rows: shown when the chosen format can tag the colour space it was written in, so the file says what it is. One sentence."
-  },
-  "exportComposition": "导出合成",
-  "@exportComposition": {
-    "description": "Title of the export dialogue. Lumit says 'export' for writing a file, never 'render'."
   },
   "exportCrop": "裁剪",
   "@exportCrop": {
@@ -1325,10 +1386,6 @@
       }
     }
   },
-  "exportFromFrame": "起始帧",
-  "@exportFromFrame": {
-    "description": "Export dialogue: the first frame to write."
-  },
   "exportGroupAudio": "音频",
   "@exportGroupAudio": {
     "description": "Export dialog: the group naming the sound written with the picture."
@@ -1369,10 +1426,6 @@
         "type": "String"
       }
     }
-  },
-  "exportIncludeAudio": "包含音频",
-  "@exportIncludeAudio": {
-    "description": "Export dialogue: whether sound is written alongside the picture."
   },
   "exportLockAspect": "锁定长宽比",
   "@exportLockAspect": {
@@ -1622,6 +1675,15 @@
       }
     }
   },
+  "exportSummarySize": "≈ {size} GB",
+  "@exportSummarySize": {
+    "description": "Export dialog: the footer line’s estimate of the file size, appended to the summary.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
   "exportTimeReading": "开始 {start} · 结束 {end} · 持续时间 {duration}",
   "@exportTimeReading": {
     "description": "Export dialog: a factual line under the Time rows; each value is a timecode.",
@@ -1636,10 +1698,6 @@
         "type": "String"
       }
     }
-  },
-  "exportToFrame": "结束帧",
-  "@exportToFrame": {
-    "description": "Export dialogue: the last frame to write."
   },
   "exportType": "类型",
   "@exportType": {
@@ -1669,15 +1727,6 @@
   "@exportWriteTo": {
     "description": "Export dialogue: the file the export is written to."
   },
-  "exportWritten": "已写入 {file}",
-  "@exportWritten": {
-    "description": "Export dialogue: shown when the export finished. {file} is a file name.",
-    "placeholders": {
-      "file": {
-        "type": "String"
-      }
-    }
-  },
   "exportedTo": "已导出至",
   "@exportedTo": {
     "description": "Bottom strip, when an export has finished. {path} is a file path.",
@@ -1698,6 +1747,19 @@
         "type": "String"
       },
       "encoder": {
+        "type": "String"
+      }
+    }
+  },
+  "faultPanelTitle": "面板无法被绘制",
+  "@faultPanelTitle": {
+    "description": "Heading of the box that replaces a panel whose contents failed to draw. The line under it is the fault's own words, which are not translated."
+  },
+  "faultPanelWhere": "已记录在 {file}",
+  "@faultPanelWhere": {
+    "description": "Under the fault heading: where the full report was written, so it can be sent on. {file} is a path to a file on this machine.",
+    "placeholders": {
+      "file": {
         "type": "String"
       }
     }
@@ -1899,9 +1961,25 @@
   "@foldPaint": {
     "description": "Heading in a layer's fold-out, over its brush strokes."
   },
+  "foldPuppet": "木偶",
+  "@foldPuppet": {
+    "description": "Heading in a layer's fold-out, over its puppet pins."
+  },
+  "foldStyles": "样式",
+  "@foldStyles": {
+    "description": "Heading in a layer's fold-out and in the Effect controls panel, over the layer styles it wears."
+  },
   "foldWaveform": "波形图",
   "@foldWaveform": {
     "description": "Heading in a layer's fold-out, over the picture of its sound; also the name of a scope."
+  },
+  "formatExrPicker": "OpenEXR 图像",
+  "@formatExrPicker": {
+    "description": "The file type shown in the system Save dialogue. OpenEXR stays as it is."
+  },
+  "formatExrSequence": "OpenEXR 图像序列",
+  "@formatExrSequence": {
+    "description": "Export format: one numbered OpenEXR per frame, holding scene-linear colour with values above white kept. OpenEXR stays as it is."
   },
   "formatH264": "H.264 视频 (.mp4)",
   "@formatH264": {
@@ -1951,6 +2029,10 @@
   "@frameRate": {
     "description": "Field label: frames per second."
   },
+  "fxAccumulationMotionBlur": "累积运动模糊",
+  "@fxAccumulationMotionBlur": {
+    "description": "Effect name in the Add effect menu and the Effect controls panel — the slow, whole-scene motion blur that re-renders everything below at several sub-frame moments and averages them."
+  },
   "fxAdd": "相加",
   "@fxAdd": {
     "description": "Effect controls — a control on Echo."
@@ -1982,6 +2064,10 @@
   "fxAlphaFrom": "Alpha 来自",
   "@fxAlphaFrom": {
     "description": "Effect controls — a control on Set channels: which channel of which layer this output channel comes from."
+  },
+  "fxAltitude": "高度",
+  "@fxAltitude": {
+    "description": "A Bevel and emboss layer style's Altitude parameter: how high above the surface the light sits, in degrees."
   },
   "fxAmount": "数量",
   "@fxAmount": {
@@ -2082,6 +2168,10 @@
   "fxBend": "弯曲",
   "@fxBend": {
     "description": "Effect controls — a control on Warp."
+  },
+  "fxBevelStyle": "浮雕样式",
+  "@fxBevelStyle": {
+    "description": "A Bevel and emboss layer style's Bevel style parameter: where the relief sits relative to the shape's edge."
   },
   "fxBezierWarp": "贝塞尔曲线变形",
   "@fxBezierWarp": {
@@ -2307,6 +2397,14 @@
   "@fxColour3": {
     "description": "Effect controls — a control on RGB split."
   },
+  "fxColourA": "颜色 A",
+  "@fxColourA": {
+    "description": "A Gradient overlay layer style's first colour, at the start of the ramp."
+  },
+  "fxColourB": "颜色 B",
+  "@fxColourB": {
+    "description": "A Gradient overlay layer style's second colour, at the end of the ramp."
+  },
   "fxColourBalance": "色彩平衡",
   "@fxColourBalance": {
     "description": "Effect controls — the name of an effect."
@@ -2326,6 +2424,10 @@
   "fxColourNoise": "彩色杂色",
   "@fxColourNoise": {
     "description": "Effect controls — a switch on Noise."
+  },
+  "fxColourOverlay": "颜色叠加",
+  "@fxColourOverlay": {
+    "description": "Name of the Colour overlay layer style: one flat colour painted across the layer."
   },
   "fxColumns": "列数",
   "@fxColumns": {
@@ -2463,7 +2565,7 @@
   "@fxDarken": {
     "description": "Effect controls — a control on Echo."
   },
-  "fxDatamosh": "Datamosh",
+  "fxDatamosh": "像素破损 (Datamosh)",
   "@fxDatamosh": {
     "description": "Effect controls — the name of an effect."
   },
@@ -2494,6 +2596,10 @@
   "fxDepth": "深度",
   "@fxDepth": {
     "description": "Effect controls — a control on Particulate: how far the emitter reaches through the layer's own plane, so particles are born at a spread of depths rather than all on it."
+  },
+  "fxDepthAnythingV2Small": "Depth Anything V2 Small",
+  "@fxDepthAnythingV2Small": {
+    "description": "Effect controls - an option on the Depth effect's Model row. The name of a model pack, so it stays as it is in every language."
   },
   "fxDepthChannel": "深度通道",
   "@fxDepthChannel": {
@@ -2575,7 +2681,7 @@
   "@fxDisplacementMap": {
     "description": "Effect name in the Add effect menu — another layer's channels push this one."
   },
-  "fxDisplay": "Display",
+  "fxDisplay": "显示",
   "@fxDisplay": {
     "description": "Effect controls — a control on Depth of field."
   },
@@ -2646,6 +2752,10 @@
   "fxEdges": "边缘",
   "@fxEdges": {
     "description": "Effect controls — a control on Radial blur."
+  },
+  "fxEditExpression": "编辑表达式...",
+  "@fxEditExpression": {
+    "description": "Effect controls — the Expression driver's row that opens its expression for editing."
   },
   "fxEditShader": "编辑着色器…",
   "@fxEditShader": {
@@ -2818,6 +2928,10 @@
   "fxFadeOut": "淡出",
   "@fxFadeOut": {
     "description": "Effect controls — a control on Radio waves: how much of a wave's life it spends fading out."
+  },
+  "fxFalloff": "衰减",
+  "@fxFalloff": {
+    "description": "Effect controls — a control on Glow."
   },
   "fxFarBlur": "远景模糊",
   "@fxFarBlur": {
@@ -3427,7 +3541,7 @@
   "@fxMagentas": {
     "description": "Effect controls — a colour range on Hue and saturation."
   },
-  "fxManual": "Manual",
+  "fxManual": "手动",
   "@fxManual": {
     "description": "Effect controls — a control on Flash."
   },
@@ -3467,6 +3581,10 @@
   "@fxMatte": {
     "description": "Effect controls — a control on Lens flare."
   },
+  "fxMatteInverted": "反转遮罩",
+  "@fxMatteInverted": {
+    "description": "Effect controls — a Matte mode option on Roto brush: drop the subject rather than keep it."
+  },
   "fxMatteKey": "遮罩键控",
   "@fxMatteKey": {
     "description": "Effect controls — the name of an effect."
@@ -3474,6 +3592,14 @@
   "fxMatteLayer": "遮罩图层",
   "@fxMatteLayer": {
     "description": "Effect controls — a control on Lens flare."
+  },
+  "fxMatteMode": "遮罩模式",
+  "@fxMatteMode": {
+    "description": "Effect controls — a control on Roto brush: whether the matte keeps the subject or drops it."
+  },
+  "fxMax": "最大",
+  "@fxMax": {
+    "description": "Effect controls — a control on Pixel sort: the top of the band of values that sorts."
   },
   "fxMaxClones": "最大仿制数",
   "@fxMaxClones": {
@@ -3523,6 +3649,10 @@
   "@fxMidtones": {
     "description": "Effect controls — a Curves knot, the curve's output at input 0.5."
   },
+  "fxMin": "最小",
+  "@fxMin": {
+    "description": "Effect controls — a control on Pixel sort: the bottom of the band of values that sorts."
+  },
   "fxMinimum": "最小值",
   "@fxMinimum": {
     "description": "Effect controls — a Math driver operation: the smaller of the two numbers."
@@ -3542,6 +3672,10 @@
   "fxMode": "模式",
   "@fxMode": {
     "description": "Effect controls — a control on Flash."
+  },
+  "fxModel": "模型",
+  "@fxModel": {
+    "description": "Effect controls - a control on Depth and on Remove background: which trained model reads the frames. The models themselves are addons installed from Settings."
   },
   "fxMonochrome": "单色",
   "@fxMonochrome": {
@@ -3715,6 +3849,10 @@
   "@fxPathOverlap": {
     "description": "Effect controls — a control on Scribble: how far each stroke runs past the mask’s edge."
   },
+  "fxPeak": "峰值",
+  "@fxPeak": {
+    "description": "Effect controls: an output of the Audio level driver, the loudest single sample in the window it reads."
+  },
   "fxPerAxisWobble": "Per-axis wobble",
   "@fxPerAxisWobble": {
     "description": "Effect controls — a control on an effect."
@@ -3803,7 +3941,7 @@
   "@fxPosterize": {
     "description": "Effect name in the Add effect menu — the tone range cut into flat steps."
   },
-  "fxPosterizeTime": "Posterize time",
+  "fxPosterizeTime": "色调分离时间（抽帧）",
   "@fxPosterizeTime": {
     "description": "Effect controls — the name of an effect."
   },
@@ -3911,6 +4049,10 @@
   "@fxRelief": {
     "description": "Effect controls — a control on Emboss and on Texturize: how thick the raised surface reads."
   },
+  "fxReloadChannels": "重新加载通道",
+  "@fxReloadChannels": {
+    "description": "Effect controls — a button on Extract channels that reads the file's channel list again, for when the render it came from has changed shape."
+  },
   "fxRemainder": "余数",
   "@fxRemainder": {
     "description": "Effect controls — a Math driver operation: what is left after dividing."
@@ -3918,6 +4060,10 @@
   "fxRemap": "重映射",
   "@fxRemap": {
     "description": "Driver name in the Graph panel — maps one range of numbers onto another."
+  },
+  "fxRemoveBackground": "移除背景",
+  "@fxRemoveBackground": {
+    "description": "Effect controls - the name of the effect that cuts the subject out of what is behind them."
   },
   "fxRemoveEdgeLeak": "消除边缘渗漏",
   "@fxRemoveEdgeLeak": {
@@ -3998,6 +4144,10 @@
   "fxRise": "上升",
   "@fxRise": {
     "description": "Effect controls — a Style option on Warp."
+  },
+  "fxRobustVideoMatting": "Robust Video Matting",
+  "@fxRobustVideoMatting": {
+    "description": "Effect controls - an option on Remove background's Model row. The name of a model pack, so it stays as it is in every language."
   },
   "fxRollSpeed": "滚动速度",
   "@fxRollSpeed": {
@@ -4158,6 +4308,10 @@
   "fxShadowOnly": "仅阴影",
   "@fxShadowOnly": {
     "description": "Effect controls — a control on Drop shadow: keep the shadow and hide the layer."
+  },
+  "fxShadowOpacity": "阴影不透明度",
+  "@fxShadowOpacity": {
+    "description": "A Bevel and emboss layer style's Shadow opacity: how strong the shaded face is, per cent."
   },
   "fxShadowTonalWidth": "阴影色调宽度",
   "@fxShadowTonalWidth": {
@@ -4936,6 +5090,27 @@
   "@hierarchyEmpty": {
     "description": "Empty-state line in the Hierarchy panel."
   },
+  "histEditLayerStyles": "编辑图层样式",
+  "@histEditLayerStyles": {
+    "description": "A row of the Edit > History window: the name of one edit that was made — a layer style added, removed, switched off or dialled. Sent by the engine as English and looked up here."
+  },
+  "iconSetBold": "加粗",
+  "@iconSetBold": {
+    "description": "Icon set option: heavy lines, 2 pixels."
+  },
+  "iconSetRegular": "常规",
+  "@iconSetRegular": {
+    "description": "Icon set option: the icons as drawn, a 1.5 pixel line."
+  },
+  "iconsReplaced": "已替换 {count} 个",
+  "@iconsReplaced": {
+    "description": "Beside the custom icons row: how many of the set's icons the folder currently replaces.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "importFootage": "导入素材",
   "@importFootage": {
     "description": "Button, menu item and tooltip: bring media files into the project."
@@ -5095,6 +5270,14 @@
   "keyImportFootage": "导入素材",
   "@keyImportFootage": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyInterpBezier": "贝塞尔",
+  "@keyInterpBezier": {
+    "description": "Choice in the Keyframe interpolation dialogue: a curve the user aims by dragging its handle."
+  },
+  "keyInterpLinear": "线性",
+  "@keyInterpLinear": {
+    "description": "Choice in the Keyframe interpolation dialogue: a straight line to the next keyframe."
   },
   "keyMaximiseThePanelUnderThePointer": "最大化指针下的面板",
   "@keyMaximiseThePanelUnderThePointer": {
@@ -5377,15 +5560,6 @@
       }
     }
   },
-  "keymapClashPanelCount": "{count, plural, =1{1 个快捷键在某个面板中含义不同} other{{count} 个快捷键在某个面板中含义不同}}",
-  "@keymapClashPanelCount": {
-    "description": "Note in the keymap table: a panel takes a chord over from its app-wide meaning. {count} is how many chords do.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "keymapExported": "快捷键映射已导出。",
   "@keymapExported": {
     "description": "Shown after a keymap file has been written."
@@ -5418,23 +5592,25 @@
   "@keymapPressAShortcut": {
     "description": "Shown in a keymap row while it is waiting for the user to press keys."
   },
-  "keymapShadowLine": "{chord} — 在{context}中为{action}，在其他位置为{shadowed}",
-  "@keymapShadowLine": {
-    "description": "One line under the keymap's panel note: which chord, what it does in which panel, and what it does everywhere else. {chord} is the key combination, {action} and {shadowed} are command names, {context} is a panel name.",
-    "placeholders": {
-      "chord": {
-        "type": "String"
-      },
-      "action": {
-        "type": "String"
-      },
-      "context": {
-        "type": "String"
-      },
-      "shadowed": {
-        "type": "String"
-      }
-    }
+  "keymapWheelAlt": "Alt（Mac中为Option）",
+  "@keymapWheelAlt": {
+    "description": "Scroll wheel modifier choice: the Alt key (Option on a Mac)."
+  },
+  "keymapWheelCtrl": "Ctrl",
+  "@keymapWheelCtrl": {
+    "description": "Scroll wheel modifier choice: the Control key."
+  },
+  "keymapWheelShift": "Shift",
+  "@keymapWheelShift": {
+    "description": "Scroll wheel modifier choice: the Shift key."
+  },
+  "keymapWheelZoomTime": "缩放时间轴",
+  "@keymapWheelZoomTime": {
+    "description": "Scroll wheel row: the modifier that zooms time about the pointer in the Timeline, Audio timeline and Graph editor."
+  },
+  "keymapWheelZoomValues": "缩放图表数值",
+  "@keymapWheelZoomValues": {
+    "description": "Scroll wheel row: the modifier that zooms the value axis in the Graph editor when auto fit is off."
   },
   "keysEase": "缓动",
   "@keysEase": {
@@ -5607,6 +5783,10 @@
   "@menuAssignWorkspaceShortcut": {
     "description": "Menu item (a feature that is not built yet — it appears greyed out)."
   },
+  "menuAudio": "音频",
+  "@menuAudio": {
+    "description": "Submenu in the Layer menu, holding the commands that act on a layer's sound."
+  },
   "menuAuto": "自动",
   "@menuAuto": {
     "description": "Preview resolution: render only the pixels the current magnification can show. Sits beside Full, Half, Third and Quarter."
@@ -5635,9 +5815,23 @@
   "@menuCloseProject": {
     "description": "Menu item."
   },
+  "menuCombineAxesOf": "合并 {property} 轴",
+  "@menuCombineAxesOf": {
+    "description": "Layer ▸ Transform and Animation ▸ Separate dimensions submenu item: puts a transform property's separated axes back on one row. {property} is the property's own name — Anchor point, Position or Scale.",
+    "placeholders": {
+      "property": {
+        "type": "String",
+        "example": "Position"
+      }
+    }
+  },
   "menuCommandPalette": "命令面板…",
   "@menuCommandPalette": {
     "description": "Menu item."
+  },
+  "menuCompareSplit": "分屏",
+  "@menuCompareSplit": {
+    "description": "A row of the View menu. The two pictures side by side, each in its half."
   },
   "menuComposition": "合成",
   "@menuComposition": {
@@ -5678,6 +5872,10 @@
   "menuDeselectAll": "取消全选",
   "@menuDeselectAll": {
     "description": "Menu item."
+  },
+  "menuDetachAudio": "分离音频",
+  "@menuDetachAudio": {
+    "description": "Menu item, in Layer > Audio and on a layer's right-click menu in the Timeline: put the layer's sound on an audio-only row of its own directly below, and mute the original row."
   },
   "menuDetectBeats": "检测节拍",
   "@menuDetectBeats": {
@@ -5726,6 +5924,14 @@
   "menuFit": "适合",
   "@menuFit": {
     "description": "Menu item."
+  },
+  "menuFlipHorizontally": "水平翻转",
+  "@menuFlipHorizontally": {
+    "description": "Layer ▸ Transform submenu item: mirrors the selected layers left to right."
+  },
+  "menuFlipVertically": "垂直翻转",
+  "@menuFlipVertically": {
+    "description": "Layer ▸ Transform submenu item: mirrors the selected layers top to bottom."
   },
   "menuFlow": "Flow",
   "@menuFlow": {
@@ -5806,6 +6012,30 @@
   "menuMaskAndShapePath": "蒙版和形状路径",
   "@menuMaskAndShapePath": {
     "description": "Menu item."
+  },
+  "menuMaskFeather": "羽化...",
+  "@menuMaskFeather": {
+    "description": "Layer ▸ Mask submenu item: opens a small dialogue asking for the soft edge's width, in layer pixels, for the mask whose row is picked in the Timeline."
+  },
+  "menuMaskOpacity": "不透明度...",
+  "@menuMaskOpacity": {
+    "description": "Layer ▸ Mask submenu item: opens a small dialogue asking how strongly the picked mask gates, 0 to 100."
+  },
+  "menuMatteAlpha": "Alpha 遮罩",
+  "@menuMatteAlpha": {
+    "description": "Layer ▸ Matte submenu item: gate the selected layers with the transparency of the layer above each of them."
+  },
+  "menuMatteAlphaInverted": "Alpha 反转遮罩",
+  "@menuMatteAlphaInverted": {
+    "description": "Layer ▸ Matte submenu item: the same as Alpha matte, with the gate turned inside out."
+  },
+  "menuMatteLuma": "亮度遮罩",
+  "@menuMatteLuma": {
+    "description": "Layer ▸ Matte submenu item: gate the selected layers with the brightness of the layer above each of them."
+  },
+  "menuMatteLumaInverted": "亮度反转遮罩",
+  "@menuMatteLumaInverted": {
+    "description": "Layer ▸ Matte submenu item: the same as Luma matte, with the gate turned inside out."
   },
   "menuNew": "新建",
   "@menuNew": {
@@ -5923,6 +6153,16 @@
   "@menuSelectAll": {
     "description": "Menu item."
   },
+  "menuSeparateAxesOf": "分离 {property} 轴",
+  "@menuSeparateAxesOf": {
+    "description": "Layer ▸ Transform and Animation ▸ Separate dimensions submenu item: gives a transform property's axes a row and a curve each. {property} is the property's own name — Anchor point, Position or Scale.",
+    "placeholders": {
+      "property": {
+        "type": "String",
+        "example": "Position"
+      }
+    }
+  },
   "menuSeparateDimensions": "分离维度",
   "@menuSeparateDimensions": {
     "description": "Menu item."
@@ -6006,6 +6246,10 @@
   "menuView": "视图",
   "@menuView": {
     "description": "Menu item."
+  },
+  "menuViewLayout": "视图布局",
+  "@menuViewLayout": {
+    "description": "A submenu of the View menu: how many views the Viewer panel shows."
   },
   "menuWindow": "窗口",
   "@menuWindow": {
@@ -6462,7 +6706,7 @@
   "@pasteSequenceShape": {
     "description": "Context-menu item: apply a copied speed curve."
   },
-  "planarPartial": "已跟踪 {frames} 帧，共 {total} 帧 — 无法继续跟踪该平面",
+  "planarPartial": "已跟踪 {frames} 帧，共 {total} 帧 — 无法继续跟踪",
   "@planarPartial": {
     "description": "Planar track status line when the track stopped part-way through the clip: the first {frames} frames carry the surface and the rest of the clip does not. Both numbers are frame counts.",
     "placeholders": {
@@ -6483,11 +6727,11 @@
       }
     }
   },
-  "planarSolvingSurface": "正在计算平面",
+  "planarSolvingSurface": "正在计算运动",
   "@planarSolvingSurface": {
     "description": "Planar track status line in Effect controls: the frames are in and the surface's four corners are being computed."
   },
-  "planarTracked": "已跟踪 {frames} 帧的平面",
+  "planarTracked": "已跟踪 {frames} 帧",
   "@planarTracked": {
     "description": "Planar track status line when a whole track is in hand. {frames} is a frame count.",
     "placeholders": {
@@ -6605,10 +6849,6 @@
         "type": "String"
       }
     }
-  },
-  "projectColourNoConfig": "没有配置：正在使用 Lumit 自己的颜色处理。",
-  "@projectColourNoConfig": {
-    "description": "Project settings, Colour group: the line under the configuration row when the project names no configuration file, which is every project until somebody chooses one."
   },
   "projectColourNotInForce": "未生效：{reason}。正在改用内置的颜色处理。",
   "@projectColourNotInForce": {
@@ -6739,7 +6979,7 @@
       }
     }
   },
-  "ramTier": "RAM",
+  "ramTier": "运行内存",
   "@ramTier": {
     "description": "Bottom strip: the name of the memory cache tier, beside VRAM and Disk. An abbreviation most languages keep."
   },
@@ -6770,6 +7010,10 @@
   "relinkEllipsis": "重新链接…",
   "@relinkEllipsis": {
     "description": "Same as relink, with the ellipsis that means a file dialogue opens."
+  },
+  "reloadIcons": "重新加载图标",
+  "@reloadIcons": {
+    "description": "Button in the custom icons row: reads the folder again so new or changed SVG files show up."
   },
   "removeEffect": "移除效果",
   "@removeEffect": {
@@ -6910,10 +7154,6 @@
   "@searchSettings": {
     "description": "Placeholder in the search box in the Settings window's title strip; it hides the setting rows that do not match."
   },
-  "searchShortcuts": "搜索快捷键",
-  "@searchShortcuts": {
-    "description": "Placeholder in the keymap table's search box."
-  },
   "selectACompositionFirst": "请在项目面板中选择一个合成。",
   "@selectACompositionFirst": {
     "description": "Empty-state line in a panel that needs a composition before it can show anything."
@@ -6986,10 +7226,6 @@
   "@settingsAutosaveKeep": {
     "description": "Settings window, Autosave: the name of the row whose number is how many rotating copies are kept beside the project before the oldest is discarded."
   },
-  "settingsAutosaveOff": "自动保存已关闭 — 只有崩溃日志在保护未保存的工作。",
-  "@settingsAutosaveOff": {
-    "description": "Settings window, Autosave: the line under the interval row when the interval is zero. Zero is a real choice, not an error, so this reports it calmly. The crash journal is Lumit's running record of edits, which recovery replays."
-  },
   "settingsBudget": "容量上限",
   "@settingsBudget": {
     "description": "Settings window: the name of a row setting how much a cache may hold."
@@ -7002,16 +7238,16 @@
   "@settingsChromeLabels": {
     "description": "Settings row title, on the Appearance page's Interface section. Chooses whether buttons, tabs and toggles show their word or the icon that stands for it."
   },
+  "settingsColourDepth": "色彩深度",
+  "@settingsColourDepth": {
+    "description": "Project settings: the name of the setting choosing how many bits a channel the compositor works in."
+  },
   "settingsColourScheme": "配色方案",
   "@settingsColourScheme": {
     "description": "Settings window: the name of one setting."
   },
   "settingsCompact": "紧凑",
   "@settingsCompact": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsCorners": "边角",
-  "@settingsCorners": {
     "description": "Settings window: the name of one setting."
   },
   "settingsCustomColours": "自定义颜色",
@@ -7057,6 +7293,22 @@
   "settingsFramesWaitingToBeWritten": "等待写入的帧",
   "@settingsFramesWaitingToBeWritten": {
     "description": "Settings window: the name of one setting."
+  },
+  "settingsFullResolutionWhileDragging": "在拖拽时以全分辨率渲染",
+  "@settingsFullResolutionWhileDragging": {
+    "description": "Settings window: the name of the setting that renders a value drag at the Viewer's own resolution instead of the reduced one, so previews stay sharp and get slower."
+  },
+  "settingsGovernorGraphicsMemory": "显存",
+  "@settingsGovernorGraphicsMemory": {
+    "description": "Settings, resource governor: the name of the row reporting memory reserved on the graphics card."
+  },
+  "settingsGovernorSevere": "接近满载——暂停缓存填充",
+  "@settingsGovernorSevere": {
+    "description": "Settings, resource governor: the state of a memory tier close enough to its ceiling that the renderer has stopped adding to its caches."
+  },
+  "settingsGovernorTight": "资源紧张",
+  "@settingsGovernorTight": {
+    "description": "Settings, resource governor: the state of a memory tier that is approaching its ceiling."
   },
   "settingsGraphicsMemoryReserved": "已保留的显存",
   "@settingsGraphicsMemoryReserved": {
@@ -7118,10 +7370,6 @@
   "@settingsGroupRendering": {
     "description": "Project settings: heading over a group of rows."
   },
-  "settingsGroupScopes": "示波器",
-  "@settingsGroupScopes": {
-    "description": "Settings window: heading over a group of rows."
-  },
   "settingsGroupSpareCopies": "备份副本",
   "@settingsGroupSpareCopies": {
     "description": "Settings window, Autosave: the heading over the settings that decide how often a spare copy of the project is written and how many are kept."
@@ -7150,215 +7398,21 @@
   "@settingsHeldByTheGraphicsDriver": {
     "description": "Settings window: the name of one setting."
   },
-  "settingsHelpAntiAliasing": "平滑旋转和缩放后图层的边缘。保存在项目中，预览与导出使用相同设置。",
-  "@settingsHelpAntiAliasing": {
-    "description": "Project settings: the sentence under Anti-aliasing."
-  },
-  "settingsHelpAntiAliasingInUse": "此显卡不提供上面的设置，因此 Lumit 使用它所支持的最高档。项目未被更改。",
-  "@settingsHelpAntiAliasingInUse": {
-    "description": "Project settings: the sentence under 'In use on this machine'."
-  },
-  "settingsHelpAutomaticUpdates": "在 Lumit 启动时查找新版本，每天最多一次。在你要求之前不会下载任何内容。",
-  "@settingsHelpAutomaticUpdates": {
-    "description": "Settings window: the sentence under the settingsAutomaticUpdates setting."
-  },
-  "settingsHelpCacheBudget": "已完成的帧最多可占用多少内存，本机共有 {total}。",
-  "@settingsHelpCacheBudget": {
-    "description": "Settings window: the sentence under the memory cache Budget. {total} is a size, e.g. '32 GB'.",
-    "placeholders": {
-      "total": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpCacheInUse": "{requests} 帧中有 {hits} 帧来自缓存；{decodes} 帧经过解码。",
-  "@settingsHelpCacheInUse": {
-    "description": "Settings window: the sentence under the memory cache's In use row. All three are whole numbers.",
-    "placeholders": {
-      "hits": {
-        "type": "String"
-      },
-      "requests": {
-        "type": "String"
-      },
-      "decodes": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpChromeLabels": "按钮、标签页和开关显示文字还是代表它的图标。无论你选择哪种，悬停提示始终显示文字，而你自己输入的内容永远不会变成图标。",
-  "@settingsHelpChromeLabels": {
-    "description": "Explanatory line under the Chrome labels row in Settings."
-  },
-  "settingsHelpColourScheme": "每个面板取色的调色板。",
-  "@settingsHelpColourScheme": {
-    "description": "Settings window: the sentence under the settingsColourScheme setting."
-  },
-  "settingsHelpCompact": "行距略微收紧，屏幕上可以容纳更多图层和参数。其他一切不变。",
-  "@settingsHelpCompact": {
-    "description": "Settings window: the sentence under the settingsCompact setting."
-  },
-  "settingsHelpCorners": "控件和面板的圆角程度。",
-  "@settingsHelpCorners": {
-    "description": "Settings window: the sentence under the settingsCorners setting."
-  },
-  "settingsHelpCustomColours": "以此方案为起点，自行设置任意颜色。",
-  "@settingsHelpCustomColours": {
-    "description": "Settings window: the sentence under the Custom colours setting, when no custom theme exists yet."
-  },
-  "settingsHelpDiskBudget": "存放的帧最多可占用多少磁盘空间。它们在关闭 Lumit 后仍然保留，因此重新打开项目时缓存仍在。",
-  "@settingsHelpDiskBudget": {
-    "description": "Settings window: the sentence under the disk cache Budget."
-  },
-  "settingsHelpEditingTheme": "编辑 {theme} 的颜色。",
-  "@settingsHelpEditingTheme": {
-    "description": "Settings window: the sentence under Custom colours when a custom theme is in use. {theme} is the theme's name, which the user chose.",
-    "placeholders": {
-      "theme": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpFramesWaitingToBeWritten": "写入磁盘缓存的后台队列，上限为八帧。",
-  "@settingsHelpFramesWaitingToBeWritten": {
-    "description": "Settings window: the sentence under the settingsFramesWaitingToBeWritten setting."
-  },
-  "settingsHelpGraphicsMemoryReserved": "驱动为此从系统中取用了多少，其中又有多少正在使用。两者之差是 Lumit 已释放而驱动尚未交还的内存。",
-  "@settingsHelpGraphicsMemoryReserved": {
-    "description": "Settings window: the sentence under the settingsGraphicsMemoryReserved setting."
-  },
-  "settingsHelpHeldByTheGraphicsDriver": "驱动仍为 Lumit 保留的图像和缓冲区。少量是正常的 — 显卡上的帧，以及正在生成的帧。成千上万则意味着引擎用完的图像从未被销毁，而在 Mac 上这部分内存包含在上面的总量之内。",
-  "@settingsHelpHeldByTheGraphicsDriver": {
-    "description": "Settings window: the sentence under the settingsHeldByTheGraphicsDriver setting."
-  },
-  "settingsHelpInUse": "保存在显卡上、无需合成即可显示的帧。",
-  "@settingsHelpInUse": {
-    "description": "Settings window: the sentence under the settingsInUse setting."
-  },
-  "settingsHelpInUse2": "磁盘上的帧，只需一次提升即可播放。",
-  "@settingsHelpInUse2": {
-    "description": "Settings window: the sentence under the settingsInUse setting."
-  },
-  "settingsHelpInterfaceScale": "每个面板的绘制大小，适配高密度或较远的屏幕。",
-  "@settingsHelpInterfaceScale": {
-    "description": "Settings window: the sentence under the settingsInterfaceScale setting."
-  },
-  "settingsHelpLanguage": "Lumit 使用的语言。翻译来自志愿者，因此新语言起初可能有部分内容仍是英文。",
-  "@settingsHelpLanguage": {
-    "description": "Settings window: the sentence under the Language setting."
-  },
-  "settingsHelpMotion": "控件变化时的动画程度。",
-  "@settingsHelpMotion": {
-    "description": "Settings window: the sentence under the settingsMotion setting."
-  },
-  "settingsHelpNotHeldByAnyCache": "进程的占用，减去上面每一项存储 — 在本机上这包括显卡上的帧。这里数值大并不是需要缩小的缓存：它是本窗口没有计入的内存，值得报告。",
-  "@settingsHelpNotHeldByAnyCache": {
-    "description": "Settings window: the sentence under the settingsNotHeldByAnyCache setting."
-  },
   "settingsHelpNowhereToPark": "无处存放：本机没有 Lumit 可以写入的文件夹。",
   "@settingsHelpNowhereToPark": {
     "description": "Settings window: shown where the disk cache folder would be, when there is none."
   },
-  "settingsHelpOpenMediaDecoders": "每个正在播放的素材项目一个。每个解码器都持有自己的缓冲区，不受此处任何容量上限限制。",
-  "@settingsHelpOpenMediaDecoders": {
-    "description": "Settings window: the sentence under the settingsOpenMediaDecoders setting."
+  "settingsIconSet": "图标集",
+  "@settingsIconSet": {
+    "description": "Settings window, Appearance: the dropdown choosing how heavily the icons are drawn."
   },
-  "settingsHelpPanelLayout": "将每个面板恢复到默认位置和大小。",
-  "@settingsHelpPanelLayout": {
-    "description": "Settings window: the sentence under the settingsPanelLayout setting."
-  },
-  "settingsHelpPasteLayersAtTheirOriginal": "粘贴的图层保留复制时的时间码，而不是从时间指示器开始。适合在第二个合成中重建同一时刻；日常的“放到这里”请关闭它。无论如何设置，效果始终以其第一个关键帧对齐时间指示器粘贴。",
-  "@settingsHelpPasteLayersAtTheirOriginal": {
-    "description": "Settings window: the sentence under the settingsPasteLayersAtTheirOriginal setting."
-  },
-  "settingsHelpPlayheadStaysWherePlaybackStopped": "播放停止时把时间指示器留在屏幕上的那一帧，而不是放回开始播放的位置。无论如何设置，播放时拖动标尺始终会停止播放并跟随指针。",
-  "@settingsHelpPlayheadStaysWherePlaybackStopped": {
-    "description": "Settings window: the sentence under the settingsPlayheadStaysWherePlaybackStopped setting."
-  },
-  "settingsHelpQualityTier": "实时控制器最终选定的档位。",
-  "@settingsHelpQualityTier": {
-    "description": "Settings window: the sentence under the settingsQualityTier setting."
-  },
-  "settingsHelpRetimeOpensToVelocity": "Retime 图表打开时显示播放速度百分比 — 每个关键帧一个点，向上拖动加速，低于零则倒放 — 而不是显示正在播放的是源素材的哪一刻。",
-  "@settingsHelpRetimeOpensToVelocity": {
-    "description": "Settings window: the sentence under the settingsRetimeOpensToVelocity setting."
-  },
-  "settingsHelpRetimeValuesInSeconds": "Retime 行以秒数显示正在播放的是源素材的哪一刻，而不是与编辑器中其他时间一样的 HH:MM:SS:FF 时间码。秒可以表示两帧之间的位置，时间码不能。",
-  "@settingsHelpRetimeValuesInSeconds": {
-    "description": "Settings window: the sentence under the settingsRetimeValuesInSeconds setting."
-  },
-  "settingsHelpScopeEverywhere": "每个尚未单独设置的项目。",
-  "@settingsHelpScopeEverywhere": {
-    "description": "Settings window: the sentence under Applies to, when the setting is this machine's default."
-  },
-  "settingsHelpScopeThisProject": "保存在此项目中，因此会随项目副本一起携带。",
-  "@settingsHelpScopeThisProject": {
-    "description": "Settings window: the sentence under Applies to, when the setting is stored in the project."
-  },
-  "settingsHelpSmoothThePictureWhenZoomed": "关闭时，放大超过 1:1 的像素仍是方块，这正是放大想看到的。开启时，画面在像素之间混合 — 更柔和，在为构图而非检查而放大时更舒服。",
-  "@settingsHelpSmoothThePictureWhenZoomed": {
-    "description": "Settings window: the sentence under the settingsSmoothThePictureWhenZoomed setting."
-  },
-  "settingsHelpShowTheToneMapButton": "在查看器栏上放置色调映射按钮。色调映射把比屏幕所能显示更亮的画面折回可显示的范围，让你在工作时也能看到那部分细节 — 它只是一种查看方式，永远不会进入导出。除非你要求，否则关闭。",
-  "@settingsHelpShowTheToneMapButton": {
-    "description": "Settings window: the sentence under the settingsShowTheToneMapButton setting. \"Up there\" means detail brighter than the display can show."
-  },
-  "settingsHelpSurroundTakesThemeColours": "关闭时，画面周围是中性灰 — 调色不能在带色调的环境中判断。开启时，它与界面其余部分一致。",
-  "@settingsHelpSurroundTakesThemeColours": {
-    "description": "Settings window: the sentence under the settingsSurroundTakesThemeColours setting."
-  },
-  "settingsHelpThisProcess": "系统所报告的 Lumit 占用总量 — 也就是活动监视器和任务管理器显示的数字。",
-  "@settingsHelpThisProcess": {
-    "description": "Settings window: the sentence under the settingsThisProcess setting."
-  },
-  "settingsHelpTransformInEffectControls": "在图层的效果之上重复显示它的变换行。展开图层时，时间线中已经会显示它们。",
-  "@settingsHelpTransformInEffectControls": {
-    "description": "Settings window: the sentence under the settingsTransformInEffectControls setting."
-  },
-  "settingsHelpShapeEasesInAPopup": "图表编辑器的缓动按钮会在一个浮动小窗中打开形状编辑器，而不是在缓动面板中。点击窗外它就会关闭 — 而选择其他关键帧就是一次窗外点击 — 因此一次绘制的形状只能用于打开时选中的那些关键帧。开启它可以节省屏幕空间。",
-  "@settingsHelpShapeEasesInAPopup": {
-    "description": "Settings window: the sentence under the settingsShapeEasesInAPopup setting."
-  },
-  "settingsHelpUseThemeColours": "关闭时，无论界面如何，示波器都在标准的近黑刻度上读数 — 信号本就该这样测量。开启时，它改用主题的颜色。",
-  "@settingsHelpUseThemeColours": {
-    "description": "Settings window: the sentence under the settingsUseThemeColours setting."
-  },
-  "settingsHelpVideoArrivesAsASequence": "添加到合成中的视频和图像序列会成为序列图层，可以在自己的行上剪成片段。静态图像永远不会被包装。",
-  "@settingsHelpVideoArrivesAsASequence": {
-    "description": "Settings window: the sentence under the settingsVideoArrivesAsASequence setting."
-  },
-  "settingsHelpVramBudget": "已完成的帧最多可占用多少显存，显卡共有 {total}。",
-  "@settingsHelpVramBudget": {
-    "description": "Settings window: the sentence under the graphics-card cache Budget. {total} is a size.",
-    "placeholders": {
-      "total": {
-        "type": "String"
-      }
-    }
-  },
-  "settingsHelpWaveformsRiseFromTheBottom": "波形立在行的底部，而不是以静音为中心，每一列按声音向两侧摆动的幅度向上延伸。居中波形的一半是另一半的镜像，因此这样把整行都用在有意义的那一半上 — 在窄行中很有用。对单条波形和频率分层同样适用。",
-  "@settingsHelpWaveformsRiseFromTheBottom": {
-    "description": "Settings window: the sentence under the settingsWaveformsRiseFromTheBottom setting."
-  },
-  "settingsHelpWaveformsShowTheFrequencyStack": "图层的波形绘制为三条堆叠的波形 — 低频、中频和高频 — 而不是一条。无论哪种乐器在演奏，响亮的段落在单条波形上都是一整块；分层则把底鼓和踩镲分开显示，便于把剪辑点对准其中之一。关闭它可得到一条普通波形。",
-  "@settingsHelpWaveformsShowTheFrequencyStack": {
-    "description": "Settings window: the sentence under the settingsWaveformsShowTheFrequencyStack setting."
-  },
-  "settingsHelpWhenTheMachineCannotKeep": "自适应会保持时间并柔化画面；每一帧则保持画面并花费所需的时间。",
-  "@settingsHelpWhenTheMachineCannotKeep": {
-    "description": "Settings window: the sentence under the settingsWhenTheMachineCannotKeep setting."
-  },
-  "settingsHelpYourThemes": "复制一个以便在不影响原件的情况下修改，或把一个作为文件发给别人。",
-  "@settingsHelpYourThemes": {
-    "description": "Settings window: the sentence under the Your themes heading."
+  "settingsIconsFolder": "自定义图标",
+  "@settingsIconsFolder": {
+    "description": "Settings window, Appearance: the row showing the folder a person's own icon files are read from, with a reload button."
   },
   "settingsInUse": "使用中",
   "@settingsInUse": {
     "description": "Settings window: the name of a row showing how full a cache is."
-  },
-  "settingsInterfaceScale": "界面缩放",
-  "@settingsInterfaceScale": {
-    "description": "Settings window: the name of one setting."
   },
   "settingsKeymapFile": "快捷键映射文件",
   "@settingsKeymapFile": {
@@ -7440,14 +7494,6 @@
   "@settingsPageInterface": {
     "description": "Settings window: name of a page in the sidebar."
   },
-  "settingsPageKeymap": "快捷键映射",
-  "@settingsPageKeymap": {
-    "description": "Settings window: name of a page in the sidebar. A keymap is the whole set of keyboard shortcuts."
-  },
-  "settingsPagePerformance": "性能",
-  "@settingsPagePerformance": {
-    "description": "Settings window: name of a page in the sidebar."
-  },
   "settingsPagePreviewAndCache": "预览与缓存",
   "@settingsPagePreviewAndCache": {
     "description": "Settings window: name of a page in the sidebar — playback quality and the three frame caches."
@@ -7516,10 +7562,6 @@
   "@settingsSurround": {
     "description": "Settings window, Appearance: the name of the row choosing the colour of the area around the picture in the Viewer."
   },
-  "settingsSurroundTakesThemeColours": "画面周围使用主题颜色",
-  "@settingsSurroundTakesThemeColours": {
-    "description": "Settings window: the name of one setting."
-  },
   "settingsThisProcess": "此进程",
   "@settingsThisProcess": {
     "description": "Settings window: the name of one setting."
@@ -7532,16 +7574,16 @@
   "@settingsTitle": {
     "description": "Title of the settings window."
   },
+  "settingsToolBarPosition": "工具栏位置",
+  "@settingsToolBarPosition": {
+    "description": "Settings window: the name of the row choosing whether the toolbar is a strip across the top or a rail down the left."
+  },
   "settingsTooltips": "工具提示",
   "@settingsTooltips": {
     "description": "Settings window: the name of one setting."
   },
   "settingsTransformInEffectControls": "在效果控件中显示变换",
   "@settingsTransformInEffectControls": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsUseThemeColours": "使用主题颜色",
-  "@settingsUseThemeColours": {
     "description": "Settings window: the name of one setting."
   },
   "settingsUsedMbIn": "{megabytes} MB，分布在 {entries} 帧中",
@@ -7568,14 +7610,6 @@
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."
   },
-  "settingsWaveformFrequencyStack": "波形频率分层",
-  "@settingsWaveformFrequencyStack": {
-    "description": "Settings window: the name of one setting."
-  },
-  "settingsWaveformsFromBottom": "波形从底部开始",
-  "@settingsWaveformsFromBottom": {
-    "description": "Settings window: the name of one setting."
-  },
   "settingsWelcomeOnLaunch": "启动时显示欢迎屏幕",
   "@settingsWelcomeOnLaunch": {
     "description": "Settings window, General page: the name of the switch that decides whether Lumit opens on the welcome screen. Off means it opens straight into the editor."
@@ -7599,6 +7633,14 @@
   "shaderEditorTitle": "编辑着色器",
   "@shaderEditorTitle": {
     "description": "Title of the window that opens from a Custom shader effect's 'Edit shader…' button, where the user types the shader program. Shown capitalised as a kicker in the window's title strip."
+  },
+  "shaderNodeDot": "点积",
+  "@shaderNodeDot": {
+    "description": "Name of the 'Dot product' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect). Also a row of the box search that adds one."
+  },
+  "shaderNodeNormalize": "归一化",
+  "@shaderNodeNormalize": {
+    "description": "Name of the 'Normalise' box in a Custom shader's inner node graph (the Graph panel, entered by double-clicking the effect) — scales a vector to length one. Also a row of the box search that adds one."
   },
   "shaderNodeUv": "UV",
   "@shaderNodeUv": {
@@ -7796,6 +7838,18 @@
   "@splashSubtitle": {
     "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
   },
+  "stageBuild": "构建",
+  "@stageBuild": {
+    "description": "Name of the render's draw-list building stage, shown in the render-time column's header beside the frame total and in its tooltip breakdown. One short lowercase word."
+  },
+  "stageComposite": "合成",
+  "@stageComposite": {
+    "description": "Name of the render's compositing stage (drawing the layers on the graphics card), shown in the render-time column header's tooltip breakdown. One short lowercase word."
+  },
+  "stageDecode": "解码",
+  "@stageDecode": {
+    "description": "Name of the render's decoding stage (reading source frames off disk), shown in the render-time column's header beside the frame total and in its tooltip breakdown. One short lowercase word."
+  },
   "stretchAnchor": "入点保持不变；图层的末端移动。",
   "@stretchAnchor": {
     "description": "Stretch dialogue: a note under the wells saying which end of the layer stays put when it is stretched."
@@ -7844,10 +7898,6 @@
   "@switchAudible": {
     "description": "Layer switch: the layer's sound plays."
   },
-  "switchEffects": "效果",
-  "@switchEffects": {
-    "description": "Layer switch: whether this layer's effects are applied."
-  },
   "switchEffectsBypassed": "已跳过效果",
   "@switchEffectsBypassed": {
     "description": "Layer switch, when the effects are being skipped."
@@ -7855,10 +7905,6 @@
   "switchEffectsOn": "效果已开启",
   "@switchEffectsOn": {
     "description": "Layer switch, when the effects are being applied."
-  },
-  "switchFlow": "Flow",
-  "@switchFlow": {
-    "description": "Layer switch: collapse a pre-composition's transformations. Flow is a Lumit term."
   },
   "switchGuide": "引导层",
   "@switchGuide": {
@@ -8193,6 +8239,15 @@
   "@tipBrushSize": {
     "description": "Tooltip. Keep it to the control's name — one or two words."
   },
+  "tipCacheDisk": "{path}",
+  "@tipCacheDisk": {
+    "description": "Tooltip on the disk cache meter, which is the folder frames are parked in and nothing else. {path} is that folder and is not translated. A tooltip is a name, never more than two words.",
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "tipCacheDiskNone": "无文件夹",
   "@tipCacheDiskNone": {
     "description": "Tooltip on the disk cache meter when the machine offers no cache folder."
@@ -8260,10 +8315,6 @@
   "tipEnable": "启用",
   "@tipEnable": {
     "description": "Tooltip on the checkbox that switches an effect on. One or two words."
-  },
-  "tipExportAfterV1": "v1 之后",
-  "@tipExportAfterV1": {
-    "description": "Export dialog: why the Colour section's colour-management row is disabled. Shown on hover."
   },
   "tipExportColourManagedBy": "项目设置",
   "@tipExportColourManagedBy": {
@@ -8371,14 +8422,6 @@
   "@tipMissingOnly": {
     "description": "Tooltip on the Project panel's filter when it is off. One or two words."
   },
-  "tipMoreInGroup": "长按",
-  "@tipMoreInGroup": {
-    "description": "Tooltip suffix on a toolbar button that hides other tools behind a press-and-hold. One or two words."
-  },
-  "tipMovePanel": "移动面板",
-  "@tipMovePanel": {
-    "description": "Tooltip on a panel's drag handle. One or two words."
-  },
   "tipNotBuiltYet": "尚未实现",
   "@tipNotBuiltYet": {
     "description": "Tooltip suffix on a tool that can be selected but does nothing yet. One or two words."
@@ -8390,10 +8433,6 @@
   "tipOutlineWidth": "轮廓宽度",
   "@tipOutlineWidth": {
     "description": "Tooltip. Keep it to the control's name — one or two words."
-  },
-  "tipPanelLayout": "面板布局",
-  "@tipPanelLayout": {
-    "description": "Tooltip on the workspace preset buttons. One or two words."
   },
   "tipParent": "父级",
   "@tipParent": {
@@ -8432,14 +8471,6 @@
   "tipPlayheadTime": "时间指示器时间",
   "@tipPlayheadTime": {
     "description": "Tooltip on the Timeline's time readout. One or two words."
-  },
-  "tipPreviewResolution": "预览分辨率",
-  "@tipPreviewResolution": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown (Full, Half, Quarter). One or two words."
-  },
-  "tipPreviewResolutionAdaptive": "由自适应选择",
-  "@tipPreviewResolutionAdaptive": {
-    "description": "Tooltip on the Viewer bar's resolution dropdown while it is disabled because adaptive playback picks the resolution automatically."
   },
   "tipProperties": "属性",
   "@tipProperties": {
@@ -8504,6 +8535,14 @@
   "tipSnapOn": "吸附已开启",
   "@tipSnapOn": {
     "description": "Tooltip on the magnet: dragged keyframes land on whole frames. One or two words."
+  },
+  "tipSoundMixFold": "隐藏图层",
+  "@tipSoundMixFold": {
+    "description": "Tooltip on the Sound mix row's twirl while the audio layers are shown in the stack: pressing it hides them behind the row again. Short."
+  },
+  "tipSoundMixUnfold": "显示图层",
+  "@tipSoundMixUnfold": {
+    "description": "Tooltip on the Sound mix row's twirl while the audio layers are folded behind it: pressing it shows them in the stack. Short."
   },
   "tipSpeedGraph": "速度图表",
   "@tipSpeedGraph": {
@@ -8620,6 +8659,10 @@
   "@tipViewerAtEffect": {
     "description": "Tooltip on the Viewer's 'at effect' chip: clicking it shows the composition with that layer's effects stopping there, and clicking again returns the finished picture. One or two words."
   },
+  "tipViewerCacheReady": "缓存就绪",
+  "@tipViewerCacheReady": {
+    "description": "Tooltip on the Viewer deck's small meter showing how much of the work area is cached. One or two words."
+  },
   "tipViewerChannel": "通道视图",
   "@tipViewerChannel": {
     "description": "Tooltip on the Viewer bar's channel dropdown, which shows a tinted mark and no words, so this is the only name it has. It chooses whether the picture is shown in full colour or as one channel on its own."
@@ -8656,9 +8699,9 @@
   "@tipViewerSnapshotTake": {
     "description": "Tooltip on the Viewer bar's take-snapshot button, which shows a camera icon and no words. It keeps a copy of the picture on screen to compare against later. One or two words."
   },
-  "tipViewerToneMap": "色调映射",
-  "@tipViewerToneMap": {
-    "description": "Tooltip on the Viewer's tone-map toggle, which has an icon and no label, so this names it. Tone mapping rolls off detail brighter than the display can show; it is a preview, which the colour badge beside it says by reading \"Preview only\" while it is on."
+  "tipViewerView": "3D 视图",
+  "@tipViewerView": {
+    "description": "Tooltip on the Viewer bar's view dropdown, which shows a mark and no words, so this is the only name it has. It chooses whether the picture is what the composition's own camera sees or one of the fixed and custom viewpoints used to arrange a 3D scene."
   },
   "tipZoomIn": "放大",
   "@tipZoomIn": {
@@ -9334,6 +9377,10 @@
   "@unitGb": {
     "description": "The gigabyte unit, shown after an amount of memory."
   },
+  "unitInches": "英寸",
+  "@unitInches": {
+    "description": "A unit the camera settings can show its distances in. Lower case."
+  },
   "unitKhz": "kHz",
   "@unitKhz": {
     "description": "Unit beside a sound's sample rate — kilohertz. Most languages keep the SI symbol.",
@@ -9342,6 +9389,10 @@
   "unitMb": "MB",
   "@unitMb": {
     "description": "The megabyte unit, shown after an amount of memory."
+  },
+  "unitMillimetres": "毫米",
+  "@unitMillimetres": {
+    "description": "A unit the camera settings can show its distances in. Lower case."
   },
   "unitMinutes": "分钟",
   "@unitMinutes": {
@@ -9355,9 +9406,29 @@
   "@unitPixels": {
     "description": "A unit, written into the keyframe data that is copied to the clipboard. Lower case."
   },
+  "unitSymbolDb": "分贝",
+  "@unitSymbolDb": {
+    "description": "The unit rider beside a Volume value in the graph editor, decibels. Abbreviated because it sits in a narrow column beside the number.",
+    "type": "text"
+  },
+  "unitSymbolDegrees": "°",
+  "@unitSymbolDegrees": {
+    "description": "The unit rider beside an effect parameter's value when the number is an angle. A symbol, not a word — it sits in a narrow column beside the number.",
+    "type": "text"
+  },
   "unitSymbolFrames": "帧",
   "@unitSymbolFrames": {
     "description": "The unit rider beside an effect parameter's value when the number is a count of frames at the composition's rate. Lower case.",
+    "type": "text"
+  },
+  "unitSymbolMm": "mm",
+  "@unitSymbolMm": {
+    "description": "The millimetre symbol, shown after a focal length or a film size. Most languages keep the SI symbol.",
+    "type": "text"
+  },
+  "unitSymbolPercent": "%",
+  "@unitSymbolPercent": {
+    "description": "The unit rider beside an effect parameter's value when the number is a percentage. A symbol, not a word — it sits in a narrow column beside the number.",
     "type": "text"
   },
   "unitSymbolPx": "px",
@@ -9659,7 +9730,7 @@
   "@viewerColourToneMap": {
     "description": "Entry in the Viewer header's colour-pipeline menu, with a tick beside it when it is on. It folds very bright values back under 1 so they can be seen rather than clipping flat. Preview only, so it never changes an export."
   },
-  "viewerDisplayTransform": "Linear → sRGB",
+  "viewerDisplayTransform": "线性 → sRGB",
   "@viewerDisplayTransform": {
     "description": "Colour-management badge on the Viewer bar: the display transform, written as working space then an arrow then the display's space. \"Linear\" and \"sRGB\" are colour-space names and are not translated."
   },
@@ -9704,11 +9775,51 @@
   "@viewerQualityResolution": {
     "description": "Heading over the first group in the Viewer header's quality menu: how many pixels the engine is asked to make for the preview."
   },
+  "viewerViewActiveCamera": "激活摄像机",
+  "@viewerViewActiveCamera": {
+    "description": "Entry in the Viewer bar's 3D view menu, and the one it starts on: the picture is what the composition's own camera sees, which is also what an export gets."
+  },
+  "viewerViewBack": "后视图",
+  "@viewerViewBack": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from behind. One of six fixed viewpoints named as the sides of a box, the same set every 3D application offers."
+  },
+  "viewerViewBottom": "底视图",
+  "@viewerViewBottom": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from underneath. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewerViewCustom1": "自定义视图 1",
+  "@viewerViewCustom1": {
+    "description": "Entry in the Viewer bar's 3D view menu: the first of three viewpoints that start at an angle and keep wherever the camera tools move them. The number distinguishes the three and nothing else."
+  },
+  "viewerViewCustom2": "自定义视图 2",
+  "@viewerViewCustom2": {
+    "description": "Entry in the Viewer bar's 3D view menu: the second of three viewpoints that start at an angle and keep wherever the camera tools move them."
+  },
+  "viewerViewCustom3": "自定义视图 3",
+  "@viewerViewCustom3": {
+    "description": "Entry in the Viewer bar's 3D view menu: the third of three viewpoints that start at an angle and keep wherever the camera tools move them."
+  },
+  "viewerViewFront": "前视图",
+  "@viewerViewFront": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen square on from the front. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewerViewLeft": "左视图",
+  "@viewerViewLeft": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from its left side. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewerViewRight": "右视图",
+  "@viewerViewRight": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from its right side. One of six fixed viewpoints named as the sides of a box."
+  },
+  "viewerViewTop": "顶视图",
+  "@viewerViewTop": {
+    "description": "Entry in the Viewer bar's 3D view menu: the scene seen from above. One of six fixed viewpoints named as the sides of a box."
+  },
   "volume": "音量",
   "@volume": {
     "description": "Row label: how loud a layer's sound is."
   },
-  "vramTier": "VRAM",
+  "vramTier": "显存",
   "@vramTier": {
     "description": "Bottom strip: the name of the graphics-card cache tier, beside RAM and Disk. An abbreviation most languages keep."
   },

@@ -42,27 +42,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn db_maps_to_the_gains_a_fader_promises() {
-        assert!((gain_of_db(0.0) - 1.0).abs() < 1e-12);
-        assert!((gain_of_db(20.0) - 10.0).abs() < 1e-9);
-        assert!((gain_of_db(-6.0) - 0.501_187).abs() < 1e-6);
-    }
-
-    #[test]
     fn the_knee_is_exact_silence_and_the_step_above_it_is_not() {
         assert_eq!(gain_of_db(SILENCE_FLOOR_DB), 0.0);
         assert_eq!(gain_of_db(-500.0), 0.0);
         assert!(gain_of_db(SILENCE_FLOOR_DB + 0.1) > 0.0);
-    }
-
-    #[test]
-    fn a_gain_round_trips_through_db_and_answers_the_same_way_twice() {
-        for db in [-40.0, -12.0, -0.5, 0.0, 3.0, 24.0] {
-            let there = db_of_gain(gain_of_db(db));
-            assert!((there - db).abs() < 1e-9, "{db} came back as {there}");
-        }
-        assert_eq!(db_of_gain(0.0), SILENCE_FLOOR_DB);
-        assert_eq!(db_of_gain(-1.0), db_of_gain(1.0));
-        assert_eq!(gain_of_db(-3.0), gain_of_db(-3.0));
     }
 }

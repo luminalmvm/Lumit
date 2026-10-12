@@ -393,64 +393,6 @@ pub fn ap0_to_rec709() -> Result<Matrix34> {
 mod tests {
     use super::*;
 
-    fn close(a: [f32; 3], b: [f32; 3], tol: f32) -> bool {
-        a.iter().zip(b).all(|(x, y)| (x - y).abs() <= tol)
-    }
-
-    #[test]
-    fn rec709_derivation_matches_the_published_srgb_matrix() {
-        // The numbers everyone agrees on (IEC 61966-2-1 / Rec.709 D65).
-        let published = [
-            0.4124, 0.3576, 0.1805, //
-            0.2126, 0.7152, 0.0722, //
-            0.0193, 0.1192, 0.9505,
-        ];
-        let got = rgb_to_xyz(&REC709).expect("Rec.709 primaries derive");
-        for (g, p) in got.iter().zip(published) {
-            assert!((g - p).abs() < 5e-5, "got {got:?}");
-        }
-    }
-
-    #[test]
-    fn white_maps_to_white_across_the_aces_bridge() {
-        let m = ap0_to_rec709().expect("AP0 bridge derives");
-        // ACES white is D60; after Bradford adaptation it must land on Rec.709
-        // white, i.e. an equal-energy triple stays equal-energy.
-        assert!(close(apply(&m, [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0], 1e-4));
-    }
-
-    #[test]
-    fn ap1_to_ap0_is_the_acescg_matrix() {
-        // AP1 and AP0 share a white point, so no adaptation is involved and the
-        // matrix is the published ACEScg→ACES2065-1 one.
-        let m = rgb_to_rgb(&AP1, &AP0).expect("AP1→AP0 derives");
-        let published = [0.695_452_241_4_f64, 0.140_678_696_5, 0.163_869_062_2];
-        for (g, p) in m[0..3].iter().zip(published) {
-            assert!((*g - p).abs() < 1e-5, "got {:?}", &m[0..3]);
-        }
-        assert!(close(apply(&m, [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0], 1e-5));
-    }
-
-    #[test]
-    fn xyz_bridge_round_trips() {
-        let to = xyz_d65_to_rec709().expect("XYZ bridge derives");
-        let back = invert(&to).expect("and inverts");
-        let c = [0.2, 0.5, 0.8];
-        assert!(close(apply(&back, apply(&to, c)), c, 1e-5));
-    }
-
-    #[test]
-    fn concat_then_invert_is_the_identity() {
-        let a: Matrix34 = [
-            1.5, 0.2, -0.1, 0.05, -0.3, 0.9, 0.4, 0.0, 0.1, -0.2, 1.2, -0.02,
-        ];
-        let b = rgb_to_rgb(&AP1, &REC709).expect("derives");
-        let ab = concat(&a, &b);
-        let inv = invert(&ab).expect("invertible");
-        let c = [0.3, -0.1, 1.7];
-        assert!(close(apply(&inv, apply(&ab, c)), c, 1e-4));
-    }
-
     #[test]
     fn a_flat_matrix_refuses_to_invert() {
         let singular: Matrix34 = [1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0];

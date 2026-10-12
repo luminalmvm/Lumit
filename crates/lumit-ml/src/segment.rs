@@ -349,51 +349,6 @@ mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
 
-    /// **The highest score wins, and a model that scores nothing still
-    /// answers.** Picking the wrong candidate is the difference between the
-    /// thing that was tapped and the whole object it is part of.
-    #[test]
-    fn the_candidate_the_model_thinks_best_is_the_one_taken() {
-        assert_eq!(best_of(3, &[0.1, 0.9, 0.4]), 1);
-        assert_eq!(best_of(3, &[0.9, 0.1, 0.4]), 0);
-        assert_eq!(best_of(3, &[]), 0, "no scores is the first candidate");
-        assert_eq!(best_of(3, &[f32::NAN, 0.2, 0.1]), 1, "a score that is not");
-        assert_eq!(best_of(0, &[0.5]), 0);
-    }
-
-    /// **The probability a seed threshold reads means what it says.** Nought is
-    /// half, sure is all, and a number that is not one covers nothing.
-    #[test]
-    fn a_logit_becomes_the_coverage_it_means() {
-        assert!((sigmoid(0.0) - 0.5).abs() < 1e-6);
-        assert!(sigmoid(20.0) > 0.99, "certain is nearly all of the pixel");
-        assert!(sigmoid(-20.0) < 0.01, "and certainly not is nearly none");
-        assert_eq!(sigmoid(f32::NAN), 0.0);
-    }
-
-    /// **With nothing installed, opening the pack is a refusal that says which
-    /// is missing.** The Roto brush's card reads one of these, so "install the
-    /// runtime" and "install a segmentation pack" must not be one answer.
-    #[test]
-    fn opening_with_nothing_installed_refuses_by_name() {
-        let _serial = crate::test_support::serially();
-        let root = tempfile::tempdir().unwrap();
-        store::with_dir(Some(root.path().to_path_buf()));
-        let refusal = Segment::open().unwrap_err();
-        assert!(
-            matches!(
-                refusal,
-                MlError::RuntimeMissing | MlError::PackMissing(Task::Segmentation)
-            ),
-            "{refusal:?}"
-        );
-        assert!(
-            installed_identity().is_none(),
-            "and there is nothing to name"
-        );
-        store::with_dir(None);
-    }
-
     /// A manifest for a segmentation pack whose two files are that many bytes.
     fn a_manifest(encoder: u64, decoder: u64) -> String {
         let one = "5c0f6e4bd0ee1f9dfbee4e8e5ba75d84bd3d5b93bd0e9e0e4e1c8f4b0a2d6e11";

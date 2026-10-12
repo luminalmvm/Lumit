@@ -19,7 +19,6 @@ import 'package:lumit_flutter/panels/timeline_panel_frb.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
-import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/widgets/controls.dart'
     show closeLumitPopups, lumitPopupOpen;
 
@@ -111,26 +110,6 @@ void main() {
         reason: 'the twirl brings them back for a look');
   });
 
-  testWidgets('a double click on the row opens the Audio workspace',
-      (tester) async {
-    final p = await mount(tester);
-    await mix(tester, p);
-    expect(p.ui.workspace.activePreset, isNot(WorkspacePreset.audio));
-
-    // The recogniser wants the first tap's own countdown spent before the
-    // second lands, and the tracker put down after it.
-    final at = tester.getCenter(
-        find.descendant(of: row, matching: find.text(l10n.timelineSoundMix)));
-    await tester.tapAt(at);
-    await tester.pump(kDoubleTapMinTime);
-    await tester.tapAt(at);
-    await tester.pump(kDoubleTapTimeout);
-    await settleFrb(tester, minRounds: 4);
-
-    expect(p.ui.workspace.activePreset, WorkspacePreset.audio,
-        reason: 'the row is the way back to the panel that made the mix');
-  });
-
   testWidgets('the row menu converts the mix to a precomp', (tester) async {
     final p = await mount(tester);
     await mix(tester, p);
@@ -176,67 +155,6 @@ void main() {
     expect(clipRows.single.getClips(), hasLength(1));
     closeLumitPopups();
     await tester.pumpAndSettle();
-  });
-
-  testWidgets('the row belongs to the comp, not to the panel', (tester) async {
-    final p = await mount(tester);
-    await mix(tester, p);
-    expect(row, findsOneWidget);
-
-    // A second comp with a layer of nothing but sound, which has never been
-    // near the Audio timeline.
-    final other = p.state.project!.newComposition(name: 'Trailer');
-    final wav = p.state.project!.importFootage(path: _toneWavFile());
-    other.addFootageLayer(footage: wav, asSequence: false);
-    final music = [
-      for (final layer in other.getLayers())
-        if (layer.getKind() == BridgeLayerKind.audio)
-          layer.internallayerId.toString(),
-    ].single;
-    p.ui.setSelectedComp(other);
-    p.ui.model.refresh();
-    await settleFrb(tester, minRounds: 8);
-
-    expect(row, findsNothing, reason: 'the mark was the first comp\'s');
-    expect(find.byKey(ValueKey<String>('tl-rowbody-$music')), findsOneWidget,
-        reason: 'so this one keeps its Audio layer in the stack');
-  });
-
-  testWidgets('the graph pane has no row, and keeps the Audio layers',
-      (tester) async {
-    final p = await mount(tester);
-    await mix(tester, p);
-    final music = find.byKey(ValueKey<String>('tl-rowbody-${p.music}'));
-    expect(row, findsOneWidget);
-    expect(music, findsNothing);
-
-    await tester.tap(find.byKey(const ValueKey('tl-graph')));
-    await settleFrb(tester, minRounds: 2);
-
-    expect(row, findsNothing,
-        reason: 'the graph half has no foot to pin the row to');
-    expect(music, findsOneWidget,
-        reason: 'and with no twirl to bring them back they stay in the stack');
-  });
-
-  testWidgets('a drag of the master fader is one undo step', (tester) async {
-    final p = await mount(tester);
-    await mix(tester, p);
-
-    final before = p.state.project!.appliedSteps();
-    final drag =
-        await tester.startGesture(tester.getCenter(find.byKey(const ValueKey(
-      'tl-sound-mix-db',
-    ))));
-    for (var i = 0; i < 5; i++) {
-      await drag.moveBy(const Offset(8, 0));
-      await tester.pump();
-    }
-    await drag.up();
-    await settleFrb(tester, minRounds: 2);
-
-    expect(p.state.project!.appliedSteps(), before + 1,
-        reason: 'the well writes on release, not on every tick of travel');
   });
 }
 

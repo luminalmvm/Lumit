@@ -84,6 +84,8 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
                 path: None,
                 path_offset: lumit_core::anim::Property::zero(),
                 animators: Vec::new(),
+                style: Default::default(),
+                paragraph: Default::default(),
                 extra: serde_json::Map::new(),
             },
         },
@@ -197,7 +199,7 @@ pub fn build(media: &RefMedia) -> Result<(Document, Uuid), String> {
 /// never hit across runs, and two measurements would not be of the same
 /// composition. FNV-1a over the name is stable for as long as the names are,
 /// and the names are what §1 pins.
-fn id(name: &str) -> Uuid {
+pub(crate) fn id(name: &str) -> Uuid {
     const OFFSET: u128 = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58d;
     const PRIME: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013b;
     let mut h = OFFSET;
@@ -210,7 +212,7 @@ fn id(name: &str) -> Uuid {
 /// A rational, falling back to zero rather than panicking. Every call site
 /// passes a literal non-zero denominator, so the fallback is unreachable — it
 /// exists because engine crates do not unwrap (docs/14 §4).
-fn rat(num: i64, den: i64) -> Rational {
+pub(crate) fn rat(num: i64, den: i64) -> Rational {
     Rational::new(num, den).unwrap_or(Rational::ZERO)
 }
 
@@ -220,7 +222,7 @@ fn secs(n: i64) -> Rational {
 }
 
 /// Register a footage item and return its id.
-fn add_footage(doc: &mut Document, name: &str, path: &Path) -> Uuid {
+pub(crate) fn add_footage(doc: &mut Document, name: &str, path: &Path) -> Uuid {
     let item = id(name);
     doc.items.push(ProjectItem::Footage(FootageItem {
         id: item,
@@ -234,13 +236,14 @@ fn add_footage(doc: &mut Document, name: &str, path: &Path) -> Uuid {
         sequence: None,
         extra: serde_json::Map::new(),
         colour_space: None,
+        source_layer: None,
     }));
     item
 }
 
 /// A layer of `kind` running from the comp's start for `span`, everything else
 /// left at its default.
-fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
+pub(crate) fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
     Layer {
         id: id(name),
         name: name.into(),
@@ -256,6 +259,7 @@ fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         volume_db: Property::zero(),
         pan: Property::zero(),
         audio_only: false,
+        audio_streams: Default::default(),
         adjustment: false,
         retime: None,
         interpolation: Interpolation::default(),

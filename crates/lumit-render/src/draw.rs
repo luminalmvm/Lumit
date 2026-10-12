@@ -75,6 +75,11 @@ pub struct MatteDraw {
     /// not footage, one nobody has assigned, and a Precomp matte, whose layers
     /// were each interpreted as themselves when the nested comp was realised.
     pub colour_space: Option<String>,
+    /// The plans of the matte source's own Node graph effects, 1:1 with the
+    /// `node_graph` ops in `fx`, as [`DofInputDraw::graph_fx`] carries a
+    /// referenced layer's. Empty unless its stack is folded in and applies a
+    /// graph.
+    pub graph_fx: Vec<GraphDraw>,
 }
 
 /// One Roto brush's matte for one frame, as the draw carries it: the
@@ -160,6 +165,27 @@ pub struct DofInputDraw {
     /// the space its footage item was tagged with rather than the built-in
     /// assumption. `None` for anything that is not tagged footage.
     pub colour_space: Option<String>,
+    /// The referenced layer's own width and height, px at composition size.
+    /// The picture is stretched over the consuming layer's raster on its way
+    /// in, so this is the only place its shape survives.
+    pub natural: [f32; 2],
+    /// The plans of the referenced layer's own Node graph effects, 1:1 with
+    /// the `node_graph` ops in `fx` exactly as [`CompLayerDraw::graph_fx`] is
+    /// with a layer's own. Empty unless its stack is folded in and applies a
+    /// graph.
+    pub graph_fx: Vec<GraphDraw>,
+}
+
+impl LayerInputDraw {
+    /// The referenced layer's own size, px at composition size. `None` where
+    /// there is no other layer: an unset row, or the effect's own input.
+    #[must_use]
+    pub fn size(&self) -> Option<[f32; 2]> {
+        match self {
+            LayerInputDraw::Layer(d) => Some(d.natural),
+            _ => None,
+        }
+    }
 }
 
 /// What a layer-input parameter resolves to for one effect op (docs/impl/
@@ -180,6 +206,36 @@ pub enum LayerInputDraw {
     ThisLayer,
     /// Another layer, rendered alone at this raster.
     Layer(DofInputDraw),
+    /// One op's whole list of layers, for an effect with more than one layer
+    /// row: an entry per row in declaration order, unset ones included. Still
+    /// one slot for the op, however long the list is.
+    ///
+    /// Clone to points lays its list out itself: a picture for each layer at
+    /// each moment a stamp may show, or one for each clone, with an absent
+    /// entry where the layer is not there at that moment.
+    Several(Vec<LayerInputDraw>),
+    /// Clone to points' list, left to be made during the render. Its points
+    /// come from an effect above that makes them on the card, and its copies
+    /// are numbered, so how many renders there are is not known until that
+    /// stream exists. The realiser asks the builder again then
+    /// ([`crate::build::late_clone_pictures`]).
+    Late(Box<LateClones>),
+}
+
+/// Where a [`LayerInputDraw::Late`] list belongs, as plain data: enough for
+/// the builder to walk back to the effect and make its pictures.
+pub struct LateClones {
+    /// The composition, the layer the effect is on, and the effect.
+    pub comp: uuid::Uuid,
+    pub owner: uuid::Uuid,
+    pub effect: uuid::Uuid,
+    /// The comp time the walk was at, and the frame's own time there.
+    pub t: f64,
+    pub frame_t: f64,
+    /// The comps above this one, so one that shows itself still stops.
+    pub visited: Vec<uuid::Uuid>,
+    /// Which copy of how many the walk itself was rendered as.
+    pub clone: (u32, u32),
 }
 
 /// A layer-input's nested comp render — the [`DrawSource::Nested`]
@@ -257,6 +313,17 @@ pub enum GraphStep {
         colour_tables: Vec<Option<crate::colour::TableRequest>>,
         /// 1:1 with the op, as [`CompLayerDraw::flare_lens_files`] is.
         flare_lens_files: Vec<Option<String>>,
+        /// What a background analysis filed for this box at this frame: a Roto
+        /// brush's matte, or a planes-tier plane. Both describe the **file**
+        /// the box reads, which is the footage of the Read its picture comes
+        /// from ([`lumit_core::comp_graph::CompGraph::read_behind`]). `None`
+        /// on every other box, and wherever nothing has been filed.
+        roto: Option<RotoMatteDraw>,
+        plane: Option<PlaneDraw>,
+        /// That Read's own step, whose placement the baked picture takes: it
+        /// was made from the file's frame, so it is laid in the graph's frame
+        /// exactly where the file's picture is.
+        baked_from: Option<usize>,
     },
     /// Picture A laid over picture B, the node a layer stack has no word for.
     Merge {
@@ -620,6 +687,12 @@ pub struct CompLayerDraw {
     /// stack holding both consumers gets both measurements and neither silently
     /// takes the other's.
     ///
+    /// The same pictures are the neighbour frames of any other temporal effect
+    /// on these two kinds (Echo, a plugin that reads the frames either side),
+    /// so the list covers the stack's whole window. The last field says
+    /// whether a flow consumer asked for that offset: only those are measured,
+    /// and an Echo pays for the render and nothing else.
+    ///
     /// Empty on every layer whose motion the decode worker can measure and on
     /// every layer that asks for none, which is almost all of them.
     #[allow(clippy::type_complexity)]
@@ -627,5 +700,6 @@ pub struct CompLayerDraw {
         i32,
         Vec<CompLayerDraw>,
         Option<lumit_core::model::CameraPose>,
+        bool,
     )>,
 }

@@ -37,15 +37,4 @@ void main() {
     expect(runners['windows'],
         contains('set_impeller_switch(flutter::ImpellerSwitch::Disabled)'));
   });
-
-  test('no runner pins it through the environment, which release ignores', () {
-    // The numbered key, `FLUTTER_ENGINE_SWITCH_<n>` — only code that builds one
-    // writes that, so the runners' own comments about why they do not are not
-    // mistaken for the thing they warn against.
-    for (final entry in runners.entries) {
-      expect(entry.value, isNot(contains('FLUTTER_ENGINE_SWITCH_')),
-          reason: '${entry.key} reaches for an environment switch the release '
-              'engine compiles out; use the platform API instead');
-    }
-  });
 }

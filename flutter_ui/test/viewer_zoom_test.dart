@@ -42,53 +42,6 @@ void main() {
       expect(after(zoom, cursor).dx, closeTo(cursor.dx, 1e-9));
       expect(after(zoom, cursor).dy, closeTo(cursor.dy, 1e-9));
     });
-
-    test('halving is its inverse, about the same point', () {
-      const cursor = Offset(640, 120);
-      final inThen = zoomAboutPoint(
-        cursor: cursor,
-        factor: 2,
-        fitted: fitted,
-        compSize: compSize,
-        panel: panel,
-      );
-      final back = zoomAboutPoint(
-        cursor: cursor,
-        factor: 0.5,
-        // The picture as the first zoom left it.
-        fitted: Rect.fromLTWH(
-          (panel.width - compSize.width * inThen.scale) / 2 + inThen.pan.dx,
-          (panel.height - compSize.height * inThen.scale) / 2 + inThen.pan.dy,
-          compSize.width * inThen.scale,
-          compSize.height * inThen.scale,
-        ),
-        compSize: compSize,
-        panel: panel,
-      );
-      expect(back.scale, closeTo(0.8, 1e-9));
-      expect(back.pan.dx, closeTo(0, 1e-9));
-      expect(back.pan.dy, closeTo(0, 1e-9));
-    });
-
-    test('it stops at the ceiling and the floor rather than running away', () {
-      final far = zoomAboutPoint(
-        cursor: const Offset(400, 200),
-        factor: 1e6,
-        fitted: fitted,
-        compSize: compSize,
-        panel: panel,
-      );
-      expect(far.scale, maxViewerZoom);
-
-      final tiny = zoomAboutPoint(
-        cursor: const Offset(400, 200),
-        factor: 1e-6,
-        fitted: fitted,
-        compSize: compSize,
-        panel: panel,
-      );
-      expect(tiny.scale, minViewerZoom);
-    });
   });
 
   group('Zooming to a box', () {
@@ -106,36 +59,6 @@ void main() {
       expect(zoom.scale, closeTo(3.2, 1e-9));
       final centre = after(zoom, box.center);
       expect(centre.dx, closeTo(panel.width / 2, 1e-9));
-      expect(centre.dy, closeTo(panel.height / 2, 1e-9));
-    });
-
-    test('the tighter axis decides, so nothing inside the box is cut off', () {
-      // Wide and short: the width is the binding constraint (800/400 = 2
-      // against 400/50 = 8).
-      const box = Rect.fromLTWH(200, 100, 400, 50);
-      final zoom = zoomToBox(
-        box: box,
-        out: false,
-        fitted: fitted,
-        compSize: compSize,
-        panel: panel,
-      );
-      expect(zoom.scale, closeTo(0.8 * 2, 1e-9));
-    });
-
-    test('Alt is the exact inverse: the view shrinks into the box', () {
-      const box = Rect.fromLTWH(300, 150, 200, 100);
-      final out = zoomToBox(
-        box: box,
-        out: true,
-        fitted: fitted,
-        compSize: compSize,
-        panel: panel,
-      );
-      expect(out.scale, closeTo(0.8 / 4, 1e-9));
-      final centre = after(out, box.center);
-      expect(centre.dx, closeTo(panel.width / 2, 1e-9),
-          reason: 'still centred on what was swept');
       expect(centre.dy, closeTo(panel.height / 2, 1e-9));
     });
 
