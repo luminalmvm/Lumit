@@ -433,16 +433,23 @@ class FxSection extends StatelessWidget {
           )
         else
           heading,
-        if (open)
-          for (var i = 0; i < rows.length; i++)
-            Container(
-              decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: t.hairline))),
-              padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
-              child: named == null
-                  ? rows[i]
-                  : named.row('$scope/#$i', rows[i]),
-            ),
+        OpenReveal(
+          open: open,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < rows.length; i++)
+                Container(
+                  decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: t.hairline))),
+                  padding: const EdgeInsets.fromLTRB(10, 2, 10, 2),
+                  child: named == null
+                      ? rows[i]
+                      : named.row('$scope/#$i', rows[i]),
+                ),
+            ],
+          ),
+        ),
       ],
     );
 

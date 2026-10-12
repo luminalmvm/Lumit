@@ -440,6 +440,46 @@ class _HoverMarkState extends State<HoverMark> with TickerProviderStateMixin {
   }
 }
 
+/// What a twirl opens, coming up into place as it is opened.
+///
+/// In plain terms: the rows under a heading used to be there the instant the
+/// triangle was pressed. They now arrive the way a settings page does, a
+/// short rise and a fade. Only on being opened while on screen: a panel full
+/// of open sections that comes forward is simply there, as it always was.
+/// Shutting is immediate, as every leaving is.
+class OpenReveal extends StatefulWidget {
+  final bool open;
+  final Widget child;
+
+  const OpenReveal({super.key, required this.open, required this.child});
+
+  @override
+  State<OpenReveal> createState() => _OpenRevealState();
+}
+
+class _OpenRevealState extends State<OpenReveal> {
+  /// How many times it has been opened while on screen.
+  int _opened = 0;
+
+  @override
+  void didUpdateWidget(OpenReveal old) {
+    super.didUpdateWidget(old);
+    if (widget.open && !old.open) _opened++;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.open) return const SizedBox.shrink();
+    final motion = ThemeScope.of(context).motion;
+    return Entrance(
+      key: ValueKey<int>(_opened),
+      spec: _opened == 0 ? MotionSpec.still : motion.reveal,
+      rise: motion.revealRise,
+      child: widget.child,
+    );
+  }
+}
+
 /// A twirl's triangle, turned a quarter as it opens or shuts.
 ///
 /// In plain terms: the little triangle beside a layer or an effect points
