@@ -2326,20 +2326,27 @@ class _TimelineRulerState extends State<TimelineRuler> {
                         final at = axis
                             .frameAtExact(_rulerX(context, d.globalPosition));
                         setState(() {
-                          // Snapped to the shared targets, this edge excepted
-                          // — an edge that snaps to itself never moves.
+                          // Snapped to the shared targets, the work area's own
+                          // two edges excepted. An edge that snaps to itself
+                          // never moves, and one that snaps to the other has
+                          // no length left to land on.
                           _dragFrame = _snapped(at,
                               except: (s) =>
-                                  s.kind ==
-                                  (isStart
-                                      ? SnapKind.workAreaStart
-                                      : SnapKind.workAreaEnd));
+                                  s.kind == SnapKind.workAreaStart ||
+                                  s.kind == SnapKind.workAreaEnd);
                         });
                         widget.onWorkPreview?.call(_work);
                       },
                       onHorizontalDragEnd: (_) {
                         final commit = _escape.end();
-                        final frame = _dragFrame;
+                        // The edge as it is drawn, which stops a frame short
+                        // of the other one. The pointer's own frame can be
+                        // past it, and writing that would move both edges.
+                        final frame = _dragFrame == null
+                            ? null
+                            : isStart
+                                ? _work.start
+                                : _work.end;
                         setState(() {
                           _dragFrame = null;
                           _caught = null;
