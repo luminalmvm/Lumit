@@ -593,6 +593,25 @@ class EffectParamRowFrb extends StatelessWidget {
     }
     if (value == null) return Text('—', style: t.small);
 
+    // A driven parameter is a line of code, not a number to drag, so it gets
+    // the editor row instead of the value field. Asked once, ahead of the
+    // kinds: an angle or a whole number can hold an expression as well as a
+    // Float can, and Animation ▸ Add expression or an import puts one there.
+    if (value
+        case BridgeEffectValue_Float(field0: BridgeScalar_Expression expr)) {
+      final owner = currentLayer;
+      if (owner == null) return Text('—', style: t.small);
+      return EffectParamRowExpression(
+        key: ValueKey<String>('fx-expression-$id-${param.id}-${param.hashCode}'),
+        value: expr,
+        comp: comp,
+        frame: frame,
+        layer: owner,
+        set: _set,
+        setLive: _setLive,
+      );
+    }
+
     switch (param.kind) {
       case BridgeParamKind_Float(
           :final sliderMin,
@@ -601,23 +620,6 @@ class EffectParamRowFrb extends StatelessWidget {
           :final hardMax
         ):
         if (value case BridgeEffectValue_Float(:final field0)) {
-          // A driven parameter is a line of code, not a number to drag, so it
-          // gets the editor row instead of the value field.
-          if (field0 case BridgeScalar_Expression expr) {
-            final owner = currentLayer;
-            if (owner == null) return Text('—', style: t.small);
-            return EffectParamRowExpression(
-              key: ValueKey<String>(
-                  'fx-expression-$id-${param.id}-${param.hashCode}'),
-              value: expr,
-              comp: comp,
-              frame: frame,
-              layer: owner,
-              set: _set,
-              setLive: _setLive,
-            );
-          }
-
           final field = _scalarField(
             context,
             scalar: field0,
@@ -1177,24 +1179,6 @@ class EffectParamRowFrb extends StatelessWidget {
     required String keyName,
     bool log = false,
   }) {
-    // A driven parameter is a line of code, not a number to drag — the same
-    // answer the Float row gives.
-    if (scalar case BridgeScalar_Expression expr) {
-      final owner = currentLayer;
-      if (owner == null) {
-        return Text('—', style: ThemeScope.of(context).theme.small);
-      }
-      return EffectParamRowExpression(
-        key: ValueKey<String>('fx-expression-$keyName-${param.hashCode}'),
-        value: expr,
-        comp: comp,
-        frame: frame,
-        layer: owner,
-        set: _set,
-        setLive: _setLive,
-      );
-    }
-
     final animated = scalar is! BridgeScalar_Static;
     final shown = animated
         ? sampledScalar(scalar, timeOfFrame(comp, frame))
@@ -1319,6 +1303,11 @@ class EffectParamRowFrb extends StatelessWidget {
               : (v) =>
                   _setLive(BridgeEffectValue.float(BridgeScalar.static_(v))),
           onCommit: write,
+          // The same offer and the same seed the Float row makes.
+          setExpression: animated || currentLayer == null
+              ? null
+              : () => _set(BridgeEffectValue.float(BridgeScalar.expression(
+                  shown.toString(), newExpressionLanguage(context)))),
         ),
         const SizedBox(width: 6),
         AngleDial(
@@ -1828,6 +1817,10 @@ class EffectPointRowFrb extends StatelessWidget {
   /// fold-out today — which is what makes the chain absent rather than dead.
   final VoidCallback? onToggleLink;
 
+  /// Whether a well offers Set expression. Off where the effect sits on no
+  /// layer, a node graph's box, since an expression is worked out about one.
+  final bool canSetExpression;
+
   const EffectPointRowFrb({
     super.key,
     required this.effectId,
@@ -1845,6 +1838,7 @@ class EffectPointRowFrb extends StatelessWidget {
     this.enabled = true,
     this.linked = false,
     this.onToggleLink,
+    this.canSetExpression = false,
   });
 
   /// Whether the pair takes the **position dropper**, and in what unit a pick
@@ -2021,6 +2015,16 @@ class EffectPointRowFrb extends StatelessWidget {
           onChanged: (v) => writeChannel(param, v.toDouble(), live: false),
           onChangeLive: (v) => writeChannel(param, v.toDouble(), live: true),
           onChangeEnd: (v) => writeChannel(param, v.toDouble(), live: false),
+          // Seeded with the number showing, so turning one on does not move
+          // the picture until it is edited. The half then has a row to itself.
+          setExpression: !canSetExpression
+              ? null
+              : () => onWrite(
+                  id,
+                  param.id,
+                  BridgeEffectValue.float(BridgeScalar.expression(
+                      scalar.field0.toString(),
+                      newExpressionLanguage(context)))),
         ),
       );
     }
@@ -2153,6 +2157,12 @@ class EffectPointRowFrb extends StatelessWidget {
     );
   }
 }
+
+/// Whether [value] is a number an expression works out. A point with one on
+/// either half is drawn as two rows and not as an [EffectPointRowFrb], whose
+/// wells hold a number and have no room for a line of code.
+bool drivenByExpression(BridgeEffectValue? value) =>
+    value is BridgeEffectValue_Float && value.field0 is BridgeScalar_Expression;
 
 /// What a scalar reads at [frame]: its own number while it is still, and its
 /// curve at the playhead once it is keyed.

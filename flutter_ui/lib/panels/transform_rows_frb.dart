@@ -713,6 +713,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
           degrees: static_,
           onChanged: (v) => _live(axis.prop, v),
           onCommit: (v) => _commit(axis.prop, v),
+          setExpression: () => _commitExpression(
+              axis.prop,
+              BridgeScalar.expression(
+                  static_.toString(), newExpressionLanguage(context))),
         );
       }
       return SizedBox(

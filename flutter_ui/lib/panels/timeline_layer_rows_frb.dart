@@ -980,10 +980,12 @@ class _VolumeRowState extends State<_VolumeRow> {
     return ValueListenableBuilder<int>(
       valueListenable: playhead,
       builder: (context, frame, _) {
+        // Keyed or worked out by an expression, it is read under the playhead.
         final value = _staged ??
-            (animated
-                ? sampledScalar(scalar, timeOfFrame(widget.comp, frame))
-                : (scalar as BridgeScalar_Static).field0);
+            switch (scalar) {
+              BridgeScalar_Static(:final field0) => field0,
+              _ => sampledScalar(scalar, timeOfFrame(widget.comp, frame)),
+            };
         return Row(
           children: [
             KeyframeControlsFrb(

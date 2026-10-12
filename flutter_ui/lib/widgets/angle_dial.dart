@@ -227,6 +227,10 @@ class TurnsAndDegreesField extends StatefulWidget {
   /// Key stem for the two fields, so a rebuild keeps the caret.
   final String keyName;
 
+  /// Turn the angle into an expression, offered in both boxes' menus. Null
+  /// where the property cannot hold one.
+  final VoidCallback? setExpression;
+
   const TurnsAndDegreesField({
     super.key,
     required this.degrees,
@@ -234,6 +238,7 @@ class TurnsAndDegreesField extends StatefulWidget {
     required this.keyName,
     this.onChanged,
     this.enabled = true,
+    this.setExpression,
   });
 
   /// The whole turns in an angle, toward zero — so −370° reads as −1 turn and
@@ -280,6 +285,7 @@ class _TurnsAndDegreesFieldState extends State<TurnsAndDegreesField> {
                 ? null
                 : (v) => onChanged(v.toDouble() * 360 + rest),
             onChangeEnd: (v) => onCommit(v.toDouble() * 360 + rest),
+            setExpression: widget.setExpression,
           ),
         ),
         const SizedBox(width: 3),
@@ -305,6 +311,7 @@ class _TurnsAndDegreesFieldState extends State<TurnsAndDegreesField> {
               _dragTurns = null;
             },
             onDragCancel: () => _dragTurns = null,
+            setExpression: widget.setExpression,
           ),
         ),
       ],
