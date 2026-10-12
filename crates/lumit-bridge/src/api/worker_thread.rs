@@ -1821,6 +1821,9 @@ struct Playback {
     next_present_due: Option<std::time::Instant>,
     /// Frames rendered ahead of the clock, oldest first, waiting to be shown.
     ring: std::collections::VecDeque<(u64, lumit_render::PreparedFrame)>,
+    /// The document revision the ring and the sound were made from. An edit
+    /// moves the store's past it, which is how the run hears about one.
+    revision: u64,
     /// Recent render costs, sizing the ring (`capacity()`).
     costs: crate::playback::CostWindow,
     /// The highest frame whose source decodes have been posted to the
@@ -2121,6 +2124,42 @@ fn start_audio(comp: Uuid, start: f64, document: Option<std::sync::Arc<lumit_cor
     crate::audio::play(comp, start, document);
     #[cfg(not(feature = "media"))]
     let _ = (comp, start, document);
+}
+
+/// Bring the sound up to date with an edit that landed while `playback` runs:
+/// a fader, the audio switch, an effect in the chain.
+///
+/// A mix that is loaded is swapped under its running clock, so the edit is
+/// heard on the next callback and nothing seeks. A mix the edit did not change
+/// is recognised by its signature and costs nothing. A comp that was silent
+/// until this edit has no clock to keep, so its sound starts at the picture.
+#[frb(ignore)]
+fn refresh_audio(playback: &mut Playback, document: &std::sync::Arc<lumit_core::Document>) {
+    // A reverse leg or a shuttle has no sound to bring up to date.
+    if playback.silent() {
+        return;
+    }
+    #[cfg(feature = "media")]
+    {
+        let comp = playback.comp.id;
+        let document = std::sync::Arc::clone(document);
+        if let Some(pending) = &mut playback.pending_audio {
+            // Still in the pre-roll: the sound starts from this document
+            // instead of the one play was pressed on.
+            *pending = std::sync::Arc::clone(&document);
+            crate::audio::prepare(comp, document);
+        } else if held_clock_seconds().is_some() {
+            crate::audio::prepare(comp, document);
+        } else {
+            let frame = playback
+                .ring
+                .front()
+                .map_or(playback.next, |(frame, _)| *frame);
+            crate::audio::play(comp, frame as f64 / playback.fps, document);
+        }
+    }
+    #[cfg(not(feature = "media"))]
+    let _ = document;
 }
 
 /// Where the sound has got to, in seconds, or `None` when there is no mix to
@@ -3014,16 +3053,32 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
 
     // Render ahead while the ring has room and frames remain.
     if playback.ring.len() < playback.capacity() {
-        if playback.has_more() {
-            let (document, revision) = {
-                let Ok(document) = state.project.state() else {
-                    return;
-                };
-                let Ok(document) = document.read() else {
-                    return;
-                };
-                (document.store.snapshot(), document.store.revision())
+        let (document, revision) = {
+            let Ok(document) = state.project.state() else {
+                return;
             };
+            let Ok(document) = document.read() else {
+                return;
+            };
+            (document.store.snapshot(), document.store.revision())
+        };
+        // An edit landed while the run was going. The frames banked ahead
+        // were made from the document as it was, so all but the one about to
+        // go out are made again: the edit is on screen a frame later, not a
+        // ring later. One stays so the next present is not late for want of
+        // a picture. A frame the edit did not touch keeps its name and comes
+        // straight back off the card. Read before `has_more`, so an edit is
+        // still heard while the last frames of a leg drain.
+        if revision != playback.revision {
+            playback.revision = revision;
+            if let Some(stale) = playback.ring.get(1).map(|(frame, _)| *frame) {
+                playback.ring.truncate(1);
+                playback.next = stale;
+                playback.ended = false;
+            }
+            refresh_audio(playback, &document);
+        }
+        if playback.has_more() {
             // Playback shows what the Viewer shows: with the chip on, the run
             // plays the cut picture, and every name below is of the cut
             // document so the look-ahead and the tiers agree with the frame
@@ -3466,6 +3521,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         last_presented: None,
         next_present_due: None,
         ring: std::collections::VecDeque::new(),
+        revision,
         costs: crate::playback::CostWindow::default(),
         prefetched_to: None,
         cut_ahead_to: None,
@@ -5756,6 +5812,7 @@ mod tests {
             last_presented: None,
             next_present_due: None,
             ring: std::collections::VecDeque::new(),
+            revision: 0,
             costs: crate::playback::CostWindow::default(),
             prefetched_to: None,
             cut_ahead_to: None,
