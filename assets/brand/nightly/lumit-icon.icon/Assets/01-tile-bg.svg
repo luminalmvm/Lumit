@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512" fill="none">
+  <!-- Layer 1 (bottom), nightly: the tile as a night sky. Full-bleed, as the
+       stable tile is - Icon Composer supplies the squircle mask. The stars
+       keep to the corners, clear of the mark. -->
+  <defs>
+    <linearGradient id="night-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141a4a"/><stop offset="0.55" stop-color="#2a2170"/>
+      <stop offset="1" stop-color="#5a2f9a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#night-sky)"/>
+  <g fill="#ffffff">
+    <circle cx="92" cy="84" r="5"/>
+    <circle cx="150" cy="52" r="2.5" opacity="0.7"/>
+    <circle cx="58" cy="150" r="2.5" opacity="0.6"/>
+    <circle cx="420" cy="70" r="3" opacity="0.8"/>
+    <circle cx="452" cy="138" r="2" opacity="0.6"/>
+    <circle cx="74" cy="412" r="2.5" opacity="0.6"/>
+    <circle cx="140" cy="452" r="2" opacity="0.5"/>
+    <circle cx="436" cy="424" r="3.5" opacity="0.8"/>
+    <circle cx="372" cy="462" r="2" opacity="0.6"/>
+    <!-- One four-point star, the size a keyframe's corner is. -->
+    <path d="M386 96 Q389 110 403 113 Q389 116 386 130 Q383 116 369 113 Q383 110 386 96 Z"/>
+  </g>
+</svg>

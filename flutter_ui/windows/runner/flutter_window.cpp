@@ -1,8 +1,14 @@
 #include "flutter_window.h"
 
+#include <flutter/method_channel.h>
+#include <flutter/standard_method_codec.h>
+
 #include <optional>
+#include <string>
+#include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "resource.h"
 
 namespace {
 
@@ -52,6 +58,42 @@ bool FlutterWindow::OnCreate() {
           "LumitViewerTexture")) {
     viewer_texture_bridge_ = std::make_unique<ViewerTextureBridge>(registrar);
   }
+
+  // A nightly may wear the regular icon (lib/state/app_icon.dart): a path
+  // puts that .ico on the window, and so on the taskbar, and none puts the
+  // executable's own back. It lasts as long as Lumit runs; the Start menu
+  // always draws the executable's.
+  flutter::MethodChannel<> app_icon(
+      flutter_controller_->engine()->messenger(), "lumit/app_icon",
+      &flutter::StandardMethodCodec::GetInstance());
+  app_icon.SetMethodCallHandler(
+      [this](const flutter::MethodCall<>& call,
+             std::unique_ptr<flutter::MethodResult<>> result) {
+        HICON icon = nullptr;
+        if (const auto* path = std::get_if<std::string>(call.arguments())) {
+          // The length asked for with -1 counts the terminator, which the
+          // string then holds as a spare character; c_str() stops before it.
+          const int length = ::MultiByteToWideChar(CP_UTF8, 0, path->c_str(),
+                                                   -1, nullptr, 0);
+          std::wstring wide(static_cast<size_t>(length > 0 ? length : 0),
+                            L'\0');
+          ::MultiByteToWideChar(CP_UTF8, 0, path->c_str(), -1, wide.data(),
+                                length);
+          icon = static_cast<HICON>(
+              ::LoadImageW(nullptr, wide.c_str(), IMAGE_ICON, 0, 0,
+                           LR_LOADFROMFILE | LR_DEFAULTSIZE));
+        }
+        // No path, or a file that would not load: the icon it was built with.
+        if (!icon) {
+          icon = ::LoadIcon(::GetModuleHandle(nullptr),
+                            MAKEINTRESOURCE(IDI_APP_ICON));
+        }
+        ::SendMessage(GetHandle(), WM_SETICON, ICON_BIG,
+                      reinterpret_cast<LPARAM>(icon));
+        ::SendMessage(GetHandle(), WM_SETICON, ICON_SMALL,
+                      reinterpret_cast<LPARAM>(icon));
+        result->Success();
+      });
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 

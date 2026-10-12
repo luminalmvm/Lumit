@@ -9066,6 +9066,14 @@
   "@updateChecksumMismatch": {
     "description": "Why an update was rejected: the file is not the one that was published."
   },
+  "updateNightlyBody": "New features first, less tested. Projects saved in a nightly may not open in the stable version. Keep a copy.",
+  "@updateNightlyBody": {
+    "description": "Body of the dialogue asking before updates switch to nightly builds."
+  },
+  "updateNightlyTitle": "Use nightly builds?",
+  "@updateNightlyTitle": {
+    "description": "Title of the dialogue asking before updates switch to nightly builds."
+  },
   "updateNotSigned": "This update is not signed, so Lumit will not install it",
   "@updateNotSigned": {
     "description": "Why an update was rejected: the release carries no signed manifest, or Lumit could not fetch it. Shown only on builds that carry a release signing key."
@@ -11088,6 +11096,14 @@
   "settingsKeymapFile": "Keymap file",
   "@settingsKeymapFile": {
     "description": "Settings window, Shortcuts: the name of the row whose buttons read a keymap from a file and write one out."
+  },
+  "settingsNightlyBuilds": "Nightly builds",
+  "@settingsNightlyBuilds": {
+    "description": "Settings window: the name of the switch that makes updates follow nightly builds, the newest and least tested, rather than stable releases."
+  },
+  "settingsNightlyIcon": "Nightly icon",
+  "@settingsNightlyIcon": {
+    "description": "Settings window, shown only in a nightly build: the switch between the nightly build's own application icon (on) and the regular Lumit icon (off)."
   },
   "settingsNoMatches": "No setting matches that.",
   "@settingsNoMatches": {
@@ -13833,6 +13849,10 @@
         "type": "String"
       }
     }
+  },
+  "statusNightly": "Nightly",
+  "@statusNightly": {
+    "description": "A small label on the status line, shown only in a nightly build, saying that this is one. One word."
   },
   "statusOutputPeak": "Output {db} dB peak",
   "@statusOutputPeak": {

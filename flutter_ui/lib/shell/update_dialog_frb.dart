@@ -74,6 +74,23 @@ Future<void> pressUpdateRow(
   }
 }
 
+/// Ask before updates follow nightly builds. True when the user agreed.
+///
+/// The one thing worth a window: a nightly can save a project the stable
+/// version cannot open, and that is better heard before the switch than after.
+Future<bool> confirmNightlyBuilds(BuildContext context) async {
+  final go = await showLumitModal<bool>(
+    context: context,
+    builder: (close) => _Ask(
+      title: l10n.updateNightlyTitle,
+      body: l10n.updateNightlyBody,
+      yes: l10n.updateContinue,
+      onChoose: close,
+    ),
+  );
+  return go == true;
+}
+
 /// Ask, download, then move on to the restart question.
 Future<void> _offerAndFetch(
   BuildContext context, {
@@ -87,7 +104,12 @@ Future<void> _offerAndFetch(
 
   final go = await showLumitModal<bool>(
     context: context,
-    builder: (close) => _OfferUpdate(release: release, onChoose: close),
+    builder: (close) => _Ask(
+      title: l10n.updateOfferTitle(release.version),
+      body: l10n.updateOfferBody(release.assetName, release.sizeLabel),
+      yes: l10n.updateDownload,
+      onChoose: close,
+    ),
   );
   if (go != true || !context.mounted) return;
 
@@ -277,12 +299,22 @@ class _BeforeYouUpdate extends StatelessWidget {
   }
 }
 
-/// "There is a newer Lumit — shall I fetch it?", with what that costs.
-class _OfferUpdate extends StatelessWidget {
-  final UpdateRelease release;
+/// A question with a sentence under it: "Not now", and the way forward.
+/// The offer of an update and the nightly warning are both this.
+class _Ask extends StatelessWidget {
+  final String title;
+  final String body;
+
+  /// The label on the button that goes ahead.
+  final String yes;
   final ValueChanged<bool?> onChoose;
 
-  const _OfferUpdate({required this.release, required this.onChoose});
+  const _Ask({
+    required this.title,
+    required this.body,
+    required this.yes,
+    required this.onChoose,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -295,15 +327,11 @@ class _OfferUpdate extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.all(10),
-            child: Text(l10n.updateOfferTitle(release.version),
-                style: t.bodyPrimary),
+            child: Text(title, style: t.bodyPrimary),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(
-              l10n.updateOfferBody(release.assetName, release.sizeLabel),
-              style: t.small.copyWith(color: t.textMuted),
-            ),
+            child: Text(body, style: t.small.copyWith(color: t.textMuted)),
           ),
           const SizedBox(height: 14),
           Padding(
@@ -322,12 +350,12 @@ class _OfferUpdate extends StatelessWidget {
                 HouseButton(
                   key: const ValueKey('update-offer-yes'),
                   small: true,
-                  // The window's default action: Enter downloads. No style
+                  // The window's default action: Enter goes ahead. No style
                   // on the label: the filled action sets its own capitals.
                   primary: true,
                   autofocus: true,
                   onPressed: () => onChoose(true),
-                  child: Text(l10n.updateDownload),
+                  child: Text(yes),
                 ),
               ],
             ),

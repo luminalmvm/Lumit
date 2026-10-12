@@ -56,6 +56,7 @@ import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share
 import 'package:lumit_flutter/src/rust/api/share.dart'
     show BridgeSharePerson;
 import 'package:lumit_flutter/state/account.dart';
+import 'package:lumit_flutter/state/app_icon.dart';
 import 'package:lumit_flutter/state/backup.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/extensions.dart';
@@ -479,8 +480,9 @@ class LumitUiState extends ChangeNotifier {
   /// are two views of the same check and neither owns it. The version is passed
   /// as a function, not a string: it comes over the bridge, and a widget test
   /// that builds this state must not call the engine merely by existing.
-  late final UpdateService updates =
-      UpdateService(currentVersion: () => versionFromBootLine(lumitVersion()));
+  late final UpdateService updates = UpdateService(
+      currentVersion: () => versionFromBootLine(lumitVersion()),
+      nightly: () => workspace.nightlyUpdates);
 
   /// The catalogue of addons, what is installed, and one install at a time.
   ///
@@ -759,6 +761,21 @@ class LumitUiState extends ChangeNotifier {
     if (!updates.dueForCheck(workspace.lastUpdateCheckMs)) return;
     await updates.check();
     workspace.rememberUpdateCheck(DateTime.now().millisecondsSinceEpoch);
+  }
+
+  /// Follow nightly builds or stable releases, and look at once at what the
+  /// new channel has: what the last check found belongs to the old one.
+  Future<void> setNightlyUpdates(bool on) async {
+    workspace.setNightlyUpdates(on);
+    // Never under `flutter test`, for the reason above.
+    if (Platform.environment.containsKey('FLUTTER_TEST')) return;
+    await updates.check();
+  }
+
+  /// On a nightly build, show the icon the user chose for it.
+  Future<void> applyAppIcon() async {
+    if (!updates.runningNightly) return;
+    await showRegularAppIcon(!workspace.nightlyIcon);
   }
 
   /// Bumped when `Ctrl+Shift+P` asks for the command palette.

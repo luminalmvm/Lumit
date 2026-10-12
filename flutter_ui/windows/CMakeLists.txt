@@ -32,6 +32,12 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Visual Studio 18's standard library refuses <experimental/coroutine>, which
+# the webview_windows plugin still includes, and this is the switch its own
+# error names. A stopgap: the header is due to be removed outright, and the
+# plugin has to move to <coroutine>, or be replaced, before it is.
+add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by

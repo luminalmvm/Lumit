@@ -55,6 +55,7 @@ import '../icons/lumit_icons.dart';
 import '../l10n/engine_labels.dart' show addonTask;
 import '../l10n/strings.dart';
 import '../state/addons.dart';
+import '../state/app_icon.dart';
 import '../state/expression_language.dart';
 import '../state/extensions.dart';
 import '../state/external_links.dart';
@@ -843,6 +844,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     final shipped = InterfaceSettings();
     switch (_page) {
       case SettingsPage.general:
+        workspace.nightlyUpdates = null;
+        workspace.nightlyIcon = true;
+        ui.applyAppIcon();
         workspace.setAutoUpdate(true);
         workspace.setDiscordStatus(DiscordStatus.app);
         ui.pushDiscordStatus();
@@ -1046,6 +1050,17 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _flag(t, 'settings-auto-update', l10n.settingsAutomaticUpdates,
                 value: ui.workspace.autoUpdate,
                 set: ui.workspace.setAutoUpdate),
+            _flag(t, 'settings-nightly', l10n.settingsNightlyBuilds,
+                value: ui.updates.followsNightly,
+                set: (on) => _setNightly(ui, on)),
+            // A nightly's own icon, or the regular one. Only a nightly has
+            // both to choose between.
+            if (ui.updates.runningNightly && appIconCanChange)
+              _flag(t, 'settings-nightly-icon', l10n.settingsNightlyIcon,
+                  value: ui.workspace.nightlyIcon, set: (on) {
+                ui.workspace.setNightlyIcon(on);
+                ui.applyAppIcon();
+              }),
             // The whole row watches the service, not just its button: the line
             // under it is the part that says what was found, and a stale
             // sentence beside a live button would be worse than either alone.
@@ -1081,6 +1096,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           ],
         ),
       ]);
+
+  /// Change channel, asking first on the way in: a nightly can save a project
+  /// the stable version cannot open.
+  Future<void> _setNightly(LumitUiState ui, bool on) async {
+    if (on && !await confirmNightlyBuilds(context)) return;
+    await ui.setNightlyUpdates(on);
+    if (mounted) setState(() {});
+  }
 
   /// What this build is, read over the bridge once: the row rebuilds with
   /// every update-service notification, and the installed version cannot

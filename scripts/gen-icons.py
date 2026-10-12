@@ -16,6 +16,10 @@
 #
 # Outputs (all committed):
 #   flutter_ui/windows/runner/resources/app_icon.ico   <- lumit-mark.svg (bare)
+#   assets/brand/nightly/app_icon.ico                  <- nightly/lumit-mark.svg
+#   assets/brand/nightly/stable-icon.png               <- lumit-icon.icon (macOS
+#       only, needs Icon Composer): the regular icon as a picture, which a
+#       nightly build shows in the Dock when asked to (lib/state/app_icon.dart)
 #   assets/brand/lumit-project.ico                     <- lumit-project.svg (.lum)
 #   assets/brand/lumit-preset.ico                      <- lumit-preset.svg (.lumfx)
 #   assets/brand/lumit-theme.ico                       <- lumit-theme.svg (.lumtheme)
@@ -32,6 +36,8 @@
 # downscaled from the 1024 render rather than drawn fresh at each size.
 
 import io
+import subprocess
+import tempfile
 from pathlib import Path
 
 import resvg_py
@@ -59,11 +65,43 @@ def write_ico(svg_path: Path, out: Path) -> None:
     print(f"{out.relative_to(ROOT)}: {ICO_SIZES}")
 
 
+ICTOOL = Path(
+    "/Applications/Xcode.app/Contents/Applications/Icon Composer.app"
+    "/Contents/Executables/ictool"
+)
+
+
+def write_dock_png(icon: Path, out: Path, size: int = 512) -> None:
+    # Icon Composer exports the tile edge to edge; the Dock wants the classic
+    # margin round it (the body is 824 of 1024), so it is set into a clear
+    # canvas at that proportion.
+    if not ICTOOL.exists():
+        print(f"{out.relative_to(ROOT)}: skipped, no Icon Composer on this machine")
+        return
+    body = round(size * 824 / 1024)
+    with tempfile.TemporaryDirectory() as tmp:
+        png = Path(tmp) / "icon.png"
+        subprocess.run(
+            [ICTOOL, icon, "--export-image", "--output-file", png,
+             "--platform", "macOS", "--rendition", "Default",
+             "--width", str(body), "--height", str(body), "--scale", "1",
+             "--design-generation", "26"],
+            check=True, capture_output=True,
+        )
+        canvas = Image.new("RGBA", (size, size))
+        canvas.paste(Image.open(png).convert("RGBA"), ((size - body) // 2,) * 2)
+    canvas.save(out, optimize=True)
+    print(f"{out.relative_to(ROOT)}: {size}")
+
+
 def main() -> None:
     write_ico(
         BRAND / "lumit-mark.svg",
         ROOT / "flutter_ui" / "windows" / "runner" / "resources" / "app_icon.ico",
     )
+    # The nightly build's icon; scripts/stamp-nightly.sh swaps it in.
+    write_ico(BRAND / "nightly" / "lumit-mark.svg", BRAND / "nightly" / "app_icon.ico")
+    write_dock_png(BRAND / "lumit-icon.icon", BRAND / "nightly" / "stable-icon.png")
     write_ico(BRAND / "lumit-project.svg", BRAND / "lumit-project.ico")
     write_ico(BRAND / "lumit-preset.svg", BRAND / "lumit-preset.ico")
     write_ico(BRAND / "lumit-theme.svg", BRAND / "lumit-theme.ico")

@@ -276,6 +276,12 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // person, and everything after it is about the project.
           _bubble(t, const ProfileChip()),
           _divider(t),
+          // Which kind of Lumit this is, when it is not the ordinary kind: in
+          // every screenshot of a nightly, and beside the name it belongs to.
+          if (_ui.updates.runningNightly) ...[
+            _bubble(t, _nightly(t)),
+            _divider(t),
+          ],
           // Review links, while there are comments nobody has looked at or a
           // composition is on its way up.
           ListenableBuilder(
@@ -458,6 +464,21 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       style: dirty ? t.small : t.small.copyWith(color: t.textMuted),
     );
   }
+
+  /// The mark of a nightly build: one word in an outlined pill, in the
+  /// warning colour because that is what it is, and small enough to forget.
+  Widget _nightly(LumitTheme t) => Container(
+        key: const ValueKey('status-nightly'),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: t.warning),
+          borderRadius: BorderRadius.circular(t.tokens.actionRadius),
+        ),
+        child: Text(
+          l10n.statusNightly,
+          style: t.small.copyWith(color: t.warning),
+        ),
+      );
 
   /// What the armed tool's modifiers do, at the right-hand end: one muted
   /// line, or nothing for a tool with nothing to say.
