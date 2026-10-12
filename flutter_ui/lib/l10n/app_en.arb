@@ -1595,7 +1595,7 @@
   "@firstRunAutoUpdate": {
     "description": "First run: the sentence beside the automatic-updates checkbox."
   },
-  "firstRunCut": "Footage arrives on Sequence layers, and Lumit opens in the Cut workspace.",
+  "firstRunCut": "Footage arrives on Sequence layers, in the Cut workspace.",
   "@firstRunCut": {
     "description": "First run: what choosing Premiere Pro or Resolve habits does. Sequence layer and Cut (the workspace) are Lumit product terms."
   },
@@ -6417,7 +6417,7 @@
   "@sourceTitle": {
     "description": "Title of the Viewer's source side, where one footage item is looked at before it is placed in a composition."
   },
-  "sourceEmptyHint": "Double-click footage in the Project panel to load it here.",
+  "sourceEmptyHint": "Double-click footage to load it here.",
   "@sourceEmptyHint": {
     "description": "Empty-state line in the Viewer's source side before any footage has been loaded into it."
   },
@@ -6449,7 +6449,7 @@
   "@sourceInsert": {
     "description": "Button that places the marked stretch of the source at the playhead and moves the clips after it later."
   },
-  "sourceInsertTip": "Place the marked stretch at the playhead and move what follows along",
+  "sourceInsertTip": "Insert at the playhead",
   "@sourceInsertTip": {
     "description": "Tooltip for the source side's Insert button."
   },
@@ -6457,27 +6457,27 @@
   "@sourceOverwrite": {
     "description": "Button that places the marked stretch of the source at the playhead, replacing whatever is there."
   },
-  "sourceOverwriteTip": "Place the marked stretch at the playhead, over what is there",
+  "sourceOverwriteTip": "Overwrite at the playhead",
   "@sourceOverwriteTip": {
     "description": "Tooltip for the source side's Overwrite button."
   },
-  "cutRefusedOverlap": "That would move a clip onto one that stays. Lock that track or clear the space first.",
+  "cutRefusedOverlap": "That would overlap another clip.",
   "@cutRefusedOverlap": {
     "description": "Status-line notice when an edit in the Cut timeline is refused because a clip it would carry along would land on a clip that does not move."
   },
-  "cutRefusedBeforeStart": "A clip cannot start before the composition does.",
+  "cutRefusedBeforeStart": "Clips can't start before the composition.",
   "@cutRefusedBeforeStart": {
     "description": "Status-line notice when an edit in the Cut timeline is refused because it would move a clip before the start of the composition."
   },
-  "cutRefusedLocked": "A track this edit has to change is locked.",
+  "cutRefusedLocked": "A track this edit needs is locked.",
   "@cutRefusedLocked": {
     "description": "Status-line notice when an edit in the Cut timeline is refused because it needs to change a locked track."
   },
-  "cutRefusedLimit": "The clip has no more to give that way.",
+  "cutRefusedLimit": "No more footage in that direction.",
   "@cutRefusedLimit": {
     "description": "Status-line notice when a trim, roll, slip or slide in the Cut timeline is refused because a clip or its neighbour would be left with no length, or would run off the start of its source."
   },
-  "cutRefusedUncuttable": "A clip whose Retime is driven by an expression cannot be cut.",
+  "cutRefusedUncuttable": "Clips with a Retime expression can't be cut.",
   "@cutRefusedUncuttable": {
     "description": "Status-line notice when a cut in the Cut timeline is refused because the clip's Retime is an expression."
   },
@@ -6485,7 +6485,7 @@
   "@cutRefusedNothing": {
     "description": "Status-line notice when an edit in the Cut timeline finds nothing to act on: no clip under the razor, no gap, or no edit point."
   },
-  "cutRefusedWrongLayer": "Picture clips go on picture tracks and sound clips on sound tracks.",
+  "cutRefusedWrongLayer": "Picture goes on picture tracks, sound on sound tracks.",
   "@cutRefusedWrongLayer": {
     "description": "Status-line notice when a clip in the Cut timeline is refused because it was put on the wrong kind of track."
   },
@@ -9481,7 +9481,7 @@
   "@cutRippleDelete": {
     "description": "Cut timeline, clip menu: remove the clip and close the room it leaves, so everything after it moves earlier."
   },
-  "cutNoTracks": "No tracks yet. Drop footage here to make one.",
+  "cutNoTracks": "Drop footage here.",
   "@cutNoTracks": {
     "description": "Shown across the Cut timeline's empty rows when the composition has no layers. 'Tracks' is this panel's own word for its rows."
   },
@@ -10584,7 +10584,7 @@
       }
     }
   },
-  "aeExpressionOverKeys": "the expression sits over keyframes, and only one of the two can drive a property here — the keyframes do, and the expression's text is kept: {source}",
+  "aeExpressionOverKeys": "the keyframes are used, and the expression is kept as text: {source}",
   "@aeExpressionOverKeys": {
     "description": "Import report row reason, lower case. An After Effects expression Lumit could run, on a property that also has keyframes; Lumit keeps the keyframes. The placeholder is the expression's source text.",
     "placeholders": {
@@ -12906,7 +12906,7 @@
       }
     }
   },
-  "expressionsFileNotExpressions": "That file does not hold Lumit expressions.",
+  "expressionsFileNotExpressions": "That isn't a Lumit expressions file.",
   "@expressionsFileNotExpressions": {
     "description": "Status-line notice when the file chosen for Import in the Expressions panel is not a file of saved expressions."
   },
@@ -15273,7 +15273,7 @@
   "@shareAddress": {
     "description": "Field label in the Shared project window: this computer's network address, which goes into the invite. The person can type another over it."
   },
-  "shareHostHint": "Anyone with the invite can join and edit until you stop sharing.",
+  "shareHostHint": "Anyone with the link can join and edit.",
   "@shareHostHint": {
     "description": "Quiet line on the Share this project page of the Shared project window, under the fields."
   },
@@ -15625,7 +15625,7 @@
   "@shareShowTitle": {
     "description": "Title of the small question that opens when Show is pressed beside a hidden invite link."
   },
-  "shareShowBody": "Anyone who sees this link can join the project and change it, and the link holds your internet address. Keep it off streams, recordings and screenshots.",
+  "shareShowBody": "Anyone who sees this link can join. Keep it off streams and screenshots.",
   "@shareShowBody": {
     "description": "Body of the question asked before a hidden invite link is shown."
   },
@@ -15649,35 +15649,35 @@
   "@shareRelayExample": {
     "description": "Placeholder in the empty Relay field, showing what a relay's address looks like. Keep it as a made-up address."
   },
-  "shareRelayHint": "A relay is a small server someone you trust runs. It carries your edits to people your router does not let in, and cannot read them. Leave it empty if you have none.",
+  "shareRelayHint": "Your own relay server. Optional.",
   "@shareRelayHint": {
     "description": "Quiet line under the Relay field in the Shared project window."
   },
-  "shareAddressHint": "Another address this computer can be reached at, such as a VPN's. It is added to the link. Leave it empty if you are not sure.",
+  "shareAddressHint": "Another address for this computer, such as a VPN's. Optional.",
   "@shareAddressHint": {
     "description": "Quiet line under the Address field, under Advanced, while a project is being shared."
   },
-  "shareOpenChecking": "Checking whether people outside your network can join…",
+  "shareOpenChecking": "Checking your connection…",
   "@shareOpenChecking": {
     "description": "Quiet line under the invite link for a second or two after sharing starts, while Lumit asks the home router, and a relay if one is set, to let people in."
   },
-  "shareOpenAnywhere": "Anyone you send this link to can join.",
+  "shareOpenAnywhere": "Anyone with this link can join.",
   "@shareOpenAnywhere": {
     "description": "Quiet line under the invite link once the home router has agreed to let people outside the network in."
   },
-  "shareOpenRelay": "Anyone you send this link to can join. People your router does not let in come through the relay.",
+  "shareOpenRelay": "Anyone with this link can join, through the relay.",
   "@shareOpenRelay": {
     "description": "Quiet line under the invite link when the home router would not let people in but the relay is ready."
   },
-  "shareOpenLocal": "Only people on your own network can join with this link, because your router would not let anyone else in. The other person can share the project instead, or you can stop, set a relay under Advanced and share again.",
+  "shareOpenLocal": "Only people on your network can join. To share further, set a relay under Advanced.",
   "@shareOpenLocal": {
     "description": "Warning line under the invite link when the home router refused, or sits behind another router, and no relay is set."
   },
-  "shareOpenLocalOff": "Only people on your own network can join with this link, because the router was not asked to let anyone else in.",
+  "shareOpenLocalOff": "Only people on your network can join.",
   "@shareOpenLocalOff": {
     "description": "Warning line under the invite link when the person unticked the Internet box before sharing and no relay is set."
   },
-  "shareRelayDown": "The relay is not answering, so only people on your own network can join just now. Lumit keeps trying it.",
+  "shareRelayDown": "The relay isn't responding. Only people on your network can join for now.",
   "@shareRelayDown": {
     "description": "Warning line under the invite link when a relay is set but cannot be reached and the home router would not let people in either."
   },
@@ -15697,19 +15697,19 @@
   "@sharePasswordTheirs": {
     "description": "Placeholder in the empty Password field on the Join a project page, shown when the pasted invite link needs a password."
   },
-  "sharePasswordHint": "People joining have to type this as well as having the link. Leave it empty for no password.",
+  "sharePasswordHint": "Optional.",
   "@sharePasswordHint": {
     "description": "Quiet line under the Password field on the Share this project page."
   },
-  "sharePasswordSet": "People joining need the password as well as this link.",
+  "sharePasswordSet": "Guests also need the password.",
   "@sharePasswordSet": {
     "description": "Quiet line under the invite link while a project is shared with a password. For a project kept online it is the tooltip of the lock beside Invite to edit, the only one of the two invites the password is asked for."
   },
-  "sharePasswordNeeded": "That invite needs the host's password",
+  "sharePasswordNeeded": "Enter the host's password",
   "@sharePasswordNeeded": {
     "description": "Line in the Shared project window when a guest tries to join by an invite link that needs a password and typed none."
   },
-  "shareUnreachableOrPassword": "Nobody answered, or the password is wrong. Check both, and that the host is still sharing.",
+  "shareUnreachableOrPassword": "Couldn't join. Check the password, and that the host is still sharing.",
   "@shareUnreachableOrPassword": {
     "description": "Line in the Shared project window when joining with a password failed. Lumit is not told which of the two it was."
   },
@@ -15717,11 +15717,11 @@
   "@shareFootage": {
     "description": "Row label and group heading in the Shared project window, for sending footage files to people in the project who have not got them."
   },
-  "shareGive": "Send stand-ins of my footage to people who have not got it",
+  "shareGive": "Send stand-ins of my footage",
   "@shareGive": {
     "description": "Text beside a tick box in the Shared project window. A stand-in is a small copy of a whole clip that another person can cut with."
   },
-  "shareTake": "Get stand-ins of footage I have not got",
+  "shareTake": "Get stand-ins of missing footage",
   "@shareTake": {
     "description": "Text beside a tick box in the Shared project window. When ticked, Lumit asks the others for a small copy of any clip the project uses that is not on this computer."
   },
@@ -15741,7 +15741,7 @@
   "@shareLimitUnit": {
     "description": "Unit shown after the Upload limit and Download limit fields: kilobytes a second."
   },
-  "shareLimitHint": "How fast footage is sent and fetched, in kilobytes a second. 0 or empty is no limit. Edits are never held back.",
+  "shareLimitHint": "In KB/s. Leave empty for no limit.",
   "@shareLimitHint": {
     "description": "Quiet line under the two limit fields in the Shared project window."
   },
@@ -15799,7 +15799,7 @@
       }
     }
   },
-  "shareExportAskBody": "{name} has not got all the footage and asks this computer to export \"{comp}\" and send them the file. It goes in your export queue and starts now.",
+  "shareExportAskBody": "{name} is missing footage and wants this computer to export \"{comp}\" for them.",
   "@shareExportAskBody": {
     "description": "Body of the question shown when another person asks this computer to export for them. {comp} is a composition's name.",
     "placeholders": {
@@ -15853,7 +15853,7 @@
   "@exportFootageStandIns": {
     "description": "Option in the export dialogue's Missing footage list. Exports from the small copies as they are, which is draft quality."
   },
-  "exportFootageCount": "{count, plural, =1{1 footage item in this composition is not on this computer.} other{{count} footage items in this composition are not on this computer.}}",
+  "exportFootageCount": "{count, plural, =1{1 footage item is missing.} other{{count} footage items are missing.}}",
   "@exportFootageCount": {
     "description": "Line under the Missing footage row in the export dialogue.",
     "placeholders": {
@@ -15866,7 +15866,7 @@
   "@exportFootageStarting": {
     "description": "Footer line of the export dialogue for the moment after Export is pressed with footage to fetch."
   },
-  "exportFootageMaking": "The others' computers are getting the footage ready…",
+  "exportFootageMaking": "Preparing footage…",
   "@exportFootageMaking": {
     "description": "Footer line of the export dialogue while another person's computer is making the files this export asked for and nothing has been sent yet."
   },
@@ -15879,7 +15879,7 @@
       }
     }
   },
-  "exportFootageFailed": "Some of the footage could not be fetched. Whoever has it may have left, or switched sending off.",
+  "exportFootageFailed": "Couldn't fetch some footage.",
   "@exportFootageFailed": {
     "description": "Footer line of the export dialogue when footage this export needs could not be got."
   },
@@ -15892,7 +15892,7 @@
       }
     }
   },
-  "exportRemoteRunning": "{name}'s computer is exporting, frame {frame} of {total}",
+  "exportRemoteRunning": "Exporting on {name}'s computer, frame {frame} of {total}",
   "@exportRemoteRunning": {
     "description": "Footer line of the export dialogue while another person's computer does the export.",
     "placeholders": {
@@ -15907,7 +15907,7 @@
       }
     }
   },
-  "exportRemoteFetching": "Fetching the finished file, {percent}%",
+  "exportRemoteFetching": "Fetching the file, {percent}%",
   "@exportRemoteFetching": {
     "description": "Footer line of the export dialogue while the file another person's computer exported is being sent back.",
     "placeholders": {
@@ -15925,7 +15925,7 @@
       }
     }
   },
-  "exportRemoteRefused": "{name} did not take the export",
+  "exportRemoteRefused": "{name} declined the export",
   "@exportRemoteRefused": {
     "description": "Footer line of the export dialogue when the other person said no to doing the export.",
     "placeholders": {
@@ -15934,7 +15934,7 @@
       }
     }
   },
-  "exportRemoteLacking": "{name}'s computer has not got all the footage either",
+  "exportRemoteLacking": "{name} is missing footage too",
   "@exportRemoteLacking": {
     "description": "Footer line of the export dialogue when the person asked to export turns out not to have every file.",
     "placeholders": {
@@ -15976,7 +15976,7 @@
   "@settingsShareDownLimit": {
     "description": "Row title in Settings: the fastest this computer takes footage from others in a shared project."
   },
-  "settingsShareLimitHint": "How fast footage is sent and fetched in a shared project. Edits are never held back.",
+  "settingsShareLimitHint": "Applies to footage in shared projects.",
   "@settingsShareLimitHint": {
     "description": "Description under the Footage upload limit row in Settings."
   },
@@ -16037,7 +16037,7 @@
   "@settingsExtensionsInstall": {
     "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a folder picker."
   },
-  "settingsExtensionsInstallHint": "Pick the folder that holds the extension's extension.json. Lumit shows what it asks to be allowed before anything is installed.",
+  "settingsExtensionsInstallHint": "Pick the folder containing extension.json.",
   "@settingsExtensionsInstallHint": {
     "description": "Description under the Install from a folder row in the Extensions section of Settings. extension.json is a file name and is not translated."
   },
@@ -16083,23 +16083,23 @@
   "@extensionCannot": {
     "description": "Heading of the list of things an extension is never able to do, in the install question."
   },
-  "extensionCanProject": "See what the open project's file is called, and when a project opens, saves or closes",
+  "extensionCanProject": "See the project's file name, and when it opens, saves or closes",
   "@extensionCanProject": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanActivity": "See when you edit and what each step is called, and when Lumit is the window in front",
+  "extensionCanActivity": "See when you edit, the name of each edit, and when Lumit is in front",
   "@extensionCanActivity": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanExport": "See when an export starts and finishes, and fingerprint the file it made",
+  "extensionCanExport": "See when exports start and finish, and fingerprint the file",
   "@extensionCanExport": {
     "description": "One line of the It can list in the extension install question. A fingerprint is a short number worked out from a file that changes if the file does."
   },
-  "extensionCanImport": "Bring files into the project, and watch a folder you pick for new ones",
+  "extensionCanImport": "Import files, and watch a folder you pick",
   "@extensionCanImport": {
     "description": "One line of the It can list in the extension install question."
   },
-  "extensionCanShare": "Open the Shared project window for you to share or join, see who is in a shared project, and read its invite link while you share",
+  "extensionCanShare": "Open the Shared project window, see who's in a shared project, and read its invite link",
   "@extensionCanShare": {
     "description": "One line of the It can list in the extension install question."
   },
@@ -16112,7 +16112,7 @@
       }
     }
   },
-  "extensionCanPanel": "Show its own panel, and a line in the strip at the bottom of the window",
+  "extensionCanPanel": "Show its own panel, and a line at the bottom of the window",
   "@extensionCanPanel": {
     "description": "Last line of the It can list in the extension install question, shown for every extension."
   },
@@ -16124,11 +16124,11 @@
   "@extensionCannotFiles": {
     "description": "One line of the It cannot list in the extension install question."
   },
-  "extensionCannotEdit": "Change what is in your project, beyond bringing files into it when it is allowed to",
+  "extensionCannotEdit": "Change your project, apart from importing files when allowed",
   "@extensionCannotEdit": {
     "description": "One line of the It cannot list in the extension install question."
   },
-  "extensionWebNote": "Its panel is a web page, and like any web page it can load things from the internet. Install an extension only from someone you trust.",
+  "extensionWebNote": "Only install extensions from people you trust.",
   "@extensionWebNote": {
     "description": "Quiet note at the foot of the extension install question."
   },
@@ -16136,7 +16136,7 @@
   "@extensionInstall": {
     "description": "Default button of the extension install question."
   },
-  "extensionInstalled": "{name} is installed. Its panel is under Window, Extensions.",
+  "extensionInstalled": "{name} installed. Find it under Window ▸ Extensions.",
   "@extensionInstalled": {
     "description": "Bottom-strip notice after an extension is installed. Window and Extensions are menu names.",
     "placeholders": {
@@ -16145,11 +16145,11 @@
       }
     }
   },
-  "extensionNotOne": "That folder has no extension.json in it",
+  "extensionNotOne": "No extension.json in that folder",
   "@extensionNotOne": {
     "description": "Bottom-strip notice when the folder picked to install an extension from is not an extension. extension.json is a file name and is not translated."
   },
-  "extensionNewer": "That extension needs Lumit {version} or newer",
+  "extensionNewer": "Needs Lumit {version} or newer",
   "@extensionNewer": {
     "description": "Bottom-strip notice when an extension asks for a newer Lumit than this one.",
     "placeholders": {
@@ -16158,7 +16158,7 @@
       }
     }
   },
-  "extensionTooLarge": "That extension's folder holds more than an extension may",
+  "extensionTooLarge": "That extension is too large",
   "@extensionTooLarge": {
     "description": "Bottom-strip notice when an extension's folder has too many files or is too large to install."
   },
@@ -16166,7 +16166,7 @@
   "@extensionBusy": {
     "description": "Bottom-strip notice when an install is asked for while another is running."
   },
-  "extensionFailed": "The extension could not be installed",
+  "extensionFailed": "Couldn't install the extension",
   "@extensionFailed": {
     "description": "Bottom-strip notice when an extension's files could not be read or copied."
   },
@@ -16174,27 +16174,27 @@
   "@extensionMissingTitle": {
     "description": "Title shown in a dock panel whose extension has been removed."
   },
-  "extensionMissingHint": "The extension this panel showed has been removed. Close the panel, or install it again in Settings.",
+  "extensionMissingHint": "This extension was removed. Install it again in Settings.",
   "@extensionMissingHint": {
     "description": "Hint under the title in a dock panel whose extension has been removed."
   },
-  "extensionFailedTitle": "The extension could not be shown",
+  "extensionFailedTitle": "Couldn't show the extension",
   "@extensionFailedTitle": {
     "description": "Title shown in an extension's dock panel when its page could not be put up."
   },
-  "extensionFailedHint": "Its page would not load. Closing the panel and showing it again tries once more.",
+  "extensionFailedHint": "Couldn't load. Close the panel and open it again.",
   "@extensionFailedHint": {
     "description": "Hint in an extension's dock panel when its page failed to load."
   },
-  "extensionBrokenHint": "The page its extension.json names is missing. Install the extension again.",
+  "extensionBrokenHint": "A file is missing. Install the extension again.",
   "@extensionBrokenHint": {
     "description": "Hint in an extension's dock panel when the installed folder has lost its page. extension.json is a file name and is not translated."
   },
-  "extensionNoRuntime": "Lumit shows extensions with Microsoft's WebView2, which is not installed on this computer.",
+  "extensionNoRuntime": "Extensions need Microsoft WebView2, which isn't installed.",
   "@extensionNoRuntime": {
     "description": "Hint in an extension's dock panel on a Windows machine without the WebView2 runtime. WebView2 is a product name."
   },
-  "extensionStrayed": "This panel has left the extension's own pages, so nothing it asks of Lumit is answered.",
+  "extensionStrayed": "This panel has left the extension's pages, so it can't use Lumit.",
   "@extensionStrayed": {
     "description": "Warning strip at the top of an extension's dock panel when the page inside has gone to some other website."
   },
@@ -16206,7 +16206,7 @@
   "@profileUnnamed": {
     "description": "Name shown for a profile that has not been given one, on the profile button at the left of the bottom strip and in its card."
   },
-  "profileLocal": "On this machine only",
+  "profileLocal": "On this device only",
   "@profileLocal": {
     "description": "Quiet line under a profile's name in the profile card when it is not signed in to a Lumit account."
   },
@@ -16246,7 +16246,7 @@
   "@profileRemove": {
     "description": "Button in Settings beside a profile that is not the one in use: take it off this machine."
   },
-  "profileRemoveAsk": "Remove {name} from this machine? Its settings here are deleted, its account isn't.",
+  "profileRemoveAsk": "Remove {name}? Its settings on this device are deleted. The account stays.",
   "@profileRemoveAsk": {
     "description": "Confirmation before a profile is removed. {name} is the profile's name.",
     "placeholders": {
@@ -16279,7 +16279,7 @@
   "@proCardTitle": {
     "description": "Heading of the card inviting someone to look at Lumit Pro, in the profile card. A product name: do not translate."
   },
-  "proCardLine": "Share anywhere, and reflect settings on any device.",
+  "proCardLine": "Share anywhere. Settings on every device.",
   "@proCardLine": {
     "description": "One line under the Lumit Pro heading in the profile card."
   },
@@ -16299,7 +16299,7 @@
   "@syncStatusSyncing": {
     "description": "Line in the profile card while settings are being sent to or fetched from Lumit's server."
   },
-  "syncStatusFailed": "Could not sync. Lumit will try again soon.",
+  "syncStatusFailed": "Couldn't sync. Trying again soon.",
   "@syncStatusFailed": {
     "description": "Line in the profile card when the last attempt to sync settings failed."
   },
@@ -16413,7 +16413,7 @@
   "@signInResent": {
     "description": "Shown in place of the Send another code link for a moment after it is clicked."
   },
-  "signInBrowser": "Finish signing in in your browser.",
+  "signInBrowser": "Continue in your browser.",
   "@signInBrowser": {
     "description": "Line shown in the sign-in window while it waits for a Google or Discord sign-in to finish in the browser."
   },
@@ -16421,27 +16421,27 @@
   "@signInWorking": {
     "description": "Shown on the filled button of the sign-in window while it is busy, which takes a couple of seconds."
   },
-  "signInUnavailable": "Signing in is not switched on yet.",
+  "signInUnavailable": "Sign-in isn't available yet.",
   "@signInUnavailable": {
     "description": "Shown in the sign-in window when Lumit's server offers no way to sign in."
   },
-  "signInErrorCredentials": "That email and password do not match an account.",
+  "signInErrorCredentials": "Wrong email or password.",
   "@signInErrorCredentials": {
     "description": "Error in the sign-in window."
   },
-  "signInErrorCode": "That code is not right, or it has run out.",
+  "signInErrorCode": "Wrong or expired code.",
   "@signInErrorCode": {
     "description": "Error on the code page of the sign-in window."
   },
-  "signInErrorSlow": "Too many tries. Wait a few minutes and try again.",
+  "signInErrorSlow": "Too many attempts. Try again in a few minutes.",
   "@signInErrorSlow": {
     "description": "Error in the sign-in window when the server is limiting attempts."
   },
-  "signInErrorOffline": "Lumit's server could not be reached. Check your connection.",
+  "signInErrorOffline": "Can't connect. Check your internet.",
   "@signInErrorOffline": {
     "description": "Error in the sign-in window and the Lumit Pro window."
   },
-  "signInErrorEmail": "That does not look like an email address.",
+  "signInErrorEmail": "Enter a valid email.",
   "@signInErrorEmail": {
     "description": "Error in the sign-in window."
   },
@@ -16454,23 +16454,23 @@
       }
     }
   },
-  "signInErrorName": "Type the name people will see.",
+  "signInErrorName": "Enter a name.",
   "@signInErrorName": {
     "description": "Error when creating an account with the name left empty."
   },
-  "signInErrorProvider": "That account's email isn't confirmed, so it can't be used to sign in.",
+  "signInErrorProvider": "Verify your email with that account first.",
   "@signInErrorProvider": {
     "description": "Error after trying to sign in with a Google or Discord account whose email address is not verified."
   },
-  "signInErrorTimedOut": "Sign-in wasn't finished in the browser. Try again.",
+  "signInErrorTimedOut": "Sign-in timed out. Try again.",
   "@signInErrorTimedOut": {
     "description": "Error when a Google or Discord sign-in was started and never finished."
   },
-  "signInErrorBrowser": "The browser could not be opened.",
+  "signInErrorBrowser": "Couldn't open your browser.",
   "@signInErrorBrowser": {
     "description": "Error when Lumit could not open the web browser for signing in or for the shop."
   },
-  "signInErrorGeneric": "That did not work. Try again in a moment.",
+  "signInErrorGeneric": "Something went wrong. Try again.",
   "@signInErrorGeneric": {
     "description": "Error in the sign-in window and the Lumit Pro window for anything unexpected."
   },
@@ -16482,11 +16482,11 @@
   "@proHeadline": {
     "description": "Large heading in the Lumit Pro window."
   },
-  "proFeatureRelayTitle": "Share from anywhere",
+  "proFeatureRelayTitle": "Share projects anywhere",
   "@proFeatureRelayTitle": {
     "description": "First feature in the Lumit Pro window."
   },
-  "proFeatureRelayBody": "Guests join through Lumit's relay. Nothing to set up.",
+  "proFeatureRelayBody": "Guests join through Lumit's relay. With no additional setup.",
   "@proFeatureRelayBody": {
     "description": "What the first Lumit Pro feature does. A relay passes a shared project's edits between people who cannot reach each other."
   },
@@ -16543,7 +16543,7 @@
   "@proSignInPreview": {
     "description": "The filled button in the Lumit Pro window when nobody is signed in and Pro is free for now."
   },
-  "proWaiting": "Finish paying in your browser.",
+  "proWaiting": "Complete your purchase in your browser.",
   "@proWaiting": {
     "description": "Line in the Lumit Pro window after the shop has been opened in the browser."
   },
@@ -16551,7 +16551,7 @@
   "@proWaitingCancel": {
     "description": "Link in the Lumit Pro window that stops waiting for the shop."
   },
-  "proThanksHeadline": "You have Lumit Pro",
+  "proThanksHeadline": "You now have Lumit Pro",
   "@proThanksHeadline": {
     "description": "Large heading in the Lumit Pro window once the account has Pro."
   },
@@ -16581,7 +16581,7 @@
       }
     }
   },
-  "proPastDue": "The last payment failed. Update your card to keep Pro.",
+  "proPastDue": "Payment failed. Update your card to keep Pro.",
   "@proPastDue": {
     "description": "Warning in the Lumit Pro window and Settings."
   },
@@ -17285,7 +17285,7 @@
   "@settingsAccountDelete": {
     "description": "Button on the Account page of Settings."
   },
-  "settingsAccountDeleteAsk": "Delete your Lumit account? Any subscription ends now and synced settings are removed. Settings on this machine stay.",
+  "settingsAccountDeleteAsk": "Delete your Lumit account? Your subscription ends and synced settings are removed. Settings on this device stay.",
   "@settingsAccountDeleteAsk": {
     "description": "Confirmation before a Lumit account is deleted."
   },
@@ -17337,11 +17337,11 @@
   "@shareCloud": {
     "description": "Row label on the Share this project page: whether guests can come in through the relay Lumit itself runs for people with Lumit Pro."
   },
-  "shareCloudUse": "Let guests join through Lumit's relay",
+  "shareCloudUse": "Use Lumit's relay",
   "@shareCloudUse": {
     "description": "Checkbox on the Share this project page, for an account with Lumit Pro."
   },
-  "shareCloudPro": "Lumit Pro lets guests join from anywhere.",
+  "shareCloudPro": "Share anywhere with Lumit Pro.",
   "@shareCloudPro": {
     "description": "Line on the Share this project page for someone without Lumit Pro, beside a button that opens the Lumit Pro window."
   },
