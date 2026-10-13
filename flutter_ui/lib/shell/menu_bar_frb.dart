@@ -89,6 +89,8 @@ import 'tool_bar_frb.dart' show LumitTopLineToolsFrb;
 import 'tour_frb.dart';
 import 'update_dialog_frb.dart';
 import 'welcome_frb.dart' show projectDisplayName;
+import 'window_frame.dart';
+import 'wordmark.dart';
 import 'workspace_shortcut_frb.dart';
 
 /// The machinery half of Window ▸ Workspace (docs/07 §1.4): saving the
@@ -575,24 +577,38 @@ class LumitMenuBarFrb extends StatelessWidget {
       // the options taking what is left between. The headings scroll only
       // once they would take more than half the line, which no window they
       // fit is narrow enough for.
+      //
+      // Where the window has no title bar this line is also that: the mark
+      // stands where a title bar's icon would, it and the empty stretch
+      // after the headings move the window, and the end is left clear for
+      // the window's buttons (window_frame.dart).
       child: LayoutBuilder(
         builder: (context, c) => Row(
           children: [
+            if (windowFrameDrawn)
+              const WindowDragArea(
+                child: Padding(
+                  padding: EdgeInsets.only(left: 10, right: 4),
+                  child: Center(widthFactor: 1, child: LumitMark(size: 16)),
+                ),
+              ),
             Expanded(
-              child: onRail
-                  ? LayoutBuilder(
-                      builder: (context, c) => Row(
-                        children: [
-                          ConstrainedBox(
-                            constraints:
-                                BoxConstraints(maxWidth: c.maxWidth / 2),
-                            child: headings,
-                          ),
-                          const Expanded(child: LumitTopLineToolsFrb()),
-                        ],
-                      ),
-                    )
-                  : headings,
+              child: LayoutBuilder(
+                builder: (context, c) => Row(
+                  children: [
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: onRail ? c.maxWidth / 2 : c.maxWidth),
+                      child: headings,
+                    ),
+                    Expanded(
+                      child: onRail
+                          ? const LumitTopLineToolsFrb()
+                          : const WindowDragArea(),
+                    ),
+                  ],
+                ),
+              ),
             ),
             // The command box at the line's end, in every style and position,
             // unless the person has switched it off or the window is too
@@ -609,6 +625,7 @@ class LumitMenuBarFrb extends StatelessWidget {
               ),
               const SizedBox(width: 6),
             ],
+            SizedBox(width: windowButtonsWidth),
           ],
         ),
       ),

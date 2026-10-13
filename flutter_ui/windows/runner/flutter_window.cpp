@@ -95,6 +95,34 @@ bool FlutterWindow::OnCreate() {
         result->Success();
       });
 
+  // The window has no title bar (win32_window.cpp), so Flutter draws the
+  // buttons one would hold and says here what was pressed
+  // (lib/shell/window_frame.dart). Every call answers whether the window is
+  // maximised, which is all the button's drawing needs to know.
+  flutter::MethodChannel<> window(
+      flutter_controller_->engine()->messenger(), "lumit/window",
+      &flutter::StandardMethodCodec::GetInstance());
+  window.SetMethodCallHandler(
+      [this](const flutter::MethodCall<>& call,
+             std::unique_ptr<flutter::MethodResult<>> result) {
+        const HWND hwnd = GetHandle();
+        const std::string& method = call.method_name();
+        if (method == "drag") {
+          // What a press on a title bar does. Flutter holds the mouse while a
+          // button is down, and Windows will not move a window until it lets
+          // go. Posted, so this call has answered before the move begins.
+          ::ReleaseCapture();
+          ::PostMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        } else if (method == "minimise") {
+          ::ShowWindow(hwnd, SW_MINIMIZE);
+        } else if (method == "maximise") {
+          ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+        } else if (method == "close") {
+          ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+        }
+        result->Success(flutter::EncodableValue(::IsZoomed(hwnd) != 0));
+      });
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {

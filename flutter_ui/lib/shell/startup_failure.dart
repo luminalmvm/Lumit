@@ -16,6 +16,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/shell/window_frame.dart';
 import 'package:lumit_flutter/state/faults.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 
@@ -37,6 +38,12 @@ class StartupFailureApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       localizationsDelegates: Strings.localizationsDelegates,
       supportedLocales: Strings.supportedLocales,
+      // The window has no title bar on Windows, and this of all screens
+      // needs a way to close it.
+      builder: (context, child) => WindowFrame(
+        theme: theme,
+        child: WindowDragStrip(theme: theme, child: child!),
+      ),
       home: ColoredBox(
         color: theme.surface0,
         child: Padding(

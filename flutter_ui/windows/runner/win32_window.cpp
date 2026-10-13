@@ -2,6 +2,7 @@
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <windowsx.h>
 
 #include <fstream>
 
@@ -131,6 +132,44 @@ void SaveWindowPlacement(HWND window) {
   }
   std::ofstream file(path.c_str(), std::ios::binary | std::ios::trunc);
   file.write(reinterpret_cast<const char*>(&placement), sizeof(placement));
+}
+
+// The window has no title bar. Lumit's menu bar is its top line and carries the
+// window buttons (lib/shell/window_frame.dart), so the frame keeps its sides
+// and bottom and gives its top to the client area. See WM_NCCALCSIZE below.
+
+// How far the frame's edge reaches past what is seen, in physical pixels. A
+// maximised window hangs over the screen by this much on every side.
+int FrameThickness(HWND window) {
+  const UINT dpi = FlutterDesktopGetDpiForHWND(window);
+  return GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi) +
+         GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+}
+
+// Whether a point on the screen, as WM_NCHITTEST carries it, is on the top
+// resize edge. The title bar used to hold that edge. Now it is the first few
+// pixels of the client area, half the frame's thickness so the menus under it
+// keep most of their height. A maximised window has no edge to drag.
+bool OnTopEdge(HWND window, LPARAM point) {
+  RECT frame;
+  if (IsZoomed(window) || !GetWindowRect(window, &frame)) {
+    return false;
+  }
+  return GET_Y_LPARAM(point) < frame.top + FrameThickness(window) / 2;
+}
+
+// The Flutter view's own window procedure, under ViewProc.
+WNDPROC g_view_proc = nullptr;
+
+// The view covers the whole client area, so it is the window Windows asks
+// about a point on the top edge. Answering "not mine" there hands the question
+// to the frame behind it, which answers with the resize edge.
+LRESULT CALLBACK ViewProc(HWND view, UINT message, WPARAM wparam,
+                          LPARAM lparam) noexcept {
+  if (message == WM_NCHITTEST && OnTopEdge(GetParent(view), lparam)) {
+    return HTTRANSPARENT;
+  }
+  return CallWindowProc(g_view_proc, view, message, wparam, lparam);
 }
 
 }  // namespace
@@ -303,6 +342,40 @@ Win32Window::MessageHandler(HWND hwnd,
       }
       return 0;
 
+    // The title bar goes and the rest of the frame stays. Windows works out
+    // the usual client area, then the top it came in with is put back, so the
+    // client area starts at the window's own top edge. The style still says
+    // there is a caption, which is what keeps the shadow, the snapping and the
+    // minimise and maximise animations.
+    case WM_NCCALCSIZE: {
+      // Windows asks in two forms, and in both the rectangle to answer in is
+      // the first thing at |lparam|.
+      auto* client = reinterpret_cast<RECT*>(lparam);
+      const LONG top = client->top;
+      DefWindowProc(hwnd, message, wparam, lparam);
+      // Maximised, the top hangs over the screen like the other three sides,
+      // and the menu bar would be cut off without this.
+      client->top = top + (IsZoomed(hwnd) ? FrameThickness(hwnd) : 0);
+      return 0;
+    }
+
+    case WM_NCHITTEST: {
+      const LRESULT hit = DefWindowProc(hwnd, message, wparam, lparam);
+      if (hit != HTCLIENT || !OnTopEdge(hwnd, lparam)) {
+        return hit;
+      }
+      // The corners reach as far along the top as the frame is thick, as they
+      // do down the sides.
+      RECT client;
+      GetClientRect(hwnd, &client);
+      POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ScreenToClient(hwnd, &point);
+      const int corner = FrameThickness(hwnd);
+      return point.x < corner
+                 ? HTTOPLEFT
+                 : point.x >= client.right - corner ? HTTOPRIGHT : HTTOP;
+    }
+
     case WM_DPICHANGED: {
       auto newRectSize = reinterpret_cast<RECT*>(lparam);
       LONG newWidth = newRectSize->right - newRectSize->left;
@@ -376,6 +449,8 @@ void Win32Window::SetChildContent(HWND content) {
 
   MoveWindow(content, frame.left, frame.top, frame.right - frame.left,
              frame.bottom - frame.top, true);
+  g_view_proc = reinterpret_cast<WNDPROC>(SetWindowLongPtr(
+      content, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(ViewProc)));
 
   SetFocus(child_content_);
 }
