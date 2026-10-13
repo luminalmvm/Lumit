@@ -45,6 +45,9 @@ pub struct WorkerState {
     /// Whether this thread is running at its playing priority
     /// ([`playback_priority`]).
     prioritised: bool,
+    /// The document as the Viewer looks at it, kept between frames
+    /// ([`viewed_kept`]).
+    viewed: Option<Viewed>,
     /// The newest Scopes trace asked for while playing, kept for the moment
     /// after the next picture.
     scope_waiting: Option<RenderScopeRequest>,
@@ -1596,7 +1599,13 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // The fill banks what the Viewer will ask for, and while the chip is on
     // that is the cut picture — a fill under the other name would be work
     // nothing ever reads back.
-    let document = viewed_through(state.prefix, state.view, document);
+    let document = viewed_kept(
+        &mut state.viewed,
+        state.prefix,
+        state.view,
+        revision,
+        document,
+    );
     let Some(comp) = document.comp(comp_ref.id) else {
         state.fill_exhausted = true;
         return;
@@ -2944,6 +2953,7 @@ fn worker_loop(
         unparked: std::collections::VecDeque::new(),
         last_leg: None,
         scope_waiting: None,
+        viewed: None,
         prioritised: false,
         prefetcher: lumit_render::Prefetcher::default(),
         last_shown: None,
@@ -3306,7 +3316,13 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // plays the cut picture, and every name below is of the cut
             // document so the look-ahead and the tiers agree with the frame
             // that gets composited.
-            let document = viewed_through(state.prefix, state.view, document);
+            let document = viewed_kept(
+                &mut state.viewed,
+                state.prefix,
+                state.view,
+                revision,
+                document,
+            );
             // The adaptive tier applies at RENDER time — the whole point of a
             // coarser tier is a cheaper composite, so it must be in
             // force while the frame is made, not when it is shown. Read before
@@ -4243,6 +4259,49 @@ fn viewed(
 /// through the same view builds the same document and names the same frames.
 #[frb(ignore)]
 const VIEW_CAMERA_ID: Uuid = Uuid::from_u128(0x6c75_6d69_7420_7669_6577_2063_616d_6572);
+
+/// [`viewed_through`], kept between frames.
+///
+/// A view or a prefix point makes a copy of the whole document, which for a
+/// large project is several milliseconds, and playback and the idle fill asked
+/// for one every frame. The copy made for a revision and a way of looking is
+/// the copy for the next frame too.
+#[frb(ignore)]
+fn viewed_kept(
+    kept: &mut Option<Viewed>,
+    prefix: Option<crate::api::state::BridgePrefixPoint>,
+    view: Option<(Uuid, lumit_core::model::CameraPose)>,
+    revision: u64,
+    document: std::sync::Arc<lumit_core::Document>,
+) -> std::sync::Arc<lumit_core::Document> {
+    if prefix.is_none() && view.is_none() {
+        // Nothing is copied, so there is nothing to keep.
+        *kept = None;
+        return document;
+    }
+    if let Some(was) = kept {
+        if (was.revision, was.prefix, was.view) == (revision, prefix, view) {
+            return was.document.clone();
+        }
+    }
+    let document = viewed_through(prefix, view, document);
+    *kept = Some(Viewed {
+        revision,
+        prefix,
+        view,
+        document: document.clone(),
+    });
+    document
+}
+
+/// What [`viewed_kept`] keeps.
+#[frb(ignore)]
+struct Viewed {
+    revision: u64,
+    prefix: Option<crate::api::state::BridgePrefixPoint>,
+    view: Option<(Uuid, lumit_core::model::CameraPose)>,
+    document: std::sync::Arc<lumit_core::Document>,
+}
 
 /// [`viewed`], then looked through the Viewer's 3D view when one is set
 /// (docs/impl/camera.md §6): a Camera layer holding the view's pose is put at
@@ -5819,6 +5878,7 @@ mod tests {
             unparked: std::collections::VecDeque::new(),
             last_leg: None,
             scope_waiting: None,
+            viewed: None,
             prioritised: false,
             prefetcher: lumit_render::Prefetcher::default(),
             last_shown: None,
