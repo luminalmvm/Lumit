@@ -28,6 +28,10 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Line numbers in a backtrace and nothing more. Full debug info is for a
+  # debugger, which nobody attaches to a runner, and writing it for a hundred
+  # test binaries is a good share of every build here, most of all on Windows.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 # Caches, which every job below leans on. A repository gets 10 GB and the
 # least recently used go first, so two rules keep the ones that matter in:
