@@ -45,6 +45,14 @@ struct Shared {
     plan: RwLock<Option<Arc<mix::MixPlan>>>,
     /// Frames consumed since load/seek — the clock.
     playhead: AtomicUsize,
+    /// How many frames the last callback moved the playhead by, and when it
+    /// did ([`nanos`]). A sound card takes its samples a buffer at a time, so
+    /// the playhead alone moves in steps of ten milliseconds or more, and a
+    /// picture timed off those steps arrives unevenly. With these two a
+    /// reader can say where the clock is between one callback and the next
+    /// ([`Shared::clock_frames`]).
+    step: AtomicUsize,
+    stepped_at: AtomicU64,
     playing: AtomicBool,
     /// The monitor mute: the device is handed silence while the mix, the
     /// clock and the meters carry on as if it were heard. Not document data,
@@ -74,6 +82,8 @@ impl Shared {
         Self {
             plan: RwLock::new(plan),
             playhead: AtomicUsize::new(0),
+            step: AtomicUsize::new(0),
+            stepped_at: AtomicU64::new(0),
             playing: AtomicBool::new(false),
             muted: AtomicBool::new(false),
             scrub: AtomicU64::new(0),
@@ -82,6 +92,25 @@ impl Shared {
             starved: AtomicU64::new(0),
             closed: AtomicBool::new(false),
         }
+    }
+
+    /// Where the clock stands, in frames.
+    ///
+    /// The callback hands the card a buffer and counts all of it at once.
+    /// While playing, that buffer is counted in here as time passes, so the
+    /// clock runs smoothly from the start of the buffer to its end, and
+    /// waits there if the next callback is late. Stopped, it is the playhead.
+    // The three reads are not one read. One that lands across a callback is
+    // out by a buffer at most, for that one reading.
+    fn clock_frames(&self, rate: u32) -> f64 {
+        let playhead = self.playhead.load(Ordering::Relaxed) as f64;
+        if !self.playing.load(Ordering::Relaxed) {
+            return playhead;
+        }
+        let step = self.step.load(Ordering::Relaxed) as f64;
+        let since = nanos().saturating_sub(self.stepped_at.load(Ordering::Relaxed));
+        let passed = since as f64 * f64::from(rate) / 1e9;
+        (playhead - step + passed.min(step)).max(0.0)
     }
 }
 
@@ -104,6 +133,13 @@ const FILL_REST: std::time::Duration = std::time::Duration::from_millis(40);
 /// looks, and long enough that an export reading through the same pool does
 /// not push the playhead's own blocks out.
 const FILL_HOLD_MS: u64 = 2_000;
+
+/// Nanoseconds since the first call, for placing the clock between callbacks.
+fn nanos() -> u64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    let start = START.get_or_init(std::time::Instant::now);
+    u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
+}
 
 /// How many frames a scrub burst takes to fade in, and again to fade out. A
 /// burst starts and stops wherever the playhead happens to be, which is
@@ -394,6 +430,8 @@ impl AudioEngine {
 
     pub fn seek_seconds(&self, t: f64) {
         let frame = (t.max(0.0) * f64::from(self.device_rate)) as usize;
+        // No buffer has been counted from here yet.
+        self.shared.step.store(0, Ordering::Relaxed);
         self.shared.playhead.store(frame, Ordering::Relaxed);
         self.filler.unpark();
     }
@@ -422,7 +460,7 @@ impl AudioEngine {
     /// master). Output latency compensation arrives with the ring buffer
     /// work; at ±half a frame tolerance it is acceptable to omit for Gate 0.
     pub fn clock_seconds(&self) -> f64 {
-        self.shared.playhead.load(Ordering::Relaxed) as f64 / f64::from(self.device_rate)
+        self.shared.clock_frames(self.device_rate) / f64::from(self.device_rate)
     }
 
     /// A cheap, cloneable, thread-safe read-only view of the playback clock.
@@ -462,7 +500,7 @@ impl ClockHandle {
     /// [`AudioEngine::clock_seconds`].
     #[must_use]
     pub fn seconds(&self) -> f64 {
-        self.shared.playhead.load(Ordering::Relaxed) as f64 / f64::from(self.device_rate)
+        self.shared.clock_frames(self.device_rate) / f64::from(self.device_rate)
     }
 
     /// Whether the engine is currently playing — identical to
@@ -553,7 +591,8 @@ fn fill(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usize) {
         return;
     };
     let total = plan.total_frames;
-    let mut playhead = shared.playhead.load(Ordering::Relaxed);
+    let began = shared.playhead.load(Ordering::Relaxed);
+    let mut playhead = began;
     // On the stack, so a buffer's worth of mixing and metering costs no
     // atomics and no allocation; published once, below.
     let mut acc = [meter::MeterAcc::default(); meter::SLOTS];
@@ -576,7 +615,17 @@ fn fill(shared: &Shared, scrub: &mut Scrub, out: &mut [f32], channels: usize) {
             break;
         }
     }
-    shared.playhead.store(playhead, Ordering::Relaxed);
+    // Only if nothing moved the playhead meanwhile. A seek that landed while
+    // this buffer was being mixed used to be written over here, and the
+    // sound then carried on from where it had been.
+    if shared
+        .playhead
+        .compare_exchange(began, playhead, Ordering::Relaxed, Ordering::Relaxed)
+        .is_ok()
+    {
+        shared.step.store(playhead - began, Ordering::Relaxed);
+        shared.stepped_at.store(nanos(), Ordering::Relaxed);
+    }
     shared.meters.publish(&acc);
     if missed > 0 {
         shared.starved.fetch_add(missed as u64, Ordering::Relaxed);
