@@ -1084,6 +1084,17 @@ fn line_up_frame(
     false
 }
 
+/// Whether any tier holds the frame named `key`: the card, memory or disk.
+#[frb(ignore)]
+fn held_in_a_tier(
+    renderer: &lumit_render::HeadlessRenderer,
+    disk: &lumit_render::diskio::DiskIo,
+    key: u128,
+    bgra: bool,
+) -> bool {
+    renderer.has_frame_texture(key, bgra) || crate::framecache::contains(key) || disk.contains(key)
+}
+
 /// Whether a coming frame is worth a read off disk.
 ///
 /// Only one of the four answers leads to a read: the frame is on disk, and no
@@ -3175,16 +3186,8 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         .filter(|ahead| (ahead - frame).is_multiple_of(speed))
                         .collect()
                 };
+                let mut coming_held = true;
                 for &future in &coming {
-                    let wants = state
-                        .renderer
-                        .prefetch_wants(&document, comp_id, future, quality);
-                    state.prefetcher.request(wants);
-                    // And climb the tiers for the coming frames at the same
-                    // time: a frame held in memory goes up to the card now, a
-                    // parked one is asked for now — a read off disk takes a
-                    // turn or two of the loop, thus a frame asked for when it
-                    // is shown always comes too late and is composited again.
                     let view = state.view_id.load(std::sync::atomic::Ordering::Relaxed);
                     let name = state.names.get_or_compute(
                         revision,
@@ -3198,6 +3201,24 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                                 .frame_key_presynced(&document, comp_id, future, quality)
                         },
                     );
+                    // Only a frame that has to be composited needs its footage.
+                    // Decoding for one a tier already holds is work nobody
+                    // uses, and it made the pictures of a cached span go out
+                    // late.
+                    let held = name
+                        .is_some_and(|key| held_in_a_tier(&state.renderer, &state.disk, key, bgra));
+                    coming_held &= held;
+                    if !held {
+                        let wants = state
+                            .renderer
+                            .prefetch_wants(&document, comp_id, future, quality);
+                        state.prefetcher.request(wants);
+                    }
+                    // And climb the tiers for the coming frames at the same
+                    // time: a frame held in memory goes up to the card now, a
+                    // parked one is asked for now — a read off disk takes a
+                    // turn or two of the loop, thus a frame asked for when it
+                    // is shown always comes too late and is composited again.
                     if let Some(key) = name {
                         let provenance = lumit_render::FrameProvenance {
                             comp: comp_id,
@@ -3231,7 +3252,11 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 // are opened now, so the cut does not wait for it. Forward
                 // only, a reverse leg crosses its edit points as it always
                 // did.
-                if !playback.reverse {
+                // Not while the frames coming are held: nothing in them will
+                // be decoded. The asking picks up where it left off at the
+                // first frame that is not.
+                let cached_span = coming_held && !coming.is_empty();
+                if !playback.reverse && !cached_span {
                     let fps = document.comp(comp_id).map_or(60.0, |c| c.frame_rate.fps());
                     let window = crate::playback::cut_window(
                         frame,
