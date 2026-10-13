@@ -1249,6 +1249,14 @@ fn drain_packets(
                     .get(stream_index)
                     .map(|s| s.time_base)
                     .ok_or_else(|| MediaError::Ffmpeg("output stream missing".into()))?;
+                // A picture lasts one tick of its encoder's clock, and most
+                // encoders leave that unsaid. Without it the file ends where
+                // its last frame starts: it reads a frame short and so a
+                // little fast, and an MP4 marks that frame as past the end,
+                // to be decoded and thrown away.
+                if packet.duration == 0 && ctx.codec_type == ffi::AVMEDIA_TYPE_VIDEO {
+                    packet.set_duration(1);
+                }
                 packet.rescale_ts(ctx.time_base, stream_tb);
                 output
                     .interleaved_write_frame(&mut packet)

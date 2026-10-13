@@ -211,6 +211,12 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
         if packet.stream_index != stream_index {
             continue;
         }
+        // A packet the file marks to be decoded and thrown away, as one past
+        // the end of an MP4's edit is, never comes back from the decoder as a
+        // frame. Counting it promises a frame that asking for can only fail.
+        if packet.flags & ffi::AV_PKT_FLAG_DISCARD as i32 != 0 {
+            continue;
+        }
         let pts = if packet.pts != ffi::AV_NOPTS_VALUE {
             packet.pts
         } else {
