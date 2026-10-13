@@ -972,17 +972,57 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       columnsToJson(_groupOrder, _groupWidths, _hiddenGroups));
 
   /// The groups a bottom-bar toggle offers, in the order the bar shows them.
-  /// **Each toggle hides the columns its own word names** (owner, desktop
-  /// testing). Switches is the A/V cluster, Modes is the render cluster, and
-  /// Parent is the parent picker — which used to be the whole compose cluster,
-  /// so pressing Parent took the matte and the blend with it. The matte and
-  /// the blend have no toggle of their own: the mockup's bottom bar carries
-  /// these three words and no more.
+  /// Each toggle hides the columns its own word names: Modes is the render
+  /// cluster, Compose is the matte and the blend, and Parent is the parent
+  /// picker. Switches has no toggle, so the eye and the lock are always there.
   static const List<TimelineGroup> _toggleableGroups = [
-    TimelineGroup.switches,
     TimelineGroup.render,
+    TimelineGroup.compose,
     TimelineGroup.parent,
   ];
+
+  void _toggleGroup(TimelineGroup group) => setState(() {
+        if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
+        _saveColumns();
+      });
+
+  /// The headings' right-click menu: the same columns the bottom bar toggles,
+  /// by name, for anyone who looks for them on the headings first.
+  Future<void> _showColumnMenu(Offset position) async {
+    final timings = _ui?.renderTimings;
+    final picked = await showMenuAt<String>(
+      context: context,
+      position: position,
+      width: 170,
+      rows: (close) => [
+        for (final group in _toggleableGroups)
+          MenuRow(
+            key: ValueKey<String>('tl-column-menu-${group.name}'),
+            onPressed: () => close(group.name),
+            child: Row(children: [
+              menuTick(!_hiddenGroups.contains(group)),
+              Expanded(child: Text(columnGroupLabel(group))),
+            ]),
+          ),
+        if (timings != null)
+          MenuRow(
+            key: const ValueKey('tl-column-menu-timings'),
+            onPressed: () => close(TimelineGroup.timings.name),
+            child: Row(children: [
+              menuTick(timings.measuring),
+              Expanded(child: Text(l10n.tipRenderTime)),
+            ]),
+          ),
+      ],
+    );
+    if (picked == null || !mounted) return;
+    final group = TimelineGroup.values.byName(picked);
+    if (group == TimelineGroup.timings) {
+      timings?.setMeasuring(!timings.measuring);
+    } else {
+      _toggleGroup(group);
+    }
+  }
 
   /// The width a seam drag is currently showing, or null when no seam is being
   /// dragged (T4). **The outline follows the hand**: the rows redraw at this
@@ -4192,6 +4232,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               matteToggles: matteToggles,
                               onResize: _resizeGroup,
                               onResizeLive: _liveResizeGroup,
+                              onMenu: _showColumnMenu,
                               onReorder: (dragged, target) => setState(() {
                                 _groupOrder = reorderedGroups(
                                     _groupOrder, dragged, target);
@@ -4496,10 +4537,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
               groups: _toggleableGroups,
               labels: _chromeLabels,
               hidden: _hiddenGroups,
-              onToggle: (group) => setState(() {
-                if (!_hiddenGroups.remove(group)) _hiddenGroups.add(group);
-                _saveColumns();
-              }),
+              onToggle: _toggleGroup,
               animatedOnly: _animatedOnly,
               onToggleAnimated: () =>
                   setState(() => _animatedOnly = !_animatedOnly),

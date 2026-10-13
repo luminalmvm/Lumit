@@ -800,7 +800,7 @@ class ColumnToggles extends StatelessWidget {
 
   /// What the chrome says, read once by the panel and handed down.
   /// These three toggles are the setting's **first consumer**: in every mode
-  /// but [ChromeLabels.words] they draw the set's own Switches, Modes and
+  /// but [ChromeLabels.words] they draw the set's own Modes, Matte and
   /// Parent glyphs, and the word arrives in the tooltip as it does everywhere.
   final ChromeLabels labels;
 
@@ -1006,8 +1006,8 @@ class ColumnToggles extends StatelessWidget {
 /// that word. Only the three toggleable groups can be asked: the rest are
 /// never drawn as a toggle.
 String _columnGlyph(TimelineGroup group) => switch (group) {
-      TimelineGroup.switches => LumitIcons.switches,
       TimelineGroup.render => LumitIcons.modes,
+      TimelineGroup.compose => LumitIcons.matte,
       TimelineGroup.parent => LumitIcons.parent,
       // Not toggleable, and so never asked; answered rather than thrown for,
       // because a glyph is not worth a crash.

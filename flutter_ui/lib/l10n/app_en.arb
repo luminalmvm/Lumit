@@ -8098,7 +8098,7 @@
   },
   "tipToggleColumns": "{column} column",
   "@tipToggleColumns": {
-    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading: Switches, Modes, Parent, or Render time.",
+    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own name: Modes, Compose, Parent, or Render time.",
     "placeholders": {
       "column": {
         "type": "String"

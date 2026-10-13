@@ -96,7 +96,7 @@ List<TourStep> tourSteps(LumitUiState ui) {
       target: 'tl-column-toggles',
       title: l10n.tourColumnTogglesTitle,
       body: l10n.tourColumnTogglesBody(
-          l10n.columnSwitches, l10n.columnModes, l10n.columnParent),
+          l10n.columnModes, l10n.columnCompose, l10n.columnParent),
       side: TourSide.above,
       pointer: true,
     ),
