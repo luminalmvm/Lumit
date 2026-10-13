@@ -88,6 +88,14 @@ Future<void> _start(List<String> args) async {
   // Shared project window opens on it once there is a window to open it in.
   state.launchInvite = inviteFromArgs(args);
   final ui = LumitUiState(state);
+  // Where a new project's template is, which is the workspace's to say. The
+  // project Lumit starts on is a new one too, unless something else was asked
+  // for.
+  state.projectTemplate = () =>
+      ui.workspace.projectTemplate.isEmpty ? null : ui.workspace.projectTemplate;
+  if (fromArgs == null && ui.workspace.projectTemplate.isNotEmpty) {
+    unawaited(state.newProject(ask: false));
+  }
   // The account and its sync, which a test never starts: nothing else at
   // start-up speaks to a server of Lumit's.
   unawaited(ui.profiles.start());

@@ -63,6 +63,25 @@ abstract class LumitBridgeState implements RustOpaqueInterface {
       BridgeLib.instance.api.crateApiStateLumitBridgeStateNewProject(
           onChangeStream: onChangeStream);
 
+  /// A new, unsaved project that starts as a copy of the `.lum` at `path`:
+  /// the user's own template, with its folders, compositions and settings
+  /// already in place.
+  ///
+  /// The template itself is only read. What opens has no file and a new id,
+  /// so saving asks where to, and its crash journal and autosaves are its
+  /// own and never the template's. Footage the template names is looked for
+  /// beside the template, as it is when the template is opened.
+  ///
+  /// Not sync, for the reason [`Self::open_project`] is not.
+  static Future<BridgeOpened> newProjectFrom(
+          {required String path,
+          RustStreamSink<ScopedChange>? onChangeStream,
+          RustStreamSink<OpenProgress>? onProgressStream}) =>
+      BridgeLib.instance.api.crateApiStateLumitBridgeStateNewProjectFrom(
+          path: path,
+          onChangeStream: onChangeStream,
+          onProgressStream: onProgressStream);
+
   /// Deliberately **not** `#[frb(sync)]`, unlike its `new_project` sibling:
   /// reading a `.lum` parses a whole document and stats every media file it
   /// names, and on the UI isolate that froze the window for as long as it

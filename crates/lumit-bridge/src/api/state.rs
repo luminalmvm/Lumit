@@ -977,6 +977,41 @@ impl LumitBridgeState {
         report_phase(progress, OpenPhase::StartingPreview);
         Ok(BridgeOpened::Opened { project })
     }
+
+    /// A new, unsaved project that starts as a copy of the `.lum` at `path`:
+    /// the user's own template, with its folders, compositions and settings
+    /// already in place.
+    ///
+    /// The template itself is only read. What opens has no file and a new id,
+    /// so saving asks where to, and its crash journal and autosaves are its
+    /// own and never the template's. Footage the template names is looked for
+    /// beside the template, as it is when the template is opened.
+    ///
+    /// Not sync, for the reason [`Self::open_project`] is not.
+    // ponytail: footage packed inside the template is not unpacked, since
+    // there is no project folder yet to unpack it into. Unpack to a temporary
+    // folder if templates turn out to carry footage.
+    pub fn new_project_from(
+        path: &str,
+        on_change_stream: Option<CallbackStream>,
+        on_progress_stream: Option<OpenProgressStream>,
+    ) -> Result<BridgeOpened, BridgeError> {
+        let progress = on_progress_stream.as_ref();
+        crate::packing::begin();
+        report_phase(progress, OpenPhase::ReadingFile);
+        let path = PathBuf::from(path);
+        let Ok((mut doc, _manifest)) = lumit_project::open(&path) else {
+            return Ok(BridgeOpened::NotOpened);
+        };
+        doc.id = Uuid::now_v7();
+        let beside = path.parent().unwrap_or_else(|| Path::new(""));
+        let Some((project, _missing)) = adopt(doc, None, beside, on_change_stream, progress)?
+        else {
+            return Ok(BridgeOpened::NotOpened);
+        };
+        report_phase(progress, OpenPhase::StartingPreview);
+        Ok(BridgeOpened::Opened { project })
+    }
 }
 
 /// Make `doc` the open project: relink its media, hand every project already

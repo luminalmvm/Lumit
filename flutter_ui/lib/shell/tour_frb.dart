@@ -286,7 +286,7 @@ void _clearDemo(LumitState state, int? made) {
   final only = onlyTourDemo(state);
   _demoItems = null;
   // Nothing in it is the user's, so there is nothing to ask about saving.
-  if (made != null && only) state.newProject(ask: false);
+  if (made != null && only) state.newProject(ask: false, blank: true);
 }
 
 /// How many items the project held once the tour had made its composition,

@@ -4691,6 +4691,18 @@
   "@graphAutoFit": {
     "description": "Graph editor button: keep the curves framed in the view."
   },
+  "settingsProjectTemplate": "New project template",
+  "@settingsProjectTemplate": {
+    "description": "Settings window, Workspace group: the name of the row that picks a project file every new project starts as a copy of."
+  },
+  "settingsHelpProjectTemplate": "A project that every new project starts as a copy of.",
+  "@settingsHelpProjectTemplate": {
+    "description": "Settings window: the line under New project template while none is chosen. Once one is chosen the line shows its path instead."
+  },
+  "templateNotOpened": "The project template would not open, so the new project is empty",
+  "@templateNotOpened": {
+    "description": "Status line notice: the project file chosen as the template in Settings is missing or unreadable, and New made an empty project instead."
+  },
   "graphFitSelection": "Fit selection",
   "@graphFitSelection": {
     "description": "Graph editor button: zoom the view, in time and in value, to the selected keyframes, or to every curve when none is selected."
