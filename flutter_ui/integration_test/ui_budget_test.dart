@@ -159,6 +159,15 @@ class _Harness with ProbeGestures {
     }
   }
 
+  /// Whether a press at [at] lands in [e]. A row can be inside the lanes' box
+  /// and still be under the bar below them, as the last one is in a short
+  /// window, and a press there goes to the bar.
+  bool reaches(Element e, Offset at) {
+    final result = HitTestResult();
+    tester.binding.hitTestInView(result, at, tester.view.viewId);
+    return result.path.any((entry) => entry.target == e.renderObject);
+  }
+
   /// The rows as the framework's finders see them: on stage only, which the
   /// probe's own tree walk does not check.
   Iterable<OutlineRow> get outlineRows =>
@@ -331,7 +340,9 @@ void main() {
     List<Element> visibleRows() => [
           for (final e in tester.elementList(find.byType(OutlineRow)))
             if (h.rectOf(e) case final r?
-                when r.top >= lanes.top && r.bottom <= lanes.bottom)
+                when r.top >= lanes.top &&
+                    r.bottom <= lanes.bottom &&
+                    h.reaches(e, Offset(r.left + 40, r.center.dy)))
               e,
         ];
     Rect? nthRow(int n) {
