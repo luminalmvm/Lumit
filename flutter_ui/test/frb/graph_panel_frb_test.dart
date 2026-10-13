@@ -74,7 +74,7 @@ void main() {
     Future<void> mount(WidgetTester tester, dynamic p,
         {List<BridgeEffectInfo> Function()? drivers,
         List<BridgePresetInfo> Function()? groups,
-        Future<String?> Function()? groupSave}) async {
+        String? Function()? groupLibrary}) async {
       const size = Size(900, 600);
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;
@@ -83,7 +83,7 @@ void main() {
         child: GraphPanelFrb(
           driversLister: drivers,
           groupsLister: groups,
-          groupSavePicker: groupSave,
+          groupLibrary: groupLibrary,
         ),
         state: p.state as LumitState,
         uiState: p.uiState as LumitUiState,
@@ -743,33 +743,44 @@ void main() {
     Finder driverBox(UuidValue id) =>
         find.byKey(ValueKey<String>('graph-node-driver:$id'));
 
-    /// **Naming a set is one act with two halves**: the wash appears on
+    /// **Naming a set is one act with two halves**: the frame appears on
     /// the canvas and the same name goes into the library, so a rig that took
-    /// five minutes to wire is one row in the search from then on.
-    testWidgets(
-        'Save group names the pick, washes the canvas and writes a file',
+    /// five minutes to wire is one row in the search from then on. An effect
+    /// is saved with the drivers beside it.
+    testWidgets('Save group names the pick, frames it and writes a file',
         (tester) async {
       final p = withBlur();
       final wiggle = seedDriver(p.layer, 'wiggle', const Offset(60, 300));
       final smooth = seedDriver(p.layer, 'smooth', const Offset(320, 300));
-      final path = '${library().path}/Audio rig.lumgrp';
-      await mount(tester, p, groupSave: () async => path);
+      final dir = library().path;
+      await mount(tester, p, groupLibrary: () => dir);
 
       await clickBox(tester, driverBox(wiggle));
       await clickBox(tester, driverBox(smooth),
           held: LogicalKeyboardKey.controlLeft);
+      await clickBox(
+          tester,
+          find.byKey(ValueKey<String>('graph-node-${effectKey(p.layer)}')),
+          held: LogicalKeyboardKey.controlLeft);
       await tester.tap(find.byKey(const ValueKey('graph-save-group')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('theme-name-field')), 'Audio rig');
+      await tester.tap(find.byKey(const ValueKey('theme-name-ok')));
       await tester.pumpAndSettle();
 
       final group = p.layer.getGraph().wiring.groups.single;
-      expect(group.name, 'Audio rig', reason: 'the file names the group');
-      expect(group.members, hasLength(2));
+      expect(group.name, 'Audio rig', reason: 'the group takes the name');
+      expect(group.members, hasLength(3));
       expect(group.colour, isNot(0),
           reason: 'index 0 is the quiet default of the palette, not a region');
-      expect(File(path).existsSync(), isTrue);
-      expect(find.byKey(const ValueKey<String>('graph-group-Audio rig')),
+      final saved = File('$dir/Audio rig.lumgrp');
+      expect(saved.existsSync(), isTrue);
+      expect(saved.readAsStringSync(), contains('"effects"'),
+          reason: 'the blur is in the file with the drivers');
+      expect(find.byKey(const ValueKey<String>('graph-group-0')),
           findsOneWidget,
-          reason: 'and the wash is drawn behind its members');
+          reason: 'and the frame is drawn behind its members');
     });
 
     /// **The wires inside come back wired** — the whole reason a group is worth

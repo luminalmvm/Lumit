@@ -57,6 +57,30 @@ hollow sockets and the chain running from the box before it to the box after. Sw
 off in [Effect controls](/panels/effect-controls/) unplugs it here, and unplugging it here
 switches it off there.
 
+## Groups
+
+A **group** is a named, coloured frame behind some boxes. It follows them as they move, and
+a box sits in one group at most.
+
+| Gesture | What it does |
+| --- | --- |
+| `Ctrl+G`, or **Group** in the toolbar | Frames the picked boxes and starts typing the group's name. |
+| Click a group's bar | Picks every box in it. |
+| Drag the bar | Moves the group. |
+| Double-click the bar, or `F2` | Renames it. |
+| Right-click the bar | Opens its menu: **Rename**, **Colour**, **Save group** and **Ungroup**. |
+| Drop a box inside a frame | Adds it to that group. |
+| `Ctrl+Shift+G` | Takes the picked boxes out of their groups. |
+
+The two shortcuts are the ones set for grouping layers in the Timeline. Zoomed out, a
+group's name keeps its size on screen.
+
+**Save group** asks for a name and writes the group to the preset library as a `.lumgrp`
+file: its effects and drivers, the wires among them and their layout. Source and Layer out
+are never saved. Picked boxes that are not a group become one under that name. A saved
+group is listed in the node search under **Group**. Inserting one adds its effects to the
+end of the layer's stack and puts its drivers where the search was opened.
+
 ## Drivers
 
 A **driver** makes a value rather than a picture, and a wire from a driver into a

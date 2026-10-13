@@ -23,6 +23,7 @@
 // edited and handed straight back with the staged boxes, so a wire, a drag, a
 // rename and a delete each undo whole.
 
+import 'dart:io' show File;
 import 'dart:math' as math;
 import 'dart:typed_data' show Float64List;
 
@@ -65,6 +66,7 @@ import 'effect_param_row_frb.dart'
         paramRidersFor,
         relistedRows,
         scalarValueAt;
+import 'graph_groups.dart';
 import 'graph_panel.dart';
 import 'placeholder.dart';
 import 'shader_editor.dart'
@@ -250,7 +252,8 @@ class CompGraphPanel extends StatefulWidget {
   State<CompGraphPanel> createState() => _CompGraphPanelState();
 }
 
-class _CompGraphPanelState extends State<CompGraphPanel> {
+class _CompGraphPanelState extends State<CompGraphPanel>
+    with GraphGroups<CompGraphPanel> {
   LumitUiState? _ui;
 
   /// The held graph. Read when the comp or the document changes, never in a
@@ -490,6 +493,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
   /// picture mark says whether this box can be looked *at*: a driver, a value
   /// Input and the Output make no picture, so they offer no chip (§4.5).
   void _publishPick() {
+    groupPick = null;
     final ui = _ui;
     if (ui == null) return;
     final key = _selection.keys.isEmpty ? null : _selection.keys.last;
@@ -1247,6 +1251,18 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
         run: () => _addFx(info, at, wire: wire),
       ));
     }
+    // The saved groups, last. A wire in hand has no one socket of a whole
+    // group to land on, so they are left out while one is held.
+    if (wire == null) {
+      for (final saved in listGraphGroups()) {
+        entries.add(FxConsoleEntry(
+          label: saved.name,
+          kind: FxConsoleKind.effect,
+          group: l10n.graphGroup,
+          run: () => _insertGroup(saved.path, at),
+        ));
+      }
+    }
     try {
       await showFxConsoleFrb(
         context: context,
@@ -1437,21 +1453,95 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
           for (final e in graph.wiring.exposed)
             if (!ids.contains(e)) e,
         ],
-        groups: [
-          for (final g in graph.wiring.groups)
-            BridgeCompNodeGroup(
-              name: g.name,
-              colour: g.colour,
-              members: [
-                for (final m in g.members)
-                  if (!ids.contains(m)) m,
-              ],
-            ),
-        ],
+        groups: _bridgeGroups(groupsWithout(victims.keys)),
       ),
       instances: instances,
     );
     return true;
+  }
+
+  // --- Groups -------------------------------------------------------------
+
+  @override
+  List<GraphGroup> get groups => [
+        for (final g
+            in _graph?.wiring.groups ?? const <BridgeCompNodeGroup>[])
+          GraphGroup(g.name, g.colour, g.members.map(compNodeKey).toList()),
+      ];
+
+  List<BridgeCompNodeGroup> _bridgeGroups(List<GraphGroup> groups) => [
+        for (final g in groups)
+          BridgeCompNodeGroup(name: g.name, colour: g.colour, members: [
+            for (final key in g.members)
+              if (_byKey[key]?.id case final id?) id,
+          ]),
+      ];
+
+  @override
+  void commitGroups(List<GraphGroup> next) {
+    if (_graph == null) return;
+    // A saved group keeps each box's place, so a box nobody has dragged is
+    // given the one it is drawn at.
+    for (final g in next) {
+      for (final key in g.members) {
+        if (_boxRects[key] case final rect?) {
+          _positions.putIfAbsent(key, () => rect.topLeft);
+        }
+      }
+    }
+    _commit(_wiringNow(groups: _bridgeGroups(next)));
+  }
+
+  /// Where each box was drawn by the last build.
+  Map<String, Rect> _boxRects = const {};
+
+  @override
+  Map<String, Rect> get boxRects => _boxRects;
+
+  @override
+  List<String> get pickedKeys => _selection.keys.toList();
+
+  @override
+  void pickKeys(Iterable<String> keys) => _pick([
+        for (final key in keys)
+          if (_byKey[key]?.id case final id?) id,
+      ]);
+
+  /// Every graph has its own Output, so a saved group leaves it behind.
+  @override
+  bool groupCarries(String key) {
+    final id = _byKey[key]?.id;
+    return id != null && id != _graph?.wiring.output;
+  }
+
+  @override
+  String groupText(String name, int colour, List<String> members) =>
+      widget.comp.saveGraphGroup(name: name, colour: colour, nodes: [
+        for (final key in members)
+          if (_byKey[key]?.id case final id?) id,
+      ]);
+
+  @override
+  String get groupExtension => 'lumngrp';
+
+  @override
+  double get groupZoom => _zoom;
+
+  @override
+  LumitUiState? get groupUi => _ui;
+
+  /// Drop a saved group at `at`: one op, so one undo step however many boxes
+  /// and wires it carries.
+  void _insertGroup(String path, Offset at) {
+    try {
+      widget.comp.insertGraphGroup(
+          text: File(path).readAsStringSync(), x: at.dx, y: at.dy);
+    } catch (_) {
+      // The file has gone or is not a group, so nothing was added.
+      return;
+    }
+    _ui?.model.refresh();
+    _reload();
   }
 
   // --- Copy and paste -----------------------------------------------------
@@ -1573,6 +1663,11 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
     _pressAt = event.localPosition;
 
     final socket = layout.socketAt(at);
+    // A group's bar, unless a socket is poking out over it.
+    if (groupDown(event, at, (drag) => _nodeDrag = drag,
+        unless: socket != null)) {
+      return;
+    }
     if (socket != null) {
       // A wire already there is grabbed by its **far** end: drop it on another
       // input to move it, or on nothing at all to take it off. An output draws
@@ -1700,6 +1795,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
           _positions[entry.key] = entry.value + delta;
         }
         _dropWire = _dropInsert(layout)?.edge;
+        groupDragOver(drag.origins.keys);
       });
       return;
     }
@@ -1740,6 +1836,9 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
 
     if (_nodeDrag case final drag?) {
       final insert = moved ? _dropInsert(layout) : null;
+      // A box let go inside a group's frame joins it, in the same write as
+      // its new place.
+      final joined = groupsAfterDrop(moved ? drag.origins.keys : const []);
       setState(() {
         _nodeDrag = null;
         _dropWire = null;
@@ -1770,7 +1869,10 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
           return;
         }
       }
-      if (moved && _graph != null) _commit(_wiringNow());
+      if (moved && _graph != null) {
+        _commit(_wiringNow(
+            groups: joined == null ? null : _bridgeGroups(joined)));
+      }
       return;
     }
 
@@ -1886,6 +1988,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
       );
     }
     final layout = _layout();
+    _boxRects = {for (final box in layout.boxes) box.key: box.rect};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1907,6 +2010,8 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
         child: Row(
           children: [
             const Spacer(),
+            ...groupButtons(t),
+            const SizedBox(width: 10),
             Text(l10n.graphAutoWire, style: t.kicker),
             const SizedBox(width: 10),
             HouseToggle(
@@ -1973,6 +2078,10 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
             (event.logicalKey == LogicalKeyboardKey.delete ||
                 event.logicalKey == LogicalKeyboardKey.backspace)) {
           _deleteSelected();
+          return KeyEventResult.handled;
+        }
+        if (node.hasPrimaryFocus &&
+            groupKey(event) == KeyEventResult.handled) {
           return KeyEventResult.handled;
         }
         // Only the canvas itself: a rename field inside it types these.
@@ -2057,15 +2166,7 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
                         ..setEntry(1, 1, _zoom),
                       child: GraphBoxStack(
                         children: [
-                          for (final group in _graph!.wiring.groups)
-                            if (graphGroupRect([
-                              for (final member in group.members)
-                                if (layout.byKey[compNodeKey(member)]
-                                    case final box?)
-                                  box.rect,
-                            ])
-                                case final rect?)
-                              _groupWash(t, group, rect),
+                          ...groupWashes(t, () => _claimed = true),
                           for (final box in layout.boxes)
                             Positioned(
                               left: box.rect.left,
@@ -2103,31 +2204,6 @@ class _CompGraphPanelState extends State<CompGraphPanel> {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  /// One group's tinted wash and its name: the label palette, indexed, as the
-  /// layer canvas draws it.
-  Widget _groupWash(LumitTheme t, BridgeCompNodeGroup group, Rect rect) {
-    final colour = t.labelColour(group.colour);
-    return Positioned.fromRect(
-      key: ValueKey<String>('comp-graph-group-${group.name}'),
-      rect: rect,
-      child: IgnorePointer(
-        child: Container(
-          decoration: BoxDecoration(
-            color: colour.withValues(alpha: 0.05),
-            border: Border.all(color: colour.withValues(alpha: 0.18)),
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-          ),
-          padding: EdgeInsets.fromLTRB(graphGroupPad, 3, graphGroupPad, 0),
-          alignment: Alignment.topLeft,
-          child: Text(group.name,
-              style: t.kicker.copyWith(color: colour),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
         ),
       ),
     );
