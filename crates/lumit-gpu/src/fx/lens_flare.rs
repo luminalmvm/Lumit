@@ -798,14 +798,13 @@ impl LazyFlare {
         }
     }
 
-    /// Forget every bake, count and policy a previous test left here, so a
-    /// shared engine (`crate::test_support`) starts each test the way a new
-    /// one would. An engine still building has nothing to forget.
-    #[cfg(any(test, feature = "test-fixtures"))]
-    pub(super) fn reset_for_tests(&self) {
+    /// Forget every bake, count and policy the last renderer left here, so
+    /// an engine handed on ([`crate::SharedGpu`]) starts the way a new one
+    /// would. An engine still building has nothing to forget.
+    pub(super) fn reset(&self) {
         self.deferred.store(false, Ordering::Relaxed);
         if let Some(lf) = self.ready.get() {
-            lf.reset_for_tests();
+            lf.reset();
         }
     }
 }
@@ -966,14 +965,30 @@ impl LensFlareFx {
             bind_group_layouts: &[&trace_layout],
             push_constant_ranges: &[],
         });
-        let compute = |entry: &str, label: &str, module: &wgpu::ShaderModule, pl| {
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(label),
-                layout: Some(pl),
-                module,
-                entry_point: Some(entry),
-                compilation_options: Default::default(),
-                cache: None,
+        // Each is started here and collected below, so the eight compile
+        // side by side and not one after another.
+        let compute = |entry: &'static str,
+                       label: &'static str,
+                       module: &wgpu::ShaderModule,
+                       pl: &wgpu::PipelineLayout| {
+            let (device, module, pl) = (device.clone(), module.clone(), pl.clone());
+            crate::Compiling::start(move || {
+                device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(&pl),
+                    module: &module,
+                    entry_point: Some(entry),
+                    // wgpu zeroes workgroup memory first unless told not to,
+                    // and FXC takes five seconds to compile that for the
+                    // blur's line cache. The blur and the tile detect each
+                    // write every slot before reading any, so nothing is
+                    // lost by leaving it out.
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        zero_initialize_workgroup_memory: false,
+                        ..Default::default()
+                    },
+                    cache: None,
+                })
             })
         };
         let trace = compute("trace", "fx-lens-flare-trace", &trace_mod, &trace_pl);
@@ -1041,14 +1056,14 @@ impl LensFlareFx {
         let blur = compute("blur", "fx-lens-flare-blur", &blur_mod, &blur_pl);
 
         Self {
-            trace,
-            build_splats,
-            detect_tiles,
-            detect_pick,
-            deposit,
-            resolve,
-            blur,
-            combine,
+            trace: trace.wait(),
+            build_splats: build_splats.wait(),
+            detect_tiles: detect_tiles.wait(),
+            detect_pick: detect_pick.wait(),
+            deposit: deposit.wait(),
+            resolve: resolve.wait(),
+            blur: blur.wait(),
+            combine: combine.wait(),
             trace_layout,
             detect_layout,
             deposit_layout,
@@ -1168,11 +1183,9 @@ impl LensFlareFx {
         }
     }
 
-    /// See [`LazyFlare::reset_for_tests`]. A bake still on the thread is
-    /// waited for first, so it cannot surface in a later test as a lens
-    /// nobody there asked for.
-    #[cfg(any(test, feature = "test-fixtures"))]
-    pub(super) fn reset_for_tests(&self) {
+    /// See [`LazyFlare::reset`]. A bake still on the thread is waited for
+    /// first, so it cannot surface later as a lens nobody there asked for.
+    pub(super) fn reset(&self) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         while self.bake_pending() && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(5));

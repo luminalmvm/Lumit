@@ -685,6 +685,46 @@ impl HeadlessRenderer {
         Ok(Self::from_engines(gpu, colour, compositor, fx, scope))
     }
 
+    /// A renderer around the device and engines another one has finished
+    /// with ([`Self::into_engines`]). Its caches, probes and decoders are new,
+    /// so nothing of the last project comes with them.
+    #[must_use]
+    pub fn reusing(shared: lumit_gpu::SharedGpu) -> Self {
+        shared.reset();
+        let lumit_gpu::SharedGpu {
+            ctx,
+            colour,
+            compositor,
+            fx,
+            scope,
+        } = shared;
+        Self::from_engines(ctx, colour, compositor, fx, scope)
+    }
+
+    /// The device and engines back out of a renderer, for the next one.
+    /// `None` when a render unwound and left the engines behind (see
+    /// `parts`), and the next renderer then builds its own.
+    #[must_use]
+    pub fn into_engines(self) -> Option<lumit_gpu::SharedGpu> {
+        let Self {
+            gpu, parts, scope, ..
+        } = self;
+        let mut parts = parts?;
+        // Only the default depth's engine is kept, which is the one seeded
+        // at construction and so always here. One built for another depth
+        // is dropped with the rest of `parts`.
+        // ponytail: a 32-bit project builds its engine again each time it is
+        // opened. Keep the whole map if that gets noticed.
+        let fx = parts.fx.remove(&lumit_gpu::WORKING_FORMAT)?;
+        Some(lumit_gpu::SharedGpu {
+            ctx: gpu,
+            colour: parts.colour,
+            compositor: parts.compositor,
+            fx,
+            scope,
+        })
+    }
+
     /// The renderer around a device and engines already built — what
     /// [`Self::new`] does after the slow part, and what the shared test
     /// renderer does with the process-wide set (`test_support`).
@@ -8728,7 +8768,8 @@ mod tests {
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod test_support {
     use super::HeadlessRenderer;
-    use lumit_gpu::test_support::{lease, Lease, SharedGpu};
+    use lumit_gpu::test_support::{lease, Lease};
+    use lumit_gpu::SharedGpu;
     use std::ops::{Deref, DerefMut};
 
     /// A [`HeadlessRenderer`] on borrowed engines. Derefs to the renderer;
@@ -8759,30 +8800,6 @@ pub mod test_support {
             Ok(TestRenderer {
                 renderer: Some(renderer),
                 lease,
-            })
-        }
-
-        /// The device and engines back out of a renderer, for the pool.
-        /// `None` when a render unwound and left the engines behind (see
-        /// `parts`); the pool then builds a new set for the next test.
-        fn into_engines(self) -> Option<SharedGpu> {
-            let Self {
-                gpu, parts, scope, ..
-            } = self;
-            let mut parts = parts?;
-            // The pool holds one engine, and it is the default depth's: that
-            // is the one every test that has not asked for another is about to
-            // want, and it is seeded at construction so it is always here. An
-            // engine a test built for some other depth is dropped with the
-            // rest of `parts` rather than pooled, which is what keeps the
-            // shared set to one.
-            let fx = parts.fx.remove(&lumit_gpu::WORKING_FORMAT)?;
-            Some(SharedGpu {
-                ctx: gpu,
-                colour: parts.colour,
-                compositor: parts.compositor,
-                fx,
-                scope,
             })
         }
     }

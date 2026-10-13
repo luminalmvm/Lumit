@@ -756,17 +756,25 @@ impl ParticulatePipelines {
                 bind_group_layouts: &[&empty_layout, &draw_layout],
                 push_constant_ranges: &[],
             });
-        let compute = |entry: &str, label: &str| {
-            ctx.device
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        // Started here and collected below, so the four compile beside the
+        // draw pipeline and not one after another.
+        let compute = |entry: &'static str, label: &'static str| {
+            let (device, layout, module) = (ctx.device.clone(), compute_pl.clone(), module.clone());
+            crate::Compiling::start(move || {
+                device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(label),
-                    layout: Some(&compute_pl),
-                    module,
+                    layout: Some(&layout),
+                    module: &module,
                     entry_point: Some(entry),
                     compilation_options: Default::default(),
                     cache: None,
                 })
+            })
         };
+        let alive = compute("pt_alive", "fx-particulate-alive");
+        let scan = compute("pt_scan", "fx-particulate-scan");
+        let blocks = compute("pt_blocks", "fx-particulate-blocks");
+        let scatter = compute("pt_scatter", "fx-particulate-scatter");
         let draw = ctx
             .device
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -804,10 +812,10 @@ impl ParticulatePipelines {
             layout,
             draw_layout,
             empty_layout,
-            alive: compute("pt_alive", "fx-particulate-alive"),
-            scan: compute("pt_scan", "fx-particulate-scan"),
-            blocks: compute("pt_blocks", "fx-particulate-blocks"),
-            scatter: compute("pt_scatter", "fx-particulate-scatter"),
+            alive: alive.wait(),
+            scan: scan.wait(),
+            blocks: blocks.wait(),
+            scatter: scatter.wait(),
             draw,
         }
     }

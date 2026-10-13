@@ -216,10 +216,7 @@ class _StopsPreviewProgressState extends State<_StopsPreviewProgress> {
   // reads the developer's own settings file, so a test would assert against
   // whatever colour scheme the machine happened to be set to.
   final uiState = LumitUiState(state, workspace: Workspace());
-  // Known to [settleFrb], which ends every settle with this state's preview
-  // tracker idle — see [_settleProgress] for the failure that needs it.
-  _liveUis.add(uiState);
-  addTearDown(() => _liveUis.remove(uiState));
+  settleProgressOf(uiState);
   // Every one of these listens to the engine's response stream and holds the
   // preview-progress timer. Dropped on the floor at the end of a test they do
   // not stop listening, so by the end of a file a dozen dead UI states are
@@ -306,8 +303,18 @@ Future<void> settleFrb(
   await _settleProgress(tester, slice);
 }
 
-/// The UI states [freshProject] has made and not yet torn down.
+/// The UI states known to [settleFrb] and not yet torn down.
 final List<LumitUiState> _liveUis = [];
+
+/// Make a UI state known to [settleFrb], which ends every settle with its
+/// preview tracker idle — see [_settleProgress] for the failure that needs it.
+/// [freshProject] does this for its own. A test that builds one for itself and
+/// fronts a composition calls it too, since the worker can answer before the
+/// test is over.
+void settleProgressOf(LumitUiState uiState) {
+  _liveUis.add(uiState);
+  addTearDown(() => _liveUis.remove(uiState));
+}
 
 /// End a settle with no preview-progress timer pending.
 ///

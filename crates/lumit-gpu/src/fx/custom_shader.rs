@@ -137,10 +137,9 @@ impl CustomShaderPipelines {
         }
     }
 
-    /// Forget every compiled shader and count, so a shared engine
-    /// (`crate::test_support`) starts each test the way a new one would.
-    #[cfg(any(test, feature = "test-fixtures"))]
-    pub(super) fn reset_for_tests(&self) {
+    /// Forget every compiled shader and count, so an engine handed on
+    /// ([`crate::SharedGpu`]) starts the way a new one would.
+    pub(super) fn reset(&self) {
         if let Ok(mut cache) = self.cache.lock() {
             cache.clear();
         }

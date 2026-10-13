@@ -523,7 +523,8 @@ pub enum OpenPhase {
     /// and the previous one being closed out of the way.
     PreparingProject,
     /// The engine's part is done. What is left belongs to the frontend: start
-    /// the render worker and wait for its first reply.
+    /// the render worker and wait for its first frame, which fills the rest of
+    /// the bar as it is made.
     StartingPreview,
 }
 
@@ -559,14 +560,16 @@ pub enum BridgeOpened {
 }
 
 /// Where each phase begins on the bar. One table, so the weights cannot
-/// disagree between the two places that report them.
+/// disagree between the two places that report them. The first frame gets
+/// the larger share, since the read is over in a fraction of a second and a
+/// heavy frame is not.
 fn phase_fraction(phase: OpenPhase) -> f64 {
     match phase {
         OpenPhase::ReadingFile => 0.0,
-        OpenPhase::ReadingPackedMedia => 0.1,
-        OpenPhase::ResolvingMedia => 0.4,
-        OpenPhase::PreparingProject => 0.7,
-        OpenPhase::StartingPreview => 0.9,
+        OpenPhase::ReadingPackedMedia => 0.05,
+        OpenPhase::ResolvingMedia => 0.25,
+        OpenPhase::PreparingProject => 0.35,
+        OpenPhase::StartingPreview => 0.4,
     }
 }
 
