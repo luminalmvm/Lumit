@@ -1,4 +1,4 @@
-// Groups on a graph canvas.
+// Groups and notes on a graph canvas.
 //
 // A group is a named, coloured frame behind some boxes. It stores which boxes
 // and nothing about where, so the frame is drawn round wherever they sit and
@@ -11,9 +11,13 @@
 // round the inner one, and every edit here keeps any two groups either apart
 // or one inside the other.
 //
+// A note is a few words on the canvas. It is not a box: it has no sockets,
+// nothing reads it and it is not part of the pick. It is dragged by its body,
+// reworded on a double-click and has a menu on a right-click.
+//
 // The layer canvas and the node graph canvas hold different boxes and write
-// different lists. Each tells [GraphGroups] what its groups are and how to
-// write them back, and the rest is here once.
+// different lists. Each tells [GraphGroups] what its groups and notes are and
+// how to write them back, and the rest is here once.
 
 import 'dart:convert' show jsonDecode;
 import 'dart:io' show File;
@@ -23,6 +27,7 @@ import 'package:flutter/services.dart' show HardwareKeyboard, LogicalKeyboardKey
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
     show BridgePresetInfo, presetsDirPath, renameSavedGroup;
+import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeGraphNote;
 import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 
@@ -62,6 +67,15 @@ String graphGroupFile(String dir, String name, String extension) {
 /// What a row of a group's menu does.
 enum _GroupDo { rename, colour, save, ungroup }
 
+/// What a row of a note's menu does.
+enum _NoteDo { edit, colour, delete }
+
+/// How wide a note is drawn, in canvas units. Its height is its words'.
+const double graphNoteWidth = 180;
+
+/// The chip of the label palette a new note wears: the amber.
+const int _noteColour = 2;
+
 /// The group half of a graph canvas.
 mixin GraphGroups<W extends StatefulWidget> on State<W> {
   /// The canvas's groups as the document has them.
@@ -97,6 +111,18 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   /// Put the saved group at [path] in the middle of the canvas.
   void insertSavedGroup(String path);
 
+  /// The canvas's notes as the document has them.
+  List<BridgeGraphNote> get notes;
+
+  /// Write the notes back as one undo step.
+  void commitNotes(List<BridgeGraphNote> next);
+
+  /// A clear spot in the middle of the canvas, where a new note goes.
+  Offset get noteSpot;
+
+  /// Whether the toolbar's magnet is on, which a dragged note follows too.
+  bool get groupSnaps;
+
   double get groupZoom;
   LumitUiState? get groupUi;
 
@@ -108,6 +134,28 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
 
   /// The group a dragged box would join if it were let go now.
   int? groupLit;
+
+  /// The note whose words are being typed.
+  int? noteEditing;
+
+  /// Where a note that is not written yet will go. It joins the document
+  /// when it has words, so a note abandoned empty never existed.
+  Offset? _noteNew;
+
+  /// A note being dragged, and where it has got to.
+  (int, Offset)? _noteDrag;
+
+  /// A press that landed in a name or a note being typed. The canvas takes
+  /// the keyboard on every other press, which would end the typing.
+  bool _typingPress = false;
+
+  /// Whether the press being handled landed in a field of this mixin's.
+  /// Asked once per press by the canvas, before it takes the keyboard.
+  bool groupTypingPress() {
+    final was = _typingPress;
+    _typingPress = false;
+    return was;
+  }
 
   /// A bar's press, on its way to the canvas's own pointer handler.
   int? _pressed;
@@ -455,6 +503,158 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     ];
   }
 
+  /// Start a new note in the middle of the canvas.
+  void addNote() => setState(() {
+        noteEditing = null;
+        _noteNew = noteSpot;
+      });
+
+  BridgeGraphNote _note(BridgeGraphNote from,
+          {String? text, int? colour, Offset? at}) =>
+      BridgeGraphNote(
+        text: text ?? from.text,
+        colour: colour ?? from.colour,
+        x: at?.dx ?? from.x,
+        y: at?.dy ?? from.y,
+      );
+
+  /// The words typed into a note. One left with none is taken away, and a
+  /// new one with none is never made.
+  void _noteDone(int? at, String typed) {
+    final text = typed.trim();
+    final fresh = _noteNew;
+    setState(() => noteEditing = _noteNew = null);
+    final all = notes;
+    if (at == null) {
+      if (fresh == null || text.isEmpty) return;
+      commitNotes([
+        ...all,
+        BridgeGraphNote(
+            text: text, colour: _noteColour, x: fresh.dx, y: fresh.dy),
+      ]);
+    } else if (at < all.length && text != all[at].text) {
+      commitNotes([
+        for (final (i, n) in all.indexed)
+          if (i != at) n else if (text.isNotEmpty) _note(n, text: text),
+      ]);
+    }
+  }
+
+  Future<void> _noteMenu(int at, Offset position) async {
+    final picked = await showMenuAt<_NoteDo>(
+      context: context,
+      position: position,
+      width: 160,
+      rows: (close) => [
+        MenuRow(
+          key: const ValueKey('graph-note-menu-edit'),
+          onPressed: () => close(_NoteDo.edit),
+          child: Text(l10n.graphNoteEdit),
+        ),
+        MenuRow(
+          key: const ValueKey('graph-note-menu-colour'),
+          onPressed: () => close(_NoteDo.colour),
+          child: Text(l10n.graphGroupColour),
+        ),
+        MenuRow(
+          key: const ValueKey('graph-note-menu-delete'),
+          onPressed: () => close(_NoteDo.delete),
+          child: Text(l10n.delete),
+        ),
+      ],
+    );
+    if (picked == null || !mounted || at >= notes.length) return;
+    switch (picked) {
+      case _NoteDo.edit:
+        setState(() => noteEditing = at);
+      case _NoteDo.colour:
+        final colour =
+            await showLabelPicker(context, position, keyPrefix: 'graph-note');
+        if (colour == null || !mounted || at >= notes.length) return;
+        commitNotes([
+          for (final (i, n) in notes.indexed)
+            i == at ? _note(n, colour: colour) : n,
+        ]);
+      case _NoteDo.delete:
+        commitNotes([...notes]..removeAt(at));
+    }
+  }
+
+  /// A dragged note let go: on the dot grid with the magnet on, and written
+  /// back once.
+  void _noteDropped() {
+    final drag = _noteDrag;
+    if (drag == null) return;
+    setState(() => _noteDrag = null);
+    final (at, where) = drag;
+    if (at >= notes.length) return;
+    final to = groupSnaps
+        ? Offset(
+            (where.dx / graphDotGrid).round() * graphDotGrid,
+            (where.dy / graphDotGrid).round() * graphDotGrid,
+          )
+        : where;
+    commitNotes([
+      for (final (i, n) in notes.indexed) i == at ? _note(n, at: to) : n,
+    ]);
+  }
+
+  /// The notes, for the canvas's stack: over the groups' frames and under
+  /// the boxes. [onOwnPress] is what a box's own controls call.
+  List<Widget> graphNotes(LumitTheme t, VoidCallback onOwnPress) {
+    void typing() {
+      _typingPress = true;
+      onOwnPress();
+    }
+
+    // A note being dragged is drawn where the drag has got it to.
+    Offset place(int i, BridgeGraphNote note) => switch (_noteDrag) {
+          (final at, final where) when at == i => where,
+          _ => Offset(note.x, note.y),
+        };
+
+    return [
+      for (final (i, note) in notes.indexed)
+        Positioned(
+          key: ValueKey<String>('graph-note-$i'),
+          left: place(i, note).dx,
+          top: place(i, note).dy,
+          width: graphNoteWidth,
+          child: GraphNoteCard(
+            text: note.text,
+            colour: t.labelColour(note.colour),
+            editing: noteEditing == i,
+            onOwnPress: noteEditing == i ? typing : onOwnPress,
+            onDone: (text) => _noteDone(i, text),
+            onCancel: () => setState(() => noteEditing = null),
+            onEdit: () => setState(() {
+              _noteNew = null;
+              noteEditing = i;
+            }),
+            onMenu: (position) => _noteMenu(i, position),
+            onDrag: (delta) =>
+                setState(() => _noteDrag = (i, place(i, note) + delta)),
+            onDragEnd: _noteDropped,
+          ),
+        ),
+      if (_noteNew case final at?)
+        Positioned(
+          key: const ValueKey('graph-note-new'),
+          left: at.dx,
+          top: at.dy,
+          width: graphNoteWidth,
+          child: GraphNoteCard(
+            text: '',
+            colour: t.labelColour(_noteColour),
+            editing: true,
+            onOwnPress: typing,
+            onDone: (text) => _noteDone(null, text),
+            onCancel: () => setState(() => _noteNew = null),
+          ),
+        ),
+    ];
+  }
+
   /// The canvas's group keys. They follow the Timeline's own chords for
   /// grouping layers, so one rebinding moves both.
   KeyEventResult groupKey(KeyEvent event) {
@@ -499,7 +699,10 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
               lit: groupLit == i,
               renaming: groupRenaming == i,
               onPress: () => _pressed = i,
-              onOwnPress: onOwnPress,
+              onOwnPress: () {
+                _typingPress = true;
+                onOwnPress();
+              },
               onRenamed: (name) => renameGroup(i, name),
               onRenameCancelled: () => setState(() => groupRenaming = null),
             ),
@@ -507,7 +710,8 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     ];
   }
 
-  /// The toolbar's two group buttons, shared so both canvases word them alike.
+  /// The toolbar's group and note buttons, shared so both canvases word them
+  /// alike.
   List<Widget> groupButtons(LumitTheme t) => [
         LumitTooltip(
           message: l10n.tipGraphGroup,
@@ -521,6 +725,19 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
             child: glyph.LumitIcon(LumitIcons.group,
                 size: graphIconSize,
                 colour: canGroup ? t.textPrimary : t.textDisabled),
+          ),
+        ),
+        const SizedBox(width: 6),
+        LumitTooltip(
+          message: l10n.tipGraphNote,
+          child: HouseButton(
+            key: const ValueKey('graph-note'),
+            small: true,
+            frameless: true,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            onPressed: addNote,
+            child: glyph.LumitIcon(LumitIcons.note,
+                size: graphIconSize, colour: t.textMuted),
           ),
         ),
         const SizedBox(width: 6),
@@ -643,6 +860,84 @@ class GraphGroupWash extends StatelessWidget {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// One note: a tinted card with its words on it, or the field they are typed
+/// in. A note with no [onEdit] is one still being written for the first time.
+class GraphNoteCard extends StatelessWidget {
+  final String text;
+  final Color colour;
+  final bool editing;
+  final VoidCallback onOwnPress;
+  final ValueChanged<String> onDone;
+  final VoidCallback onCancel;
+  final VoidCallback? onEdit;
+  final ValueChanged<Offset>? onMenu;
+  final ValueChanged<Offset>? onDrag;
+  final VoidCallback? onDragEnd;
+
+  const GraphNoteCard({
+    super.key,
+    required this.text,
+    required this.colour,
+    required this.editing,
+    required this.onOwnPress,
+    required this.onDone,
+    required this.onCancel,
+    this.onEdit,
+    this.onMenu,
+    this.onDrag,
+    this.onDragEnd,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final card = BoxDecoration(
+      color: Color.alphaBlend(colour.withValues(alpha: 0.18), t.surface1),
+      border: Border(left: BorderSide(color: colour, width: 2)),
+      borderRadius: BorderRadius.circular(t.tokens.cardRadius),
+    );
+    if (editing) {
+      return Listener(
+        onPointerDown: (_) => onOwnPress(),
+        child: Container(
+          height: 96,
+          decoration: card,
+          padding: const EdgeInsets.only(left: 2),
+          child: GraphNameField(
+            key: const ValueKey('graph-note-field'),
+            initial: text,
+            multiline: true,
+            hint: l10n.graphNoteHint,
+            onDone: onDone,
+            onCancel: onCancel,
+          ),
+        ),
+      );
+    }
+    return Listener(
+      onPointerDown: (event) {
+        onOwnPress();
+        if (event.buttons == kSecondaryMouseButton) onMenu?.call(event.position);
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onDoubleTap: onEdit,
+          onPanUpdate: (details) => onDrag?.call(details.delta),
+          onPanEnd: (_) => onDragEnd?.call(),
+          child: Container(
+            decoration: card,
+            padding: const EdgeInsets.fromLTRB(10, 6, 8, 7),
+            child: Text(text,
+                style: t.body.copyWith(color: t.textPrimary, height: 1.35)),
+          ),
+        ),
+      ),
     );
   }
 }

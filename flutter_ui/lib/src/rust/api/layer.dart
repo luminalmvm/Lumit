@@ -2926,6 +2926,12 @@ class LayerReference {
         that: this,
       );
 
+  /// The notes on this layer's graph canvas.
+  List<BridgeGraphNote> getGraphNotes() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraphNotes(
+        that: this,
+      );
+
   /// One read for everything a row draws — see [`BridgeLayerInfo`]. One
   /// document lock and one crossing, where the per-field getters cost one of
   /// each per field.
@@ -3679,6 +3685,12 @@ class LayerReference {
           required BridgeGraphWiring wiring}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetGraph(
           that: this, drivers: drivers, wiring: wiring);
+
+  /// Replace the notes on this layer's graph canvas, as one undo step. A
+  /// note is added, moved, reworded and deleted this way.
+  void setGraphNotes({required List<BridgeGraphNote> notes}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSetGraphNotes(that: this, notes: notes);
 
   /// Choose how in-between frames are found. One undo step.
   ///

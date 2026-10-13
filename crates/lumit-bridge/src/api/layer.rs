@@ -7554,8 +7554,45 @@ impl LayerReference {
             .iter()
             .map(BridgeEffectInstance::get_effects)
             .collect();
-        let graph = crate::api::graph::wiring_into(wiring, nodes);
+        let mut graph = crate::api::graph::wiring_into(wiring, nodes);
+        graph.notes = self.item()?.graph.notes;
 
+        let proj = self.project()?;
+        let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
+        proj.store
+            .commit(lumit_core::Op::SetLayerGraph {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                graph: Box::new(graph),
+            })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
+    /// The notes on this layer's graph canvas.
+    #[frb(sync)]
+    pub fn get_graph_notes(&self) -> Result<Vec<crate::api::graph::BridgeGraphNote>, BridgeError> {
+        Ok(self
+            .item()?
+            .graph
+            .notes
+            .iter()
+            .map(crate::api::graph::BridgeGraphNote::read)
+            .collect())
+    }
+
+    /// Replace the notes on this layer's graph canvas, as one undo step. A
+    /// note is added, moved, reworded and deleted this way.
+    #[frb(sync)]
+    pub fn set_graph_notes(
+        &self,
+        notes: Vec<crate::api::graph::BridgeGraphNote>,
+    ) -> Result<(), BridgeError> {
+        let mut graph = self.item()?.graph;
+        graph.notes = notes
+            .into_iter()
+            .map(crate::api::graph::BridgeGraphNote::core)
+            .collect();
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store

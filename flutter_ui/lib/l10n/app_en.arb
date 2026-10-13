@@ -11967,7 +11967,19 @@
   },
   "graphGroupColour": "Colour…",
   "@graphGroupColour": {
-    "description": "Graph panel: a row of the menu on a group's bar. Opens the row of label colours to tint the group's frame with."
+    "description": "Graph panel: a row of the menu on a group's bar and of the menu on a note. Opens the row of label colours to tint the group's frame or the note with."
+  },
+  "tipGraphNote": "Add note",
+  "@tipGraphNote": {
+    "description": "Graph panel toolbar: tooltip on the button that puts a new note on the canvas, a few words that are not a box and are wired to nothing."
+  },
+  "graphNoteHint": "Note",
+  "@graphNoteHint": {
+    "description": "Graph panel: shown quietly in an empty note while nothing has been typed into it. A noun."
+  },
+  "graphNoteEdit": "Edit",
+  "@graphNoteEdit": {
+    "description": "Graph panel: a row of the menu on a note. Opens the note's words for typing. A verb."
   },
   "graphUngroup": "Ungroup",
   "@graphUngroup": {

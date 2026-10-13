@@ -711,6 +711,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeGraphNode dco_decode_bridge_graph_node(dynamic raw);
 
   @protected
+  BridgeGraphNote dco_decode_bridge_graph_note(dynamic raw);
+
+  @protected
   BridgeGraphPoint dco_decode_bridge_graph_point(dynamic raw);
 
   @protected
@@ -1379,6 +1382,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeGraphNode> dco_decode_list_bridge_graph_node(dynamic raw);
+
+  @protected
+  List<BridgeGraphNote> dco_decode_list_bridge_graph_note(dynamic raw);
 
   @protected
   List<BridgeHistoryEntry> dco_decode_list_bridge_history_entry(dynamic raw);
@@ -2613,6 +2619,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeGraphNode sse_decode_bridge_graph_node(SseDeserializer deserializer);
 
   @protected
+  BridgeGraphNote sse_decode_bridge_graph_note(SseDeserializer deserializer);
+
+  @protected
   BridgeGraphPoint sse_decode_bridge_graph_point(SseDeserializer deserializer);
 
   @protected
@@ -3382,6 +3391,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeGraphNode> sse_decode_list_bridge_graph_node(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeGraphNote> sse_decode_list_bridge_graph_note(
       SseDeserializer deserializer);
 
   @protected
@@ -4759,6 +4772,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeGraphNode self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_graph_note(
+      BridgeGraphNote self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_graph_point(
       BridgeGraphPoint self, SseSerializer serializer);
 
@@ -5610,6 +5627,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_graph_node(
       List<BridgeGraphNode> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_graph_note(
+      List<BridgeGraphNote> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_history_entry(

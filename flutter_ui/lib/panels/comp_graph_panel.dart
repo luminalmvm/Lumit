@@ -432,8 +432,10 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     // never in a build.
     final infos = <String, BridgeEffectInstanceInfo>{};
     final params = <String, CompBoxRows>{};
+    var notes = const <BridgeGraphNote>[];
     if (graph != null) {
       try {
+        notes = widget.comp.getNodeGraphNotes();
         for (final instance in widget.comp.getNodeGraphInstances()) {
           final key = compNodeKey(instance.id());
           final info = instance.getInfo();
@@ -456,6 +458,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
     }
     setState(() {
       _graph = graph;
+      _notes = notes;
       _infos = infos;
       _params = params;
       _byKey = {
@@ -1528,12 +1531,33 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   List<BridgePresetInfo> savedGroups() => listGraphGroups();
 
   @override
-  void insertSavedGroup(String path) => _insertGroup(
-      path,
-      graphClearSpot(
+  void insertSavedGroup(String path) => _insertGroup(path, noteSpot);
+
+  /// The held notes, read with the graph.
+  List<BridgeGraphNote> _notes = const [];
+
+  @override
+  List<BridgeGraphNote> get notes => _notes;
+
+  @override
+  void commitNotes(List<BridgeGraphNote> next) {
+    try {
+      widget.comp.setNodeGraphNotes(notes: next);
+    } catch (_) {
+      // Refused, or the comp moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  @override
+  Offset get noteSpot => graphClearSpot(
         _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
         [for (final b in _layout().boxes) b.rect],
-      ));
+      );
+
+  @override
+  bool get groupSnaps => _snapToGrid;
 
   @override
   double get groupZoom => _zoom;
@@ -1664,7 +1688,8 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   Offset _toCanvas(Offset local) => (local - _pan) / _zoom;
 
   void _down(PointerDownEvent event, GraphLayout layout) {
-    _canvasFocus.requestFocus();
+    // A press in a name or a note being typed leaves the keyboard there.
+    if (!groupTypingPress()) _canvasFocus.requestFocus();
     _menuPress = false;
     if (_claimed) {
       _claimed = false;
@@ -2178,6 +2203,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                       child: GraphBoxStack(
                         children: [
                           ...groupWashes(t, () => _claimed = true),
+                          ...graphNotes(t, () => _claimed = true),
                           for (final box in layout.boxes)
                             Positioned(
                               left: box.rect.left,

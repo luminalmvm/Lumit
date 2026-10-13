@@ -1192,10 +1192,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     if (!mounted) return;
     final layer = _ui?.selectedLayer.value;
     BridgeLayerGraph? graph;
+    var notes = const <BridgeGraphNote>[];
     var name = '';
     if (layer != null) {
       try {
         graph = layer.getGraph();
+        notes = layer.getGraphNotes();
         name = layer.getInfo().name;
       } catch (_) {
         // The layer has gone since the selection was made; the placeholder is
@@ -1206,6 +1208,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     setState(() {
       _layer = layer;
       _graph = graph;
+      _notes = graph == null ? const [] : notes;
       _byKey = {
         for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
           graphNodeKey(n.node): n,
@@ -2012,12 +2015,33 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       (widget.groupsLister ?? listNodeGroups)();
 
   @override
-  void insertSavedGroup(String path) => _insertGroup(
-      path,
-      graphClearSpot(
+  void insertSavedGroup(String path) => _insertGroup(path, noteSpot);
+
+  /// The held notes, read with the graph.
+  List<BridgeGraphNote> _notes = const [];
+
+  @override
+  List<BridgeGraphNote> get notes => _notes;
+
+  @override
+  void commitNotes(List<BridgeGraphNote> next) {
+    try {
+      _layer?.setGraphNotes(notes: next);
+    } catch (_) {
+      // Refused, or the layer moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  @override
+  Offset get noteSpot => graphClearSpot(
         _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
         [for (final b in _boxesNow()) b.rect],
-      ));
+      );
+
+  @override
+  bool get groupSnaps => _snapToGrid;
 
   @override
   double get groupZoom => _zoom;
@@ -2204,7 +2228,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   Offset _toCanvas(Offset local) => (local - _pan) / _zoom;
 
   void _down(PointerDownEvent event, GraphLayout layout) {
-    _canvasFocus.requestFocus();
+    // A press in a name or a note being typed leaves the keyboard there.
+    if (!groupTypingPress()) _canvasFocus.requestFocus();
     _menuPress = false;
     if (_claimed) {
       _claimed = false;
@@ -2824,6 +2849,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                           children: [
                             // The groups' frames, under every box.
                             ...groupWashes(t, () => _claimed = true),
+                            ...graphNotes(t, () => _claimed = true),
                             // A ring round each box someone else in the
                             // shared project has picked, in their colour.
                             // Only walked while the project is shared.
@@ -3609,11 +3635,18 @@ class GraphNameField extends StatefulWidget {
   final ValueChanged<String> onDone;
   final VoidCallback onCancel;
 
+  /// Many lines, for a note: Enter starts a new one and clicking away is
+  /// what commits.
+  final bool multiline;
+  final String? hint;
+
   const GraphNameField({
     super.key,
     required this.initial,
     required this.onDone,
     required this.onCancel,
+    this.multiline = false,
+    this.hint,
   });
 
   @override
@@ -3654,6 +3687,9 @@ class _GraphNameFieldState extends State<GraphNameField> {
         width: double.infinity,
         autofocus: true,
         submitOnLostFocus: true,
+        multiline: widget.multiline,
+        topAlign: widget.multiline,
+        hint: widget.hint,
         onSubmitted: widget.onDone,
         onCancelled: widget.onCancel,
       );

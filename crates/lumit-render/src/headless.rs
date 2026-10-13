@@ -5315,6 +5315,7 @@ mod tests {
         }
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(id) {
             c.graph = Some(CompGraph {
+                notes: Vec::new(),
                 nodes,
                 edges: vec![GraphEdge {
                     from: read,
@@ -6239,6 +6240,7 @@ mod tests {
                 let l = comp.layers.iter_mut().find(|l| l.id == top).unwrap();
                 l.effects = vec![blur];
                 l.graph = LayerGraph {
+                    notes: Vec::new(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![wiggle],
@@ -6585,6 +6587,7 @@ mod tests {
             if let Some(enabled) = graph {
                 remap.enabled = enabled;
                 l.graph = LayerGraph {
+                    notes: Vec::new(),
                     out_unwired: false,
                     groups: Vec::new(),
                     nodes: vec![remap],
@@ -7281,6 +7284,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                notes: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -7330,6 +7334,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                notes: Vec::new(),
                 nodes: vec![
                     GraphNode::Read {
                         id: read,
@@ -7391,6 +7396,7 @@ mod tests {
             w,
             h,
             CompGraph {
+                notes: Vec::new(),
                 nodes: vec![
                     GraphNode::Input {
                         id: src,
@@ -7480,6 +7486,7 @@ mod tests {
         let sampler_id = sampler.id;
 
         let graph = LayerGraph {
+            notes: Vec::new(),
             out_unwired: false,
             groups: Vec::new(),
             nodes: vec![sampler],

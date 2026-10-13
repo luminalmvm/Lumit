@@ -3498,7 +3498,40 @@ impl CompositionReference {
             })
             .collect();
         crate::api::track::settle(&before, &mut nodes);
-        let graph = crate::api::comp_graph::wiring_into(wiring, nodes);
+        let mut graph = crate::api::comp_graph::wiring_into(wiring, nodes);
+        graph.notes = self.graph_of(&doc)?.notes.clone();
+        self.commit(lumit_core::Op::SetCompGraph {
+            comp: self.id,
+            graph: Box::new(graph),
+        })
+    }
+
+    /// The notes on this node graph's canvas.
+    #[frb(sync)]
+    pub fn get_node_graph_notes(
+        &self,
+    ) -> Result<Vec<crate::api::graph::BridgeGraphNote>, BridgeError> {
+        let doc = self.document()?;
+        Ok(self
+            .graph_of(&doc)?
+            .notes
+            .iter()
+            .map(crate::api::graph::BridgeGraphNote::read)
+            .collect())
+    }
+
+    /// Replace the notes on this node graph's canvas, as one undo step.
+    #[frb(sync)]
+    pub fn set_node_graph_notes(
+        &self,
+        notes: Vec<crate::api::graph::BridgeGraphNote>,
+    ) -> Result<(), BridgeError> {
+        let doc = self.document()?;
+        let mut graph = self.graph_of(&doc)?.clone();
+        graph.notes = notes
+            .into_iter()
+            .map(crate::api::graph::BridgeGraphNote::core)
+            .collect();
         self.commit(lumit_core::Op::SetCompGraph {
             comp: self.id,
             graph: Box::new(graph),
