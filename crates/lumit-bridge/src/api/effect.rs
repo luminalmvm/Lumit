@@ -510,6 +510,31 @@ pub fn list_graph_groups() -> Vec<BridgePresetInfo> {
         .unwrap_or_default()
 }
 
+/// Give a saved group another name: the one inside the file, which every list
+/// shows, and the file's own, which becomes `to`.
+///
+/// Refused when `to` is some other file, so a rename never writes over a saved
+/// group.
+#[frb(sync)]
+pub fn rename_saved_group(path: String, name: String, to: String) -> Result<(), BridgeError> {
+    let (from, to) = (std::path::Path::new(&path), std::path::Path::new(&to));
+    // The same file under another spelling is not a clash: a file system that
+    // ignores case finds the old file at the new name.
+    if to.exists() && std::fs::canonicalize(to).ok() != std::fs::canonicalize(from).ok() {
+        return Err(BridgeError::InvalidPreset);
+    }
+    let text = std::fs::read_to_string(from).map_err(|_| BridgeError::InvalidPreset)?;
+    let mut saved: serde_json::Value =
+        serde_json::from_str(&text).map_err(|_| BridgeError::InvalidPreset)?;
+    saved
+        .as_object_mut()
+        .ok_or(BridgeError::InvalidPreset)?
+        .insert("name".to_owned(), name.into());
+    let text = serde_json::to_string_pretty(&saved).map_err(|_| BridgeError::InvalidPreset)?;
+    std::fs::write(from, text).map_err(|_| BridgeError::InvalidPreset)?;
+    std::fs::rename(from, to).map_err(|_| BridgeError::InvalidPreset)
+}
+
 /// A preset file's text, ready for `load_preset`, whichever kind of preset the
 /// file is.
 ///

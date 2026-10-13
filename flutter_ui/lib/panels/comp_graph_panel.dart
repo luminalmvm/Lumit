@@ -1525,6 +1525,17 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   String get groupExtension => 'lumngrp';
 
   @override
+  List<BridgePresetInfo> savedGroups() => listGraphGroups();
+
+  @override
+  void insertSavedGroup(String path) => _insertGroup(
+      path,
+      graphClearSpot(
+        _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
+        [for (final b in _layout().boxes) b.rect],
+      ));
+
+  @override
   double get groupZoom => _zoom;
 
   @override

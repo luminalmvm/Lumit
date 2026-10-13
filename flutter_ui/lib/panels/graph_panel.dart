@@ -2008,6 +2008,18 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       widget.groupLibrary != null ? widget.groupLibrary!() : super.groupLibrary;
 
   @override
+  List<BridgePresetInfo> savedGroups() =>
+      (widget.groupsLister ?? listNodeGroups)();
+
+  @override
+  void insertSavedGroup(String path) => _insertGroup(
+      path,
+      graphClearSpot(
+        _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
+        [for (final b in _boxesNow()) b.rect],
+      ));
+
+  @override
   double get groupZoom => _zoom;
 
   @override

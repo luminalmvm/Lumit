@@ -166,6 +166,16 @@ List<BridgePresetInfo> listNodeGroups() =>
 List<BridgePresetInfo> listGraphGroups() =>
     BridgeLib.instance.api.crateApiEffectListGraphGroups();
 
+/// Give a saved group another name: the one inside the file, which every list
+/// shows, and the file's own, which becomes `to`.
+///
+/// Refused when `to` is some other file, so a rename never writes over a saved
+/// group.
+void renameSavedGroup(
+        {required String path, required String name, required String to}) =>
+    BridgeLib.instance.api
+        .crateApiEffectRenameSavedGroup(path: path, name: name, to: to);
+
 /// A preset file's text, ready for `load_preset`, whichever kind of preset the
 /// file is.
 ///

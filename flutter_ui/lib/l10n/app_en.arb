@@ -11987,6 +11987,42 @@
       }
     }
   },
+  "graphSavedGroups": "Saved groups",
+  "@graphSavedGroups": {
+    "description": "Graph panel: tooltip on the toolbar button that opens the list of groups saved to the library, and that window's heading."
+  },
+  "graphSavedGroupsEmpty": "No saved groups",
+  "@graphSavedGroupsEmpty": {
+    "description": "Graph panel, Saved groups window: shown in place of the list when the library holds no group for this kind of graph."
+  },
+  "graphSavedGroupBoxes": "{count, plural, =1{1 box} other{{count} boxes}}",
+  "@graphSavedGroupBoxes": {
+    "description": "Graph panel, Saved groups window: how many boxes a saved group holds, shown quietly at the end of its row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "graphSavedGroupsFolder": "Show folder",
+  "@graphSavedGroupsFolder": {
+    "description": "Graph panel, Saved groups window: button that opens the folder the saved groups are kept in, in the system's file manager."
+  },
+  "graphRenameSavedGroup": "Rename group",
+  "@graphRenameSavedGroup": {
+    "description": "Graph panel, Saved groups window: heading of the small dialogue that asks for a saved group's new name."
+  },
+  "graphDeleteSavedGroup": "Delete the saved group “{name}”?",
+  "@graphDeleteSavedGroup": {
+    "description": "Graph panel, Saved groups window: asked before a saved group's file is deleted from the library. Groups already on a canvas are not touched.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Audio rig"
+      }
+    }
+  },
   "graphSaveGroupReplaceYes": "Replace",
   "@graphSaveGroupReplaceYes": {
     "description": "Graph panel: the button that agrees to write over a saved group of the same name."
