@@ -409,11 +409,10 @@ struct BarFingerprint {
 }
 
 /// Apply cross-thread cache controls, move frames between the tiers, and keep
-/// the meters and the cache bar fresh — run once per worker loop turn, cheap
-/// when nothing changed (a handful of atomic loads). `stream` carries the
-/// cache-bar's redraw nudge (see [`publish_cache_bar`]).
+/// the meters fresh — run once per worker loop turn, cheap when nothing
+/// changed (a handful of atomic loads).
 #[frb(ignore)]
-fn sync_caches(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
+fn sync_caches(state: &mut WorkerState) {
     // Nothing here clears a tier because the document changed. It used to: the
     // frames were named by position, so a committed edit did not rename any of
     // them and the only safe answer was to throw them all away. They are named
@@ -491,7 +490,6 @@ fn sync_caches(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     sync_disk(state);
     drain_demotions(state);
     collect_disk_loads(state);
-    publish_cache_bar(state, stream);
 }
 
 /// Keep the disk tier pointed at the right folder and inside its budget, and
@@ -3160,7 +3158,7 @@ fn one_turn(
         state.prioritised = state.playback.is_some();
         playback_priority(state.prioritised);
     }
-    sync_caches(state, stream);
+    sync_caches(state);
 
     // While playing the worker has work of its own, so it must not block on
     // the channel — it takes whatever has arrived and gets on with the next
@@ -3245,6 +3243,10 @@ fn one_turn(
             }
         }
     }
+    // After the frame, not before it: naming a long composition's frames can
+    // take half a second, which a frame somebody asked for should not wait
+    // behind.
+    publish_cache_bar(state, stream);
     Turn::Continue
 }
 
