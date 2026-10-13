@@ -2609,7 +2609,8 @@ class LumitUiState extends ChangeNotifier {
             renderMinor: f.renderNode?.minor,
             primaryMajor: f.primaryNode?.major,
             primaryMinor: f.primaryNode?.minor)
-        .then((id) => _adoptTexture(id, f.frame.toInt(), f.view));
+        .then((id) => _adoptTexture(id, f.view));
+    _followFrame(f.frame.toInt(), f.view);
   }
 
   /// Windows and macOS zero-copy: register the surface by the one integer that
@@ -2619,7 +2620,8 @@ class LumitUiState extends ChangeNotifier {
   void _showSharedTexture(BridgeSharedFrameInfo f) {
     controllerFor(f.view)
         .ensureRegistered(f.handle.toInt(), f.width, f.height)
-        .then((id) => _adoptTexture(id, f.frame.toInt(), f.view));
+        .then((id) => _adoptTexture(id, f.view));
+    _followFrame(f.frame.toInt(), f.view);
   }
 
   /// Which texture each view is drawing, by the engine's view id. A view with
@@ -2629,15 +2631,23 @@ class LumitUiState extends ChangeNotifier {
   ValueNotifier<int?> textureOf(int engineId) =>
       _viewTextures.putIfAbsent(engineId, () => ValueNotifier<int?>(null));
 
-  /// A registered texture is now current: mark a frame available and, if the id
-  /// changed, point that view at it.
+  /// A frame has come from the engine: the playhead follows it.
+  ///
+  /// As the message arrives, and not once its texture is registered. A
+  /// registration is a round trip to the runner, and the playhead, the loop's
+  /// turn and everything listening for a frame waited behind it.
   ///
   /// **Only the active view moves the playhead.** A frame arriving for a
   /// background view says nothing about where the user is standing, and
   /// letting one drive the transport would make a locked view's first frame
   /// drag the playhead somewhere nobody asked for.
-  void _adoptTexture(int? id, int frame, int engineId) {
+  void _followFrame(int frame, int engineId) {
     if (engineId == activeViewId) _arrived(frame);
+  }
+
+  /// A registered texture is now current: mark a frame available and, if the id
+  /// changed, point that view at it.
+  void _adoptTexture(int? id, int engineId) {
     if (id == null) return;
     controllerFor(engineId).frameReady();
     final slot = textureOf(engineId);
