@@ -21,6 +21,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../icons/icon_style.dart';
+import '../icons/lumit_icon.dart';
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../theme/theme.dart';
 
@@ -154,7 +157,7 @@ class _WindowButtonsState extends State<_WindowButtons>
           children: [
             _WindowButton(
               theme: widget.theme,
-              glyph: _Glyph.minimise,
+              mark: _Mark.windowMinimise,
               label: l10n.windowMinimise,
               onPressed: () => _ask('minimise'),
             ),
@@ -164,13 +167,13 @@ class _WindowButtonsState extends State<_WindowButtons>
             // into the runner. Win+Z and dragging to a screen edge still snap.
             _WindowButton(
               theme: widget.theme,
-              glyph: maximised ? _Glyph.restore : _Glyph.maximise,
+              mark: maximised ? _Mark.windowRestore : _Mark.windowMaximise,
               label: maximised ? l10n.windowRestore : l10n.windowMaximise,
               onPressed: () => _ask('maximise'),
             ),
             _WindowButton(
               theme: widget.theme,
-              glyph: _Glyph.close,
+              mark: _Mark.windowClose,
               label: l10n.close,
               onPressed: () => _ask('close'),
             ),
@@ -179,17 +182,48 @@ class _WindowButtonsState extends State<_WindowButtons>
       );
 }
 
-enum _Glyph { minimise, maximise, restore, close }
+/// The four marks, named as a person's own icon folder names them
+/// (icons/icon_style.dart).
+///
+/// Each style draws its own (tool/icons/glyphs.json, Window): Studio in the
+/// set's ordinary hand, Desk square and mitred, Lantern smaller and rounder.
+enum _Mark {
+  windowMinimise,
+  windowMaximise,
+  windowRestore,
+  windowClose;
+
+  String glyph(ThemeShape shape) => switch (shape) {
+        ThemeShape.studio => const [
+            LumitIcons.windowMinimise,
+            LumitIcons.windowMaximise,
+            LumitIcons.windowRestore,
+            LumitIcons.close,
+          ],
+        ThemeShape.desk => const [
+            LumitIcons.windowMinimiseSquare,
+            LumitIcons.windowMaximiseSquare,
+            LumitIcons.windowRestoreSquare,
+            LumitIcons.windowCloseSquare,
+          ],
+        ThemeShape.lantern => const [
+            LumitIcons.windowMinimiseRound,
+            LumitIcons.windowMaximiseRound,
+            LumitIcons.windowRestoreRound,
+            LumitIcons.windowCloseRound,
+          ],
+      }[index];
+}
 
 class _WindowButton extends StatefulWidget {
   final LumitTheme theme;
-  final _Glyph glyph;
+  final _Mark mark;
   final String label;
   final VoidCallback onPressed;
 
   const _WindowButton({
     required this.theme,
-    required this.glyph,
+    required this.mark,
     required this.label,
     required this.onPressed,
   });
@@ -205,7 +239,10 @@ class _WindowButtonState extends State<_WindowButton> {
   Widget build(BuildContext context) {
     final t = widget.theme;
     // Close warns in the theme's own error colour, as the system's goes red.
-    final closing = _hover && widget.glyph == _Glyph.close;
+    final closing = _hover && widget.mark == _Mark.windowClose;
+    // Lantern lights a round plate under the pointer, as it does for every
+    // action. The flat styles light the button edge to edge.
+    final round = t.tokens.roomed;
     return Semantics(
       button: true,
       label: widget.label,
@@ -215,22 +252,34 @@ class _WindowButtonState extends State<_WindowButton> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onPressed,
-          child: ColoredBox(
-            color: closing
-                ? t.error
-                : _hover
-                    ? t.surface3
-                    : t.surface3.withValues(alpha: 0),
-            child: SizedBox(
-              width: _buttonWidth,
-              child: CustomPaint(
-                painter: _GlyphPainter(
-                  widget.glyph,
-                  closing
+          child: Container(
+            width: _buttonWidth,
+            padding: round
+                ? const EdgeInsets.symmetric(horizontal: 4, vertical: 3)
+                : null,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: closing
+                    ? t.error
+                    : _hover
+                        ? t.surface3
+                        : null,
+                borderRadius:
+                    round ? BorderRadius.circular(t.tokens.actionRadius) : null,
+              ),
+              child: Center(
+                child: LumitIcon(
+                  IconStyle.resolve(
+                      widget.mark.name, widget.mark.glyph(t.shape), t),
+                  // At rest on Lantern the button stands on the room, so its
+                  // ink is the room's.
+                  colour: closing
                       ? t.surface0
                       : _hover
                           ? t.textPrimary
-                          : t.textSecondary,
+                          : round
+                              ? t.roomInk
+                              : t.textSecondary,
                 ),
               ),
             ),
@@ -239,50 +288,4 @@ class _WindowButtonState extends State<_WindowButton> {
       ),
     );
   }
-}
-
-/// The four marks, drawn as the system draws its own: hairlines in a box ten
-/// pixels a side.
-class _GlyphPainter extends CustomPainter {
-  final _Glyph glyph;
-  final Color colour;
-
-  const _GlyphPainter(this.glyph, this.colour);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final pen = Paint()
-      ..color = colour
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    final box = Rect.fromCenter(
-        center: size.center(Offset.zero), width: 10, height: 10);
-    switch (glyph) {
-      case _Glyph.minimise:
-        canvas.drawLine(box.centerLeft, box.centerRight, pen);
-      case _Glyph.maximise:
-        canvas.drawRect(box, pen);
-      case _Glyph.restore:
-        // The window in front, and the top and right of the one behind it.
-        canvas.drawRect(
-            Rect.fromLTRB(box.left, box.top + 2, box.right - 2, box.bottom),
-            pen);
-        canvas.drawPath(
-          Path()
-            ..moveTo(box.left + 2, box.top + 2)
-            ..lineTo(box.left + 2, box.top)
-            ..lineTo(box.right, box.top)
-            ..lineTo(box.right, box.bottom - 2)
-            ..lineTo(box.right - 2, box.bottom - 2),
-          pen,
-        );
-      case _Glyph.close:
-        canvas.drawLine(box.topLeft, box.bottomRight, pen);
-        canvas.drawLine(box.topRight, box.bottomLeft, pen);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_GlyphPainter old) =>
-      old.glyph != glyph || old.colour != colour;
 }
