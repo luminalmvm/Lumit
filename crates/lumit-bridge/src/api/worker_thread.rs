@@ -45,6 +45,9 @@ pub struct WorkerState {
     /// Whether this thread is running at its playing priority
     /// ([`playback_priority`]).
     prioritised: bool,
+    /// The newest Scopes trace asked for while playing, kept for the moment
+    /// after the next picture.
+    scope_waiting: Option<RenderScopeRequest>,
     /// The leg last played: its composition, first frame and last. The same
     /// again is a loop ([`Playback::loops_to`]).
     last_leg: Option<(Uuid, u64, u64)>,
@@ -2940,6 +2943,7 @@ fn worker_loop(
         present_due: None,
         unparked: std::collections::VecDeque::new(),
         last_leg: None,
+        scope_waiting: None,
         prioritised: false,
         prefetcher: lumit_render::Prefetcher::default(),
         last_shown: None,
@@ -3151,6 +3155,14 @@ fn one_turn(
     }
 
     play_one_frame(state, stream);
+    // A trace asked for as playback stopped is still owed.
+    if state.playback.is_none() {
+        if let Some(req) = state.scope_waiting.take() {
+            if let Err(err) = trace_scope(req, state, stream) {
+                note!("Dropping the trace: {err}");
+            }
+        }
+    }
     Turn::Continue
 }
 
@@ -3244,6 +3256,15 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             playback
                 .present_costs
                 .push(present_started.elapsed().as_secs_f64());
+            if let Some(req) = state.scope_waiting.take() {
+                if let Err(err) = trace_scope(req, state, stream) {
+                    note!("Dropping the trace: {err}");
+                }
+                return;
+            }
+            let Some(playback) = &mut state.playback else {
+                return;
+            };
             playback.report_pace();
             return;
         }
@@ -3877,6 +3898,14 @@ fn handle_requests(
                 WorkerRequest::SamplePixels(req) => sample_pixels(req, state, stream),
                 // Named for what it does rather than "render", so the three
                 // variants do not all share a prefix that says nothing.
+                // While playing, a trace waits for the moment after a
+                // picture has gone out, which is when the most time is free.
+                // It reads a whole frame back off the card, 5 to 15 ms, and
+                // served as it arrived that came out of the next picture.
+                WorkerRequest::TraceScope(req) if state.playback.is_some() => {
+                    state.scope_waiting = Some(req);
+                    Ok(())
+                }
                 WorkerRequest::TraceScope(req) => trace_scope(req, state, stream),
                 WorkerRequest::RenderCompWithPreview(req) => {
                     render_comp_with_preview(req, state, stream)
@@ -5763,6 +5792,7 @@ mod tests {
             present_due: None,
             unparked: std::collections::VecDeque::new(),
             last_leg: None,
+            scope_waiting: None,
             prioritised: false,
             prefetcher: lumit_render::Prefetcher::default(),
             last_shown: None,
