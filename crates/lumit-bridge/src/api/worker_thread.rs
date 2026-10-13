@@ -45,6 +45,9 @@ pub struct WorkerState {
     /// Whether this thread is running at its playing priority
     /// ([`playback_priority`]).
     prioritised: bool,
+    /// The leg last played: its composition, first frame and last. The same
+    /// again is a loop ([`Playback::loops_to`]).
+    last_leg: Option<(Uuid, u64, u64)>,
     /// Frames the disk tier's queue had no room for, to be offered again
     /// ([`drain_demotions`]).
     unparked: std::collections::VecDeque<Unparked>,
@@ -1946,6 +1949,12 @@ struct Playback {
     /// How far ahead this run has asked about edit points
     /// ([`crate::playback::cut_window`]).
     cut_ahead_to: Option<u64>,
+    /// Where the next lap starts, when this leg is one of a loop: it began
+    /// and ends where the leg before it did. Nobody says a run loops, the
+    /// frontend simply asks for the same leg again.
+    loops_to: Option<u64>,
+    /// How far into the next lap the tiers have been climbed for.
+    turn_lined_to: Option<u64>,
     /// The mix waiting for the sound to be started, once the picture has
     /// banked enough to start with it (the pre-roll,
     /// [`Self::pre_roll_done`]). `None` once the sound has been started, or
@@ -2930,6 +2939,7 @@ fn worker_loop(
         playback: None,
         present_due: None,
         unparked: std::collections::VecDeque::new(),
+        last_leg: None,
         prioritised: false,
         prefetcher: lumit_render::Prefetcher::default(),
         last_shown: None,
@@ -3440,6 +3450,47 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 if let Some(&edge) = coming.last() {
                     playback.prefetched_to = Some(edge);
                 }
+                // A loop about to turn: bring the first frames of the next
+                // lap up the tiers as this one runs out, so the turn does not
+                // wait on a read off disk.
+                if let Some(start) = playback.loops_to {
+                    let left = playback.last.saturating_sub(frame);
+                    let reach = start
+                        .saturating_add(DISK_PRE_ASK.saturating_sub(left))
+                        .min(frame);
+                    let from = playback.turn_lined_to.map_or(start, |done| done + 1);
+                    for early in from..reach {
+                        let view = state.view_id.load(std::sync::atomic::Ordering::Relaxed);
+                        let name = state.names.get_or_compute(
+                            revision,
+                            view,
+                            comp_id,
+                            early,
+                            quality.tag(),
+                            || {
+                                state
+                                    .renderer
+                                    .frame_key_presynced(&document, comp_id, early, quality)
+                            },
+                        );
+                        if let Some(key) = name {
+                            let provenance = lumit_render::FrameProvenance {
+                                comp: comp_id,
+                                frame: early,
+                                scale_q: lumit_render::preview_scale_q(quality),
+                                quality,
+                            };
+                            line_up_frame(
+                                &mut state.renderer,
+                                &state.disk,
+                                &mut state.disk_wanted,
+                                key,
+                                provenance,
+                            );
+                        }
+                        playback.turn_lined_to = Some(early);
+                    }
+                }
                 // And a second ahead, the clips about to start: their files
                 // are opened now, so the cut does not wait for it. Forward
                 // only, a reverse leg crosses its edit points as it always
@@ -3685,6 +3736,10 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     state.renderer.sync_colour(&document);
     // The engine clamps the shuttle: a speed of zero would never leave `from`.
     let speed = req.speed.clamp(1, 8) as usize;
+    // The same leg twice running is a loop, and a third is on its way.
+    let leg = (comp_id, from, last);
+    let loops_to = (state.last_leg == Some(leg) && !req.reverse && speed == 1).then_some(from);
+    state.last_leg = Some(leg);
     // The stretch the leg is about to play, nearest first.
     let asks: Vec<u64> = if req.reverse {
         (from.saturating_sub(DISK_PRE_ASK)..=from)
@@ -3762,6 +3817,8 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         costs: crate::playback::CostWindow::default(),
         prefetched_to: None,
         cut_ahead_to: None,
+        loops_to,
+        turn_lined_to: None,
         audio_held_for_picture: false,
         on_time_run: 0,
         audio_settles: None,
@@ -5705,6 +5762,7 @@ mod tests {
             playback: None,
             present_due: None,
             unparked: std::collections::VecDeque::new(),
+            last_leg: None,
             prioritised: false,
             prefetcher: lumit_render::Prefetcher::default(),
             last_shown: None,
@@ -6058,6 +6116,8 @@ mod tests {
             costs: crate::playback::CostWindow::default(),
             prefetched_to: None,
             cut_ahead_to: None,
+            loops_to: None,
+            turn_lined_to: None,
             audio_held_for_picture: false,
             on_time_run: 0,
             audio_settles: None,
