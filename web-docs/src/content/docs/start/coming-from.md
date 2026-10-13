@@ -47,10 +47,15 @@ is applied from **Animation ▸ Apply animation preset**. See
 | Track | **Layer**; the Sequence layer is the Vegas-style row you can cut on |
 | Velocity envelope | **Retime**, edited through the Speed lens of the graph editor, or within a Sequence layer |
 | Cursor | **Playhead** |
-| Split | The **razor** tool, on the [toolbar](/panels/toolbar/) |
+| Split | **Layer ▸ Split layer**, or the **razor** tool on the [toolbar](/panels/toolbar/) |
+| Event FX | A clip's own [effects](/use/cutting/#effects-and-blend-mode-on-a-clip) |
+| Auto ripple | **Auto ripple**, on the [Cut timeline](/use/cutting/#switches) |
+| Automatic crossfades | **Auto crossfade**, on the Cut timeline |
+| Quantize to frames | **Quantise**, on the Cut timeline |
 
-Choosing **Vegas** on the first run makes video arrive as a Sequence layer and opens the
-Retime graph to speed.
+Choosing **Vegas** on the first run makes video arrive as a Sequence layer, opens the
+Retime graph to speed, and loads the Vegas shortcuts. They are also the **Vegas** preset in
+[Settings ▸ Shortcuts](/use/settings/).
 
 ## Premiere Pro or Resolve to Lumit
 
