@@ -136,6 +136,13 @@ seedRandom(index, true); random(0, 360)    // one fixed angle for each layer
 
 The search box matches names and scripts.
 
+The editor also follows the Timeline. Select a property that has an expression and the
+editor shows it, with the property's name and its value at the playhead underneath. What
+is typed is written to the property on clicking away, or with **Ctrl+Enter**.
+
+An entry picked from the list stays in the editor when the selection moves. **New** goes
+back to following.
+
 ## Notes
 
 - **A Rhai expression that fails reads as −1.** A JavaScript expression that fails leaves
