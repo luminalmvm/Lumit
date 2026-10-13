@@ -3580,6 +3580,13 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                         playback.cut_ahead_to = Some(through);
                     }
                 }
+                // Every frame promises each frame as it is, so a Lens flare
+                // bakes inside the frame. One drawn with the lens before it is
+                // not kept, and making it again on the next lap stops the sound.
+                let exact = matches!(playback.mode, BridgePlaybackMode::EveryFrame);
+                if exact {
+                    state.renderer.set_deferred_flare_bakes(false);
+                }
                 let started = std::time::Instant::now();
                 let rendered = prepare_frame(
                     state, &document, comp_id, frame, quality, bgra,
@@ -3587,6 +3594,9 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     // and every rendered frame warms it for the next pass.
                     true,
                 );
+                if exact {
+                    state.renderer.set_deferred_flare_bakes(true);
+                }
                 let cost = started.elapsed().as_secs_f64();
                 // `prepare_frame` borrowed the whole worker, so the playback state
                 // has to be picked up again to file the result.
