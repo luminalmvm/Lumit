@@ -321,12 +321,16 @@ class LumitTooltip extends StatelessWidget {
   /// name of any length, which would otherwise be one line across the
   /// window. Null leaves it on one line.
   final double? maxWidth;
+
+  /// More to say under the message, for the rare tip that is a list.
+  final Widget? body;
   final Widget child;
   const LumitTooltip(
       {super.key,
       required this.message,
       this.action,
       this.maxWidth,
+      this.body,
       required this.child});
 
   @override
@@ -334,7 +338,11 @@ class LumitTooltip extends StatelessWidget {
     final scope = ThemeScope.of(context);
     if (!scope.showTooltips) return child;
     return _HoverTip(
-        message: message, action: action, maxWidth: maxWidth, child: child);
+        message: message,
+        action: action,
+        maxWidth: maxWidth,
+        body: body,
+        child: child);
   }
 }
 
@@ -342,11 +350,13 @@ class _HoverTip extends StatefulWidget {
   final String message;
   final String? action;
   final double? maxWidth;
+  final Widget? body;
   final Widget child;
   const _HoverTip(
       {required this.message,
       this.action,
       this.maxWidth,
+      this.body,
       required this.child});
 
   @override
@@ -390,6 +400,19 @@ class _HoverTipState extends State<_HoverTip> {
         : Provider.of<LumitUiState?>(context, listen: false)
             ?.keymap
             .chordFor(action);
+    // The chord reads as a menu row's does: small and muted.
+    final says = chord == null
+        ? Text(widget.message, style: t.body)
+        : Text.rich(
+            TextSpan(text: widget.message, children: [
+              TextSpan(
+                text: '  $chord',
+                style: t.small.copyWith(color: t.textMuted),
+              ),
+            ]),
+            style: t.body,
+          );
+    final body = widget.body;
     _entry = OverlayEntry(
       builder: (_) => Positioned.fill(
         child: IgnorePointer(
@@ -411,17 +434,12 @@ class _HoverTipState extends State<_HoverTip> {
                   border: Border.all(color: t.hairline),
                   boxShadow: t.floatShadow,
                 ),
-                // The chord reads as a menu row's does: small and muted.
-                child: chord == null
-                    ? Text(widget.message, style: t.body)
-                    : Text.rich(
-                        TextSpan(text: widget.message, children: [
-                          TextSpan(
-                            text: '  $chord',
-                            style: t.small.copyWith(color: t.textMuted),
-                          ),
-                        ]),
-                        style: t.body,
+                child: body == null
+                    ? says
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [says, body],
                       ),
               ),
             ),

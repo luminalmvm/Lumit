@@ -154,6 +154,9 @@ class UpdateRelease {
   /// Empty for most releases, which have nothing to say ([updateNoticeFrom]).
   final List<UpdateNoticeLine> notice;
 
+  /// What went into the release, newest first ([releaseChangesFrom]).
+  final List<String> changes;
+
   const UpdateRelease({
     required this.version,
     required this.tag,
@@ -166,6 +169,7 @@ class UpdateRelease {
     this.manifestUrl,
     this.manifestSignatureUrl,
     this.notice = const [],
+    this.changes = const [],
   });
 
   /// How big the download is, for a sentence a human reads. Whole MB: the
@@ -234,6 +238,7 @@ class UpdateRelease {
     }
 
     final name = chosen['name'] as String;
+    final body = json['body'] is String ? json['body'] as String : '';
     return UpdateRelease(
       version: versionFromTag(tag),
       tag: tag,
@@ -245,8 +250,8 @@ class UpdateRelease {
       sha256: chosen['digest'] is String ? chosen['digest'] as String : null,
       manifestUrl: attachment(releaseManifestName),
       manifestSignatureUrl: attachment(releaseManifestSignatureName),
-      notice: updateNoticeFrom(
-          json['body'] is String ? json['body'] as String : ''),
+      notice: updateNoticeFrom(body),
+      changes: releaseChangesFrom(body),
     );
   }
 }
@@ -307,6 +312,30 @@ List<UpdateNoticeLine> updateNoticeFrom(String body) {
   }
   flush();
   return lines;
+}
+
+/// What went into a release, newest first.
+///
+/// The pipeline has GitHub write a "What's Changed" list into every release,
+/// a line per merged pull request in the order they landed. This is that list
+/// with the "by @who in <address>" taken off each line, and without the
+/// dependency bumps, which say nothing about Lumit to whoever is using it.
+List<String> releaseChangesFrom(String body) {
+  final changes = <String>[];
+  var inside = false;
+  for (final raw in body.split(RegExp(r'\r?\n'))) {
+    final line = raw.trim();
+    if (line.startsWith('#')) {
+      inside = line.toLowerCase().contains("what's changed");
+      continue;
+    }
+    final mark = RegExp(r'^[-*+]\s+').firstMatch(line);
+    if (!inside || mark == null || line.contains(' by @dependabot')) continue;
+    changes.add(_plainNotes(line
+        .substring(mark.end)
+        .replaceFirst(RegExp(r'\s+by @\S+ in \S+$'), '')));
+  }
+  return changes.reversed.toList();
 }
 
 /// Bold, code and link marks off a line: `**Glow**` reads as Glow, and a link
@@ -439,6 +468,9 @@ int compareVersions(String a, String b) {
   return left.length.compareTo(right.length);
 }
 
+/// One build's own changes, as the update button lists them.
+typedef UpdateBuild = ({String version, List<String> changes});
+
 /// Asking GitHub what the latest release is. Injected so a test can answer
 /// without a network. One release for the stable channel, a list of them for
 /// nightly.
@@ -532,6 +564,7 @@ class UpdateService extends ChangeNotifier {
 
   UpdateStage _stage = UpdateStage.idle;
   UpdateRelease? _release;
+  List<UpdateBuild> _builds = const [];
 
   /// The notice of the release that is running, when the last check saw it.
   List<UpdateNoticeLine> _said = const [];
@@ -554,6 +587,11 @@ class UpdateService extends ChangeNotifier {
 
   /// The release that is waiting, once one has been found.
   UpdateRelease? get release => _release;
+
+  /// What the waiting update brings, a build at a time and newest first: the
+  /// one on offer and every nightly skipped on the way to it. Only those with
+  /// a change of their own to list, and empty off the nightly channel.
+  List<UpdateBuild> get builds => _builds;
 
   /// What the waiting release says to read first, less what the build that is
   /// running said already. A nightly carries the next release's notice night
@@ -623,6 +661,7 @@ class UpdateService extends ChangeNotifier {
       // The newest release this machine can install: the one `latest` named,
       // or on the nightly channel the best of the recent ones.
       UpdateRelease? found;
+      final seen = <UpdateRelease>[];
       _said = const [];
       for (final entry in json is List ? json : [json]) {
         if (entry is! Map<String, dynamic>) continue;
@@ -634,6 +673,7 @@ class UpdateService extends ChangeNotifier {
           nightly: nightly,
         );
         if (release?.version == current) _said = release!.notice;
+        if (release != null && nightly) seen.add(release);
         if (release != null &&
             (found == null ||
                 compareVersions(release.version, found.version) > 0)) {
@@ -651,9 +691,28 @@ class UpdateService extends ChangeNotifier {
       if (wanted) {
         _stage = UpdateStage.available;
         _release = found;
+        // GitHub starts a pre-release's list at the last stable release, so
+        // a nightly repeats every nightly before it. Oldest first, each build
+        // keeps only what no earlier one has said.
+        seen.sort((a, b) => compareVersions(a.version, b.version));
+        final said = <String>{};
+        _builds = [
+          for (final release in seen)
+            (
+              version: release.version,
+              changes: release.changes.where(said.add).toList(),
+            ),
+        ]
+            .where((build) =>
+                build.changes.isNotEmpty &&
+                compareVersions(build.version, current) > 0)
+            .toList()
+            .reversed
+            .toList();
       } else {
         _stage = UpdateStage.upToDate;
         _release = null;
+        _builds = const [];
       }
     } catch (_) {
       _fail(l10n.updateCheckFailed);
