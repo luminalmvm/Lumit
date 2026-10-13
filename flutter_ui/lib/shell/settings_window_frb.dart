@@ -2787,7 +2787,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settingsRow(
               t,
               l10n.settingsPreset,
-              '',
+              _presetMessage ?? '',
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2796,7 +2796,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.lumit);
-                      if (mounted) setState(() {});
+                      _presetLoaded(l10n.keymapLumitDefault);
                     },
                     child: Text(l10n.keymapLumitDefault, style: t.small),
                   ),
@@ -2806,7 +2806,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.afterEffects);
-                      if (mounted) setState(() {});
+                      _presetLoaded(l10n.keymapAfterEffects);
                     },
                     child: Text(l10n.keymapAfterEffects, style: t.small),
                   ),
@@ -2816,7 +2816,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.vegas);
-                      if (mounted) setState(() {});
+                      _presetLoaded(l10n.firstRunVegasName);
                     },
                     child: Text(l10n.firstRunVegasName, style: t.small),
                   ),
@@ -2985,6 +2985,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// What the last import or export said, shown under the buttons.
   String? _keymapMessage;
+
+  /// Which preset the row's buttons last loaded, said beside them: the table
+  /// under it changes all at once and names nothing.
+  String? _presetMessage;
+
+  void _presetLoaded(String name) {
+    if (!mounted) return;
+    setState(() => _presetMessage = l10n.keymapPresetLoaded(name));
+  }
 
   /// Read a keymap file and hand it to the engine, which refuses it whole if it
   /// is not one — so a wrong file costs nothing but the message.

@@ -5640,6 +5640,15 @@
   "@keymapKeyboardPanel": {
     "description": "Settings window, Shortcuts: the legend under the keyboard picture for a key whose shortcut only works while one panel is in use. Its partner reads Anywhere."
   },
+  "keymapPresetLoaded": "{name} loaded.",
+  "@keymapPresetLoaded": {
+    "description": "Settings window, Shortcuts: shown beside the Preset buttons after one is pressed. {name} is the button's own label, such as Lumit default, After Effects or Vegas.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "keymapLumitDefault": "Lumit default",
   "@keymapLumitDefault": {
     "description": "Button that loads Lumit's own set of keyboard shortcuts."
