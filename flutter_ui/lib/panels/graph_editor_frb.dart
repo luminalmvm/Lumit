@@ -2397,6 +2397,15 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                           for (final blur in const [2.0, 4.0])
                             Shadow(color: t.surface1, blurRadius: blur),
                         ]),
+                        // The point in hand has landed on its guide.
+                        caughtGuide: switch (_handleDrag) {
+                          final drag?
+                              when drag.dotOnly &&
+                                  drag.speed == _guideOf(drag.channel) =>
+                            drag.speed,
+                          _ => null,
+                        },
+                        lit: t.textPrimary,
                       ),
                     ),
                   ),
@@ -3080,6 +3089,11 @@ class _GraphPainter extends CustomPainter {
   final Set<double> guides;
   final TextStyle? guideLabel;
 
+  /// The guide a dragged point is sitting on, drawn [lit] while it does: the
+  /// snap is seen as well as felt.
+  final double? caughtGuide;
+  final Color? lit;
+
   const _GraphPainter({
     required this.channels,
     required this.shownKeys,
@@ -3097,6 +3111,8 @@ class _GraphPainter extends CustomPainter {
     this.vegas = false,
     this.guides = const {},
     this.guideLabel,
+    this.caughtGuide,
+    this.lit,
   });
 
   double _yOf(double v, (double, double) range, Size size) {
@@ -3235,12 +3251,12 @@ class _GraphPainter extends CustomPainter {
   /// dashing all of it would be thousands of strokes nobody sees. The dashes
   /// are counted from the start of time, so they stand still under a scroll.
   void _paintGuides(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = (guideLabel?.color ?? grid).withValues(alpha: 0.7)
-      ..strokeWidth = 1;
+    final faint = (guideLabel?.color ?? grid).withValues(alpha: 0.7);
+    final paint = Paint()..strokeWidth = 1;
     for (final speed in guides) {
       final y = _yOf(speed, range, size);
       if (y < 0 || y > size.height) continue;
+      paint.color = speed == caughtGuide ? lit ?? faint : faint;
       final right = viewportLeft + viewportWidth - graphGutterWidth;
       for (var x = (viewportLeft / 10).floor() * 10.0; x < right; x += 10) {
         canvas.drawLine(Offset(x, y), Offset(x + 6, y), paint);

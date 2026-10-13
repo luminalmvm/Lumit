@@ -1119,6 +1119,14 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
                       guideLabel: (speed) => l10n.speedGuideEveryFrame(
                           '${guideSpeedText(speed)}${l10n.unitSymbolPercent}'),
                       guide: t.textMuted,
+                      // The point in hand has landed on its guide.
+                      caught: switch (_drag) {
+                        final held?
+                            when held.speed ==
+                                _everyFrame[held.clip.id.toString()] =>
+                          held.clip.id.toString(),
+                        _ => null,
+                      },
                       range: _range,
                       line: t.hairline,
                       curve: t.curve.first,
@@ -1647,6 +1655,10 @@ class _EnvelopePainter extends CustomPainter {
   final Map<String, double> guides;
   final String Function(double speed) guideLabel;
   final Color guide;
+
+  /// The clip whose dragged point is sitting on its guide, which is drawn
+  /// [lit] while it does: the snap is seen as well as felt.
+  final String? caught;
   final TextStyle label;
 
   /// Where the viewport's left edge sits in the canvas's own coordinates.
@@ -1666,6 +1678,7 @@ class _EnvelopePainter extends CustomPainter {
     required this.guides,
     required this.guideLabel,
     required this.guide,
+    this.caught,
     required this.label,
     required this.viewportLeft,
   });
@@ -1746,9 +1759,7 @@ class _EnvelopePainter extends CustomPainter {
   /// a corner.
   void _paintGuides(Canvas canvas, Size size) {
     if (guides.isEmpty) return;
-    final paint = Paint()
-      ..color = guide.withValues(alpha: 0.7)
-      ..strokeWidth = 1;
+    final paint = Paint()..strokeWidth = 1;
     final column = (TextPainter(
       text: TextSpan(text: '100%', style: label),
       textDirection: TextDirection.ltr,
@@ -1763,6 +1774,9 @@ class _EnvelopePainter extends CustomPainter {
       // A clip's first and last keys are its own two edges.
       final from = xOfKey(lane.clip, lane.keys.first).clamp(0.0, size.width);
       final to = xOfKey(lane.clip, lane.keys.last).clamp(0.0, size.width);
+      paint.color = lane.clip.id.toString() == caught
+          ? lit
+          : guide.withValues(alpha: 0.7);
       for (var x = from; x < to; x += 10) {
         canvas.drawLine(
             Offset(x, at), Offset((x + 6).clamp(from, to), at), paint);
@@ -1784,5 +1798,6 @@ class _EnvelopePainter extends CustomPainter {
       old.curve != curve ||
       old.selected != selected ||
       old.typing != typing ||
+      old.caught != caught ||
       old.viewportLeft != viewportLeft;
 }
