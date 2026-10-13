@@ -327,11 +327,12 @@ void main() {
     });
     // The rows actually on screen. The Timeline builds a screenful either
     // side of the window too, and a click aimed at one of those lands on
-    // whatever is really there.
+    // whatever is really there. The lane area starts with the ruler, which
+    // is level with the outline's headings, so the rows start under it.
     List<Element> visibleRows() => [
           for (final e in tester.elementList(find.byType(OutlineRow)))
             if (h.rectOf(e) case final r?
-                when r.top >= lanes.top && r.bottom <= lanes.bottom)
+                when r.top >= ruler.bottom && r.bottom <= lanes.bottom)
               e,
         ];
     Rect? nthRow(int n) {
