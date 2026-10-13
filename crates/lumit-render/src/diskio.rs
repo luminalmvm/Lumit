@@ -259,7 +259,37 @@ pub fn spawn() -> DiskIo {
             // The desired cap, so it survives project switches (a fresh
             // cache is opened per `SetRoot`) rather than resetting.
             let mut cap = DEFAULT_CAP_BYTES;
-            while let Ok(cmd) = rx.recv() {
+            // Everything that has arrived and not been dealt with, oldest first.
+            let mut waiting: std::collections::VecDeque<Cmd> = Default::default();
+            loop {
+                if waiting.is_empty() {
+                    match rx.recv() {
+                        Ok(cmd) => waiting.push_back(cmd),
+                        Err(_) => break,
+                    }
+                }
+                waiting.extend(rx.try_iter());
+                // A read is a picture somebody is about to be shown and a
+                // write is nobody waiting, so a read goes ahead of the writes
+                // queued before it. Taken in turn, a run of writes held the
+                // reads of a playing span up until their frames had been
+                // composited again. Never ahead of anything else, as a read
+                // asked for after a change of folder is of the new folder,
+                // and never ahead of the write of the frame it asks for.
+                let first_other = waiting
+                    .iter()
+                    .position(|cmd| !matches!(cmd, Cmd::Store { .. }));
+                let next = first_other
+                    .filter(|&at| match &waiting[at] {
+                        Cmd::Load { hash, .. } => !waiting.iter().take(at).any(
+                            |cmd| matches!(cmd, Cmd::Store { hash: stored, .. } if stored == hash),
+                        ),
+                        _ => false,
+                    })
+                    .unwrap_or(0);
+                let Some(cmd) = waiting.remove(next) else {
+                    continue;
+                };
                 match cmd {
                     Cmd::SetRoot(root) => {
                         // Snapshot the index of the cache being closed: its log

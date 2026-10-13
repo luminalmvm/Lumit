@@ -3333,7 +3333,8 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     {
                         let asked_ago =
                             state.disk_wanted.get(&key).map(|want| want.asked.elapsed());
-                        if crate::playback::wait_for_disk(asked_ago) {
+                        let banked = !playback.ring.is_empty();
+                        if crate::playback::wait_for_disk(asked_ago, banked) {
                             // A sliver of sleep, not a spin: the copy is
                             // collected at the top of the next turn, and a
                             // stop arriving mid-wait is still seen promptly.

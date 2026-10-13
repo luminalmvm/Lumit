@@ -142,20 +142,33 @@ pub(crate) fn next_present_due(
 /// frame because a copy of it is on its way up from disk.
 ///
 /// `asked_ago` is how long ago the disk tier was asked for the frame, `None`
-/// when it never was (nothing to wait for). A read plus decompression lands
-/// within a few loop turns; [`DISK_LOAD_GRACE`] bounds the wait so a load that
-/// never comes (file deleted underneath the session) degrades to a composite
-/// rather than a hang. Only every-frame playback waits at all — it promises
-/// every frame, not any particular arrival time — and only for frames not yet
-/// held anywhere above disk; adaptive playback keeps chasing its clock.
-pub(crate) fn wait_for_disk(asked_ago: Option<std::time::Duration>) -> bool {
-    asked_ago.is_some_and(|ago| ago < DISK_LOAD_GRACE)
+/// when it never was (nothing to wait for). `banked` is whether a finished
+/// frame is still waiting to be shown ahead of this one.
+///
+/// With one banked the picture is not waiting on this frame, so the copy is
+/// waited for: it is far cheaper than making the frame again, and making it
+/// would hold up the pictures that are ready. The render runs frames ahead of
+/// the picture, so a copy asked for a moment ago is often for a frame not due
+/// for a third of a second. With nothing banked the frame is wanted now, and
+/// the copy gets [`DISK_LOAD_GRACE`] from when it was asked for. Only
+/// every-frame playback waits at all. Adaptive keeps chasing its clock.
+pub(crate) fn wait_for_disk(asked_ago: Option<std::time::Duration>, banked: bool) -> bool {
+    let patience = if banked {
+        DISK_LOAD_PATIENCE
+    } else {
+        DISK_LOAD_GRACE
+    };
+    asked_ago.is_some_and(|ago| ago < patience)
 }
 
-/// How long a pending disk copy is given before the frame is composited
-/// anyway. Generous beside one read (a few milliseconds) so a queue of
-/// pre-asked loads can drain; tiny beside the composite it saves.
+/// How long a pending disk copy is given when the picture is waiting on it.
+/// Generous beside one read (a few milliseconds) so a queue of pre-asked loads
+/// can drain; tiny beside the composite it saves.
 pub(crate) const DISK_LOAD_GRACE: std::time::Duration = std::time::Duration::from_millis(50);
+
+/// How long one is given while finished frames are still banked ahead of it.
+/// A read that never comes (the file deleted underneath) is given up on here.
+pub(crate) const DISK_LOAD_PATIENCE: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// The order idle cache-fill visits frames around the playhead (docs/06 §5.5,
 /// with the forward bias the owner asked for): two frames ahead for every one
