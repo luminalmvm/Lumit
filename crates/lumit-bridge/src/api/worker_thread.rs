@@ -45,6 +45,9 @@ pub struct WorkerState {
     /// Whether this thread is running at its playing priority
     /// ([`playback_priority`]).
     prioritised: bool,
+    /// Frames the disk tier's queue had no room for, to be offered again
+    /// ([`drain_demotions`]).
+    unparked: std::collections::VecDeque<Unparked>,
     /// When the picture after the last one shown was due, in every-frame
     /// playback. The next run starts on it, so a loop turns on the beat
     /// instead of cutting its last frame short.
@@ -543,6 +546,27 @@ fn disk_root(
 /// banked what it rendered.
 #[frb(ignore)]
 fn drain_demotions(state: &mut WorkerState) {
+    // The copies the disk had no room in its queue for last time, oldest
+    // first. One refused was never offered again: it lived in memory until
+    // memory let it go, and was then composited from the beginning.
+    while let Some(waiting) = state.unparked.front() {
+        let key = waiting.key;
+        let settled = state.disk.contains(key) || state.disk.is_pending(key) || {
+            state.disk.park(
+                key,
+                waiting.width,
+                waiting.height,
+                waiting.bgra,
+                waiting.bytes.clone(),
+                waiting.cost_ms,
+                waiting.scale_q,
+            )
+        };
+        if !settled {
+            break;
+        }
+        state.unparked.pop_front();
+    }
     for mut demoted in state.renderer.poll_demotions() {
         // One allocation for both tiers. The frame goes to memory and to disk at
         // the same time, and it is 8 MB at 1080p, thus a copy for each tier was
@@ -550,32 +574,76 @@ fn drain_demotions(state: &mut WorkerState) {
         let bytes = std::sync::Arc::new(std::mem::take(&mut demoted.rgba));
         // `park` rather than a bare send: it refuses a frame already on its way
         // down and refuses everything once the queue is full, which is what
-        // keeps a write-behind queue from becoming a memory leak. A
-        // refusal costs this frame its place on disk and nothing else — it is
-        // still on the card and in memory, and it will be offered again.
+        // keeps a write-behind queue from becoming a memory leak. One it
+        // refuses waits here and is offered again next turn.
         //
         // What it cost and what size it was made at go with it, so the disk
         // tier's cap can weigh it against its neighbours rather than taking
         // whatever was written first (docs/06 §5.3).
-        _ = state.disk.park(
-            demoted.key,
-            demoted.width,
-            demoted.height,
-            demoted.bgra,
+        let waiting = Unparked {
+            key: demoted.key,
+            width: demoted.width,
+            height: demoted.height,
+            bgra: demoted.bgra,
+            bytes: bytes.clone(),
+            cost_ms: demoted.cost_ms,
+            scale_q: demoted.provenance.scale_q,
+        };
+        let parked = state.disk.park(
+            waiting.key,
+            waiting.width,
+            waiting.height,
+            waiting.bgra,
             bytes.clone(),
-            demoted.cost_ms,
-            demoted.provenance.scale_q,
+            waiting.cost_ms,
+            waiting.scale_q,
         );
+        if !parked && !state.disk.contains(waiting.key) && !state.disk.is_pending(waiting.key) {
+            // Bounded, as the queue it stands behind is: past this the oldest
+            // goes without, which costs a composite if it is wanted again.
+            if state.unparked.len() >= MAX_UNPARKED {
+                state.unparked.pop_front();
+            }
+            state.unparked.push_back(waiting);
+        }
         crate::framecache::put_demoted(demoted.key, &demoted, bytes);
     }
 }
+
+/// A frame waiting for room in the disk tier's queue.
+#[frb(ignore)]
+struct Unparked {
+    key: u128,
+    width: u32,
+    height: u32,
+    bgra: bool,
+    bytes: std::sync::Arc<Vec<u8>>,
+    cost_ms: u32,
+    scale_q: u16,
+}
+
+/// The most frames kept waiting for the disk. Each holds its pixels, 8 MB at
+/// 1080p, so this is a quarter of a gigabyte at worst.
+const MAX_UNPARKED: usize = 32;
 
 /// Put frames that have come back off disk onto the graphics card, so a promoted
 /// frame is shown without compositing anything (docs/06 §5.1: "promotes
 /// disk→RAM→VRAM ahead of the playhead").
 #[frb(ignore)]
 fn collect_disk_loads(state: &mut WorkerState) {
-    let loaded: Vec<_> = state.disk.loaded.try_iter().collect();
+    // While playing, one a turn. A queue of them taken in one go was tens of
+    // milliseconds of uploads between two pictures, and the rest are collected
+    // a turn later all the same.
+    let most = if card_backed_up(&state.renderer) {
+        // Left in the queue until the card can take them without losing
+        // what they push off it.
+        0
+    } else if state.playback.is_some() {
+        1
+    } else {
+        usize::MAX
+    };
+    let loaded: Vec<_> = state.disk.loaded.try_iter().take(most).collect();
     for frame in loaded {
         let Some(want) = state.disk_wanted.remove(&frame.hash) else {
             // Nobody is waiting for it any more (a comp switch, a clear); the
@@ -1057,6 +1125,11 @@ fn line_up_frame(
         // Only the order it came down in can go back up: the other order would
         // show with red and blue swapped.
         if held.bgra == bgra {
+            // Early, so it can wait: the render turn promotes it if this
+            // does not.
+            if card_backed_up(renderer) {
+                return false;
+            }
             return renderer
                 .upload_frame_texture(lumit_render::Promotion {
                     key,
@@ -1089,6 +1162,21 @@ fn line_up_frame(
         .tx
         .send(lumit_render::diskio::Cmd::Load { hash: key, bgra });
     false
+}
+
+/// Whether another frame on the card now would push one off it that cannot
+/// be saved: the card's cache is full and every read-back slot is taken.
+///
+/// A frame pushed off the card is read back so memory and disk can keep it,
+/// a few at a time, and one pushed off with no slot free is simply lost. The
+/// ring fills by promoting eight frames in a couple of milliseconds, which
+/// lost half of what they displaced, and those were composited again the next
+/// time round. Work that is ahead of the picture waits a turn instead.
+#[frb(ignore)]
+fn card_backed_up(renderer: &lumit_render::HeadlessRenderer) -> bool {
+    let (used, budget, entries) = renderer.frame_texture_stats();
+    let one = used.checked_div(entries).unwrap_or(0);
+    used + one > budget && renderer.demotions_saturated()
 }
 
 /// Whether any tier holds the frame named `key`: the card, memory or disk.
@@ -2841,6 +2929,7 @@ fn worker_loop(
         renderer,
         playback: None,
         present_due: None,
+        unparked: std::collections::VecDeque::new(),
         prioritised: false,
         prefetcher: lumit_render::Prefetcher::default(),
         last_shown: None,
@@ -3229,6 +3318,16 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     },
                 );
                 if let Some(key) = name {
+                    // With a picture banked this frame is ahead of need, so
+                    // it waits for a read-back slot rather than cost the
+                    // frame it would push off the card.
+                    if !state.renderer.has_frame_texture(key, bgra)
+                        && !playback.ring.is_empty()
+                        && card_backed_up(&state.renderer)
+                    {
+                        std::thread::sleep(std::time::Duration::from_micros(500));
+                        return;
+                    }
                     if !state.renderer.has_frame_texture(key, bgra)
                         && !crate::framecache::contains(key)
                     {
@@ -5604,6 +5703,7 @@ mod tests {
             renderer,
             playback: None,
             present_due: None,
+            unparked: std::collections::VecDeque::new(),
             prioritised: false,
             prefetcher: lumit_render::Prefetcher::default(),
             last_shown: None,
