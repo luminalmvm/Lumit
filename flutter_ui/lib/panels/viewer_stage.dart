@@ -447,7 +447,12 @@ class ViewerStage extends StatelessWidget {
                 // Its own layer, so the marks over the picture do not draw
                 // every square again as they move.
                 child: RepaintBoundary(
-                  child: CustomPaint(painter: _CheckerPainter(t, fitted)),
+                  child: CustomPaint(
+                    // Thousands of squares that rarely change: kept as one
+                    // picture instead of being drawn square by square.
+                    isComplex: true,
+                    painter: _CheckerPainter(t, fitted),
+                  ),
                 ),
               ),
             // The picture, inside the boundary a snapshot is taken of.
