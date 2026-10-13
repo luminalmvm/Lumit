@@ -197,7 +197,7 @@ impl LongHarness {
             let frame = start + i;
             let t = Instant::now();
             for done in ahead.drain() {
-                r.preload_decoded(done.item, done.frame, done.target_width, done.decoded);
+                r.preload_decoded(done);
             }
             let ahead_to = (frame + READ_AHEAD).min(last);
             for future in posted_to.max(frame) + 1..=ahead_to {

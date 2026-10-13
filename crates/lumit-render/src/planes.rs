@@ -1296,10 +1296,11 @@ pub fn analyse(
 #[must_use]
 pub fn job_for(
     fx: &EffectInstance,
-    path: PathBuf,
+    path: impl Into<lumit_media::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<PlaneJob> {
+    let path: lumit_media::MediaSource = path.into();
     let settings = PlaneSettings::of(fx)?;
     Some(PlaneJob {
         instance: fx.id,
@@ -1367,8 +1368,10 @@ pub fn warm_jobs(doc: &Document) -> Vec<PlaneJob> {
             _ => None,
         })?;
         let fingerprint = footage.media.fingerprint.as_ref()?;
-        (!footage.media.absolute_path.is_empty())
-            .then(|| (PathBuf::from(&footage.media.absolute_path), fingerprint))
+        (!footage.media.absolute_path.is_empty()).then(|| {
+            let path = PathBuf::from(&footage.media.absolute_path);
+            crate::source::analysed(footage, path, fingerprint)
+        })
     };
     let mut out = Vec::new();
     for item in &doc.items {
@@ -1388,7 +1391,7 @@ pub fn warm_jobs(doc: &Document) -> Vec<PlaneJob> {
                 continue;
             };
             for fx in lumit_core::planes::analyses(&layer.effects) {
-                if let Some(job) = job_for(fx, path.clone(), fingerprint, false) {
+                if let Some(job) = job_for(fx, path.clone(), &fingerprint, false) {
                     out.push(job);
                 }
             }
@@ -1396,7 +1399,7 @@ pub fn warm_jobs(doc: &Document) -> Vec<PlaneJob> {
         for (fx, _, media) in comp.graph.iter().flat_map(|g| g.analysis_boxes()) {
             if let Some((path, fingerprint)) = source_of(media) {
                 // `None` for a Roto brush, which is the roto store's to warm.
-                out.extend(job_for(fx, path, fingerprint, false));
+                out.extend(job_for(fx, path, &fingerprint, false));
             }
         }
     }

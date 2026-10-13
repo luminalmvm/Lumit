@@ -948,7 +948,8 @@ List<MenuSection> lumitMenus(
             // already does to the one it replaces, so this is the same road the
             // application takes at launch, walked deliberately.
             MenuEntry(
-                l10n.menuCloseProject, project == null ? null : app.newProject),
+                l10n.menuCloseProject,
+                project == null ? null : () => app.newProject(blank: true)),
             // Save is only meaningful once there is a project; without a path it
             // behaves as Save as, which is what the engine's empty-path refusal
             // makes us handle explicitly.

@@ -167,6 +167,8 @@ void main() {
           sampleRate: 0,
           audioStreams: 0,
           isStill: false,
+          startFrame: BigInt.zero,
+          startDropFrame: false,
         );
 
     test('a length at a rate is that many frames', () {

@@ -786,6 +786,7 @@ impl ProjectReference {
             extra: serde_json::Map::new(),
             colour_space: None,
             source_layer: None,
+            interpretation: Default::default(),
         };
         let item_id = item.id;
 
@@ -831,6 +832,7 @@ impl ProjectReference {
                 (r.num(), r.den())
             }),
             source_layer: None,
+            ..Default::default()
         });
         // Nothing to probe without a decoder, and the call says so itself.
         #[cfg(not(feature = "media"))]

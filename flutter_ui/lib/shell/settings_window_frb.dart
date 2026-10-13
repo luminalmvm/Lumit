@@ -1032,6 +1032,40 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _flag(t, 'settings-welcome-on-launch', l10n.settingsWelcomeOnLaunch,
                 value: ui.workspace.showWelcomeOnLaunch,
                 set: ui.workspace.setShowWelcomeOnLaunch),
+            // The project a new one starts as a copy of. The path is the
+            // row's own second line, and Clear goes back to an empty project.
+            _row(
+              t,
+              l10n.settingsProjectTemplate,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('settings-project-template'),
+                    small: true,
+                    onPressed: () async {
+                      final path = await pickProjectToOpen();
+                      if (path == null || !mounted) return;
+                      setState(() => ui.workspace.setProjectTemplate(path));
+                    },
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                  if (ui.workspace.projectTemplate.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    HouseButton(
+                      key: const ValueKey('settings-project-template-clear'),
+                      small: true,
+                      onPressed: () =>
+                          setState(() => ui.workspace.setProjectTemplate('')),
+                      child: Text(l10n.clear, style: t.small),
+                    ),
+                  ],
+                ],
+              ),
+              description: ui.workspace.projectTemplate.isEmpty
+                  ? l10n.settingsHelpProjectTemplate
+                  : ui.workspace.projectTemplate,
+            ),
             _row(
               t,
               l10n.settingsPanelLayout,

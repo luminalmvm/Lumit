@@ -94,7 +94,7 @@ impl TimeBase {
 /// So an NTSC-family rate is recognised first (the decimal times 1001/1000
 /// comes out whole), then a whole rate, and anything else is kept to a
 /// thousandth — which covers the hand-typed rates AE also allows.
-fn frame_rate_of(fps: f64) -> Option<FrameRate> {
+pub(crate) fn frame_rate_of(fps: f64) -> Option<FrameRate> {
     if !fps.is_finite() || fps <= 0.0 || fps > 10_000.0 {
         return None;
     }

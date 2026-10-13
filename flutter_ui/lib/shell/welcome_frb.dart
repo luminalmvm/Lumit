@@ -490,7 +490,10 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
 /// in it has nothing to lose, so where it lives is a question for the first
 /// save rather than for the door.
 void startNewProject(LumitState app, {VoidCallback? onStarted}) {
-  if (app.project?.path() != null) app.newProject();
+  // A template is worth starting again for, even from an empty project.
+  if (app.project?.path() != null || app.projectTemplate?.call() != null) {
+    app.newProject();
+  }
   onStarted?.call();
 }
 

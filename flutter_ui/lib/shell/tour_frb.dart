@@ -96,7 +96,7 @@ List<TourStep> tourSteps(LumitUiState ui) {
       target: 'tl-column-toggles',
       title: l10n.tourColumnTogglesTitle,
       body: l10n.tourColumnTogglesBody(
-          l10n.columnSwitches, l10n.columnModes, l10n.columnParent),
+          l10n.columnModes, l10n.columnCompose, l10n.columnParent),
       side: TourSide.above,
       pointer: true,
     ),
@@ -286,7 +286,7 @@ void _clearDemo(LumitState state, int? made) {
   final only = onlyTourDemo(state);
   _demoItems = null;
   // Nothing in it is the user's, so there is nothing to ask about saving.
-  if (made != null && only) state.newProject(ask: false);
+  if (made != null && only) state.newProject(ask: false, blank: true);
 }
 
 /// How many items the project held once the tour had made its composition,

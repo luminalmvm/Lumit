@@ -349,8 +349,11 @@ Map<String, dynamic> columnsToJson(List<TimelineGroup> order,
           _ => e.value,
         },
     },
-    // The Layer column cannot be switched off.
-    hidden: named(j?['hidden']).toSet()..remove(TimelineGroup.identity),
+    // The Layer column cannot be switched off. Switches has no toggle either,
+    // so a stored hide is dropped or it would stay hidden for good.
+    hidden: named(j?['hidden']).toSet()
+      ..remove(TimelineGroup.identity)
+      ..remove(TimelineGroup.switches),
   );
 }
 

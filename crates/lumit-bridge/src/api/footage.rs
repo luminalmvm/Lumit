@@ -72,6 +72,11 @@ pub struct BridgeMediaInfo {
     /// with no picture is `video_codec: None`, which is a different fact from
     /// a picture that does not move.
     pub is_still: bool,
+    /// The timecode of the first frame, as a frame number at this rate: the
+    /// one the item was given, else the file's own, else nought.
+    pub start_frame: u64,
+    /// Whether that timecode is written the drop-frame way.
+    pub start_drop_frame: bool,
 }
 
 /// The rate a numbered run of stills plays at, as the exact pair the engine
@@ -170,6 +175,7 @@ impl FootageReference {
                 .as_ref()
                 .map(|s| (s.frame_rate.num(), s.frame_rate.den())),
             source_layer: f.source_layer,
+            interpret: lumit_render::source::interpretation(f),
         })
     }
 
@@ -340,6 +346,7 @@ impl FootageReference {
                     path: candidate,
                     sequence_fps: other.sequence_fps(),
                     source_layer: other.source_layer,
+                    interpret: lumit_render::source::interpretation(other),
                 });
                 ops.push(lumit_core::Op::SetMediaRef {
                     id: other.id,
@@ -419,6 +426,7 @@ impl FootageReference {
                         path,
                         sequence_fps: Some((fps_num, fps_den)),
                         source_layer: None,
+                        interpret: lumit_render::source::interpretation(f),
                     }),
                 _ => None,
             }
@@ -499,7 +507,7 @@ impl FootageReference {
             let Some(src) = Self::resolve_source(&proj, footage) else {
                 return Ok(None);
             };
-            let cached = crate::media::thumb_cached(&proj.media, self.id, max_edge, frame);
+            let cached = crate::media::thumb_cached(&proj.media, self.id, &src, max_edge, frame);
             (src, cached)
         };
 
@@ -510,7 +518,14 @@ impl FootageReference {
                     return Ok(None);
                 };
                 if let Ok(mut proj) = project.write() {
-                    crate::media::thumb_store(&mut proj.media, self.id, max_edge, frame, &decoded);
+                    crate::media::thumb_store(
+                        &mut proj.media,
+                        self.id,
+                        &src,
+                        max_edge,
+                        frame,
+                        &decoded,
+                    );
                 }
                 decoded
             }
@@ -691,6 +706,15 @@ impl FootageReference {
         let duration = lumit_core::time::Rational::from_f64_on_grid(info.duration_seconds, 1000)
             .unwrap_or(lumit_core::time::Rational::ZERO);
         let video = info.video.as_ref();
+        let shown = video.and_then(|v| {
+            let (num, den) = (
+                u32::try_from(v.fps_num).ok()?,
+                u32::try_from(v.fps_den).ok()?,
+            );
+            lumit_core::time::FrameRate::new(num, den).ok()
+        });
+        let (start_frame, start_drop_frame) =
+            crate::api::interpret::start_timecode(footage, &src, shown).unwrap_or((0, false));
         Ok(Some(BridgeMediaInfo {
             width: video.map_or(0, |v| v.width),
             height: video.map_or(0, |v| v.height),
@@ -719,6 +743,8 @@ impl FootageReference {
             audio_streams: info.audio_streams().count() as u32,
             // Has a picture, but it does not run.
             is_still: info.has_picture() && !info.runs_as_video(),
+            start_frame,
+            start_drop_frame,
         }))
     }
 

@@ -12,5 +12,9 @@ void main() {
       expect(framesOfTimecodeSigned(shown, 30000, 1001), frame,
           reason: 'frame $frame reads back from $shown');
     }
+    // Drop-frame skips two numbers a minute, so an hour of 29.97 is 107892
+    // frames and the first frame of the second minute is numbered 02.
+    expect(timecodeOfRate(107892, 30000, 1001, dropFrame: true), '01:00:00;00');
+    expect(timecodeOfRate(1800, 30000, 1001, dropFrame: true), '00:01:00;02');
   });
 }

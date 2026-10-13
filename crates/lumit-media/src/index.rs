@@ -24,11 +24,17 @@ pub struct FrameIndex {
     /// Median pts delta between successive frames (frame duration in pts).
     pub median_delta: i64,
     pub fingerprint: Fingerprint,
+    /// How the source this index was asked for reads its frames. Not part of
+    /// the sidecar, which is the file's own and shared by every reading of it.
+    #[serde(skip)]
+    pub interpret: crate::Interpretation,
 }
 
 impl FrameIndex {
+    /// How many frames the source plays, as it is interpreted. The file's own
+    /// count is `entries.len()`, and the rest of this type speaks in those.
     pub fn frame_count(&self) -> usize {
-        self.entries.len()
+        self.interpret.frame_count(self.entries.len())
     }
 
     pub fn pts_of_frame(&self, n: usize) -> Option<i64> {
@@ -122,11 +128,13 @@ pub(crate) fn load_or_build_with(
     // run of 300 frames from the same run with 400 in it.
     let cache_dir = cache_dir.filter(|_| src.sequence_fps.is_none());
     if let (Some(dir), Ok(fp)) = (cache_dir, Fingerprint::of(src.on_disk())) {
-        if let Some(index) = FrameIndex::load_cached(dir, &fp) {
+        if let Some(mut index) = FrameIndex::load_cached(dir, &fp) {
+            index.interpret = src.interpret;
             return Ok(index);
         }
     }
-    let index = build(src)?;
+    let mut index = build(src)?;
+    index.interpret = src.interpret;
     if let Some(dir) = cache_dir {
         let _ = index.save_to(dir);
     }
@@ -154,6 +162,7 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
             vfr: false,
             median_delta: 0,
             fingerprint,
+            interpret: src.interpret,
         });
     }
     let mut input = crate::probe::open_input(&src)?;
@@ -203,6 +212,7 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
             vfr: false,
             median_delta: step,
             fingerprint,
+            interpret: src.interpret,
         });
     }
 
@@ -249,6 +259,7 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
         vfr,
         median_delta,
         fingerprint,
+        interpret: src.interpret,
     })
 }
 
@@ -615,6 +626,7 @@ mod tests {
                 mtime_unix: 0,
                 content_hash: String::new(),
             },
+            interpret: Default::default(),
         };
         assert_eq!(index.frame_count(), 0);
         assert_eq!(index.nearest_keyframe_at_or_before(0), 0);
@@ -643,6 +655,7 @@ mod tests {
             vfr: false,
             median_delta: 1,
             fingerprint: Fingerprint::of(path).unwrap(),
+            interpret: Default::default(),
         }
     }
 

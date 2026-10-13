@@ -268,6 +268,10 @@ pub struct MediaSource {
     /// `Some(n)` reads layer `n` of a layered image file on its own
     /// (`crate::psd`) rather than the picture the file opens as.
     pub source_layer: Option<u32>,
+    /// How the file's frames are read (`crate::interpret`). The probe, the
+    /// index and the decoder all answer in interpreted frames, so a source
+    /// with fields separated has twice the frames at twice the rate.
+    pub interpret: crate::Interpretation,
 }
 
 impl MediaSource {
@@ -276,8 +280,17 @@ impl MediaSource {
     pub fn file(path: impl Into<PathBuf>) -> Self {
         Self {
             path: path.into(),
-            sequence_fps: None,
-            source_layer: None,
+            ..Self::default()
+        }
+    }
+
+    /// The same file read exactly as it is. What a copy of the file is made
+    /// from, so the copy can be interpreted the way its original is.
+    #[must_use]
+    pub fn raw(&self) -> Self {
+        Self {
+            interpret: crate::Interpretation::default(),
+            ..self.clone()
         }
     }
 
@@ -408,6 +421,7 @@ mod tests {
             path: dir.path().join("shot0003.ppm"),
             sequence_fps: Some((30, 1)),
             source_layer: None,
+            ..Default::default()
         };
 
         let probe = crate::probe::probe(&src).unwrap();
@@ -447,6 +461,7 @@ mod tests {
             path: dir.path().join("g0002.ppm"),
             sequence_fps: Some((25, 1)),
             source_layer: None,
+            ..Default::default()
         };
         let index = crate::index::build_frame_index(&src).unwrap();
         assert_eq!(index.frame_count(), 3, "the run stops at the hole");

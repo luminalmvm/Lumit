@@ -106,6 +106,10 @@ or a moment before during playback, not when its comp opens. The render keeps at
 twelve decoders open and playback's read-ahead twelve more, a thread each. Both close the
 one unused longest, never one a current frame uses.
 
+A footage item's interpretation rides on its `MediaSource`. The probe, the frame index and
+the decoder apply it, so the rest of the engine counts interpreted frames and never the
+file's own.
+
 ## 7. Plugins and expressions
 
 - First-party effects run in-process. Third-party OFX plugins run in a broker process per

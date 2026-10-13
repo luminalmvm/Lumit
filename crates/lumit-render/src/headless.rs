@@ -1795,16 +1795,16 @@ impl HeadlessRenderer {
 
     /// File one prefetched decode into the decoded-source cache, under exactly
     /// the key the render's own decode would use — so the render finds it and
-    /// decodes nothing. Wrong or stale pixels cannot be filed under a live
-    /// key: the key IS (item, source frame, decode width).
-    pub fn preload_decoded(
-        &mut self,
-        item: Uuid,
-        frame: usize,
-        target_width: Option<u32>,
-        decoded: lumit_media::DecodedFrame,
-    ) {
-        self.pool.preload(item, frame, target_width, decoded);
+    /// decodes nothing. The key is (item, source frame, decode width), and a
+    /// frame read from a source the item no longer reads is let go.
+    pub fn preload_decoded(&mut self, done: crate::prefetch::Prefetched) {
+        self.pool.preload(
+            done.item,
+            &done.source,
+            done.frame,
+            done.target_width,
+            done.decoded,
+        );
     }
 
     /// Forget the retained per-layer pixels. The next [`Self::render_preview`]
@@ -3684,6 +3684,7 @@ fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
         path: footage_path(f),
         sequence_fps: f.sequence_fps(),
         source_layer: f.source_layer,
+        interpret: crate::source::interpretation(f),
     }
 }
 
@@ -3765,6 +3766,22 @@ pub fn source_frames_used(
             note(job, &mut used);
         }
     }
+    // The parts asked for are parts of the file, so frames counted the way
+    // the item is interpreted are turned back into the file's own.
+    for (id, frames) in &mut used {
+        let Some((src, _)) = probes.get(id) else {
+            continue;
+        };
+        let it = src.interpret;
+        if it.is_plain() {
+            continue;
+        }
+        let Ok(index) = crate::media_index::load_or_build_index(src) else {
+            continue;
+        };
+        let raw = index.entries.len();
+        *frames = frames.iter().flat_map(|n| it.raw_frames(*n, raw)).collect();
+    }
     used
 }
 
@@ -3801,11 +3818,11 @@ struct Probes {
     /// Probe results by footage id, kept beside the source they were read
     /// from, so a relink or a run of stills read at a new rate probes again.
     originals: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
-    /// The same, for each item's **proxy** file, kept beside its path rather
+    /// The same, for each item's **proxy** file, kept beside its source rather
     /// than under the id alone, so attaching a different proxy (or the one
     /// MAKE-PROXY has just written) probes again instead of answering about a
     /// file that is no longer the one referenced.
-    proxies: HashMap<Uuid, (PathBuf, Probe)>,
+    proxies: HashMap<Uuid, (lumit_media::MediaSource, Probe)>,
 }
 
 /// A thread that probes files a little before playback reaches them
@@ -3924,15 +3941,23 @@ impl SourceProbes for ProbeView<'_> {
         let Ok(mut probes) = self.probes.try_borrow_mut() else {
             return SourceProbe::Unprobed;
         };
-        let path = media_path(proxy);
+        // A proxy is one file, never a numbered run: it stands in for the
+        // whole of the original, however many files that was. It is a copy of
+        // the same frames, so it is read the way its original is.
+        let src = lumit_media::MediaSource {
+            path: media_path(proxy),
+            interpret: match self.doc.item(item) {
+                Some(ProjectItem::Footage(f)) => crate::source::interpretation(f),
+                _ => lumit_media::Interpretation::default(),
+            },
+            ..Default::default()
+        };
         match probes.proxies.get(&item) {
-            Some((cached, probe)) if *cached == path => seen(Some(probe)),
+            Some((cached, probe)) if *cached == src => seen(Some(probe)),
             _ => {
-                // A proxy is one file, never a numbered run: it stands in for
-                // the whole of the original, however many files that was.
-                let probe = probe_item(&lumit_media::MediaSource::file(path.clone()));
+                let probe = probe_item(&src);
                 let answer = seen(Some(&probe));
-                probes.proxies.insert(item, (path, probe));
+                probes.proxies.insert(item, (src, probe));
                 answer
             }
         }
@@ -4178,6 +4203,7 @@ mod tests {
                 extra: serde_json::Map::new(),
                 colour_space: None,
                 source_layer: None,
+                interpretation: Default::default(),
             }));
         id
     }
@@ -5694,6 +5720,7 @@ mod tests {
             extra: serde_json::Map::new(),
             colour_space: None,
             source_layer: None,
+            interpretation: Default::default(),
         }));
         let mut music = matrix_layer("Music", LayerKind::Footage { item }, cw, ch);
         music.audio_only = true;
@@ -5918,6 +5945,7 @@ mod tests {
                     extra: serde_json::Map::new(),
                     colour_space: None,
                     source_layer: None,
+                    interpretation: Default::default(),
                 }));
                 let comp_id = push_comp(&mut doc, "Scene", cw, ch);
                 let clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -6665,6 +6693,7 @@ mod tests {
                     extra: serde_json::Map::new(),
                     colour_space: None,
                     source_layer: None,
+                    interpretation: Default::default(),
                 }));
             let comp_id = Uuid::now_v7();
             let mut clip_layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -6830,6 +6859,7 @@ mod tests {
                     extra: serde_json::Map::new(),
                     colour_space: None,
                     source_layer: None,
+                    interpretation: Default::default(),
                 }));
             let comp_id = Uuid::now_v7();
             let mut layer = matrix_layer("Clip", LayerKind::Footage { item }, 320, 240);
@@ -7127,6 +7157,7 @@ mod tests {
                 extra: serde_json::Map::new(),
                 colour_space: None,
                 source_layer: None,
+                interpretation: Default::default(),
             }));
         id
     }
