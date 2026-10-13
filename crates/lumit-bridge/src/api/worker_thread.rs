@@ -42,6 +42,9 @@ pub struct WorkerState {
     /// Playback, when it is running. `None` means the worker is idle and blocks
     /// waiting for something to do.
     playback: Option<Playback>,
+    /// Whether this thread is running at its playing priority
+    /// ([`playback_priority`]).
+    prioritised: bool,
     /// When the picture after the last one shown was due, in every-frame
     /// playback. The next run starts on it, so a loop turns on the beat
     /// instead of cutting its last frame short.
@@ -2559,6 +2562,38 @@ fn raise_timer_resolution() {
 #[frb(ignore)]
 fn raise_timer_resolution() {}
 
+/// Run this thread a step above the rest of the machine while it plays, and
+/// back at the ordinary priority when it stops (Windows).
+///
+/// A picture is due at a moment, and on a machine with every core busy the
+/// thread that sends it waited its turn like any other: with sixteen cores
+/// loaded the pictures of a cached span went out ten milliseconds late, and
+/// on time with this. Only while playing, so that an idle fill or a heavy
+/// still frame never takes a core ahead of the interface.
+// ponytail: Windows only. macOS and Linux want their own call (a QoS class,
+// a nice value) and a machine to measure it on.
+#[cfg(windows)]
+#[frb(ignore)]
+fn playback_priority(playing: bool) {
+    use windows::Win32::System::Threading::{
+        GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL, THREAD_PRIORITY_NORMAL,
+    };
+    let priority = if playing {
+        THREAD_PRIORITY_ABOVE_NORMAL
+    } else {
+        THREAD_PRIORITY_NORMAL
+    };
+    // SAFETY: the pseudo-handle of the calling thread and a priority constant.
+    // A refusal leaves the thread as it was, which is all there is to do.
+    unsafe {
+        let _ = SetThreadPriority(GetCurrentThread(), priority);
+    }
+}
+
+#[cfg(not(windows))]
+#[frb(ignore)]
+fn playback_priority(_playing: bool) {}
+
 #[frb(ignore)]
 pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
     let (send_to_worker, receive_from_app) = std::sync::mpsc::channel::<WorkerRequest>();
@@ -2805,6 +2840,7 @@ fn worker_loop(
         renderer,
         playback: None,
         present_due: None,
+        prioritised: false,
         prefetcher: lumit_render::Prefetcher::default(),
         last_shown: None,
         // The first view a frontend asks for. It sends the real look as soon
@@ -2934,6 +2970,10 @@ fn one_turn(
     // has gone answers nothing, and every step below would fail one at a
     // time until the session looked broken.
     recover_lost_device(state, stream);
+    if state.playback.is_some() != state.prioritised {
+        state.prioritised = state.playback.is_some();
+        playback_priority(state.prioritised);
+    }
     sync_caches(state, stream);
 
     // While playing the worker has work of its own, so it must not block on
@@ -5563,6 +5603,7 @@ mod tests {
             renderer,
             playback: None,
             present_due: None,
+            prioritised: false,
             prefetcher: lumit_render::Prefetcher::default(),
             last_shown: None,
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
