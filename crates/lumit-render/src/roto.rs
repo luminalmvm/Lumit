@@ -1504,7 +1504,7 @@ impl MediaRgba {
     /// Open `path` for propagation. Costs a frame-index build the first time the
     /// file is seen, which is why this is called on the propagation thread.
     #[must_use]
-    pub fn open(path: &Path) -> Option<Self> {
+    pub fn open(path: &lumit_media::MediaSource) -> Option<Self> {
         let video = lumit_media::probe::probe(path).ok()?.video?;
         let index = crate::media_index::load_or_build_index(path).ok()?;
         let frames = index.frame_count();
@@ -1537,10 +1537,11 @@ impl RotoFrames for MediaRgba {
 #[must_use]
 pub fn job_for(
     fx: &EffectInstance,
-    path: PathBuf,
+    path: impl Into<lumit_media::MediaSource>,
     fingerprint: &Fingerprint,
     propagate: bool,
 ) -> Option<RotoJob> {
+    let path: lumit_media::MediaSource = path.into();
     let block = fx.roto.clone().unwrap_or_default();
     let mut settings = RotoSettings::of(fx);
     // Which pack would seed this run, taken here rather than in the document,
@@ -1623,8 +1624,10 @@ pub fn warm_jobs(doc: &Document) -> Vec<RotoJob> {
             _ => None,
         })?;
         let fingerprint = footage.media.fingerprint.as_ref()?;
-        (!footage.media.absolute_path.is_empty())
-            .then(|| (PathBuf::from(&footage.media.absolute_path), fingerprint))
+        (!footage.media.absolute_path.is_empty()).then(|| {
+            let path = PathBuf::from(&footage.media.absolute_path);
+            crate::source::analysed(footage, path, fingerprint)
+        })
     };
     let stroked = |fx: &EffectInstance| !fx.roto.as_ref().is_none_or(RotoBlock::is_empty);
     let mut out = Vec::new();
@@ -1645,7 +1648,7 @@ pub fn warm_jobs(doc: &Document) -> Vec<RotoJob> {
                 continue;
             };
             for fx in lumit_core::roto::brushes(&layer.effects).filter(|fx| stroked(fx)) {
-                if let Some(job) = job_for(fx, path.clone(), fingerprint, false) {
+                if let Some(job) = job_for(fx, path.clone(), &fingerprint, false) {
                     out.push(job);
                 }
             }
@@ -1655,7 +1658,7 @@ pub fn warm_jobs(doc: &Document) -> Vec<RotoJob> {
                 continue;
             }
             if let Some((path, fingerprint)) = source_of(media) {
-                out.extend(job_for(fx, path, fingerprint, false));
+                out.extend(job_for(fx, path, &fingerprint, false));
             }
         }
     }

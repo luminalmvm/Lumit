@@ -1087,6 +1087,20 @@ List<double> gridValues(double lo, double hi, double height) {
   return out;
 }
 
+/// A grid line's number, to as many places as [step] needs. One place for
+/// every step put the same number on two lines once the step was under 0.1.
+String gridLabel(double v, double step) {
+  if (v.abs() >= 100) return v.round().toString();
+  var places = 1;
+  for (var s = step.abs(); s > 0 && s < 0.0999 && places < 6; s *= 10) {
+    places++;
+  }
+  // Whole numbers stay plain, and the steps are summed so they land a hair off.
+  final text = v.toStringAsFixed(places);
+  final shown = double.parse(text);
+  return shown == shown.roundToDouble() ? shown.round().toString() : text;
+}
+
 /// **What interpolation a brand-new keyframe is born with** (M19).
 ///
 /// Not a fixed default: it takes after the keys it lands between. The half

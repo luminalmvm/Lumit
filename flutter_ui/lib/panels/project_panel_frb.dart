@@ -59,6 +59,7 @@ import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
+import '../shell/interpret_footage_frb.dart';
 import '../shell/menu_bar_frb.dart' show importFootageFrb;
 import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
@@ -278,7 +279,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     super.dispose();
   }
 
-  /// The Project panel's keyboard commands — just `item.rename` today.
+  /// The Project panel's keyboard commands: rename, and the three for how
+  /// the selected footage is interpreted.
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
     if (lumitModalOpen) return false;
@@ -298,6 +300,34 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       if (_selectedIds.length != 1 || _renamingId != null) return false;
       setState(() => _renamingId = _selectedIds.first);
       return true;
+    }
+    final footage = [
+      for (final id in _visibleIds)
+        if (_selectedIds.contains(id))
+          if (_itemById[id] case ItemReference_Footage(:final field0)) field0,
+    ];
+    if (footage.isEmpty) return false;
+    switch (action) {
+      case 'footage.interpret':
+        showInterpretFootageFrb(
+          context: context,
+          items: footage,
+          subject: footage.length == 1
+              ? (_itemById[_selectedIds.first]?.name() ?? '')
+              : l10n.interpretSeveral(footage.length),
+          spaces: ui.colourSummary.loaded ? ui.colourSummary.spaces : const [],
+        ).then((applied) {
+          if (applied && mounted) _documentChanged();
+        });
+        return true;
+      case 'footage.interpretation.remember':
+        rememberInterpretation(footage.first);
+        return true;
+      case 'footage.interpretation.apply':
+        if (rememberedInterpretation == null) return false;
+        applyRememberedInterpretation(footage);
+        _documentChanged();
+        return true;
     }
     return false;
   }

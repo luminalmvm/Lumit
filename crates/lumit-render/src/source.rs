@@ -149,11 +149,168 @@ pub fn effective_media<'a>(
     let Some(proxy) = doc.proxy_in_use(item) else {
         return Some((&f.media, original));
     };
-    if proxy_agrees(original, probes.proxy_probe(item)) {
+    // Fields are rows of the file's own frames, and a scaled-down copy has
+    // already blended them together, so there is nothing left to separate.
+    let rows_matter = interpretation(f).separates_fields();
+    if !rows_matter && proxy_agrees(original, probes.proxy_probe(item)) {
         Some((proxy, original))
     } else {
         Some((&f.media, original))
     }
+}
+
+/// How the decoder is told to read this item's file: the item's
+/// interpretation, in the media crate's terms.
+///
+/// The numbers come from a project file, or from someone else in a shared
+/// project, so the ones that size a frame or a clip are held to what real
+/// footage could want and anything outside that reads as the file's own.
+#[must_use]
+pub fn interpretation(f: &lumit_core::model::FootageItem) -> lumit_media::Interpretation {
+    use lumit_core::interpretation::{AlphaMode, FieldOrder, LinearLight, Pulldown};
+    /// After Effects' own ceiling, and far past any use of it.
+    const MOST_LOOPS: u32 = 9999;
+    let it = &f.interpretation;
+    let within = |n: u32, d: u32, lo: f64, hi: f64| {
+        d > 0 && (lo..=hi).contains(&(f64::from(n) / f64::from(d)))
+    };
+    lumit_media::Interpretation {
+        alpha: match it.alpha {
+            AlphaMode::Straight => lumit_media::Alpha::Straight,
+            AlphaMode::Ignore => lumit_media::Alpha::Ignore,
+            AlphaMode::Premultiplied { matte } => lumit_media::Alpha::Premultiplied(matte),
+        },
+        invert_alpha: it.invert_alpha,
+        // A run of stills has no rate of its own to conform, only the one the
+        // item gives it, which rides on the source separately.
+        conform_fps: it
+            .frame_rate
+            .filter(|_| f.sequence.is_none())
+            .map(|r| (r.num(), r.den()))
+            .filter(|(n, d)| within(*n, *d, 0.01, 999.0)),
+        fields: match it.fields {
+            FieldOrder::Off => lumit_media::Fields::Off,
+            FieldOrder::Upper => lumit_media::Fields::Upper,
+            FieldOrder::Lower => lumit_media::Fields::Lower,
+        },
+        preserve_edges: it.preserve_edges,
+        pulldown: match it.pulldown {
+            Pulldown::Off => lumit_media::Pulldown::Off,
+            Pulldown::ThreeTwo { phase } => lumit_media::Pulldown::ThreeTwo(phase % 5),
+            Pulldown::Advanced { phase } => lumit_media::Pulldown::Advanced(phase % 5),
+        },
+        pixel_aspect: it
+            .pixel_aspect
+            .filter(|(n, d)| n != d && within(*n, *d, 0.1, 10.0)),
+        // Once is the plain reading, so it is written the plain way.
+        loops: match it.plays().min(MOST_LOOPS) {
+            1 => 0,
+            n => n,
+        },
+        // Preserved numbers are taken as they stand, which is linear. An
+        // assigned colour space says what curve the file has by itself, so
+        // linear light is only asked of a file with none.
+        linear: match (it.preserve_rgb, &f.colour_space, it.linear_light) {
+            (true, _, _) => Some(true),
+            (false, Some(_), _) | (false, None, LinearLight::Auto) => None,
+            (false, None, LinearLight::On) => Some(true),
+            (false, None, LinearLight::Off) => Some(false),
+        },
+    }
+}
+
+pub use lumit_media::MediaSource;
+
+/// What an analysis of this item reads and what its answers are filed under:
+/// the file as the item interprets it, and the file's fingerprint, marked with
+/// that reading when it changes which pictures there are. A track made of a
+/// clip's fields is not a track of its frames.
+#[must_use]
+pub fn analysed(
+    f: &lumit_core::model::FootageItem,
+    path: std::path::PathBuf,
+    fingerprint: &lumit_core::model::Fingerprint,
+) -> (MediaSource, lumit_core::model::Fingerprint) {
+    let interpret = interpretation(f);
+    // The rate only re-times the same pictures in the same order, so an
+    // analysis made before it was set still stands.
+    let pictures = lumit_media::Interpretation {
+        conform_fps: None,
+        ..interpret
+    };
+    let mut fingerprint = fingerprint.clone();
+    if !pictures.is_plain() {
+        fingerprint.head_tail_hash = format!("{}#{pictures:?}", fingerprint.head_tail_hash);
+    }
+    let source = MediaSource {
+        path,
+        sequence_fps: f.sequence_fps(),
+        source_layer: f.source_layer,
+        interpret,
+    };
+    (source, fingerprint)
+}
+
+/// What a file's alpha looks like it means, from its own frames. `None` when
+/// it can't be read or no frame looked at has any transparency in it.
+///
+/// Decodes up to three frames, so it is for a worker thread.
+#[must_use]
+pub fn guess_alpha(src: &lumit_media::MediaSource) -> Option<lumit_media::Alpha> {
+    use lumit_media::interpret::guess_alpha;
+    let raw = src.raw();
+    if let Some(frame) = lumit_media::read_own(&raw, None) {
+        return guess_alpha(&frame.ok()?);
+    }
+    let index = crate::media_index::load_or_build_index(&raw).ok()?;
+    let frames = index.frame_count();
+    let mut decoder = lumit_media::VideoDecoder::open(&raw, index).ok()?;
+    // The middle first: a clip often opens and closes on nothing at all.
+    let mut tried = Vec::new();
+    for n in [frames / 2, 0, frames.saturating_sub(1)] {
+        if tried.contains(&n) {
+            continue;
+        }
+        tried.push(n);
+        if let Some(guess) = guess_alpha(&decoder.frame_rgba(n, None).ok()?) {
+            return Some(guess);
+        }
+    }
+    None
+}
+
+/// The pulldown cadence a file's own frames show, or `Off` when none stands
+/// out. Looks at a run of frames from the start and, if that says nothing (a
+/// still opening, say), one from the middle.
+///
+/// Decodes up to thirty full frames, so it is for a worker thread.
+#[must_use]
+pub fn guess_pulldown(src: &lumit_media::MediaSource) -> lumit_media::Pulldown {
+    use lumit_media::interpret::{comb_score, guess_pulldown};
+    const RUN: usize = 15;
+    let raw = src.raw();
+    let Ok(index) = crate::media_index::load_or_build_index(&raw) else {
+        return lumit_media::Pulldown::Off;
+    };
+    let frames = index.frame_count();
+    let Ok(mut decoder) = lumit_media::VideoDecoder::open(&raw, index) else {
+        return lumit_media::Pulldown::Off;
+    };
+    let mut starts = vec![0];
+    if frames / 2 >= RUN {
+        starts.push(frames / 2);
+    }
+    for start in starts {
+        let scores: Vec<f64> = (start..(start + RUN).min(frames))
+            .map_while(|n| decoder.frame_rgba(n, None).ok())
+            .map(|frame| comb_score(&frame))
+            .collect();
+        let guess = guess_pulldown(&scores, start);
+        if guess != lumit_media::Pulldown::Off {
+            return guess;
+        }
+    }
+    lumit_media::Pulldown::Off
 }
 
 /// Whether a proxy's own probe agrees with the original's about *what footage

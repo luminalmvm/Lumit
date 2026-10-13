@@ -98,12 +98,33 @@ at its average rate: each frame shows the picture that was on screen at that mom
 picture stays with its sound. A stretch recorded slower repeats frames and one recorded
 faster skips some.
 
-Where a project carries a colour configuration you can say what a footage item arrived in, from the
-**Colour space** submenu on its row — see [Colour management](/use/colour-management/).
+**Interpret footage…** on a footage row's menu changes how the file is read. It opens on
+every selected footage item at once.
+
+| Setting | Does |
+| --- | --- |
+| **Alpha** | Straight, premultiplied against a matte colour, or ignored. **Guess** reads it from the file's frames. |
+| **Invert alpha** | Swaps opaque and clear. |
+| **Frame rate** | Plays the file's frames at another rate. The picture gets longer or shorter and its sound does not. |
+| **Start timecode** | The timecode of the first frame, which the source view counts from. |
+| **Separate fields** | Splits each interlaced frame into its two fields, at twice the rate. |
+| **Preserve edges** | Fills a field's missing rows along the edges in the picture. |
+| **Remove pulldown** | Takes a 3:2 or 24Pa cadence out of interlaced video. **Guess** finds the cadence. |
+| **Pixel aspect ratio** | Widens or narrows the picture until its pixels are square. |
+| **Loop** | Plays the picture through more than once. |
+| **Colour space** | What the file arrived in, see [Colour management](/use/colour-management/). |
+| **Linear light** | Whether the file's numbers are already linear. Read only with no colour space chosen. |
+| **Preserve RGB** | Takes the file's numbers as they are, with no colour conversion. |
+
+**Remember interpretation** on the same menu keeps one item's settings, and **Apply
+interpretation** gives them to every selected item.
+
+Footage from a Lumit Bridge bundle keeps the interpretation it had in After Effects.
 
 :::note[Not built yet]
-Overriding the frame rate or the alpha of an imported file is planned. Currently there is
-no way to do this, which includes the rate of an image sequence.
+An `.aep` opened directly does not carry its footage interpretation over. A proxy is not
+read while fields are separated. A looped item's sound plays once. The fields and pixel
+aspect ratio a file declares are shown and not applied until chosen.
 :::
 
 ## Missing files

@@ -63,6 +63,7 @@ fn scene() -> (Arc<Document>, Uuid, Uuid) {
         extra: serde_json::Map::new(),
         colour_space: None,
         source_layer: None,
+        interpretation: Default::default(),
     }));
     let layer = Layer {
         graph: Default::default(),

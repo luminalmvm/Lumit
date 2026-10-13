@@ -1297,6 +1297,11 @@ Map<String, String> get _built => {
       "Zoom to fit": l10n.keyZoomToFit,
       "Rename the layer": l10n.keyRenameTheLayer,
       "Rename the selected item": l10n.keyRenameTheSelectedItem,
+      "Interpret the selected footage": l10n.keyInterpretTheSelectedFootage,
+      "Remember the footage's interpretation":
+          l10n.keyRememberTheFootagesInterpretation,
+      "Apply the remembered interpretation":
+          l10n.keyApplyTheRememberedInterpretation,
       "Rename the selected effect": l10n.keyRenameTheSelectedEffect,
       "Show or hide the layer": l10n.keyShowOrHideTheLayer,
       "Easy ease": l10n.keyEasyEase,
@@ -1452,6 +1457,7 @@ Map<String, String> get _built => {
       "Edit swatches": l10n.histEditSwatches,
       "Set colour management": l10n.histSetColourManagement,
       "Set footage colour space": l10n.histSetFootageColourSpace,
+      "Interpret footage": l10n.interpretFootage,
       "Edit solid": l10n.histEditSolid,
       "Trim comp to work area": l10n.menuTrimCompToWorkArea,
       "Crop comp to region of interest": l10n.menuCropCompToRegion,

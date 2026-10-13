@@ -793,6 +793,9 @@ class Workspace extends ChangeNotifier {
   /// something is displayed, so turning this off never hides a choice.
   bool showWelcomeOnLaunch = true;
 
+  /// The `.lum` a new project starts as a copy of, or empty for none.
+  String projectTemplate = '';
+
   /// When the last update check finished, in milliseconds since the epoch.
   /// Zero means never. Kept so six launches in a morning ask GitHub once.
   int lastUpdateCheckMs = 0;
@@ -1322,6 +1325,12 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  /// Choose the project every new one starts as a copy of, or none.
+  void setProjectTemplate(String path) {
+    projectTemplate = path;
+    settingsChanged();
+  }
+
   /// Turn the welcome screen on or off for the next launch.
   void setShowWelcomeOnLaunch(bool on) {
     showWelcomeOnLaunch = on;
@@ -1846,6 +1855,7 @@ class Workspace extends ChangeNotifier {
         'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
         'show_welcome_on_launch': showWelcomeOnLaunch,
+        'project_template': projectTemplate,
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'audio_device': audioDevice,
@@ -1951,6 +1961,7 @@ class Workspace extends ChangeNotifier {
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
+    projectTemplate = j['project_template'] as String? ?? '';
     lastUpdateCheckMs = j['last_update_check_ms'] as int? ?? 0;
     keymapJson = j['keymap'] is String ? j['keymap'] as String : null;
     // Absent, or empty from a hand-edited file, means follow the machine —

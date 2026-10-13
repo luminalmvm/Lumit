@@ -18,6 +18,7 @@
 // channel, batched per layer, so a drag stays one undo step per property.
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -108,8 +109,11 @@ class GraphEditorFrb extends StatefulWidget {
   final GraphLens lens;
 
   /// Auto-fit: the vertical range follows the curves (docs/07 §5.3). Off, the
-  /// range is the user's — the wheel pans it and `Alt`+wheel zooms it.
+  /// range is the user's — the wheel pans it and the value-zoom wheel zooms it.
   final bool autoFit;
+
+  /// The values were zoomed by hand while auto-fit was on, so it should go off.
+  final VoidCallback? onAutoFitOff;
 
   /// Whether the Pen tool is armed on the toolbar (docs/07 §1.7).
   ///
@@ -163,6 +167,7 @@ class GraphEditorFrb extends StatefulWidget {
     this.snapTargets = const [],
     required this.lens,
     required this.autoFit,
+    this.onAutoFitOff,
     this.vegas = false,
     this.penArmed = false,
     this.breakHandles = false,
@@ -402,12 +407,52 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     super.initState();
     rowValueDrag.addListener(_rowDragChanged);
     _probeRates();
+    widget.hScroll?.addListener(_scrolled);
   }
 
   @override
   void didUpdateWidget(GraphEditorFrb oldWidget) {
     super.didUpdateWidget(oldWidget);
     _probeRates();
+    if (oldWidget.hScroll != widget.hScroll) {
+      oldWidget.hScroll?.removeListener(_scrolled);
+      widget.hScroll?.addListener(_scrolled);
+    }
+  }
+
+  /// Whether the framing on screen is no longer what auto-fit would choose
+  /// for what is on screen now.
+  bool get _fitIsStale {
+    if (!mounted || !widget.autoFit || _frozen != null) return false;
+    final (lo, hi) = _fitRange();
+    final (wasLo, wasHi) = _lastRange;
+    final slack = 1e-9 * (1 + (wasHi - wasLo).abs());
+    return (lo - wasLo).abs() > slack || (hi - wasHi).abs() > slack;
+  }
+
+  /// Auto-fit frames what is on screen, so a scroll that changes what that
+  /// is reframes it. Scrolling moves the pane without rebuilding it, and the
+  /// framing used to stay as it was until something else rebuilt the panel.
+  void _scrolled() {
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      return _refitAfterFrame();
+    }
+    if (_fitIsStale) setState(() {});
+  }
+
+  bool _refitQueued = false;
+
+  /// Look again once the frame is laid out. A zoom moves the scroll position
+  /// during layout, after this pane has framed itself on where it was, so a
+  /// build can't see the view it is about to be shown in.
+  void _refitAfterFrame() {
+    if (_refitQueued || !widget.autoFit) return;
+    _refitQueued = true;
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _refitQueued = false;
+      if (_fitIsStale) setState(() {});
+    });
   }
 
   void _rowDragChanged() {
@@ -471,6 +516,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void dispose() {
     sayInHand(this, const []);
     rowValueDrag.removeListener(_rowDragChanged);
+    widget.hScroll?.removeListener(_scrolled);
     _preview.cancel();
     _escape.dispose();
     super.dispose();
@@ -566,6 +612,32 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// range becomes the manual one; in auto mode the next build fits anyway.
   void fitNow() => setState(() => _manual.remove(widget.lens));
 
+  /// The stretch of time a fit should show, in seconds: the selected keys, or
+  /// every key when fewer than two moments are picked. Null when there is no
+  /// stretch to show. With auto-fit off the values are framed on it here,
+  /// since nothing else will.
+  (double, double)? fitSelection() {
+    final picked = <double>{}, all = <double>{};
+    for (final c in widget.channels) {
+      for (var i = 0; i < c.keys.length; i++) {
+        final t = rationalSeconds(c.keys[i].time);
+        all.add(t);
+        if (widget.selectedKeys.contains('${c.id}#$i')) picked.add(t);
+      }
+    }
+    final times = picked.length > 1 ? picked : all;
+    if (times.length < 2) return null;
+    var t0 = times.first, t1 = times.first;
+    for (final t in times) {
+      if (t < t0) t0 = t;
+      if (t > t1) t1 = t;
+    }
+    if (!widget.autoFit) {
+      setState(() => _manual[widget.lens] = _fitRange((t0, t1)));
+    }
+    return (t0, t1);
+  }
+
   /// Delete the selected keys — the Timeline's Delete shortcut.
   void deleteSelectedKeys() => _deleteSelection();
 
@@ -595,8 +667,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// The edge samples are what stop a span *between* two keys from framing on
   /// nothing: zoomed between them there is no key in view at all, and the
   /// value there is the whole of what the view shows.
-  List<List<BridgeKeyframe>> get _visibleChannelKeys {
-    final window = _visibleSeconds;
+  List<List<BridgeKeyframe>> _channelKeysWithin((double, double)? window) {
     if (window == null) return _channelKeys;
     final (t0, t1) = window;
     return [
@@ -638,20 +709,23 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   bool get _anyEnvelope => widget.channels.any(isEnvelope);
 
-  (double, double) _fitRange() {
+  /// The values to frame: what is on screen, or [window] when a fit names
+  /// its own stretch of time.
+  (double, double) _fitRange([(double, double)? window]) {
+    final keys = _channelKeysWithin(window ?? _visibleSeconds);
     // Only shapes on screen means only speeds on screen.
     final allPaths = widget.channels.isNotEmpty &&
         widget.channels.every((c) => c.isMaskPath);
     if (widget.lens == GraphLens.value && !allPaths) {
       return fitValueRange(
-        _visibleChannelKeys,
+        keys,
         [
           for (final c in widget.channels)
             if (c.isStatic) c.staticValue,
         ],
       );
     }
-    if (!_anyEnvelope) return fitSpeedRange(_visibleChannelKeys);
+    if (!_anyEnvelope) return fitSpeedRange(keys);
     // An envelope brings its own floor and ceiling (100% down to −25%), which
     // the ordinary speed fit has no business inventing. Any other channel
     // selected alongside is framed as before and the two ranges are unioned —
@@ -738,12 +812,19 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       widget.onWheelTime(event, event.localPosition.dx);
       return;
     }
-    // The vertical axis is the user's only once auto-fit is off.
-    if (widget.autoFit || _paneSize.height <= 0) return;
+    if (_paneSize.height <= 0) return;
+    final zoomValues = keymap.wheelHeld(BridgeWheelAction.zoomValues);
+    // The vertical axis is the user's only once auto-fit is off, and zooming
+    // the values is what turns it off.
+    if (widget.autoFit) {
+      if (!zoomValues) return;
+      _manual[widget.lens] = _lastRange;
+      widget.onAutoFitOff?.call();
+    }
     final range = _manual[widget.lens] ??= _lastRange;
     final (lo, hi) = range;
     final span = hi - lo;
-    if (keymap.wheelHeld(BridgeWheelAction.zoomValues)) {
+    if (zoomValues) {
       // Zoom about the pointer: the value under the cursor stays put. The
       // anchor is clamped to the pane, because the pointer signal is reported
       // against a listener that is taller than the graph — an anchor from
@@ -2252,6 +2333,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         final range = _range();
         _lastRange = range;
         _paneSize = Size(constraints.maxWidth, height);
+        _refitAfterFrame();
 
         return Listener(
           // Claimed through the resolver, not handled outright: the pane sits
@@ -3190,14 +3272,12 @@ class _GraphPainter extends CustomPainter {
       Rect.fromLTWH(left, 0, graphGutterWidth, size.height),
       Paint()..color = gutterFill,
     );
-    for (final v in _gridValues(size)) {
+    final values = _gridValues(size);
+    final step = values.length > 1 ? values[1] - values[0] : 1.0;
+    for (final v in values) {
       final y = _yOf(v, range, size);
       final text = TextPainter(
-        text: TextSpan(
-            text: (v.abs() >= 100 || v == v.roundToDouble()
-                ? v.round().toString()
-                : v.toStringAsFixed(1)),
-            style: label),
+        text: TextSpan(text: gridLabel(v, step), style: label),
         textDirection: TextDirection.ltr,
       )..layout();
       text.paint(canvas,

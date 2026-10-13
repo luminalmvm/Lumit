@@ -4703,6 +4703,181 @@
   "@graphAutoFit": {
     "description": "Graph editor button: keep the curves framed in the view."
   },
+  "interpretFootage": "Interpret footage",
+  "@interpretFootage": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: its title. Also the name of the edit in Edit > History."
+  },
+  "interpretFootageEllipsis": "Interpret footage…",
+  "@interpretFootageEllipsis": {
+    "description": "Project panel, a footage item's right-click menu: opens the window that sets how the file is read."
+  },
+  "rememberInterpretation": "Remember interpretation",
+  "@rememberInterpretation": {
+    "description": "Project panel, a footage item's right-click menu: keep how this item is read, to give to other items."
+  },
+  "applyInterpretation": "Apply interpretation",
+  "@applyInterpretation": {
+    "description": "Project panel, a footage item's right-click menu: read every selected item the way the remembered one is."
+  },
+  "interpretTabMain": "Main",
+  "@interpretTabMain": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the first page tab, over alpha, frame rate, fields and pixel shape. One word."
+  },
+  "interpretTabColour": "Colour",
+  "@interpretTabColour": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the second page tab, over the colour settings. One word."
+  },
+  "interpretAlpha": "Alpha",
+  "@interpretAlpha": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the group that says what the file's transparency channel means."
+  },
+  "interpretReadAs": "Read as",
+  "@interpretReadAs": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the row under Alpha that picks what the file's alpha channel means. Followed by Straight, Premultiplied or Ignore."
+  },
+  "interpretTime": "Time",
+  "@interpretTime": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the group holding the frame rate and the start timecode. One word."
+  },
+  "interpretAlphaStraight": "Straight",
+  "@interpretAlphaStraight": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Alpha list: the colour is whole and the alpha cuts it out."
+  },
+  "interpretAlphaPremultiplied": "Premultiplied",
+  "@interpretAlphaPremultiplied": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Alpha list: the colour was saved already mixed into a matte colour."
+  },
+  "interpretAlphaIgnore": "Ignore",
+  "@interpretAlphaIgnore": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Alpha list: read the file as having no transparency."
+  },
+  "tipInterpretMatte": "Matte colour",
+  "@tipInterpretMatte": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: tooltip on the colour swatch beside Premultiplied, the colour the file was saved over. Two words at most."
+  },
+  "interpretInvertAlpha": "Invert alpha",
+  "@interpretInvertAlpha": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: a tick that swaps what the alpha calls opaque and clear."
+  },
+  "interpretGuess": "Guess",
+  "@interpretGuess": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: a button that looks at the file's frames and fills in the setting beside it. One word."
+  },
+  "interpretNoGuess": "Nothing to go on",
+  "@interpretNoGuess": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: shown beside a Guess button when the frames gave no answer. Short."
+  },
+  "interpretStartTimecode": "Start timecode",
+  "@interpretStartTimecode": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the row for the timecode of the file's first frame. Empty means the file's own."
+  },
+  "interpretFieldsGroup": "Fields and pulldown",
+  "@interpretFieldsGroup": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the group for interlaced footage."
+  },
+  "interpretSeparateFields": "Separate fields",
+  "@interpretSeparateFields": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the row that says whether each frame is two interlaced fields, and which came first."
+  },
+  "interpretUpperFirst": "Upper field first",
+  "@interpretUpperFirst": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Separate fields list: the top rows were shot first."
+  },
+  "interpretLowerFirst": "Lower field first",
+  "@interpretLowerFirst": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Separate fields list: the bottom rows were shot first."
+  },
+  "interpretPreserveEdges": "Preserve edges",
+  "@interpretPreserveEdges": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: a tick that fills a separated field's missing rows along the edges in the picture."
+  },
+  "interpretRemovePulldown": "Remove pulldown",
+  "@interpretRemovePulldown": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the row that picks the film cadence to take out of interlaced video."
+  },
+  "interpretOther": "Other",
+  "@interpretOther": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the last group, for pixel shape and loop. One word."
+  },
+  "interpretPixelShape": "Pixel aspect ratio",
+  "@interpretPixelShape": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the row that says how much wider than tall one pixel is."
+  },
+  "interpretSquarePixels": "Square pixels",
+  "@interpretSquarePixels": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Pixel aspect ratio list: the pixels are as wide as they are tall."
+  },
+  "interpretLoop": "Loop",
+  "@interpretLoop": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the row for how many times the file plays through."
+  },
+  "interpretLoopTimes": "times",
+  "@interpretLoopTimes": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the unit after the Loop number, as in '3 times'. Lower case."
+  },
+  "interpretLinearLight": "Linear light",
+  "@interpretLinearLight": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Colour page: whether the file's numbers are already linear light."
+  },
+  "interpretLinearOn": "On",
+  "@interpretLinearOn": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Linear light list: the file's numbers are linear light."
+  },
+  "interpretLinearAutoOn": "Automatic (on)",
+  "@interpretLinearAutoOn": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Linear light list: decided from the file, which for this float file means on."
+  },
+  "interpretLinearAutoOff": "Automatic (off)",
+  "@interpretLinearAutoOff": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Linear light list: decided from the file, which for this file means off."
+  },
+  "interpretPreserveRgb": "Preserve RGB",
+  "@interpretPreserveRgb": {
+    "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Colour page: a tick that takes the file's numbers as they are, with no colour conversion."
+  },
+  "interpretFromFile": "From file ({value})",
+  "@interpretFromFile": {
+    "description": "The Interpret footage window: a list entry or a note giving what the file itself says, such as its own frame rate or field order. {value} is that value.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "interpretAdvancedPulldown": "{pattern} (24Pa)",
+  "@interpretAdvancedPulldown": {
+    "description": "The Interpret footage window, Remove pulldown list: an advanced-cadence entry. {pattern} is five letters such as WWSWW and is never translated, and 24Pa is the cadence's own name.",
+    "placeholders": {
+      "pattern": {
+        "type": "String"
+      }
+    }
+  },
+  "interpretSeveral": "{count} items",
+  "@interpretSeveral": {
+    "description": "The Interpret footage window: what the title bar names when it was opened on more than one footage item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsProjectTemplate": "New project template",
+  "@settingsProjectTemplate": {
+    "description": "Settings window, Workspace group: the name of the row that picks a project file every new project starts as a copy of."
+  },
+  "settingsHelpProjectTemplate": "A project that every new project starts as a copy of.",
+  "@settingsHelpProjectTemplate": {
+    "description": "Settings window: the line under New project template while none is chosen. Once one is chosen the line shows its path instead."
+  },
+  "templateNotOpened": "The project template would not open, so the new project is empty",
+  "@templateNotOpened": {
+    "description": "Status line notice: the project file chosen as the template in Settings is missing or unreadable, and New made an empty project instead."
+  },
+  "graphFitSelection": "Fit selection",
+  "@graphFitSelection": {
+    "description": "Graph editor button: zoom the view, in time and in value, to the selected keyframes, or to every curve when none is selected."
+  },
   "graphBreakHandles": "Break handles",
   "@graphBreakHandles": {
     "description": "Graph editor button: while it is on, dragging one handle of a keyframe leaves the handle on its other side where it is."
@@ -5165,6 +5340,18 @@
   },
   "keyRenameTheSelectedEffect": "Rename the selected effect",
   "@keyRenameTheSelectedEffect": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyInterpretTheSelectedFootage": "Interpret the selected footage",
+  "@keyInterpretTheSelectedFootage": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyRememberTheFootagesInterpretation": "Remember the footage's interpretation",
+  "@keyRememberTheFootagesInterpretation": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyApplyTheRememberedInterpretation": "Apply the remembered interpretation",
+  "@keyApplyTheRememberedInterpretation": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyRenameTheSelectedItem": "Rename the selected item",
@@ -7747,6 +7934,10 @@
   "@tipBreakHandlesOff": {
     "description": "Tooltip on the graph editor's Break handles button, when it is off. One or two words."
   },
+  "tipFitSelection": "Fit selection",
+  "@tipFitSelection": {
+    "description": "Tooltip on the graph editor's Fit selection button. One or two words."
+  },
   "tipBreakHandlesOn": "Handles broken",
   "@tipBreakHandlesOn": {
     "description": "Tooltip on the graph editor's Break handles button, when it is on. One or two words."
@@ -8130,7 +8321,7 @@
   },
   "tipToggleColumns": "{column} column",
   "@tipToggleColumns": {
-    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own column heading: Switches, Modes, Parent, or Render time.",
+    "description": "Tooltip on the Timeline bottom bar's column-group toggles. {column} is that group's own name: Modes, Compose, Parent, or Render time.",
     "placeholders": {
       "column": {
         "type": "String"

@@ -38,10 +38,10 @@ pub(crate) struct MediaCache {
     thumbs: HashMap<ThumbKey, Thumb>,
 }
 
-/// What a cached thumbnail is of: the item, the size asked for, and which
-/// frame of it.
+/// What a cached thumbnail is of: the item, the size asked for, which frame
+/// of it, and how the file was being read.
 #[cfg(feature = "media")]
-type ThumbKey = (Uuid, u32, i64);
+type ThumbKey = (Uuid, u32, i64, lumit_media::Interpretation);
 
 /// A decoded thumbnail: width, height, and tightly packed RGBA8.
 #[cfg(feature = "media")]
@@ -64,8 +64,8 @@ impl MediaCache {
 
     /// A cached thumbnail for `(id, max_edge)`, if one was decoded already.
     #[cfg(feature = "media")]
-    fn thumb_get(&self, id: Uuid, max_edge: u32, frame: i64) -> Option<Thumb> {
-        self.thumbs.get(&(id, max_edge, frame)).cloned()
+    fn thumb_get(&self, key: ThumbKey) -> Option<Thumb> {
+        self.thumbs.get(&key).cloned()
     }
 
     /// Store a decoded thumbnail for `(id, max_edge)`.
@@ -80,11 +80,11 @@ impl MediaCache {
     /// pays by decoding again on the way back. Give it recency ordering if that
     /// ever shows up as a stutter.
     #[cfg(feature = "media")]
-    fn thumb_put(&mut self, id: Uuid, max_edge: u32, frame: i64, w: u32, h: u32, rgba: Vec<u8>) {
-        self.thumbs.insert((id, max_edge, frame), (w, h, rgba));
+    fn thumb_put(&mut self, key: ThumbKey, w: u32, h: u32, rgba: Vec<u8>) {
+        self.thumbs.insert(key, (w, h, rgba));
         let bytes: usize = self.thumbs.values().map(|(_, _, rgba)| rgba.len()).sum();
         if bytes > THUMB_BUDGET_BYTES {
-            self.thumbs.retain(|(_, _, frame), _| *frame == 0);
+            self.thumbs.retain(|(_, _, frame, _), _| *frame == 0);
         }
     }
 }
@@ -126,10 +126,11 @@ pub(crate) fn decode_frame(
 pub(crate) fn thumb_cached(
     cache: &MediaCache,
     id: Uuid,
+    src: &lumit_media::MediaSource,
     max_edge: u32,
     frame: i64,
 ) -> Option<Thumb> {
-    cache.thumb_get(id, max_edge.clamp(1, 4096), frame.max(0))
+    cache.thumb_get((id, max_edge.clamp(1, 4096), frame.max(0), src.interpret))
 }
 
 /// Decode and downscale one frame, touching no cache and holding no lock.
@@ -176,19 +177,14 @@ pub(crate) fn thumb_decode(
 pub(crate) fn thumb_store(
     cache: &mut MediaCache,
     id: Uuid,
+    src: &lumit_media::MediaSource,
     max_edge: u32,
     frame: i64,
     thumb: &Thumb,
 ) {
     let (w, h, rgba) = thumb;
-    cache.thumb_put(
-        id,
-        max_edge.clamp(1, 4096),
-        frame.max(0),
-        *w,
-        *h,
-        rgba.clone(),
-    );
+    let key = (id, max_edge.clamp(1, 4096), frame.max(0), src.interpret);
+    cache.thumb_put(key, *w, *h, rgba.clone());
 }
 
 /// Downscale tightly-packed RGBA8 `src` (`sw`×`sh`) so its longer edge is at

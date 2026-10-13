@@ -1536,7 +1536,10 @@ pub(crate) fn clip_source_duration(
             let lumit_core::model::ProjectItem::Footage(footage) = doc.item(id)? else {
                 return None;
             };
+            #[cfg(not(feature = "media"))]
             let _path = FootageReference::resolve_path(state, footage)?;
+            #[cfg(feature = "media")]
+            let _path = FootageReference::resolve_source(state, footage)?;
             #[cfg(not(feature = "media"))]
             {
                 // No decoder, so no honest length — and a guess here would put
@@ -4461,7 +4464,7 @@ impl LayerReference {
                     .filter(|fps| *fps > 0.0)
                     .unwrap_or(1.0);
                 let at = (opens_at * fps).round() as i64;
-                let cached = crate::media::thumb_cached(&proj.media, item, max_edge, at);
+                let cached = crate::media::thumb_cached(&proj.media, item, &src, max_edge, at);
                 (src, at, cached)
             };
 
@@ -4472,7 +4475,14 @@ impl LayerReference {
                         return Ok(None);
                     };
                     if let Ok(mut proj) = project.write() {
-                        crate::media::thumb_store(&mut proj.media, item, max_edge, at, &decoded);
+                        crate::media::thumb_store(
+                            &mut proj.media,
+                            item,
+                            &src,
+                            max_edge,
+                            at,
+                            &decoded,
+                        );
                     }
                     decoded
                 }

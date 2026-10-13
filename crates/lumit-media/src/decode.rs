@@ -213,7 +213,11 @@ impl VideoDecoder {
         index: FrameIndex,
         allow_hardware: bool,
     ) -> Result<Self, MediaError> {
-        let input = crate::probe::open_input(&src.into())?;
+        let src = src.into();
+        // The source says how its frames are read, whoever built the index.
+        let mut index = index;
+        index.interpret = src.interpret;
+        let input = crate::probe::open_input(&src)?;
         let (stream_index, par) = input
             .streams()
             .iter()
@@ -255,13 +259,70 @@ impl VideoDecoder {
 
     /// Decode exactly frame `n`, optionally scaled to `target_width`
     /// (aspect-preserving) — true raster downsampling for preview resolution.
+    ///
+    /// `n` counts the source's frames as it is interpreted
+    /// (`crate::interpret`): a field, a film frame with its pulldown removed,
+    /// or a later play-through are each a frame here.
     pub fn frame_rgba(
         &mut self,
         n: usize,
         target_width: Option<u32>,
     ) -> Result<DecodedFrame, MediaError> {
-        let frame = self.frame_exact(n)?;
-        convert_rgba(&frame, target_width)
+        use crate::interpret::{fill_field, finish, spread_field, weave, Pick};
+        let it = self.index.interpret;
+        if it.is_plain() {
+            let frame = self.frame_exact(n)?;
+            return convert_rgba(&frame, target_width, None);
+        }
+        let frame = match it.pick(n, self.index.entries.len()) {
+            Pick::Whole(raw) => {
+                let frame = self.frame_exact(raw)?;
+                convert_rgba(&frame, target_width, it.pixel_aspect)?
+            }
+            // Fields are rows, so they are pulled apart at the file's own
+            // size and only then scaled. The field's rows are lifted out of
+            // the planes first and converted as a picture of their own:
+            // most interlaced video stores colour at half height, a row of it
+            // to each field in turn, and converting the woven frame whole
+            // would give each field half of the other's colour.
+            Pick::Field { frame, second } => {
+                let parity = it.parity(second);
+                let woven = self.frame_exact(frame)?;
+                let (_, full) = scaled_size(woven.width, woven.height, None, None);
+                let mut whole = match field_planes(&woven, parity) {
+                    Some(half) => {
+                        let field = convert_sized(&half, half.width, half.height)?;
+                        spread_field(field, u32::try_from(full).unwrap_or(0), parity)
+                    }
+                    None => convert_rgba(&woven, None, None)?,
+                };
+                fill_field(&mut whole, parity, it.preserve_edges);
+                fit(whole, target_width, it.pixel_aspect)
+            }
+            Pick::Weave { first, second } => {
+                // The earlier of the two first, so the decoder only runs forward.
+                let (a, b) = (first.min(second), first.max(second));
+                let early = self.frame_exact(a)?;
+                let late = self.frame_exact(b)?;
+                let (first, second) = if first <= second {
+                    (&early, &late)
+                } else {
+                    (&late, &early)
+                };
+                let parity = it.parity(false);
+                // Woven in the planes, for the same reason, and then it is a
+                // whole frame like any other.
+                match weave_planes(first, second, parity) {
+                    Some(woven) => convert_rgba(&woven, target_width, it.pixel_aspect)?,
+                    None => {
+                        let first = convert_rgba(first, None, None)?;
+                        let second = convert_rgba(second, None, None)?;
+                        fit(weave(&first, second, parity), target_width, it.pixel_aspect)
+                    }
+                }
+            }
+        };
+        Ok(finish(frame, &it))
     }
 
     /// Decode exactly frame `n` as luma at the file's own raster size — the
@@ -272,8 +333,25 @@ impl VideoDecoder {
     /// pixels, and a preview-tier downsample would silently change what a
     /// solved focal length means.
     pub fn frame_luma(&mut self, n: usize) -> Result<LumaFrame, MediaError> {
-        let frame = self.frame_exact(n)?;
-        convert_luma(&frame)
+        use crate::interpret::Pick;
+        let it = self.index.interpret;
+        if it.is_plain() {
+            let frame = self.frame_exact(n)?;
+            return convert_luma(&frame);
+        }
+        // A reading that only renumbers the file's frames, or changes what
+        // their alpha or their numbers mean, has the same brightness in the
+        // same place: the file's own frame is the answer, at its own size.
+        if let (Pick::Whole(raw), None) = (it.pick(n, self.index.entries.len()), it.pixel_aspect) {
+            let frame = self.frame_exact(raw)?;
+            return convert_luma(&frame);
+        }
+        // ponytail: fields and pixel shapes go the long way, through the
+        // colour picture, so the tracker sees the frames the layer shows. A
+        // field-aware luma tap is the upgrade if tracking interlaced footage
+        // is ever slow enough to matter.
+        let frame = self.frame_rgba(n, None)?;
+        Ok(luma_of(&frame))
     }
 
     /// Decode exactly frame `n` and hand back the picture in the shared planar
@@ -487,15 +565,7 @@ fn convert_luma(frame: &AVFrame) -> Result<LumaFrame, MediaError> {
 /// format constants, so a float format nobody here has heard of is still
 /// recognised as one.
 fn is_float(format: i32) -> bool {
-    // SAFETY: `av_pix_fmt_desc_get` takes a format value and returns either a
-    // pointer to a static descriptor libav owns for the lifetime of the
-    // process, or null for a value it does not recognise — which the null
-    // check below is what handles. Nothing is allocated and nothing borrowed.
-    #[allow(unsafe_code)]
-    unsafe {
-        let desc = ffi::av_pix_fmt_desc_get(format);
-        !desc.is_null() && ((*desc).flags & u64::from(ffi::AV_PIX_FMT_FLAG_FLOAT)) != 0
-    }
+    crate::probe::pix_fmt_flag(format, ffi::AV_PIX_FMT_FLAG_FLOAT)
 }
 
 /// A float frame packed as scene-linear 32-bit floats, keeping the range and
@@ -508,18 +578,9 @@ fn is_float(format: i32) -> bool {
 /// encoder's own pack stage, and on the common case (an EXR with alpha)
 /// swscale has no conversion to do at all, since that planar format is already
 /// the decoder's own output: the samples are copied, never converted.
-fn convert_linear_f32(
-    frame: &AVFrame,
-    target_width: Option<u32>,
-) -> Result<DecodedFrame, MediaError> {
+fn convert_linear_f32(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<DecodedFrame, MediaError> {
     let src_w = frame.width;
     let src_h = frame.height;
-    let dst_w = target_width
-        .map(|w| i32::try_from(w).unwrap_or(src_w))
-        .unwrap_or(src_w)
-        .clamp(2, src_w.max(2));
-    let dst_h =
-        ((i64::from(src_h) * i64::from(dst_w) / i64::from(src_w.max(1))) as i32).max(2) & !1;
 
     let mut sws = SwsContext::get_context(
         src_w,
@@ -579,19 +640,210 @@ fn convert_linear_f32(
     })
 }
 
-fn convert_rgba(frame: &AVFrame, target_width: Option<u32>) -> Result<DecodedFrame, MediaError> {
+/// The size a frame is converted to: `target_width` wide if that is narrower
+/// than the picture, and as tall as keeps its shape. `pixel_aspect` widens (or
+/// narrows) the picture first, so its pixels come out square.
+fn scaled_size(
+    src_w: i32,
+    src_h: i32,
+    target_width: Option<u32>,
+    pixel_aspect: Option<(u32, u32)>,
+) -> (i32, i32) {
+    let it = crate::Interpretation {
+        pixel_aspect,
+        ..Default::default()
+    };
+    let wide = u32::try_from(src_w)
+        .ok()
+        .and_then(|w| i32::try_from(it.width(w)).ok())
+        .unwrap_or(src_w);
+    let dst_w = target_width
+        .map(|w| i32::try_from(w).unwrap_or(wide))
+        .unwrap_or(wide)
+        .clamp(2, wide.max(2));
+    // Preserve aspect; keep even dimensions (some swscale paths prefer it).
+    let dst_h = ((i64::from(src_h) * i64::from(dst_w) / i64::from(wide.max(1))) as i32).max(2) & !1;
+    (dst_w, dst_h)
+}
+
+/// [`scaled_size`]'s answer for a frame already in hand: one whose fields
+/// were pulled apart at full size and is only now made the size asked for.
+pub(crate) fn fit(
+    frame: DecodedFrame,
+    target_width: Option<u32>,
+    pixel_aspect: Option<(u32, u32)>,
+) -> DecodedFrame {
+    if target_width.is_none() && pixel_aspect.is_none() {
+        return frame;
+    }
+    let (w, h) = (
+        i32::try_from(frame.width).unwrap_or(i32::MAX),
+        i32::try_from(frame.height).unwrap_or(i32::MAX),
+    );
+    let (dst_w, dst_h) = scaled_size(w, h, target_width, pixel_aspect);
+    crate::interpret::resize(
+        frame,
+        u32::try_from(dst_w).unwrap_or(0),
+        u32::try_from(dst_h).unwrap_or(0),
+    )
+}
+
+/// A colour frame's brightness, 0 to 1, by the Rec. 709 weights.
+fn luma_of(frame: &DecodedFrame) -> LumaFrame {
+    let size = frame.format.bytes_per_px();
+    let channel = |px: &[u8], c: usize| match frame.format {
+        PixelFormat::Srgb8 => px.get(c).map_or(0.0, |v| f32::from(*v) / 255.0),
+        PixelFormat::LinearF32 => px
+            .get(c * 4..c * 4 + 4)
+            .and_then(|b| <[u8; 4]>::try_from(b).ok())
+            .map_or(0.0, f32::from_le_bytes),
+    };
+    LumaFrame {
+        width: frame.width,
+        height: frame.height,
+        luma: frame
+            .rgba
+            .chunks_exact(size)
+            .map(|px| 0.2126 * channel(px, 0) + 0.7152 * channel(px, 1) + 0.0722 * channel(px, 2))
+            .collect(),
+    }
+}
+
+/// How many rows each plane of a `height`-row picture in `format` has, and
+/// how many bytes one of its rows is. `None` for a format whose planes are
+/// not plain rows of samples: a palette, a bitstream or a hardware surface.
+fn plane_rows(format: i32, width: i32, height: i32) -> Option<Vec<(usize, usize)>> {
+    // SAFETY: `av_pix_fmt_desc_get` takes a format value and returns a pointer
+    // to a static descriptor libav owns for the life of the process, or null
+    // for a value it does not know, which is checked before it is read.
+    // `av_pix_fmt_count_planes` takes the same value and returns a count.
+    #[allow(unsafe_code)]
+    let (shift, planes, flags) = unsafe {
+        let desc = ffi::av_pix_fmt_desc_get(format);
+        if desc.is_null() {
+            return None;
+        }
+        (
+            i32::from((*desc).log2_chroma_h),
+            ffi::av_pix_fmt_count_planes(format),
+            (*desc).flags,
+        )
+    };
+    let not_rows =
+        ffi::AV_PIX_FMT_FLAG_PAL | ffi::AV_PIX_FMT_FLAG_HWACCEL | ffi::AV_PIX_FMT_FLAG_BITSTREAM;
+    if flags & u64::from(not_rows) != 0 || !(1..=4).contains(&planes) || shift > 4 {
+        return None;
+    }
+    (0..planes)
+        .map(|plane| {
+            // The two colour planes are the ones stored at reduced height.
+            let rows = if plane == 1 || plane == 2 {
+                (height + (1 << shift) - 1) >> shift
+            } else {
+                height
+            };
+            // SAFETY: plain values in, a byte count or a negative error out.
+            #[allow(unsafe_code)]
+            let bytes = unsafe { ffi::av_image_get_linesize(format, width, plane) };
+            Some((usize::try_from(rows).ok()?, usize::try_from(bytes).ok()?))
+                .filter(|(rows, bytes)| *rows > 0 && *bytes > 0)
+        })
+        .collect()
+}
+
+/// A new frame of `height` rows in `like`'s format, row `r` of every plane
+/// copied from the frame and the row `from(r)` names. Every frame it names
+/// must be `like`'s size and format. A row past the end of a plane is its
+/// last row.
+fn rows_from<'a>(
+    like: &AVFrame,
+    height: i32,
+    from: impl Fn(usize) -> (&'a AVFrame, usize),
+) -> Option<AVFrame> {
+    let source = plane_rows(like.format, like.width, like.height)?;
+    let rows = plane_rows(like.format, like.width, height)?;
+    let mut out = AVFrame::new();
+    out.set_width(like.width);
+    out.set_height(height);
+    out.set_format(like.format);
+    out.alloc_buffer().ok()?;
+    // SAFETY: both are live frames, and this copies colour and timing
+    // properties only, never picture data.
+    #[allow(unsafe_code)]
+    unsafe {
+        ffi::av_frame_copy_props(out.as_mut_ptr(), like.as_ptr());
+    }
+    for (plane, ((count, bytes), (source_rows, _))) in rows.iter().zip(&source).enumerate() {
+        for r in 0..*count {
+            let (src, at) = from(r);
+            let at = at.min(source_rows.saturating_sub(1));
+            let (from_ptr, from_stride) = (*src.data.get(plane)?, *src.linesize.get(plane)?);
+            let (to_ptr, to_stride) = (*out.data.get(plane)?, *out.linesize.get(plane)?);
+            let from_stride = usize::try_from(from_stride).ok()?;
+            let to_stride = usize::try_from(to_stride).ok()?;
+            if from_ptr.is_null() || to_ptr.is_null() || from_stride < *bytes || to_stride < *bytes
+            {
+                return None;
+            }
+            // SAFETY: `at` is below the plane's row count for a frame of the
+            // source's size and format, and `r` below the count for the new
+            // frame's, both worked out from libav's own description of the
+            // format. Each row is at least `bytes` long, checked above
+            // against the stride. The two frames are separate allocations.
+            #[allow(unsafe_code)]
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    from_ptr.add(at * from_stride),
+                    to_ptr.add(r * to_stride),
+                    *bytes,
+                );
+            }
+        }
+    }
+    Some(out)
+}
+
+/// One field of a frame as a picture of its own, half as tall: the rows of
+/// `parity` from every plane. `None` where the planes can't be read as rows,
+/// and the caller separates the converted picture instead.
+fn field_planes(frame: &AVFrame, parity: usize) -> Option<AVFrame> {
+    let rows = usize::try_from(frame.height).ok()?;
+    let height = i32::try_from((rows + 1).saturating_sub(parity & 1) / 2).ok()?;
+    if height < 1 {
+        return None;
+    }
+    rows_from(frame, height, |r| (frame, 2 * r + (parity & 1)))
+}
+
+/// The rows of `parity` from `first` with the others from `second`, plane by
+/// plane: the two halves of a film frame that pulldown split across two.
+fn weave_planes(first: &AVFrame, second: &AVFrame, parity: usize) -> Option<AVFrame> {
+    let same =
+        (first.format, first.width, first.height) == (second.format, second.width, second.height);
+    if !same {
+        return None;
+    }
+    rows_from(first, first.height, |r| {
+        (if r % 2 == parity & 1 { first } else { second }, r)
+    })
+}
+
+fn convert_rgba(
+    frame: &AVFrame,
+    target_width: Option<u32>,
+    pixel_aspect: Option<(u32, u32)>,
+) -> Result<DecodedFrame, MediaError> {
+    let (dst_w, dst_h) = scaled_size(frame.width, frame.height, target_width, pixel_aspect);
+    convert_sized(frame, dst_w, dst_h)
+}
+
+/// A frame as RGBA at exactly this size, eight-bit or float as it arrived.
+fn convert_sized(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<DecodedFrame, MediaError> {
     if is_float(frame.format) {
-        return convert_linear_f32(frame, target_width);
+        return convert_linear_f32(frame, dst_w, dst_h);
     }
     let src_w = frame.width;
     let src_h = frame.height;
-    let dst_w = target_width
-        .map(|w| i32::try_from(w).unwrap_or(src_w))
-        .unwrap_or(src_w)
-        .clamp(2, src_w.max(2));
-    // Preserve aspect; keep even dimensions (some swscale paths prefer it).
-    let dst_h =
-        ((i64::from(src_h) * i64::from(dst_w) / i64::from(src_w.max(1))) as i32).max(2) & !1;
 
     let mut sws = SwsContext::get_context(
         src_w,
@@ -709,6 +961,226 @@ mod tests {
             *slot = f32::from_le_bytes(bytes);
         }
         out
+    }
+
+    /// An interpreted source has to agree with itself: the probe, the index
+    /// and the decoder all counting the same frames, and each frame being the
+    /// one the interpretation names. Get that wrong and every layer cut from
+    /// the clip shows the wrong moment.
+    #[test]
+    fn an_interpreted_source_is_read_in_interpreted_frames() {
+        use crate::{Fields, Interpretation, MediaSource};
+        let dir = tempfile::tempdir().unwrap();
+        let Some(file) = fixture(dir.path()) else {
+            eprintln!("skipping: no ffmpeg CLI available");
+            return;
+        };
+        // Two seconds of 320 by 240 at 60 fps: 120 frames.
+        let plain = MediaSource::file(&file);
+        let read = |src: &MediaSource, n: usize| {
+            let index = build_frame_index(src.clone()).unwrap();
+            let mut decoder = VideoDecoder::open(src.clone(), index).unwrap();
+            decoder.frame_rgba(n, None).unwrap()
+        };
+        let facts = |src: &MediaSource| {
+            let probe = crate::probe::probe(src.clone()).unwrap();
+            let video = probe.video.unwrap();
+            let frames = build_frame_index(src.clone()).unwrap().frame_count();
+            (
+                video.fps_num,
+                video.fps_den,
+                video.width,
+                frames,
+                probe.duration_seconds,
+            )
+        };
+
+        // Conformed to 24 and played twice: the same pictures, slower, twice.
+        let conformed = MediaSource {
+            interpret: Interpretation {
+                conform_fps: Some((24, 1)),
+                loops: 2,
+                ..Default::default()
+            },
+            ..plain.clone()
+        };
+        let (num, den, width, frames, seconds) = facts(&conformed);
+        assert_eq!((num, den, width, frames), (24, 1, 320, 240));
+        assert!((seconds - 10.0).abs() < 0.1, "lasts {seconds} s");
+        assert_eq!(
+            frame_hash(&read(&conformed, 125)),
+            frame_hash(&read(&plain, 5)),
+            "the second time round is the first again"
+        );
+
+        // Fields separated: two pictures a frame, each keeping its own rows.
+        let fields = MediaSource {
+            interpret: Interpretation {
+                fields: Fields::Upper,
+                ..Default::default()
+            },
+            ..plain.clone()
+        };
+        let (num, den, _, frames, _) = facts(&fields);
+        assert_eq!((num, den, frames), (120, 1, 240));
+        let (whole, later) = (read(&plain, 5), read(&fields, 11));
+        assert_eq!((later.width, later.height), (whole.width, whole.height));
+        let row = |f: &DecodedFrame, y: usize| f.rgba[y * 320 * 4..(y + 1) * 320 * 4].to_vec();
+        assert_eq!(
+            row(&later, 101),
+            row(&whole, 101),
+            "the later field is the odd rows"
+        );
+
+        // Pixels twice as wide as tall: the picture is, too.
+        let wide = MediaSource {
+            interpret: Interpretation {
+                pixel_aspect: Some((2, 1)),
+                ..Default::default()
+            },
+            ..plain
+        };
+        assert_eq!(facts(&wide).2, 640);
+        let stretched = read(&wide, 0);
+        assert_eq!((stretched.width, stretched.height), (640, 240));
+    }
+
+    /// Fields and pulldown on real video, not made-up rows: a clip interlaced
+    /// and a clip telecined by ffmpeg must come apart into exactly the frames
+    /// they were made from. Lossless and unsubsampled, so "exactly" is bytes.
+    #[test]
+    fn real_interlaced_and_telecined_video_comes_apart_into_its_frames() {
+        use crate::index::tests_support::ffmpeg_bin;
+        use crate::interpret::{comb_score, guess_pulldown};
+        use crate::{Fields, Interpretation, MediaSource, Pulldown};
+        let dir = tempfile::tempdir().unwrap();
+        let Some(bin) = ffmpeg_bin() else {
+            eprintln!("skipping: no ffmpeg CLI available");
+            return;
+        };
+        let make_from = |name: &str, source: &str, filter: &str| {
+            let out = dir.path().join(name);
+            let ok = std::process::Command::new(bin)
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i", source])
+                .args(["-vf", filter, "-c:v", "ffv1"])
+                .arg(&out)
+                .status()
+                .is_ok_and(|s| s.success());
+            ok.then_some(out)
+        };
+        let make = |name: &str, rate: &str, filter: &str| {
+            let source = format!("testsrc2=duration=1:size=160x120:rate={rate}");
+            make_from(name, &source, filter)
+        };
+        let frames = |src: &MediaSource| {
+            let index = build_frame_index(src.clone()).unwrap();
+            let count = index.frame_count();
+            let mut decoder = VideoDecoder::open(src.clone(), index).unwrap();
+            (0..count)
+                .map(|n| decoder.frame_rgba(n, None).unwrap())
+                .collect::<Vec<_>>()
+        };
+        let row = |f: &DecodedFrame, y: usize| f.rgba[y * 160 * 4..(y + 1) * 160 * 4].to_vec();
+
+        // Sixty pictures a second woven into thirty frames, upper field first.
+        let (Some(whole), Some(woven)) = (
+            make("p60.mkv", "60", "format=yuv444p"),
+            make("i30.mkv", "60", "format=yuv444p,tinterlace=interleave_top"),
+        ) else {
+            eprintln!("skipping: this ffmpeg has no ffv1 or tinterlace");
+            return;
+        };
+        let pictures = frames(&MediaSource::file(&whole));
+        let fields = frames(&MediaSource {
+            interpret: Interpretation {
+                fields: Fields::Upper,
+                ..Default::default()
+            },
+            ..MediaSource::file(&woven)
+        });
+        assert_eq!(fields.len(), pictures.len() / 2 * 2);
+        for n in [0, 1, 10, 11] {
+            // Each field keeps the rows it was shot on: even for the earlier.
+            let y = 40 + n % 2;
+            assert_eq!(row(&fields[n], y), row(&pictures[n], y), "field {n}");
+        }
+
+        // Colour stored at half height, a row of it to each field in turn,
+        // which is how nearly all interlaced video keeps it. A red picture
+        // woven with a blue one must come apart red and blue, each the colour
+        // it is in a file that was never woven, and not two shades of purple.
+        let flat = "color=c=black:size=160x120:rate=60:duration=1";
+        let tones = "format=yuv444p,geq=lum='if(mod(N,2),60,90)':\
+                     cb='if(mod(N,2),230,100)':cr='if(mod(N,2),110,230)',format=yuv420p";
+        let (Some(apart), Some(together)) = (
+            make_from("tones.mkv", flat, tones),
+            make_from(
+                "tones-i.mkv",
+                flat,
+                &format!("{tones},tinterlace=interleave_top"),
+            ),
+        ) else {
+            eprintln!("skipping: this ffmpeg has no geq");
+            return;
+        };
+        let apart = frames(&MediaSource::file(&apart));
+        let together = frames(&MediaSource {
+            interpret: Interpretation {
+                fields: Fields::Upper,
+                ..Default::default()
+            },
+            ..MediaSource::file(&together)
+        });
+        let centre = |f: &DecodedFrame| {
+            let at = (60 * 160 + 80) * 4;
+            [f.rgba[at], f.rgba[at + 1], f.rgba[at + 2]]
+        };
+        for n in [0, 1, 6, 7] {
+            let (got, want) = (centre(&together[n]), centre(&apart[n]));
+            assert!(
+                got.iter().zip(want).all(|(g, w)| g.abs_diff(w) <= 4),
+                "field {n} is {got:?}, and its own picture was {want:?}"
+            );
+        }
+        assert!(
+            centre(&apart[0])[0] > centre(&apart[1])[0] + 60,
+            "red, then blue"
+        );
+
+        // Twenty-four frames a second telecined to thirty, the plain cadence.
+        let (Some(film), Some(video)) = (
+            make("p24.mkv", "24000/1001", "format=yuv444p"),
+            make("t30.mkv", "24000/1001", "format=yuv444p,telecine"),
+        ) else {
+            eprintln!("skipping: this ffmpeg has no telecine");
+            return;
+        };
+        let film = frames(&MediaSource::file(&film));
+        let telecined = frames(&MediaSource::file(&video));
+        let scores: Vec<f64> = telecined.iter().take(15).map(comb_score).collect();
+        let cadence = guess_pulldown(&scores, 0);
+        assert_eq!(cadence, Pulldown::ThreeTwo(0), "scores {scores:?}");
+        let restored = frames(&MediaSource {
+            interpret: Interpretation {
+                fields: Fields::Upper,
+                pulldown: cadence,
+                ..Default::default()
+            },
+            ..MediaSource::file(&video)
+        });
+        assert!(
+            restored.len() + 1 >= film.len(),
+            "{} of {}",
+            restored.len(),
+            film.len()
+        );
+        for n in 0..restored.len().min(film.len()) {
+            assert_eq!(
+                frame_hash(&restored[n]),
+                frame_hash(&film[n]),
+                "film frame {n}"
+            );
+        }
     }
 
     /// The point of the whole float path: a value four times brighter than
@@ -1003,6 +1475,7 @@ mod tests {
                 mtime_unix: 0,
                 content_hash: String::new(),
             },
+            interpret: Default::default(),
         };
         assert!(VideoDecoder::open(&truncated, index).is_err());
     }

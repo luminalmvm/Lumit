@@ -105,6 +105,8 @@ pub struct Item {
     pub duration: Option<f64>,
     /// AE's conform frame rate; 0 means "no override".
     pub fps_override: Option<f64>,
+    /// The footage's pixel aspect ratio, 1 for square.
+    pub pixel_aspect: Option<f64>,
     /// `IGNORE` | `STRAIGHT` | `PREMULTIPLIED`.
     pub alpha: Option<String>,
     /// The matte colour a premultiplied item is unmultiplied against.

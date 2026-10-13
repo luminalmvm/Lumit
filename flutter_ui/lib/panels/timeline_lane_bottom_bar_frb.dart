@@ -70,6 +70,10 @@ class LaneBottomBar extends StatelessWidget {
   final double perFrame;
   final double fps;
 
+  /// What the view under this bar adds after the magnet: the graph's own
+  /// framing buttons. Empty for the lanes.
+  final List<Widget> viewButtons;
+
   const LaneBottomBar({
     super.key,
     required this.zoom,
@@ -83,6 +87,7 @@ class LaneBottomBar extends StatelessWidget {
     this.onToggleMagnet,
     this.perFrame = 0,
     this.fps = 0,
+    this.viewButtons = const [],
   });
 
   /// Desk's zoom: the dial and, beside it, what one tick of the engraved
@@ -247,6 +252,7 @@ class LaneBottomBar extends StatelessWidget {
                         ),
                       ),
                     ),
+                  ...viewButtons,
                   const SizedBox(width: 12),
                 ],
               ),

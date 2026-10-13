@@ -3191,9 +3191,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // File whatever the decode-ahead thread has finished into the renderer's
     // cache, so the renders below find their source pixels already decoded.
     for done in state.prefetcher.drain() {
-        state
-            .renderer
-            .preload_decoded(done.item, done.frame, done.target_width, done.decoded);
+        state.renderer.preload_decoded(done);
     }
 
     // The pre-roll: the sound starts once the picture has something banked to

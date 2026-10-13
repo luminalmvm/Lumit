@@ -331,6 +331,10 @@ class ColumnHeader extends StatelessWidget {
   /// outline draws its rows at while the hand is on the seam.
   final void Function(TimelineGroup group, double? delta) onResizeLive;
 
+  /// A right-click anywhere on the headings, which opens the list of columns
+  /// to show and hide.
+  final ValueChanged<Offset> onMenu;
+
   const ColumnHeader({
     super.key,
     required this.order,
@@ -339,10 +343,19 @@ class ColumnHeader extends StatelessWidget {
     required this.onReorder,
     required this.onResize,
     required this.onResizeLive,
+    required this.onMenu,
   });
 
   @override
   Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapUp: (d) => onMenu(d.globalPosition),
+      child: _headings(context),
+    );
+  }
+
+  Widget _headings(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
       height: t.density.timelineHeaderRow,

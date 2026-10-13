@@ -57,6 +57,7 @@ fn comp_of(path: &str, records: &[u32]) -> (Arc<Document>, Uuid) {
             extra: serde_json::Map::new(),
             colour_space: None,
             source_layer: Some(*record),
+            interpretation: Default::default(),
         }));
         layers.push(Layer {
             graph: Default::default(),
@@ -206,4 +207,69 @@ fn each_layer_of_an_illustrator_document_draws_as_itself() {
         close(px(&rgba, w, 2, 2), [0, 0, 0, 255]),
         "empty off the layer"
     );
+}
+
+/// How a footage item is interpreted has to reach the picture, not only the
+/// item: numbers taken as linear light draw brighter than the same numbers
+/// read through the sRGB curve, and an inverted alpha shows what the layer
+/// was covering.
+#[test]
+fn an_interpreted_item_draws_as_it_is_interpreted() {
+    use lumit_core::interpretation::{Interpretation, LinearLight};
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        eprintln!("no adapter here");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let records = [
+        PsdLayer::solid("Background", [0, 0, 32, 32], RED),
+        PsdLayer::solid("Square", [8, 8, 16, 16], GREY),
+    ];
+    let path = dir.path().join("art.psd");
+    std::fs::write(&path, document(SIZE, SIZE, 8, &records)).unwrap();
+    let path = path.to_string_lossy().into_owned();
+    // The square over the background, with the square's item read as `it`.
+    let mut render = |it: Interpretation| {
+        let (doc, comp) = comp_of(&path, &[1, 0]);
+        let mut doc = (*doc).clone();
+        if let Some(ProjectItem::Footage(square)) = doc.items.first_mut() {
+            square.interpretation = it;
+        }
+        let (rgba, w, _) = r.render_rgba(&Arc::new(doc), comp, 0, 1.0).expect("render");
+        (px(&rgba, w, 12, 12), px(&rgba, w, 20, 20))
+    };
+
+    let (square, around) = render(Interpretation::default());
+    assert!(close(square, GREY) && close(around, RED));
+
+    // 128 of 255 as linear light is half, which the display shows as 188.
+    let lit = [188, 188, 188, 255];
+    for it in [
+        Interpretation {
+            preserve_rgb: true,
+            ..Default::default()
+        },
+        Interpretation {
+            linear_light: LinearLight::On,
+            ..Default::default()
+        },
+    ] {
+        let (square, around) = render(it.clone());
+        assert!(
+            square.iter().zip(lit).all(|(g, w)| g.abs_diff(w) <= 2),
+            "{it:?} drew {square:?}"
+        );
+        assert!(close(around, RED));
+    }
+
+    // Inverted, the square is clear and the rest of its layer is not.
+    let (square, around) = render(Interpretation {
+        invert_alpha: true,
+        ..Default::default()
+    });
+    assert!(
+        close(square, RED),
+        "the background shows through: {square:?}"
+    );
+    assert!(!close(around, RED), "and is covered elsewhere: {around:?}");
 }

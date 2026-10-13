@@ -811,6 +811,7 @@ fn example_doc(
             extra: serde_json::Map::new(),
             colour_space: None,
             source_layer: None,
+            interpretation: Default::default(),
         }));
         item
     };

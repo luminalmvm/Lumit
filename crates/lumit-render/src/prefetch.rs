@@ -49,6 +49,9 @@ const FINISHED_WAITING: usize = 32;
 /// [`crate::headless::HeadlessRenderer::preload_decoded`].
 pub struct Prefetched {
     pub item: Uuid,
+    /// The file it was read from and how, so a frame that lands after the
+    /// item was pointed elsewhere or interpreted afresh is not filed.
+    pub source: lumit_media::MediaSource,
     pub frame: usize,
     pub target_width: Option<u32>,
     /// The decode itself, handed on whole, so a float frame is filed as what
@@ -196,15 +199,15 @@ fn run(jobs: &Receiver<Vec<PrefetchWant>>, done: &SyncSender<Prefetched>) {
     // The file this stream is reading. An item whose file has changed, as
     // one relinked or one whose stand-in gave way to the original has, is
     // opened again rather than read on from the old file.
-    let mut source: Option<std::path::PathBuf> = None;
+    let mut source: Option<lumit_media::MediaSource> = None;
     while let Ok(frame) = jobs.recv() {
         for want in frame {
-            if source.as_ref() != Some(&want.source.path) {
+            if source.as_ref() != Some(&want.source) {
                 if source.is_some() {
                     decoders.close(want.item);
                     read.clear();
                 }
-                source = Some(want.source.path.clone());
+                source = Some(want.source.clone());
             }
             // One layer of a layered file, or an Illustrator document, is
             // read by the file's own reader, as the render reads it. ffmpeg
@@ -227,6 +230,7 @@ fn run(jobs: &Receiver<Vec<PrefetchWant>>, done: &SyncSender<Prefetched>) {
             // Full means nobody is collecting, and the picture is let go.
             let _ = done.try_send(Prefetched {
                 item: want.item,
+                source: want.source.clone(),
                 frame: want.frame,
                 target_width: want.target_width,
                 decoded,

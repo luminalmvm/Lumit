@@ -160,6 +160,9 @@ impl ActionId {
             "app.settings" => "Open Settings",
             "project.settings" => "Open Project settings",
             "item.rename" => "Rename the selected item",
+            "footage.interpret" => "Interpret the selected footage",
+            "footage.interpretation.remember" => "Remember the footage's interpretation",
+            "footage.interpretation.apply" => "Apply the remembered interpretation",
             "panel.maximise" => "Maximise the panel under the pointer",
             "graph.toggle" => "Show or hide the graph editor",
             // Tools.
@@ -1022,6 +1025,10 @@ pub fn default_keymap() -> Keymap {
         // the item in the Project panel, the effect in Effect controls — the
         // same key the Timeline has always used for its layers.
         row(Project, "Enter", "item.rename"),
+        // After Effects' own three for Interpret Footage.
+        row(Project, "Mod+Alt+G", "footage.interpret"),
+        row(Project, "Mod+Alt+C", "footage.interpretation.remember"),
+        row(Project, "Mod+Alt+V", "footage.interpretation.apply"),
         row(Effects, "Enter", "effect.rename"),
         row(Timeline, "X", "layer.toggle.visible"),
         // --- Graph editor ---
@@ -1231,6 +1238,8 @@ pub fn after_effects_preset() -> Keymap {
             km.rebind_action(context, &action.into(), chord);
         }
     }
+    // AE zooms time on Alt and the graph's values on Ctrl, which this swaps to.
+    km.wheel.set(WheelAction::ZoomTime, WheelModifier::Alt);
     km
 }
 

@@ -201,12 +201,41 @@ class LumitState extends ChangeNotifier {
     }
   }
 
-  /// A new, empty project in place of the open one. Close project is this too.
+  /// Where the user's project template is, or null when they have none. Set
+  /// by the shell, which holds the setting. Null until there is one.
+  String? Function()? projectTemplate;
+
+  /// A new project in place of the open one: a copy of the user's template
+  /// when they have set one, else an empty one. Close project is this too,
+  /// with [blank], since closing is not asking for the template.
   ///
   /// [ask] false skips the question about unsaved changes, for a project that
   /// holds nothing of the user's.
-  Future<void> newProject({bool ask = true}) async {
+  Future<void> newProject({bool ask = true, bool blank = false}) async {
     if (ask && unsavedNeedsAsking && !await askBeforeLeaving()) return;
+    final template = blank ? null : projectTemplate?.call();
+    if (template != null) {
+      // Reading the template takes a moment, and the user may open something
+      // else in it. What they opened stands, and the template is let go.
+      final was = project;
+      final sink = _changeSink();
+      try {
+        final outcome = await LumitBridgeState.newProjectFrom(
+            path: template, onChangeStream: sink);
+        if (outcome case BridgeOpened_Opened(project: final made)) {
+          if (!identical(project, was) || opening.value) {
+            if (identical(_pendingSink, sink)) _pendingSink = null;
+            made.close();
+            return;
+          }
+          return _adopt(made);
+        }
+      } catch (_) {
+        // Falls through to an empty project, with the notice below.
+      }
+      if (!identical(project, was) || opening.value) return;
+      postNotice(l10n.templateNotOpened, error: true);
+    }
     _adopt(LumitBridgeState.newProject(onChangeStream: _changeSink()));
   }
 
