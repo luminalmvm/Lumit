@@ -9517,25 +9517,13 @@
   "@cutAutoRipple": {
     "description": "A toggle on the Cut timeline's strip: while on, deleting, trimming or moving a clip moves everything after it by as much. Two words."
   },
-  "tipCutAutoRipple": "Edits move what follows",
-  "@tipCutAutoRipple": {
-    "description": "Tooltip on the Cut timeline's Auto ripple toggle. A few words."
-  },
   "cutAutoCrossfade": "Auto crossfade",
   "@cutAutoCrossfade": {
     "description": "A toggle on the Cut timeline's strip: while on, a clip dragged across the end of another keeps the overlap, which plays as a dissolve or a crossfade. Two words."
   },
-  "tipCutAutoCrossfade": "Overlaps become crossfades",
-  "@tipCutAutoCrossfade": {
-    "description": "Tooltip on the Cut timeline's Auto crossfade toggle. A few words."
-  },
   "cutQuantise": "Quantise",
   "@cutQuantise": {
     "description": "A toggle on the Cut timeline's strip: while on, sound clips move in whole frames. Off, a sound clip can sit between two frames. One word."
-  },
-  "tipCutQuantise": "Sound moves in whole frames",
-  "@tipCutQuantise": {
-    "description": "Tooltip on the Cut timeline's Quantise toggle. A few words."
   },
   "cutSwitchOn": "{name} on",
   "@cutSwitchOn": {
@@ -9561,11 +9549,7 @@
   },
   "clipBlendFromLayer": "From layer",
   "@clipBlendFromLayer": {
-    "description": "Effect controls panel, with one clip of a Sequence layer picked: the first choice in the clip's Blend mode list. The clip uses its layer's blend mode and has none of its own. The Cut timeline's own menu says From track for the same choice."
-  },
-  "cutBlendFromTrack": "From track",
-  "@cutBlendFromTrack": {
-    "description": "Cut timeline, right-click on a clip, first row of the Blend mode list: the clip uses its track's blend mode and has none of its own."
+    "description": "The first choice in a clip's Blend mode list, in the Effect controls panel with one clip of a Sequence layer picked and on the clip's menu in the Cut timeline. The clip uses its layer's blend mode and has none of its own."
   },
   "cutBypassEffects": "Bypass effects",
   "@cutBypassEffects": {

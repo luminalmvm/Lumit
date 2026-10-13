@@ -2309,7 +2309,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                             Expanded(
                               child: Text(
                                   i < 0
-                                      ? l10n.cutBlendFromTrack
+                                      ? l10n.clipBlendFromLayer
                                       : engineLabel(_blendNames[i]),
                                   overflow: TextOverflow.ellipsis),
                             ),
@@ -2765,7 +2765,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             'ctl-ripple',
             l10n.cutAutoRipple,
             on: _autoRipple,
-            tip: l10n.tipCutAutoRipple,
             onPressed: () =>
                 _toggle((s) => s.cutAutoRipple = !s.cutAutoRipple),
           ),
@@ -2774,7 +2773,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             'ctl-crossfade',
             l10n.cutAutoCrossfade,
             on: _autoCrossfade,
-            tip: l10n.tipCutAutoCrossfade,
             onPressed: () =>
                 _toggle((s) => s.cutAutoCrossfade = !s.cutAutoCrossfade),
           ),
@@ -2783,7 +2781,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             'ctl-quantise',
             l10n.cutQuantise,
             on: _quantise,
-            tip: l10n.tipCutQuantise,
             onPressed: () =>
                 _toggle((s) => s.quantiseSound = !s.quantiseSound),
           ),
