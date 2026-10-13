@@ -149,6 +149,12 @@ class SavedSession {
   /// [PanelFolds.toJson]. Raw JSON for [dock]'s reason.
   final Map<String, dynamic>? folds;
 
+  /// How tall each row of the Cut timeline stands where it has been dragged
+  /// off the usual height, by composition id and then row id. Session state
+  /// for the reason the looks are: a way of working on the cut, not an edit
+  /// to it. A composition with every row at the usual height is absent.
+  final Map<String, Map<String, double>> cutTrackHeights;
+
   const SavedSession({
     this.openComps = const [],
     this.activeComp,
@@ -164,6 +170,7 @@ class SavedSession {
     this.viewerViews = const [],
     this.viewerLayout,
     this.folds,
+    this.cutTrackHeights = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -175,6 +182,7 @@ class SavedSession {
         'viewer_views': viewerViews,
         'viewer_layout': viewerLayout,
         'folds': folds,
+        'cut_track_heights': cutTrackHeights,
         'viewer_looks': {
           for (final e in viewerLooks.entries)
             e.key: {'stops': e.value.stops, 'tone_map': e.value.toneMap},
@@ -266,13 +274,31 @@ class SavedSession {
         folds: j['folds'] is Map
             ? (j['folds'] as Map).cast<String, dynamic>()
             : null,
+        cutTrackHeights: _heightsFromJson(j['cut_track_heights']),
       );
+
+  /// The Cut timeline's row heights out of a session's JSON, dropping what is
+  /// not the shape this build writes.
+  static Map<String, Map<String, double>> _heightsFromJson(Object? raw) {
+    if (raw is! Map) return const {};
+    return {
+      for (final comp in raw.entries)
+        if (comp.key is String && comp.value is Map)
+          comp.key as String: {
+            for (final row in (comp.value as Map).entries)
+              if (row.key is String && row.value is num)
+                row.key as String: (row.value as num).toDouble(),
+          },
+    };
+  }
 
   /// The arrangement compared by value. Encoding is the cheap deep compare
   /// here: both sides are built key-by-key in the same order by [toJson], so
   /// equal trees encode identically.
   String get _dockKey => dock == null ? '' : jsonEncode(dock);
   String get _foldsKey => folds == null ? '' : jsonEncode(folds);
+  String get _heightsKey =>
+      cutTrackHeights.isEmpty ? '' : jsonEncode(cutTrackHeights);
 
   @override
   bool operator ==(Object other) =>
@@ -282,6 +308,7 @@ class SavedSession {
       other.selectedLayer == selectedLayer &&
       other._dockKey == _dockKey &&
       other._foldsKey == _foldsKey &&
+      other._heightsKey == _heightsKey &&
       mapEquals(other.viewerLooks, viewerLooks) &&
       mapEquals(other.previewResolutions, previewResolutions) &&
       mapEquals(other.viewerOverlays, viewerOverlays) &&
@@ -700,6 +727,12 @@ class Workspace extends ChangeNotifier {
   /// grades at is theirs, and having to set it again every session is the
   /// annoyance the option exists to remove.
   double curvePlotSize = 150;
+
+  /// The Effect controls panel's keyframe strip: whether it is shown, and
+  /// how wide its column is. A preference for the reason the plot size is:
+  /// how someone lays the panel out is theirs to keep.
+  bool fxKeyStrip = true;
+  double fxKeyStripWidth = 220;
 
   /// Whether the Viewer's surround takes the theme's own surface rather than
   /// the neutral grey. Off by default, and for the same reason the scopes
@@ -1326,6 +1359,16 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setFxKeyStrip(bool shown) {
+    fxKeyStrip = shown;
+    settingsChanged();
+  }
+
+  void setFxKeyStripWidth(double pixels) {
+    fxKeyStripWidth = pixels;
+    settingsChanged();
+  }
+
   void setThemedViewerSurround(bool on) {
     themedViewerSurround = on;
     settingsChanged();
@@ -1843,6 +1886,8 @@ class Workspace extends ChangeNotifier {
         'recent_colours': [...recentColours],
         'themed_effect_graphs': themedEffectGraphs,
         'curve_plot_size': curvePlotSize,
+        'fx_key_strip': fxKeyStrip,
+        'fx_key_strip_width': fxKeyStripWidth,
         'themed_viewer_surround': themedViewerSurround,
         'smooth_zoomed_viewer': smoothZoomedViewer,
         'precompose_move_attributes': precomposeMoveAttributes,
@@ -2038,6 +2083,8 @@ class Workspace extends ChangeNotifier {
     themedEffectGraphs = j['themed_effect_graphs'] == true;
     // Absent means a file written before the size could be chosen: medium.
     curvePlotSize = (j['curve_plot_size'] as num?)?.toDouble() ?? 150;
+    fxKeyStrip = j['fx_key_strip'] as bool? ?? true;
+    fxKeyStripWidth = (j['fx_key_strip_width'] as num?)?.toDouble() ?? 220;
     themedViewerSurround = j['themed_viewer_surround'] == true;
     smoothZoomedViewer = j['smooth_zoomed_viewer'] == true;
     precomposeMoveAttributes = j['precompose_move_attributes'] as bool? ?? true;

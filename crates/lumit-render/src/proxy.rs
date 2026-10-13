@@ -258,6 +258,30 @@ mod tests {
             "progress is reported once per frame written"
         );
         assert_eq!(seen.last().copied(), Some((src_frames, src_frames)));
+
+        // The rate has to agree as well, or the proxy is refused the same
+        // way, and the last frame has to come back from it. A file that ends
+        // where its last frame starts fails both: it reads a little fast, and
+        // that frame is marked as past the end.
+        let src_fps = lumit_media::probe::probe(&source)
+            .unwrap()
+            .video
+            .unwrap()
+            .fps();
+        assert!(
+            (video.fps() - src_fps).abs() < 1e-3,
+            "the proxy runs at {} and its original at {src_fps}",
+            video.fps()
+        );
+        let last_red = |path: &Path| {
+            let index = crate::media_index::load_or_build_index(path).unwrap();
+            let mut decoder = lumit_media::decode::VideoDecoder::open(path, index).unwrap();
+            decoder.frame_rgba(src_frames - 1, None).unwrap().rgba[0]
+        };
+        assert!(
+            last_red(&dest).abs_diff(last_red(&source)) < 16,
+            "the proxy's last frame is the original's last frame"
+        );
     }
 
     /// Cancelling stops the transcode where it stands, and reports no error —

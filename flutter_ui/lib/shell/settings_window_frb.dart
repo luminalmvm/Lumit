@@ -906,6 +906,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.transformInEffectControls = shipped.transformInEffectControls;
         settings.easingInPopup = shipped.easingInPopup;
         settings.layerNamesOnBars = shipped.layerNamesOnBars;
+        settings.markerLines = shipped.markerLines;
+        settings.quantiseSound = shipped.quantiseSound;
         settings.timelineMinimap = shipped.timelineMinimap;
         settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
         settings.tabOpensNodeSearch = shipped.tabOpensNodeSearch;
@@ -1973,6 +1975,18 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.layerNamesOnBars = on;
             changed();
           }),
+          _flag(t, 'settings-marker-lines', l10n.settingsMarkerLines,
+              value: settings.markerLines, set: (on) {
+            settings.markerLines = on;
+            changed();
+          }),
+          // The Cut timeline's Quantise switch, here as well because the
+          // Audio timeline reads it and has no switch of its own.
+          _flag(t, 'settings-quantise-sound', l10n.settingsQuantiseSound,
+              value: settings.quantiseSound, set: (on) {
+            settings.quantiseSound = on;
+            changed();
+          }),
           // Unset, it follows the style: on in Lantern, off in the others.
           _flag(t, 'settings-timeline-minimap', l10n.settingsTimelineMinimap,
               value: settings.timelineMinimap ?? t.shape == ThemeShape.lantern,
@@ -2773,7 +2787,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settingsRow(
               t,
               l10n.settingsPreset,
-              '',
+              _presetMessage ?? '',
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -2782,7 +2796,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.lumit);
-                      if (mounted) setState(() {});
+                      _presetLoaded(l10n.keymapLumitDefault);
                     },
                     child: Text(l10n.keymapLumitDefault, style: t.small),
                   ),
@@ -2792,9 +2806,19 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     small: true,
                     onPressed: () async {
                       await km.loadPreset(BridgeKeymapPreset.afterEffects);
-                      if (mounted) setState(() {});
+                      _presetLoaded(l10n.keymapAfterEffects);
                     },
                     child: Text(l10n.keymapAfterEffects, style: t.small),
+                  ),
+                  const SizedBox(width: 6),
+                  HouseButton(
+                    key: const ValueKey('keymap-preset-vegas'),
+                    small: true,
+                    onPressed: () async {
+                      await km.loadPreset(BridgeKeymapPreset.vegas);
+                      _presetLoaded(l10n.firstRunVegasName);
+                    },
+                    child: Text(l10n.firstRunVegasName, style: t.small),
                   ),
                 ],
               ),
@@ -2961,6 +2985,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
 
   /// What the last import or export said, shown under the buttons.
   String? _keymapMessage;
+
+  /// Which preset the row's buttons last loaded, said beside them: the table
+  /// under it changes all at once and names nothing.
+  String? _presetMessage;
+
+  void _presetLoaded(String name) {
+    if (!mounted) return;
+    setState(() => _presetMessage = l10n.keymapPresetLoaded(name));
+  }
 
   /// Read a keymap file and hand it to the engine, which refuses it whole if it
   /// is not one — so a wrong file costs nothing but the message.

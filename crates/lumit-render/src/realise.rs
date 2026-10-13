@@ -2390,6 +2390,21 @@ mod tests {
             drop(ctx.encoder("settling"));
             ctx.settle();
         }
+        // The test before this one on the shared device may have dropped far
+        // more than a render's worth, and that comes back over several
+        // submissions. So wait until the count has stood still twice running.
+        let mut live = ctx.live_objects().0;
+        let mut still = 0;
+        for _ in 0..32 {
+            drop(ctx.encoder("settling"));
+            ctx.settle();
+            let now = ctx.live_objects().0;
+            still = if now == live { still + 1 } else { 0 };
+            live = now;
+            if still == 2 {
+                break;
+            }
+        }
         let before = ctx.live_objects().0;
         ctx.begin_frame();
         let out = f();

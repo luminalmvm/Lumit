@@ -285,6 +285,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       .interface
       .layerNamesOnBars;
 
+  /// Settings ▸ Timeline ▸ *Sound moves in whole frames*, read the same way.
+  bool get _quantiseSound => Provider.of<LumitUiState>(context, listen: false)
+      .workspace
+      .interface
+      .quantiseSound;
+
   /// What the chrome says — Settings ▸ Appearance ▸ Interface ▸ *Chrome
   /// labels*, read once per build of the panel and handed down.
   ///
@@ -4771,6 +4777,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                             ),
                           ],
                         ),
+                        // Each marker's line, down
+                        // through the curves as it
+                        // runs down the lanes.
+                        MarkerLinesGround(
+                            comp: comp, axis: axis, hScroll: _hLane),
                         // The playhead, over the
                         // ruler and curves alike —
                         // on its own layer, so the
@@ -4880,6 +4891,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                       comp: comp,
                       rows: rows,
                       barNames: _barNames,
+                      quantiseSound: _quantiseSound,
                       selection: _rowSelection,
                       layerDrag: _layerDrag,
                       blockHeights: blockHeights,

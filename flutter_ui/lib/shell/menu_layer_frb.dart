@@ -751,7 +751,7 @@ bool shiftSelectedLayers(LumitState app, LumitUiState ui, int frames) {
   ];
   if (comp == null || ids.isEmpty) return false;
   try {
-    comp.slideLayers(layerIds: ids, delta: frames);
+    comp.slideLayers(layerIds: ids, delta: frames, nudgeTicks: 0);
   } catch (_) {
     return false;
   }

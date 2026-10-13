@@ -31,8 +31,11 @@ import 'timeline_key_block_frb.dart';
 /// a drag is one undo step; a move onto a neighbour is refused and the key
 /// simply stays where it was.
 class KeyLane extends StatefulWidget {
-  final BridgeLayerEntry entry;
-  final LayerFoldRow row;
+  /// The layer and row the lane stands for, where it has them. The Effect
+  /// controls strip draws the same lane over a row's channels and has
+  /// neither.
+  final BridgeLayerEntry? entry;
+  final LayerFoldRow? row;
   final String rowId;
   final List<BridgeKeyframe> keys;
   final TimelineAxis axis;
@@ -80,8 +83,8 @@ class KeyLane extends StatefulWidget {
 
   const KeyLane({
     super.key,
-    required this.entry,
-    required this.row,
+    this.entry,
+    this.row,
     required this.rowId,
     required this.keys,
     required this.axis,

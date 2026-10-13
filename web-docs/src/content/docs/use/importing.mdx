@@ -92,6 +92,12 @@ are not read.
 ## Interpretation
 
 Frame rate and alpha are read from the file itself, and so is the colour space.
+
+A recording with a variable frame rate, as screen and game captures often are, is laid out
+at its average rate: each frame shows the picture that was on screen at that moment, so the
+picture stays with its sound. A stretch recorded slower repeats frames and one recorded
+faster skips some.
+
 **Interpret footage…** on a footage row's menu changes how the file is read. It opens on
 every selected footage item at once.
 

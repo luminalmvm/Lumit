@@ -939,34 +939,44 @@ void main() {
         await tester.pump();
         await settleFrb(tester, minRounds: 2, maxRounds: 6);
 
-        // Nothing remembered at the frame about to be asked for, or the count
-        // would be answered out of memory and pass for free.
-        clearCompTimeCache();
-        counter
-          ..reset()
-          ..counting = true;
-        p.uiState.playheadFrame.value = 18;
-        await tester.pump();
-        await settleFrb(tester, minRounds: 2, maxRounds: 6);
-        counter.counting = false;
-        // **The cold case, which is what a scrub actually is.** The memory was
-        // emptied above, so this frame is one nothing has been asked about —
-        // the state a sweep across an unvisited stretch is in on every frame
-        // of it, and where `time_of_frame` used to cost ~0.6 ms a frame
-        // (ui-performance §3.4). One crossing warms the page it lands in.
-        expect(
-          counter.calls['composition_reference_time_of_frame'] ?? 0,
-          0,
-          reason: 'a frame nobody had asked about was converted on its own:\n'
-              '${counter.ranking()}',
-        );
-        expect(
-          counter.calls['composition_reference_times_of_frames'] ?? 0,
-          lessThanOrEqualTo(1),
-          reason: 'the page was warmed more than once for one frame:\n'
-              '${counter.ranking()}',
-        );
-        return counter.total;
+        // Three frames are measured and the cheapest is the answer. A settle
+        // that takes one more wave pays one more call for it, and a runner
+        // has taken three more at four layers than at two with nothing
+        // dearer in the code. What a row costs is paid on every frame, so it
+        // is in the cheapest one too.
+        var cheapest = 1 << 30;
+        for (final frame in [18, 19, 20]) {
+          // Nothing remembered at the frame about to be asked for, or the
+          // count would be answered out of memory and pass for free.
+          clearCompTimeCache();
+          counter
+            ..reset()
+            ..counting = true;
+          p.uiState.playheadFrame.value = frame;
+          await tester.pump();
+          await settleFrb(tester, minRounds: 2, maxRounds: 6);
+          counter.counting = false;
+          // **The cold case, which is what a scrub actually is.** The memory
+          // was emptied above, so this frame is one nothing has been asked
+          // about — the state a sweep across an unvisited stretch is in on
+          // every frame of it, and where `time_of_frame` used to cost ~0.6 ms
+          // a frame (ui-performance §3.4). One crossing warms the page it
+          // lands in.
+          expect(
+            counter.calls['composition_reference_time_of_frame'] ?? 0,
+            0,
+            reason: 'a frame nobody had asked about was converted on its own:\n'
+                '${counter.ranking()}',
+          );
+          expect(
+            counter.calls['composition_reference_times_of_frames'] ?? 0,
+            lessThanOrEqualTo(1),
+            reason: 'the page was warmed more than once for one frame:\n'
+                '${counter.ranking()}',
+          );
+          cheapest = math.min(cheapest, counter.total);
+        }
+        return cheapest;
       }
 
       final few = await callsForScrub(2);

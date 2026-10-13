@@ -325,6 +325,9 @@ class LayerArea extends StatelessWidget {
   /// bar's own build.
   final bool barNames;
 
+  /// Whether a moved Audio layer lands on a whole frame, handed to its bar.
+  final bool quantiseSound;
+
   /// What a move drag on a selected bar carries — the panel's answer,
   /// asked at drag start. See [Bar.selectionMove].
   final SelectionMove Function() selectionMove;
@@ -334,6 +337,7 @@ class LayerArea extends StatelessWidget {
     required this.comp,
     required this.rows,
     this.barNames = false,
+    this.quantiseSound = true,
     required this.selection,
     this.onOpenSequence,
     this.onGraphHeight,
@@ -898,15 +902,9 @@ class LayerArea extends StatelessWidget {
                                           // selection moves: picking a key row
                                           // must not redraw the bar above it.
                                           onlyLit: true,
-                                          onEffectDropped: (name) {
-                                            try {
-                                              rows[i]
-                                                  .entry
-                                                  .layer
-                                                  .addEffect(name: name);
-                                            } catch (_) {}
-                                            onChanged();
-                                          },
+                                          onEffectDropped: (data) => data
+                                              .landOn(rows[i].entry.layer)
+                                              .then((_) => onChanged()),
                                           builder: (context, mine) => Bar(
                                             key: ValueKey<String>(
                                                 'tl-bar-${rows[i].id}'),
@@ -947,6 +945,7 @@ class LayerArea extends StatelessWidget {
                                             snapTargets: snap,
                                             magnet: magnet,
                                             showName: barNames,
+                                            quantiseSound: quantiseSound,
                                             selectionMove: selectionMove,
                                           ),
                                         ),
@@ -961,6 +960,7 @@ class LayerArea extends StatelessWidget {
                                           key: ValueKey<String>(
                                               'tl-seq-${rows[i].id}'),
                                           entry: rows[i].entry,
+                                          comp: comp,
                                           axis: axis,
                                           fps: fps,
                                           fpsNum: fpsNum,
@@ -1168,6 +1168,8 @@ class LayerArea extends StatelessWidget {
                 )),
               ],
             ),
+            // Each marker's line, from the ruler down through every row.
+            MarkerLinesGround(comp: comp, axis: axis, hScroll: hScroll),
             // Where the others in a shared project have their playheads,
             // under this person's own.
             if (sharing) SharePlayheads(comp: comp, xOf: axis.xOf),

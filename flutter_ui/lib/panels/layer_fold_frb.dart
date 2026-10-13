@@ -1398,7 +1398,7 @@ bool moveLaneKeys({
       // the commit routes by the engine's shared instance lookup either way.
       final List<BridgeEffectInstance> stack;
       if (clipId != null) {
-        stack = entry.layer.getClipEffects(clip: clipId);
+        stack = entry.layer.getClipEffects(clip: clipId, onCompClock: false);
       } else if (group != null) {
         if (comp == null) return false;
         stack = comp.getGroupEffects(group: group);

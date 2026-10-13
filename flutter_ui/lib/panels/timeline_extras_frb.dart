@@ -36,7 +36,8 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/drag_escape.dart';
 import '../widgets/layer_picker.dart';
-import 'timeline_metrics_frb.dart' show TimelineMode, laneKeyHalf;
+import 'timeline_metrics_frb.dart'
+    show TimelineMode, laneKeyHalf, positionOf;
 import 'timeline_snap.dart';
 
 /// The Timeline's **panel header strip** (§12A.1, §12A.6: 22 tall): the panel's
@@ -1738,6 +1739,8 @@ class _TimelineRulerState extends State<TimelineRuler> {
   @override
   void dispose() {
     _escape.dispose();
+    // A ruler closed with a marker in hand must not leave its line stranded.
+    if (_dragMarker != null || _dragSpan != null) markerDragPreview.value = null;
     super.dispose();
   }
 
@@ -1922,11 +1925,18 @@ class _TimelineRulerState extends State<TimelineRuler> {
       final int last = _dragMarkerLast - (span > 1 ? span - 1 : 0);
       _dragMarkerFrame = at.clamp(0, last < 0 ? 0 : last);
     });
-    widget.onMarkerPreview?.call((
+    _stageMarker((
       id: marker.id,
       frame: _dragMarkerFrame!,
       span: marker.durationFrames ?? 0,
     ));
+  }
+
+  /// Say where a marker drag has got to, or with null that it is over: to
+  /// whoever holds this ruler, and to [markerDragPreview] for the lines.
+  void _stageMarker(MarkerPreview? staged) {
+    markerDragPreview.value = staged;
+    widget.onMarkerPreview?.call(staged);
   }
 
   /// Where the flag being dragged sits in the document, so it can be kept out
@@ -1941,7 +1951,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
       _dragMarkerFrame = null;
       _caught = null;
     });
-    widget.onMarkerPreview?.call(null);
+    _stageMarker(null);
   }
 
   /// The region whose end is being dragged, and how long that has made it.
@@ -1966,8 +1976,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
       _dragSpanFrames =
           (at - from).clamp(1, max(1, _dragMarkerLast + 1 - from));
     });
-    widget.onMarkerPreview
-        ?.call((id: marker.id, frame: from, span: _dragSpanFrames!));
+    _stageMarker((id: marker.id, frame: from, span: _dragSpanFrames!));
   }
 
   /// Put a region's end back where the drag found it, writing nothing.
@@ -1978,7 +1987,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
       _dragSpanFrames = null;
       _caught = null;
     });
-    widget.onMarkerPreview?.call(null);
+    _stageMarker(null);
   }
 
   /// The drag ended: write the length the region has been drawn at, once.
@@ -1995,7 +2004,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
           if (m.id == marker.id) m.withSpan(frames) else m,
       ]);
     }
-    widget.onMarkerPreview?.call(null);
+    _stageMarker(null);
   }
 
   /// A scrub is over, so whatever `Shift` had the playhead holding lets go.
@@ -2030,7 +2039,7 @@ class _TimelineRulerState extends State<TimelineRuler> {
       _writeMarkers(markersWithFrb(widget.comp,
           frame: to, label: marker.label, id: marker.id));
     }
-    widget.onMarkerPreview?.call(null);
+    _stageMarker(null);
   }
 
   /// The right-click menu on a flag: change what it says, its colour, whether
@@ -2771,6 +2780,166 @@ class _MarkerRegionsPainter extends CustomPainter {
 /// edges are drawn.
 const double markerRegionFillAlpha = 0.14;
 const double markerRegionEdgeAlpha = 0.45;
+
+/// The marker a drag on a ruler has staged, or null when none is on.
+///
+/// One for the whole application, written by whichever ruler has the drag:
+/// the lines under a ruler follow a flag from here, so a timeline that mounts
+/// [MarkerLinesGround] has nothing to hand it. A marker's id belongs to one
+/// comp, so a ground showing another comp finds nothing of its own in it.
+final ValueNotifier<MarkerPreview?> markerDragPreview = ValueNotifier(null);
+
+/// How strongly a marker's line is drawn down the rows, and a beat's: enough
+/// to find over empty lane, and thin and light enough that a clip's picture,
+/// wave and name all read through it.
+const double markerLineAlpha = 0.6;
+const double beatLineAlpha = 0.3;
+
+/// How far apart beats have to stand, in pixels, before their lines are drawn
+/// at all, and how far apart before they are drawn at full strength.
+const double beatLineMinGap = 8;
+const double beatLineFullGap = 16;
+
+/// A comp's markers, each as a one-pixel line in its own colour from the
+/// ruler's floor down through every row: the exact frame, readable against
+/// the clips without looking up at the flag.
+///
+/// Goes over the whole of a timeline's lane side, ruler and all, beside the
+/// playhead's overlay. It listens to [markerDragPreview] for itself, so a
+/// flag being dragged takes its line with it and nothing is rebuilt, and to
+/// [hScroll] for the fraction of a pixel that keeps the lines on the grid.
+///
+/// **Beats draw when they have room.** A song has hundreds, and with the comp
+/// zoomed to fit they would stand a few pixels apart and wash the rows gold.
+/// So they are left out below [beatLineMinGap] between neighbours and come up
+/// to strength by [beatLineFullGap], which is the zoom a cut to the beat is
+/// made at anyway.
+///
+/// Draws nothing with Settings ▸ Timeline ▸ Marker lines off.
+class MarkerLinesGround extends StatelessWidget {
+  const MarkerLinesGround({
+    super.key,
+    required this.comp,
+    required this.axis,
+    this.hScroll,
+  });
+
+  final CompositionReference comp;
+  final TimelineAxis axis;
+
+  /// The scroll the lanes ride sideways, when they ride one.
+  final ScrollController? hScroll;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final on = Provider.of<LumitUiState>(context, listen: false)
+        .workspace
+        .interface
+        .markerLines;
+    if (!on) return const SizedBox.shrink();
+    final markers = markersOf(comp);
+    final beats = [
+      for (final m in markers)
+        if (m.isBeat) frameAtTime(comp, m.time),
+    ]..sort();
+    // The mean gap between neighbouring beats, which for a detected grid is
+    // every gap.
+    final gap = beats.length < 2
+        ? double.infinity
+        : (beats.last - beats.first) / (beats.length - 1) * axis.perFrame;
+    final beatAlpha = beatLineAlpha *
+        ((gap - beatLineMinGap) / (beatLineFullGap - beatLineMinGap))
+            .clamp(0.0, 1.0);
+    final lines = [
+      for (final m in markers)
+        if (!m.isBeat)
+          (
+            id: m.id,
+            frame: frameAtTime(comp, m.time),
+            colour: markerColour(t, m).withValues(alpha: markerLineAlpha),
+          )
+        else if (beatAlpha > 0)
+          (
+            id: m.id,
+            frame: frameAtTime(comp, m.time),
+            colour: t.animated.withValues(alpha: beatAlpha),
+          ),
+    ];
+    return Positioned.fill(
+      top: t.density.ruler,
+      child: RepaintBoundary(
+        child: IgnorePointer(
+          child: AnimatedBuilder(
+            animation: Listenable.merge([markerDragPreview, hScroll]),
+            builder: (context, _) {
+              final staged = markerDragPreview.value;
+              return CustomPaint(
+                key: const ValueKey<String>('tl-marker-lines'),
+                painter: _MarkerLinesPainter(
+                  lines: [
+                    for (final line in lines)
+                      (
+                        axis.xOf(staged != null && staged.id == line.id
+                            ? staged.frame
+                            : line.frame),
+                        // The one in hand at full strength, so it is read
+                        // against the clips it is being lined up with.
+                        staged != null && staged.id == line.id
+                            ? line.colour.withValues(alpha: 1)
+                            : line.colour,
+                      ),
+                  ],
+                  // Only the fraction: rounding is the same under a whole
+                  // pixel of scroll, so one changes nothing and repaints
+                  // nothing.
+                  origin: switch (hScroll) {
+                    final scroll? =>
+                      -((positionOf(scroll)?.pixels ?? 0) % 1.0),
+                    null => 0,
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MarkerLinesPainter extends CustomPainter {
+  /// Each line's place in the view's own pixels, and its colour.
+  final List<(double, Color)> lines;
+
+  /// Where this painter's left edge sits against the panel's pixel grid: the
+  /// fraction of a pixel the lanes are scrolled by, negated.
+  final double origin;
+
+  const _MarkerLinesPainter({required this.lines, required this.origin});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (x, colour) in lines) {
+      if (x < 0 || x > size.width) continue;
+      // A filled pixel column and not a stroke, put on the panel's grid: a
+      // stroke centred on a whole pixel is two half-lit columns, and at most
+      // zooms a frame does not fall on a whole pixel to begin with. Half a
+      // pixel back, so the column stands under the point of the flag.
+      final left = (x - 0.5 + origin).roundToDouble() - origin;
+      canvas.drawRect(
+          Rect.fromLTWH(left, 0, 1, size.height), Paint()..color = colour);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MarkerLinesPainter old) =>
+      old.origin != origin || !listEquals(old.lines, lines);
+
+  /// Never takes the pointer, it is the ground and not a control.
+  @override
+  bool? hitTest(Offset position) => false;
+}
 
 /// A comp marker on the time ruler: an **upward triangle sitting on the cache
 /// bar**, half inside the backdrop pill that carries what it says

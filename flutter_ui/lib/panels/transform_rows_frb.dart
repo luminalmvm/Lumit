@@ -37,6 +37,7 @@ import '../state/timeline_columns.dart';
 import '../widgets/angle_dial.dart';
 import '../widgets/controls.dart';
 import 'graph_editor_frb.dart';
+import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
@@ -588,6 +589,11 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         context: context,
         name: label,
         keyframeControls: keyframes,
+        lane: FxKeyLane(
+          rowKey: keyframes.rowKey,
+          scalars: keyframes.scalars,
+          onWrite: keyframes.onWrite,
+        ),
         control: Row(
           mainAxisSize: MainAxisSize.min,
           children: [

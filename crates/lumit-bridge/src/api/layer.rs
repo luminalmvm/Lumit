@@ -1507,6 +1507,14 @@ pub struct BridgeClip {
     pub source_out: BridgeRational,
     /// Whether the clip plays a composition and not a footage item.
     pub source_is_comp: bool,
+    /// The clip's own blend mode as an index into [`list_blend_modes`], or
+    /// `None` while it takes its layer's.
+    pub blend: Option<u32>,
+    /// Where the clip starts and ends on the comp's clock in frames, with the
+    /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
+    /// may sit between two frames, and this is where it is drawn.
+    pub start_exact: f64,
+    pub end_exact: f64,
 }
 
 /// How long a clip's source runs, which is the one thing
@@ -1575,6 +1583,10 @@ fn bridge_clip(
             .frame_at(CompTime(layer.start_offset.0.checked_add(t).unwrap_or(t)))
     };
     let reach = clip.source_reach(source_duration);
+    let exact = |t: lumit_core::time::Rational| {
+        (layer.start_offset.0.to_f64() + t.to_f64()) * f64::from(comp.frame_rate.num())
+            / f64::from(comp.frame_rate.den())
+    };
     BridgeClip {
         id: clip.id,
         place_start: rational_of(clip.place_start),
@@ -1613,6 +1625,14 @@ fn bridge_clip(
         source_in: rational_of(clip.source_in),
         source_out: rational_of(clip.source_out),
         source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
+        blend: clip.blend.map(|blend| {
+            lumit_core::model::BlendMode::ALL
+                .iter()
+                .position(|b| *b == blend)
+                .unwrap_or(0) as u32
+        }),
+        start_exact: exact(clip.place_start),
+        end_exact: exact(clip.place_end()),
     }
 }
 
@@ -2983,15 +3003,29 @@ impl LayerReference {
         })
     }
 
-    /// Serialise this layer's whole effect stack to `.lumfx` JSON.
+    /// Serialise this layer's effect stack to `.lumfx` JSON: the whole of it,
+    /// or with `only` the one effect of that id, which may be on the layer or
+    /// on one of its clips.
     ///
     /// Returns the text rather than writing a file: choosing where something
     /// goes is the file picker's job, and the engine has no business opening one.
     /// A layer with no effects still saves — an empty preset is a valid, if
     /// unexciting, document.
     #[frb(sync)]
-    pub fn save_preset(&self, name: String) -> Result<String, BridgeError> {
-        let effects = self.leaving()?.effects;
+    pub fn save_preset(&self, name: String, only: Option<Uuid>) -> Result<String, BridgeError> {
+        let layer = self.leaving()?;
+        let effects = match only {
+            None => layer.effects,
+            Some(id) => {
+                let clips = match &layer.kind {
+                    lumit_core::model::LayerKind::Sequence { clips } => clips.as_slice(),
+                    _ => &[],
+                };
+                let on_clips = clips.iter().flat_map(|c| &c.effects);
+                let found = layer.effects.iter().chain(on_clips).find(|e| e.id == id);
+                vec![found.cloned().ok_or(BridgeError::InvalidEffect)?]
+            }
+        };
         serde_json::to_string_pretty(&serde_json::json!({
             "format": 1,
             "name": name,
@@ -3000,7 +3034,8 @@ impl LayerReference {
         .map_err(|_| BridgeError::InvalidPreset)
     }
 
-    /// Append a `.lumfx` preset's effects to this layer's stack, as one op.
+    /// Append a `.lumfx` preset's effects to this layer's stack, or with
+    /// `clip` to that clip's own, as one op.
     ///
     /// Each arrives with a **fresh** instance id: applying one preset to
     /// several layers must not give them effects that share an id, since an id
@@ -3010,7 +3045,7 @@ impl LayerReference {
     /// along in each effect's `extra` map, exactly as the project file tolerates
     /// additions. Only text that is not a preset at all is refused.
     #[frb(sync)]
-    pub fn load_preset(&self, text: String) -> Result<(), BridgeError> {
+    pub fn load_preset(&self, text: String, clip: Option<Uuid>) -> Result<(), BridgeError> {
         #[derive(serde::Deserialize)]
         struct Preset {
             effects: Vec<EffectInstance>,
@@ -3026,7 +3061,8 @@ impl LayerReference {
             })
             .collect();
 
-        self.with_effects(move |effects| {
+        let home = clip.map_or(InstanceHome::Effects, InstanceHome::Clip);
+        self.with_instances(home, move |effects| {
             effects.extend(fresh);
             Ok(())
         })
@@ -4054,6 +4090,24 @@ impl LayerReference {
         self.commit_clips(clips)
     }
 
+    /// Give one clip a blend mode of its own, as an index into
+    /// [`list_blend_modes`], or hand it back to the layer's with `None`. The
+    /// layer blends by it for as long as that clip is the one showing.
+    #[frb(sync)]
+    pub fn set_clip_blend(&self, clip: Uuid, index: Option<u32>) -> Result<(), BridgeError> {
+        let blend = match index {
+            Some(index) => Some(
+                *lumit_core::model::BlendMode::ALL
+                    .get(index as usize)
+                    .ok_or(BridgeError::InvalidBlendMode)?,
+            ),
+            None => None,
+        };
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        clips[index].blend = blend;
+        self.commit_clips(clips)
+    }
+
     /// Set one clip's own level in dB - what the gain line across the box
     /// writes when it is let go (docs/impl/audio-timeline.md §2).
     ///
@@ -4143,7 +4197,7 @@ impl LayerReference {
         overlap: bool,
     ) -> Result<(), BridgeError> {
         if target.is_some_and(|t| t.layer_id == self.layer_id) {
-            return self.slide_clip(clip, to_frame, overlap);
+            return self.slide_clip(clip, to_frame, overlap, 0);
         }
         let layer = self.item()?;
         let comp = self.composition()?;
@@ -4236,8 +4290,18 @@ impl LayerReference {
     /// `overlap` keeps the neighbour it is slid over, so the overlap is a
     /// crossfade (docs/impl/audio-timeline.md §2); without it the slide
     /// overwrites, which is what a picture row does.
+    ///
+    /// `nudge_ticks` is a part of a frame to add, in samples at 48 kHz. It is
+    /// read on an audio-only layer alone, where a clip may sit between two
+    /// frames.
     #[frb(sync)]
-    pub fn slide_clip(&self, clip: Uuid, to_frame: i64, overlap: bool) -> Result<(), BridgeError> {
+    pub fn slide_clip(
+        &self,
+        clip: Uuid,
+        to_frame: i64,
+        overlap: bool,
+        nudge_ticks: i64,
+    ) -> Result<(), BridgeError> {
         let (mut clips, index) = self.clips_and_index(clip)?;
         let comp = self.composition()?;
         let layer = self.item()?;
@@ -4263,6 +4327,13 @@ impl LayerReference {
                 .map_err(|_| BridgeError::InvalidTime)?
         } else {
             step
+        };
+        let delta = if layer.audio_only && nudge_ticks != 0 {
+            Rational::new(nudge_ticks, 48_000)
+                .and_then(|part| delta.checked_add(part))
+                .map_err(|_| BridgeError::InvalidTime)?
+        } else {
+            delta
         };
 
         let wanted = clips[index]
@@ -4764,6 +4835,7 @@ impl LayerReference {
                 gain_db: 0.0,
                 link: None,
                 audio_streams: layer.audio_streams.clone(),
+                blend: None,
                 extra: serde_json::Map::new(),
             }],
         };
@@ -7253,15 +7325,34 @@ impl LayerReference {
     /// [`Self::get_effects`] hands out the layer's
     /// (docs/impl/audio-timeline.md §4).
     ///
-    /// Offset zero: a clip's parameters are keyed in clip time and a clip's
-    /// zero is its own start, which is the clock the clip's chain bakes in.
+    /// A clip's parameters are keyed in clip time, and a clip's zero is its
+    /// own start. Without `on_comp_clock` the copies cross on that clock, at
+    /// offset zero, which is what a lane that walks the keys out itself
+    /// wants. With it they cross on the comp's clock like a layer's own
+    /// effects, the clip's start and the layer's zero already added, so a
+    /// panel that keys at the playhead needs to know nothing about clips. A
+    /// copy carries its offset back with it, so either kind commits to the
+    /// same keys.
     #[frb(sync)]
-    pub fn get_clip_effects(&self, clip: Uuid) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
+    pub fn get_clip_effects(
+        &self,
+        clip: Uuid,
+        on_comp_clock: bool,
+    ) -> Result<Vec<BridgeEffectInstance>, BridgeError> {
         let (clips, index) = self.clips_and_index(clip)?;
+        let offset = if on_comp_clock {
+            self.item()?
+                .start_offset
+                .0
+                .checked_add(clips[index].place_start)
+                .map_err(|_| BridgeError::InvalidTime)?
+        } else {
+            lumit_core::time::Rational::ZERO
+        };
         Ok(clips[index]
             .effects
             .iter()
-            .map(|e| BridgeEffectInstance::new(e.clone(), lumit_core::time::Rational::ZERO))
+            .map(|e| BridgeEffectInstance::new(e.clone(), offset))
             .collect())
     }
 

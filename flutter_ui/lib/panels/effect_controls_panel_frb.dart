@@ -38,6 +38,7 @@
 // shape exists.
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show listEquals, mapEquals;
 import 'package:lumit_flutter/state/share.dart';
@@ -56,6 +57,8 @@ import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
 import '../l10n/engine_labels.dart';
+import '../shell/menu_layer_frb.dart' show blendModeNames;
+import '../state/file_dialogs.dart';
 import '../l10n/strings.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
@@ -68,16 +71,18 @@ import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'roto_display_frb.dart';
 import 'shader_editor.dart';
+import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'layer_fold_frb.dart'
     show
+        clipFoldPrefix,
         effectPath,
         groupFoldPrefix,
         stylePath,
         transformGroupPath,
         transformPath;
 import '../widgets/share_marks.dart';
-import 'timeline_extras_frb.dart' show DoubleTap;
+import 'timeline_extras_frb.dart' show DoubleTap, clipRadius;
 import 'timeline_metrics_frb.dart' show dimmedIf;
 import 'transform_rows_frb.dart';
 import '../state/clipboard.dart';
@@ -633,9 +638,247 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
               hint: l10n.effectControlsNoLayer,
             );
           }
-          return _body(context, comp, shown);
+          // One clip picked in the Cut timeline is the subject the way a
+          // picked group header is: its own stack, its own Add effect.
+          return ValueListenableBuilder<
+              ({LayerReference layer, UuidValue clip})?>(
+            valueListenable: ui.cutClip,
+            builder: (context, pick, _) {
+              final onClip =
+                  pick != null && pick.layer.internalcompId == comp.internalid;
+              // Where the editor reads a clip's stack from, set here and not
+              // by the clip's own rows: the subject before this one is still
+              // in the tree while it fades, and its rows rebuilding would
+              // point the editor back at the clip that was left.
+              if (onClip) {
+                final (layer, clip) = (pick.layer, pick.clip);
+                _effects.groupStack = null;
+                _effects.clipStack =
+                    () => layer.getClipEffects(clip: clip, onCompClock: true);
+              }
+              // Going between a layer's stack and a clip's is content
+              // arriving in a place that was already there.
+              final reveal = ThemeScope.of(context).motion.reveal;
+              return AnimatedSwitcher(
+                duration: reveal.duration,
+                switchInCurve: reveal.curve,
+                layoutBuilder: (current, previous) => Stack(
+                  fit: StackFit.expand,
+                  children: [...previous, if (current != null) current],
+                ),
+                child: KeyedSubtree(
+                  key: ValueKey<String>(
+                      onClip ? 'fx-subject-${pick.clip}' : 'fx-subject-layer'),
+                  child: onClip
+                      ? _clipBody(context, comp, pick.layer, pick.clip)
+                      : _body(context, comp, shown),
+                ),
+              );
+            },
+          );
         },
       ),
+    );
+  }
+
+  /// A clip's effects as the cards draw them, read once per document
+  /// revision and kept: on the comp's clock, so a card keys at the playhead
+  /// as a layer's does.
+  ({BigInt? revision, UuidValue clip, List<BridgeEffectInstanceInfo> stack})?
+      _clipRead;
+
+  List<BridgeEffectInstanceInfo> _clipInfos(
+      LumitUiState ui, LayerReference layer, UuidValue clip) {
+    final revision = ui.model.revision;
+    final held = _clipRead;
+    if (held != null && held.revision == revision && held.clip == clip) {
+      return held.stack;
+    }
+    var stack = const <BridgeEffectInstanceInfo>[];
+    try {
+      stack = [
+        for (final instance
+            in layer.getClipEffects(clip: clip, onCompClock: true))
+          instance.getInfo(),
+      ];
+    } catch (_) {
+      // The clip went under the panel, which then has no cards to draw.
+    }
+    _clipRead = (revision: revision, clip: clip, stack: stack);
+    return stack;
+  }
+
+  /// The panel with one **clip** of a Sequence layer as its subject: the
+  /// clip's own stack drawn with the cards a layer's is, and Add effect
+  /// landing on the clip. A clip the model no longer holds falls back to its
+  /// layer.
+  Widget _clipBody(
+    BuildContext context,
+    CompositionReference comp,
+    LayerReference layer,
+    UuidValue clipId,
+  ) {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    return ListenableBuilder(
+      listenable: ui.model,
+      builder: (context, _) {
+        final t = ThemeScope.of(context).theme;
+        final entry = ui.model.byId(layer.internallayerId);
+        BridgeClip? clip;
+        for (final c in entry?.info.clips ?? const <BridgeClip>[]) {
+          if (c.id == clipId) clip = c;
+        }
+        // The clip has gone: its layer's own rows. Not through [_body],
+        // which would also tell the editor to forget the clip in hand now.
+        if (entry == null || clip == null) {
+          return _rows(context, comp, layer, ui.playheadFrame.value);
+        }
+        final stack = _clipInfos(ui, layer, clipId);
+        final first = clip.startFrame.toInt();
+        final length = clip.endFrame.toInt() - first;
+        final span = (first, length < 1 ? 1 : length);
+        void changed() {
+          Provider.of<LumitState>(context, listen: false)
+              .notifyDocumentChanged();
+          ui.model.refresh();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Header(
+              layerName: clip.sourceName,
+              clipOn: entry.info.name,
+              onAdd: (name) {
+                try {
+                  layer.addClipEffect(clip: clipId, name: name);
+                } catch (_) {
+                  // A driver, which a clip has no graph for: the engine
+                  // refused calmly and the menu simply did nothing.
+                }
+                changed();
+              },
+            ),
+            // A picture clip's blend mode, beside the effects it carries.
+            if (entry.info.kind != BridgeLayerKind.audio)
+              _ClipBlendRow(
+                blend: clip.blend,
+                onChanged: (index) {
+                  try {
+                    layer.setClipBlend(clip: clipId, index: index);
+                  } catch (_) {
+                    // A locked layer refuses, and quietly.
+                  }
+                  changed();
+                },
+              ),
+            Expanded(
+              // The keyframe strip spans the clip, and the keys cross on the
+              // comp's clock, so its lanes need no offset.
+              child: FxKeyStripHost(
+                spanStart: span.$1,
+                spanFrames: span.$2,
+                child: DragTarget<EffectDragData>(
+                onAcceptWithDetails: (details) async {
+                  await details.data.landOn(layer, clip: clipId);
+                  if (mounted) changed();
+                },
+                builder: (context, candidate, _) => Container(
+                  decoration: candidate.isEmpty
+                      ? null
+                      : BoxDecoration(
+                          border: Border.all(color: t.accent),
+                          color: t.accent.withValues(alpha: 0.06),
+                        ),
+                  child: ListView(
+                    key: const ValueKey('fx-clip-ground'),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    children: [
+                      if (stack.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: Text(
+                            l10n.noEffectsOnClipYet,
+                            style: t.small,
+                            textAlign: TextAlign.center,
+                          ),
+                        )
+                      else
+                        for (var i = 0; i < stack.length; i++)
+                          _clipEffectCard(
+                              context, ui, comp, layer, clipId, stack[i], i,
+                              changed),
+                    ],
+                  ),
+                ),
+              ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// One clip effect's card: the layer card with the clip as the list its
+  /// commands read. Like a group header's, it takes no part in the effect
+  /// selection, and its heading only twirls.
+  Widget _clipEffectCard(
+    BuildContext context,
+    LumitUiState ui,
+    CompositionReference comp,
+    LayerReference layer,
+    UuidValue clip,
+    BridgeEffectInstanceInfo fx,
+    int index,
+    VoidCallback changed,
+  ) {
+    return _EffectSection(
+      key: ValueKey<String>('fx-card-clip-$index'),
+      info: fx,
+      graphName: _graphNameOf(context, fx),
+      clip: clip,
+      open: _isOpen('fx-${fx.id}'),
+      onToggle: () => _toggleEffect(fx.id, ui.selectedEffects.value),
+      driven: const {},
+      stagedValue: _effects.stagedValue,
+      onStackChanged: changed,
+      onWrite: (id, param, value) {
+        _effects.write(layer, id, param, value);
+        changed();
+      },
+      onWritePair: (id, values) {
+        _effects.writeAll(layer, id, values);
+        changed();
+      },
+      onLive: (id, param, value) => setState(() {
+        _effects.live(comp, layer, id, param, value,
+            frame: ui.playheadFrame.value, scale: ui.viewerScale);
+      }),
+      onSelect: () {},
+      layer: layer,
+      allLayers: ui.model.layers,
+      comp: comp,
+      playheadFrame: ui.playheadFrame.value,
+      onSeek: (frame) => ui.playheadFrame.value = frame,
+      isGroupOpen: _isGroupOpen,
+      onToggleGroup: _toggleGroup,
+      pressed: _actionPressed,
+      themedGraphs: ui.workspace.themedEffectGraphs,
+      curvePlotSize: ui.workspace.curvePlotSize,
+      onCurvePlotSize: ui.workspace.setCurvePlotSize,
+      onAction: (effect, param) {
+        try {
+          fireEffectAction(
+              layer: layer,
+              effect: effect,
+              param: param,
+              frame: BigInt.from(ui.playheadFrame.value));
+        } catch (_) {
+          // Refused; the effect's own status line says why.
+        }
+        setState(() => _actionPressed += 1);
+      },
     );
   }
 
@@ -680,6 +923,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         // header is the subject.
         final gid = g.id;
         _effects.groupStack = () => comp.getGroupEffects(group: gid);
+        _effects.clipStack = null;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -807,9 +1051,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     CompositionReference comp,
     LayerReference layer,
   ) {
-    // A layer subject reads no group's stack: the editor's third place to
-    // look is only armed while a header is the subject.
+    // A layer subject reads no group's stack and no clip's: the editor's
+    // third place to look is only armed while one of those is the subject.
     _effects.groupStack = null;
+    _effects.clipStack = null;
     final ui = Provider.of<LumitUiState>(context, listen: false);
     // **The panel does not listen to the playhead.** Every row that reads it —
     // a value under the playhead, a diamond that fills on a key — carries its
@@ -879,14 +1124,19 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
           },
         ),
         Expanded(
+          // The keyframe strip beside the rows, spanning the layer's own in
+          // and out points. The rows' lanes draw into the column it opens.
+          child: FxKeyStripHost(
+            spanStart: info.inFrame,
+            spanFrames: info.outFrame - info.inFrame < 1
+                ? 1
+                : info.outFrame - info.inFrame,
           // The drop target for an effect dragged from Effects & presets.
           // Nothing else produces an `EffectDragData`; the Timeline's layer
           // rows and the graph panels are the other places that take one.
           child: DragTarget<EffectDragData>(
-            onAcceptWithDetails: (details) {
-              try {
-                layer.addEffect(name: details.data.name);
-              } catch (_) {}
+            onAcceptWithDetails: (details) async {
+              await details.data.landOn(layer);
               ui.model.refresh();
             },
             builder: (context, candidate, _) => Container(
@@ -1055,6 +1305,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 ),
               ),
             ),
+          ),
           ),
         ),
       ],
@@ -1536,11 +1787,51 @@ class _AtPlayhead extends StatelessWidget {
       );
 }
 
+/// A clip's own blend mode under the header: **From layer** while it has
+/// none, then the engine's list.
+class _ClipBlendRow extends StatelessWidget {
+  final int? blend;
+  final ValueChanged<int?> onChanged;
+  const _ClipBlendRow({required this.blend, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    final modes = blendModeNames();
+    return Container(
+      color: t.surface1,
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+      child: Row(
+        children: [
+          Text(l10n.tipBlendMode,
+              style: t.small.copyWith(color: t.textSecondary)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: BareDropdown<int>(
+              key: const ValueKey('fx-clip-blend'),
+              dense: true,
+              value: blend == null || blend! >= modes.length ? -1 : blend!,
+              options: [for (var i = -1; i < modes.length; i++) i],
+              label: (i) =>
+                  i < 0 ? l10n.clipBlendFromLayer : engineLabel(modes[i]),
+              onChanged: (i) => onChanged(i < 0 ? null : i),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The panel header: which layer is being edited, and Add effect.
 class _Header extends StatelessWidget {
   final String layerName;
+
+  /// The layer a clip subject is on. Set, the header says the rows are a
+  /// clip's and not the layer's own.
+  final String? clipOn;
   final ValueChanged<String> onAdd;
-  const _Header({required this.layerName, required this.onAdd});
+  const _Header({required this.layerName, this.clipOn, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -1548,30 +1839,56 @@ class _Header extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       color: t.surface1,
-      child: Row(
-        children: [
-          lumitIcon(LumitIcon.fx, size: iconSize, color: t.textMuted),
+      child: _row(context, t),
+    );
+  }
+
+  Widget _row(BuildContext context, LumitTheme t) {
+    return Row(
+      children: [
+        lumitIcon(LumitIcon.fx, size: iconSize, color: t.textMuted),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(layerName,
+              style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
+        ),
+        if (clipOn case final layer?) ...[
           const SizedBox(width: 8),
-          Expanded(
-            child: Text(layerName,
-                style: t.bodyPrimary, overflow: TextOverflow.ellipsis),
-          ),
-          // Its own context, so the menu drops from the *button* rather than
-          // from the header row's left edge — which is where it used to land.
-          Builder(
-            builder: (buttonContext) => HouseButton(
-              key: const ValueKey('fx-add'),
-              small: true,
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              onPressed: () => showAddEffectMenu(buttonContext, onAdd),
-              // Add effect is a container label like every other kicker, so the
-              // capitals live here rather than in the arb file.
-              child: Text(t.kickerCase(l10n.addEffect),
-                  style: t.kicker.copyWith(color: t.textSecondary)),
+          // The mark that these are a clip's own effects, with the layer
+          // it is on in the tooltip.
+          LumitTooltip(
+            message: layer,
+            child: Container(
+              key: const ValueKey('fx-clip-mark'),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                border: Border.all(color: t.accent),
+                borderRadius: BorderRadius.circular(clipRadius(t)),
+              ),
+              child: Text(t.kickerCase(l10n.effectControlsClip),
+                  style: t.kicker.copyWith(color: t.accent)),
             ),
           ),
         ],
-      ),
+        const Spacer(),
+        // The keyframe strip's switch.
+        const FxKeyStripToggle(),
+        const SizedBox(width: 4),
+        // Its own context, so the menu drops from the *button* rather than
+        // from the header row's left edge — which is where it used to land.
+        Builder(
+          builder: (buttonContext) => HouseButton(
+            key: const ValueKey('fx-add'),
+            small: true,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            onPressed: () => showAddEffectMenu(buttonContext, onAdd),
+            // Add effect is a container label like every other kicker, so the
+            // capitals live here rather than in the arb file.
+            child: Text(t.kickerCase(l10n.addEffect),
+                style: t.kicker.copyWith(color: t.textSecondary)),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1719,6 +2036,11 @@ class _EffectSection extends StatelessWidget {
   /// `SetGroupEffects`, so the card's remove, bypass, reorder, reset and
   /// every parameter row are the same widgets doing the same thing.
   final UuidValue? group;
+
+  /// This card sits on a **clip's** own stack: the group bit's pattern, grown
+  /// its fourth arm. Every command goes through [layer], the clip's layer,
+  /// and the engine routes the instance to the clip that holds it.
+  final UuidValue? clip;
   final LayerReference layer;
 
   /// Every layer in the comp, from the read model — what a layer-valued
@@ -1801,6 +2123,7 @@ class _EffectSection extends StatelessWidget {
     required this.stagedValue,
     this.style = false,
     this.group,
+    this.clip,
     required this.layer,
     required this.allLayers,
     required this.comp,
@@ -1839,7 +2162,7 @@ class _EffectSection extends StatelessWidget {
     // stack's, and a style has no place in it. So this card's own instance is
     // the whole answer — and a group header's card takes the same
     // road for the same reason.
-    if (style || group != null) {
+    if (style || group != null || clip != null) {
       return [
         for (final candidate in _instances())
           if (candidate.id() == info.id) candidate,
@@ -1858,10 +2181,15 @@ class _EffectSection extends StatelessWidget {
   /// the layer's style list, or its effect stack. Written back
   /// through `setEffects` either way: the engine routes a staged list to the
   /// list its ids name.
-  List<BridgeEffectInstance> _instances() => switch (group) {
-        final g? => comp.getGroupEffects(group: g),
-        null => style ? layer.getStyles() : layer.getEffects(),
-      };
+  List<BridgeEffectInstance> _instances() {
+    if (clip case final c?) {
+      return layer.getClipEffects(clip: c, onCompClock: true);
+    }
+    return switch (group) {
+      final g? => comp.getGroupEffects(group: g),
+      null => style ? layer.getStyles() : layer.getEffects(),
+    };
+  }
 
   /// Where this instance sits in the list it is on, and how long that list
   /// is — read now, never held.
@@ -1986,7 +2314,9 @@ class _EffectSection extends StatelessWidget {
             ? stylePath(owner, '$id')
             : group != null
                 ? effectPath(groupFoldPrefix(group!), '$id')
-                : effectPath(owner, '$id');
+                : clip != null
+                    ? effectPath(clipFoldPrefix(clip!), '$id')
+                    : effectPath(owner, '$id');
 
     // The effect's own display, read at `at` — the Levels histogram traces the
     // frame under the playhead, so this one *is* rebuilt on a scrub, alone.
@@ -2025,6 +2355,13 @@ class _EffectSection extends StatelessWidget {
       // Bypassed draws as a dashed outline round the heading (docs/15 §5), not
       // as a faded stack: the values stay readable while the effect is off.
       enabled: info.enabled,
+      // Every key on the effect, for the strip's summary lane while shut.
+      summaryKeys: [
+        for (final v in info.values)
+          if (v.value case BridgeEffectValue_Float(
+              field0: BridgeScalar_Keyframed(:final field0)))
+            ...field0,
+      ],
       leading: LumitTooltip(
         message: info.enabled ? l10n.tipDisable : l10n.tipEnable,
         // **A target you can hit** (owner, desk test). The checkbox's own 14px
@@ -2559,6 +2896,30 @@ class _EffectSection extends StatelessWidget {
     }
   }
 
+  /// Save this effect alone as a `.lumfx` in the preset library, where the
+  /// Effects & presets panel lists it. Named after the effect to begin with.
+  Future<void> _savePreset(BuildContext context) async {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final suggested = '${info.customName ?? effectLabelOf(info.name)}.lumfx';
+    final path = await pickPresetSaveLocation(suggested,
+        initialDirectory: presetsDirPath());
+    if (path == null) return;
+    final name = path.split(RegExp(r'[/\\]')).last.replaceAll('.lumfx', '');
+    try {
+      File(path)
+          .writeAsStringSync(layer.savePreset(name: name, only: info.id));
+    } catch (_) {
+      // A folder that will not take the file, or an effect that went away
+      // under the open dialogue. The document is untouched either way.
+      return;
+    }
+    ui.presetsChanged.value++;
+    if (context.mounted) {
+      Provider.of<LumitState>(context, listen: false)
+          .postNotice(l10n.presetSavedNotice);
+    }
+  }
+
   void _stackMenu(BuildContext context, Offset at) {
     // Where the moves below start from, read at the press. An instance that
     // has gone has no menu.
@@ -2662,6 +3023,17 @@ class _EffectSection extends StatelessWidget {
                   _copyEffect(context);
                 },
                 child: Text(l10n.copyEffect),
+              ),
+            // This one effect as a preset, settings and keyframes and all.
+            // A group header's stack is not a layer's to save from.
+            if (!style && group == null)
+              MenuRow(
+                key: ValueKey<String>('fx-menu-save-preset-$id'),
+                onPressed: () {
+                  close(null);
+                  _savePreset(context);
+                },
+                child: Text(l10n.savePresetEllipsis),
               ),
             MenuRow(
               key: ValueKey<String>('fx-menu-remove-$id'),

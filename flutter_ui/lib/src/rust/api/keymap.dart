@@ -325,6 +325,9 @@ enum BridgeKeymapPreset {
 
   /// The After Effects muscle-memory alternate.
   afterEffects,
+
+  /// The Vegas Pro muscle-memory alternate.
+  vegas,
   ;
 }
 

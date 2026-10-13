@@ -16,8 +16,10 @@
 // The envelope is the same editor as the graph's Vegas lens, over the same
 // keyframes: a point per key, its height the playback speed in
 // per cent, straight lines between. `Ctrl`-click or double-click the line
-// plants a point; `Alt`-click lifts one. A clip that has never been retimed
-// draws the flat 100% it is playing at, and the first edit gives it a real map.
+// plants a point; `Alt`-click lifts one. Double-click a point, or right-click
+// it, to type its speed. `Ctrl` held through a drag moves the point a tenth as
+// far. A clip that has never been retimed draws the flat 100% it is playing
+// at, and the first edit gives it a real map.
 //
 // Zero bridge calls to draw: every clip and its map ride in on the comp read
 // model. The bridge is crossed only when a gesture commits.
@@ -25,16 +27,19 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
 import '../l10n/strings.dart';
 import '../shell/stretch_dialog_frb.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'graph_key_fields.dart';
 import 'graph_maths.dart';
 import 'layer_fold_frb.dart';
 import 'timeline_extras_frb.dart';
@@ -78,6 +83,10 @@ const double _edgeGrab = 7;
 /// A Sequence layer's clips and their speed envelope, under its bar.
 class SequenceViewFrb extends StatefulWidget {
   final BridgeLayerEntry entry;
+
+  /// The comp the layer is in, which is who knows what footage a clip plays.
+  /// Without it the envelope draws no every-frame guide.
+  final CompositionReference? comp;
   final TimelineAxis axis;
   final double fps;
   final int fpsNum;
@@ -129,6 +138,7 @@ class SequenceViewFrb extends StatefulWidget {
   const SequenceViewFrb({
     super.key,
     required this.entry,
+    this.comp,
     required this.axis,
     required this.fps,
     required this.fpsNum,
@@ -346,6 +356,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
               .clamp(sequenceGraphMin, sequenceGraphMax),
           child: _EnvelopeStrip(
             entry: widget.entry,
+            comp: widget.comp,
             axis: widget.axis,
             hScroll: widget.hScroll,
             fps: widget.fps,
@@ -762,6 +773,7 @@ class _SequenceViewFrbState extends State<SequenceViewFrb> {
         layer.slideClip(
           clip: drag.clip.id,
           toFrame: drag.clip.startFrame + shift,
+          nudgeTicks: 0,
           // A slide on a picture row overwrites what it lands on. Overlapping
           // by a slide is the audio row's own rule, and a dissolve on a
           // picture row is made by its own command.
@@ -884,6 +896,7 @@ class _GraphDividerState extends State<_GraphDivider> {
 /// against an axis that grows to hold whatever the curves reach.
 class _EnvelopeStrip extends StatefulWidget {
   final BridgeLayerEntry entry;
+  final CompositionReference? comp;
   final TimelineAxis axis;
   final ScrollController? hScroll;
   final double fps;
@@ -897,6 +910,7 @@ class _EnvelopeStrip extends StatefulWidget {
 
   const _EnvelopeStrip({
     required this.entry,
+    this.comp,
     required this.axis,
     this.hScroll,
     required this.fps,
@@ -915,8 +929,71 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
   /// The point under the pointer while a drag runs: which clip, which key,
   /// the speed it is being asked for, and how far it has been carried in
   /// time. A point moves both ways — *when* a ramp reaches a speed matters as
-  /// much as what the speed is.
-  ({BridgeClip clip, int index, double speed, double dx})? _drag;
+  /// much as what the speed is. `fine` is whether `Ctrl` had the last move at
+  /// a tenth of the pointer's rate, which the readout answers with a decimal.
+  ({BridgeClip clip, int index, double speed, double dx, bool fine})? _drag;
+
+  /// The point whose speed is being typed, as `clipId#index`, so it stays lit
+  /// for as long as its box is open.
+  String? _typing;
+
+  /// A right-button press, which opens a point's menu and is no part of a
+  /// click or a drag.
+  bool _secondary = false;
+
+  /// The speed at which each clip shows every frame of its footage once, by
+  /// clip id, for the clips whose footage runs faster than the comp. A null
+  /// entry is a clip already asked about.
+  final Map<String, double?> _everyFrame = {};
+
+  /// Each footage item's probe, by item id, so a row cut from one file asks
+  /// about that file once.
+  final Map<String, Future<BridgeMediaInfo?>> _probes = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _probeRates();
+  }
+
+  @override
+  void didUpdateWidget(_EnvelopeStrip old) {
+    super.didUpdateWidget(old);
+    _probeRates();
+  }
+
+  /// Ask what rate each new clip's footage runs at. Never from the build, and
+  /// once per clip: a clip already asked about costs a map lookup.
+  // ponytail: one crossing per clip as the view opens, and the answer is kept
+  // by clip id while it stays open. Carry the footage's rate on the clip's
+  // read model if a long row opens slowly or a replaced file keeps its guide.
+  void _probeRates() {
+    final comp = widget.comp;
+    if (comp == null) return;
+    for (final clip in _clips) {
+      final id = clip.id.toString();
+      if (clip.sourceIsComp || _everyFrame.containsKey(id)) continue;
+      _everyFrame[id] = null;
+      final FootageReference? footage;
+      try {
+        // The clip showing at its own first frame is the clip itself.
+        footage = comp
+            .cutMatchFrame(frame: clip.startFrame, layer: widget.entry.layer)
+            ?.footage;
+      } catch (_) {
+        continue;
+      }
+      if (footage == null) continue;
+      (_probes[footage.internalid.toString()] ??= footage.mediaInfo())
+          .then((info) {
+        if (!mounted || info == null || info.fpsNum <= 0 || info.fpsDen <= 0) {
+          return;
+        }
+        final speed = everyFrameSpeed(widget.fps, info.fpsNum / info.fpsDen);
+        if (speed != null) setState(() => _everyFrame[id] = speed);
+      });
+    }
+  }
 
   /// The speed the grabbed point had when the gesture began, and how far the
   /// pointer has travelled since.
@@ -1032,10 +1109,33 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
                       y: (s) => _y(s, height),
                       chosen: t.accent,
                       selected: _selected,
+                      typing: _typing,
+                      lit: t.textPrimary,
+                      guides: {
+                        for (final c in _clips)
+                          if (_everyFrame[c.id.toString()] case final speed?)
+                            c.id.toString(): speed,
+                      },
+                      guideLabel: (speed) => l10n.speedGuideEveryFrame(
+                          '${guideSpeedText(speed)}${l10n.unitSymbolPercent}'),
+                      guide: t.textMuted,
+                      // The point in hand has landed on its guide.
+                      caught: switch (_drag) {
+                        final held?
+                            when held.speed ==
+                                _everyFrame[held.clip.id.toString()] =>
+                          held.clip.id.toString(),
+                        _ => null,
+                      },
                       range: _range,
                       line: t.hairline,
                       curve: t.curve.first,
-                      label: t.small.copyWith(color: t.textMuted),
+                      // A halo in the ground's colour, so the words keep
+                      // their edge where the curve runs through them.
+                      label: t.small.copyWith(color: t.textMuted, shadows: [
+                        for (final blur in const [2.0, 4.0])
+                          Shadow(color: t.surface1, blurRadius: blur),
+                      ]),
                       viewportLeft: (widget.hScroll?.hasClients ?? false)
                           ? widget.hScroll!.offset
                           : 0,
@@ -1081,6 +1181,11 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
                 key: const ValueKey('seq-envelope'),
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (e) {
+                  if (e.buttons & kSecondaryMouseButton != 0) {
+                    _secondary = true;
+                    _pointMenu(e.localPosition, e.position, height);
+                    return;
+                  }
                   _downAt = e.localPosition;
                   if (_onALine(e.localPosition, height)) {
                     _startDrag(e.localPosition, height);
@@ -1099,16 +1204,30 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
                   final held = _drag;
                   if (held == null) return;
                   _moving = true;
-                  _travelled += e.delta.dy;
+                  // `Ctrl` is the value well's own fine rung, a tenth of the
+                  // pointer's rate. Taken off each move as it is added, so
+                  // pressing or letting go mid-drag changes what the next
+                  // pixel is worth and moves nothing.
+                  final fine = HardwareKeyboard.instance.isControlPressed;
+                  _travelled += e.delta.dy * (fine ? 0.1 : 1);
                   final (lo, hi) = _range;
                   final span = (hi - lo).abs() < 1e-9 ? 1.0 : hi - lo;
+                  final perPixel = span / (height <= 0 ? 1 : height);
+                  // Down is slower: the axis runs fast at the top.
+                  final asked = _grabbedAt - _travelled * perPixel;
                   _drag = (
                     clip: held.clip,
                     index: held.index,
-                    // Down is slower: the axis runs fast at the top.
-                    speed: _grabbedAt -
-                        _travelled / (height <= 0 ? 1 : height) * span,
+                    // Onto the every-frame guide when it comes near, which a
+                    // fine drag is too exact to want.
+                    speed: fine
+                        ? asked
+                        : snapEnvelopeSpeed(
+                            asked,
+                            _everyFrame[held.clip.id.toString()],
+                            envelopeSnapReach * perPixel),
                     dx: held.dx + e.delta.dx,
+                    fine: fine,
                   );
                   // The picture follows the point. A retime decides *which*
                   // frame is decoded, so this is the one drag where nothing
@@ -1116,6 +1235,10 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
                   widget.onPreview?.call(held.clip, _shown(held.clip));
                 }),
                 onPointerUp: (e) {
+                  if (_secondary) {
+                    _secondary = false;
+                    return;
+                  }
                   setState(() => _frozen = null);
                   final box = _box;
                   if (box != null) {
@@ -1139,6 +1262,7 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
                   _moving = false;
                   _frozen = null;
                   _box = null;
+                  _secondary = false;
                 }),
               ),
             ),
@@ -1151,7 +1275,7 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
   /// The speed the drag is asking for, floating beside the point.
   Widget _readout(
       LumitTheme t,
-      ({BridgeClip clip, int index, double speed, double dx}) held,
+      ({BridgeClip clip, int index, double speed, double dx, bool fine}) held,
       double height) {
     final keys = _shown(held.clip);
     final index = held.index.clamp(0, keys.length - 1);
@@ -1169,7 +1293,9 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
             border: Border.all(color: t.hairline),
             borderRadius: BorderRadius.circular(t.tokens.controlRadius),
           ),
-          child: Text('${held.speed.round()}%',
+          child: Text(
+              '${speedText(held.speed, fine: held.fine)}'
+              '${l10n.unitSymbolPercent}',
               style: t.small.copyWith(color: t.textPrimary)),
         ),
       ),
@@ -1342,8 +1468,78 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
       _frozen = _range;
       _grabbedAt = at;
       _travelled = 0;
-      _drag = (clip: found.clip, index: found.index, speed: at, dx: 0);
+      _drag = (
+        clip: found.clip,
+        index: found.index,
+        speed: at,
+        dx: 0,
+        fine: false,
+      );
     });
+  }
+
+  /// The point [local] is on, or null when it is on none: the nearest one in
+  /// reach, without the fallback a drag takes.
+  ({BridgeClip clip, int index})? _pointAt(Offset local, double height) {
+    final found = _nearestPoint(local, height);
+    if (found == null) return null;
+    final keys = _keysOf(found.clip);
+    // A clip whose map is an expression has no points to be on.
+    if (found.index >= keys.length) return null;
+    final at = Offset(_xOfKey(found.clip, keys[found.index]),
+        _y(envelopeSpeeds(keys)[found.index], height));
+    return (at - local).distance < 14 ? found : null;
+  }
+
+  /// Right-click a point for what can be done to it.
+  Future<void> _pointMenu(Offset local, Offset global, double height) async {
+    final found = _pointAt(local, height);
+    if (found == null) return;
+    final picked = await showMenuAt<String>(
+      context: context,
+      position: global,
+      rows: (close) => [
+        MenuRow(
+            key: const ValueKey('seq-envelope-set-speed'),
+            onPressed: () => close('speed'),
+            child: Text(l10n.menuSetSpeed)),
+      ],
+    );
+    if (!mounted || picked == null) return;
+    _typeSpeed(found.clip, found.index, height);
+  }
+
+  /// Open the box that types one point's speed, beside the point.
+  ///
+  /// The number goes where a drag's goes, through [_withSpeed] and [_write],
+  /// so a typed 37.5 and a point dragged to 37.5 are the same keys.
+  Future<void> _typeSpeed(BridgeClip clip, int index, double height) async {
+    final box = context.findRenderObject();
+    final keys = _keysOf(clip);
+    if (box is! RenderBox || index < 0 || index >= keys.length) return;
+    final speed = envelopeSpeeds(keys)[index];
+    final id = clip.id;
+    setState(() => _typing = '$id#$index');
+    await showSpeedFieldPopover(
+      context: context,
+      // Below and to the right, so the point stays in sight beside its box.
+      position: box.localToGlobal(
+              Offset(_xOfKey(clip, keys[index]), _y(speed, height))) +
+          const Offset(10, 8),
+      percent: speed,
+      onApply: (percent, _) {
+        // The clip as the document holds it now, never the one the box
+        // opened on.
+        for (final now in _clips) {
+          if (now.id != id) continue;
+          final all = _keysOf(now);
+          if (index < all.length) {
+            _write(now, _withSpeed(now, all, index, percent));
+          }
+        }
+      },
+    );
+    if (mounted) setState(() => _typing = null);
   }
 
   /// `Ctrl`-click or double-click the line to plant a point; `Alt`-click one
@@ -1364,6 +1560,14 @@ class _EnvelopeStripState extends State<_EnvelopeStrip> {
       return;
     }
     if (!doubled && !keys.isControlPressed) return;
+    // Double-click a point to type its speed. Anywhere else on the line it
+    // plants one, as `Ctrl`-click does everywhere.
+    if (doubled && !keys.isControlPressed) {
+      if (_pointAt(local, height) case final on?) {
+        _typeSpeed(on.clip, on.index, height);
+        return;
+      }
+    }
 
     final clip = _clipAt(local.dx);
     if (clip == null) return;
@@ -1440,6 +1644,21 @@ class _EnvelopePainter extends CustomPainter {
   /// The accent a caught point takes, and which points are caught.
   final Color chosen;
   final Set<String> selected;
+
+  /// The point whose speed is being typed, as `clipId#index`, and the colour
+  /// it is lit and ringed in while its box is open.
+  final String? typing;
+  final Color lit;
+
+  /// The speed at which a clip shows every frame of its footage once, by clip
+  /// id, with what the guide drawn there is called and its colour.
+  final Map<String, double> guides;
+  final String Function(double speed) guideLabel;
+  final Color guide;
+
+  /// The clip whose dragged point is sitting on its guide, which is drawn
+  /// [lit] while it does: the snap is seen as well as felt.
+  final String? caught;
   final TextStyle label;
 
   /// Where the viewport's left edge sits in the canvas's own coordinates.
@@ -1454,6 +1673,12 @@ class _EnvelopePainter extends CustomPainter {
     required this.curve,
     required this.chosen,
     required this.selected,
+    required this.typing,
+    required this.lit,
+    required this.guides,
+    required this.guideLabel,
+    required this.guide,
+    this.caught,
     required this.label,
     required this.viewportLeft,
   });
@@ -1482,6 +1707,8 @@ class _EnvelopePainter extends CustomPainter {
       painter.paint(canvas, Offset(viewportLeft + 2, at - painter.height));
     }
 
+    _paintGuides(canvas, size);
+
     final stroke = Paint()
       ..color = curve
       ..strokeWidth = 2
@@ -1499,7 +1726,20 @@ class _EnvelopePainter extends CustomPainter {
       }
       canvas.drawPath(path, stroke);
       for (var i = 0; i < points.length; i++) {
-        final caught = selected.contains('${lane.clip.id}#$i');
+        final id = '${lane.clip.id}#$i';
+        if (id == typing) {
+          // Brighter than anything else on the line, with a ring round it:
+          // the box beside it is about this point and no other.
+          canvas.drawCircle(points[i], 4.5, Paint()..color = lit);
+          canvas.drawCircle(
+              points[i],
+              7.5,
+              Paint()
+                ..color = lit
+                ..style = PaintingStyle.stroke);
+          continue;
+        }
+        final caught = selected.contains(id);
         canvas.drawCircle(
           points[i],
           caught ? 4.5 : 3.5,
@@ -1509,11 +1749,55 @@ class _EnvelopePainter extends CustomPainter {
     }
   }
 
+  /// The every-frame guide: one faint dashed line across each clip whose
+  /// footage runs faster than the comp, at the speed that shows every source
+  /// frame once, and its name once at the window's left edge.
+  ///
+  /// Dashed longer than the reference lines are dotted, so the three never
+  /// read as one mark. The name sits a column in from theirs, because the
+  /// guide is often a few pixels off the zero line and two labels cannot share
+  /// a corner.
+  void _paintGuides(Canvas canvas, Size size) {
+    if (guides.isEmpty) return;
+    final paint = Paint()..strokeWidth = 1;
+    final column = (TextPainter(
+      text: TextSpan(text: '100%', style: label),
+      textDirection: TextDirection.ltr,
+    )..layout())
+        .width;
+    final named = <double>{};
+    for (final lane in lanes) {
+      final speed = guides[lane.clip.id.toString()];
+      if (speed == null || lane.keys.length < 2) continue;
+      final at = y(speed);
+      if (at < 0 || at > size.height) continue;
+      // A clip's first and last keys are its own two edges.
+      final from = xOfKey(lane.clip, lane.keys.first).clamp(0.0, size.width);
+      final to = xOfKey(lane.clip, lane.keys.last).clamp(0.0, size.width);
+      paint.color = lane.clip.id.toString() == caught
+          ? lit
+          : guide.withValues(alpha: 0.7);
+      for (var x = from; x < to; x += 10) {
+        canvas.drawLine(
+            Offset(x, at), Offset((x + 6).clamp(from, to), at), paint);
+      }
+      if (!named.add(speed)) continue;
+      final painter = TextPainter(
+        text: TextSpan(text: guideLabel(speed), style: label),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      painter.paint(
+          canvas, Offset(viewportLeft + column + 10, at - painter.height));
+    }
+  }
+
   @override
   bool shouldRepaint(_EnvelopePainter old) =>
       old.lanes != lanes ||
       old.range != range ||
       old.curve != curve ||
       old.selected != selected ||
+      old.typing != typing ||
+      old.caught != caught ||
       old.viewportLeft != viewportLeft;
 }

@@ -136,6 +136,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     // while Effects & presets is the focused one.
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
     _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
+    _boundUi!.presetsChanged.addListener(_refreshPresets);
   }
 
   void _onSearchRequested() {
@@ -146,12 +147,14 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   }
 
   void _refreshPresets() {
+    if (!mounted) return;
     setState(() => _presets = (widget.presetsLister ?? listPresets)());
   }
 
   @override
   void dispose() {
     _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
+    _boundUi?.presetsChanged.removeListener(_refreshPresets);
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -298,8 +301,19 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
 
   /// Apply to the primary layer only, as the Effect menu and the effects
   /// console do. With nothing selected it does nothing.
-  void _apply(LumitUiState ui, String name) {
-    ui.selectedLayer.value?.addEffect(name: name);
+  /// Onto the clip picked in the Cut timeline when there is one, else the
+  /// primary layer.
+  Future<void> _apply(LumitUiState ui, String name) =>
+      _land(ui, EffectDragData(name, name));
+
+  Future<void> _land(LumitUiState ui, EffectDragData data) async {
+    final clip = ui.cutClip.value;
+    final layer = clip?.layer ?? ui.selectedLayer.value;
+    if (layer == null) return;
+    await data.landOn(layer, clip: clip?.clip);
+    if (!mounted) return;
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    ui.model.refresh();
     setState(() {});
   }
 
@@ -427,26 +441,14 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     ];
   }
 
-  /// Apply a library preset's whole stack to the primary layer only, as
-  /// [_apply] does. A file that has gone away just refreshes the listing.
+  /// Apply a library preset's whole stack where [_apply] puts an effect. A
+  /// file that has gone away just refreshes the listing.
   Future<void> _applyPreset(LumitUiState ui, BridgePresetInfo preset) async {
-    final layer = ui.selectedLayer.value;
-    if (layer == null) return;
-    final file = File(preset.path);
-    if (!file.existsSync()) {
+    if (!File(preset.path).existsSync()) {
       _refreshPresets();
       return;
     }
-    final String text;
-    try {
-      text = await readEffectPreset(path: preset.path);
-    } catch (_) {
-      return;
-    }
-    try {
-      layer.loadPreset(text: text);
-    } catch (_) {}
-    if (mounted) setState(() {});
+    await _land(ui, EffectDragData.preset(preset.path, preset.name));
   }
 }
 
@@ -574,14 +576,28 @@ class _PresetRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => _libraryRow(
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    // Dragged as an effect is, onto a layer or a clip.
+    return Draggable<EffectDragData>(
+      data: EffectDragData.preset(preset.path, preset.name),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: FloatSurface(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Text(preset.name, style: t.small),
+        ),
+      ),
+      child: _libraryRow(
         context,
         label: preset.name,
         favourite: favourite,
         onToggleFavourite: onToggleFavourite,
         onApply: onApply,
         starKey: 'preset-star-${preset.name}',
-      );
+      ),
+    );
+  }
 }
 
 /// The `namespace` an entry carries when it came out of an OFX plugin — the

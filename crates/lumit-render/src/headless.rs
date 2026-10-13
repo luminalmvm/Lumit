@@ -5081,6 +5081,7 @@ mod tests {
             gain_db: 0.0,
             link: None,
             audio_streams: Default::default(),
+            blend: None,
             extra: serde_json::Map::new(),
         };
         push_layer(

@@ -64,6 +64,8 @@ void main() {
               gainDb: 0,
               startFrame: 90,
               endFrame: 150,
+              startExact: 90,
+              endExact: 150,
               retimed: false,
               retime: const BridgeScalar.static_(0),
               fadeIn: const BridgeClipFade(

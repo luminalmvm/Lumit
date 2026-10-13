@@ -22,6 +22,7 @@ import '../shell/settings_window_frb.dart';
 import '../state/comp_time.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart' show flowPath;
@@ -281,14 +282,16 @@ class FlowRowsFrb extends StatelessWidget {
       onChanged();
     }
 
+    void write(List<BridgeScalar> next) {
+      layer.setFlowInputRate(value: next.first);
+      onChanged();
+    }
+
     return fxTwoColumnRow(
       context: context,
       keyframeControls: KeyframeControlsFrb(
         scalars: [rate],
-        onWrite: (next) {
-          layer.setFlowInputRate(value: next.first);
-          onChanged();
-        },
+        onWrite: write,
         comp: comp,
         onSeek: onSeek,
         rowKey: 'flow-input-rate',
@@ -296,6 +299,8 @@ class FlowRowsFrb extends StatelessWidget {
         // columns.
         fixedColumns: true,
       ),
+      lane: FxKeyLane(
+          rowKey: 'flow-input-rate', scalars: [rate], onWrite: write),
       name: Text(t.propertyCase(l10n.flowInputRate),
           style: t.body, overflow: TextOverflow.ellipsis),
       control: FlowRateControl(

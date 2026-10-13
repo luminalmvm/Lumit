@@ -1001,6 +1001,36 @@ List<BridgeKeyframe> setEnvelopeSpeed(
   return (lo < dlo ? lo - pad : dlo, hi > dhi ? hi + pad : dhi);
 }
 
+/// The speed, in per cent, at which footage shows every one of its frames
+/// once: the comp's rate over the footage's, so 300 fps footage in a 24 fps
+/// comp is 8. Below it frames repeat, above it frames are skipped.
+///
+/// Null unless the footage is the faster of the two. Rates half a per cent
+/// apart count as the same, so 24 against 23.976 draws no guide beside 100%.
+double? everyFrameSpeed(double compFps, double footageFps) =>
+    compFps > 0 && footageFps > compFps * 1.005
+        ? compFps / footageFps * 100
+        : null;
+
+/// How near the every-frame guide a dragged point has to come to land on it,
+/// in pixels.
+const double envelopeSnapReach = 3;
+
+/// [speed] taken onto [guide] when it is within [reach] per cent of it.
+double snapEnvelopeSpeed(double speed, double? guide, double reach) =>
+    guide != null && (speed - guide).abs() <= reach ? guide : speed;
+
+/// A speed as a point's drag readout writes it, without the sign: whole per
+/// cent, or one decimal place while the drag is [fine]. Only the reading is
+/// rounded, never the speed the drag stores.
+String speedText(double percent, {required bool fine}) =>
+    fine ? percent.toStringAsFixed(1) : '${percent.round()}';
+
+/// The every-frame guide's own number: two places, with the noughts trimmed,
+/// so 8 reads 8 and 23.976 in 300 reads 7.99.
+String guideSpeedText(double percent) =>
+    percent.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+
 // ---------------------------------------------------------------------------
 // Grid ruling.
 // ---------------------------------------------------------------------------

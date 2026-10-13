@@ -70,7 +70,10 @@ impl FrameIndex {
     // ---- sidecar cache -------------------------------------------------
 
     pub fn cache_path(dir: &Path, fp: &Fingerprint) -> PathBuf {
-        dir.join(format!("{}.kidx", fp.cache_key()))
+        // The number is the table's meaning, not its layout: 2 is the first
+        // that leaves out frames a file marks as not shown and conforms a
+        // variable frame rate. An older sidecar is simply never read again.
+        dir.join(format!("{}.2.kidx", fp.cache_key()))
     }
 
     pub fn save_to(&self, dir: &Path) -> Result<PathBuf, MediaError> {
@@ -167,11 +170,11 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
     }
     let mut input = crate::probe::open_input(&src)?;
 
-    let (stream_index, timebase) = input
+    let (stream_index, timebase, rate) = input
         .streams()
         .iter()
         .find(|s| s.codecpar().codec_type == ffi::AVMEDIA_TYPE_VIDEO)
-        .map(|s| (s.index, s.time_base))
+        .map(|s| (s.index, s.time_base, s.avg_frame_rate))
         .ok_or(MediaError::NoStreams)?;
 
     // An image sequence needs no scan. Every file is one packet and one
@@ -221,6 +224,12 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
         if packet.stream_index != stream_index {
             continue;
         }
+        // A packet the file marks to be decoded and thrown away, as one past
+        // the end of an MP4's edit is, never comes back from the decoder as a
+        // frame. Counting it promises a frame that asking for can only fail.
+        if packet.flags & ffi::AV_PKT_FLAG_DISCARD as i32 != 0 {
+            continue;
+        }
         let pts = if packet.pts != ffi::AV_NOPTS_VALUE {
             packet.pts
         } else {
@@ -251,6 +260,16 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
     } else {
         false
     };
+    // Everything above this table treats footage as one frame every 1/fps
+    // seconds, at the average rate the probe reports. A recording whose frames
+    // are not evenly spaced is made to be that here, once: frame n is the
+    // picture that was on screen n/fps seconds in. Read by count alone it
+    // drifts against its own sound wherever the recording ran fast or slow.
+    let entries = if vfr {
+        conformed(&entries, timebase, rate, median_delta).unwrap_or(entries)
+    } else {
+        entries
+    };
 
     Ok(FrameIndex {
         timebase_num: timebase.num,
@@ -261,6 +280,46 @@ pub fn build_frame_index(src: impl Into<MediaSource>) -> Result<FrameIndex, Medi
         fingerprint,
         interpret: src.interpret,
     })
+}
+
+/// `entries` laid out at a constant `rate`: for each frame of that rate, the
+/// entry whose picture is showing at its moment. A stretch recorded slower
+/// than the rate repeats entries and one recorded faster skips some. `None`
+/// when the rate or the timebase is not usable, or the answer would be
+/// absurdly long, and the table is then left as it was read.
+///
+/// ponytail: the rate is the file's average, so a stretch recorded faster than
+/// that loses frames. The upgrade is to conform to the recording's nominal
+/// rate, which the probe would have to report as the item's rate as well.
+fn conformed(
+    entries: &[IndexEntry],
+    timebase: ffi::AVRational,
+    rate: ffi::AVRational,
+    median_delta: i64,
+) -> Option<Vec<IndexEntry>> {
+    let (first, last) = (entries.first()?.pts, entries.last()?.pts);
+    if rate.num <= 0 || rate.den <= 0 || timebase.num <= 0 || timebase.den <= 0 {
+        return None;
+    }
+    // One frame of the rate in pts, as the exact fraction `num / den`.
+    let num = i128::from(rate.den) * i128::from(timebase.den);
+    let den = i128::from(rate.num) * i128::from(timebase.num);
+    // The last frame is on screen for a frame's length of its own.
+    let span = i128::from(last) - i128::from(first) + i128::from(median_delta.max(1));
+    let count = usize::try_from(((span * den + num / 2) / num).max(1)).ok()?;
+    if count > entries.len().saturating_mul(16) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(count);
+    let mut at = 0;
+    for n in 0..count {
+        let moment = i128::from(first) + (n as i128 * num * 2 + den) / (den * 2);
+        while at + 1 < entries.len() && i128::from(entries[at + 1].pts) <= moment {
+            at += 1;
+        }
+        out.push(entries[at]);
+    }
+    Some(out)
 }
 
 /// Test fixtures shared by index/decode tests and downstream crates' tests
@@ -581,6 +640,33 @@ pub mod tests_support {
 mod tests {
     use super::tests_support::fixture;
     use super::*;
+
+    /// A recording that stalls is laid out at its rate by time: the picture
+    /// that was on screen is repeated through the stall, so what comes after
+    /// it is still where the sound has it.
+    #[test]
+    fn a_variable_rate_is_conformed_by_time_and_not_by_count() {
+        let entry = |pts: i64| IndexEntry {
+            pts,
+            keyframe: pts == 0,
+        };
+        // Ticks of a thirtieth of a second: frames at 0, 1 and 2, nothing for
+        // three ticks, then 6 and 7. Eight frame lengths, five pictures.
+        let read: Vec<IndexEntry> = [0, 1, 2, 6, 7].into_iter().map(entry).collect();
+        let timebase = ffi::AVRational { num: 1, den: 30 };
+        let rate = ffi::AVRational { num: 30, den: 1 };
+        let laid = conformed(&read, timebase, rate, 1).expect("a usable rate");
+        let pts: Vec<i64> = laid.iter().map(|e| e.pts).collect();
+        assert_eq!(pts, [0, 1, 2, 2, 2, 2, 6, 7]);
+        // At half the rate every other picture is passed over.
+        let half = ffi::AVRational { num: 15, den: 1 };
+        let laid = conformed(&read, timebase, half, 1).expect("a usable rate");
+        let pts: Vec<i64> = laid.iter().map(|e| e.pts).collect();
+        assert_eq!(pts, [0, 2, 2, 6]);
+        // No rate to conform to leaves the table as it was read.
+        let none = ffi::AVRational { num: 0, den: 1 };
+        assert!(conformed(&read, timebase, none, 1).is_none());
+    }
 
     #[test]
     fn probe_and_index_agree_with_the_fixture() {

@@ -152,18 +152,56 @@ int cutPictureCount(List<CutTrack> tracks) {
 String cutThumbKey(BridgeClip clip) =>
     '${clip.id}@${clip.startFrame}@${clip.retimed}';
 
-/// Which track the point [y] lands on, measured down from the top of the
-/// first track, with every track [height] tall. Null above the first or below
-/// the last.
-int? cutTrackAt(List<CutTrack> tracks, double y, double height) {
-  if (y < 0 || height <= 0) return null;
-  final at = y ~/ height;
-  return at < tracks.length ? at : null;
+/// Where each track's top stands, measured down from the top of the first,
+/// with the foot of the last on the end: one more entry than [heights].
+List<double> cutTrackTops(List<double> heights) {
+  final tops = List<double>.filled(heights.length + 1, 0);
+  for (var i = 0; i < heights.length; i++) {
+    tops[i + 1] = tops[i] + heights[i];
+  }
+  return tops;
 }
+
+/// Which track the point [y] lands on, measured down from the top of the
+/// first track, with [tops] from [cutTrackTops]. Null above the first or
+/// below the last. By binary search, since a pointer move asks it.
+int? cutTrackAt(List<CutTrack> tracks, double y, List<double> tops) {
+  if (y < 0 || tops.length <= tracks.length || y >= tops.last) return null;
+  var lo = 0;
+  var hi = tracks.length - 1;
+  while (lo < hi) {
+    final mid = (lo + hi) >> 1;
+    if (tops[mid + 1] <= y) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  return lo;
+}
+
+/// The tracks whose rows cross the stretch from [top] to [bottom], as the
+/// range `[first, last)`.
+(int, int) cutTracksBetween(List<double> tops, double top, double bottom) {
+  final count = tops.length - 1;
+  var first = 0;
+  while (first < count && tops[first + 1] <= top) {
+    first++;
+  }
+  var last = first;
+  while (last < count && tops[last] < bottom) {
+    last++;
+  }
+  return (first, last);
+}
+
+/// How short and how tall a track may be dragged, against the usual height.
+const double cutTrackMinScale = 0.5;
+const double cutTrackMaxScale = 4;
 
 /// Where a clip's box begins and how wide it is drawn: never under two pixels,
 /// so a clip of one frame is still something the pointer can find.
-(double, double) cutClipBox(TimelineAxis axis, int start, int end) {
+(double, double) cutClipBox(TimelineAxis axis, num start, num end) {
   final left = axis.xOf(start);
   return (left, (axis.xOf(end) - left).clamp(2.0, double.infinity));
 }
@@ -263,7 +301,9 @@ Set<String> cutClipsBetween(CutTrack track, int from, int to) {
 /// after moves from, for a slide the neighbours' edges that follow, by
 /// clip id as (start, end) shifts, and for a fade handle which end's fade is
 /// in hand, the start's when [fade] is true, the end's when it is false, with
-/// the travel in [shift] and no box moving at all.
+/// the travel in [shift] and no box moving at all. [sub] is the part of a
+/// frame a move of sound alone carries past [shift] while Frames is off, and
+/// nought for everything else.
 typedef CutDrag = ({
   CutTool tool,
   Set<String> clips,
@@ -275,15 +315,17 @@ typedef CutDrag = ({
   int? rippleFrom,
   Map<String, (int, int)> others,
   bool? fade,
+  double sub,
 });
 
-/// How far a ripple trim moves what follows: the engine's rule, everything
-/// from the clip's old end moves by its change of length. Zero for any other
-/// gesture.
+/// How far a ripple moves what follows: the engine's rule. Everything from a
+/// trimmed clip's old end moves by its change of length, and with the Ripple
+/// switch on everything after a moved clip moves as far as it does. Zero for
+/// any other gesture.
 int cutRippleOf(CutDrag? drag) {
-  if (drag == null || drag.tool != CutTool.ripple || drag.rippleFrom == null) {
-    return 0;
-  }
+  if (drag == null || drag.rippleFrom == null) return 0;
+  if (drag.grab == BarGrab.move) return drag.shift;
+  if (drag.tool != CutTool.ripple) return 0;
   return switch (drag.grab) {
     BarGrab.trimOut => drag.shift,
     BarGrab.trimIn => -drag.shift,
@@ -320,7 +362,7 @@ int cutRippleOf(CutDrag? drag) {
         ? (start + ripple, end + ripple)
         : (start, end);
   }
-  if (ripple != 0) return (start, end + ripple);
+  if (ripple != 0 && drag.grab != BarGrab.move) return (start, end + ripple);
   return switch (drag.grab) {
     BarGrab.move => (start + drag.shift, end + drag.shift),
     BarGrab.trimIn => (start + drag.shift, end),

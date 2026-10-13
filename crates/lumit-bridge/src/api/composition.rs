@@ -656,21 +656,46 @@ impl CompositionReference {
             ..comp.motion_blur
         };
 
+        let (width, height) = (
+            settings.width.clamp(16, 16384),
+            settings.height.clamp(16, 16384),
+        );
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.begin_undo_group();
+        // The other settings first, at the size the frame has, so the step
+        // is named for the settings in the undo list. Then a new frame size,
+        // which keeps the picture's middle in the middle: the frame is
+        // cropped (or grown) evenly about its centre, which moves the layers
+        // with it. Without this every layer stays where it was against the
+        // top-left corner and a narrower comp shows them pushed to one side.
         let applied = proj
             .store
             .commit(lumit_core::Op::SetCompSettings {
                 comp: self.id,
                 name: settings.name,
-                width: settings.width.clamp(16, 16384),
-                height: settings.height.clamp(16, 16384),
+                width: comp.width,
+                height: comp.height,
                 frame_rate,
                 duration,
                 background: lumit_core::model::LinearColour(settings.background),
             })
             .map_err(BridgeError::OpError)
+            .and_then(|_| {
+                if (width, height) == (comp.width, comp.height) {
+                    return Ok(());
+                }
+                proj.store
+                    .commit(lumit_core::Op::CropCompToRegion {
+                        comp: self.id,
+                        x: (f64::from(comp.width) - f64::from(width)) / 2.0,
+                        y: (f64::from(comp.height) - f64::from(height)) / 2.0,
+                        width,
+                        height,
+                    })
+                    .map(|_| ())
+                    .map_err(BridgeError::OpError)
+            })
             .and_then(|_| {
                 if motion_blur == comp.motion_blur {
                     return Ok(());
@@ -3838,7 +3863,7 @@ impl CompositionReference {
             .iter()
             .filter(|l| members.contains(&l.id))
             .collect();
-        self.commit_slide(&comp, &moving, delta)
+        self.commit_slide(&comp, &moving, delta, 0)
     }
 
     /// Slide the given layers along the timeline by `delta` frames, as one
@@ -3853,13 +3878,27 @@ impl CompositionReference {
     /// whole slide; the Timeline hands over the unlocked share of the
     /// selection, which is how a locked sibling sits still while the rest
     /// move.
+    ///
+    /// `nudge_ticks` is a part of a frame to add, in samples at 48 kHz, read
+    /// only when every layer that moves is audio-only: sound may sit between
+    /// two frames and a picture may not.
     #[frb(sync)]
-    pub fn slide_layers(&self, layer_ids: Vec<Uuid>, delta: i64) -> Result<(), BridgeError> {
+    pub fn slide_layers(
+        &self,
+        layer_ids: Vec<Uuid>,
+        delta: i64,
+        nudge_ticks: i64,
+    ) -> Result<(), BridgeError> {
         let comp = self.composition()?;
         let ids: std::collections::HashSet<Uuid> = layer_ids.into_iter().collect();
         let moving: Vec<&lumit_core::model::Layer> =
             comp.layers.iter().filter(|l| ids.contains(&l.id)).collect();
-        self.commit_slide(&comp, &moving, delta)
+        let nudge = if moving.iter().all(|l| l.audio_only) {
+            nudge_ticks
+        } else {
+            0
+        };
+        self.commit_slide(&comp, &moving, delta, nudge)
     }
 
     /// The shared slide: clamp at comp zero as a unit, then move every layer's
@@ -3872,6 +3911,7 @@ impl CompositionReference {
         comp: &lumit_core::model::Composition,
         moving: &[&lumit_core::model::Layer],
         delta: i64,
+        nudge_ticks: i64,
     ) -> Result<(), BridgeError> {
         let Some(earliest) = moving
             .iter()
@@ -3881,7 +3921,7 @@ impl CompositionReference {
             return Ok(());
         };
         let delta = delta.max(-earliest);
-        if delta == 0 {
+        if delta == 0 && nudge_ticks == 0 {
             return Ok(());
         }
         // The travel as a **duration**, added to each of the three times,
@@ -3889,12 +3929,24 @@ impl CompositionReference {
         // (docs/14 §2). A start offset need not sit on a frame boundary, and
         // quantising it here would nudge a layer's contents by a fraction of a
         // frame every time the group was dragged.
-        let travel = lumit_core::time::Duration(
-            comp.frame_rate
-                .time_of_frame(delta)
-                .map_err(|_| BridgeError::InvalidFrameRate)?
-                .0,
-        );
+        let travel = comp
+            .frame_rate
+            .time_of_frame(delta)
+            .map_err(|_| BridgeError::InvalidFrameRate)?
+            .0;
+        let travel = lumit_core::time::Rational::new(nudge_ticks, 48_000)
+            .and_then(|part| travel.checked_add(part))
+            .map_err(|_| BridgeError::InvalidFrameRate)?;
+        // Never before comp zero, part of a frame or not.
+        if moving.iter().any(|l| {
+            l.in_point
+                .0
+                .checked_add(travel)
+                .map_or(true, |t| t.is_negative())
+        }) {
+            return Ok(());
+        }
+        let travel = lumit_core::time::Duration(travel);
         let mut ops = Vec::with_capacity(moving.len());
         for l in moving {
             let at = |t: lumit_core::time::CompTime| {
@@ -4344,7 +4396,7 @@ mod group_tests {
         let all = ids(&layers);
         let before = comp.get_model().expect("model");
 
-        comp.slide_layers(vec![all[0], all[1], all[2]], 12)
+        comp.slide_layers(vec![all[0], all[1], all[2]], 12, 0)
             .expect("the selection slides");
         let after = comp.get_model().expect("model");
         for i in 0..3 {
@@ -4364,10 +4416,10 @@ mod group_tests {
 
         // Stagger two layers, then drive the pair at the wall: the earlier one
         // stops at zero and the later one keeps its distance from it.
-        comp.slide_layers(vec![all[0]], 5).expect("stagger one");
-        comp.slide_layers(vec![all[2]], 12)
+        comp.slide_layers(vec![all[0]], 5, 0).expect("stagger one");
+        comp.slide_layers(vec![all[2]], 12, 0)
             .expect("stagger the other");
-        comp.slide_layers(vec![all[0], all[2]], -1000)
+        comp.slide_layers(vec![all[0], all[2]], -1000, 0)
             .expect("clamped, not refused");
         let walled = comp.get_model().expect("model");
         assert_eq!(span(&walled, 0).0, 0, "the earliest bar sits on the wall");

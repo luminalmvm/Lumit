@@ -214,6 +214,8 @@ void main() {
         placeDuration: const BridgeRational(num: 1, den: 1),
         startFrame: start,
         endFrame: end,
+        startExact: start.toDouble(),
+        endExact: end.toDouble(),
         retimed: false,
         retime: const BridgeScalar.static_(0),
         fadeIn: const BridgeClipFade(
@@ -271,6 +273,8 @@ void main() {
       placeDuration: const BridgeRational(num: 1, den: 1),
       startFrame: 0,
       endFrame: 24,
+      startExact: 0,
+      endExact: 24,
       retimed: false,
       retime: const BridgeScalar.static_(0),
       fadeIn:

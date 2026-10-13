@@ -26,6 +26,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/state/comp_model.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
+import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:provider/provider.dart';
 
@@ -337,6 +338,13 @@ class _HandleDrag {
   double rawDy = 0;
   double startSpeed = 0;
 
+  /// An envelope point's drag: the speed the pointer's travel asks for before
+  /// the every-frame guide takes it, where the pointer last was, and whether
+  /// `Ctrl` had the last move at a tenth of the pointer's rate.
+  double asked = 0;
+  double? lastY;
+  bool fine = false;
+
   /// Which way a `Shift`-constrained dot drag is going: whichever axis the
   /// pointer has travelled further along in **pixels**, so the choice follows
   /// the gesture rather than the zoom (see [_KeyDrag]).
@@ -398,12 +406,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void initState() {
     super.initState();
     rowValueDrag.addListener(_rowDragChanged);
+    _probeRates();
     widget.hScroll?.addListener(_scrolled);
   }
 
   @override
   void didUpdateWidget(GraphEditorFrb oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _probeRates();
     if (oldWidget.hScroll != widget.hScroll) {
       oldWidget.hScroll?.removeListener(_scrolled);
       widget.hScroll?.addListener(_scrolled);
@@ -448,6 +458,41 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   void _rowDragChanged() {
     if (mounted) setState(() {});
   }
+
+  /// The speed at which each Retime channel's footage shows every one of its
+  /// frames once, by layer id, where the footage runs faster than the comp. A
+  /// null entry is a layer already asked about.
+  final Map<String, double?> _everyFrame = {};
+
+  /// Ask what rate each new Retime channel's footage runs at, the way the
+  /// Retime row does: the source rides in on the read model, and the probe is
+  /// asked for once and never from the build.
+  // ponytail: kept by layer id for as long as the pane lives, so a comp whose
+  // rate is changed, or a layer given other footage, keeps the old guide
+  // until the Timeline is opened again. Key it by rate and source if it bites.
+  void _probeRates() {
+    for (final channel in widget.channels) {
+      if (!channel.retime) continue;
+      final id = channel.entry.layer.internallayerId.toString();
+      if (_everyFrame.containsKey(id)) continue;
+      _everyFrame[id] = null;
+      final source = channel.entry.info.source;
+      if (source is! ItemReference_Footage) continue;
+      source.field0.mediaInfo().then((info) {
+        if (!mounted || info == null || info.fpsNum <= 0 || info.fpsDen <= 0) {
+          return;
+        }
+        final speed = everyFrameSpeed(widget.fps, info.fpsNum / info.fpsDen);
+        if (speed != null) setState(() => _everyFrame[id] = speed);
+      });
+    }
+  }
+
+  /// Where [channel]'s every-frame guide stands, in per cent, or null when it
+  /// draws none: not an envelope, or footage no faster than the comp.
+  double? _guideOf(GraphChannel channel) => isEnvelope(channel)
+      ? _everyFrame[channel.entry.layer.internallayerId.toString()]
+      : null;
 
   // Every drag in the graph begins and ends with a `setState` here, so
   // this hears them all. The properties on show are in this person's hand
@@ -1422,6 +1467,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         }
       }
     }
+    // An envelope point is dragged in per cent, which is what its axis reads.
+    if (isEnvelope(channel)) {
+      drag.speed = drag.asked = envelopeSpeeds(channel.keys)[index];
+    }
     setState(() {
       _handleDrag = drag;
       _frozen = _range();
@@ -1490,10 +1539,27 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     setState(() {
       if (isEnvelope(drag.channel)) {
         // An envelope point: its height is the playback speed in per cent,
-        // straight off the axis, and it carries the key sideways like any
-        // speed dot. There is no influence to set — an envelope's sides are
-        // always the chord, which is what keeps its lines straight.
-        drag.speed = pointerValue;
+        // and it carries the key sideways like any speed dot. There is no
+        // influence to set. An envelope's sides are always the chord, which
+        // is what keeps its lines straight.
+        //
+        // By the pointer's travel and not its place, so `Ctrl` can make the
+        // travel worth a tenth, the value well's own fine rung, and be pressed
+        // or let go mid-drag without the point jumping. A fine drag is too
+        // exact to want the every-frame guide's pull, and `Ctrl` is what lets
+        // go of a snap everywhere else here.
+        final fine = HardwareKeyboard.instance.isControlPressed;
+        final span =
+            (range.$2 - range.$1).abs() < 1e-12 ? 1.0 : range.$2 - range.$1;
+        final perPixel = span / (height <= 0 ? 1 : height);
+        drag.asked -=
+            (local.dy - (drag.lastY ?? local.dy)) * perPixel * (fine ? 0.1 : 1);
+        drag.lastY = local.dy;
+        drag.fine = fine;
+        drag.speed = fine
+            ? drag.asked
+            : snapEnvelopeSpeed(drag.asked, _guideOf(drag.channel),
+                envelopeSnapReach * perPixel);
         if (drag.dotOnly) {
           drag.rawDx += dx;
           drag.rawDy += dy;
@@ -1976,6 +2042,37 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       lower = frame;
       upper = frame;
     }
+    if (isEnvelope(channel)) {
+      // An envelope point's number is its speed in per cent, the unit its
+      // axis reads in, and never the source second the key holds underneath.
+      // It has no influences to type: its sides are always the chord.
+      final id = '${channel.id}#$index';
+      // Selected, so the point stays lit for as long as its box is open.
+      if (!widget.selectedKeys.contains(id)) {
+        widget.selectedKeys
+          ..clear()
+          ..add(id);
+        widget.onSelectionChanged();
+      }
+      final box = context.findRenderObject();
+      await showSpeedFieldPopover(
+        context: context,
+        // Below and to the right of the point, which stays in sight beside it.
+        position: box is RenderBox
+            ? box.localToGlobal(_keyPoint(
+                    channel, index, _range(), _paneSize.height,
+                    isOut: true)) +
+                const Offset(10, 8)
+            : position,
+        percent: envelopeSpeeds(keys)[index],
+        frame: frame,
+        minFrame: lower,
+        maxFrame: upper,
+        onApply: (percent, frame) => _applySpeedPoint(channel.id, index,
+            percent: percent, frame: frame ?? keyFrame(key, widget.fps)),
+      );
+      return;
+    }
     await showKeyFieldsPopover(
       context: context,
       position: position,
@@ -2045,6 +2142,30 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             else
               keys[i],
         ]),
+      });
+      widget.onChanged();
+      return;
+    }
+  }
+
+  /// Write a typed speed, and a typed frame, onto one envelope point.
+  ///
+  /// Through the two functions a drag commits through ([setEnvelopeSpeed] and
+  /// [moveEnvelopePoint]), so a point typed to 37.5 and a point dragged to
+  /// 37.5 hold the same keys. Looked up by id at the moment of the write, as
+  /// [_applyKeyFields] does.
+  void _applySpeedPoint(String channelId, int index,
+      {required double percent, required double frame}) {
+    for (final channel in widget.channels) {
+      if (channel.id != channelId) continue;
+      var keys = channel.keys;
+      if (index < 0 || index >= keys.length) return;
+      if ((keyFrame(keys[index], widget.fps) - frame).abs() > 1e-9) {
+        keys = moveEnvelopePoint(keys, index,
+            timeOfSubframe(frame, widget.fpsNum, widget.fpsDen));
+      }
+      commitChannelEdits({
+        channel: BridgeScalar.keyframed(setEnvelopeSpeed(keys, index, percent)),
       });
       widget.onChanged();
       return;
@@ -2138,8 +2259,13 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
             MenuRow(onPressed: () => close('ease'), child: Text(l10n.easeEasy)),
             MenuRow(onPressed: () => close('hold'), child: Text(l10n.easeHold)),
             MenuRow(
+                key: const ValueKey<String>('graph-key-menu-speed'),
                 onPressed: () => close('speed'),
-                child: Text(l10n.menuKeyframeSpeed)),
+                // An envelope point has one speed and no influence, so its
+                // row opens the box that types that speed.
+                child: Text(isEnvelope(channel)
+                    ? l10n.menuSetSpeed
+                    : l10n.menuKeyframeSpeed)),
             MenuRow(
                 onPressed: () => close('delete'), child: Text(l10n.deleteKey)),
           ],
@@ -2153,6 +2279,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       return;
     }
     if (picked == 'speed') {
+      if (isEnvelope(channel)) {
+        await _openKeyFields(channel, index, position);
+        return;
+      }
       await _openKeySpeed(channel, index, side: side);
       return;
     }
@@ -2258,6 +2388,24 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                         viewportWidth: _viewportWidth(constraints.maxWidth),
                         gutterFill: t.surface0.withValues(alpha: 0.85),
                         vegas: widget.vegas,
+                        guides: {
+                          for (final c in widget.channels)
+                            if (_guideOf(c) case final speed?) speed,
+                        },
+                        guideLabel:
+                            t.small.copyWith(color: t.textMuted, shadows: [
+                          for (final blur in const [2.0, 4.0])
+                            Shadow(color: t.surface1, blurRadius: blur),
+                        ]),
+                        // The point in hand has landed on its guide.
+                        caughtGuide: switch (_handleDrag) {
+                          final drag?
+                              when drag.dotOnly &&
+                                  drag.speed == _guideOf(drag.channel) =>
+                            drag.speed,
+                          _ => null,
+                        },
+                        lit: t.textPrimary,
                       ),
                     ),
                   ),
@@ -2319,6 +2467,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
               ..._snapCapture(t),
               // The live readout, beside the key in hand (§6.2).
               ..._valueHint(range, height, constraints.maxWidth),
+              ..._speedHint(range, height),
               // Over the live pane rather than instead of it, so the grid and
               // the axis stay readable behind the invitation to fill them.
               if (widget.channels.isEmpty)
@@ -2530,6 +2679,28 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         bottom: 0,
         width: 1,
         child: IgnorePointer(child: ColoredBox(color: t.accent)),
+      ),
+    ];
+  }
+
+  /// The speed an envelope point's drag is asking for, in the pill every
+  /// drag here carries: whole per cent, or to a decimal place while `Ctrl`
+  /// has the drag fine.
+  List<Widget> _speedHint((double, double) range, double height) {
+    final drag = _handleDrag;
+    if (drag == null || !drag.dotOnly || !isEnvelope(drag.channel)) {
+      return const [];
+    }
+    final point = _keyPoint(drag.channel, drag.index, range, height,
+        isOut: drag.isOut);
+    return [
+      Positioned(
+        key: const ValueKey<String>('graph-speed-hint'),
+        left: point.dx + 8,
+        top: point.dy + 6,
+        child: HintPill(
+            text: '${speedText(drag.speed, fine: drag.fine)}'
+                '${l10n.unitSymbolPercent}'),
       ),
     ];
   }
@@ -2913,6 +3084,16 @@ class _GraphPainter extends CustomPainter {
   /// second, so it lands on the points drawn over it.
   final bool vegas;
 
+  /// The speeds, in per cent, at which the envelopes on show play every frame
+  /// of their footage once, and the face their guide is named in.
+  final Set<double> guides;
+  final TextStyle? guideLabel;
+
+  /// The guide a dragged point is sitting on, drawn [lit] while it does: the
+  /// snap is seen as well as felt.
+  final double? caughtGuide;
+  final Color? lit;
+
   const _GraphPainter({
     required this.channels,
     required this.shownKeys,
@@ -2928,6 +3109,10 @@ class _GraphPainter extends CustomPainter {
     required this.viewportWidth,
     required this.gutterFill,
     this.vegas = false,
+    this.guides = const {},
+    this.guideLabel,
+    this.caughtGuide,
+    this.lit,
   });
 
   double _yOf(double v, (double, double) range, Size size) {
@@ -2939,6 +3124,7 @@ class _GraphPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     _paintGrid(canvas, size);
+    _paintGuides(canvas, size);
     final f = fps <= 0 ? 1.0 : fps;
     for (var c = 0; c < channels.length; c++) {
       final channel = channels[c];
@@ -3054,6 +3240,35 @@ class _GraphPainter extends CustomPainter {
     for (final v in _gridValues(size)) {
       final y = _yOf(v, range, size);
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  /// The every-frame guide: a faint dashed line across the view at the speed
+  /// that shows every source frame once, named at the view's left edge. The
+  /// sequence view's envelope draws the same one.
+  ///
+  /// Only across what is on screen. The canvas is as wide as the comp, and
+  /// dashing all of it would be thousands of strokes nobody sees. The dashes
+  /// are counted from the start of time, so they stand still under a scroll.
+  void _paintGuides(Canvas canvas, Size size) {
+    final faint = (guideLabel?.color ?? grid).withValues(alpha: 0.7);
+    final paint = Paint()..strokeWidth = 1;
+    for (final speed in guides) {
+      final y = _yOf(speed, range, size);
+      if (y < 0 || y > size.height) continue;
+      paint.color = speed == caughtGuide ? lit ?? faint : faint;
+      final right = viewportLeft + viewportWidth - graphGutterWidth;
+      for (var x = (viewportLeft / 10).floor() * 10.0; x < right; x += 10) {
+        canvas.drawLine(Offset(x, y), Offset(x + 6, y), paint);
+      }
+      final text = TextPainter(
+        text: TextSpan(
+            text: l10n.speedGuideEveryFrame(
+                '${guideSpeedText(speed)}${l10n.unitSymbolPercent}'),
+            style: guideLabel),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      text.paint(canvas, Offset(viewportLeft + 8, y - text.height));
     }
   }
 

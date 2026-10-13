@@ -340,6 +340,11 @@ class Bar extends StatefulWidget {
   /// reaching for a settings object.
   final bool showName;
 
+  /// Whether an Audio layer moved by its bar lands on a whole frame. Off, it
+  /// lands where the pointer let go, between frames. Handed down as
+  /// [showName] is.
+  final bool quantiseSound;
+
   /// What a move drag on a **selected** bar carries: the unlocked
   /// selection and its comp-zero wall. A callback rather than a value because
   /// it is read once, at drag start, from a handler — the selection at the
@@ -366,6 +371,7 @@ class Bar extends StatefulWidget {
     this.snapTargets = const [],
     this.magnet = true,
     this.showName = false,
+    this.quantiseSound = true,
     this.selectionMove,
   });
 
@@ -533,8 +539,14 @@ class _BarState extends State<Bar> {
       null => (inFrame + _followShift, outFrame + _followShift),
     };
 
-    final left = widget.axis.xOf(drawIn);
-    final width = (widget.axis.xOf(drawOut) - left).clamp(2.0, 1e6);
+    // An Audio layer may sit between two frames, and its bar is drawn where
+    // it is: the part of a frame its in point stands past the whole one.
+    final past = info.kind == BridgeLayerKind.audio && widget.fps > 0
+        ? (info.span.inPoint.num / info.span.inPoint.den * widget.fps - inFrame)
+            .clamp(0.0, 1.0)
+        : 0.0;
+    final left = widget.axis.xOf(drawIn + past);
+    final width = (widget.axis.xOf(drawOut + past) - left).clamp(2.0, 1e6);
 
     // The source's reach travels with a move: sliding a layer along the
     // timeline carries its start offset, so the media it can show moves with
@@ -1191,6 +1203,10 @@ class _BarState extends State<Bar> {
   void _commit(int inFrame, int outFrame) {
     final grab = _grab;
     final moving = _moving;
+    // Read before the gesture is cleared below: how far the pointer went, to
+    // the part of a frame, and whether the bar was held on a snap target.
+    final raw = widget.axis.framesOfPx(_deltaPx);
+    final free = !widget.quantiseSound && _caught == null;
     // Clamped once more on the way out: a source length that arrived from its
     // probe part-way through the gesture only reaches the bar on the next
     // build, and what is committed must obey the bounds in force at release.
@@ -1213,10 +1229,34 @@ class _BarState extends State<Bar> {
       _caught = null;
     });
     widget.dragPreview.value = null;
-    if (grab == null || delta == 0) return;
+    if (grab == null) return;
 
-    if (grab == BarGrab.move && moving != null) {
-      widget.comp.slideLayers(layerIds: moving.layerIds, delta: delta);
+    // Sound may sit between two frames. With the setting off an Audio layer
+    // goes where the pointer let go, and with it on a layer that was left
+    // between two frames lands on one. The engine takes the part of a frame
+    // only when every layer that moves is sound.
+    var ticks = 0;
+    if (grab == BarGrab.move &&
+        widget.entry.info.kind == BridgeLayerKind.audio) {
+      final fps = widget.fps;
+      if (fps > 0 && free) {
+        delta = raw.floor();
+        if (moving != null) delta = max(delta, -moving.minIn);
+        ticks = ((raw - raw.floor()) / fps * 48000).round();
+      } else if (fps > 0 && delta != 0) {
+        final span = widget.entry.info.span.inPoint;
+        final past = span.num / span.den * fps - inFrame;
+        ticks = -(past / fps * 48000).round();
+      }
+    }
+    if (delta == 0 && ticks == 0) return;
+
+    if (grab == BarGrab.move && (moving != null || ticks != 0)) {
+      widget.comp.slideLayers(
+        layerIds: moving?.layerIds ?? [widget.entry.layer.internallayerId],
+        delta: delta,
+        nudgeTicks: ticks,
+      );
       widget.onChanged();
       return;
     }

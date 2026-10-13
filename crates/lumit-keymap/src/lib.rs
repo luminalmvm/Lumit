@@ -123,6 +123,9 @@ impl ActionId {
             "cut.select.at.playhead" => "Select the clip at the playhead",
             "cut.snap.toggle" => "Turn snapping on or off",
             "cut.linked.toggle" => "Turn linked selection on or off",
+            "cut.ripple.toggle" => "Turn auto ripple on or off",
+            "cut.crossfade.toggle" => "Turn automatic crossfades on or off",
+            "cut.quantise.toggle" => "Turn quantise to frames on or off",
             "cut.lift" => "Lift the work area",
             "cut.extract" => "Extract the work area",
             "cut.match.frame" => "Match frame",
@@ -1106,6 +1109,11 @@ pub fn default_keymap() -> Keymap {
         row(Cut, "D", "cut.select.at.playhead"),
         row(Cut, "S", "cut.snap.toggle"),
         row(Cut, "Shift+L", "cut.linked.toggle"),
+        // The three switches Vegas has. Its own keys for the first two are
+        // taken app-wide here, so they sit on those in the Vegas preset.
+        row(Cut, "Shift+B", "cut.ripple.toggle"),
+        row(Cut, "Shift+X", "cut.crossfade.toggle"),
+        row(Cut, "Alt+F8", "cut.quantise.toggle"),
         row(Cut, ";", "cut.lift"),
         row(Cut, "'", "cut.extract"),
         row(Cut, "F", "cut.match.frame"),
@@ -1235,6 +1243,87 @@ pub fn after_effects_preset() -> Keymap {
     km
 }
 
+/// The "Vegas Pro" muscle-memory preset.
+///
+/// Starts from the shipped default, which already agrees with Vegas on Space,
+/// the J/K/L shuttle, Mod+X/C/V, Delete, undo and redo, the bare digits that
+/// go to a marker, I and O for the marked span in the Cut timeline and
+/// Alt+`[` / Alt+`]` for a layer's trims, and re-points the rest. The Cut
+/// timeline first, since that is where a Vegas editor works:
+///
+/// - **S** cuts at the playhead, on the picked clips' tracks or on every
+///   track with nothing picked, which is what Vegas's split does. Snapping
+///   moves to **F8**, where Vegas has it.
+/// - **Alt+`[`** and **Alt+`]`** trim a clip's start and end to the playhead.
+///   The ripple trims go beside them with Shift, which takes them off Q and
+///   W: Q is Vegas's loop key and **W** goes to the start, and neither
+///   should cut.
+/// - **Up** and **Down** zoom, **Alt+Left** and **Alt+Right** step a frame,
+///   and with Mod as well they go to the edit point either side.
+/// - The numeric keypad nudges the picked clips: **1** and **3** a frame
+///   earlier and later, **8** and **2** up and down a track.
+/// - **Mod+D** is the select tool, Vegas's normal edit tool, and the default
+///   transition takes Shift with it. **Mod+Shift+U** turns linked selection
+///   on and off, the chord that ignores event grouping there.
+/// - **Mod+L** turns auto ripple on and off and **Mod+Shift+X** automatic
+///   crossfades. Quantise to frames is on Alt+F8 already.
+/// - **M** adds a marker, anywhere.
+///
+/// In the Timeline, **S** splits the layer, **I** and **O** set the work
+/// area as they do in the Cut timeline, Up and Down zoom, and `L` shuttles
+/// as it does everywhere else. Scale, Masks and Audio are revealed with
+/// Shift held instead.
+///
+/// Every binding re-points an action id the app already ships; the preset
+/// adds no new actions and no user-facing strings of its own.
+#[must_use]
+pub fn vegas_preset() -> Keymap {
+    use KeyContext::{Cut, Global, Timeline};
+    let mut km = default_keymap();
+    // In order: a row that gives up a key comes before the row that takes it,
+    // so nothing is left without one.
+    let moves = [
+        (Cut, "F8", "cut.snap.toggle"),
+        (Cut, "S", "cut.add.edit"),
+        (Cut, "Alt+[", "cut.trim.start"),
+        (Cut, "Alt+]", "cut.trim.end"),
+        (Cut, "Alt+Shift+[", "cut.trim.start.ripple"),
+        (Cut, "Alt+Shift+]", "cut.trim.end.ripple"),
+        (Cut, "W", "playback.comp.start"),
+        // The keypad's digits, spelt the way a keypress names them.
+        (Cut, "Numpad 1", "cut.nudge.left"),
+        (Cut, "Numpad 3", "cut.nudge.right"),
+        (Cut, "Numpad 8", "cut.nudge.up"),
+        (Cut, "Numpad 2", "cut.nudge.down"),
+        (Cut, "Alt+ArrowLeft", "playback.frame.prev"),
+        (Cut, "Alt+ArrowRight", "playback.frame.next"),
+        (Cut, "Mod+Alt+ArrowLeft", "edit.point.prev"),
+        (Cut, "Mod+Alt+ArrowRight", "edit.point.next"),
+        (Cut, "ArrowUp", "timeline.zoom.in"),
+        (Cut, "ArrowDown", "timeline.zoom.out"),
+        (Cut, "Mod+Shift+D", "cut.transition.default"),
+        (Cut, "Mod+D", "cut.tool.select"),
+        (Cut, "Mod+Shift+U", "cut.linked.toggle"),
+        (Cut, "Mod+L", "cut.ripple.toggle"),
+        (Cut, "Mod+Shift+X", "cut.crossfade.toggle"),
+        (Global, "M", "marker.add"),
+        (Timeline, "Shift+M", "reveal.masks"),
+        (Timeline, "Shift+S", "reveal.scale"),
+        (Timeline, "S", "layer.split"),
+        (Timeline, "Shift+L", "reveal.audio"),
+        (Timeline, "I", "workarea.set.start"),
+        (Timeline, "O", "workarea.set.end"),
+        (Timeline, "ArrowUp", "timeline.zoom.in"),
+        (Timeline, "ArrowDown", "timeline.zoom.out"),
+    ];
+    for (context, chord, action) in moves {
+        if let Ok(chord) = chord.parse::<Chord>() {
+            km.rebind_action(context, &action.into(), chord);
+        }
+    }
+    km
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -1263,6 +1352,7 @@ mod tests {
             "=",
             "+",
             "Shift++",
+            "Numpad 1",
         ] {
             let c = chord(s);
             assert_eq!(chord(&c.to_string()), c, "round-trip failed for {s}");
@@ -1453,12 +1543,13 @@ mod tests {
             "the shipped default must not ship with clashes"
         );
         assert!(after_effects_preset().conflicts().is_empty());
+        assert!(vegas_preset().conflicts().is_empty());
     }
 
-    /// The preset takes the shuttle off J/K/L, and a restart must not hand it
-    /// back on top of the keyframe keys.
+    /// The After Effects preset takes the shuttle off J/K/L, and a restart
+    /// must not hand it back on top of the keyframe keys.
     #[test]
-    fn the_after_effects_preset_survives_the_stored_file() {
+    fn the_presets_survive_the_stored_file() {
         let restored = with_new_defaults(after_effects_preset());
         assert!(restored.conflicts().is_empty());
         assert_eq!(
@@ -1467,6 +1558,12 @@ mod tests {
             "the shuttle stays off"
         );
         assert_eq!(restored, after_effects_preset());
+
+        // The Vegas preset moves keys about and takes none away, so nothing
+        // of the default's comes back beside it.
+        let restored = with_new_defaults(vegas_preset());
+        assert!(restored.conflicts().is_empty());
+        assert_eq!(restored, vegas_preset());
     }
 
     #[test]
@@ -1527,7 +1624,7 @@ mod tests {
     /// `layer.something.new` to a user who has never read the source.
     #[test]
     fn every_shipped_action_has_a_written_description() {
-        for km in [default_keymap(), after_effects_preset()] {
+        for km in [default_keymap(), after_effects_preset(), vegas_preset()] {
             for b in &km.bindings {
                 let described = b.action.description();
                 assert_ne!(

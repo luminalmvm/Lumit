@@ -222,7 +222,18 @@ class DragValueField extends StatefulWidget {
     this.onChangeEnd,
     this.onDragCancel,
     this.setExpression,
+    this.autofocus = false,
+    this.onSubmitted,
   });
+
+  /// Opens with its editor up and the whole value selected, for a small box
+  /// that exists to have one number typed into it.
+  final bool autofocus;
+
+  /// Fired after [onChanged] when the number was committed with `Enter`, and
+  /// not when the editor was clicked or tabbed away from. For the same small
+  /// box, which shuts once its number is in.
+  final VoidCallback? onSubmitted;
 
   /// Offered in the value's context menu when the property can take one.
   /// Absent (and the menu entry with it) for a field that cannot.
@@ -235,6 +246,11 @@ class DragValueField extends StatefulWidget {
 class _DragValueFieldState extends State<DragValueField>
     implements TextSelectionGestureDetectorBuilderDelegate {
   bool _editing = false;
+
+  /// Whether the field has still to take the focus it opens with. Once only:
+  /// the resting face is mounted again each time the editor shuts, and taking
+  /// the focus again there would open the editor straight back up.
+  late bool _autofocus = widget.autofocus;
   bool _hover = false;
   bool _focused = false;
 
@@ -387,6 +403,7 @@ class _DragValueFieldState extends State<DragValueField>
   void _beginEdit() {
     setState(() {
       _editing = true;
+      _autofocus = false;
       final text = widget.decimals == 0
           ? widget.value.round().toString()
           : widget.value.toDouble().toStringAsFixed(widget.decimals);
@@ -426,6 +443,7 @@ class _DragValueFieldState extends State<DragValueField>
     final parsed = parseNumberField(raw);
     if (parsed != null) {
       widget.onChanged(parsed.clamp(widget.min, widget.max));
+      if (submitted) widget.onSubmitted?.call();
     } else if (raw.isNotEmpty) {
       // Neither a number nor a sum. The edge says so, and on Enter the
       // editor stays open with what was typed, so it can be put right.
@@ -592,6 +610,7 @@ class _DragValueFieldState extends State<DragValueField>
     }
     return FocusableActionDetector(
       focusNode: _idleFocus,
+      autofocus: _autofocus,
       // Enter only, no Space: this is a number box, and `Enter` opening the
       // editor is what Tab-and-type needs.
       shortcuts: const {

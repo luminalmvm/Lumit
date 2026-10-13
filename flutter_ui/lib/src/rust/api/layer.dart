@@ -451,6 +451,16 @@ class BridgeClip {
   /// Whether the clip plays a composition and not a footage item.
   final bool sourceIsComp;
 
+  /// The clip's own blend mode as an index into [`list_blend_modes`], or
+  /// `None` while it takes its layer's.
+  final int? blend;
+
+  /// Where the clip starts and ends on the comp's clock in frames, with the
+  /// part of a frame `start_frame` and `end_frame` leave off. A sound clip
+  /// may sit between two frames, and this is where it is drawn.
+  final double startExact;
+  final double endExact;
+
   const BridgeClip({
     required this.id,
     required this.placeStart,
@@ -472,6 +482,9 @@ class BridgeClip {
     required this.sourceIn,
     required this.sourceOut,
     required this.sourceIsComp,
+    this.blend,
+    required this.startExact,
+    required this.endExact,
   });
 
   @override
@@ -495,7 +508,10 @@ class BridgeClip {
       link.hashCode ^
       sourceIn.hashCode ^
       sourceOut.hashCode ^
-      sourceIsComp.hashCode;
+      sourceIsComp.hashCode ^
+      blend.hashCode ^
+      startExact.hashCode ^
+      endExact.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -521,7 +537,10 @@ class BridgeClip {
           link == other.link &&
           sourceIn == other.sourceIn &&
           sourceOut == other.sourceOut &&
-          sourceIsComp == other.sourceIsComp;
+          sourceIsComp == other.sourceIsComp &&
+          blend == other.blend &&
+          startExact == other.startExact &&
+          endExact == other.endExact;
 }
 
 /// One end of a clip's fade: how long it takes, and the curve it takes. Zero
@@ -2790,11 +2809,18 @@ class LayerReference {
   /// [`Self::get_effects`] hands out the layer's
   /// (docs/impl/audio-timeline.md §4).
   ///
-  /// Offset zero: a clip's parameters are keyed in clip time and a clip's
-  /// zero is its own start, which is the clock the clip's chain bakes in.
-  List<BridgeEffectInstance> getClipEffects({required UuidValue clip}) =>
-      BridgeLib.instance.api
-          .crateApiLayerLayerReferenceGetClipEffects(that: this, clip: clip);
+  /// A clip's parameters are keyed in clip time, and a clip's zero is its
+  /// own start. Without `on_comp_clock` the copies cross on that clock, at
+  /// offset zero, which is what a lane that walks the keys out itself
+  /// wants. With it they cross on the comp's clock like a layer's own
+  /// effects, the clip's start and the layer's zero already added, so a
+  /// panel that keys at the playhead needs to know nothing about clips. A
+  /// copy carries its offset back with it, so either kind commits to the
+  /// same keys.
+  List<BridgeEffectInstance> getClipEffects(
+          {required UuidValue clip, required bool onCompClock}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetClipEffects(
+          that: this, clip: clip, onCompClock: onCompClock);
 
   /// The clips on this Sequence layer, in the order it holds them.
   ///
@@ -3107,7 +3133,8 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceInsertNodeGroup(
           that: this, text: text, x: x, y: y);
 
-  /// Append a `.lumfx` preset's effects to this layer's stack, as one op.
+  /// Append a `.lumfx` preset's effects to this layer's stack, or with
+  /// `clip` to that clip's own, as one op.
   ///
   /// Each arrives with a **fresh** instance id: applying one preset to
   /// several layers must not give them effects that share an id, since an id
@@ -3116,8 +3143,9 @@ class LayerReference {
   /// A document written by a newer Lumit still loads — unknown fields ride
   /// along in each effect's `extra` map, exactly as the project file tolerates
   /// additions. Only text that is not a preset at all is refused.
-  void loadPreset({required String text}) => BridgeLib.instance.api
-      .crateApiLayerLayerReferenceLoadPreset(that: this, text: text);
+  void loadPreset({required String text, UuidValue? clip}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceLoadPreset(
+          that: this, text: text, clip: clip);
 
   /// **Merge audio streams**, the way back from a split: this row sounds
   /// the streams mixed and the rows split off beside it go.
@@ -3406,14 +3434,17 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSaveNodeGroup(
           that: this, name: name, colour: colour, nodes: nodes);
 
-  /// Serialise this layer's whole effect stack to `.lumfx` JSON.
+  /// Serialise this layer's effect stack to `.lumfx` JSON: the whole of it,
+  /// or with `only` the one effect of that id, which may be on the layer or
+  /// on one of its clips.
   ///
   /// Returns the text rather than writing a file: choosing where something
   /// goes is the file picker's job, and the engine has no business opening one.
   /// A layer with no effects still saves — an empty preset is a valid, if
   /// unexciting, document.
-  String savePreset({required String name}) => BridgeLib.instance.api
-      .crateApiLayerLayerReferenceSavePreset(that: this, name: name);
+  String savePreset({required String name, UuidValue? only}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSavePreset(
+          that: this, name: name, only: only);
 
   /// The adjustment switch: set this layer's own picture aside and
   /// run its effect stack on the composite beneath it, or give it back.
@@ -3487,6 +3518,13 @@ class LayerReference {
           {required UuidValue clip, required List<int> streams}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipAudioStreams(
           that: this, clip: clip, streams: streams);
+
+  /// Give one clip a blend mode of its own, as an index into
+  /// [`list_blend_modes`], or hand it back to the layer's with `None`. The
+  /// layer blends by it for as long as that clip is the one showing.
+  void setClipBlend({required UuidValue clip, int? index}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetClipBlend(
+          that: this, clip: clip, index: index);
 
   /// Set the fade at one end of a clip, or at both
   /// (docs/impl/audio-timeline.md §3).
@@ -3891,12 +3929,21 @@ class LayerReference {
   /// `overlap` keeps the neighbour it is slid over, so the overlap is a
   /// crossfade (docs/impl/audio-timeline.md §2); without it the slide
   /// overwrites, which is what a picture row does.
+  ///
+  /// `nudge_ticks` is a part of a frame to add, in samples at 48 kHz. It is
+  /// read on an audio-only layer alone, where a clip may sit between two
+  /// frames.
   void slideClip(
           {required UuidValue clip,
           required PlatformInt64 toFrame,
-          required bool overlap}) =>
+          required bool overlap,
+          required PlatformInt64 nudgeTicks}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSlideClip(
-          that: this, clip: clip, toFrame: toFrame, overlap: overlap);
+          that: this,
+          clip: clip,
+          toFrame: toFrame,
+          overlap: overlap,
+          nudgeTicks: nudgeTicks);
 
   /// Razor: split this layer in two at `frame` (docs/07 §4.4).
   ///

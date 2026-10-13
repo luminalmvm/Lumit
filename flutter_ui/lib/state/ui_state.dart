@@ -2733,6 +2733,8 @@ class LumitUiState extends ChangeNotifier {
     _app.removeListener(_sourceNames.clear);
     workspace.presetApplied.removeListener(_onPresetApplied);
     cutLinked.dispose();
+    cutClip.dispose();
+    presetsChanged.dispose();
     _lifecycle.dispose();
     _clock.dispose();
     reviews.dispose();
@@ -3122,6 +3124,22 @@ class LumitUiState extends ChangeNotifier {
   /// Linked switch, and what the source side's Insert and Overwrite read.
   /// Not written down.
   final ValueNotifier<bool> cutLinked = ValueNotifier(true);
+
+  /// The one clip picked in the Cut timeline, with the layer it is on: what
+  /// Effect controls shows the stack of, and where an effect applied from
+  /// Effects & presets lands. Null with no clip picked, or several.
+  final ValueNotifier<({LayerReference layer, UuidValue clip})?> cutClip =
+      ValueNotifier(null);
+
+  /// Bumped when a preset file has been written, so the Effects & presets
+  /// panel reads its folder again.
+  final ValueNotifier<int> presetsChanged = ValueNotifier(0);
+
+  /// How tall each row of the Cut timeline stands where it has been dragged
+  /// off the usual height, by composition id and then row id. Kept in the
+  /// session beside [viewerLooks], so a project reopens with its rows as
+  /// they were left.
+  final Map<String, Map<String, double>> cutTrackHeights = {};
 
   /// Settings ▸ Timeline ▸ Editing ▸ *Several audio streams arrive as*, as
   /// the engine's calls take it. Every door footage comes into a composition
@@ -3719,6 +3737,10 @@ class LumitUiState extends ChangeNotifier {
         selectedLayer: selectedLayer.value?.internallayerId.toString(),
         dock: workspace.dock.toJson(),
         viewerLooks: Map.of(viewerLooks),
+        cutTrackHeights: {
+          for (final e in cutTrackHeights.entries)
+            if (e.value.isNotEmpty) e.key: Map.of(e.value),
+        },
         previewResolutions: {
           for (final e in previewResolutions.entries) e.key: e.value.name,
         },
@@ -3797,6 +3819,7 @@ class LumitUiState extends ChangeNotifier {
       clearSelection();
       playheadFrame.value = 0;
       viewerLooks.clear();
+      cutTrackHeights.clear();
       previewResolutions.clear();
       viewerOverlaysByComp.clear();
       guidesByComp.clear();
@@ -3841,6 +3864,9 @@ class LumitUiState extends ChangeNotifier {
       viewerLooks.addEntries(
         session.viewerLooks.entries.where((e) => known.containsKey(e.key)),
       );
+      for (final e in session.cutTrackHeights.entries) {
+        if (known.containsKey(e.key)) cutTrackHeights[e.key] = Map.of(e.value);
+      }
       // Same rule for the per-comp resolutions, plus: a name this build does
       // not have (a project written by a newer one) simply reads as the
       // default rather than stopping the project from opening.
