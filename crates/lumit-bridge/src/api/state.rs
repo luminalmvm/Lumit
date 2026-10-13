@@ -678,6 +678,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetColourConfig { .. }
         | Op::SetColourWorkingSpace { .. }
         | Op::SetFootageColourSpace { .. }
+        | Op::SetFootageInterpretation { .. }
         // The project's colour shelf. No panel draws it — the picker
         // reads it when it opens — but it is a document change like the cache
         // location above, so it reports rather than passing silently.

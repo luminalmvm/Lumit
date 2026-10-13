@@ -1254,7 +1254,12 @@ pub fn warm_jobs(doc: &Document) -> Vec<Job> {
             ) else {
                 continue;
             };
-            let path = PathBuf::from(&footage.media.absolute_path);
+            let (path, fingerprint) = crate::source::analysed(
+                footage,
+                PathBuf::from(&footage.media.absolute_path),
+                fingerprint,
+            );
+            let fingerprint = &fingerprint;
             // One camera job per **media** — two layers cutting the same shot
             // are one analysis. One planar job per **effect instance**, because
             // two quads on one shot are two answers, so there is
@@ -1994,10 +1999,11 @@ pub fn camera_track_effect(layer: &Layer) -> Option<&EffectInstance> {
 #[must_use]
 pub fn job_for(
     layer: &Layer,
-    path: PathBuf,
+    path: impl Into<lumit_media::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
+    let path: lumit_media::MediaSource = path.into();
     let LayerKind::Footage { item } = layer.kind else {
         return None;
     };
@@ -2080,10 +2086,11 @@ pub fn planar_points(fx: &EffectInstance, follow: u32) -> PointRegions {
 #[must_use]
 pub fn planar_job_for(
     layer: &Layer,
-    path: PathBuf,
+    path: impl Into<lumit_media::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
+    let path: lumit_media::MediaSource = path.into();
     let LayerKind::Footage { .. } = layer.kind else {
         return None;
     };
@@ -2171,10 +2178,11 @@ pub fn track_points_effects(layer: &Layer) -> impl Iterator<Item = &EffectInstan
 pub fn points_job_for(
     layer: &Layer,
     fx: &EffectInstance,
-    path: PathBuf,
+    path: impl Into<lumit_media::MediaSource>,
     fingerprint: &Fingerprint,
     analyse: bool,
 ) -> Option<Job> {
+    let path: lumit_media::MediaSource = path.into();
     let analysis = Analysis::of(fx, layer)?;
     Some(Job {
         media: fx.id,
@@ -2262,7 +2270,7 @@ impl MediaLuma {
     /// Open `path` for tracking. Costs a frame-index build the first time the
     /// file is seen, which is why this is called on the analysis thread.
     #[must_use]
-    pub fn open(path: &Path) -> Option<Self> {
+    pub fn open(path: &lumit_media::MediaSource) -> Option<Self> {
         let video = lumit_media::probe::probe(path).ok()?.video?;
         let index = crate::media_index::load_or_build_index(path).ok()?;
         let frames = index.frame_count();
@@ -2844,6 +2852,7 @@ mod tests {
                 extra: serde_json::Map::new(),
                 colour_space: None,
                 source_layer: None,
+                interpretation: Default::default(),
             }));
         doc.items.push(ProjectItem::Composition(comp.clone()));
         (doc, comp)

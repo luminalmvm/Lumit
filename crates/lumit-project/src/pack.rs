@@ -1073,6 +1073,7 @@ mod tests {
                 extra: serde_json::Map::new(),
             },
             source_layer: None,
+            interpretation: Default::default(),
         }));
         (doc, id, file)
     }

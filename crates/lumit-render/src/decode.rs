@@ -435,7 +435,7 @@ pub struct DecodePool {
     /// file for nearly all of its life, but not all: it is relinked, or a
     /// stand-in for it gives way to the original. One entry an item, and an
     /// entry is replaced when its item's file is.
-    sources: HashMap<Uuid, std::path::PathBuf>,
+    sources: HashMap<Uuid, lumit_media::MediaSource>,
     frame_cache: lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     /// Flow backend, created on the first Flow-policy frame. Uses [`Self::gpu`]
     /// — the renderer's own device — when the pool was given one, so flow runs
@@ -669,22 +669,22 @@ impl DecodePool {
         self.frame_cache.clear();
     }
 
-    /// Note the file `item` is about to be decoded from. When it is not the
-    /// one it was decoded from before, the decoder open on the old file goes,
-    /// and every decoded frame with it: they are filed by item and frame, so
-    /// the old file's would be handed back as the new one's.
+    /// Note the file `item` is about to be decoded from, and how it is read.
+    /// When either is not what it was before, the decoder open on the old one
+    /// goes, and every decoded frame with it: they are filed by item and
+    /// frame, so the old reading's would be handed back as the new one's.
     fn settle(&mut self, item: Uuid, source: &lumit_media::MediaSource, slate: bool) {
         if slate {
             return;
         }
         match self.sources.get(&item) {
-            Some(known) if *known == source.path => {}
+            Some(known) if known == source => {}
             known => {
                 if known.is_some() {
                     self.decoders.close(item);
                     self.clear();
                 }
-                self.sources.insert(item, source.path.clone());
+                self.sources.insert(item, source.clone());
             }
         }
     }
@@ -712,13 +712,25 @@ impl DecodePool {
     /// File a frame decoded elsewhere (the decode-ahead thread) into the
     /// decoded-frame cache, under the same key a decode here would use — the
     /// hand-off that makes a prefetched render decode nothing.
+    ///
+    /// A frame read from anything but the source the item is known by here is
+    /// let go: it was asked for before a relink, an undo or someone else's
+    /// edit changed what the item reads, and its pixels are the old reading's.
     pub fn preload(
         &mut self,
         item: Uuid,
+        source: &lumit_media::MediaSource,
         frame: usize,
         target_width: Option<u32>,
         decoded: lumit_media::DecodedFrame,
     ) {
+        match self.sources.get(&item) {
+            Some(known) if known != source => return,
+            Some(_) => {}
+            None => {
+                self.sources.insert(item, source.clone());
+            }
+        }
         self.frame_cache.insert(
             (item, frame, target_width, None),
             CachedFrame {
@@ -1837,8 +1849,9 @@ mod tests {
         pool.refuse_substitution();
         // Both ends of the pair handed over rather than decoded, so the test
         // needs no media and the file in the job never has to exist.
-        pool.preload(item, 0, None, frame(10));
-        pool.preload(item, 1, None, frame(200));
+        let read = lumit_media::MediaSource::file("clip.mov");
+        pool.preload(item, &read, 0, None, frame(10));
+        pool.preload(item, &read, 1, None, frame(200));
         let Err(why) = pool.decode_comp(Uuid::now_v7(), 0, &[job()], 0, &|_| {}) else {
             panic!("an export never writes the substitution");
         };

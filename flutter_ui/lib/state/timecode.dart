@@ -10,10 +10,23 @@
 /// makes 00:00:29:29 the last frame of a 30-second 29.97 comp rather than an
 /// impossible one. The frames field widens with the rate: 600 fps counts to
 /// :599, so it gets three digits rather than a lying two.
-String timecodeOfRate(int frame, int fpsNum, int fpsDen) {
+///
+/// [dropFrame] writes it the drop-frame way, which skips two numbers a minute
+/// at 29.97 (four at 59.94) except every tenth, with a `;` before the frames.
+/// It is how a camera numbers footage whose own start timecode says so.
+String timecodeOfRate(int frame, int fpsNum, int fpsDen,
+    {bool dropFrame = false}) {
   final den = fpsDen == 0 ? 1 : fpsDen;
   final perSecond = (fpsNum / den).ceil().clamp(1, 1000);
-  final total = frame < 0 ? 0 : frame;
+  var total = frame < 0 ? 0 : frame;
+  final drop = dropFrame ? perSecond ~/ 15 : 0;
+  if (drop > 0) {
+    final tenMinutes = perSecond * 600 - drop * 9;
+    final minute = perSecond * 60 - drop;
+    final rest = total % tenMinutes;
+    total += drop * 9 * (total ~/ tenMinutes) +
+        (rest > drop ? drop * ((rest - drop) ~/ minute) : 0);
+  }
 
   final frames = total % perSecond;
   final seconds = (total ~/ perSecond) % 60;
@@ -22,7 +35,7 @@ String timecodeOfRate(int frame, int fpsNum, int fpsDen) {
 
   final frameDigits = (perSecond - 1).toString().length.clamp(2, 4);
   String two(int v) => v.toString().padLeft(2, '0');
-  return '${two(hours)}:${two(minutes)}:${two(seconds)}:'
+  return '${two(hours)}:${two(minutes)}:${two(seconds)}${drop > 0 ? ';' : ':'}'
       '${frames.toString().padLeft(frameDigits, '0')}';
 }
 

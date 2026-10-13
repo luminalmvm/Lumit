@@ -54,6 +54,7 @@ fn project_with_folder() -> (
         extra: serde_json::Map::new(),
         colour_space: None,
         source_layer: None,
+        interpretation: Default::default(),
     };
     let loose = FootageItem {
         sequence: None,
@@ -68,6 +69,7 @@ fn project_with_folder() -> (
         extra: serde_json::Map::new(),
         colour_space: None,
         source_layer: None,
+        interpretation: Default::default(),
     };
     let folder = Folder {
         id: Uuid::now_v7(),
@@ -234,6 +236,7 @@ fn relinking_one_clip_rewrites_the_prefix_for_every_other_lost_clip() {
         },
         extra: serde_json::Map::new(),
         source_layer: None,
+        interpretation: Default::default(),
     };
     let picked_item = footage("Depth.avi", "Cine1");
     let sibling = footage("World.avi", "Cine5");
@@ -7147,6 +7150,7 @@ fn project_with_footage() -> (ProjectReference, FootageReference, tempfile::Temp
                     extra: serde_json::Map::new(),
                     colour_space: None,
                     source_layer: None,
+                    interpretation: Default::default(),
                 })),
             })
             .expect("seeded");
@@ -10144,4 +10148,47 @@ fn a_composition_brought_from_a_file_is_filed_and_is_one_undo_step() {
     assert_eq!(doc(), after);
     project.undo().expect("undone");
     assert_eq!(doc(), empty);
+}
+
+/// Interpreting footage is one edit the engine then answers by: a clip
+/// conformed to another rate and looped reports that rate and that length,
+/// which is what every layer cut from it is timed against, and one undo puts
+/// the lot back however many settings went in.
+#[test]
+#[cfg(feature = "media")]
+fn interpreting_footage_is_one_undo_step_the_engine_answers_by() {
+    use crate::api::interpret::{interpreted, set_interpretation, BridgeAlphaMode};
+    let dir = tempfile::tempdir().expect("temp dir");
+    let Some(clip) = lumit_media::index::tests_support::fixture(dir.path()) else {
+        return; // no ffmpeg on this machine
+    };
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let footage = project
+        .import_footage(clip.to_string_lossy().into_owned())
+        .expect("imported");
+
+    // Two seconds at 60 fps, as the file says.
+    let reading = footage.interpretation().expect("read");
+    let file = &reading.file;
+    assert_eq!((file.fps_num, file.fps_den, file.frames), (60, 1, 120));
+
+    let mut to = reading.now.clone();
+    to.fps_num = 24;
+    to.loops = 2;
+    to.alpha = BridgeAlphaMode::Ignore;
+    to.colour_space = Some("ACEScg".into());
+    // What the window shows for a draft is what the engine goes on to say.
+    let made = interpreted(reading.file.clone(), to.clone());
+    assert_eq!((made.fps_num, made.fps_den, made.frames), (24, 1, 240));
+
+    set_interpretation(vec![footage.clone()], to.clone()).expect("set");
+    let info = footage.media_info().expect("info").expect("it probes");
+    assert_eq!((info.fps_num, info.fps_den), (24, 1));
+    assert_eq!(info.duration.num / info.duration.den, 10);
+    assert_eq!(footage.interpretation().expect("read").now, to);
+
+    project.undo().expect("undone");
+    assert_eq!(footage.interpretation().expect("read").now, reading.now);
+    let info = footage.media_info().expect("info").expect("it probes");
+    assert_eq!((info.fps_num, info.fps_den), (60, 1));
 }

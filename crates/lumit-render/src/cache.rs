@@ -169,12 +169,20 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         // A source layer goes in beside it: two layers of one document are two
         // pictures out of the same file. Only for the item's own media, as in
         // the plan, since a proxy has no layers to pick from.
-        let (space, source_layer) = match self.doc.item(item) {
+        let (space, source_layer, read_as) = match self.doc.item(item) {
             Some(lumit_core::model::ProjectItem::Footage(f)) => (
                 f.colour_space.as_deref().unwrap_or(""),
                 f.source_layer.filter(|_| std::ptr::eq(&f.media, media)),
+                // How the file is read changes its frames and its pixels, so
+                // it names them too. Nothing is added while the file is read
+                // as it is, and every name from before this existed stands.
+                if f.interpretation.is_default() {
+                    String::new()
+                } else {
+                    format!("#i{:?}", f.interpretation)
+                },
             ),
-            _ => ("", None),
+            _ => ("", None, String::new()),
         };
         let source_layer = source_layer.map(|n| format!("#l{n}")).unwrap_or_default();
         // Missing media renders the slate (docs/07 §3.3), which is perfectly
@@ -208,7 +216,7 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
         };
         Some((
             format!(
-                "{}#w{}#c{space}{source_layer}",
+                "{}#w{}#c{space}{source_layer}{read_as}",
                 media.absolute_path,
                 target.unwrap_or(0)
             ),
@@ -431,6 +439,7 @@ mod tests {
                 extra: serde_json::Map::new(),
                 colour_space: None,
                 source_layer: None,
+                interpretation: Default::default(),
             }));
         let comp = Composition {
             graph: None,

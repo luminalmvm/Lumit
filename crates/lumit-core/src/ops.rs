@@ -745,6 +745,12 @@ pub enum Op {
         id: Uuid,
         space: Option<String>,
     },
+    /// Change how a footage item's file is read: its alpha, rate, fields,
+    /// pixel shape, loop and colour, all at once (AE: Interpret Footage).
+    SetFootageInterpretation {
+        id: Uuid,
+        interpretation: Box<crate::interpretation::Interpretation>,
+    },
     /// Edit a composition's settings after creation (AE: Composition
     /// Settings). Layers keep their spans; a shorter duration simply clips
     /// what plays.
@@ -909,6 +915,7 @@ impl Op {
                 "Set colour management"
             }
             Op::SetFootageColourSpace { .. } => "Set footage colour space",
+            Op::SetFootageInterpretation { .. } => "Interpret footage",
             Op::SetCompSettings { .. } => "Composition settings",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
@@ -2352,6 +2359,18 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetFootageColourSpace {
                 id: *id,
                 space: previous,
+            })
+        }
+        Op::SetFootageInterpretation { id, interpretation } => {
+            let crate::model::ProjectItem::Footage(f) =
+                doc.item_mut(*id).ok_or(OpError::UnknownItem)?
+            else {
+                return Err(OpError::UnknownItem);
+            };
+            let previous = std::mem::replace(&mut f.interpretation, (**interpretation).clone());
+            Ok(Op::SetFootageInterpretation {
+                id: *id,
+                interpretation: Box::new(previous),
             })
         }
         Op::SetAutoFolder { kind, folder } => {

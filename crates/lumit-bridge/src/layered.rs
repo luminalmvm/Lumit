@@ -572,6 +572,7 @@ fn layer_item(path: &Path, id: Uuid, index: usize, name: &str) -> ProjectItem {
         colour_space: None,
         sequence: None,
         source_layer: u32::try_from(index).ok(),
+        interpretation: Default::default(),
         extra: serde_json::Map::new(),
     })
 }

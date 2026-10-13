@@ -142,6 +142,9 @@ var LumitBridge = (function () {
     var LIGHT_TYPE_NAMES = ["PARALLEL", "SPOT", "POINT", "AMBIENT"];
     var ALPHA_NAMES = ["IGNORE", "STRAIGHT", "PREMULTIPLIED"];
     var FIELD_NAMES = ["OFF", "UPPER_FIELD_FIRST", "LOWER_FIELD_FIRST"];
+    var PULLDOWN_NAMES = ["OFF", "WSSWW", "SSWWW", "SWWWS", "WWWSS", "WWSSW",
+        "WWWSW_24P_ADVANCE", "WWSWW_24P_ADVANCE", "WSWWW_24P_ADVANCE", "SWWWW_24P_ADVANCE",
+        "WWWWS_24P_ADVANCE"];
 
     // Same mapping as audit.jsx, so the two kits describe a property the same way.
     function propType(p) {
@@ -384,6 +387,7 @@ var LumitBridge = (function () {
         node.fps = attempt(function () { return item.frameRate; });
         node.duration = attempt(function () { return item.duration; });
         node.fps_override = attempt(function () { return source.conformFrameRate; });
+        node.pixel_aspect = attempt(function () { return item.pixelAspect; });
         node.native_fps = attempt(function () { return source.nativeFrameRate; });
         node.alpha = enumName(attempt(function () { return source.alphaMode; }), AlphaMode, ALPHA_NAMES);
         node.premul_colour = attempt(function () { return numArray(source.premulColor); });
@@ -391,7 +395,8 @@ var LumitBridge = (function () {
         node.loop = attempt(function () { return source.loop; });
         node.fields = enumName(attempt(function () { return source.fieldSeparationType; }),
             FieldSeparationType, FIELD_NAMES);
-        node.remove_pulldown = attempt(function () { return String(source.removePulldown); });
+        node.remove_pulldown = enumName(attempt(function () { return source.removePulldown; }),
+            PulldownPhase, PULLDOWN_NAMES);
         node.is_still = attempt(function () { return source.isStill; });
         node.is_placeholder = attempt(function () { return source instanceof PlaceholderSource; });
         node.is_missing = attempt(function () { return item.footageMissing; });

@@ -1584,7 +1584,10 @@ class _SourceBarState extends State<_SourceBar>
               action: 'cut.overwrite'),
           const Spacer(),
           Text(
-            timecodeOfRate(view.sourceFrame, facts.fpsNum, facts.fpsDen),
+            // From the footage's own start timecode, where it has one.
+            timecodeOfRate(view.sourceFrame + facts.startFrame.toInt(),
+                facts.fpsNum, facts.fpsDen,
+                dropFrame: facts.startDropFrame),
             style: t.mono.copyWith(
                 fontSize: viewerTimecodeSize, color: t.textSecondary),
           ),

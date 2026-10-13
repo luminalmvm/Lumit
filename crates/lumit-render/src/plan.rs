@@ -199,16 +199,22 @@ fn media_source(
     item: Uuid,
     media: &lumit_core::model::MediaRef,
 ) -> lumit_media::MediaSource {
-    let (sequence_fps, source_layer) = match doc.item(item) {
-        Some(lumit_core::model::ProjectItem::Footage(f)) if std::ptr::eq(&f.media, media) => {
-            (f.sequence_fps(), f.source_layer)
-        }
+    let footage = match doc.item(item) {
+        Some(lumit_core::model::ProjectItem::Footage(f)) => Some(f),
+        _ => None,
+    };
+    let (sequence_fps, source_layer) = match footage {
+        Some(f) if std::ptr::eq(&f.media, media) => (f.sequence_fps(), f.source_layer),
         _ => (None, None),
     };
     lumit_media::MediaSource {
         path: PathBuf::from(&media.absolute_path),
         sequence_fps,
         source_layer,
+        // A proxy is the same frames, so it is read the way its original is.
+        interpret: footage
+            .map(crate::source::interpretation)
+            .unwrap_or_default(),
     }
 }
 
@@ -1316,6 +1322,11 @@ impl CompJob {
         let (num, den) = self.source.sequence_fps.unwrap_or((0, 0));
         h.update(&num.to_le_bytes());
         h.update(&den.to_le_bytes());
+        // And so is a file read another way. Left out while it is read as it
+        // is, so every name from before interpretation existed still stands.
+        if !self.source.interpret.is_plain() {
+            h.update(format!("{:?}", self.source.interpret).as_bytes());
+        }
         h.update(&self.source_frame.to_le_bytes());
         h.update(&self.target_width.unwrap_or(u32::MAX).to_le_bytes());
         h.update(&[u8::from(self.slate)]);
@@ -1592,6 +1603,7 @@ mod tests {
                 extra: serde_json::Map::new(),
                 colour_space: None,
                 source_layer: None,
+                interpretation: Default::default(),
             }));
             // Hidden, as a matte source always is: its picture is the gate, not
             // part of the frame.
@@ -1724,6 +1736,7 @@ mod tests {
             extra: serde_json::Map::new(),
             colour_space: None,
             source_layer: None,
+            interpretation: Default::default(),
         }));
         let inner = comp(vec![layer(LayerKind::Footage { item })]);
         let inner_id = inner.id;
@@ -1846,6 +1859,7 @@ mod tests {
                 extra: serde_json::Map::new(),
                 colour_space: None,
                 source_layer: None,
+                interpretation: Default::default(),
             }));
             item
         };
@@ -2055,6 +2069,7 @@ mod tests {
             extra: serde_json::Map::new(),
             colour_space: None,
             source_layer: None,
+            interpretation: Default::default(),
         }));
         let probes: HashMap<Uuid, crate::SourceProbe> = [(
             item,

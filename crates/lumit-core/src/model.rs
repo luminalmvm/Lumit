@@ -265,6 +265,14 @@ pub struct FootageItem {
     // it. The file's own layer ids are the upgrade.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_layer: Option<u32>,
+    /// How the file is read: its alpha, rate, fields, pixel shape, loop and
+    /// colour (docs/01-GLOSSARY.md: Interpretation). Skipped on save while it
+    /// is the default, which reads the file as it is.
+    #[serde(
+        default,
+        skip_serializing_if = "crate::interpretation::Interpretation::is_default"
+    )]
+    pub interpretation: crate::interpretation::Interpretation,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -4750,6 +4758,7 @@ mod tests {
             colour_space: None,
             extra: serde_json::Map::new(),
             source_layer: None,
+            interpretation: Default::default(),
         }
     }
 

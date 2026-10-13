@@ -661,10 +661,19 @@ pub fn footage_colour_space(doc: &Document, kind: &lumit_core::model::LayerKind)
         return None;
     };
     match doc.item(*item) {
+        Some(lumit_core::model::ProjectItem::Footage(f)) if f.interpretation.preserve_rgb => {
+            Some(PRESERVED.to_string())
+        }
         Some(lumit_core::model::ProjectItem::Footage(f)) => f.colour_space.clone(),
         _ => None,
     }
 }
+
+/// The space a footage item with Preserve RGB on is drawn in: none at all. No
+/// config can name it, so it never meets a real space, and
+/// [`InputTransforms::get`] answers it with no transform, not even the one
+/// untagged footage takes under a config's own working space.
+pub const PRESERVED: &str = "\u{0}preserved";
 
 /// The input transforms one frame's draws may ask for, baked and uploaded.
 ///
@@ -723,6 +732,9 @@ impl InputTransforms {
     /// the config does not have takes the untagged path, as it always did.
     #[must_use]
     pub fn get(&self, space: Option<&str>) -> Option<&lumit_gpu::OcioArtefact> {
+        if space == Some(PRESERVED) {
+            return None;
+        }
         space
             .and_then(|s| self.by_space.get(s))
             .or(self.default.as_ref())

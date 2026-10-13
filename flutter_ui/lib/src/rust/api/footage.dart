@@ -6,6 +6,7 @@
 import '../api.dart';
 import '../frb_generated.dart';
 import 'effect.dart';
+import 'interpret.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
@@ -78,6 +79,13 @@ class BridgeMediaInfo {
   /// a picture that does not move.
   final bool isStill;
 
+  /// The timecode of the first frame, as a frame number at this rate: the
+  /// one the item was given, else the file's own, else nought.
+  final BigInt startFrame;
+
+  /// Whether that timecode is written the drop-frame way.
+  final bool startDropFrame;
+
   const BridgeMediaInfo({
     required this.width,
     required this.height,
@@ -90,6 +98,8 @@ class BridgeMediaInfo {
     required this.sampleRate,
     required this.audioStreams,
     required this.isStill,
+    required this.startFrame,
+    required this.startDropFrame,
   });
 
   @override
@@ -104,7 +114,9 @@ class BridgeMediaInfo {
       channels.hashCode ^
       sampleRate.hashCode ^
       audioStreams.hashCode ^
-      isStill.hashCode;
+      isStill.hashCode ^
+      startFrame.hashCode ^
+      startDropFrame.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -121,7 +133,9 @@ class BridgeMediaInfo {
           channels == other.channels &&
           sampleRate == other.sampleRate &&
           audioStreams == other.audioStreams &&
-          isStill == other.isStill;
+          isStill == other.isStill &&
+          startFrame == other.startFrame &&
+          startDropFrame == other.startDropFrame;
 }
 
 /// The stand-in file attached to one footage item, as the Project panel's row
@@ -267,6 +281,29 @@ class FootageReference {
 
   Future<LumitMediaStatus> getStatus() =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceGetStatus(
+        that: this,
+      );
+
+  /// What this file's alpha looks like it means, from its own frames, or
+  /// `None` when they have no transparency to tell by.
+  Future<BridgeAlphaGuess?> guessAlpha() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceGuessAlpha(
+        that: this,
+      );
+
+  /// The pulldown cadence this file's own frames show, or `None` when none
+  /// stands out.
+  Future<BridgePulldownGuess?> guessPulldown() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceGuessPulldown(
+        that: this,
+      );
+
+  /// How this item is read now, and what its file says of itself.
+  ///
+  /// Not sync: the file's own facts come off the container, which is not
+  /// work for the UI isolate.
+  Future<BridgeFootageReading> interpretation() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceInterpretation(
         that: this,
       );
 

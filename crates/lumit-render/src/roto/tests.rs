@@ -652,6 +652,7 @@ fn a_document(
             extra: serde_json::Map::new(),
             colour_space: None,
             source_layer: None,
+            interpretation: Default::default(),
         }));
         let mut brush =
             lumit_core::fx::instantiate("roto_brush").expect("roto brush is a built-in");

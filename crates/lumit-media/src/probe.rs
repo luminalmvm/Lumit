@@ -55,6 +55,9 @@ pub struct MediaProbe {
     /// `crate::audio::SoundSource` names it by.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub more_audio: Vec<AudioInfo>,
+    /// The file's own start timecode, as it writes it (`01:00:00:00`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timecode: Option<String>,
 }
 
 impl MediaProbe {
@@ -104,6 +107,84 @@ impl MediaProbe {
     }
 }
 
+/// What a file says about how it should be read, for whoever is about to
+/// say otherwise. Every answer is the file's own, before any interpretation.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FileFacts {
+    /// Whether the picture carries an alpha channel at all.
+    pub has_alpha: bool,
+    /// Whether its samples are float, which reads as linear light.
+    pub float: bool,
+    /// The field order the file declares, `Off` when it says progressive or
+    /// nothing.
+    pub fields: crate::Fields,
+    /// The pixel shape the file declares, as a fraction. 1/1 when it says
+    /// square or nothing.
+    pub pixel_aspect: (u32, u32),
+}
+
+/// The `timecode` tag of a container or one of its streams.
+fn timecode_tag(tags: Option<rsmpeg::avutil::AVDictionaryRef>) -> Option<String> {
+    let tags = tags?;
+    let entry = tags.get(c"timecode", None, 0)?;
+    let value = entry.value().to_string_lossy().trim().to_string();
+    (!value.is_empty()).then_some(value)
+}
+
+/// Read [`FileFacts`] off the container. Opens the file and decodes nothing.
+pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
+    // Lumit's own readers hand back a picture with alpha and no more to say.
+    if crate::reads_own(src) {
+        return Ok(FileFacts {
+            has_alpha: true,
+            pixel_aspect: (1, 1),
+            ..FileFacts::default()
+        });
+    }
+    let input = open_input(src)?;
+    let mut out = FileFacts {
+        pixel_aspect: (1, 1),
+        ..FileFacts::default()
+    };
+    let mut seen = false;
+    for stream in input.streams() {
+        let par = stream.codecpar();
+        let picture = par.codec_type == ffi::AVMEDIA_TYPE_VIDEO
+            && stream.disposition & ffi::AV_DISPOSITION_ATTACHED_PIC as i32 == 0;
+        if seen || !picture {
+            continue;
+        }
+        seen = true;
+        out.has_alpha = pix_fmt_flag(par.format, ffi::AV_PIX_FMT_FLAG_ALPHA);
+        out.float = pix_fmt_flag(par.format, ffi::AV_PIX_FMT_FLAG_FLOAT);
+        out.fields = match par.field_order {
+            ffi::AV_FIELD_TT | ffi::AV_FIELD_TB => crate::Fields::Upper,
+            ffi::AV_FIELD_BB | ffi::AV_FIELD_BT => crate::Fields::Lower,
+            _ => crate::Fields::Off,
+        };
+        let shape = [stream.sample_aspect_ratio, par.sample_aspect_ratio]
+            .into_iter()
+            .find(|r| r.num > 0 && r.den > 0);
+        if let Some(r) = shape {
+            out.pixel_aspect = (r.num.unsigned_abs(), r.den.unsigned_abs());
+        }
+    }
+    Ok(out)
+}
+
+/// Whether libav's description of a pixel format carries `flag`.
+pub(crate) fn pix_fmt_flag(format: i32, flag: u32) -> bool {
+    // SAFETY: `av_pix_fmt_desc_get` takes a format value and returns either a
+    // pointer to a static descriptor libav owns for the lifetime of the
+    // process, or null for a value it does not recognise, which the null
+    // check handles. Nothing is allocated and nothing borrowed.
+    #[allow(unsafe_code)]
+    unsafe {
+        let desc = ffi::av_pix_fmt_desc_get(format);
+        !desc.is_null() && ((*desc).flags & u64::from(flag)) != 0
+    }
+}
+
 fn codec_name(id: ffi::AVCodecID) -> String {
     rsmpeg::avcodec::AVCodec::find_decoder(id)
         .map(|c| c.name().to_string_lossy().into_owned())
@@ -125,11 +206,29 @@ pub(crate) fn open_input(src: &MediaSource) -> Result<AVFormatContextInput, Medi
 
 pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
     let src = src.into();
+    let mut probe = probe_file(&src)?;
+    // The picture's numbers are the source's as it is interpreted, the same
+    // frames the index counts and the decoder hands back.
+    let runs = probe.runs_as_video();
+    if let Some(video) = probe.video.as_mut() {
+        let native = (video.fps_num, video.fps_den);
+        // One picture has no rate, fields or loop to read, only a shape.
+        if runs {
+            probe.duration_seconds = src.interpret.duration(probe.duration_seconds, native);
+            (video.fps_num, video.fps_den) = src.interpret.fps(native);
+        }
+        video.width = src.interpret.width(video.width);
+    }
+    Ok(probe)
+}
+
+/// The file's own numbers, before any interpretation.
+fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
     // ffmpeg opens neither half of an Illustrator document.
     if crate::ai::is_ai(src.on_disk()) {
         return crate::ai::probe(src.on_disk());
     }
-    let input = open_input(&src)?;
+    let input = open_input(src)?;
 
     let duration_seconds = if input.duration > 0 {
         input.duration as f64 / f64::from(ffi::AV_TIME_BASE)
@@ -141,7 +240,13 @@ pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
     let mut video = None;
     let mut audio = None;
     let mut more_audio = Vec::new();
+    let mut timecode = timecode_tag(input.metadata());
     for stream in input.streams() {
+        // A timecode track says it on its own stream, a camera file often on
+        // the picture's.
+        if timecode.is_none() {
+            timecode = timecode_tag(stream.metadata());
+        }
         let par = stream.codecpar();
         match par.codec_type {
             t if t == ffi::AVMEDIA_TYPE_VIDEO && video.is_none() => {
@@ -201,6 +306,7 @@ pub fn probe(src: impl Into<MediaSource>) -> Result<MediaProbe, MediaError> {
         video,
         audio,
         more_audio,
+        timecode,
     })
 }
 
@@ -221,6 +327,7 @@ mod tests {
             video,
             audio,
             more_audio: Vec::new(),
+            timecode: None,
         }
     }
 

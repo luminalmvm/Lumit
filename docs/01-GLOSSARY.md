@@ -10,6 +10,7 @@ its entry here first. AE and Vegas names are noted only to help people arriving 
 | **Project** | The whole document, saved as a `.lum` file. One open at a time |
 | **Asset** | Anything in the Project panel: footage, audio, sequences, stills, comps |
 | **Footage item** | An asset pointing at a media file. Lumit never changes the file |
+| **Interpretation** | How a footage item's file is read: its alpha, frame rate, fields, pixel aspect ratio, loop and colour. Kept on the item. The verb is **interpret** |
 | **File layer** | One layer of a layered image file such as a PSD or an Illustrator document, which a footage item can read on its own |
 | **Audio item** | An asset pointing at an audio file |
 | **Audio stream** | One of the sounds a media file carries side by side, such as the game and the microphone of a screen recording. A layer or clip plays the first until it is told others. To **split** gives each a row of its own, to **merge** puts them back on one. Not *audio track* |

@@ -1158,6 +1158,7 @@ mod tests {
             sequence: None,
             extra: serde_json::Map::new(),
             source_layer: None,
+            interpretation: Default::default(),
         }
     }
 

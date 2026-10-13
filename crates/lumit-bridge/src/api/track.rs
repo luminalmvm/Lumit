@@ -20,8 +20,6 @@
 //! comes back as a *reason*, never as a sentence: the words are Dart's, from the
 //! arb, the way an import report's reasons are.
 
-use std::path::PathBuf;
-
 use flutter_rust_bridge::frb;
 use lumit_core::anim::{Animation, Property};
 use lumit_core::fx::{PressFrame, Value};
@@ -538,7 +536,7 @@ fn snapshot(
 pub(crate) fn media_source(
     layer: &LayerReference,
     media: Uuid,
-) -> Result<(PathBuf, Fingerprint), BridgeError> {
+) -> Result<(lumit_render::source::MediaSource, Fingerprint), BridgeError> {
     media_source_in(layer.project_id, media)
 }
 
@@ -547,7 +545,7 @@ pub(crate) fn media_source(
 pub(crate) fn media_source_in(
     project: Uuid,
     media: Uuid,
-) -> Result<(PathBuf, Fingerprint), BridgeError> {
+) -> Result<(lumit_render::source::MediaSource, Fingerprint), BridgeError> {
     let projects = PROJECTS.read().map_err(|_| BridgeError::ReadFailed)?;
     let project = projects
         .get(&project)
@@ -572,7 +570,9 @@ pub(crate) fn media_source_in(
             lumit_project::fingerprint_path(&path).map_err(|_| BridgeError::MediaPathUnresolved)?
         }
     };
-    Ok((path, fingerprint))
+    // The file as the item reads it, so an analysis sees the frames a layer
+    // shows, filed apart from one made of the file read another way.
+    Ok(lumit_render::source::analysed(footage, path, &fingerprint))
 }
 
 // ---------------------------------------------------------------------------

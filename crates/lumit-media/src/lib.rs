@@ -13,6 +13,7 @@ pub mod decode;
 pub mod encode;
 pub mod exr;
 pub mod index;
+pub mod interpret;
 pub mod probe;
 pub mod psd;
 pub mod sequence;
@@ -32,7 +33,8 @@ pub use audio::{AudioBuffer, SoundSource};
 pub use decode::{set_hardware_decode, DecodedFrame, LumaFrame, PixelFormat, VideoDecoder};
 pub use encode::Encoder;
 pub use index::{FrameIndex, IndexEntry};
-pub use probe::{AudioInfo, MediaProbe, VideoInfo};
+pub use interpret::{Alpha, Fields, Interpretation, Pulldown};
+pub use probe::{AudioInfo, FileFacts, MediaProbe, VideoInfo};
 pub use sequence::{MediaSource, Run};
 
 #[derive(Debug, thiserror::Error)]
@@ -77,11 +79,21 @@ pub fn read_own(
     target_width: Option<u32>,
 ) -> Option<Result<DecodedFrame, MediaError>> {
     let path = src.on_disk();
-    if ai::is_ai(path) {
-        return Some(ai::read_layer(path, src.source_layer, target_width));
-    }
-    let layer = src.source_layer?;
-    Some(psd::read_layer(path, layer).map(|frame| psd::downsample(frame, target_width)))
+    let frame = if ai::is_ai(path) {
+        ai::read_layer(path, src.source_layer, target_width)
+    } else {
+        let layer = src.source_layer?;
+        psd::read_layer(path, layer).map(|frame| psd::downsample(frame, target_width))
+    };
+    // A still has no fields, cadence or loop to read, only its alpha and the
+    // shape of its pixels.
+    let it = src.interpret;
+    Some(frame.map(|mut frame| {
+        if it.pixel_aspect.is_some() {
+            frame = decode::fit(frame, target_width, it.pixel_aspect);
+        }
+        interpret::finish(frame, &it)
+    }))
 }
 
 impl From<rsmpeg::error::RsmpegError> for MediaError {

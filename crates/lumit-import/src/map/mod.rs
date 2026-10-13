@@ -411,13 +411,15 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
         // and resolution turns it into the run's first file
         // (`lumit_project::resolve_all_media`).
         sequence: (item.is_sequence == Some(true)).then(SequenceRef::default),
-        // Everything AE knew about how to read the file. Lumit has no field
-        // for most of it yet; the `ae` namespace keeps it until it does.
+        // Everything AE knew about how to read the file. What Lumit reads the
+        // same way is in `interpretation` below, and the `ae` namespace keeps
+        // the lot as it arrived.
         extra: ae_map(vec![
             ("id", serde_json::json!(item.id)),
             ("fps", serde_json::json!(item.fps)),
             ("native_fps", serde_json::json!(item.native_fps)),
             ("fps_override", serde_json::json!(item.fps_override)),
+            ("pixel_aspect", serde_json::json!(item.pixel_aspect)),
             ("duration", serde_json::json!(item.duration)),
             ("alpha", serde_json::json!(item.alpha)),
             ("premul_colour", serde_json::json!(item.premul_colour)),
@@ -435,6 +437,88 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
         ]),
         colour_space: None,
         source_layer: None,
+        interpretation: interpretation(item),
+    }
+}
+
+/// How After Effects was told to read the file (its Interpret Footage
+/// window), so the footage plays here as it did there: a clip conformed to
+/// another rate keeps that rate, and with it the length every layer cut from
+/// it was timed against.
+fn interpretation(item: &Item) -> lumit_core::interpretation::Interpretation {
+    use lumit_core::interpretation::{AlphaMode, FieldOrder, Interpretation, Pulldown};
+    let byte = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let fields = match item.fields.as_deref() {
+        Some("UPPER_FIELD_FIRST") => FieldOrder::Upper,
+        Some("LOWER_FIELD_FIRST") => FieldOrder::Lower,
+        _ => FieldOrder::Off,
+    };
+    // After Effects names a cadence by its five letters, with the advanced
+    // ones carrying `_24P_ADVANCE` after them. Its scripting also spells a
+    // split frame R, which is the same frame.
+    let cadence = item.remove_pulldown.as_deref().unwrap_or_default();
+    let letters: String = cadence
+        .chars()
+        .take(5)
+        .map(|c| if c == 'R' { 'S' } else { c })
+        .collect();
+    let phase = |names: [&str; 5]| names.iter().position(|n| *n == letters).map(|at| at as u8);
+    Interpretation {
+        alpha: match item.alpha.as_deref() {
+            Some("IGNORE") => AlphaMode::Ignore,
+            Some("PREMULTIPLIED") => {
+                let colour = item.premul_colour.as_deref().unwrap_or_default();
+                let channel = |c: usize| byte(colour.get(c).copied().unwrap_or(0.0));
+                AlphaMode::Premultiplied {
+                    matte: [channel(0), channel(1), channel(2)],
+                }
+            }
+            _ => AlphaMode::Straight,
+        },
+        invert_alpha: item.invert_alpha == Some(true),
+        // Nought is After Effects for "no override", and an override to the
+        // file's own rate changes nothing. A run of stills keeps its rate on
+        // the run.
+        frame_rate: item
+            .fps_override
+            .filter(|fps| *fps > 0.0 && item.is_sequence != Some(true))
+            .filter(|fps| item.native_fps.is_none_or(|own| (own - fps).abs() > 1e-4))
+            .and_then(time::frame_rate_of),
+        fields,
+        pulldown: match fields {
+            FieldOrder::Off => Pulldown::Off,
+            _ if cadence.ends_with("_24P_ADVANCE") => {
+                phase(["WWSWW", "WSWWW", "SWWWW", "WWWWS", "WWWSW"])
+                    .map_or(Pulldown::Off, |phase| Pulldown::Advanced { phase })
+            }
+            _ => phase(["WWSSW", "WSSWW", "SSWWW", "SWWWS", "WWWSS"])
+                .map_or(Pulldown::Off, |phase| Pulldown::ThreeTwo { phase }),
+        },
+        // After Effects reports a shape to four places. The ones it names are
+        // exact fractions, and anything else is kept to those four places.
+        pixel_aspect: item
+            .pixel_aspect
+            .filter(|par| par.is_finite() && *par > 0.0 && (par - 1.0).abs() > 1e-3)
+            .map(|par| {
+                const NAMED: [(u32, u32); 7] = [
+                    (10, 11),
+                    (40, 33),
+                    (59, 54),
+                    (118, 81),
+                    (4, 3),
+                    (3, 2),
+                    (2, 1),
+                ];
+                NAMED
+                    .into_iter()
+                    .find(|(n, d)| (f64::from(*n) / f64::from(*d) - par).abs() < 1e-3)
+                    .unwrap_or(((par * 10_000.0).round() as u32, 10_000))
+            }),
+        loops: match item.loop_count.unwrap_or(1).clamp(1, 9999) {
+            1 => 0,
+            n => n as u32,
+        },
+        ..Interpretation::default()
     }
 }
 

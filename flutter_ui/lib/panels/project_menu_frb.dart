@@ -17,6 +17,7 @@ import 'package:provider/provider.dart';
 import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
+import '../shell/interpret_footage_frb.dart';
 import '../shell/status_line_frb.dart';
 import '../state/file_dialogs.dart';
 import '../theme/theme.dart';
@@ -26,6 +27,9 @@ import 'project_columns_frb.dart';
 enum _ProjectMenuAction {
   newNodeGraph,
   compSettings,
+  interpret,
+  rememberInterpretation,
+  applyInterpretation,
   rename,
   relink,
   reveal,
@@ -197,6 +201,26 @@ Future<void> showProjectMenuFrb({
               onPressed: () => close(_ProjectMenuAction.reveal),
               child: Text(l10n.projectShowInFolder),
             ),
+          // How the file is read. Remember takes this row's reading and
+          // Apply gives the last one remembered to everything picked.
+          if (isFootage && !missing) ...[
+            MenuRow(
+              key: const ValueKey('project-menu-interpret'),
+              onPressed: () => close(_ProjectMenuAction.interpret),
+              child: Text(l10n.interpretFootageEllipsis),
+            ),
+            MenuRow(
+              key: const ValueKey('project-menu-remember-interpretation'),
+              onPressed: () => close(_ProjectMenuAction.rememberInterpretation),
+              child: Text(l10n.rememberInterpretation),
+            ),
+            if (rememberedInterpretation != null)
+              MenuRow(
+                key: const ValueKey('project-menu-apply-interpretation'),
+                onPressed: () => close(_ProjectMenuAction.applyInterpretation),
+                child: Text(l10n.applyInterpretation),
+              ),
+          ],
           // **The rate of a run of stills** (docs/07 §3.1). Stills carry no
           // rate of their own, so an imported run plays at 25 until this
           // field says otherwise, and it is the one part of a sequence the
@@ -543,6 +567,30 @@ Future<void> showProjectMenuFrb({
           onLocalEdit();
         }
       }
+    case _ProjectMenuAction.interpret:
+      final picked = [
+        for (final target in targets ?? [item])
+          if (target case ItemReference_Footage(:final field0)) field0,
+      ];
+      final applied = await showInterpretFootageFrb(
+        context: context,
+        items: picked,
+        subject: picked.length == 1
+            ? item.name()
+            : l10n.interpretSeveral(picked.length),
+        spaces: colourSpaces,
+      );
+      if (applied) onLocalEdit();
+    case _ProjectMenuAction.rememberInterpretation:
+      if (item case ItemReference_Footage(:final field0)) {
+        await rememberInterpretation(field0);
+      }
+    case _ProjectMenuAction.applyInterpretation:
+      applyRememberedInterpretation([
+        for (final target in targets ?? [item])
+          if (target case ItemReference_Footage(:final field0)) field0,
+      ]);
+      onLocalEdit();
     case _ProjectMenuAction.rename:
       onStartRename?.call();
     case _ProjectMenuAction.relink:

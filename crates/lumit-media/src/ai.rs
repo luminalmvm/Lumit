@@ -139,6 +139,7 @@ pub fn probe(path: &Path) -> Result<MediaProbe, MediaError> {
         }),
         audio: None,
         more_audio: Vec::new(),
+        timecode: None,
     })
 }
 

@@ -24,6 +24,7 @@ pub mod folder;
 pub mod footage;
 pub mod graph;
 pub mod import;
+pub mod interpret;
 pub mod keymap;
 pub mod layer;
 pub mod planes;
