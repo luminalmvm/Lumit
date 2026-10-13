@@ -772,11 +772,10 @@ class LumitUiState extends ChangeNotifier {
     await updates.check();
   }
 
-  /// On a nightly build, show the icon the user chose for it.
-  Future<void> applyAppIcon() async {
-    if (!updates.runningNightly) return;
-    await showRegularAppIcon(!workspace.nightlyIcon);
-  }
+  /// Show the icon the user chose for a nightly build. Any other build has
+  /// only its own, and is told to show that.
+  Future<void> applyAppIcon() =>
+      showRegularAppIcon(updates.runningNightly && !workspace.nightlyIcon);
 
   /// Bumped when `Ctrl+Shift+P` asks for the command palette.
   ///

@@ -48,6 +48,7 @@ import '../state/tools.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
+import 'window_frame.dart';
 
 /// How tall the strip is, and how wide and tall one tool button is.
 ///
@@ -223,14 +224,18 @@ class LumitTopLineToolsFrb extends StatelessWidget {
             children: [
               // The options stand right-aligned beside the workspaces, so
               // the two groups read as one block at the line's end.
+              // What the options leave empty moves the window, where this
+              // line is the window's top (window_frame.dart).
               if (options != null) ...[
                 _gap(pills),
                 Expanded(
-                  child:
-                      Align(alignment: Alignment.centerRight, child: options),
+                  child: Stack(children: [
+                    const Positioned.fill(child: WindowDragArea()),
+                    Align(alignment: Alignment.centerRight, child: options),
+                  ]),
                 ),
               ] else
-                const Spacer(),
+                const Expanded(child: WindowDragArea()),
               _gap(pills),
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: c.maxWidth - 22),

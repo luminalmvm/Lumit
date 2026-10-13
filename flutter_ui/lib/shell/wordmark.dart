@@ -74,3 +74,20 @@ class LumitWordmark extends StatelessWidget {
         semanticsLabel: 'Lumit',
       );
 }
+
+/// The mark by itself, the two keys meeting at their core, for where there is
+/// no room for the word. The site's own file as well, `lumit-mark.svg`, and
+/// like the keys of the wordmark it never changes colour.
+class LumitMark extends StatelessWidget {
+  final double size;
+
+  const LumitMark({super.key, required this.size});
+
+  @override
+  Widget build(BuildContext context) => SvgPicture.asset(
+        'assets/brand/lumit-mark.svg',
+        width: size,
+        height: size,
+        semanticsLabel: 'Lumit',
+      );
+}

@@ -1,9 +1,6 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
-#ifdef GDK_WINDOWING_X11
-#include <gdk/gdkx.h>
-#endif
 
 #include "extension_views.h"
 #include "flutter/generated_plugin_registrant.h"
@@ -37,38 +34,77 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_window_maximize(GTK_WINDOW(window));
 }
 
+// Hand the window to the window manager to be moved, as a press on a title bar
+// would.
+static void start_window_move(FlView* view, GtkWindow* window) {
+  GdkDevice* pointer = gdk_seat_get_pointer(gdk_display_get_default_seat(
+      gtk_widget_get_display(GTK_WIDGET(window))));
+  gint x = 0, y = 0;
+  gdk_device_get_position(pointer, nullptr, &x, &y);
+  gtk_window_begin_move_drag(window, GDK_BUTTON_PRIMARY, x, y,
+                             GDK_CURRENT_TIME);
+
+  // The window manager keeps the pointer until the button comes up, so the
+  // release never reaches Flutter. It would go on believing the button is
+  // down and take the next click for the end of this drag, so it is told now.
+  // The view listens for the mouse on an event box of its own.
+  g_autoptr(GList) children = gtk_container_get_children(GTK_CONTAINER(view));
+  for (GList* child = children; child != nullptr; child = child->next) {
+    if (!GTK_IS_EVENT_BOX(child->data)) {
+      continue;
+    }
+    GdkEvent* release = gdk_event_new(GDK_BUTTON_RELEASE);
+    release->button.button = GDK_BUTTON_PRIMARY;
+    gdk_event_set_device(release, pointer);
+    gboolean handled = FALSE;
+    g_signal_emit_by_name(child->data, "button-release-event", release,
+                          &handled);
+    gdk_event_free(release);
+  }
+}
+
+// The window has no title bar, so Flutter draws the buttons one would hold
+// and says here what was pressed (lib/shell/window_frame.dart). Every call
+// answers whether the window is maximised, which is all the button's drawing
+// needs to know. The answer goes first, since closing takes the engine with
+// it.
+static void window_method_cb(FlMethodChannel* channel,
+                             FlMethodCall* call,
+                             gpointer user_data) {
+  FlView* view = FL_VIEW(user_data);
+  GtkWindow* window = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+  const gboolean maximised = gtk_window_is_maximized(window);
+  g_autoptr(FlValue) answer = fl_value_new_bool(maximised);
+  fl_method_call_respond_success(call, answer, nullptr);
+
+  const gchar* method = fl_method_call_get_name(call);
+  if (g_strcmp0(method, "drag") == 0) {
+    start_window_move(view, window);
+  } else if (g_strcmp0(method, "minimise") == 0) {
+    gtk_window_iconify(window);
+  } else if (g_strcmp0(method, "maximise") == 0) {
+    if (maximised) {
+      gtk_window_unmaximize(window);
+    } else {
+      gtk_window_maximize(window);
+    }
+  } else if (g_strcmp0(method, "close") == 0) {
+    gtk_window_close(window);
+  }
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // Use a header bar when running in GNOME as this is the common style used
-  // by applications and is the setup most users will be using (e.g. Ubuntu
-  // desktop).
-  // If running on X and not using GNOME then just use a traditional title bar
-  // in case the window manager does more exotic layout, e.g. tiling.
-  // If running on Wayland assume the header bar will work (may need changing
-  // if future cases occur).
-  gboolean use_header_bar = FALSE;
-#ifdef GDK_WINDOWING_X11
-  GdkScreen* screen = gtk_window_get_screen(window);
-  if (GDK_IS_X11_SCREEN(screen)) {
-    const gchar* wm_name = gdk_x11_screen_get_window_manager_name(screen);
-    if (g_strcmp0(wm_name, "GNOME Shell") != 0) {
-      use_header_bar = FALSE;
-    }
-  }
-#endif
-  if (use_header_bar) {
-    GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
-    gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "lumit_flutter");
-    gtk_header_bar_set_show_close_button(header_bar, TRUE);
-    gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
-  } else {
-    gtk_window_set_title(window, "lumit_flutter");
-  }
+  // No title bar. Lumit's menu bar is the window's top line and carries the
+  // window's buttons (lib/shell/window_frame.dart). A header bar that is never
+  // shown is how GTK is told so: the window still gets the frame GTK draws for
+  // itself, with its shadow and its resize edges, and nothing along the top.
+  gtk_window_set_titlebar(window, gtk_header_bar_new());
+  gtk_window_set_title(window, "lumit_flutter");
 
   gtk_window_set_default_size(window, 1280, 720);
 
@@ -137,6 +173,14 @@ static void my_application_activate(GApplication* application) {
                                  fl_engine_get_texture_registrar(engine));
   extension_views_register(fl_engine_get_binary_messenger(engine),
                            GTK_OVERLAY(overlay), view);
+
+  // Lives as long as the window, which is as long as the application.
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  FlMethodChannel* window_channel =
+      fl_method_channel_new(fl_engine_get_binary_messenger(engine),
+                            "lumit/window", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(window_channel, window_method_cb,
+                                            view, nullptr);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

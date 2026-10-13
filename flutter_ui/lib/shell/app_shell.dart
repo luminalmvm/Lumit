@@ -35,6 +35,7 @@ import 'package:lumit_flutter/shell/tour_frb.dart';
 import 'package:lumit_flutter/shell/unsaved_changes_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart';
 import 'package:lumit_flutter/shell/window_drop_frb.dart';
+import 'package:lumit_flutter/shell/window_frame.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart'
     show CompositionReference;
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
@@ -119,10 +120,15 @@ class LumitAppNew extends StatelessWidget {
                   // together (see widgets/ui_scale.dart).
                   child: UiScaleView(
                     scale: uiState.workspace.interface.uiScale,
-                    child: Overlay(initialEntries: [
-                      OverlayEntry(
-                          builder: (context) => BootGate(welcome: welcome))
-                    ]),
+                    // Over the Overlay, so a dialogue's scrim never covers
+                    // the way to close or minimise the window.
+                    child: WindowFrame(
+                      theme: uiState.theme,
+                      child: Overlay(initialEntries: [
+                        OverlayEntry(
+                            builder: (context) => BootGate(welcome: welcome))
+                      ]),
+                    ),
                   ),
                 ),
               ),
@@ -245,27 +251,34 @@ class _BootGateState extends State<BootGate> {
   }
 
   Widget _window() {
+    final theme = ThemeScope.of(context).theme;
     if (_booting) {
-      return SplashOverlay(
-        lines: _lines,
-        onDone: () {
-          if (!mounted) return;
-          setState(() {
-            _booting = false;
-            _handovers++;
-          });
-        },
+      return WindowDragStrip(
+        theme: theme,
+        child: SplashOverlay(
+          lines: _lines,
+          onDone: () {
+            if (!mounted) return;
+            setState(() {
+              _booting = false;
+              _handovers++;
+            });
+          },
+        ),
       );
     }
     if (_welcoming) {
-      return WelcomeScreenFrb(
-        onDone: () {
-          if (!mounted) return;
-          setState(() {
-            _welcoming = false;
-            _handovers++;
-          });
-        },
+      return WindowDragStrip(
+        theme: theme,
+        child: WelcomeScreenFrb(
+          onDone: () {
+            if (!mounted) return;
+            setState(() {
+              _welcoming = false;
+              _handovers++;
+            });
+          },
+        ),
       );
     }
     return const LumitAppView();
@@ -327,9 +340,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The update check follows the questions rather than racing them:
         // the setup screen is where somebody may have just switched it off.
         ui.maybeCheckForUpdates();
-        // Only when the regular icon was asked for: the build's own icon is
-        // already up, and the common launch should not ask what it is running.
-        if (!ui.workspace.nightlyIcon) ui.applyAppIcon();
+        // Every launch, whichever icon was asked for: Windows keeps the
+        // picture a pinned shortcut had before an update changed the icon,
+        // until it is told to look again.
+        ui.applyAppIcon();
         // And the tour follows them too, in the look just chosen. Like the
         // questions it opens by itself once.
         if (!mounted) return;
