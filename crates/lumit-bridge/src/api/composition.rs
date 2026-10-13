@@ -2509,6 +2509,11 @@ impl CompositionReference {
     /// `speed` is how many times the comp's rate the leg runs at, 1 for
     /// ordinary playback and 2, 4 or 8 for the J and L shuttle. A faster leg
     /// keeps time by skipping frames, in either direction, and is silent.
+    ///
+    /// `until` is the frame the leg ends on, the end of the work area going
+    /// forwards and its start going back. Nothing past it is composited.
+    /// `None` runs to the end of the composition.
+    #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn play(
         &self,
@@ -2518,6 +2523,7 @@ impl CompositionReference {
         view: u32,
         reverse: bool,
         speed: u32,
+        until: Option<u64>,
     ) -> Result<(), BridgeError> {
         // ponytail: sound plays forwards at the comp's rate only. Pitch-shifted
         // or reversed sound is out of scope: it needs a resampling mix, and
@@ -2557,6 +2563,7 @@ impl CompositionReference {
                 scale,
                 reverse,
                 speed,
+                until,
                 audio,
                 view,
             },
