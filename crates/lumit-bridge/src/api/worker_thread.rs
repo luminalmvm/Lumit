@@ -1832,9 +1832,8 @@ struct Playback {
     /// as no mix is loaded to be master instead.
     from: u64,
     started: std::time::Instant,
-    /// When the last frame was shown — the gap between presents is what the
-    /// audio chase judges the picture's rate by. `None` before the first
-    /// present of a run.
+    /// When the last frame was shown, which the end of a leg waits a frame
+    /// from. `None` before the first present of a run.
     last_presented: Option<std::time::Instant>,
     /// When the next every-frame present falls due — a GRID, stepped by one
     /// comp period per present ([`crate::playback::next_present_due`]), so
@@ -1867,8 +1866,8 @@ struct Playback {
     /// picture that has fallen out of time with it, and this is what
     /// remembers to start it again — see [`chase_audio`].
     audio_held_for_picture: bool,
-    /// How many pictures in a row have gone out at the composition's rate, this
-    /// one included. Reset by one late picture. The sound needs
+    /// How many pictures in a row have gone out when they were due, this one
+    /// included. Reset by one late picture. The sound needs
     /// [`AUDIO_REALTIME_FRAMES`] of these before it starts again.
     on_time_run: u32,
     /// Until when the audio clock is not to be believed, because the sound
@@ -1999,6 +1998,15 @@ impl Playback {
     /// quickly must not sit in silence waiting: at 150 ms the sound starts
     /// regardless and the picture does what it can.
     fn pre_roll_done(&self, queued: usize) -> bool {
+        // Every-frame shows its first picture as soon as there is one, so
+        // that is when its sound starts. Waiting for more made the sound
+        // start behind a picture already running, and it stayed behind.
+        if matches!(self.mode, BridgePlaybackMode::EveryFrame) {
+            return queued >= 1
+                && self
+                    .next_present_due
+                    .is_none_or(|due| std::time::Instant::now() >= due);
+        }
         queued >= PRE_ROLL_FRAMES.min(self.capacity()).max(1)
             || self.started.elapsed() >= PRE_ROLL_BUDGET
     }
@@ -2209,57 +2217,58 @@ fn clock_seconds() -> Option<f64> {
     None
 }
 
-/// Stop the sound the moment the picture is not running at the composition's
-/// rate, and start it again — level with the picture — once the picture has held
-/// that rate for a while. Every-frame playback's half of A/V sync.
+/// Keep the sound level with the picture, in every-frame playback.
 ///
-/// # What is measured, and why it is not the clock
+/// Every-frame shows every frame and never runs faster than the composition,
+/// so a picture that falls behind stays behind, and the sound has to be the
+/// one that gives way. It is stopped once it is further in front of the
+/// picture than [`sync_slack`], and started again, at the frame on screen,
+/// once [`AUDIO_REALTIME_FRAMES`] pictures in a row have gone out on time.
+/// Nothing can be done while a frame is still being made, so a long one is
+/// heard over until its picture goes out.
 ///
-/// The gap between one picture going out and the next **is** the rate the user
-/// is watching. Nothing says as directly whether the sound can run beside it,
-/// and two earlier rules that measured something else both failed:
+/// # What is measured
 ///
-/// * *How far the sound is in front of the picture.* It leaves the sound running
-///   for half a second over a picture that has already stopped keeping time.
-/// * *How many finished frames are waiting.* Frames are usually waiting at the
-///   moment a picture goes out, even when the run as a whole is far slower than
-///   the composition's rate. The sound therefore started again on the very next
-///   picture, stopped, started, and to the ear never stopped at all — it
-///   stuttered instead.
+/// How far the sound is in front of the picture, read off the audio clock.
+/// That is the fault itself. The rule before this one measured the gap
+/// between two pictures instead and stopped the sound over a single late
+/// one. A picture ten milliseconds late is a thing the next one makes up,
+/// since the pictures are due on a grid, and it cost a third of a second of
+/// silence each time. On a span played from the cache that was most of the
+/// silence anybody heard. The same rule never stopped the sound over a
+/// picture running a tenth slow, where every gap is inside the allowance and
+/// the sound walks away from the picture for as long as it plays.
 ///
-/// # The two answers are unalike on purpose
+/// # Starting again
 ///
-/// One late picture stops the sound at once, because sound over a picture that
-/// is not keeping time is the fault being repaired. Starting it again takes
-/// [`AUDIO_REALTIME_FRAMES`] pictures in a row on time, because one picture that
-/// happens to land on time says nothing about the next. Stop on the evidence of
-/// one; start on the evidence of many.
+/// Counted in pictures that went out when they were due, not in how far
+/// apart they were. A picture running slow is late by a little more each
+/// time, so it never makes the count, and the sound stays off until the
+/// picture holds the rate. Starting on less than that made the sound stutter.
 ///
-/// When it does start it starts **at the picture**: the sound is moved to the
-/// frame on screen first. The sound stops in front of the picture, thus starting
-/// it where it stopped would play a moment the picture has not reached — and
-/// after a long stall that moment can be past the end of the composition.
+/// `late` is how long after it was due this picture went out, `None` for the
+/// first of a run.
 #[frb(ignore)]
-fn chase_audio(playback: &mut Playback, frame: u64, since_present: Option<std::time::Duration>) {
-    if held_clock_seconds().is_none() {
-        // No mix at all: nothing to stop and nothing to start.
-        playback.audio_held_for_picture = false;
-        playback.on_time_run = 0;
-        return;
-    }
+fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Duration>) {
     let fps = playback.fps.max(1.0);
     let period = std::time::Duration::from_secs_f64(1.0 / fps);
-    // The first picture of a run has nothing to be measured against, thus it
-    // counts as on time rather than as evidence of a slow one.
-    let on_time = since_present.is_none_or(|gap| gap <= on_time_limit(period));
+    let on_time = late.is_none_or(|late| late <= on_time_slack(period));
     playback.on_time_run = if on_time {
         playback.on_time_run.saturating_add(1)
     } else {
         0
     };
+    // A seek is a message to the audio thread. Until it has landed the clock
+    // still reads where the sound was, which is not a thing to act on.
+    let settling = playback
+        .audio_settles
+        .is_some_and(|at| std::time::Instant::now() < at);
+    let lead = sound_lead(frame, fps).filter(|_| !settling);
+    let slack = sync_slack(period).as_secs_f64();
     match audio_chase(
         playback.audio_held_for_picture,
-        on_time,
+        lead,
+        slack,
         playback.on_time_run,
     ) {
         AudioChase::Hold => {
@@ -2270,19 +2279,34 @@ fn chase_audio(playback: &mut Playback, frame: u64, since_present: Option<std::t
             playback.audio_held_for_picture = false;
             crate::api::audio::audio_seek(frame as f64 / fps);
             resume_audio();
+            playback.settle_audio();
+        }
+        AudioChase::Catch => {
+            crate::api::audio::audio_seek(frame as f64 / fps);
+            playback.settle_audio();
         }
         AudioChase::Leave => {}
     }
+}
+
+/// How far the sound is in front of the picture showing `frame`, in seconds,
+/// and behind it when negative. `None` when no sound is running.
+#[frb(ignore)]
+fn sound_lead(frame: u64, fps: f64) -> Option<f64> {
+    clock_seconds().map(|sound| sound - frame as f64 / fps)
 }
 
 /// What to do with the sound this frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[frb(ignore)]
 enum AudioChase {
-    /// Stop it: the picture is not keeping the composition's rate.
+    /// Stop it: it has got in front of the picture.
     Hold,
-    /// Start it, at the frame on screen: the picture has held that rate.
+    /// Start it, at the frame on screen: the picture has held the rate.
     Start,
+    /// Move it up to the frame on screen without stopping it: it is behind,
+    /// as a mix that finished loading after the picture started is.
+    Catch,
     /// Neither.
     Leave,
 }
@@ -2290,52 +2314,53 @@ enum AudioChase {
 /// The rule [`chase_audio`] applies, with no sound device in it so the rule can
 /// be tested on its own.
 ///
-/// `on_time` is whether this picture came at the composition's rate. `run` is
-/// how many have come at that rate without a break, this one included.
+/// `held` is whether the sound is stopped for the picture's sake. `lead` is how
+/// far the running sound is in front of the picture, in seconds, and `slack`
+/// how far it may be. `run` is how many pictures have gone out on time without
+/// a break, this one included.
 #[frb(ignore)]
-fn audio_chase(held: bool, on_time: bool, run: u32) -> AudioChase {
-    if !on_time {
-        // One late picture is enough to stop it.
-        return if held {
-            AudioChase::Leave
+fn audio_chase(held: bool, lead: Option<f64>, slack: f64, run: u32) -> AudioChase {
+    if held {
+        return if run >= AUDIO_REALTIME_FRAMES {
+            AudioChase::Start
         } else {
-            AudioChase::Hold
+            AudioChase::Leave
         };
     }
-    if held && run >= AUDIO_REALTIME_FRAMES {
-        AudioChase::Start
-    } else {
-        AudioChase::Leave
+    match lead {
+        Some(lead) if lead > slack => AudioChase::Hold,
+        Some(lead) if lead < -slack => AudioChase::Catch,
+        _ => AudioChase::Leave,
     }
 }
 
-/// How much later than the composition's frame period a picture may arrive and
-/// still count as on time.
+/// How far the sound may be from the picture before something is done about
+/// it: a frame and a quarter of the composition, and never less than 40 ms.
 ///
-/// A quarter again is past the unevenness of the worker loop and well short of a
-/// rate anybody would call correct: at 24 fps it makes 52 ms the limit, which is
-/// 19 pictures a second. Slower than that and the sound stops.
-const LATE_ENOUGH_TO_STOP: f64 = 1.25;
-
-/// The floor under the quarter-period allowance, and why proportional alone is
-/// wrong: at 120 fps a quarter of the period is two milliseconds, which is
-/// inside the jitter of an ordinary scheduler wake — the sound stopped over
-/// pictures that were holding the rate to the eye. The ear judges A/V slip in
-/// milliseconds, not in frames, so the allowance never shrinks below a fixed
-/// few of them however fast the composition runs.
-const MIN_AUDIO_SLACK: std::time::Duration = std::time::Duration::from_millis(5);
-
-/// The gap between two pictures beyond which the later one counts late:
-/// the comp period plus a quarter of it, floored at [`MIN_AUDIO_SLACK`].
+/// More than a frame, because a picture that went out most of a frame late
+/// has lost nothing: the next one is still due on the grid and makes it up,
+/// and the quarter keeps that case clear of the line. The floor because the
+/// ear judges slip in milliseconds, not in frames, and below about 40 it does
+/// not hear one: at 120 fps a frame is 8 ms, which is inside what an ordinary
+/// scheduler wake costs.
 #[frb(ignore)]
-fn on_time_limit(period: std::time::Duration) -> std::time::Duration {
+fn sync_slack(period: std::time::Duration) -> std::time::Duration {
     period
-        + period
-            .mul_f64(LATE_ENOUGH_TO_STOP - 1.0)
-            .max(MIN_AUDIO_SLACK)
+        .mul_f64(1.25)
+        .max(std::time::Duration::from_millis(40))
 }
 
-/// How many pictures in a row must arrive on time before the sound starts again.
+/// How long after it was due a picture may go out and still count as on time:
+/// a quarter of the frame period, and never less than 5 ms, which a scheduler
+/// wake alone can cost.
+#[frb(ignore)]
+fn on_time_slack(period: std::time::Duration) -> std::time::Duration {
+    period
+        .mul_f64(0.25)
+        .max(std::time::Duration::from_millis(5))
+}
+
+/// How many pictures in a row must go out on time before the sound starts again.
 ///
 /// Eight is a third of a second at 24 fps: enough that one picture landing on
 /// time by chance does not start the sound, short enough that a run which has
@@ -3039,12 +3064,13 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             let Some((frame, prepared)) = playback.ring.drain(..=chosen).last() else {
                 return;
             };
-            // How long since the last picture went out, measured before this
-            // one is stamped: the gap IS the frame rate the user is watching,
-            // and it is what says whether the sound can run alongside.
             let now = std::time::Instant::now();
-            let since_present = playback.last_presented.map(|at| now - at);
             playback.last_presented = Some(now);
+            // How long after it was due this picture is going out. The first
+            // of a run was not due at any time.
+            let late = playback
+                .next_present_due
+                .map(|due| now.saturating_duration_since(due));
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) {
                 // Step the present grid: the next frame is due one comp period
                 // after this one was SCHEDULED, not after it went out, so the
@@ -3065,7 +3091,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // otherwise hold the mix so that eight on-time pictures start
             // the forward mix again under a backward picture.
             if matches!(playback.mode, BridgePlaybackMode::EveryFrame) && !playback.reverse {
-                chase_audio(playback, frame, since_present);
+                chase_audio(playback, frame, late);
             }
             let present_started = std::time::Instant::now();
             present_ring_frame(&mut state.renderer, frame, &prepared, stream, playback.view);
@@ -6282,53 +6308,60 @@ mod bar_strip_tests {
         assert_eq!(bar_byte(false, |_| (false, false)), 0);
     }
 
-    /// **The sound stops the moment the picture stops keeping time, and comes
-    /// back to the picture once the picture has held the rate.**
+    /// **The sound gives way once it is in front of the picture, and comes back
+    /// to the picture once the picture has held the rate.**
     ///
-    /// Every-frame playback shows every frame however long each takes, thus the
-    /// picture can fall out of time with the sound. Lumit stops the sound rather
-    /// than let it run over a picture that is not keeping up.
+    /// Every-frame playback shows every frame however long each takes, so the
+    /// picture can fall behind the sound. Lumit stops the sound rather than let
+    /// it run on in front.
     ///
-    /// Three rules were tried and the first two were wrong, each in its own way:
+    /// The rules tried before this one, and what was wrong with each:
     ///
     /// * *Never start again.* The clock stops reporting when the sound stops,
-    ///   thus the test that stopped it could not run a second time.
-    /// * *Wait for the picture to reach the sound.* The sound stops in front of
-    ///   the picture by however long the slow frame took, thus after a long
-    ///   stall the picture may never reach it, and does not reach it at all if
-    ///   the composition ends first.
-    /// * *Start when frames are banked.* Frames are usually banked at the moment
-    ///   a picture goes out, even in a run far slower than the composition's
-    ///   rate — so the sound started again on the very next picture and, to the
-    ///   ear, never stopped at all.
-    ///
-    /// What is measured now is the thing that matters: whether the pictures are
-    /// arriving at the composition's rate.
+    ///   so the test that stopped it could not run a second time.
+    /// * *Wait for the picture to reach the sound.* After a long stall it may
+    ///   never reach it, and does not at all if the composition ends first.
+    /// * *Start when frames are banked.* Frames are usually banked when a
+    ///   picture goes out, even in a slow run, so the sound started again on
+    ///   the very next picture and stuttered.
+    /// * *Stop on one late picture.* A picture a few milliseconds late is made
+    ///   up by the next, and stopping for it left holes in a span played from
+    ///   the cache. It also never stopped for a picture running a little slow
+    ///   throughout, which is the case that drifts.
     #[test]
-    fn the_sound_stops_off_the_rate_and_returns_on_it() {
+    fn the_sound_gives_way_in_front_of_the_picture_and_returns_on_the_rate() {
         let long = AUDIO_REALTIME_FRAMES;
-        // Running, and the pictures are on time: nothing happens.
-        assert_eq!(audio_chase(false, true, long), AudioChase::Leave);
-        // Running, and ONE picture is late: the sound stops at once. This is the
-        // case the "how far in front" rule left running for half a second.
-        assert_eq!(audio_chase(false, false, 0), AudioChase::Hold);
+        let slack = 0.040;
+        // Running, and level with the picture: nothing happens. A picture a
+        // little late leaves the sound a little in front, and that is level.
+        assert_eq!(
+            audio_chase(false, Some(0.0), slack, long),
+            AudioChase::Leave
+        );
+        assert_eq!(audio_chase(false, Some(0.015), slack, 0), AudioChase::Leave);
+        // Running, and in front by more than the slack: it stops, whether it
+        // got there in one stall or a little at a time.
+        assert_eq!(audio_chase(false, Some(0.060), slack, 0), AudioChase::Hold);
+        assert_eq!(
+            audio_chase(false, Some(0.060), slack, long),
+            AudioChase::Hold
+        );
+        // Running, and behind: it is moved up, not stopped.
+        assert_eq!(
+            audio_chase(false, Some(-0.2), slack, long),
+            AudioChase::Catch
+        );
+        // No clock to read, as just after a seek: left alone.
+        assert_eq!(audio_chase(false, None, slack, 0), AudioChase::Leave);
 
         // Stopped, and the pictures are still late: it stays stopped.
-        assert_eq!(audio_chase(true, false, 0), AudioChase::Leave);
-        // Stopped, and a few on-time pictures have gone by — but not enough.
-        // This is the case the "frames are banked" rule started on, which made
-        // the sound stutter rather than stop.
-        assert_eq!(audio_chase(true, true, 1), AudioChase::Leave);
-        assert_eq!(audio_chase(true, true, long - 1), AudioChase::Leave);
+        assert_eq!(audio_chase(true, None, slack, 0), AudioChase::Leave);
+        // Stopped, and a few pictures have gone out on time, but not enough.
+        assert_eq!(audio_chase(true, None, slack, 1), AudioChase::Leave);
+        assert_eq!(audio_chase(true, None, slack, long - 1), AudioChase::Leave);
         // Stopped, and the rate has held: the sound comes back.
-        assert_eq!(audio_chase(true, true, long), AudioChase::Start);
-        assert_eq!(audio_chase(true, true, long + 40), AudioChase::Start);
-
-        // A run of on-time pictures does not, on its own, stop a running sound
-        // or restart one that a late picture has just stopped: the two answers
-        // are not each other's negation.
-        assert_eq!(audio_chase(false, true, 1), AudioChase::Leave);
-        assert_eq!(audio_chase(true, false, long), AudioChase::Leave);
+        assert_eq!(audio_chase(true, None, slack, long), AudioChase::Start);
+        assert_eq!(audio_chase(true, None, slack, long + 40), AudioChase::Start);
     }
 
     /// A long one is sampled: one frame in four is named and stands for the four.
