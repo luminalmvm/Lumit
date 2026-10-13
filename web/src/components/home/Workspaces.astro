@@ -5,12 +5,14 @@ import workspaceShot from "../../assets/shots/workspace.png";
 import graphShot from "../../assets/shots/graph-workspace.png";
 import nodesShot from "../../assets/shots/nodes-workspace.png";
 import audioShot from "../../assets/shots/audio-workspace.png";
+import cutShot from "../../assets/shots/cut-workspace.png";
 // A workspace's clip: the same window being worked in, and the picture is the
 // clip's first frame.
 import workspaceClip from "../../assets/clips/workspace.mp4";
 import graphClip from "../../assets/clips/graph-workspace.mp4";
 import nodesClip from "../../assets/clips/nodes-workspace.mp4";
 import audioClip from "../../assets/clips/audio-workspace.mp4";
+import cutClip from "../../assets/clips/cut-workspace.mp4";
 
 const fullSize = async (src: ImageMetadata) => ({
   url: (await getImage({ src, width: src.width, quality: 90 })).src,
@@ -18,7 +20,7 @@ const fullSize = async (src: ImageMetadata) => ({
   h: src.height,
 });
 
-// Meet the interface: one picture in front, chosen from the four.
+// Meet the interface: one picture in front, chosen from the five.
 const tabs = [
   {
     src: workspaceShot,
@@ -52,6 +54,14 @@ const tabs = [
     h: "Audio",
     p: "Mixer strips, levels, and beat detection, with the waveform under the Timeline.",
   },
+  {
+    src: cutShot,
+    clip: cutClip,
+    full: await fullSize(cutShot),
+    alt: "The Cut workspace: a clip's effects with their keyframes, a source view beside the Viewer, and tracks of clips with their sound under them",
+    h: "Cut",
+    p: "Clips on tracks, each with its own effects, and a source view beside the Viewer.",
+  },
 ];
 ---
 
@@ -62,7 +72,7 @@ const tabs = [
     </Fragment>
   </SectionHead>
 
-  {/* Four windows in a stack, the way the media page stacks a mark's three
+  {/* Five windows in a stack, the way the media page stacks a mark's three
       grounds. The ones behind stand up and to the right of the one in front,
       far enough that each shows its name and some of its picture. A click on
       one behind brings it forward, and a click on the front one enlarges
@@ -112,14 +122,14 @@ const tabs = [
   /* --o is a window's place in the stack, 0 the front. A step is one strip
      up, so the names read as a column, and --dx to the right. */
   .stack {
-    --dx: 8px;
+    --dx: 6px;
     --dy: 35px;
     display: grid;
-    padding: calc(3 * var(--dy)) calc(3 * var(--dx)) 0 0;
+    padding: calc(4 * var(--dy)) calc(4 * var(--dx)) 0 0;
   }
   .layer {
     grid-area: 1 / 1;
-    z-index: calc(4 - var(--o));
+    z-index: calc(5 - var(--o));
     overflow: hidden;
     border: 1px solid var(--color-line-2);
     border-radius: var(--radius-card);
@@ -169,12 +179,12 @@ const tabs = [
   }
   @media (min-width: 640px) {
     .stack {
-      --dx: 28px;
+      --dx: 21px;
     }
   }
   @media (min-width: 1024px) {
     .stack {
-      --dx: 56px;
+      --dx: 42px;
     }
   }
 </style>

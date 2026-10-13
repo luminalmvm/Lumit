@@ -144,6 +144,7 @@ frame around it:
 | `graph-workspace.png` | Meet the interface, Graph |
 | `nodes-workspace.png` | Meet the interface, Nodes |
 | `audio-workspace.png` | Meet the interface, Audio |
+| `cut-workspace.png` | Meet the interface, Cut |
 | `story-shared.png` | Inside Lumit, Shared projects |
 | `story-setup.png` | Inside Lumit, Setup |
 | `story-shortcuts.png` | Inside Lumit, Shortcuts |
@@ -174,7 +175,7 @@ drawn in `src/components/home/Features.astro`.
 
 ## Clips
 
-The wide picture, the two cards under it, the four workspaces and the four `story-`
+The wide picture, the two cards under it, the five workspaces and the four `story-`
 cards each play a clip over the picture. The clips are in `src/assets/clips/`, one MP4
 a picture under the picture's own name, with no sound, at 30 frames a second. A clip
 is the same box as its picture and the picture is the clip's first
