@@ -47,6 +47,7 @@ import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import '../panels/layer_fold_frb.dart' show RevealFilter;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
+import '../panels/timeline_razor.dart' show razorCut, razorTargets;
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/beats_notice.dart';
 import '../state/clipboard.dart';
@@ -2169,14 +2170,20 @@ VoidCallback? trimCompAction(LumitState app, CompositionReference? comp) {
   };
 }
 
-/// Razor the selected layer at the playhead. Only Sequence layers hold clips,
-/// so on anything else the engine declines and nothing happens.
+/// Split the selected layers at the playhead, as the shortcut does: a
+/// Sequence layer gains an edit point there, and any other layer becomes two,
+/// which are left selected.
 void _splitAtPlayhead(LumitUiState ui) {
-  final layer = ui.selectedLayer.value;
-  if (layer == null) return;
-  try {
-    layer.cutClipAt(frame: ui.playheadFrame.value);
-  } catch (_) {}
+  final frame = ui.playheadFrame.value;
+  final selected = ui.selectedLayerIds;
+  final made = razorCut([
+    for (final entry in razorTargets(ui.model.layers, frame,
+        clicked: null, allLayers: true))
+      if (selected.contains(entry.layer.internallayerId)) entry,
+  ], frame);
+  if (!made.cut) return;
+  if (made.halves.isNotEmpty) ui.setSelection(made.halves);
+  ui.model.refresh();
 }
 
 /// The menu's *Add marker* — the same call the keyboard makes, so the two
