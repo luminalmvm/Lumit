@@ -224,6 +224,16 @@ double sampleScalarWithContext(
     BridgeLib.instance.api.crateApiEffectSampleScalarWithContext(
         scalar: scalar, time: time, layer: layer);
 
+/// Why an expression on `layer` gives no number at `time`, or `None` when it
+/// runs. The sentence an expression's editor shows under the text.
+String? expressionFault(
+        {required String expression,
+        required BridgeExpressionLanguage language,
+        required BridgeRational time,
+        required LayerReference layer}) =>
+    BridgeLib.instance.api.crateApiEffectExpressionFault(
+        expression: expression, language: language, time: time, layer: layer);
+
 Float64List sampleScalarRangeWithContext(
         {required BridgeScalar scalar,
         required LayerReference layer,

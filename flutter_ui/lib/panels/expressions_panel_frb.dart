@@ -2,11 +2,18 @@
 // puts one on the selected properties.
 //
 // The library lives in the settings file, so it follows the user from project
-// to project. Apply writes the way Animation ▸ Add expression does, onto the
+// to project. Apply writes the way Animation â–¸ Add expression does, onto the
 // property rows picked in the Timeline.
+//
+// The editor also follows the Timeline. Pick a property that has an
+// expression and the editor shows it, and what is typed is written back on
+// clicking away. That holds while the editor is empty or still showing a
+// property's own text. A saved expression picked from the list, or a draft
+// typed for one, stays where it is until New.
 
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
@@ -14,9 +21,11 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../shell/menu_animation_frb.dart' show selectedChannels;
+import '../state/comp_time.dart';
 import '../state/dock.dart' show Panel;
 import '../state/expression_language.dart';
 import '../state/file_dialogs.dart';
+import '../theme/theme.dart';
 import '../widgets/autofill.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart' show ExpressionTextEditingController;
@@ -45,6 +54,20 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   /// text and applied with it.
   BridgeExpressionLanguage _language = BridgeExpressionLanguage.rhai;
 
+  /// The property the editor is showing, when it is showing one. What is
+  /// typed is written to it on clicking away.
+  GraphChannel? _linked;
+
+  /// The text and language last read from a property. The editor follows the
+  /// selection while it still holds them untouched, or holds nothing.
+  String? _loaded;
+  BridgeExpressionLanguage? _loadedLanguage;
+
+  /// Why the text gives no number, and the text it was asked about. Asked
+  /// again when the text changes and not on every frame.
+  String? _fault;
+  String? _faultOf;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +79,63 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
     _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
     _language = _boundUi!.workspace.defaultExpressionLanguage;
+    _boundUi!.selectedProperties.addListener(_follow);
+    _boundUi!.model.addListener(_follow);
+    _follow();
+  }
+
+  /// Show the picked property's expression, when the editor is free to.
+  void _follow() {
+    if (!mounted) return;
+    GraphChannel? driven;
+    for (final channel in _targets(_boundUi!)) {
+      if (channel.scalar is BridgeScalar_Expression) {
+        driven = channel;
+        break;
+      }
+    }
+    // Moving off a property keeps what was typed for it. Keeping it reads
+    // the model again, which comes back through here and does the rest.
+    if (_linked != null && driven?.id != _linked!.id && _commitLinked()) {
+      return;
+    }
+    final scalar = driven?.scalar;
+    if (driven == null || scalar is! BridgeScalar_Expression) {
+      if (_linked != null) setState(() => _linked = null);
+      return;
+    }
+    final untouched = _code.text.isEmpty ||
+        (_code.text == _loaded && _language == _loadedLanguage);
+    final same = _code.text == scalar.field0 && _language == scalar.field1;
+    if (!untouched && !same) {
+      // Something else is being written here. It is still this property's
+      // when it was this property's before.
+      setState(() => _linked = _linked?.id == driven!.id ? driven : null);
+      return;
+    }
+    setState(() {
+      _linked = driven;
+      _loaded = scalar.field0;
+      _loadedLanguage = scalar.field1;
+      _language = scalar.field1;
+    });
+    if (_code.text != scalar.field0) _code.text = scalar.field0;
+  }
+
+  /// Write what was typed to the property it was typed for, and say whether
+  /// anything was written. Nothing when nothing changed, and a blank changes
+  /// nothing.
+  bool _commitLinked() {
+    final channel = _linked;
+    if (channel == null || _code.text.trim().isEmpty) return false;
+    if (_code.text == _loaded && _language == _loadedLanguage) return false;
+    _loaded = _code.text;
+    _loadedLanguage = _language;
+    commitChannelEdits(
+        {channel: BridgeScalar.expression(_code.text, _language)});
+    Provider.of<LumitState>(context, listen: false).notifyDocumentChanged();
+    _boundUi!.model.refresh();
+    return true;
   }
 
   void _onSearchRequested() {
@@ -70,6 +150,8 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
   @override
   void dispose() {
     _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
+    _boundUi?.selectedProperties.removeListener(_follow);
+    _boundUi?.model.removeListener(_follow);
     _searchFocus.dispose();
     _search.dispose();
     _name.dispose();
@@ -85,26 +167,76 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
       ];
 
   void _pick(LumitUiState ui, String name) {
+    _commitLinked();
     _name.text = name;
     _code.text = ui.workspace.savedExpressions[name] ?? '';
     setState(() {
       _picked = name;
       _language = ui.workspace.savedExpressionLanguage(name);
+      // A saved expression is not the property's, so it stops following.
+      _linked = null;
+      _loaded = null;
     });
   }
 
   /// Clear the editor, starting from the selected property's expression when
   /// it has one, which is how an expression already in the project is saved.
   void _new(LumitUiState ui) {
-    final from = _targets(ui).firstOrNull?.scalar;
+    _commitLinked();
     _name.clear();
-    _code.text = from is BridgeScalar_Expression ? from.field0 : '';
+    _code.clear();
     setState(() {
       _picked = null;
-      _language = from is BridgeScalar_Expression
-          ? from.field1
-          : ui.workspace.defaultExpressionLanguage;
+      _linked = null;
+      _loaded = null;
+      _language = ui.workspace.defaultExpressionLanguage;
     });
+    _follow();
+  }
+
+  /// What the text comes to at the playhead, or why it comes to nothing,
+  /// worked out about the property it is for. Named when the editor is
+  /// showing that property's own.
+  Widget _readout(LumitTheme t, LumitUiState ui) {
+    final on = _linked ?? _targets(ui).firstOrNull;
+    final comp = ui.selectedComp;
+    if (on == null || comp == null || _code.text.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final time = timeOfFrame(comp, ui.playheadFrame.value);
+    final layer = on.entry.layer;
+    final asked = '${on.id}\n${_language.name}\n${_code.text}';
+    if (asked != _faultOf) {
+      _faultOf = asked;
+      _fault = expressionFault(
+          expression: _code.text, language: _language, time: time, layer: layer);
+    }
+    final fault = _fault;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+      child: Text.rich(
+        TextSpan(children: [
+          if (_linked != null)
+            TextSpan(
+              text: '${on.label}  ',
+              style: t.small.copyWith(color: t.textMuted),
+            ),
+          fault != null
+              ? TextSpan(text: fault, style: t.small.copyWith(color: t.error))
+              : TextSpan(
+                  text: '= ${sampleScalarWithContext(
+                    scalar: BridgeScalar_Expression(_code.text, _language),
+                    time: time,
+                    layer: layer,
+                  ).toStringAsPrecision(6)}',
+                  style: t.mono.copyWith(color: t.textMuted),
+                ),
+        ]),
+        key: const ValueKey('expr-readout'),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
   }
 
   void _save(LumitUiState ui) {
@@ -151,6 +283,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
         channel: BridgeScalar.expression(_code.text, _language),
     });
     app.notifyDocumentChanged();
+    ui.model.refresh();
   }
 
   @override
@@ -231,17 +364,39 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           flex: 2,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
-            child: HouseTextField(
-              key: const ValueKey('expr-code'),
-              controller: _code,
-              autofill: ExpressionAutofillGenerator(),
-              multiline: true,
-              topAlign: true,
-              style: t.mono,
-              hint: l10n.expressionHint,
-              width: double.infinity,
+            // Ctrl+Enter keeps the edit without leaving the text.
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: (_, event) {
+                final keys = HardwareKeyboard.instance;
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.enter &&
+                    (keys.isControlPressed || keys.isMetaPressed)) {
+                  _commitLinked();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: HouseTextField(
+                key: const ValueKey('expr-code'),
+                controller: _code,
+                autofill: ExpressionAutofillGenerator(),
+                multiline: true,
+                topAlign: true,
+                style: t.mono,
+                hint: l10n.expressionHint,
+                width: double.infinity,
+                onTapOutside: _commitLinked,
+              ),
             ),
           ),
+        ),
+        // The number moves with the playhead, so only this line listens.
+        ListenableBuilder(
+          listenable: Listenable.merge(
+              [ui.selectedProperties, ui.model, ui.playheadFrame]),
+          builder: (context, _) => _readout(t, ui),
         ),
         // Apply follows the Timeline's selection, so only the bar listens.
         ListenableBuilder(
@@ -316,8 +471,10 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                     key: const ValueKey('expr-language'),
                     dense: true,
                     value: _language,
-                    onChanged: (language) =>
-                        setState(() => _language = language),
+                    onChanged: (language) {
+                      setState(() => _language = language);
+                      _commitLinked();
+                    },
                   ),
                 ),
               ]),

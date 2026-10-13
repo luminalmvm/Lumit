@@ -12,13 +12,27 @@ An **expression** is a line of script on a property, calculated every frame.
 1. Right-click the property's value field.
 2. Choose **Set expression**.
 
-The field becomes a small code editor, seeded with the value that was there, and the
-number beside it shows what the expression comes to at the playhead. Type as you would in
-any editor: the function names complete as you go.
+An editor opens over the row, seeded with the value that was there. The number under the
+text is what the expression comes to at the playhead, and the function names complete as
+you type. When the expression fails, the reason is written there instead, and the row
+shows its value in red.
 
-Right-click the editor and choose **Remove expression** to go back to a plain value — the
-property keeps the number it was showing. The same menu lists **JavaScript** and **Rhai**,
-with the expression's language marked.
+| | |
+| --- | --- |
+| **Enter** | A new line |
+| Click away, or **Ctrl+Enter** | Keep the expression |
+| **Escape** | Put back what was there |
+
+The row then shows the expression and its value, and a click on either opens the editor
+again. In the Timeline the expression is written along the property's lane, and a click
+there opens the editor across the lane.
+
+**Remove expression**, in the editor and in the row's right-click menu, goes back to a
+plain value. The property keeps the number it was showing. The same menu lists
+**JavaScript** and **Rhai**, with the expression's language marked.
+
+**Animation ▸ Add expression** opens the same editor for the property rows selected in the
+Timeline, and puts the expression on every one of them.
 
 Transform properties and effect parameters both take one. Anything made of several
 numbers — a point, a colour — does not yet, and the menu simply does not offer it there.
@@ -34,7 +48,7 @@ choice.
 
 | Where | The language is set |
 | --- | --- |
-| A property's editor | In its right-click menu |
+| A property's editor | In the dropdown under the text, or the row's right-click menu |
 | **Animation ▸ Add expression** | In the dropdown under the text, at the right |
 | **Window ▸ Expressions** | In the dropdown at the right of the bottom bar |
 | An Expression box in the node graph | In the same dropdown, under **Edit expression…** |
@@ -121,6 +135,13 @@ seedRandom(index, true); random(0, 360)    // one fixed angle for each layer
   and the new one gets a number after it.
 
 The search box matches names and scripts.
+
+The editor also follows the Timeline. Select a property that has an expression and the
+editor shows it, with the property's name and its value at the playhead underneath. What
+is typed is written to the property on clicking away, or with **Ctrl+Enter**.
+
+An entry picked from the list stays in the editor when the selection moves. **New** goes
+back to following.
 
 ## Notes
 
