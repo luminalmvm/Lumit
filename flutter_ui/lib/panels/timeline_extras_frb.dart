@@ -4066,6 +4066,29 @@ class _RulerTicksPainter extends CustomPainter {
     required this.style,
   });
 
+  /// Labels already laid out, by their text. A zoom draws the same few again
+  /// on every frame of its flight, and laying one out costs far more than
+  /// drawing it.
+  static final Map<String, TextPainter> _laidOut = {};
+  static TextStyle? _laidOutIn;
+
+  TextPainter _labelAt(double seconds) {
+    if (_laidOutIn != label || _laidOut.length > 2000) {
+      for (final text in _laidOut.values) {
+        text.dispose();
+      }
+      _laidOut.clear();
+      _laidOutIn = label;
+    }
+    return _laidOut.putIfAbsent(
+      rulerLabelOf(seconds),
+      () => TextPainter(
+        text: TextSpan(text: rulerLabelOf(seconds), style: label),
+        textDirection: TextDirection.ltr,
+      )..layout(),
+    );
+  }
+
   /// Desk's engraved scale: a tick every four frames at 4, every second at 8
   /// and every labelled step at 14, all rising from the waist into the upper
   /// half, and none drawn closer than 30px to its neighbour.
@@ -4088,11 +4111,7 @@ class _RulerTicksPainter extends CustomPainter {
     for (var s = 0.0; s <= seconds; s += step) {
       final x = axis.xOf(s * fps);
       canvas.drawLine(Offset(x, mid - 14), Offset(x, mid), paint);
-      final text = TextPainter(
-        text: TextSpan(text: rulerLabelOf(s), style: label),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      text.paint(canvas, Offset(x + 4, 4));
+      _labelAt(s).paint(canvas, Offset(x + 4, 4));
     }
   }
 
@@ -4137,14 +4156,10 @@ class _RulerTicksPainter extends CustomPainter {
       // distance again below it, so the ruler reads as one band.
       canvas.drawLine(
           Offset(x, mid - labelledTick), Offset(x, mid + labelledTick), paint);
-      final text = TextPainter(
-        text: TextSpan(text: rulerLabelOf(s), style: label),
-        textDirection: TextDirection.ltr,
-      )..layout();
       // Labels sit just right of their tick, at the top of the upper half; the
       // last one may clip out at the comp's end rather than jumping inside,
       // which would misplace it.
-      text.paint(canvas, Offset(x + 4, 4));
+      _labelAt(s).paint(canvas, Offset(x + 4, 4));
     }
   }
 
