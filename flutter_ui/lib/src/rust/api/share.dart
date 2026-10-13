@@ -18,7 +18,7 @@ import 'solid.dart';
 import 'state.dart';
 part 'share.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `asking`, `at_relay`, `carry`, `describe`, `dropped`, `ending`, `events_for`, `forwarded`, `holders_of`, `kept_text`, `let_go`, `online_item`, `person`, `reach`, `relayed`, `resume`, `saved`, `saving`, `stop_all`, `stop`, `unlocked`, `versions`, `with_sharing`
+// These functions are ignored because they are not marked as `pub`: `asking`, `at_relay`, `carry`, `copy_is_at`, `copy_note`, `describe`, `dropped`, `ending`, `events_for`, `forwarded`, `holders_of`, `kept_text`, `let_go`, `note_copy`, `online_item`, `person`, `reach`, `relayed`, `resume`, `saved`, `saving`, `stop_all`, `stop`, `unlocked`, `versions`, `with_sharing`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// The port a host listens on unless the person picks another.
