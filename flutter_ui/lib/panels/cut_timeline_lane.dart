@@ -513,9 +513,15 @@ class CutTrackPainter extends CustomPainter {
 
   /// What a clip carries of its own, said at the right of its name line: its
   /// blend mode where it has one, and "fx" where it has effects, faint while
-  /// they are bypassed. Answers the width they took, which the name gives up.
+  /// they are bypassed. A sound clip that sits between two frames says how
+  /// far past the frame it starts, since at most zooms that is under a pixel
+  /// and nothing else shows it. Answers the width they took, which the name
+  /// gives up.
   double _chips(Canvas canvas, BridgeClip clip, Rect box, {double? band}) {
+    final past = clip.startExact - clip.startFrame.toInt();
     final words = <(TextPainter, bool)>[
+      if (past.abs() >= 0.005)
+        (nameOf('${past > 0 ? '+' : ''}${past.toStringAsFixed(2)}'), true),
       if (clip.blend case final blend? when blend < blendNames.length)
         (nameOf(blendNames[blend]), true),
       if (clip.effects.isNotEmpty) (nameOf('fx'), clip.fx),
