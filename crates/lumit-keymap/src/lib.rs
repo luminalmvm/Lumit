@@ -1223,6 +1223,8 @@ pub fn after_effects_preset() -> Keymap {
             km.rebind_action(context, &action.into(), chord);
         }
     }
+    // AE zooms time on Alt and the graph's values on Ctrl, which this swaps to.
+    km.wheel.set(WheelAction::ZoomTime, WheelModifier::Alt);
     km
 }
 
