@@ -4,7 +4,12 @@
 // and nothing about where, so the frame is drawn round wherever they sit and
 // follows them. The bar along its top is the handle: a press picks every box
 // in it, a drag moves them, a double-click renames it and a right-click opens
-// its menu. A box let go inside a frame joins it.
+// its menu. Boxes let go over a frame move into it.
+//
+// Groups nest. One group is inside another when all of its boxes are the
+// other's too, so nothing more is stored for it: the outer frame is drawn
+// round the inner one, and every edit here keeps any two groups either apart
+// or one inside the other.
 //
 // The layer canvas and the node graph canvas hold different boxes and write
 // different lists. Each tells [GraphGroups] what its groups are and how to
@@ -93,18 +98,41 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   final DoubleTap _taps = DoubleTap();
   int? _tapped;
 
+  /// Whether group [a] sits inside group [b]. Two groups of the very same
+  /// boxes nest in the order they were made.
+  static bool _inside(List<GraphGroup> all, int a, int b) {
+    if (a == b) return false;
+    final outer = all[b].members.toSet();
+    final inner = all[a].members.toSet();
+    return outer.containsAll(inner) && (inner.length < outer.length || a < b);
+  }
+
+  /// The groups from the innermost out, so each comes after any inside it.
+  static List<int> _innerFirst(List<GraphGroup> all) =>
+      [for (var i = 0; i < all.length; i++) i]..sort((a, b) {
+          final by = all[a].members.toSet().length -
+              all[b].members.toSet().length;
+          return by != 0 ? by : a - b;
+        });
+
   /// The frame each group draws, or null where none of its boxes is on the
-  /// canvas.
+  /// canvas. An outer group's frame goes round the frames inside it.
   List<Rect?> groupRects() {
+    final all = groups;
     final boxes = boxRects;
     final head = graphGroupHead * graphGroupScale(groupZoom);
-    return [
-      for (final group in groups)
-        graphGroupRect([
-          for (final key in group.members)
-            if (boxes[key] case final rect?) rect,
-        ], head: head),
-    ];
+    final rects = List<Rect?>.filled(all.length, null);
+    final order = _innerFirst(all);
+    for (final (n, g) in order.indexed) {
+      rects[g] = graphGroupRect([
+        for (final key in all[g].members)
+          if (boxes[key] case final rect?) rect,
+        for (final h in order.take(n))
+          if (_inside(all, h, g))
+            if (rects[h] case final rect?) rect,
+      ], head: head);
+    }
+    return rects;
   }
 
   /// The groups with [keys] taken out of them. A group left empty goes.
@@ -132,26 +160,65 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   bool get canGroup => pickedKeys.isNotEmpty;
   bool get canSaveGroup => pickedKeys.any(groupCarries);
 
-  /// Frame the picked boxes as a new group and start typing its name. A box
-  /// sits in one group, so a box picked out of another leaves it.
+  /// The groups with [boxes] framed as a new one, which comes last. A group
+  /// round all of them goes on holding them, so the new one is inside it. A
+  /// group wholly among them comes inside the new one. Any other lets go of
+  /// the boxes it shares.
+  List<GraphGroup> _grouped(List<String> boxes, String name) {
+    final picked = boxes.toSet();
+    final all = groups;
+    return [
+      for (final g in all)
+        if (g.members.toSet().containsAll(picked) ||
+            picked.containsAll(g.members))
+          g
+        else
+          GraphGroup(g.name, g.colour, [
+            for (final m in g.members)
+              if (!picked.contains(m)) m,
+          ]),
+      // Chip 0 is the palette's grey, which reads as no colour at all.
+      GraphGroup(name, all.length + 1, boxes),
+    ];
+  }
+
+  /// Frame the picked boxes as a new group and start typing its name.
   void groupPicked() {
     final picked = pickedKeys;
-    if (picked.isEmpty) return;
-    final next = [
-      ...groupsWithout(picked),
-      // Chip 0 is the palette's grey, which reads as no colour at all.
-      GraphGroup(l10n.graphGroupDefaultName, groups.length + 1, picked),
-    ];
+    // Boxes that are a group already are not framed twice.
+    if (picked.isEmpty || _groupOfPick != null) return;
+    final next = _grouped(picked, l10n.graphGroupDefaultName);
     commitGroups(next);
     setState(() => groupPick = groupRenaming = next.length - 1);
   }
 
-  /// Take the picked boxes out of their groups. With a group's bar pressed
-  /// that is all of its boxes, so the frame goes and the boxes stay.
+  /// With a group's bar pressed, take that frame away and leave its boxes.
+  /// Otherwise take each picked box out of the innermost group it is in.
   void ungroupPicked() {
-    final picked = pickedKeys.toSet();
-    if (!groups.any((g) => g.members.any(picked.contains))) return;
-    commitGroups(groupsWithout(picked));
+    final all = groups;
+    if (groupPick case final at? when at < all.length) {
+      commitGroups([...all]..removeAt(at));
+      setState(() => groupPick = groupRenaming = null);
+      return;
+    }
+    final order = _innerFirst(all);
+    final leaves = <int, Set<String>>{};
+    for (final key in pickedKeys) {
+      final at = order.where((g) => all[g].members.contains(key)).firstOrNull;
+      if (at != null) leaves.putIfAbsent(at, () => {}).add(key);
+    }
+    if (leaves.isEmpty) return;
+    commitGroups([
+      for (final (i, g) in all.indexed)
+        if (leaves[i] == null)
+          g
+        // A group left with no box goes.
+        else if (g.members.any((m) => !leaves[i]!.contains(m)))
+          GraphGroup(g.name, g.colour, [
+            for (final m in g.members)
+              if (!leaves[i]!.contains(m)) m,
+          ]),
+    ]);
     setState(() => groupPick = groupRenaming = null);
   }
 
@@ -206,9 +273,9 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
 
     final int colour;
     if (at == null) {
-      colour = groups.length + 1;
-      commitGroups(
-          [...groupsWithout(members), GraphGroup(name, colour, members)]);
+      final next = _grouped(members, name);
+      colour = next.last.colour;
+      commitGroups(next);
     } else {
       colour = groups[at].colour;
       if (name != groups[at].name) _set(at, name: name);
@@ -260,7 +327,7 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
       case _GroupDo.save:
         await saveGroup(at);
       case _GroupDo.ungroup:
-        commitGroups(groupsWithout(groups[at].members));
+        commitGroups([...groups]..removeAt(at));
         setState(() => groupPick = null);
     }
   }
@@ -313,36 +380,50 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     return true;
   }
 
-  /// Which group each of [dragged] would join where it sits: the one whose
-  /// frame its middle is in, for a box in no group yet.
-  Map<int, List<String>> _joins(Iterable<String> dragged) {
+  /// The group the dragged boxes would move into with the pointer at [at]:
+  /// the innermost frame under it. A frame already round all of them is not
+  /// one, and nor is the frame of a group being dragged whole.
+  int? _dropInto(Set<String> dragged, Offset at) {
     final all = groups;
-    final joins = <int, List<String>>{};
-    if (all.isEmpty) return joins;
+    if (all.isEmpty || dragged.isEmpty) return null;
     final rects = groupRects();
-    final boxes = boxRects;
-    for (final key in dragged) {
-      final middle = boxes[key]?.center;
-      if (middle == null || all.any((g) => g.members.contains(key))) continue;
-      final into = rects.indexWhere((r) => r != null && r.contains(middle));
-      if (into >= 0) joins.putIfAbsent(into, () => []).add(key);
+    for (final g in _innerFirst(all)) {
+      if (!(rects[g]?.contains(at) ?? false)) continue;
+      final members = all[g].members.toSet();
+      if (members.containsAll(dragged) || dragged.containsAll(members)) {
+        continue;
+      }
+      return g;
     }
-    return joins;
+    return null;
   }
 
-  /// Light the frame the boxes being dragged would join. Called as they move.
-  void groupDragOver(Iterable<String> dragged) =>
-      groupLit = _joins(dragged).keys.firstOrNull;
+  /// Light the frame the boxes being dragged would move into. Called as they
+  /// move, with the pointer in canvas units.
+  void groupDragOver(Iterable<String> dragged, Offset at) =>
+      groupLit = _dropInto(dragged.toSet(), at);
 
-  /// The groups once the boxes just let go have joined the frames they landed
-  /// in, or null when none did.
-  List<GraphGroup>? groupsAfterDrop(Iterable<String> dragged) {
+  /// The groups once the boxes just let go have moved into the frame the
+  /// pointer was over, or null when it was over none. That group and the ones
+  /// round it take them in, a group dragged whole comes along as it is, and
+  /// any other lets go of them.
+  List<GraphGroup>? groupsAfterDrop(Iterable<String> dragged, Offset at) {
     groupLit = null;
-    final joins = _joins(dragged);
-    if (joins.isEmpty) return null;
+    final moved = dragged.toSet();
+    final into = _dropInto(moved, at);
+    if (into == null) return null;
+    final all = groups;
     return [
-      for (final (i, g) in groups.indexed)
-        GraphGroup(g.name, g.colour, [...g.members, ...?joins[i]]),
+      for (final (i, g) in all.indexed)
+        if (i == into || _inside(all, into, i))
+          GraphGroup(g.name, g.colour, {...g.members, ...moved}.toList())
+        else if (moved.containsAll(g.members))
+          g
+        else
+          GraphGroup(g.name, g.colour, [
+            for (final m in g.members)
+              if (!moved.contains(m)) m,
+          ]),
     ];
   }
 
@@ -374,9 +455,11 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   List<Widget> groupWashes(LumitTheme t, VoidCallback onOwnPress) {
     final rects = groupRects();
     final scale = graphGroupScale(groupZoom);
+    final all = groups;
     return [
-      for (final (i, group) in groups.indexed)
-        if (rects[i] case final rect?)
+      // Outermost first, so a group inside another is drawn over it.
+      for (final i in _innerFirst(all).reversed)
+        if ((all[i], rects[i]) case (final group, final rect?))
           Positioned.fromRect(
             key: ValueKey<String>('graph-group-$i'),
             rect: rect,

@@ -2424,7 +2424,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
           _positions[entry.key] = entry.value + delta;
         }
         _dropWire = _dropInsert(layout)?.edge;
-        groupDragOver(drag.origins.keys);
+        groupDragOver(drag.origins.keys, at);
       });
       return;
     }
@@ -2483,9 +2483,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       // Asked before the drag is let go of, since it is what the answer is
       // worked out from.
       final insert = moved ? _dropInsert(layout) : null;
-      // A box let go inside a group's frame joins it, in the same write as
-      // its new place.
-      final joined = groupsAfterDrop(moved ? drag.origins.keys : const []);
+      // Boxes let go over a group's frame move into it, in the same write
+      // as their new place.
+      final joined = groupsAfterDrop(moved ? drag.origins.keys : const [], at);
       setState(() {
         _nodeDrag = null;
         _dropWire = null;
@@ -2762,7 +2762,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
               behavior: HitTestBehavior.opaque,
               child: Container(
                 key: const ValueKey('graph-canvas'),
-                color: t.surface0,
+                // Clipped, so a box or a group's frame pushed past the top
+                // edge goes under the toolbar and not over it.
+                decoration: BoxDecoration(color: t.surface0),
+                clipBehavior: Clip.hardEdge,
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [

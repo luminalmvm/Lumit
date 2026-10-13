@@ -60,25 +60,25 @@ switches it off there.
 ## Groups
 
 A **group** is a named, coloured frame behind some boxes. It follows them as they move, and
-a box sits in one group at most.
+a group can sit inside another.
 
 | Gesture | What it does |
 | --- | --- |
-| `Ctrl+G`, or **Group** in the toolbar | Frames the picked boxes and starts typing the group's name. |
+| `Ctrl+G`, or **Group** in the toolbar | Frames the picked boxes and starts typing the group's name. Boxes picked inside a group are framed inside it, and whole groups picked together are framed as one. |
 | Click a group's bar | Picks every box in it. |
 | Drag the bar | Moves the group. |
 | Double-click the bar, or `F2` | Renames it. |
 | Right-click the bar | Opens its menu: **Rename**, **Colour**, **Save group** and **Ungroup**. |
-| Drop a box inside a frame | Adds it to that group. |
-| `Ctrl+Shift+G` | Takes the picked boxes out of their groups. |
+| Drop boxes on a frame | Moves them into that group. |
+| `Ctrl+Shift+G` | Takes the picked boxes out of the innermost group they are in. With a group's bar picked, removes that frame and leaves its boxes. |
 
 The two shortcuts are the ones set for grouping layers in the Timeline. Zoomed out, a
 group's name keeps its size on screen.
 
 **Save group** asks for a name and writes the group to the preset library as a `.lumgrp`
 file: its effects and drivers, the wires among them and their layout. Source and Layer out
-are never saved. Picked boxes that are not a group become one under that name. A saved
-group is listed in the node search under **Group**. Inserting one adds its effects to the
+are never saved, and the groups inside it are. Picked boxes that are not a group become one
+under that name. A saved group is listed in the node search under **Group**. Inserting one adds its effects to the
 end of the layer's stack and puts its drivers where the search was opened.
 
 ## Drivers

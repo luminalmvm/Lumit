@@ -262,6 +262,42 @@ pub struct GroupPreset {
     /// One position per effect, from the same corner as [`Self::layout`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effect_layout: Vec<[f64; 2]>,
+    /// The groups inside this one. A member is a place in `nodes`, counting
+    /// on into `effects`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inner: Vec<InnerGroup>,
+}
+
+/// A group nested inside a saved one, naming its boxes by where they sit in
+/// the file, since every id is minted afresh on the way back in.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct InnerGroup {
+    pub name: String,
+    #[serde(default)]
+    pub colour: u32,
+    pub members: Vec<usize>,
+}
+
+/// The groups of `all` that sit wholly inside the saved set without being the
+/// whole of it. `saved` is the set's boxes in file order.
+fn inner_groups<T: PartialEq>(
+    saved: &[T],
+    all: impl Iterator<Item = (String, u32, Vec<T>)>,
+) -> Vec<InnerGroup> {
+    all.filter_map(|(name, colour, members)| {
+        let mut places: Vec<usize> = members
+            .iter()
+            .map(|m| saved.iter().position(|s| s == m))
+            .collect::<Option<_>>()?;
+        places.sort_unstable();
+        places.dedup();
+        (!places.is_empty() && places.len() < saved.len()).then_some(InnerGroup {
+            name,
+            colour,
+            members: places,
+        })
+    })
+    .collect()
 }
 
 /// The current on-disk format version for a group.
@@ -345,6 +381,19 @@ pub fn group_from_graph(
         .cloned()
         .collect();
 
+    let saved: Vec<NodeRef> = nodes
+        .iter()
+        .map(|n| NodeRef::Driver(n.id))
+        .chain(effects.iter().map(|n| NodeRef::Effect(n.id)))
+        .collect();
+    let inner = inner_groups(
+        &saved,
+        graph
+            .groups
+            .iter()
+            .map(|g| (g.name.clone(), g.colour, g.members.clone())),
+    );
+
     GroupPreset {
         format: GROUP_FORMAT,
         name: name.to_owned(),
@@ -354,6 +403,7 @@ pub fn group_from_graph(
         nodes,
         edges,
         effects,
+        inner,
     }
 }
 
@@ -378,6 +428,8 @@ pub struct InsertedGroup {
     pub edges: Vec<crate::graph::Edge>,
     pub layout: Vec<(crate::graph::NodeRef, [f64; 2])>,
     pub group: crate::graph::NodeGroup,
+    /// The groups nested inside [`Self::group`].
+    pub inner: Vec<crate::graph::NodeGroup>,
 }
 
 /// What inserting `preset` at canvas point `at` adds to a graph: fresh nodes,
@@ -457,12 +509,26 @@ pub fn group_instantiated(preset: &GroupPreset, at: [f64; 2]) -> InsertedGroup {
         colour: preset.colour,
         members: layout.iter().map(|(node, _)| *node).collect(),
     };
+    let inner = preset
+        .inner
+        .iter()
+        .map(|g| crate::graph::NodeGroup {
+            name: g.name.clone(),
+            colour: g.colour,
+            members: g
+                .members
+                .iter()
+                .filter_map(|&i| group.members.get(i).copied())
+                .collect(),
+        })
+        .collect();
     InsertedGroup {
         effects,
         nodes,
         edges,
         layout,
         group,
+        inner,
     }
 }
 
@@ -496,6 +562,9 @@ pub struct CompGroupPreset {
     /// group dropped anywhere keeps the shape it was saved in.
     #[serde(default)]
     pub layout: Vec<[f64; 2]>,
+    /// The groups inside this one. A member is a place in `nodes`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inner: Vec<InnerGroup>,
 }
 
 /// The current on-disk format version for a node graph group.
@@ -553,6 +622,13 @@ pub fn comp_group_from_graph(
         format: COMP_GROUP_FORMAT,
         name: name.to_owned(),
         colour,
+        inner: inner_groups(
+            &wanted,
+            graph
+                .groups
+                .iter()
+                .map(|g| (g.name.clone(), g.colour, g.members.clone())),
+        ),
         edges: graph
             .edges
             .iter()
@@ -583,6 +659,8 @@ pub struct InsertedCompGroup {
     pub edges: Vec<crate::comp_graph::GraphEdge>,
     pub layout: Vec<(uuid::Uuid, [f64; 2])>,
     pub group: crate::comp_graph::GraphGroup,
+    /// The groups nested inside [`Self::group`].
+    pub inner: Vec<crate::comp_graph::GraphGroup>,
 }
 
 /// What inserting `preset` at canvas point `at` adds to a graph: fresh boxes,
@@ -654,11 +732,25 @@ pub fn comp_group_instantiated(preset: &CompGroupPreset, at: [f64; 2]) -> Insert
         colour: preset.colour,
         members: nodes.iter().map(GraphNode::id).collect(),
     };
+    let inner = preset
+        .inner
+        .iter()
+        .map(|g| GraphGroup {
+            name: g.name.clone(),
+            colour: g.colour,
+            members: g
+                .members
+                .iter()
+                .filter_map(|&i| group.members.get(i).copied())
+                .collect(),
+        })
+        .collect();
     InsertedCompGroup {
         nodes,
         edges,
         layout,
         group,
+        inner,
     }
 }
 
@@ -800,7 +892,12 @@ mod tests {
                 (NodeRef::Effect(d), [420.0, 60.0]),
             ],
             exposed: Vec::new(),
-            groups: Vec::new(),
+            // The two drivers are a group of their own, inside the set.
+            groups: vec![crate::graph::NodeGroup {
+                name: "Pair".into(),
+                colour: 2,
+                members: vec![NodeRef::Driver(a), NodeRef::Driver(b)],
+            }],
         };
         let members = vec![NodeRef::Driver(a), NodeRef::Driver(b), NodeRef::Effect(d)];
         (graph, vec![blur], members)
@@ -853,6 +950,16 @@ mod tests {
         assert_eq!(layout[1].1, [560.0, 230.0]);
         assert_eq!(group.name, "Audio rig");
         assert_eq!(group.members.len(), 3);
+        // The group inside it came back round the two fresh drivers.
+        assert_eq!(added.inner.len(), 1);
+        assert_eq!(added.inner[0].name, "Pair");
+        assert_eq!(
+            added.inner[0].members,
+            vec![
+                crate::graph::NodeRef::Driver(nodes[0].id),
+                crate::graph::NodeRef::Driver(nodes[1].id),
+            ]
+        );
     }
 
     // -- 5.8, a node graph's groups -------------------------------------------

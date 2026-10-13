@@ -3602,6 +3602,7 @@ impl CompositionReference {
         graph.layout.extend(added.layout);
         if named {
             graph.groups.push(added.group);
+            graph.groups.extend(added.inner);
         }
 
         self.commit(lumit_core::Op::SetCompGraph {

@@ -7619,6 +7619,7 @@ impl LayerReference {
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
         graph.groups.push(added.group);
+        graph.groups.extend(added.inner);
         let graph = lumit_core::Op::SetLayerGraph {
             comp: self.comp_id,
             layer: self.layer_id,

@@ -1795,7 +1795,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
           _positions[entry.key] = entry.value + delta;
         }
         _dropWire = _dropInsert(layout)?.edge;
-        groupDragOver(drag.origins.keys);
+        groupDragOver(drag.origins.keys, at);
       });
       return;
     }
@@ -1836,9 +1836,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 
     if (_nodeDrag case final drag?) {
       final insert = moved ? _dropInsert(layout) : null;
-      // A box let go inside a group's frame joins it, in the same write as
-      // its new place.
-      final joined = groupsAfterDrop(moved ? drag.origins.keys : const []);
+      // Boxes let go over a group's frame move into it, in the same write
+      // as their new place.
+      final joined = groupsAfterDrop(moved ? drag.origins.keys : const [], at);
       setState(() {
         _nodeDrag = null;
         _dropWire = null;
