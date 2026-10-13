@@ -936,20 +936,28 @@ impl LumitBridgeState {
             return Ok(BridgeOpened::NotOpened);
         };
         // What was kept is the copy as a guest left it, so it is what opens.
+        // In the copy's own file only: another file with its id is a project
+        // of its own (`share::copy_is_at`).
         let beside = path.parent().unwrap_or_else(|| Path::new(""));
-        let (mut doc, resuming) = match lumit_share::resume(&mut doc, beside) {
+        let copy = doc.id;
+        let ours = crate::api::share::copy_is_at(copy, &path);
+        let resumed = ours.then(|| lumit_share::resume(&mut doc, beside));
+        let (mut doc, resuming) = match resumed.flatten() {
             Some((kept, resuming)) => (kept, Some(resuming)),
             None => (doc, None),
         };
         // Or a copy of a project that is kept online.
         let reopened = match resuming {
-            Some(_) => None,
-            None => lumit_share::online::resume(&mut doc, beside),
+            None if ours => lumit_share::online::resume(&mut doc, beside),
+            _ => None,
         };
         let (doc, member) = match reopened {
             Some((kept, member)) => (kept, Some(member)),
             None => (doc, None),
         };
+        if resuming.is_some() || member.is_some() {
+            crate::api::share::note_copy(copy, Some(&path));
+        }
 
         // Relative media paths resolve against the project's own directory. A
         // path with no parent (a bare filename) resolves against the working

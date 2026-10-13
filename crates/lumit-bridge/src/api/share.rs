@@ -1282,9 +1282,13 @@ pub(crate) fn saving(project: Uuid) -> Option<(Arc<Document>, u64, usize)> {
 /// nobody hosts it, whatever a host kept before goes: the file has moved on
 /// from the document those edits were made on.
 #[frb(ignore)]
-pub(crate) fn saved(project: Uuid, document: Uuid, mark: Option<usize>) {
+pub(crate) fn saved(project: Uuid, document: Uuid, path: &Path, mark: Option<usize>) {
     let shared = SHARED.lock().ok();
     let hosted = shared.as_ref().and_then(|shared| shared.get(&project));
+    // The copy is this file from now on, whatever it was saved as before.
+    if matches!(hosted, Some(Sharing::Guest(_) | Sharing::Online(_))) {
+        note_copy(document, Some(path));
+    }
     match (hosted, mark) {
         (Some(Sharing::Host(host)), Some(mark)) => host.saved(mark),
         // Sharing started while the file was being written. Kept as it is.
@@ -1295,6 +1299,51 @@ pub(crate) fn saved(project: Uuid, document: Uuid, mark: Option<usize>) {
         (Some(Sharing::Online(member)), Some(mark)) => member.saved(mark),
         _ => lumit_share::forget(document),
     }
+}
+
+/// Where this machine notes which file its copy `document` of a shared
+/// project is saved as.
+#[frb(ignore)]
+fn copy_note(document: Uuid) -> Option<PathBuf> {
+    Some(lumit_project::shared_dir()?.join(format!("guest-{document}.at")))
+}
+
+/// Note that the copy `document` is saved at `path`, or has no file yet.
+#[frb(ignore)]
+pub(crate) fn note_copy(document: Uuid, path: Option<&Path>) {
+    let Some(note) = copy_note(document) else {
+        return;
+    };
+    let Some(path) = path else {
+        let _ = std::fs::remove_file(note);
+        return;
+    };
+    if let Some(dir) = note.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(note, path.to_string_lossy().as_bytes());
+}
+
+/// Whether the file at `path` is this machine's copy `document` of a shared
+/// project, and so opens as part of it.
+///
+/// What is kept for a copy is filed by the document's id, and that is not
+/// one file's alone: a project saved under another name, a version of it and
+/// a file copied by hand all have the id of the file they came from. Opened
+/// as the copy, any of them would have the shared project's document put in
+/// place of its own, and the next save would write that over it.
+///
+/// So only the file the copy was last saved as is the copy. One noted
+/// nowhere, as a copy an earlier Lumit kept is, is the first file opened.
+/// So is one whose noted file has gone, which is a copy moved or renamed.
+#[frb(ignore)]
+pub(crate) fn copy_is_at(document: Uuid, path: &Path) -> bool {
+    let noted = copy_note(document).and_then(|note| std::fs::read_to_string(note).ok());
+    // As the disk names each, so two spellings of one path are one file.
+    let named = |path: &Path| std::fs::canonicalize(path).ok();
+    noted
+        .and_then(|noted| named(Path::new(&noted)))
+        .is_none_or(|noted| named(path) == Some(noted))
 }
 
 /// Carry on as the guest `project`'s file was left as: its host away, and
@@ -1811,11 +1860,12 @@ impl ProjectReference {
         password: Option<String>,
         events: Option<ShareEventStream>,
     ) -> Result<BridgeOnlineStarted, BridgeError> {
-        let (store, root) = {
+        let (store, root, file) = {
             let state = self.state()?;
             let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
             let root = state.path.as_deref().and_then(Path::parent);
-            (state.store.clone(), root.map(Path::to_path_buf))
+            let root = root.map(Path::to_path_buf);
+            (state.store.clone(), root, state.path.clone())
         };
         // Hashed before anything is taken, as in `share`. One that will not
         // hash stops it here, where sharing with none would be a surprise.
@@ -1837,6 +1887,8 @@ impl ProjectReference {
             Ok(member) => {
                 let link = member.invite().to_string();
                 let sharing = Sharing::Online(member);
+                // The host's file is a copy like anyone's from here.
+                note_copy(store.snapshot().id, file.as_deref());
                 carry(self.id, store, sink, &sharing);
                 if let Ok(mut shared) = SHARED.lock() {
                     shared.insert(self.id, sharing);

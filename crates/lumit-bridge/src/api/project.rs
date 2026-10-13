@@ -1278,7 +1278,8 @@ impl ProjectReference {
         let claim = crate::claim::take(&target).ok().flatten().or(claim);
         crate::claim::settle(self.id, Some(&target), claim);
         // A host keeps its edits since the last save, and that is now.
-        crate::api::share::saved(self.id, document.id, hosted.map(|(_, _, mark)| mark));
+        let mark = hosted.map(|(_, _, mark)| mark);
+        crate::api::share::saved(self.id, document.id, &target, mark);
         let mut state = project.write().map_err(|_| BridgeError::WriteFailed)?;
         if let Some(mut packed) = packed {
             // An item deleted since it was packed keeps its entry in the open

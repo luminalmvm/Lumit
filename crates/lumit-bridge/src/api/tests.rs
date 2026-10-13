@@ -10314,3 +10314,27 @@ fn interpreting_footage_is_one_undo_step_the_engine_answers_by() {
     let info = footage.media_info().expect("info").expect("it probes");
     assert_eq!((info.fps_num, info.fps_den), (60, 1));
 }
+
+/// Only the file a copy of a shared project is saved as opens as part of
+/// it. Any other file with its id would have the shared project's document
+/// put in place of its own.
+#[test]
+fn only_its_own_file_opens_as_a_shared_copy() {
+    use crate::api::share::{copy_is_at, note_copy};
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (copy, other) = (dir.path().join("copy.lum"), dir.path().join("other.lum"));
+    std::fs::write(&copy, []).expect("written");
+    std::fs::write(&other, []).expect("written");
+    let id = Uuid::now_v7();
+
+    // Noted nowhere, as a copy an earlier Lumit kept is.
+    assert!(copy_is_at(id, &other));
+    note_copy(id, Some(&copy));
+    assert!(copy_is_at(id, &copy));
+    assert!(!copy_is_at(id, &other));
+    // Moved or renamed.
+    std::fs::remove_file(&copy).expect("removed");
+    assert!(copy_is_at(id, &other));
+    note_copy(id, None);
+}
