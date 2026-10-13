@@ -978,7 +978,15 @@ impl LensFlareFx {
                     layout: Some(&pl),
                     module: &module,
                     entry_point: Some(entry),
-                    compilation_options: Default::default(),
+                    // wgpu zeroes workgroup memory first unless told not to,
+                    // and FXC takes five seconds to compile that for the
+                    // blur's line cache. The blur and the tile detect each
+                    // write every slot before reading any, so nothing is
+                    // lost by leaving it out.
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        zero_initialize_workgroup_memory: false,
+                        ..Default::default()
+                    },
                     cache: None,
                 })
             })
