@@ -79,11 +79,15 @@ void main() {
 
       // The budget is a typed number now, not a pick from a list:
       // dragging it changes what the engine holds, not just the label.
-      final before = cacheStats().budgetBytes.toInt();
       await tester.drag(find.byKey(const ValueKey('settings-cache-budget')),
           const Offset(60, 0));
       await tester.pumpAndSettle();
-      expect(cacheStats().budgetBytes.toInt(), greaterThan(before),
+      // Checked against what the drag asked for, not the budget from before
+      // it: the engine sizes the cache to the machine a moment after it
+      // starts, so the earlier number can change under the test.
+      final asked = p.uiState.workspace.performance.cacheBudgetBytes;
+      expect(asked, isNotNull, reason: 'the drag named a budget');
+      expect(cacheStats().budgetBytes.toInt(), asked,
           reason: 'the drag reached the engine');
 
       await tester.tap(find.byKey(const ValueKey('settings-cache-clear')));
