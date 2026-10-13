@@ -1073,6 +1073,7 @@ class LayerArea extends StatelessWidget {
                                   animation: Listenable.merge([
                                     vScroll,
                                     layerDrag.band,
+                                    layerDrag.seams,
                                     layerDrag.mark,
                                   ]),
                                   builder: (context, _) => CustomPaint(
@@ -1100,12 +1101,11 @@ class LayerArea extends StatelessWidget {
                                       origin:
                                           -((positionOf(vScroll)?.pixels ?? 0) %
                                               1.0),
-                                      blanks: [
-                                        ...sequenceBlanks,
-                                        if (layerDrag.band.value
-                                            case final band?)
-                                          band.blank,
-                                      ],
+                                      blanks: sequenceBlanks,
+                                      // The rows a layer drag has slid take
+                                      // their seams with them.
+                                      moves: layerDrag.seamMoves(blockHeights),
+                                      lifted: layerDrag.band.value?.blank,
                                     ),
                                   ),
                                 ),

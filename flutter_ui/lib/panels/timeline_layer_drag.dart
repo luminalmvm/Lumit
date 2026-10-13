@@ -223,6 +223,42 @@ class LayerDragState extends ValueNotifier<LayerDrag?> {
   /// follows the settle.
   final ValueNotifier<LiftedBand?> band = ValueNotifier<LiftedBand?>(null);
 
+  /// How far each block's row seams are ruled from their own place, in
+  /// pixels down, by index into the rows on screen. A block that is not
+  /// listed has not moved.
+  ///
+  /// The same overlay rules these, so a block that steps aside says here how
+  /// far it has got and its seams go with it. The block in hand lists the
+  /// slot it is aimed at, not where it is: its own seams are under its card,
+  /// and the gap opened for it is ruled as the row it will be.
+  final ValueNotifier<Map<int, double>> seams =
+      ValueNotifier<Map<int, double>>(const {});
+
+  /// The block at [index] has its seams [shift] pixels down from their place.
+  void moveSeams(int index, double shift) {
+    if ((seams.value[index] ?? 0) == shift) return;
+    seams.value = {
+      for (final e in seams.value.entries)
+        if (e.key != index) e.key: e.value,
+      if (shift != 0) index: shift,
+    };
+  }
+
+  /// The stretches of the stack whose seams have moved, as (top, bottom,
+  /// shift) in the rows' own pixels from the top of the stack.
+  List<(double, double, double)> seamMoves(List<double> heights) {
+    final shifts = seams.value;
+    if (shifts.isEmpty) return const [];
+    final moves = <(double, double, double)>[];
+    var top = 0.0;
+    for (var i = 0; i < heights.length; i++) {
+      final shift = shifts[i];
+      if (shift != null) moves.add((top, top + heights[i], shift));
+      top += heights[i];
+    }
+    return moves;
+  }
+
   /// Where the line marking the drop's place goes ([layerDragMark]), or null.
   /// Only ever set by a drag that is not carried.
   final ValueNotifier<double?> mark = ValueNotifier<double?>(null);
@@ -253,6 +289,7 @@ class LayerDragState extends ValueNotifier<LayerDrag?> {
     _drop = null;
     band.value = null;
     mark.value = null;
+    seams.value = const {};
     carried.value = 0;
     if (carries) raised.value = index;
     value = LayerDrag(index, index);
@@ -292,6 +329,10 @@ class LayerDragState extends ValueNotifier<LayerDrag?> {
       moved: landed.from != landed.to,
     );
     raised.value = landed.to;
+    // Emptied here, and every block on screen says its own again as the drag
+    // clears, so one that scrolled out of the stack mid-drag leaves nothing
+    // behind.
+    seams.value = const {};
     value = null;
     return landed;
   }
@@ -302,6 +343,7 @@ class LayerDragState extends ValueNotifier<LayerDrag?> {
     carried.dispose();
     raised.dispose();
     band.dispose();
+    seams.dispose();
     mark.dispose();
     super.dispose();
   }
@@ -473,6 +515,15 @@ class _LayerDragSlideState extends State<LayerDragSlide>
 
   void _repaint() {
     _publishBand();
+    // In hand, the seams are the slot's. Landing, the block is already in the
+    // stack's new order and only the card is still coming down.
+    widget.drag.moveSeams(
+        widget.index,
+        _inHand
+            ? layerDragShift(widget.heights, widget.drag.value, widget.index)
+            : _lift.value > 0
+                ? 0
+                : _shift.value);
     if (mounted) setState(() {});
   }
 
