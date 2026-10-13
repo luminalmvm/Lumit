@@ -2692,6 +2692,7 @@ fn build_viewer_renderer(
             renderer.unified_memory(),
         );
         renderer.set_memory_budgets(vram, ram);
+        crate::framecache::size_to_machine(vram, ram);
     }
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
     // the frame rather than inside it: picking a lens shows the lens

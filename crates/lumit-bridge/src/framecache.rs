@@ -479,7 +479,26 @@ pub(crate) fn with_best_frame<R>(
 
 /// Resize the RAM budget (Settings → Performance).
 pub(crate) fn set_budget(bytes: usize) {
+    CHOSEN.store(true, std::sync::atomic::Ordering::Relaxed);
     with_cache(|c| c.set_budget(bytes));
+}
+
+/// Whether Settings has named a RAM budget, which then stands.
+static CHOSEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Size the memory and card caches to this machine, where Settings has not
+/// named a budget: a quarter of what the governor allows each (docs/13 §3),
+/// and never less than the built-in 512 MiB.
+///
+/// The built-in figure holds about two seconds of 1080p at 60 fps across both
+/// tiers. A loop longer than that came off disk every time round, on a
+/// machine with tens of gigabytes standing idle.
+pub(crate) fn size_to_machine(vram: u64, ram: u64) {
+    let quarter = |bytes: u64| usize::try_from(bytes / 4).unwrap_or(usize::MAX);
+    if !CHOSEN.load(std::sync::atomic::Ordering::Relaxed) {
+        with_cache(|c| c.set_budget(quarter(ram).max(DEFAULT_BUDGET_BYTES)));
+    }
+    vram::size_to_machine(quarter(vram));
 }
 
 /// Empty the cache now (Settings → Clear cache).
@@ -544,7 +563,21 @@ pub(crate) mod vram {
     }
 
     pub(crate) fn set_budget(bytes: usize) {
+        CHOSEN.store(true, Ordering::Relaxed);
         BUDGET.store(bytes, Ordering::Relaxed);
+    }
+
+    /// Whether Settings has named a budget, which then stands.
+    static CHOSEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    /// See [`super::size_to_machine`].
+    pub(super) fn size_to_machine(bytes: usize) {
+        if !CHOSEN.load(Ordering::Relaxed) {
+            BUDGET.store(
+                bytes.max(lumit_render::DEFAULT_VRAM_CACHE_BYTES),
+                Ordering::Relaxed,
+            );
+        }
     }
 
     pub(crate) fn budget() -> usize {
