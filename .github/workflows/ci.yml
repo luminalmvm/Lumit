@@ -29,6 +29,16 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
 
+# Caches, which every job below leans on. A repository gets 10 GB and the
+# least recently used go first, so two rules keep the ones that matter in:
+#
+# - Only main saves a Rust cache (`save-if`). A pull request can read main's
+#   but its own are no use to any other branch, and a day of pull requests
+#   pushed main's out. The job that lost one compiled every dependency again,
+#   which on Windows is half an hour.
+# - The Flutter SDK is downloaded, not cached. It is 3.7 GB across two
+#   platforms and the download is as quick as the restore.
+
 jobs:
   check:
     name: fmt + clippy + tests (macOS)
@@ -61,6 +71,7 @@ jobs:
       # outlive its keg, so the keg's version is part of the Rust cache key.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -121,6 +132,8 @@ jobs:
         run: |
           "LIBCLANG_PATH=$env:RUNNER_TEMP\llvm\bin" >> $env:GITHUB_ENV
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The shipping target runs the full gate, media included — this is the parity
       # the desktop-dev setup unlocked (previously Windows built --no-default-features).
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -213,6 +226,8 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # GPU crates included: the tests share one device under a lock (see the
       # `windows` job), so a software rasteriser neither races nor thrashes.
@@ -299,6 +314,8 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Released, always: the harness's own loop is only comparable with itself
       # when the whole thing is optimised, and a debug number means nothing.
       #
@@ -405,11 +422,12 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
       - name: Cache pub packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -504,16 +522,17 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Flutter stable pinned to the SAME version the desktop dev box runs
       # (3.47.1), so CI and the owner's machine agree. It has to be: the runner
       # calls `DartProject::set_impeller_switch`, which 3.44.7's Windows
-      # embedder does not have, so a stale pin fails to compile main.cpp. `cache: true` caches the
-      # SDK; the pub cache is cached separately below.
+      # embedder does not have, so a stale pin fails to compile main.cpp. The pub
+      # cache is cached below; the SDK is not (see the note on caches above).
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
       - name: Cache pub packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -645,13 +664,13 @@ jobs:
         uses: ./.github/actions/ffmpeg8-macos
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # The same pinned Flutter the Linux job takes, so the two agree.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
       - name: Cache pub packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -737,7 +756,6 @@ jobs:
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
       # Generating compiles lumit-bridge, so this job needs the same native
       # dependencies the `linux` job installs — FFmpeg for rusty_ffmpeg and
       # libclang 18 for bindgen. Without them `generate` fails while building
@@ -768,6 +786,8 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The version is pinned once, on the runtime crate the generated glue links
       # against (`flutter_rust_bridge = { version = "=2.12.0", … }`). Read it from
       # there rather than restating it here: a generator that drifts from its
@@ -828,6 +848,7 @@ jobs:
         uses: ./.github/actions/ffmpeg8-macos
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # Engine crates must hold the line; the threshold may rise, never fall.
       # The FFmpeg-free engine crates are all gated (measured 83–99% locally).
@@ -897,6 +918,8 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The **bundles only**, not the checkouts they were built from: the
       # runner's `ensure` hands back a folder that already has bundles in it
       # without looking at a compiler, so a green run pays for the eighty
@@ -954,6 +977,8 @@ jobs:
         with:
           toolchain: nightly
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # `+nightly` explicitly: rust-toolchain.toml pins stable for the whole
       # repository, and it wins over whichever toolchain the step above made the
       # default - so without this cargo runs stable and `-Zsanitizer` is refused.
