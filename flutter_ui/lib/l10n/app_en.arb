@@ -16607,6 +16607,14 @@
   "@signInHaveAccount": {
     "description": "Link at the foot of the create-account page, back to signing in."
   },
+  "signInPrivacy": "Privacy",
+  "@signInPrivacy": {
+    "description": "Link at the foot of the sign-in window. Opens the website's page on what a Lumit account stores."
+  },
+  "signInTerms": "Terms",
+  "@signInTerms": {
+    "description": "Link at the foot of the sign-in window, beside Privacy. Opens the website's terms for a Lumit account and Lumit Pro."
+  },
   "signInBack": "Back",
   "@signInBack": {
     "description": "Link on the code and new password pages of the sign-in window, back to the first page."

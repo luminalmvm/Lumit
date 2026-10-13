@@ -20,6 +20,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../state/account.dart';
+import '../state/external_links.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
@@ -339,6 +340,7 @@ class _SignInState extends State<_SignIn> {
               ),
             ],
             ..._others(t, config),
+            ..._smallPrint(t),
           ],
         _Page.create => [
             _field(t, 'name', _name, l10n.signInName, autofocus: true),
@@ -355,6 +357,7 @@ class _SignInState extends State<_SignIn> {
                   () => _go(_Page.signIn)),
             ),
             ..._others(t, config),
+            ..._smallPrint(t),
           ],
         _Page.code || _Page.reset => [
             _field(t, 'code', _code, l10n.signInCode,
@@ -428,6 +431,22 @@ class _SignInState extends State<_SignIn> {
             tinted: true),
     ];
   }
+
+  /// The privacy page and the terms, on the two pages an account can be made
+  /// from. Signing in with Google or Discord makes one too.
+  List<Widget> _smallPrint(LumitTheme t) => [
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _link(t, 'privacy', l10n.signInPrivacy,
+                () => openExternalLink(lumitPrivacyUrl)),
+            const SizedBox(width: 14),
+            _link(t, 'terms', l10n.signInTerms,
+                () => openExternalLink(lumitTermsUrl)),
+          ],
+        ),
+      ];
 
   Widget _field(LumitTheme t, String id, TextEditingController controller,
           String hint,

@@ -26,6 +26,11 @@ const String lumitGuidesUrl =
 /// are `web/src/pages/releases/`, not a docs page.
 const String lumitReleasesUrl = 'https://lumitlab.com/releases/';
 
+/// What an account stores and the terms it comes with. The sign-in window
+/// links both, so they can be read before an account is made.
+const String lumitPrivacyUrl = 'https://lumitlab.com/privacy/';
+const String lumitTermsUrl = 'https://lumitlab.com/terms/';
+
 /// How Lumit opens a web page, and the seam a test replaces.
 ///
 /// A top-level function rather than a parameter threaded through every caller:
