@@ -6,6 +6,10 @@
 // in it, a drag moves them, a double-click renames it and a right-click opens
 // its menu. Boxes let go over a frame move into it.
 //
+// A group is saved to the library under a name, with a few words about it and
+// a colour. The ones ticked for the shelf sit in a strip above the
+// canvas, a click away. The rest are in the Saved groups window.
+//
 // Groups nest. One group is inside another when all of its boxes are the
 // other's too, so nothing more is stored for it: the outer frame is drawn
 // round the inner one, and every edit here keeps any two groups either apart
@@ -27,7 +31,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show HardwareKeyboard, LogicalKeyboardKey;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart'
-    show BridgePresetInfo, presetsDirPath, renameSavedGroup;
+    show
+        BridgePresetInfo,
+        BridgeSavedGroupDetails,
+        editSavedGroup,
+        presetsDirPath;
 import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeGraphNote;
 import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
@@ -37,12 +45,12 @@ import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/settings_account.dart' show askBefore;
-import '../shell/theme_name_dialog.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'graph_panel.dart';
-import 'timeline_extras_frb.dart' show DoubleTap, showLabelPicker, showMenuAt;
+import 'timeline_extras_frb.dart'
+    show DoubleTap, chipRing, showLabelPicker, showMenuAt;
 
 /// One group as a canvas works on it: its boxes by key.
 class GraphGroup {
@@ -64,6 +72,36 @@ double graphGroupScale(double zoom) => (1 / zoom).clamp(1.0, 3.0);
 String graphGroupFile(String dir, String name, String extension) {
   final stem = name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f]'), '_');
   return '$dir/$stem.$extension';
+}
+
+/// A group in the library, as its file describes it.
+class SavedGroup {
+  final String path;
+  final BridgeSavedGroupDetails details;
+
+  /// How many boxes it holds.
+  final int boxes;
+  const SavedGroup(this.path, this.details, this.boxes);
+
+  /// Read off the file. One this build cannot read is listed all the same,
+  /// under the name the library gave it.
+  factory SavedGroup.read(BridgePresetInfo info) {
+    Map saved = const {};
+    try {
+      saved = jsonDecode(File(info.path).readAsStringSync()) as Map;
+    } catch (_) {}
+    return SavedGroup(
+      info.path,
+      BridgeSavedGroupDetails(
+        name: info.name,
+        description: saved['description'] as String? ?? '',
+        colour: (saved['colour'] as num?)?.toInt() ?? 0,
+        shelf: saved['shelf'] as bool? ?? false,
+      ),
+      ((saved['nodes'] as List?)?.length ?? 0) +
+          ((saved['effects'] as List?)?.length ?? 0),
+    );
+  }
 }
 
 /// What a row of a group's menu does.
@@ -159,6 +197,31 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     return was;
   }
 
+  /// The saved groups kept on the shelf. Read when the canvas opens and when
+  /// the library changes here, never as it is drawn.
+  List<SavedGroup> _shelf = const [];
+
+  void refreshShelf() {
+    final List<SavedGroup> shelf;
+    try {
+      shelf = [
+        for (final info in savedGroups())
+          if (SavedGroup.read(info) case final saved when saved.details.shelf)
+            saved,
+      ];
+    } catch (_) {
+      // No library to read. The shelf is then simply not drawn.
+      return;
+    }
+    if (mounted) setState(() => _shelf = shelf);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    refreshShelf();
+  }
+
   /// A bar's press, on its way to the canvas's own pointer handler.
   int? _pressed;
   final DoubleTap _taps = DoubleTap();
@@ -230,7 +293,7 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
   /// round all of them goes on holding them, so the new one is inside it. A
   /// group wholly among them comes inside the new one. Any other lets go of
   /// the boxes it shares.
-  List<GraphGroup> _grouped(List<String> boxes, String name) {
+  List<GraphGroup> _grouped(List<String> boxes, String name, {int? colour}) {
     final picked = boxes.toSet();
     final all = groups;
     return [
@@ -244,7 +307,7 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
               if (!picked.contains(m)) m,
           ]),
       // Chip 0 is the palette's grey, which reads as no colour at all.
-      GraphGroup(name, all.length + 1, boxes),
+      GraphGroup(name, colour ?? all.length + 1, boxes),
     ];
   }
 
@@ -310,46 +373,56 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     _set(at, name: trimmed);
   }
 
-  /// Save the picked boxes to the library as a group, asking its name. Boxes
-  /// that are not a group yet become one under that name, so what is on the
-  /// canvas and what is in the library are called the same thing.
+  /// Save the picked boxes to the library as a group, asking what it is
+  /// called and how it is listed. Boxes that are not a group yet become one,
+  /// and the group takes the name and the colour, so what is on the canvas
+  /// and what is in the library match.
   Future<void> saveGroup([int? at]) async {
     at ??= groupPick ?? _groupOfPick;
     if (at != null && at >= groups.length) at = null;
     final members = at == null ? pickedKeys : groups[at].members;
-    if (!members.any(groupCarries)) return;
-    final name = await askThemeName(
+    final dir = groupLibrary;
+    if (dir == null || !members.any(groupCarries)) return;
+    final called = at == null ? l10n.graphGroupDefaultName : groups[at].name;
+    // A group saved before keeps the words and the shelf tick it had.
+    final before = File(graphGroupFile(dir, called, groupExtension));
+    final had = at != null && before.existsSync()
+        ? SavedGroup.read(BridgePresetInfo(name: called, path: before.path))
+        : null;
+    final details = await askGroupDetails(
       context,
       title: l10n.graphSaveGroupTitle,
-      suggested: at == null ? l10n.graphGroupDefaultName : groups[at].name,
+      initial: BridgeSavedGroupDetails(
+        name: called,
+        description: had?.details.description ?? '',
+        colour: at == null ? groups.length + 1 : groups[at].colour,
+        shelf: had?.details.shelf ?? false,
+      ),
     );
-    final dir = groupLibrary;
-    if (name == null || dir == null || !mounted) return;
-    final file = File(graphGroupFile(dir, name, groupExtension));
+    if (details == null || !mounted) return;
+    final file = File(graphGroupFile(dir, details.name, groupExtension));
     if (file.existsSync() &&
-        !await askBefore(
-            context,
-            l10n.graphSaveGroupReplace(name),
+        !await askBefore(context, l10n.graphSaveGroupReplace(details.name),
             l10n.graphSaveGroupReplaceYes)) {
       return;
     }
     if (!mounted) return;
 
-    final int colour;
     if (at == null) {
-      final next = _grouped(members, name);
-      colour = next.last.colour;
-      commitGroups(next);
-    } else {
-      colour = groups[at].colour;
-      if (name != groups[at].name) _set(at, name: name);
+      commitGroups(_grouped(members, details.name, colour: details.colour));
+    } else if (details.name != groups[at].name ||
+        details.colour != groups[at].colour) {
+      _set(at, name: details.name, colour: details.colour);
     }
     try {
-      file.writeAsStringSync(groupText(name, colour, members));
+      file.writeAsStringSync(
+          groupText(details.name, details.colour, members));
+      editSavedGroup(path: file.path, to: file.path, details: details);
     } catch (_) {
       // The library is the user's own folder. A write it refused leaves the
       // group on the canvas, which is the half that did land.
     }
+    refreshShelf();
   }
 
   /// The saved groups' window. A row picked there is inserted here.
@@ -363,8 +436,63 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
         close: close,
       ),
     );
-    if (path != null && mounted) insertSavedGroup(path);
+    if (!mounted) return;
+    refreshShelf();
+    if (path != null) insertSavedGroup(path);
   }
+
+  /// The shelf: the saved groups ticked for it, each a click from the
+  /// canvas. Null while there are none, so the strip takes no room.
+  Widget? groupShelf(LumitTheme t) => _shelf.isEmpty
+      ? null
+      : Container(
+          key: const ValueKey('graph-shelf'),
+          height: graphToolbarHeight,
+          color: t.surface1,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.centerLeft,
+          // More than fit are reached by scrolling the strip sideways.
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final saved in _shelf)
+                  LumitTooltip(
+                    message: saved.details.description.isEmpty
+                        ? saved.details.name
+                        : saved.details.description,
+                    child: HoverMark(
+                      builder: (context, lit) => GestureDetector(
+                        key: ValueKey<String>(
+                            'graph-shelf-${saved.details.name}'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => insertSavedGroup(saved.path),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 14),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                color: t.labelColour(saved.details.colour),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                saved.details.name,
+                                style: t.small.copyWith(
+                                    color: Color.lerp(
+                                        t.textMuted, t.textPrimary, lit)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
 
   Future<void> _menu(int at, Offset position) async {
     final picked = await showMenuAt<_GroupDo>(
@@ -1010,8 +1138,190 @@ class GraphNoteCard extends StatelessWidget {
   }
 }
 
+/// Ask what a saved group is called and how it is listed: its name, a few
+/// words about it, a colour and whether it is kept on the shelf.
+/// Null when the window was dismissed or the name left empty.
+Future<BridgeSavedGroupDetails?> askGroupDetails(
+  BuildContext context, {
+  required String title,
+  required BridgeSavedGroupDetails initial,
+}) =>
+    showLumitModal<BridgeSavedGroupDetails>(
+      context: context,
+      builder: (close) =>
+          _GroupDetailsForm(title: title, initial: initial, close: close),
+    );
+
+class _GroupDetailsForm extends StatefulWidget {
+  final String title;
+  final BridgeSavedGroupDetails initial;
+  final void Function(BridgeSavedGroupDetails?) close;
+  const _GroupDetailsForm(
+      {required this.title, required this.initial, required this.close});
+
+  @override
+  State<_GroupDetailsForm> createState() => _GroupDetailsFormState();
+}
+
+class _GroupDetailsFormState extends State<_GroupDetailsForm> {
+  late final TextEditingController _name =
+      TextEditingController(text: widget.initial.name)
+        ..selection = TextSelection(
+            baseOffset: 0, extentOffset: widget.initial.name.length);
+  late final TextEditingController _description =
+      TextEditingController(text: widget.initial.description);
+  late int _colour = widget.initial.colour % LumitTheme.labelCount;
+  late bool _shelf = widget.initial.shelf;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _description.dispose();
+    super.dispose();
+  }
+
+  /// A group with no name could not be found again, so an empty name is the
+  /// same answer as Cancel.
+  void _done() {
+    final name = _name.text.trim();
+    widget.close(name.isEmpty
+        ? null
+        : BridgeSavedGroupDetails(
+            name: name,
+            description: _description.text.trim(),
+            colour: _colour,
+            shelf: _shelf,
+          ));
+  }
+
+  Widget _row(LumitTheme t, String label, Widget control,
+          {bool top = false}) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: Row(
+          crossAxisAlignment:
+              top ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 84,
+              child: Padding(
+                padding: EdgeInsets.only(top: top ? 4 : 0),
+                child: Text(label, style: t.small),
+              ),
+            ),
+            Expanded(child: control),
+          ],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return FloatSurface(
+      width: 380,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(widget.title, style: t.bodyPrimary),
+            const SizedBox(height: 12),
+            _row(
+              t,
+              l10n.name,
+              HouseTextField(
+                key: const ValueKey('graph-group-name'),
+                controller: _name,
+                width: double.infinity,
+                autofocus: true,
+                onSubmitted: (_) => _done(),
+              ),
+            ),
+            _row(
+              t,
+              l10n.graphGroupDescription,
+              SizedBox(
+                height: 46,
+                child: HouseTextField(
+                  key: const ValueKey('graph-group-description'),
+                  controller: _description,
+                  width: double.infinity,
+                  multiline: true,
+                  topAlign: true,
+                ),
+              ),
+              top: true,
+            ),
+            _row(
+              t,
+              l10n.graphGroupColourLabel,
+              Row(
+                children: [
+                  for (var i = 0; i < LumitTheme.labelCount; i++)
+                    GestureDetector(
+                      key: ValueKey<String>('graph-group-colour-$i'),
+                      onTap: () => setState(() => _colour = i),
+                      child: HoverMark(
+                        swells: true,
+                        builder: (context, lit) => Container(
+                          width: 14,
+                          height: 14,
+                          margin: const EdgeInsets.only(right: 6),
+                          decoration: BoxDecoration(
+                            color: t.labelColour(i),
+                            borderRadius:
+                                BorderRadius.circular(t.tokens.controlRadius),
+                          ),
+                          foregroundDecoration:
+                              chipRing(t, i == _colour ? 1 : lit),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            _row(
+              t,
+              l10n.graphGroupShelf,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: HouseCheckbox(
+                  key: const ValueKey('graph-group-shelf'),
+                  value: _shelf,
+                  onChanged: (on) => setState(() => _shelf = on),
+                ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                HouseButton(
+                  small: true,
+                  frameless: true,
+                  onPressed: () => widget.close(null),
+                  child: Text(l10n.cancel),
+                ),
+                const SizedBox(width: 6),
+                HouseButton(
+                  key: const ValueKey('graph-group-ok'),
+                  small: true,
+                  primary: true,
+                  onPressed: _done,
+                  child: Text(l10n.save),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// The groups saved to the library for one kind of graph: click one to insert
-/// it, or rename or delete it here.
+/// it, or pin it to the shelf, edit it or delete it here.
 class _SavedGroups extends StatefulWidget {
   final List<BridgePresetInfo> Function() lister;
   final String? folder;
@@ -1032,44 +1342,20 @@ class _SavedGroups extends StatefulWidget {
 }
 
 class _SavedGroupsState extends State<_SavedGroups> {
-  /// Each saved group with its colour chip and how many boxes it holds, read
-  /// off its file when the list is made and not as it is drawn.
-  late List<(BridgePresetInfo, int, int)> _rows = _read();
+  /// Read off the files when the list is made and not as it is drawn.
+  late List<SavedGroup> _rows = _read();
 
-  List<(BridgePresetInfo, int, int)> _read() => [
-        for (final info in widget.lister())
-          switch (_facts(info.path)) {
-            (final colour, final boxes) => (info, colour, boxes),
-          },
-      ];
+  List<SavedGroup> _read() => widget.lister().map(SavedGroup.read).toList();
 
-  (int, int) _facts(String path) {
+  /// Write [details] into a saved group's file, under whatever name they
+  /// carry, and read the list again.
+  void _write(SavedGroup saved, BridgeSavedGroupDetails details) {
     try {
-      final saved = jsonDecode(File(path).readAsStringSync()) as Map;
-      return (
-        (saved['colour'] as num?)?.toInt() ?? 0,
-        ((saved['nodes'] as List?)?.length ?? 0) +
-            ((saved['effects'] as List?)?.length ?? 0),
-      );
-    } catch (_) {
-      // Not a file this build can read. It is listed all the same.
-      return (0, 0);
-    }
-  }
-
-  Future<void> _rename(BridgePresetInfo saved) async {
-    final name = await askThemeName(
-      context,
-      title: l10n.graphRenameSavedGroup,
-      suggested: saved.name,
-      confirm: l10n.rename,
-    );
-    if (name == null || name == saved.name) return;
-    try {
-      renameSavedGroup(
+      editSavedGroup(
         path: saved.path,
-        name: name,
-        to: graphGroupFile(File(saved.path).parent.path, name, widget.extension),
+        to: graphGroupFile(
+            File(saved.path).parent.path, details.name, widget.extension),
+        details: details,
       );
     } catch (_) {
       // The name is another saved group's, so this one keeps its own.
@@ -1077,9 +1363,24 @@ class _SavedGroupsState extends State<_SavedGroups> {
     if (mounted) setState(() => _rows = _read());
   }
 
-  Future<void> _delete(BridgePresetInfo saved) async {
-    if (!await askBefore(
-        context, l10n.graphDeleteSavedGroup(saved.name), l10n.delete)) {
+  Future<void> _edit(SavedGroup saved) async {
+    final details = await askGroupDetails(context,
+        title: l10n.graphEditSavedGroup, initial: saved.details);
+    if (details != null) _write(saved, details);
+  }
+
+  void _pin(SavedGroup saved) => _write(
+      saved,
+      BridgeSavedGroupDetails(
+        name: saved.details.name,
+        description: saved.details.description,
+        colour: saved.details.colour,
+        shelf: !saved.details.shelf,
+      ));
+
+  Future<void> _delete(SavedGroup saved) async {
+    if (!await askBefore(context,
+        l10n.graphDeleteSavedGroup(saved.details.name), l10n.delete)) {
       return;
     }
     try {
@@ -1091,7 +1392,8 @@ class _SavedGroupsState extends State<_SavedGroups> {
   }
 
   Widget _mark(LumitTheme t, String key, String icon, String tip,
-          VoidCallback onTap) =>
+          VoidCallback onTap,
+          {bool on = false}) =>
       LumitTooltip(
         message: tip,
         child: HoverMark(
@@ -1104,7 +1406,9 @@ class _SavedGroupsState extends State<_SavedGroups> {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               child: glyph.LumitIcon(icon,
                   size: graphIconSize,
-                  colour: Color.lerp(t.textMuted, t.textPrimary, lit)),
+                  colour: on
+                      ? t.textPrimary
+                      : Color.lerp(t.textDisabled, t.textPrimary, lit)),
             ),
           ),
         ),
@@ -1114,7 +1418,7 @@ class _SavedGroupsState extends State<_SavedGroups> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return FloatSurface(
-      width: 340,
+      width: 400,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1135,31 +1439,55 @@ class _SavedGroupsState extends State<_SavedGroups> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (final (saved, colour, boxes) in _rows)
+                    for (final saved in _rows)
                       MenuRow(
-                        key: ValueKey<String>('graph-saved-${saved.name}'),
+                        key: ValueKey<String>(
+                            'graph-saved-${saved.details.name}'),
                         onPressed: () => widget.close(saved.path),
                         child: Row(
                           children: [
                             Container(
                               width: 8,
                               height: 8,
-                              color: t.labelColour(colour),
+                              color: t.labelColour(saved.details.colour),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text(saved.name,
-                                  style: t.bodyPrimary,
-                                  overflow: TextOverflow.ellipsis),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(saved.details.name,
+                                      style: t.bodyPrimary,
+                                      overflow: TextOverflow.ellipsis),
+                                  if (saved.details.description.isNotEmpty)
+                                    Text(saved.details.description,
+                                        style: t.small,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
                             ),
-                            Text(l10n.graphSavedGroupBoxes(boxes),
+                            Text(l10n.graphSavedGroupBoxes(saved.boxes),
                                 style: t.small),
                             const SizedBox(width: 6),
-                            _mark(t, 'graph-saved-rename-${saved.name}',
-                                LumitIcons.rename, l10n.rename,
-                                () => _rename(saved)),
-                            _mark(t, 'graph-saved-delete-${saved.name}',
-                                LumitIcons.delete, l10n.delete,
+                            _mark(
+                                t,
+                                'graph-saved-shelf-${saved.details.name}',
+                                LumitIcons.puppetPin,
+                                l10n.graphGroupShelf,
+                                () => _pin(saved),
+                                on: saved.details.shelf),
+                            _mark(
+                                t,
+                                'graph-saved-edit-${saved.details.name}',
+                                LumitIcons.rename,
+                                l10n.graphEditSavedGroup,
+                                () => _edit(saved)),
+                            _mark(
+                                t,
+                                'graph-saved-delete-${saved.details.name}',
+                                LumitIcons.delete,
+                                l10n.delete,
                                 () => _delete(saved)),
                           ],
                         ),

@@ -2668,6 +2668,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _toolbar(t, layout),
+        if (groupShelf(t) case final shelf?) shelf,
         Expanded(
           child: LayoutBuilder(
             builder: (context, box) => _canvas(t, layout, box.biggest),

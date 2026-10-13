@@ -318,6 +318,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSampledPixels dco_decode_box_autoadd_bridge_sampled_pixels(dynamic raw);
 
   @protected
+  BridgeSavedGroupDetails dco_decode_box_autoadd_bridge_saved_group_details(
+      dynamic raw);
+
+  @protected
   BridgeScalar dco_decode_box_autoadd_bridge_scalar(dynamic raw);
 
   @protected
@@ -1032,6 +1036,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSampledPixels dco_decode_bridge_sampled_pixels(dynamic raw);
+
+  @protected
+  BridgeSavedGroupDetails dco_decode_bridge_saved_group_details(dynamic raw);
 
   @protected
   BridgeScalar dco_decode_bridge_scalar(dynamic raw);
@@ -2158,6 +2165,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeSavedGroupDetails sse_decode_box_autoadd_bridge_saved_group_details(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeScalar sse_decode_box_autoadd_bridge_scalar(
       SseDeserializer deserializer);
 
@@ -2982,6 +2993,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSampledPixels sse_decode_bridge_sampled_pixels(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeSavedGroupDetails sse_decode_bridge_saved_group_details(
       SseDeserializer deserializer);
 
   @protected
@@ -4266,6 +4281,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeSampledPixels self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_saved_group_details(
+      BridgeSavedGroupDetails self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_scalar(
       BridgeScalar self, SseSerializer serializer);
 
@@ -5189,6 +5208,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_sampled_pixels(
       BridgeSampledPixels self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_saved_group_details(
+      BridgeSavedGroupDetails self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_scalar(BridgeScalar self, SseSerializer serializer);

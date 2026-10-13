@@ -12029,9 +12029,21 @@
   "@graphSavedGroupsFolder": {
     "description": "Graph panel, Saved groups window: button that opens the folder the saved groups are kept in, in the system's file manager."
   },
-  "graphRenameSavedGroup": "Rename group",
-  "@graphRenameSavedGroup": {
-    "description": "Graph panel, Saved groups window: heading of the small dialogue that asks for a saved group's new name."
+  "graphEditSavedGroup": "Edit group",
+  "@graphEditSavedGroup": {
+    "description": "Graph panel, Saved groups window: tooltip on a row's edit mark, and the heading of the form it opens to change a saved group's name, description, colour and shelf tick."
+  },
+  "graphGroupDescription": "Description",
+  "@graphGroupDescription": {
+    "description": "Graph panel, the form for a saved group: label of the field for a few words about what the group does. Shown under its name in the Saved groups window and as the tooltip on the shelf."
+  },
+  "graphGroupColourLabel": "Colour",
+  "@graphGroupColourLabel": {
+    "description": "Graph panel, the form for a saved group: label of the row of colour chips. The colour tints the group's frame on the canvas and its chip in the library."
+  },
+  "graphGroupShelf": "Show on shelf",
+  "@graphGroupShelf": {
+    "description": "Graph panel: label of the tick in a saved group's form, and tooltip on the pin in the Saved groups window. On, the group is kept in the strip above the canvas where one click inserts it."
   },
   "graphDeleteSavedGroup": "Delete the saved group “{name}”?",
   "@graphDeleteSavedGroup": {

@@ -510,13 +510,29 @@ pub fn list_graph_groups() -> Vec<BridgePresetInfo> {
         .unwrap_or_default()
 }
 
-/// Give a saved group another name: the one inside the file, which every list
-/// shows, and the file's own, which becomes `to`.
+/// What a saved group says about itself beside its boxes: what the Saved
+/// groups window lists and the shelf shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeSavedGroupDetails {
+    pub name: String,
+    pub description: String,
+    /// Which chip of the label palette it wears, as an index.
+    pub colour: u32,
+    /// Whether it is kept on the shelf above the canvas.
+    pub shelf: bool,
+}
+
+/// Write a saved group's details into its file and move the file to `to`,
+/// which is the same path unless the name changed.
 ///
-/// Refused when `to` is some other file, so a rename never writes over a saved
+/// Refused when `to` is some other file, so an edit never writes over a saved
 /// group.
 #[frb(sync)]
-pub fn rename_saved_group(path: String, name: String, to: String) -> Result<(), BridgeError> {
+pub fn edit_saved_group(
+    path: String,
+    to: String,
+    details: BridgeSavedGroupDetails,
+) -> Result<(), BridgeError> {
     let (from, to) = (std::path::Path::new(&path), std::path::Path::new(&to));
     // The same file under another spelling is not a clash: a file system that
     // ignores case finds the old file at the new name.
@@ -526,10 +542,11 @@ pub fn rename_saved_group(path: String, name: String, to: String) -> Result<(), 
     let text = std::fs::read_to_string(from).map_err(|_| BridgeError::InvalidPreset)?;
     let mut saved: serde_json::Value =
         serde_json::from_str(&text).map_err(|_| BridgeError::InvalidPreset)?;
-    saved
-        .as_object_mut()
-        .ok_or(BridgeError::InvalidPreset)?
-        .insert("name".to_owned(), name.into());
+    let fields = saved.as_object_mut().ok_or(BridgeError::InvalidPreset)?;
+    fields.insert("name".to_owned(), details.name.into());
+    fields.insert("description".to_owned(), details.description.into());
+    fields.insert("colour".to_owned(), details.colour.into());
+    fields.insert("shelf".to_owned(), details.shelf.into());
     let text = serde_json::to_string_pretty(&saved).map_err(|_| BridgeError::InvalidPreset)?;
     std::fs::write(from, text).map_err(|_| BridgeError::InvalidPreset)?;
     std::fs::rename(from, to).map_err(|_| BridgeError::InvalidPreset)

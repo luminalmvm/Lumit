@@ -765,8 +765,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('graph-save-group')));
       await tester.pumpAndSettle();
       await tester.enterText(
-          find.byKey(const ValueKey('theme-name-field')), 'Audio rig');
-      await tester.tap(find.byKey(const ValueKey('theme-name-ok')));
+          find.byKey(const ValueKey('graph-group-name')), 'Audio rig');
+      await tester.tap(find.byKey(const ValueKey('graph-group-ok')));
       await tester.pumpAndSettle();
 
       final group = p.layer.getGraph().wiring.groups.single;
