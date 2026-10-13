@@ -126,6 +126,10 @@ pub use lumit_media::DecodedFrame;
 /// direct `lumit-gpu` dependency to ask.
 pub use lumit_gpu::video_memory_bytes;
 
+/// A renderer's device and engines, re-exported for the same reason: the
+/// bridge keeps them between one project's renderer and the next.
+pub use lumit_gpu::SharedGpu;
+
 /// Which graphics card the renderer opened, as one line, re-exported for the
 /// same reason: the bridge writes it to the diagnostics file once a session.
 pub use lumit_gpu::adapter_summary;

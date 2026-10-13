@@ -27,59 +27,10 @@
 
 use crate::fx::FxEngine;
 use crate::scope::ScopeEngine;
-use crate::{ColourEngine, Compositor, GpuContext};
+use crate::{ColourEngine, Compositor, GpuContext, SharedGpu};
 use std::ops::Deref;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::thread::ThreadId;
-
-/// The device and every engine compiled on it, built once per process.
-pub struct SharedGpu {
-    pub ctx: GpuContext,
-    pub colour: ColourEngine,
-    pub compositor: Compositor,
-    pub fx: FxEngine,
-    pub scope: ScopeEngine,
-}
-
-impl SharedGpu {
-    fn build() -> Option<Self> {
-        let ctx = GpuContext::headless().ok()?;
-        Some(Self {
-            colour: ColourEngine::new(&ctx),
-            compositor: Compositor::new(&ctx),
-            fx: FxEngine::new(&ctx),
-            scope: ScopeEngine::new(&ctx),
-            ctx,
-        })
-    }
-
-    /// Forget what the previous borrower left behind.
-    fn reset(&self) {
-        // A test that panicked mid-frame leaves the encoder open; the next
-        // test starts on a closed one.
-        self.ctx.frame.replace(None);
-        self.ctx.frame_depth.set(0);
-        // The pool belongs to the frame that was open, and that frame is gone —
-        // and so does the ledger charge that accounts for it. A test that ended
-        // between `begin_frame` and `end_frame` would otherwise hand the next
-        // one a card the ledger believes is already half full, which is a
-        // failure that moves about as tests are added.
-        self.ctx.release_frame_memory();
-        // `release_frame_memory` latches the abandoned frame's overdraft as
-        // "the last frame's"; the next test did not draw that frame.
-        self.ctx.last_overdrawn.set(0);
-        // The budgets too: a test that lowered one to reach a ceiling must not
-        // leave every test after it renting a smaller card.
-        self.ctx
-            .ledger()
-            .set_budget(lumit_budget::Tier::Vram, lumit_budget::DEFAULT_VRAM_BUDGET);
-        self.ctx
-            .ledger()
-            .set_budget(lumit_budget::Tier::Ram, lumit_budget::DEFAULT_RAM_BUDGET);
-        self.ctx.ledger().reset_statistics();
-        self.fx.reset_for_tests();
-    }
-}
 
 static POOL: Mutex<Option<SharedGpu>> = Mutex::new(None);
 /// Which thread holds the pool right now, so a re-entrant ask is a panic with
@@ -113,7 +64,7 @@ pub fn lease() -> Option<Lease> {
         *guard = None;
     }
     if guard.is_none() {
-        *guard = Some(SharedGpu::build()?);
+        *guard = Some(SharedGpu::build().ok()?);
     }
     guard.as_ref()?.reset();
     *HOLDER.lock().unwrap_or_else(PoisonError::into_inner) = Some(me);

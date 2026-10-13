@@ -798,14 +798,13 @@ impl LazyFlare {
         }
     }
 
-    /// Forget every bake, count and policy a previous test left here, so a
-    /// shared engine (`crate::test_support`) starts each test the way a new
-    /// one would. An engine still building has nothing to forget.
-    #[cfg(any(test, feature = "test-fixtures"))]
-    pub(super) fn reset_for_tests(&self) {
+    /// Forget every bake, count and policy the last renderer left here, so
+    /// an engine handed on ([`crate::SharedGpu`]) starts the way a new one
+    /// would. An engine still building has nothing to forget.
+    pub(super) fn reset(&self) {
         self.deferred.store(false, Ordering::Relaxed);
         if let Some(lf) = self.ready.get() {
-            lf.reset_for_tests();
+            lf.reset();
         }
     }
 }
@@ -1168,11 +1167,9 @@ impl LensFlareFx {
         }
     }
 
-    /// See [`LazyFlare::reset_for_tests`]. A bake still on the thread is
-    /// waited for first, so it cannot surface in a later test as a lens
-    /// nobody there asked for.
-    #[cfg(any(test, feature = "test-fixtures"))]
-    pub(super) fn reset_for_tests(&self) {
+    /// See [`LazyFlare::reset`]. A bake still on the thread is waited for
+    /// first, so it cannot surface later as a lens nobody there asked for.
+    pub(super) fn reset(&self) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
         while self.bake_pending() && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(5));

@@ -2960,6 +2960,65 @@ impl ColourEngine {
     }
 }
 
+/// The device and every engine compiled on it, which is the slow part of a
+/// renderer and has nothing to do with the project being drawn.
+///
+/// A renderer that is finished with hands its set to the next one rather than
+/// dropping it. The render worker does that when one project replaces another,
+/// and the tests share one set between them (`test_support`).
+pub struct SharedGpu {
+    pub ctx: GpuContext,
+    pub colour: ColourEngine,
+    pub compositor: Compositor,
+    pub fx: fx::FxEngine,
+    pub scope: scope::ScopeEngine,
+}
+
+impl SharedGpu {
+    /// # Errors
+    /// No adapter, or no device on it.
+    pub fn build() -> Result<Self, GpuError> {
+        let ctx = GpuContext::headless()?;
+        Ok(Self {
+            colour: ColourEngine::new(&ctx),
+            compositor: Compositor::new(&ctx),
+            fx: fx::FxEngine::new(&ctx),
+            scope: scope::ScopeEngine::new(&ctx),
+            ctx,
+        })
+    }
+
+    /// Forget what the previous borrower left behind.
+    pub fn reset(&self) {
+        // A test that panicked mid-frame leaves the encoder open; the next
+        // test starts on a closed one.
+        self.ctx.frame.replace(None);
+        self.ctx.frame_depth.set(0);
+        // The pool belongs to the frame that was open, and that frame is gone —
+        // and so does the ledger charge that accounts for it. A test that ended
+        // between `begin_frame` and `end_frame` would otherwise hand the next
+        // one a card the ledger believes is already half full, which is a
+        // failure that moves about as tests are added.
+        self.ctx.release_frame_memory();
+        // `release_frame_memory` latches the abandoned frame's overdraft as
+        // "the last frame's"; the next test did not draw that frame.
+        self.ctx.last_overdrawn.set(0);
+        // The budgets too: a test that lowered one to reach a ceiling must not
+        // leave every test after it renting a smaller card.
+        self.ctx
+            .ledger()
+            .set_budget(lumit_budget::Tier::Vram, lumit_budget::DEFAULT_VRAM_BUDGET);
+        self.ctx
+            .ledger()
+            .set_budget(lumit_budget::Tier::Ram, lumit_budget::DEFAULT_RAM_BUDGET);
+        self.ctx.ledger().reset_statistics();
+        // The last project's colour depth, which the effect engine in this
+        // set was not built for.
+        self.ctx.working.set(WORKING_FORMAT);
+        self.fx.reset();
+    }
+}
+
 #[cfg(test)]
 mod counter_tests {
     use super::*;

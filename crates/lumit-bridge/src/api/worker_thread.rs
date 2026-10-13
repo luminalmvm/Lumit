@@ -293,18 +293,53 @@ fn apply_viewer_look(renderer: &mut HeadlessRenderer, look: &ViewerLook) {
     renderer.set_colour_view(look.colour_view.clone());
 }
 
-/// Whose turn it is to build a renderer. Held only across
-/// [`HeadlessRenderer::new`] — never across a render, a lock on document state,
-/// or anything that can await — so it orders GPU device creation and nothing
-/// else. See the note at its one use in [`worker_loop`] for why the order
-/// matters.
+/// The device and engines between one worker's renderer and the next, and
+/// whose turn it is to build a set.
+///
+/// A set takes seconds to build and has nothing to do with the project, so a
+/// worker that stops leaves its set in `parked` and the next worker takes it.
+/// `out` is the projects whose workers hold a set, which is how a new worker
+/// knows one is about to come back.
+///
+/// Held across [`HeadlessRenderer::new`] when a set has to be built — never
+/// across a render, a lock on document state, or anything that can await — so
+/// it orders GPU device creation. See the note at its use in
+/// [`build_viewer_renderer`] for why the order matters.
 ///
 /// This is the one lock in the engine deliberately held across driver work,
 /// against docs/14 §"A lock MUST NOT be held across … an FFI call". The rule
-/// exists so a slow call cannot stall a thread waiting for *data*; this guards
-/// no data, and the slow call is the very thing being ordered — a queue for it,
-/// written as a mutex because that is what a queue of one is.
-static BUILDING_RENDERER: std::sync::Mutex<()> = std::sync::Mutex::new(());
+/// exists so a slow call cannot stall a thread waiting for *data*, and the
+/// slow call here is the very thing being ordered.
+static ENGINES: std::sync::Mutex<Engines> = std::sync::Mutex::new(Engines {
+    parked: None,
+    out: Vec::new(),
+    built_in: std::time::Duration::ZERO,
+});
+
+/// Woken when a worker lets go of its set.
+static ENGINES_BACK: std::sync::Condvar = std::sync::Condvar::new();
+
+#[frb(ignore)]
+struct Engines {
+    parked: Option<lumit_render::SharedGpu>,
+    out: Vec<Uuid>,
+    /// How long the last set took to build, which is how long a new worker
+    /// waits for one to come back before it builds its own.
+    built_in: std::time::Duration,
+}
+
+/// A worker's hold on a set, let go of however the worker ends.
+#[frb(ignore)]
+struct EnginesOut(Uuid);
+
+impl Drop for EnginesOut {
+    fn drop(&mut self) {
+        let mut pool = ENGINES.lock().unwrap_or_else(|e| e.into_inner());
+        pool.out.retain(|id| *id != self.0);
+        drop(pool);
+        ENGINES_BACK.notify_all();
+    }
+}
 
 /// Whether a renderer is still worth building for this project.
 ///
@@ -2760,23 +2795,54 @@ fn build_viewer_renderer(
     // The frb test suite is where this shows: it makes a project per test and
     // draws in most of them, so a file of ninety tests asked for ninety
     // devices inside a few seconds. Poisoning is nothing to fail over: the
-    // lock guards no data, only the turn-taking.
-    let building = BUILDING_RENDERER.lock().unwrap_or_else(|e| e.into_inner());
-    if !worth_building_for(project) {
-        // Quietly: a project closing while its worker waited its turn is the
-        // ordinary end of a session, not a fault.
-        return None;
+    // lock guards the turn-taking and a set nobody is using.
+    let mut pool = ENGINES.lock().unwrap_or_else(|e| e.into_inner());
+    // The worker of a project that has closed is on its way out with a set.
+    // It stops at the end of its turn, which is at once unless it is part
+    // way through a frame, so it is waited for as long as a build would take.
+    let give_up = std::time::Instant::now() + pool.built_in;
+    loop {
+        if !worth_building_for(project) {
+            // Quietly: a project closing while its worker waited its turn is
+            // the ordinary end of a session, not a fault.
+            return None;
+        }
+        let coming = pool.parked.is_none()
+            && pool
+                .out
+                .iter()
+                .any(|id| !worth_building_for(&ProjectReference::new(*id)));
+        let left = give_up.saturating_duration_since(std::time::Instant::now());
+        if !coming || left.is_zero() {
+            break;
+        }
+        pool = ENGINES_BACK
+            .wait_timeout(pool, left)
+            .unwrap_or_else(|e| e.into_inner())
+            .0;
     }
     // No renderer means no Viewer, but the editor itself stays usable — the
     // worker just stops instead of taking the process down with it.
-    let mut renderer = match HeadlessRenderer::new() {
-        Ok(renderer) => renderer,
-        Err(err) => {
-            note!("Could not create the renderer, stopping the worker: {err}");
-            return None;
+    let mut renderer = match pool.parked.take() {
+        Some(set) => HeadlessRenderer::reusing(set),
+        None => {
+            let began = std::time::Instant::now();
+            match HeadlessRenderer::new() {
+                Ok(renderer) => {
+                    pool.built_in = began.elapsed();
+                    renderer
+                }
+                Err(err) => {
+                    note!("Could not create the renderer, stopping the worker: {err}");
+                    return None;
+                }
+            }
         }
     };
-    drop(building);
+    if !pool.out.contains(&project.id) {
+        pool.out.push(project.id);
+    }
+    drop(pool);
     // Which card that renderer is on, in the file a bug report is written
     // from. Once a session, however many renderers it builds.
     crate::faults::record_adapter();
@@ -2944,6 +3010,7 @@ fn worker_loop(
     let Some(renderer) = build_viewer_renderer(&project, &stream, &view_id) else {
         return;
     };
+    let _out = EnginesOut(project.id);
 
     let mut state = WorkerState {
         project,
@@ -3017,7 +3084,7 @@ fn worker_loop(
         }));
         match outcome {
             Ok(Turn::Continue) => faults_in_a_row = 0,
-            Ok(Turn::Stop) => return,
+            Ok(Turn::Stop) => break,
             Err(payload) => {
                 faults_in_a_row += 1;
                 // Both, and not one or the other: the console line is what a
@@ -3039,6 +3106,11 @@ fn worker_loop(
                 rebuild_renderer(&mut state, &mut stream);
             }
         }
+    }
+    // The device and engines outlive the project, and the next worker takes
+    // them rather than building its own.
+    if let Some(set) = state.renderer.into_engines() {
+        ENGINES.lock().unwrap_or_else(|e| e.into_inner()).parked = Some(set);
     }
 }
 
