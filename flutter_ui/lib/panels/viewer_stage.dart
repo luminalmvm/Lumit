@@ -444,7 +444,16 @@ class ViewerStage extends StatelessWidget {
             // the rendering, is what made zooming in seize the whole window.
             if (grid)
               Positioned.fill(
-                child: CustomPaint(painter: _CheckerPainter(t, fitted)),
+                // Its own layer, so the marks over the picture do not draw
+                // every square again as they move.
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    // Thousands of squares that rarely change: kept as one
+                    // picture instead of being drawn square by square.
+                    isComplex: true,
+                    painter: _CheckerPainter(t, fitted),
+                  ),
+                ),
               ),
             // The picture, inside the boundary a snapshot is taken of.
             // Everything below in this stack is a sibling of it, so the
