@@ -772,11 +772,10 @@ class LumitUiState extends ChangeNotifier {
     await updates.check();
   }
 
-  /// On a nightly build, show the icon the user chose for it.
-  Future<void> applyAppIcon() async {
-    if (!updates.runningNightly) return;
-    await showRegularAppIcon(!workspace.nightlyIcon);
-  }
+  /// Show the icon the user chose for a nightly build. Any other build has
+  /// only its own, and is told to show that.
+  Future<void> applyAppIcon() =>
+      showRegularAppIcon(updates.runningNightly && !workspace.nightlyIcon);
 
   /// Bumped when `Ctrl+Shift+P` asks for the command palette.
   ///
@@ -2525,10 +2524,18 @@ class LumitUiState extends ChangeNotifier {
       model.refreshIfMoved();
     });
     sub = state.onWorkerResponse.listen((msg) {
-      // Any reply at all means the new project's worker is up and answering,
-      // which is what the opening card is waiting on. Not the frame alone: a
-      // first render that faults would otherwise leave the shell covered.
-      state.previewReady();
+      // The opening card waits for the first frame and its bar follows that
+      // frame. Every frame asked for ends with a finished report, so a first
+      // render that faults doesn't leave the shell covered. The cache bar's
+      // nudge says nothing about a frame that has been asked for. With no
+      // Viewer on screen to ask for one, it is the sign that the worker is
+      // up, and the card goes on it.
+      if (msg case WorkerResponse_RenderProgress(:final field0)
+          when !field0.done) {
+        state.previewProgress(field0.fraction);
+      } else if (msg is! WorkerResponse_CacheFilled || _askedFor.isEmpty) {
+        state.previewReady();
+      }
       switch (msg) {
         case WorkerResponse_RenderedDMABuf frame:
           previewTier.value = frame.field0.tier;

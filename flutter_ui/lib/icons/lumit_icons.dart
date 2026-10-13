@@ -399,6 +399,35 @@ abstract final class LumitIcons {
   static const String subscript =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h6M5.5 3.5v7M11 10l1.5-1v4"/></svg>';
 
+  // --- Window ---
+  /// The window's own three buttons, drawn by Lumit where the window has no title bar. These three are Studio's, in the set's ordinary hand, and Close is its fourth.
+  static const String windowMinimise =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h8"/></svg>';
+  static const String windowMaximise =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/></svg>';
+  /// The window in front and the top and right of the one behind it: maximised, and about to be put back.
+  static const String windowRestore =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="7.5" height="7.5" rx="1.5"/><path d="M5.75 3h5.75A1.5 1.5 0 0 1 13 4.5v5.75"/></svg>';
+  /// Desk's four: square ends and mitred corners, since that style is square throughout. Minimise is a line on the floor of the box, the place the window goes to.
+  static const String windowMinimiseSquare =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke-linecap="butt" stroke-linejoin="miter" d="M3.5 12h9"/></svg>';
+  /// A plate with a second line under its top edge, the way an instrument's panel is drawn with its own title strip.
+  static const String windowMaximiseSquare =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke-linecap="butt" stroke-linejoin="miter" d="M3.5 3.5h9v9h-9zM3.5 5.5h9"/></svg>';
+  static const String windowRestoreSquare =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke-linecap="butt" stroke-linejoin="miter" d="M3.5 6h6.5v6.5H3.5zM6 6V3.5h6.5V10H10"/></svg>';
+  static const String windowCloseSquare =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path stroke-linecap="butt" stroke-linejoin="miter" d="M4 4l8 8M12 4l-8 8"/></svg>';
+  /// Lantern's four, drawn smaller to sit inside the round plate that style lights under the pointer.
+  static const String windowMinimiseRound =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h6"/></svg>';
+  static const String windowMaximiseRound =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="8" height="8" rx="3"/></svg>';
+  static const String windowRestoreRound =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="7" height="7" rx="2.5"/><path d="M6.5 3.5h3.5a2.5 2.5 0 0 1 2.5 2.5v3.5"/></svg>';
+  static const String windowCloseRound =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l6 6M11 5l-6 6"/></svg>';
+
   /// Every glyph by its chrome word — the names tooltips and
   /// the Words setting use (docs/15-DESIGN.md §5.1).
   static const Map<String, String> byName = <String, String>{
@@ -564,5 +593,16 @@ abstract final class LumitIcons {
     'Small caps': smallCaps,
     'Superscript': superscript,
     'Subscript': subscript,
+    'Window minimise': windowMinimise,
+    'Window maximise': windowMaximise,
+    'Window restore': windowRestore,
+    'Window minimise square': windowMinimiseSquare,
+    'Window maximise square': windowMaximiseSquare,
+    'Window restore square': windowRestoreSquare,
+    'Window close square': windowCloseSquare,
+    'Window minimise round': windowMinimiseRound,
+    'Window maximise round': windowMaximiseRound,
+    'Window restore round': windowRestoreRound,
+    'Window close round': windowCloseRound,
   };
 }

@@ -127,6 +127,12 @@ runs:
     # (otool -L) and every Homebrew path it names must exist. One that does not
     # means a dependency was bumped since the keg was built, and the keg is
     # removed so the build step below runs as if the cache had missed.
+    #
+    # The keg's own libraries are left out of that check. They name each other
+    # through opt/ffmpeg@8.1.2, a link that is only made further down, so
+    # counting them failed every restored keg and FFmpeg was built again in
+    # every macOS job of every run. They came back with the keg in one piece,
+    # so there is nothing to check.
     - name: Reinstall the cached keg's runtime dependencies and check it loads
       id: check
       if: steps.cache.outputs.cache-matched-key != ''
@@ -157,6 +163,7 @@ runs:
             [ -L "$lib" ] && continue
             otool -L "$lib" | tail -n +2 | awk '{print $1}' \
               | grep -E '^/(opt/homebrew|usr/local)/' \
+              | grep -vF '/opt/ffmpeg@8.1.2/' \
               | while read -r dep; do
                   [ -e "$dep" ] || echo "$(basename "$lib") wants $dep"
                 done || true

@@ -40,6 +40,7 @@ void main() {
 
     final state = LumitState()..newProject();
     final ui = LumitUiState(state, workspace: workspace);
+    settleProgressOf(ui);
     final project = state.project!;
     final scene = project.newComposition(name: 'Scene');
     final titles = project.newComposition(name: 'Titles');
@@ -83,7 +84,7 @@ void main() {
     // Not awaited: reading a document is an async frb call whose continuation
     // only lands on the real event-loop turns settleFrb provides. What is
     // waited for is the *adoption* — `opening` also covers the first frame,
-    // which a widget test with no Viewer mounted never receives.
+    // which may or may not have landed by the time this test is over.
     final adopted = state.project;
     state.openProject(path);
     await settleFrb(tester, until: () => !identical(state.project, adopted));
@@ -105,6 +106,7 @@ void main() {
       (tester) async {
     final state = LumitState()..newProject();
     final ui = LumitUiState(state, workspace: Workspace());
+    settleProgressOf(ui);
     final project = state.project!;
     final outer = project.newComposition(name: 'Outer');
     final inner = project.newComposition(name: 'Inner');
@@ -132,6 +134,7 @@ void main() {
 
     final state = LumitState()..newProject();
     final ui = LumitUiState(state, workspace: workspace);
+    settleProgressOf(ui);
     state.project!.newComposition(name: 'Scene');
     var saved = false;
     state.project!.save(path: path).then((_) => saved = true);
@@ -170,6 +173,7 @@ void main() {
     final author = Workspace();
     final authorState = LumitState()..newProject();
     final authorUi = LumitUiState(authorState, workspace: author);
+    settleProgressOf(authorUi);
     final scene = authorState.project!.newComposition(name: 'Scene');
     authorUi.setSelectedComp(scene);
     authorUi.playheadFrame.value = 9;
@@ -187,6 +191,7 @@ void main() {
     final other = Workspace();
     final otherState = LumitState()..newProject();
     final otherUi = LumitUiState(otherState, workspace: other);
+    settleProgressOf(otherUi);
     expect(other.sessionFor(path), isNull, reason: 'never opened here');
 
     final adopted = otherState.project;

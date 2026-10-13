@@ -753,6 +753,32 @@ pub fn sample_scalar_with_context(
     }
 }
 
+/// Why an expression on `layer` gives no number at `time`, or `None` when it
+/// runs. The sentence an expression's editor shows under the text.
+#[frb(sync)]
+pub fn expression_fault(
+    expression: String,
+    language: BridgeExpressionLanguage,
+    time: BridgeRational,
+    layer: LayerReference,
+) -> Option<String> {
+    let doc = document_for(&layer)?;
+    let context = Arc::new(ExpressionContext {
+        document: doc,
+        comp: Some(layer.comp_id),
+        layer: Some(layer.layer_id),
+        comp_time: Rational::new(time.num, time.den)
+            .unwrap_or(Rational::ZERO)
+            .to_f64(),
+        current_depth: 0,
+        inputs: None,
+    });
+    // On the interface's thread, as the sampler above is.
+    lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
+        lumit_core::expression::fault_in(language.read(), &expression, Some(context))
+    })
+}
+
 /// The project document a layer reference points into.
 ///
 /// `None` when the project has gone — closed between the panel asking and this

@@ -12,6 +12,7 @@
 
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
@@ -255,6 +256,17 @@ void main() {
       expect(keys.first.interpOut, isA<BridgeSideInterp_Hold>());
     });
 
+    // The editor's text, and Ctrl+Enter, which keeps what was typed.
+    final editorText = find.descendant(
+        of: find.byKey(const ValueKey('expression-editor-text')),
+        matching: find.byType(EditableText));
+    Future<void> keepEdit(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('Animation ▸ Add expression puts one on the picked row',
         (tester) async {
       final p = withComp();
@@ -268,11 +280,9 @@ void main() {
 
       await choose(tester, 'Animation', 'Add expression');
       await tester.pumpAndSettle();
-      await tester.enterText(
-          find.byKey(const ValueKey('expression-text')), 'time * 2');
+      await tester.enterText(editorText, 'time * 2');
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('expression-confirm')));
-      await tester.pumpAndSettle();
+      await keepEdit(tester);
 
       final after = layer.getTransform().positionX;
       expect(after, isA<BridgeScalar_Expression>());
@@ -294,20 +304,18 @@ void main() {
       ];
       p.uiState.model.refresh();
       await mount(tester, p);
-      final picker = find.byKey(const ValueKey('expression-language'));
+      final picker = find.byKey(const ValueKey('expression-editor-language'));
 
       await choose(tester, 'Animation', 'Add expression');
       await tester.pumpAndSettle();
       expect(find.descendant(of: picker, matching: find.text('Rhai')),
           findsOneWidget);
-      await tester.enterText(
-          find.byKey(const ValueKey('expression-text')), 'Math.round(7 / 2)');
+      await tester.enterText(editorText, 'Math.round(7 / 2)');
       await tester.tap(picker);
       await tester.pumpAndSettle();
       await tester.tap(find.text('JavaScript').last);
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('expression-confirm')));
-      await tester.pumpAndSettle();
+      await keepEdit(tester);
 
       final after = layer.getTransform().positionX as BridgeScalar_Expression;
       expect(after.field0, 'Math.round(7 / 2)');
@@ -320,14 +328,14 @@ void main() {
           4,
           reason: 'JavaScript halves 7 to 3.5; Rhai has no Math at all');
 
-      // Reopened on a row that has one, the dialogue shows that row's own.
+      // Reopened on a row that has one, the editor shows that row's own.
       p.uiState.model.refresh();
       await tester.pumpAndSettle();
       await choose(tester, 'Animation', 'Add expression');
       await tester.pumpAndSettle();
       expect(find.descendant(of: picker, matching: find.text('JavaScript')),
           findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('expression-cancel')));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
 
       // A saved expression keeps its language, through a file and back.

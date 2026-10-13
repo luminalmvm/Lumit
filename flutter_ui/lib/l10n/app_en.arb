@@ -208,6 +208,18 @@
   "@cloneSourceSet": {
     "description": "Notice after alt-clicking with the clone stamp."
   },
+  "windowMinimise": "Minimise",
+  "@windowMinimise": {
+    "description": "Screen reader name of the button at the top right of Lumit's window that minimises the window. Use the operating system's own word for it."
+  },
+  "windowMaximise": "Maximise",
+  "@windowMaximise": {
+    "description": "Screen reader name of the button at the top right of Lumit's window that makes the window fill the screen. Use the operating system's own word for it."
+  },
+  "windowRestore": "Restore",
+  "@windowRestore": {
+    "description": "Screen reader name of the same button once the window fills the screen: it puts the window back to the size it was. Use the operating system's own word for it."
+  },
   "close": "Close",
   "@close": {
     "description": "Button that shuts a window."

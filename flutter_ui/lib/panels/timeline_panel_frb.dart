@@ -4435,8 +4435,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   child: AnimatedBuilder(
                     // And the layer drag's band, which the seams stand clear
                     // of so a layer in hand is drawn over them.
-                    animation: Listenable.merge(
-                        [_vOutline, _layerDrag.band, _layerDrag.mark]),
+                    animation: Listenable.merge([
+                      _vOutline,
+                      _layerDrag.band,
+                      _layerDrag.seams,
+                      _layerDrag.mark,
+                    ]),
                     builder: (context, _) => CustomPaint(
                       // The line marking a drop's place, for a drag that is
                       // not carried: across the columns and the gutter, so it
@@ -4463,13 +4467,25 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                               b.$1 - (positionOf(_vOutline)?.pixels ?? 0),
                               b.$2 - (positionOf(_vOutline)?.pixels ?? 0),
                             ),
-                          if (_layerDrag.band.value case final band?)
+                        ],
+                        // The rows a layer drag has slid take their seams
+                        // with them.
+                        moves: [
+                          for (final m in _layerDrag.seamMoves(blockHeights))
                             (
+                              m.$1 - (positionOf(_vOutline)?.pixels ?? 0),
+                              m.$2 - (positionOf(_vOutline)?.pixels ?? 0),
+                              m.$3,
+                            ),
+                        ],
+                        lifted: switch (_layerDrag.band.value) {
+                          final band? => (
                               band.top - (positionOf(_vOutline)?.pixels ?? 0),
                               band.bottom -
                                   (positionOf(_vOutline)?.pixels ?? 0),
                             ),
-                        ],
+                          null => null,
+                        },
                       ),
                     ),
                   ),

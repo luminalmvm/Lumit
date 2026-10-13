@@ -629,21 +629,46 @@ class _RenderKeyStripHit extends RenderBox {
 ///
 /// [blanks] are stretches to leave unruled, as (top, bottom) pairs: an open
 /// sequence view is one table cell, not six rows of one.
+///
+/// [moves] are the stretches a layer drag has slid, as (top, bottom, shift)
+/// ([LayerDragState.seamMoves]). A seam is the foot of the row above it, so
+/// it goes wherever that row has gone. [lifted] is the card in hand, which
+/// the seams stand clear of wherever they are.
 List<double> rowSeamOffsets({
   required double step,
   required double height,
   double phase = 0,
   double origin = 0,
   List<(double, double)> blanks = const [],
+  List<(double, double, double)> moves = const [],
+  (double, double)? lifted,
 }) {
   if (step <= 0) return const [];
+  // A seam slid into view started outside it, so look that much further.
+  var reach = 0.0;
+  for (final m in moves) {
+    if (m.$3.abs() > reach) reach = m.$3.abs();
+  }
   final ys = <double>[];
-  for (var y = phase + step; y <= height; y += step) {
-    if (y < 0) continue;
+  final first = phase + step;
+  for (var base = first - (reach / step).ceil() * step;
+      base <= height + reach;
+      base += step) {
     // Strictly inside a blank, so the seams that *bound* an open view stay:
     // the row still has a top and a bottom, it simply has no rules through
     // its middle.
-    if (blanks.any((b) => y > b.$1 + 0.5 && y < b.$2 - 0.5)) continue;
+    if (blanks.any((b) => base > b.$1 + 0.5 && base < b.$2 - 0.5)) continue;
+    var y = base;
+    for (final m in moves) {
+      if (base > m.$1 + 0.5 && base < m.$2 + 0.5) {
+        y += m.$3;
+        break;
+      }
+    }
+    // Only a seam that has been slid comes in from outside.
+    if (y == base && (base < first - 0.5 || base > height)) continue;
+    if (y < 0 || y > height) continue;
+    if (lifted != null && y > lifted.$1 + 0.5 && y < lifted.$2 - 0.5) continue;
     // Rounded **where the seam will be seen**, not where it is drawn.
     // [origin] is the painter's own top edge in the panel's pixels — the
     // negated scroll offset for a painter riding the scrolled content, zero
@@ -686,12 +711,19 @@ class RowDividerPainter extends CustomPainter {
   /// lane side's content-riding overlay, zero for the outline's pinned one.
   final double origin;
 
+  /// The stretches a layer drag has slid and the card it has in hand
+  /// ([rowSeamOffsets]), so the seams travel with the rows that step aside.
+  final List<(double, double, double)> moves;
+  final (double, double)? lifted;
+
   const RowDividerPainter({
     required this.step,
     required this.colour,
     this.phase = 0,
     this.origin = 0,
     this.blanks = const [],
+    this.moves = const [],
+    this.lifted,
   });
 
   @override
@@ -705,7 +737,9 @@ class RowDividerPainter extends CustomPainter {
         height: size.height,
         phase: phase,
         origin: origin,
-        blanks: blanks)) {
+        blanks: blanks,
+        moves: moves,
+        lifted: lifted)) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
   }
@@ -720,7 +754,9 @@ class RowDividerPainter extends CustomPainter {
       old.colour != colour ||
       old.phase != phase ||
       old.origin != origin ||
-      !listEquals(old.blanks, blanks);
+      old.lifted != lifted ||
+      !listEquals(old.blanks, blanks) ||
+      !listEquals(old.moves, moves);
 
   /// Never absorbs a pointer: a background painter's default would eat the
   /// gestures on the rows below it.

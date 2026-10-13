@@ -127,6 +127,20 @@ const double wellTextSize = 11;
 /// picture, and it is set a size down from a panel's editable value.
 const double barValueTextSize = 10;
 
+DateTime? _setExpressionAt;
+
+/// Set expression was chosen from a value's menu. The row the value turns
+/// into asks [tookSetExpression], and opens its editor when it was.
+void noteSetExpression() => _setExpressionAt = DateTime.now();
+
+/// Whether Set expression was chosen a moment ago. It answers yes once.
+bool tookSetExpression() {
+  final at = _setExpressionAt;
+  _setExpressionAt = null;
+  return at != null &&
+      DateTime.now().difference(at) < const Duration(seconds: 1);
+}
+
 /// The **value well** (docs/15-DESIGN.md §2.1/§3.1): drag horizontally
 /// to adjust, click to type, right-click for Reset / Copy / Paste.
 ///
@@ -524,6 +538,7 @@ class _DragValueFieldState extends State<DragValueField>
                 MenuRow(
                   onPressed: () {
                     close(null);
+                    noteSetExpression();
                     widget.setExpression?.call();
                   },
                   child: Text(l10n.setExpression),

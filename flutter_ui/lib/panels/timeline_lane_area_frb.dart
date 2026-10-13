@@ -15,6 +15,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'expression_editor.dart';
 import 'key_block.dart';
 import 'graph_editor_frb.dart';
 import 'graph_maths.dart';
@@ -1073,6 +1074,7 @@ class LayerArea extends StatelessWidget {
                                   animation: Listenable.merge([
                                     vScroll,
                                     layerDrag.band,
+                                    layerDrag.seams,
                                     layerDrag.mark,
                                   ]),
                                   builder: (context, _) => CustomPaint(
@@ -1100,12 +1102,11 @@ class LayerArea extends StatelessWidget {
                                       origin:
                                           -((positionOf(vScroll)?.pixels ?? 0) %
                                               1.0),
-                                      blanks: [
-                                        ...sequenceBlanks,
-                                        if (layerDrag.band.value
-                                            case final band?)
-                                          band.blank,
-                                      ],
+                                      blanks: sequenceBlanks,
+                                      // The rows a layer drag has slid take
+                                      // their seams with them.
+                                      moves: layerDrag.seamMoves(blockHeights),
+                                      lifted: layerDrag.band.value?.blank,
                                     ),
                                   ),
                                 ),
@@ -1304,8 +1305,31 @@ class LayerArea extends StatelessWidget {
       );
     }
     final rowKeys = laneKeysOf(row);
-    if (rowKeys.isEmpty) return null;
     final rowId = foldRowPath(id, row);
+    if (rowKeys.isEmpty) {
+      // A row an expression drives has no keys to draw, so its lane shows the
+      // expression, and that is where it is opened to be written. Only the
+      // lead axis is read first, and a transform row may hold one on another.
+      if (foldRowScalar(row) is! BridgeScalar_Expression &&
+          row is! FoldTransformRow) {
+        return null;
+      }
+      final channels = graphChannels(layers: [entry], selected: [rowId]);
+      final driven = [
+        for (final channel in channels)
+          if (channel.scalar is BridgeScalar_Expression) channel,
+      ];
+      if (driven.isEmpty) return null;
+      return ExpressionLane(
+        key: ValueKey<String>('tl-expression-lane-$rowId'),
+        channels: driven,
+        named: channels.length > 1,
+        comp: comp,
+        hScroll: hScroll,
+        locked: entry.info.switches.locked,
+        onChanged: onChanged,
+      );
+    }
     // The diamonds travel with a bar being moved, live (§6.26) — the same
     // reading the waveform above already takes from the same preview, and for
     // the same reason: a key that jumps only on release was never seen to

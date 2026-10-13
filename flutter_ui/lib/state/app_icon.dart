@@ -4,13 +4,18 @@
 //
 // A nightly has its own icon, so nobody mistakes it for a release. Some people
 // would rather keep the one they know, so a nightly carries the regular icon as
-// well and can show it instead: in the Dock on macOS, on the window and the
-// taskbar on Windows. The runner does the showing (macos/Runner/
-// MainFlutterWindow.swift, windows/runner/flutter_window.cpp); this file only
-// says which file to show.
+// well and can show it instead: in the Dock on macOS, and on the window, the
+// taskbar and the Start menu on Windows. The runner does the showing (macos/
+// Runner/MainFlutterWindow.swift, windows/runner/flutter_window.cpp); this
+// file only says which file to show.
 //
-// It lasts as long as Lumit is running. The Finder and the Start menu draw the
-// icon the application was built with, and nothing here changes that.
+// On macOS it lasts as long as Lumit is running, and the Finder draws the icon
+// the application was built with. On Windows the shortcuts in the Start menu
+// and on the taskbar are given the same picture, so they keep it.
+//
+// Windows is also slow to notice that an update changed the icon: a pinned
+// shortcut goes on drawing the old one. Every build says which icon is its
+// own at each launch, and the runner passes that on to the shortcuts.
 //
 // Linux is left alone: a Wayland desktop takes the icon from the desktop entry
 // and has no window icon to set.
@@ -27,8 +32,8 @@ bool get appIconCanChange => Platform.isMacOS || Platform.isWindows;
 /// Show the regular icon, or go back to the one this build came with.
 ///
 /// The regular icon is only inside a nightly build (scripts/stamp-nightly.sh
-/// puts it there), so this is only worth calling from one. Never throws: an
-/// icon that stays as it was is not worth a sentence anywhere.
+/// puts it there), so only one may ask for it. Never throws: an icon that
+/// stays as it was is not worth a sentence anywhere.
 Future<void> showRegularAppIcon(bool regular) async {
   if (!appIconCanChange) return;
   final beside = File(Platform.resolvedExecutable).parent.path;

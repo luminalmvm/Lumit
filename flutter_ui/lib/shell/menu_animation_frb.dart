@@ -23,6 +23,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/track.dart' show fireEffectAction;
 
 import '../l10n/strings.dart';
+import '../panels/expression_editor.dart';
 import '../panels/graph_channels.dart';
 import '../panels/graph_edits.dart';
 import '../panels/graph_maths.dart';
@@ -30,8 +31,8 @@ import '../panels/layer_fold_frb.dart'
     show asOneUndoStep, transformGroupPath;
 import '../panels/text_animator_rows_frb.dart' show addTextAnimator;
 import '../panels/transform_rows_frb.dart' show transformGroups;
+import '../state/comp_time.dart';
 import '../state/file_dialogs.dart';
-import 'expression_dialog_frb.dart';
 import 'keyframe_dialogs_frb.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
 import 'menu_layer_frb.dart' show onSelection;
@@ -365,8 +366,11 @@ MenuEntry animateTextRow(LumitState app, LumitUiState ui) => MenuEntry(
     );
 
 /// Animation ▸ Add expression: an expression on every picked property row,
-/// replacing whatever it held. It opens in the language the first row's
-/// expression is in, or the one Settings names for a new expression.
+/// replacing whatever it held.
+///
+/// It opens the editor a row opens, on the first picked row: showing that
+/// row's expression, or the number it reads when it has none, as Set
+/// expression does. The value and the reason under the text are that row's.
 MenuEntry addExpressionRow(
     BuildContext context, LumitState app, LumitUiState ui) {
   final channels = [
@@ -377,24 +381,38 @@ MenuEntry addExpressionRow(
     l10n.menuAddExpression,
     channels.isEmpty
         ? null
-        : () async {
-            final was = channels.first.scalar;
-            final asked = await showExpressionDialogFrb(
+        : () {
+            final comp = ui.selectedComp;
+            if (comp == null) return;
+            final first = channels.first;
+            final was = first.scalar;
+            final layer = first.entry.layer;
+            final size = MediaQuery.sizeOf(context);
+            showExpressionEditor(
               context: context,
-              initial: was is BridgeScalar_Expression ? was.field0 : '',
-              language: was is BridgeScalar_Expression
-                  ? was.field1
-                  : ui.workspace.defaultExpressionLanguage,
+              // A menu has no row to open over, so it opens mid-window.
+              over: Rect.fromLTWH((size.width - 520) / 2, size.height / 3, 520, 0),
+              value: was is BridgeScalar_Expression
+                  ? was
+                  : BridgeScalar_Expression(
+                      sampleScalarWithContext(
+                              scalar: was,
+                              time: timeOfFrame(comp, ui.playheadFrame.value),
+                              layer: layer)
+                          .toString(),
+                      ui.workspace.defaultExpressionLanguage),
+              fresh: was is! BridgeScalar_Expression,
+              comp: comp,
+              layer: layer,
+              onCommit: (next) {
+                // An expression goes on every picked row. Taking one off
+                // leaves a number, which is only the first row's to hold.
+                commitChannelEdits(next is BridgeScalar_Expression
+                    ? {for (final channel in channels) channel: next}
+                    : {first: next});
+                app.notifyDocumentChanged();
+              },
             );
-            // Blank changes nothing. Taking an expression *off* a property is
-            // the row's own control (docs/07 §4.3, still owed), not a menu row
-            // that would have to invent a value to put back.
-            if (asked == null || asked.text.trim().isEmpty) return;
-            commitChannelEdits({
-              for (final channel in channels)
-                channel: BridgeScalar.expression(asked.text, asked.language),
-            });
-            app.notifyDocumentChanged();
           },
     action: 'expression.add',
   );

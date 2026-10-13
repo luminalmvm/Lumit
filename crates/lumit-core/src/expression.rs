@@ -597,6 +597,26 @@ pub fn evaluate_value_in(
     ))
 }
 
+/// Why `expression` gives a property no number, or `None` when it does.
+///
+/// [`evaluate_in`] cannot say: it hands the property of a failed expression a
+/// number all the same, so that a render has something to draw. This is for
+/// the editor, which shows the sentence.
+pub fn fault_in(
+    language: Language,
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+) -> Option<String> {
+    match evaluate_value_in(language, expression, context, &[]) {
+        Err(why) => Some(why),
+        Ok(ExprValue::Number(n)) if !n.is_finite() => Some("not a finite number".into()),
+        Ok(ExprValue::Number(_)) => None,
+        // JavaScript gives a property the number that is its own of a list.
+        Ok(_) if language == Language::JavaScript => None,
+        Ok(_) => Some("an array - a property takes one number".into()),
+    }
+}
+
 /// A list of numbers as the value its length makes it.
 fn list_value(numbers: &[f64]) -> Result<ExprValue, String> {
     match *numbers {
