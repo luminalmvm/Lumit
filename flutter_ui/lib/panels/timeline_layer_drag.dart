@@ -856,8 +856,9 @@ class DropMarkPainter extends CustomPainter {
 /// its neighbours wherever it has been moved to.
 ///
 /// A column paints its children in order, so a block carried *down* the stack
-/// would otherwise slide underneath every row after it. Only the paint order
-/// changes: layout and hit-testing are a plain column's.
+/// would otherwise slide underneath every row after it. It is asked first
+/// about a pointer too, so the row drawn on top is the row the pointer is
+/// over. Layout is a plain column's.
 class RaisedColumn extends Column {
   /// The child to paint last, as an index into [children], or null for none.
   final int? raised;
@@ -910,6 +911,30 @@ class _RenderRaisedFlex extends RenderFlex {
     if (value == _raised) return;
     _raised = value;
     markNeedsPaint();
+  }
+
+  /// A column asks its children from the last back, so a row carried down
+  /// over the next one lost the pointer to it, and with the pointer its
+  /// hover: its pickers went quiet until the row under it had stepped aside.
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    final raised = _raised;
+    if (raised != null) {
+      var held = firstChild;
+      for (var i = 0; held != null && i < raised; i++) {
+        held = childAfter(held);
+      }
+      final child = held;
+      if (child != null &&
+          result.addWithPaintOffset(
+            offset: (child.parentData! as FlexParentData).offset,
+            position: position,
+            hitTest: (result, at) => child.hitTest(result, position: at),
+          )) {
+        return true;
+      }
+    }
+    return super.hitTestChildren(result, position: position);
   }
 
   @override
