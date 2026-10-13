@@ -289,6 +289,16 @@ pub struct FxCache {
     /// in between — so the planner's lookup takes a handle, and the handle
     /// lives until the next frame's plan drops it.
     pins: std::collections::HashMap<u128, Tex>,
+    /// Nested frames a flow neighbour made, kept for the one frame after it.
+    ///
+    /// The picture a neighbour shows a Precomp at is the next frame's own
+    /// picture of it, and playback adds nothing to the store, so every such
+    /// Precomp was made twice a frame. `ahead` is what this frame's neighbours
+    /// are making and `carried` what the last frame's made; nothing here
+    /// outlives the frame after the one that made it.
+    carried: std::collections::HashMap<u128, Tex>,
+    ahead: std::collections::HashMap<u128, Tex>,
+    carrying: bool,
     /// The planes tier's uploaded textures, by (effect instance, source
     /// frame, run) (docs/impl/addons.md §6.1).
     ///
@@ -325,6 +335,9 @@ impl FxCache {
             lru: lumit_cache::ByteLru::new(budget_bytes),
             keep: false,
             pins: std::collections::HashMap::new(),
+            carried: std::collections::HashMap::new(),
+            ahead: std::collections::HashMap::new(),
+            carrying: false,
             planes: std::collections::HashMap::new(),
             runs: 0,
             hits: 0,
@@ -380,8 +393,14 @@ impl FxCache {
         let held = self
             .pins
             .get(&key)
+            .or_else(|| self.carried.get(&key))
+            .or_else(|| self.ahead.get(&key))
             .cloned()
             .or_else(|| self.lru.get(&key).map(|t| t.0.clone()));
+        // One a neighbour found made already is the next frame's all the same.
+        if let Some(found) = held.as_ref().filter(|_| self.carrying) {
+            self.ahead.insert(key, found.clone());
+        }
         if held.is_some() {
             self.nested_served += 1;
         } else {
@@ -393,6 +412,9 @@ impl FxCache {
     /// File a nested comp's finished frame under its name, when the
     /// cache is taking entries ([`Self::keep_outputs`]).
     pub fn put_nested(&mut self, key: u128, tex: Tex) {
+        if self.carrying {
+            self.ahead.insert(key, tex.clone());
+        }
         if self.keep {
             self.lru.insert(key, CachedTex(tex));
         }
@@ -412,6 +434,13 @@ impl FxCache {
     /// Drop the previous frame's pins: called as each frame's plan begins.
     pub fn unpin_nested(&mut self) {
         self.pins.clear();
+        self.carried = std::mem::take(&mut self.ahead);
+    }
+
+    /// Whether the nested frames made from here on are a flow neighbour's, to
+    /// be kept for the frame after this one.
+    pub fn carry_nested(&mut self, carrying: bool) {
+        self.carrying = carrying;
     }
 
     /// Whether the renders that follow may *add* to the cache. Lookups always
@@ -427,6 +456,8 @@ impl FxCache {
     pub fn clear(&mut self) {
         self.lru.clear();
         self.pins.clear();
+        self.carried.clear();
+        self.ahead.clear();
         // The planes as well: a user who asked for an empty cache meant all of
         // it, and these are textures on the card like any other.
         self.planes.clear();

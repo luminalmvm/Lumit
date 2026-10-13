@@ -8461,6 +8461,60 @@ mod tests {
         assert_eq!(r.effect_cache_stats().0 .2, 0, "Clear cache empties it");
     }
 
+    /// **A Precomp under a motion-blurred adjustment is made once a frame**.
+    ///
+    /// Motion blur on an adjustment layer builds everything below it again a
+    /// frame on, to measure the motion against. A Precomp in that neighbour is
+    /// the next frame's own picture of it, so the next frame finds it made,
+    /// playback or not, and its picture is byte for byte what a renderer that
+    /// never saw the neighbour makes.
+    #[test]
+    fn a_precomp_a_flow_neighbour_made_is_the_next_frames_own() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                eprintln!("skipping: no GPU adapter");
+                return;
+            }
+        };
+        let red = LinearColour([0.8, 0.1, 0.1, 1.0]);
+        let blue = LinearColour([0.1, 0.1, 0.8, 1.0]);
+        let (mut doc, comp_id, _) = matrix_base(64, 64, red);
+        let (mut child_doc, child_id, _) = matrix_base(64, 64, blue);
+        // The nested comp moves, so each of its frames is its own picture.
+        child_doc.comp_mut(child_id).unwrap().layers[0]
+            .transform
+            .position_x = ramp(8.0, 56.0, 1);
+        for item in child_doc.items {
+            doc.items.push(item);
+        }
+        let nested = matrix_layer("Nested", LayerKind::Precomp { comp: child_id }, 64, 64);
+        let mut blur = matrix_layer("Blur", LayerKind::Adjustment, 64, 64);
+        blur.effects
+            .push(lumit_core::fx::instantiate("motion_blur").unwrap());
+        let comp = doc.comp_mut(comp_id).unwrap();
+        comp.layers.insert(0, nested);
+        comp.layers.insert(0, blur);
+        let doc = Arc::new(doc);
+
+        // As playback renders: nothing is added to the store.
+        let _ = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (2, 0),
+            "the frame's own and its neighbour's"
+        );
+        let warm = r.render_rgba(&doc, comp_id, 1, 1.0).expect("render");
+        assert_eq!(
+            r.nested_frame_counts(),
+            (3, 1),
+            "the neighbour's is this frame's own, and only the next is made"
+        );
+        let mut cold = HeadlessRenderer::new().expect("a second renderer");
+        let cold = cold.render_rgba(&doc, comp_id, 1, 1.0).expect("render");
+        assert_eq!(warm, cold, "the picture a renderer with nothing kept makes");
+    }
+
     /// A measured frame lands its milliseconds on the right rows: the layer
     /// that was drawn, and the effect instance inside it that ran. Without the
     /// ids threaded from the resolve through the draw list, this is where a

@@ -1380,6 +1380,11 @@ fn comp_walk(
     // A nested frame's name says nothing of which copy it is, so a numbered
     // copy is never named and never served from the nested store.
     let keys = keys.filter(|_| clone_number == lumit_core::fx::drivers::NO_CLONE);
+    // A rebuild at another moment names one thing only: a Precomp layer's
+    // frame that comes out as that frame itself would ([`rebuilt_as_itself`]).
+    // Nothing else in it is named, which is how every rebuild used to be.
+    let rebuild_keys = keys;
+    let keys = keys.filter(|_| !with.rebuild);
     // A rebuild at another moment draws each clip as it is at that moment,
     // where the planner fetched it.
     let at_moment = pixels_at_moment(doc, comp, t_comp, frame_t, pixels_by_layer);
@@ -3370,6 +3375,14 @@ fn comp_walk(
                     .as_ref()
                     .filter(|_| layer.graph_inputs.is_some())
                     .map_or_else(Vec::new, |graph| graph_values(layer, graph, st));
+                // In a rebuild the frame keeps its name when it is the picture
+                // its own frame would show, so the frame after this one finds
+                // it made already.
+                let named = rebuild_keys.filter(|_| {
+                    !with.rebuild
+                        || (plain_stack(layer, lt)
+                            && rebuilt_as_itself(doc, nested, st, frame_st, pixels_by_layer, 0))
+                });
                 let nested_draws = comp_walk(
                     doc,
                     nested,
@@ -3377,7 +3390,7 @@ fn comp_walk(
                     frame_st,
                     pixels_by_layer,
                     visited,
-                    keys,
+                    named,
                     false,
                     Walk {
                         values: &values,
@@ -3467,7 +3480,7 @@ fn comp_walk(
                         // layer moved by whole frames keeps its names, and a
                         // placed graph's own Input values are folded in so
                         // two hosts of one graph name two pictures (§5.3).
-                        key: keys.filter(|_| !driven_inputs(layer)).and_then(|k| {
+                        key: named.filter(|_| !driven_inputs(layer)).and_then(|k| {
                             k.nested_key_with(nested, st, layer.graph_inputs.as_ref())
                         }),
                         // Paint on a Precomp: stamped into the nested
@@ -3682,6 +3695,7 @@ fn comp_walk(
                             fetched,
                             visited,
                             clone_number,
+                            keys,
                         )
                     },
                 });
@@ -5023,6 +5037,7 @@ pub fn below_draws_at(
         pixels_by_layer,
         visited,
         lumit_core::fx::drivers::NO_CLONE,
+        None,
     )
 }
 
@@ -5039,6 +5054,7 @@ fn below_draws_cloned(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
     clone: (u32, u32),
+    keys: Option<&dyn crate::cache::NestedKeyer>,
 ) -> (Vec<CompLayerDraw>, Option<lumit_core::model::CameraPose>) {
     // A below-only view of the comp: the same size, background, frame rate,
     // markers and camera, but only the layers beneath the adjustment. The
@@ -5069,7 +5085,7 @@ fn below_draws_cloned(
         frame_t,
         pixels_by_layer,
         visited,
-        None,
+        keys,
         false,
         Walk {
             clone,
@@ -5121,6 +5137,7 @@ pub fn posterize_below(
         pixels_by_layer,
         visited,
         clone,
+        None,
     );
     Some(TemporalBelow { draws, camera })
 }
@@ -5193,6 +5210,7 @@ pub fn accumulation_mb_below(
                 &at_moment_by_layer,
                 visited,
                 clone,
+                None,
             )
         })
         .collect();
@@ -5294,6 +5312,7 @@ fn adjustment_flow_below(
     pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
     visited: &mut Vec<uuid::Uuid>,
     clone: (u32, u32),
+    keys: Option<&dyn crate::cache::NestedKeyer>,
 ) -> Vec<(
     i32,
     Vec<CompLayerDraw>,
@@ -5318,6 +5337,7 @@ fn adjustment_flow_below(
                 pixels_by_layer,
                 visited,
                 clone,
+                keys,
             );
             (offset, draws, camera, measure)
         })
@@ -5393,6 +5413,119 @@ fn pixels_at_moment<'a>(
         }
     }
     out
+}
+
+/// Whether a layer's own effects come out the same in a rebuild at another
+/// moment as in that moment's own frame.
+///
+/// A rebuild gives a stack no neighbour frames and no flow, and holds an
+/// effect that is not sampled in time at the frame's own time. A stack that
+/// asks for none of those is the same either way.
+fn plain_stack(layer: &lumit_core::model::Layer, lt: f64) -> bool {
+    let fx_on = layer.switches.fx;
+    let fx = &layer.effects;
+    fx.iter().chain(&layer.styles).all(|e| e.sample_temporally)
+        && !lumit_core::fx::stack_is_temporal(fx, fx_on)
+        && lumit_core::fx::stack_flow_neighbours(fx, fx_on).is_empty()
+        && lumit_core::fx::stack_posterize(fx, fx_on, lt).is_none()
+        && lumit_core::fx::stack_accumulation_mb(fx, fx_on, lt).is_none()
+        // Both of these read footage at other moments by roads of their own.
+        && fx
+            .iter()
+            .all(|e| !matches!(e.effect.match_name.as_str(), "clone_to_points" | "node_graph"))
+}
+
+/// Whether `comp`, built again at `t` inside a frame whose own time in it is
+/// `frame_t`, is pixel for pixel the picture its own frame at `t` shows.
+///
+/// That is what lets a rebuild's Precomp keep its frame's name. It answers
+/// yes only for what is known to be the same. Every layer the walk draws at
+/// `t`, or holds pixels for, is footage the planner fetched at that moment
+/// and picks one whole frame of, another such comp, or a kind with no decoded
+/// picture at all, and none carries a stack a rebuild treats differently
+/// ([`plain_stack`]). Anything else is a no, and the Precomp is built
+/// unnamed as it always was.
+fn rebuilt_as_itself(
+    doc: &lumit_core::model::Document,
+    comp: &lumit_core::model::Composition,
+    t: f64,
+    frame_t: f64,
+    pixels_by_layer: &std::collections::HashMap<uuid::Uuid, &CompLayerPixels>,
+    depth: u32,
+) -> bool {
+    use lumit_core::model::LayerKind;
+    // A node graph files its clips under its own boxes, a group's effects
+    // are a stack nobody asked about here, and a cycle has no answer. None is
+    // worth following.
+    if comp.graph.is_some() || comp.groups.iter().any(|g| !g.effects.is_empty()) || depth > 8 {
+        return false;
+    }
+    let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+    let offset = crate::plan::moment_offset(t, frame_t, dt);
+    // The walk's own questions, asked at `t` as it asks them.
+    let any_solo = comp.layers.iter().any(|l| l.switches.solo);
+    let occluder = lumit_core::occlusion::occluder_index(doc, comp, t);
+    comp.layers.iter().enumerate().all(|(idx, layer)| {
+        if layer.audio_only || t < layer.in_point.0.to_f64() || t >= layer.out_point.0.to_f64() {
+            return true;
+        }
+        let drawn = layer.switches.visible
+            && !layer.graph.out_unwired
+            && !(any_solo && !layer.switches.solo)
+            && !occluder.is_some_and(|o| idx > o);
+        let fetched = pixels_by_layer.get(&layer.id);
+        // Not drawn and nothing fetched for it: no layer reads it either, so
+        // it is nothing in both.
+        if !drawn && fetched.is_none() && !matches!(layer.kind, LayerKind::Precomp { .. }) {
+            return true;
+        }
+        let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+        if !plain_stack(layer, lt) {
+            return false;
+        }
+        // An adjustment draws the composite beneath it, whatever its kind.
+        if layer.is_adjustment() {
+            return true;
+        }
+        match &layer.kind {
+            // The moment's picture is one whole source frame. The frame's own
+            // is too only when nothing blends or synthesises between two.
+            LayerKind::Footage { .. } => fetched.is_some_and(|lp| {
+                offset == 0.0
+                    || (matches!(
+                        layer.interpolation,
+                        lumit_core::retime::Interpolation::Nearest
+                    ) && lp
+                        .shutter
+                        .iter()
+                        .any(|(o, moment)| o.to_bits() == offset.to_bits() && moment.is_some()))
+            }),
+            // Spliced into its parent, a collapsed one is walked with no
+            // cull, which is another set of questions than these.
+            LayerKind::Precomp { comp: id } => doc.comp(*id).is_some_and(|nested| {
+                let frame_lt = lumit_core::time::layer_time(frame_t, layer.start_offset.0);
+                !matches!(
+                    lumit_core::model::collapse_state(doc, comp, layer, lt),
+                    lumit_core::model::CollapseState::Active
+                ) && rebuilt_as_itself(
+                    doc,
+                    nested,
+                    lumit_core::model::nested_source_time(layer, nested, lt),
+                    lumit_core::model::nested_source_time(layer, nested, frame_lt),
+                    pixels_by_layer,
+                    depth + 1,
+                )
+            }),
+            LayerKind::Solid { .. }
+            | LayerKind::Text { .. }
+            | LayerKind::Shape { .. }
+            | LayerKind::Adjustment
+            | LayerKind::Null
+            | LayerKind::Camera { .. }
+            | LayerKind::Light { .. } => true,
+            LayerKind::Sequence { .. } => false,
+        }
+    })
 }
 
 /// `pixels_by_layer` without the Sequence layers of `comp` that are in a gap
