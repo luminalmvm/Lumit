@@ -31,6 +31,9 @@ there opens the editor across the lane.
 plain value. The property keeps the number it was showing. The same menu lists
 **JavaScript** and **Rhai**, with the expression's language marked.
 
+**Animation ▸ Add expression** opens the same editor for the property rows selected in the
+Timeline, and puts the expression on every one of them.
+
 Transform properties and effect parameters both take one. Anything made of several
 numbers — a point, a colour — does not yet, and the menu simply does not offer it there.
 
