@@ -843,6 +843,7 @@ mod tests {
             },
         };
         let graph = CompGraph {
+            notes: Vec::new(),
             nodes: vec![
                 declared("gain", InputKind::Number, 7.0),
                 declared("tint", InputKind::Colour, 0.75),

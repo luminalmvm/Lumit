@@ -350,6 +350,7 @@ mod tests {
             id: uuid::Uuid::now_v7(),
         });
         CompGraph {
+            notes: Vec::new(),
             nodes,
             edges: Vec::new(),
             layout: Vec::new(),

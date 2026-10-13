@@ -57,6 +57,48 @@ hollow sockets and the chain running from the box before it to the box after. Sw
 off in [Effect controls](/panels/effect-controls/) unplugs it here, and unplugging it here
 switches it off there.
 
+## Groups
+
+A **group** is a named, coloured frame behind some boxes. It follows them as they move, and
+a group can sit inside another.
+
+| Gesture | What it does |
+| --- | --- |
+| `Ctrl+G`, or **Group** in the toolbar | Frames the picked boxes and starts typing the group's name. Boxes picked inside a group are framed inside it, and whole groups picked together are framed as one. |
+| Click a group's bar | Picks every box in it. |
+| Drag the bar | Moves the group. |
+| Double-click the bar, or `F2` | Renames it. |
+| Right-click the bar | Opens its menu: **Rename**, **Colour**, **Save group** and **Ungroup**. |
+| Drop boxes on a frame | Moves them into that group. |
+| `Ctrl+Shift+G` | Takes the picked boxes out of the innermost group they are in. With a group's bar picked, removes that frame and leaves its boxes. |
+
+The two shortcuts are the ones set for grouping layers in the Timeline. Zoomed out, a
+group's name keeps its size on screen.
+
+**Save group** asks for a name, a description, a colour and whether to show the group on
+the shelf, and writes it to the preset library as a `.lumgrp` file: its effects and drivers, the wires among them and their layout. Source and Layer out
+are never saved, and the groups inside it are. Picked boxes that are not a group become one
+under that name. A saved group is listed in the node search under **Group**. Inserting one adds its effects to the
+end of the layer's stack and puts its drivers where the search was opened.
+
+A group shown on the **shelf** sits in a strip above the canvas, and a click there inserts
+it.
+
+The folder button beside **Save group** opens **Saved groups**. Click a group there to
+insert it. Each row has a pin for the shelf, an edit mark and a delete mark, and **Show
+folder** opens the library in the file manager.
+
+## Notes
+
+A **note** is a few words left on the canvas. It is not a box and is wired to nothing.
+
+- **Add note** in the toolbar starts one in the middle of the canvas. Clicking away keeps
+  it, and one left empty is not kept.
+- **Drag** a note to move it.
+- **Double-click** it to change its words.
+- **The twirl** folds it down to its first line.
+- **Right-click** it for **Edit**, **Collapse**, **Colour** and **Delete**.
+
 ## Drivers
 
 A **driver** makes a value rather than a picture, and a wire from a driver into a

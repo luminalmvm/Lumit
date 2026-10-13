@@ -318,6 +318,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeSampledPixels dco_decode_box_autoadd_bridge_sampled_pixels(dynamic raw);
 
   @protected
+  BridgeSavedGroupDetails dco_decode_box_autoadd_bridge_saved_group_details(
+      dynamic raw);
+
+  @protected
   BridgeScalar dco_decode_box_autoadd_bridge_scalar(dynamic raw);
 
   @protected
@@ -709,6 +713,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeGraphNode dco_decode_bridge_graph_node(dynamic raw);
 
   @protected
+  BridgeGraphNote dco_decode_bridge_graph_note(dynamic raw);
+
+  @protected
   BridgeGraphPoint dco_decode_bridge_graph_point(dynamic raw);
 
   @protected
@@ -1029,6 +1036,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSampledPixels dco_decode_bridge_sampled_pixels(dynamic raw);
+
+  @protected
+  BridgeSavedGroupDetails dco_decode_bridge_saved_group_details(dynamic raw);
 
   @protected
   BridgeScalar dco_decode_bridge_scalar(dynamic raw);
@@ -1377,6 +1387,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeGraphNode> dco_decode_list_bridge_graph_node(dynamic raw);
+
+  @protected
+  List<BridgeGraphNote> dco_decode_list_bridge_graph_note(dynamic raw);
 
   @protected
   List<BridgeHistoryEntry> dco_decode_list_bridge_history_entry(dynamic raw);
@@ -2152,6 +2165,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeSavedGroupDetails sse_decode_box_autoadd_bridge_saved_group_details(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeScalar sse_decode_box_autoadd_bridge_scalar(
       SseDeserializer deserializer);
 
@@ -2611,6 +2628,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeGraphNode sse_decode_bridge_graph_node(SseDeserializer deserializer);
 
   @protected
+  BridgeGraphNote sse_decode_bridge_graph_note(SseDeserializer deserializer);
+
+  @protected
   BridgeGraphPoint sse_decode_bridge_graph_point(SseDeserializer deserializer);
 
   @protected
@@ -2973,6 +2993,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeSampledPixels sse_decode_bridge_sampled_pixels(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeSavedGroupDetails sse_decode_bridge_saved_group_details(
       SseDeserializer deserializer);
 
   @protected
@@ -3380,6 +3404,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeGraphNode> sse_decode_list_bridge_graph_node(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeGraphNote> sse_decode_list_bridge_graph_note(
       SseDeserializer deserializer);
 
   @protected
@@ -4253,6 +4281,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeSampledPixels self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_saved_group_details(
+      BridgeSavedGroupDetails self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_scalar(
       BridgeScalar self, SseSerializer serializer);
 
@@ -4757,6 +4789,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeGraphNode self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_graph_note(
+      BridgeGraphNote self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_graph_point(
       BridgeGraphPoint self, SseSerializer serializer);
 
@@ -5172,6 +5208,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_sampled_pixels(
       BridgeSampledPixels self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_saved_group_details(
+      BridgeSavedGroupDetails self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_scalar(BridgeScalar self, SseSerializer serializer);
@@ -5608,6 +5648,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_graph_node(
       List<BridgeGraphNode> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_graph_note(
+      List<BridgeGraphNote> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_history_entry(

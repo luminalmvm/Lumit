@@ -57,12 +57,12 @@ import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
-import '../state/file_dialogs.dart';
 import '../state/settings.dart' show InterfaceSettings;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
 import 'comp_graph_panel.dart' show CompGraphPanel;
+import 'graph_groups.dart';
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
 import 'layer_fold_frb.dart' show effectPath;
 import '../state/share.dart';
@@ -189,13 +189,13 @@ const double graphIconSize = 13;
 // The graph adds through the Ctrl+Space console: one search
 // surface, one key. `shell/fx_console_frb.dart` owns its shape.
 
-/// A group's wash: the air it leaves round its members, and the band its name
-/// sits in above them (the NodeGraph drawing's own numbers).
+/// A group's wash: the air it leaves round its members, and the bar its name
+/// sits in above them, which is the height of a box's own header.
 const double graphGroupPad = 12;
-const double graphGroupHead = 18;
+const double graphGroupHead = graphNodeHeaderHeight;
 
-/// What a saved group is called on disk — the engine's own constant, restated
-/// here only because a file dialogue needs the letters.
+/// What a saved group is called on disk: the engine's own constant, restated
+/// here because the file's name needs the letters.
 const String graphGroupExtension = 'lumgrp';
 
 /// Where an unplaced box lands: the chain marches right, the drivers sit
@@ -590,7 +590,8 @@ Offset graphClearSpot(Offset at, Iterable<Rect> taken) {
 /// wash follows a member the moment it is dragged and cannot go stale. Null
 /// where the canvas is drawing none of the members — a group whose boxes have
 /// all gone draws nothing rather than a rectangle round the origin.
-Rect? graphGroupRect(Iterable<Rect> members) {
+Rect? graphGroupRect(Iterable<Rect> members,
+    {double head = graphGroupHead}) {
   Rect? bounds;
   for (final member in members) {
     bounds = bounds == null ? member : bounds.expandToInclude(member);
@@ -598,7 +599,7 @@ Rect? graphGroupRect(Iterable<Rect> members) {
   if (bounds == null) return null;
   return Rect.fromLTRB(
     bounds.left - graphGroupPad,
-    bounds.top - graphGroupPad - graphGroupHead,
+    bounds.top - graphGroupPad - head,
     bounds.right + graphGroupPad,
     bounds.bottom + graphGroupPad,
   );
@@ -853,9 +854,9 @@ class GraphPanelFrb extends StatefulWidget {
   /// what is in the folder rather than writing to the user's own library.
   final List<BridgePresetInfo> Function()? groupsLister;
 
-  /// Where "Save group…" writes, injected so a test never opens a system file
-  /// dialogue. Null takes the picker, starting in the preset library folder.
-  final Future<String?> Function()? groupSavePicker;
+  /// The folder "Save group…" writes into, injected so a test never writes
+  /// to the user's own library. Null takes the preset library folder.
+  final String? Function()? groupLibrary;
 
   /// The node graph canvas's own two catalogue seams, handed straight on.
   final List<BridgeEffectInfo> Function()? graphNodesLister;
@@ -865,7 +866,7 @@ class GraphPanelFrb extends StatefulWidget {
     super.key,
     this.driversLister,
     this.groupsLister,
-    this.groupSavePicker,
+    this.groupLibrary,
     this.graphNodesLister,
     this.effectsLister,
   });
@@ -874,7 +875,8 @@ class GraphPanelFrb extends StatefulWidget {
   State<GraphPanelFrb> createState() => _GraphPanelFrbState();
 }
 
-class _GraphPanelFrbState extends State<GraphPanelFrb> {
+class _GraphPanelFrbState extends State<GraphPanelFrb>
+    with GraphGroups<GraphPanelFrb> {
   LumitUiState? _ui;
   LayerReference? _layer;
 
@@ -963,6 +965,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   }
 
   void _publishPick() {
+    groupPick = null;
     _ui?.graphNode.value = _selected;
     final layer = _layer;
     if (layer == null) return;
@@ -1189,10 +1192,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     if (!mounted) return;
     final layer = _ui?.selectedLayer.value;
     BridgeLayerGraph? graph;
+    var notes = const <BridgeGraphNote>[];
     var name = '';
     if (layer != null) {
       try {
         graph = layer.getGraph();
+        notes = layer.getGraphNotes();
         name = layer.getInfo().name;
       } catch (_) {
         // The layer has gone since the selection was made; the placeholder is
@@ -1203,6 +1208,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     setState(() {
       _layer = layer;
       _graph = graph;
+      _notes = graph == null ? const [] : notes;
       _byKey = {
         for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
           graphNodeKey(n.node): n,
@@ -1750,9 +1756,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     if (group) project.beginUndoGroup();
 
     if (drivers.isNotEmpty) {
-      // The wires go with them in the same write.
+      // The wires go with them in the same write, and their places in any
+      // group.
       _commit(
-        _wiringNow(edges: kept),
+        _wiringNow(
+          edges: kept,
+          groups: _bridgeGroups(groupsWithout(victims.map(graphNodeKey))),
+        ),
         drivers: [
           for (final d in layer.getGraphDrivers())
             if (!drivers.contains(d.id())) d,
@@ -1932,52 +1942,112 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
 
   // --- Named groups -------------------------------------------------------
 
-  /// The picked driver boxes — what a group can hold. The Source, the Layer
-  /// out and the stack's effects are derived from the layer, so a group naming
-  /// one could only ever be dropped back onto a layer with the same stack.
-  List<BridgeNodeRef> get _groupable => [
-        for (final node in _selection.values)
-          if (node is BridgeNodeRef_Driver) node,
+  @override
+  List<GraphGroup> get groups => [
+        for (final g
+            in _graph?.wiring.groups ?? const <BridgeNodeGroup>[])
+          GraphGroup(g.name, g.colour, g.members.map(graphNodeKey).toList()),
       ];
 
-  /// Name the picked boxes and write them to the library — **one gesture, two
-  /// halves**. Naming a set is what draws its wash, and the same name
-  /// is what the file is called, exactly as an effect preset takes its display
-  /// name from the file it was saved as.
-  Future<void> _saveGroup() async {
-    final layer = _layer;
-    final graph = _graph;
-    final members = _groupable;
-    if (layer == null || graph == null || members.isEmpty) return;
+  List<BridgeNodeGroup> _bridgeGroups(List<GraphGroup> groups) => [
+        for (final g in groups)
+          BridgeNodeGroup(name: g.name, colour: g.colour, members: [
+            for (final key in g.members)
+              if (_refOf(key) case final ref?) ref,
+          ]),
+      ];
 
-    final picker = widget.groupSavePicker;
-    final path = picker != null
-        ? await picker()
-        : await pickNodeGroupSaveLocation('group.lumgrp',
-            initialDirectory: presetsDirPath());
-    if (path == null || !mounted) return;
-    final name = path
-        .split(RegExp(r'[/\\]'))
-        .last
-        .replaceAll('.$graphGroupExtension', '');
-    // The next chip along, skipping index 0 — that one is the palette's quiet
-    // default, and a wash that reads as "no colour" is not a region.
-    final colour = graph.wiring.groups.length + 1;
-
-    _commit(_wiringNow(groups: [
-      ...graph.wiring.groups,
-      BridgeNodeGroup(name: name, colour: colour, members: members),
-    ]));
-    // Written from the *committed* graph, so the file and the wash carry the
-    // same name, colour and members however the commit was healed.
-    try {
-      File(path).writeAsStringSync(
-          layer.saveNodeGroup(name: name, colour: colour, nodes: members));
-    } catch (_) {
-      // The library is the user's folder; a failed write leaves the group on
-      // the canvas, which is the half that did land.
+  @override
+  void commitGroups(List<GraphGroup> next) {
+    if (_graph == null) return;
+    // A box nobody has dragged has no place of its own in the document, and a
+    // saved group keeps each box's place. So a box in a group is given the
+    // one it is drawn at.
+    for (final g in next) {
+      for (final key in g.members) {
+        if (_boxRects[key] case final rect?) {
+          _positions.putIfAbsent(key, () => rect.topLeft);
+        }
+      }
     }
+    _commit(_wiringNow(groups: _bridgeGroups(next)));
   }
+
+  /// Where each box was drawn by the last build.
+  Map<String, Rect> _boxRects = const {};
+
+  @override
+  Map<String, Rect> get boxRects => _boxRects;
+
+  @override
+  List<String> get pickedKeys => _selection.keys.toList();
+
+  @override
+  void pickKeys(Iterable<String> keys) => _pick([
+        for (final key in keys)
+          if (_refOf(key) case final ref?) ref,
+      ]);
+
+  /// The Source and the Layer out are the layer's own, so a saved group
+  /// leaves them behind.
+  @override
+  bool groupCarries(String key) => switch (_refOf(key)) {
+        BridgeNodeRef_Driver() || BridgeNodeRef_Effect() => true,
+        _ => false,
+      };
+
+  @override
+  String groupText(String name, int colour, List<String> members) =>
+      _layer!.saveNodeGroup(name: name, colour: colour, nodes: [
+        for (final key in members)
+          if (_refOf(key) case final ref?) ref,
+      ]);
+
+  @override
+  String get groupExtension => graphGroupExtension;
+
+  @override
+  String? get groupLibrary =>
+      widget.groupLibrary != null ? widget.groupLibrary!() : super.groupLibrary;
+
+  @override
+  List<BridgePresetInfo> savedGroups() =>
+      (widget.groupsLister ?? listNodeGroups)();
+
+  @override
+  void insertSavedGroup(String path) => _insertGroup(path, noteSpot);
+
+  /// The held notes, read with the graph.
+  List<BridgeGraphNote> _notes = const [];
+
+  @override
+  List<BridgeGraphNote> get notes => _notes;
+
+  @override
+  void commitNotes(List<BridgeGraphNote> next) {
+    try {
+      _layer?.setGraphNotes(notes: next);
+    } catch (_) {
+      // Refused, or the layer moved under us. Re-reading is the recovery.
+    }
+    _ui?.model.refresh();
+    _reload();
+  }
+
+  @override
+  Offset get noteSpot => graphClearSpot(
+        _toCanvas(Offset(_viewport.width / 2, _viewport.height / 2)),
+        [for (final b in _boxesNow()) b.rect],
+      );
+
+  @override
+  bool get groupSnaps => _snapToGrid;
+
+  @override
+  double get groupZoom => _zoom;
+
+  @override
+  LumitUiState? get groupUi => _ui;
 
   /// Drop a saved group at `at` — one commit, so one undo step however many
   /// boxes and wires it carries.
@@ -2158,7 +2228,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
   Offset _toCanvas(Offset local) => (local - _pan) / _zoom;
 
   void _down(PointerDownEvent event, GraphLayout layout) {
-    _canvasFocus.requestFocus();
+    // A press in a name or a note being typed leaves the keyboard there.
+    if (!groupTypingPress()) _canvasFocus.requestFocus();
     _menuPress = false;
     if (_claimed) {
       _claimed = false;
@@ -2171,6 +2242,11 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
     _pressAt = event.localPosition;
 
     final socket = layout.socketAt(at);
+    // A group's bar, unless a socket is poking out over it.
+    if (groupDown(event, at, (drag) => _nodeDrag = drag,
+        unless: socket != null)) {
+      return;
+    }
     if (socket != null && _isChainType(socket.port.portType)) {
       // **The image chain's wires can be picked up too** (owner item
       // 10: "connections between effect boxes can't be removed"). Pressing a
@@ -2385,6 +2461,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           _positions[entry.key] = entry.value + delta;
         }
         _dropWire = _dropInsert(layout)?.edge;
+        groupDragOver(drag.origins.keys, at);
       });
       return;
     }
@@ -2443,6 +2520,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       // Asked before the drag is let go of, since it is what the answer is
       // worked out from.
       final insert = moved ? _dropInsert(layout) : null;
+      // Boxes let go over a group's frame move into it, in the same write
+      // as their new place.
+      final joined = groupsAfterDrop(moved ? drag.origins.keys : const [], at);
       setState(() {
         _nodeDrag = null;
         _dropWire = null;
@@ -2467,7 +2547,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           return;
         }
       }
-      if (moved && _graph != null) _commit(_wiringNow());
+      if (moved && _graph != null) {
+        _commit(_wiringNow(
+            groups: joined == null ? null : _bridgeGroups(joined)));
+      }
       return;
     }
 
@@ -2579,11 +2662,13 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
       graph.wiring.exposed.map(graphNodeKey).toSet(),
       _layerName,
     );
+    _boxRects = {for (final box in layout.boxes) box.key: box.rect};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _toolbar(t, layout),
+        if (groupShelf(t) case final shelf?) shelf,
         Expanded(
           child: LayoutBuilder(
             builder: (context, box) => _canvas(t, layout, box.biggest),
@@ -2606,17 +2691,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                   style: t.body.copyWith(color: t.textMuted),
                   overflow: TextOverflow.ellipsis),
             ),
-            // Named regions of the canvas: what is picked becomes a group with
-            // a wash of its own, and the same act writes it to the library.
-            // Greyed until at least one driver box is picked, since a
-            // group of derived boxes is a group nothing could re-insert.
-            HouseButton(
-              key: const ValueKey('graph-save-group'),
-              small: true,
-              frameless: true,
-              onPressed: _groupable.isEmpty ? null : _saveGroup,
-              child: Text(l10n.graphSaveGroup, style: t.small),
-            ),
+            ...groupButtons(t),
             const SizedBox(width: 10),
             Text(l10n.graphAutoWire, style: t.kicker),
             const SizedBox(width: 10),
@@ -2691,6 +2766,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
           _deleteSelected();
           return KeyEventResult.handled;
         }
+        if (node.hasPrimaryFocus &&
+            groupKey(event) == KeyEventResult.handled) {
+          return KeyEventResult.handled;
+        }
         // Only the canvas itself: a rename field inside it types these.
         if (node.hasPrimaryFocus &&
             graphAddKey(event, _ui!.workspace.interface)) {
@@ -2721,7 +2800,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
               behavior: HitTestBehavior.opaque,
               child: Container(
                 key: const ValueKey('graph-canvas'),
-                color: t.surface0,
+                // Clipped, so a box or a group's frame pushed past the top
+                // edge goes under the toolbar and not over it.
+                decoration: BoxDecoration(color: t.surface0),
+                clipBehavior: Clip.hardEdge,
                 child: Stack(
                   clipBehavior: Clip.hardEdge,
                   children: [
@@ -2766,18 +2848,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
                           ..setEntry(1, 1, _zoom),
                         child: GraphBoxStack(
                           children: [
-                            // The named regions, under every box and taking no
-                            // pointer: a wash is something to read, never
-                            // something to press.
-                            for (final group in _graph!.wiring.groups)
-                              if (graphGroupRect([
-                                for (final member in group.members)
-                                  if (layout.byKey[graphNodeKey(member)]
-                                      case final box?)
-                                    box.rect,
-                              ])
-                                  case final rect?)
-                                _groupWash(t, group, rect),
+                            // The groups' frames, under every box.
+                            ...groupWashes(t, () => _claimed = true),
+                            ...graphNotes(t, () => _claimed = true),
                             // A ring round each box someone else in the
                             // shared project has picked, in their colour.
                             // Only walked while the project is shared.
@@ -2868,33 +2941,6 @@ class _GraphPanelFrbState extends State<GraphPanelFrb> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// One group's tinted wash and its name. The colour is a **label chip**
-  /// (the label palette, indexed) — the graph's own colour coding is the port
-  /// types and nothing else, so a region borrows the application's other
-  /// palette rather than inventing a third.
-  Widget _groupWash(LumitTheme t, BridgeNodeGroup group, Rect rect) {
-    final colour = t.labelColour(group.colour.toInt());
-    return Positioned.fromRect(
-      key: ValueKey<String>('graph-group-${group.name}'),
-      rect: rect,
-      child: IgnorePointer(
-        child: Container(
-          decoration: BoxDecoration(
-            color: colour.withValues(alpha: 0.05),
-            border: Border.all(color: colour.withValues(alpha: 0.18)),
-            borderRadius: BorderRadius.circular(t.tokens.controlRadius),
-          ),
-          padding: EdgeInsets.fromLTRB(graphGroupPad, 3, graphGroupPad, 0),
-          alignment: Alignment.topLeft,
-          child: Text(group.name,
-              style: t.kicker.copyWith(color: colour),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-        ),
       ),
     );
   }
@@ -3138,7 +3184,7 @@ class GraphNodeCard extends StatelessWidget {
   /// on Enter or on clicking away — the contract every inline rename in the
   /// application has, and the one the Effect controls heading's own
   /// editor keeps.
-  Widget _editor(LumitTheme t) => _NodeNameField(
+  Widget _editor(LumitTheme t) => GraphNameField(
         key: ValueKey<String>('graph-node-rename-$_key'),
         initial: _card.customName ?? '',
         onDone: onRenamed,
@@ -3579,29 +3625,36 @@ class _GraphPainter extends CustomPainter {
   bool shouldRepaint(_GraphPainter old) => true;
 }
 
-/// A node card's inline rename field: the box's current custom name, selected
+/// A node card's inline rename field, and a group bar's: the current name, selected
 /// on open because a name is retyped far more often than amended, committed on
 /// Enter or on clicking away and thrown away on Escape.
 ///
 /// Empty is a real answer — it clears the custom name and the card goes back to
 /// showing the box's own label — so an empty field is committed like any other.
-class _NodeNameField extends StatefulWidget {
+class GraphNameField extends StatefulWidget {
   final String initial;
   final ValueChanged<String> onDone;
   final VoidCallback onCancel;
 
-  const _NodeNameField({
+  /// Many lines, for a note: Enter starts a new one and clicking away is
+  /// what commits.
+  final bool multiline;
+  final String? hint;
+
+  const GraphNameField({
     super.key,
     required this.initial,
     required this.onDone,
     required this.onCancel,
+    this.multiline = false,
+    this.hint,
   });
 
   @override
-  State<_NodeNameField> createState() => _NodeNameFieldState();
+  State<GraphNameField> createState() => _GraphNameFieldState();
 }
 
-class _NodeNameFieldState extends State<_NodeNameField> {
+class _GraphNameFieldState extends State<GraphNameField> {
   late final TextEditingController _controller = TextEditingController(
     text: widget.initial,
   )..selection = TextSelection(
@@ -3635,6 +3688,9 @@ class _NodeNameFieldState extends State<_NodeNameField> {
         width: double.infinity,
         autofocus: true,
         submitOnLostFocus: true,
+        multiline: widget.multiline,
+        topAlign: widget.multiline,
+        hint: widget.hint,
         onSubmitted: widget.onDone,
         onCancelled: widget.onCancel,
       );

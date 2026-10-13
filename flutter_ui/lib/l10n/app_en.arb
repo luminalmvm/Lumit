@@ -1575,10 +1575,6 @@
   "@fileTypeShader": {
     "description": "A file type in the system's file dialogues: a .wgsl shader loaded into a Custom shader effect by its 'Load from file…' button."
   },
-  "fileTypeNodeGroup": "Lumit node group",
-  "@fileTypeNodeGroup": {
-    "description": "A file type in the system's file dialogues: a saved .lumgrp set of Graph panel boxes and the wires between them."
-  },
   "fileTypeAeProject": "After Effects project",
   "@fileTypeAeProject": {
     "description": "A file type in the system's Open dialogue for the After Effects import: an .aep project, or a zipped Lumit Bridge bundle."
@@ -11967,11 +11963,113 @@
   },
   "graphSaveGroup": "Save group…",
   "@graphSaveGroup": {
-    "description": "Graph panel toolbar button: names the picked boxes as a group, tinting the canvas behind them, and writes that group to the user's library so it can be dropped into another layer later."
+    "description": "Graph panel toolbar button, and a row of the menu on a group's bar: asks for a name, then writes the picked boxes to the user's library as a group that can be dropped into another graph later. Boxes that are not a group yet become one."
   },
   "graphGroup": "Group",
   "@graphGroup": {
     "description": "Graph panel node search: the kind shown beside a row that is a saved group of boxes rather than a single one, in the place an effect row shows its category."
+  },
+  "tipGraphGroup": "Group",
+  "@tipGraphGroup": {
+    "description": "Graph panel toolbar: tooltip on the button that puts a named, coloured frame round the picked boxes. A verb. The shortcut is shown after it."
+  },
+  "graphGroupDefaultName": "Group",
+  "@graphGroupDefaultName": {
+    "description": "Graph panel: the name a new group of boxes is given until it is renamed. Drawn on the bar along the top of the group's frame. A noun, one word."
+  },
+  "graphGroupColour": "Colour…",
+  "@graphGroupColour": {
+    "description": "Graph panel: a row of the menu on a group's bar and of the menu on a note. Opens the row of label colours to tint the group's frame or the note with."
+  },
+  "tipGraphNote": "Add note",
+  "@tipGraphNote": {
+    "description": "Graph panel toolbar: tooltip on the button that puts a new note on the canvas, a few words that are not a box and are wired to nothing."
+  },
+  "graphNoteHint": "Note",
+  "@graphNoteHint": {
+    "description": "Graph panel: shown quietly in an empty note while nothing has been typed into it. A noun."
+  },
+  "graphNoteCollapse": "Collapse",
+  "@graphNoteCollapse": {
+    "description": "Graph panel: a row of the menu on a note. Folds the note down to its first line. A verb."
+  },
+  "graphNoteExpand": "Expand",
+  "@graphNoteExpand": {
+    "description": "Graph panel: a row of the menu on a collapsed note. Opens it to show all of its words again. A verb."
+  },
+  "graphNoteEdit": "Edit",
+  "@graphNoteEdit": {
+    "description": "Graph panel: a row of the menu on a note. Opens the note's words for typing. A verb."
+  },
+  "graphUngroup": "Ungroup",
+  "@graphUngroup": {
+    "description": "Graph panel: a row of the menu on a group's bar. Takes the frame away and leaves its boxes where they are."
+  },
+  "graphSaveGroupTitle": "Save group",
+  "@graphSaveGroupTitle": {
+    "description": "Graph panel: the heading of the small dialogue that asks what a group is called before it is saved to the library. A name field sits under it."
+  },
+  "graphSaveGroupReplace": "Replace the saved group “{name}”?",
+  "@graphSaveGroupReplace": {
+    "description": "Graph panel: asked when a group is saved under the name of one already in the library. Yes writes over the saved one.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Audio rig"
+      }
+    }
+  },
+  "graphSavedGroups": "Saved groups",
+  "@graphSavedGroups": {
+    "description": "Graph panel: tooltip on the toolbar button that opens the list of groups saved to the library, and that window's heading."
+  },
+  "graphSavedGroupsEmpty": "No saved groups",
+  "@graphSavedGroupsEmpty": {
+    "description": "Graph panel, Saved groups window: shown in place of the list when the library holds no group for this kind of graph."
+  },
+  "graphSavedGroupBoxes": "{count, plural, =1{1 box} other{{count} boxes}}",
+  "@graphSavedGroupBoxes": {
+    "description": "Graph panel, Saved groups window: how many boxes a saved group holds, shown quietly at the end of its row.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "graphSavedGroupsFolder": "Show folder",
+  "@graphSavedGroupsFolder": {
+    "description": "Graph panel, Saved groups window: button that opens the folder the saved groups are kept in, in the system's file manager."
+  },
+  "graphEditSavedGroup": "Edit group",
+  "@graphEditSavedGroup": {
+    "description": "Graph panel, Saved groups window: tooltip on a row's edit mark, and the heading of the form it opens to change a saved group's name, description, colour and shelf tick."
+  },
+  "graphGroupDescription": "Description",
+  "@graphGroupDescription": {
+    "description": "Graph panel, the form for a saved group: label of the field for a few words about what the group does. Shown under its name in the Saved groups window and as the tooltip on the shelf."
+  },
+  "graphGroupColourLabel": "Colour",
+  "@graphGroupColourLabel": {
+    "description": "Graph panel, the form for a saved group: label of the row of colour chips. The colour tints the group's frame on the canvas and its chip in the library."
+  },
+  "graphGroupShelf": "Show on shelf",
+  "@graphGroupShelf": {
+    "description": "Graph panel: label of the tick in a saved group's form, and tooltip on the pin in the Saved groups window. On, the group is kept in the strip above the canvas where one click inserts it."
+  },
+  "graphDeleteSavedGroup": "Delete the saved group “{name}”?",
+  "@graphDeleteSavedGroup": {
+    "description": "Graph panel, Saved groups window: asked before a saved group's file is deleted from the library. Groups already on a canvas are not touched.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Audio rig"
+      }
+    }
+  },
+  "graphSaveGroupReplaceYes": "Replace",
+  "@graphSaveGroupReplaceYes": {
+    "description": "Graph panel: the button that agrees to write over a saved group of the same name."
   },
   "graphDriven": "driven",
   "@graphDriven": {

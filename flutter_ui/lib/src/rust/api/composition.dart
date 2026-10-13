@@ -1364,6 +1364,12 @@ class CompositionReference {
         that: this,
       );
 
+  /// The notes on this node graph's canvas.
+  List<BridgeGraphNote> getNodeGraphNotes() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceGetNodeGraphNotes(
+        that: this,
+      );
+
   /// Everything the Composition settings dialog shows.
   ///
   /// The frame rate crosses as an exact `{num, den}` pair and the duration as
@@ -2146,6 +2152,12 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetNodeGraph(
               that: this, instances: instances, wiring: wiring);
+
+  /// Replace the notes on this node graph's canvas, as one undo step.
+  void setNodeGraphNotes({required List<BridgeGraphNote> notes}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetNodeGraphNotes(
+              that: this, notes: notes);
 
   /// Apply the Composition settings dialog, as one undo step.
   ///

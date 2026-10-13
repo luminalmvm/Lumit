@@ -9,8 +9,8 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'graph.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `catalogue_ports`, `core`, `core`, `of`, `of`, `of`, `of`, `of`, `param_ports`, `read_layer_graph`, `wiring_into`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `catalogue_ports`, `core`, `core`, `core`, `of`, `of`, `of`, `of`, `of`, `param_ports`, `read_layer_graph`, `read`, `wiring_into`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// One wire.
 class BridgeGraphEdge {
@@ -92,6 +92,47 @@ class BridgeGraphNode {
           enabled == other.enabled &&
           inputs == other.inputs &&
           outputs == other.outputs;
+}
+
+/// A note on a graph's canvas: a few words, where somebody put them. Both
+/// kinds of graph keep them, and neither reads them.
+class BridgeGraphNote {
+  final String text;
+
+  /// Which chip of the label palette tints it, as an index.
+  final int colour;
+  final double x;
+  final double y;
+
+  /// Folded down to its first line.
+  final bool collapsed;
+
+  const BridgeGraphNote({
+    required this.text,
+    required this.colour,
+    required this.x,
+    required this.y,
+    required this.collapsed,
+  });
+
+  @override
+  int get hashCode =>
+      text.hashCode ^
+      colour.hashCode ^
+      x.hashCode ^
+      y.hashCode ^
+      collapsed.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeGraphNote &&
+          runtimeType == other.runtimeType &&
+          text == other.text &&
+          colour == other.colour &&
+          x == other.x &&
+          y == other.y &&
+          collapsed == other.collapsed;
 }
 
 /// The half of the graph the user edits: wires, positions, which boxes are

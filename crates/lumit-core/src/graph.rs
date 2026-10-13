@@ -176,6 +176,9 @@ pub struct LayerGraph {
     /// because it changes no pixel.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<NodeGroup>,
+    /// The notes left on the canvas. Presentation state as the groups are.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<Note>,
     /// **The Layer out box's image socket is unplugged**: the layer
     /// makes no picture at all.
     ///
@@ -222,6 +225,22 @@ pub struct NodeGroup {
     /// listed twice is the same as listed once, and a member the layer no
     /// longer carries is dropped by [`LayerGraph::prune_to`].
     pub members: Vec<NodeRef>,
+}
+
+/// A note on a graph's canvas: a few words, where somebody put them.
+///
+/// Not a box. It has no sockets and nothing reads it, so it changes no pixel
+/// and reaches no frame key.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Note {
+    pub text: String,
+    /// Which chip of the label palette tints it, as a group's does.
+    pub colour: u32,
+    /// Its top-left corner on the canvas.
+    pub at: [f64; 2],
+    /// Folded down to its first line.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub collapsed: bool,
 }
 
 /// Why a graph was refused (§1.5).
@@ -361,6 +380,7 @@ impl LayerGraph {
             && self.layout.is_empty()
             && self.exposed.is_empty()
             && self.groups.is_empty()
+            && self.notes.is_empty()
             && !self.out_unwired
     }
 
@@ -778,6 +798,7 @@ mod tests {
         let edge = param_edge(&wiggle, "value", NodeRef::Effect(blur.id), "radius");
         (
             LayerGraph {
+                notes: Vec::new(),
                 out_unwired: false,
                 nodes: vec![wiggle],
                 edges: vec![edge],

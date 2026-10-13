@@ -49,11 +49,12 @@ double panelMinWidth(Panel panel) => switch (panel) {
       Panel.timeline => 220,
       // A parameter row: its name, its wells and its keyframe marks.
       Panel.effectControls => 300,
-      // The toolbar's fixed controls — save group, the two toggles, the snap
-      // magnet and the view cluster — measure 471 px once the magnet landed.
-      // The sweep overflowed at the old 320 floor. Below this the floor
-      // slides, which is what a canvas panel wants anyway.
-      Panel.graph => 480,
+      // The toolbar's fixed controls measure 551 px in the tests' font,
+      // which is wider than the shipped one: the group, note and saved
+      // groups buttons, save group, the two toggles, the snap magnet and
+      // the view cluster. Below this the floor slides, which is what a
+      // canvas panel wants anyway.
+      Panel.graph => 560,
       Panel.effectsAndPresets => 180,
       Panel.node => 200,
       Panel.scopes => 160,

@@ -577,6 +577,42 @@ fn param_ports<'a>(
         })
 }
 
+/// A note on a graph's canvas: a few words, where somebody put them. Both
+/// kinds of graph keep them, and neither reads them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeGraphNote {
+    pub text: String,
+    /// Which chip of the label palette tints it, as an index.
+    pub colour: u32,
+    pub x: f64,
+    pub y: f64,
+    /// Folded down to its first line.
+    pub collapsed: bool,
+}
+
+impl BridgeGraphNote {
+    #[frb(ignore)]
+    pub(crate) fn read(note: &lumit_core::graph::Note) -> Self {
+        Self {
+            text: note.text.clone(),
+            colour: note.colour,
+            x: note.at[0],
+            y: note.at[1],
+            collapsed: note.collapsed,
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn core(self) -> lumit_core::graph::Note {
+        lumit_core::graph::Note {
+            text: self.text,
+            colour: self.colour,
+            at: [self.x, self.y],
+            collapsed: self.collapsed,
+        }
+    }
+}
+
 /// The document form of an edited wiring — the body of
 /// `LayerReference::set_graph`, which pairs it with the staged driver nodes.
 #[frb(ignore)]
@@ -610,6 +646,9 @@ pub(crate) fn wiring_into(
                 members: group.members.into_iter().map(BridgeNodeRef::core).collect(),
             })
             .collect(),
+        // The wiring carries none. Whoever commits it puts the document's
+        // own back.
+        notes: Vec::new(),
         out_unwired: wiring.out_unwired,
     }
 }

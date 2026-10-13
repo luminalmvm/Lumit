@@ -2926,6 +2926,12 @@ class LayerReference {
         that: this,
       );
 
+  /// The notes on this layer's graph canvas.
+  List<BridgeGraphNote> getGraphNotes() =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceGetGraphNotes(
+        that: this,
+      );
+
   /// One read for everything a row draws — see [`BridgeLayerInfo`]. One
   /// document lock and one crossing, where the per-field getters cost one of
   /// each per field.
@@ -3128,6 +3134,9 @@ class LayerReference {
   /// makes two boxes share an instance. Unlike `new_driver` this is not
   /// staged: dropping a saved rig *is* the whole gesture, there being nothing
   /// left to decide once the spot is chosen.
+  ///
+  /// The effects a group carries join the end of this layer's stack, as an
+  /// effect preset's do.
   void insertNodeGroup(
           {required String text, required double x, required double y}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceInsertNodeGroup(
@@ -3424,9 +3433,10 @@ class LayerReference {
   ///
   /// The engine hands back the text and Dart chooses where it goes, exactly
   /// as an effect preset does: the engine never opens a file dialogue. What
-  /// is saved is the driver boxes, the wires with both ends inside the set,
-  /// and where they sat relative to one another; a wire leaving the set is
-  /// not saved, because it names something the group does not carry.
+  /// is saved is the drivers and the stack's effects among `nodes`, the
+  /// wires with both ends inside the set, and where they sat relative to one
+  /// another; a wire leaving the set is not saved, because it names
+  /// something the group does not carry.
   String saveNodeGroup(
           {required String name,
           required int colour,
@@ -3675,6 +3685,12 @@ class LayerReference {
           required BridgeGraphWiring wiring}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetGraph(
           that: this, drivers: drivers, wiring: wiring);
+
+  /// Replace the notes on this layer's graph canvas, as one undo step. A
+  /// note is added, moved, reworded and deleted this way.
+  void setGraphNotes({required List<BridgeGraphNote> notes}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceSetGraphNotes(that: this, notes: notes);
 
   /// Choose how in-between frames are found. One undo step.
   ///
