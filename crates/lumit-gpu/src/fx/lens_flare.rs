@@ -965,14 +965,22 @@ impl LensFlareFx {
             bind_group_layouts: &[&trace_layout],
             push_constant_ranges: &[],
         });
-        let compute = |entry: &str, label: &str, module: &wgpu::ShaderModule, pl| {
-            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some(label),
-                layout: Some(pl),
-                module,
-                entry_point: Some(entry),
-                compilation_options: Default::default(),
-                cache: None,
+        // Each is started here and collected below, so the eight compile
+        // side by side and not one after another.
+        let compute = |entry: &'static str,
+                       label: &'static str,
+                       module: &wgpu::ShaderModule,
+                       pl: &wgpu::PipelineLayout| {
+            let (device, module, pl) = (device.clone(), module.clone(), pl.clone());
+            crate::Compiling::start(move || {
+                device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(&pl),
+                    module: &module,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    cache: None,
+                })
             })
         };
         let trace = compute("trace", "fx-lens-flare-trace", &trace_mod, &trace_pl);
@@ -1040,14 +1048,14 @@ impl LensFlareFx {
         let blur = compute("blur", "fx-lens-flare-blur", &blur_mod, &blur_pl);
 
         Self {
-            trace,
-            build_splats,
-            detect_tiles,
-            detect_pick,
-            deposit,
-            resolve,
-            blur,
-            combine,
+            trace: trace.wait(),
+            build_splats: build_splats.wait(),
+            detect_tiles: detect_tiles.wait(),
+            detect_pick: detect_pick.wait(),
+            deposit: deposit.wait(),
+            resolve: resolve.wait(),
+            blur: blur.wait(),
+            combine: combine.wait(),
             trace_layout,
             detect_layout,
             deposit_layout,

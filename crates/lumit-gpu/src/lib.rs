@@ -1827,37 +1827,58 @@ impl ColourEngine {
                     bind_group_layouts: &[&layout, &ocio_layout],
                     push_constant_ranges: &[],
                 });
-        let make_with =
-            |pl: &wgpu::PipelineLayout, target: wgpu::TextureFormat, label: &str, entry: &str| {
-                ctx.device
-                    .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                        label: Some(label),
-                        layout: Some(pl),
-                        vertex: wgpu::VertexState {
-                            module: &shader,
-                            entry_point: Some("vs_fullscreen"),
-                            buffers: &[],
-                            compilation_options: Default::default(),
-                        },
-                        fragment: Some(wgpu::FragmentState {
-                            module: &shader,
-                            entry_point: Some(entry),
-                            targets: &[Some(target.into())],
-                            compilation_options: Default::default(),
-                        }),
-                        primitive: Default::default(),
-                        depth_stencil: None,
-                        multisample: Default::default(),
-                        multiview: None,
-                        cache: None,
-                    })
-            };
-        let make = |target: wgpu::TextureFormat, label: &str, entry: &str| {
+        let make_with = |pl: &wgpu::PipelineLayout,
+                         target: wgpu::TextureFormat,
+                         label: &'static str,
+                         entry: &'static str| {
+            let (device, pl, shader) = (ctx.device.clone(), pl.clone(), shader.clone());
+            Compiling::start(move || {
+                device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(&pl),
+                    vertex: wgpu::VertexState {
+                        module: &shader,
+                        entry_point: Some("vs_fullscreen"),
+                        buffers: &[],
+                        compilation_options: Default::default(),
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: Some(entry),
+                        targets: &[Some(target.into())],
+                        compilation_options: Default::default(),
+                    }),
+                    primitive: Default::default(),
+                    depth_stencil: None,
+                    multisample: Default::default(),
+                    multiview: None,
+                    cache: None,
+                })
+            })
+        };
+        let make = |target: wgpu::TextureFormat, label: &'static str, entry: &'static str| {
             make_with(&pipeline_layout, target, label, entry)
         };
-        let make_ocio = |target: wgpu::TextureFormat, label: &str, entry: &str| {
+        let make_ocio = |target: wgpu::TextureFormat, label: &'static str, entry: &'static str| {
             make_with(&ocio_pipeline_layout, target, label, entry)
         };
+        // All eight are started here, so they compile side by side.
+        let linearise = make(WORKING_FORMAT, "linearise", "fs_copy");
+        let linearise_ocio = make_ocio(WORKING_FORMAT, "linearise-ocio", "fs_ocio");
+        let display = make(SRGB_FORMAT, "display", "fs_copy");
+        let display_bgra = make(
+            wgpu::TextureFormat::Bgra8UnormSrgb,
+            "display-bgra",
+            "fs_copy",
+        );
+        let display16 = make(DEEP_DISPLAY_FORMAT, "display16", "fs_display16");
+        let display_ocio = make_ocio(unencoded(SRGB_FORMAT), "display-ocio", "fs_ocio");
+        let display_bgra_ocio = make_ocio(
+            unencoded(wgpu::TextureFormat::Bgra8UnormSrgb),
+            "display-bgra-ocio",
+            "fs_ocio",
+        );
+        let display16_ocio = make_ocio(DEEP_DISPLAY_FORMAT, "display16-ocio", "fs_ocio16");
         let sampler = ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("colour-nearest"),
             mag_filter: wgpu::FilterMode::Nearest,
@@ -1880,24 +1901,16 @@ impl ColourEngine {
             linearise: std::sync::Mutex::new(std::collections::HashMap::from([(
                 WORKING_FORMAT,
                 LinearisePair {
-                    plain: make(WORKING_FORMAT, "linearise", "fs_copy"),
-                    ocio: make_ocio(WORKING_FORMAT, "linearise-ocio", "fs_ocio"),
+                    plain: linearise.wait(),
+                    ocio: linearise_ocio.wait(),
                 },
             )])),
-            display: make(SRGB_FORMAT, "display", "fs_copy"),
-            display_bgra: make(
-                wgpu::TextureFormat::Bgra8UnormSrgb,
-                "display-bgra",
-                "fs_copy",
-            ),
-            display16: make(DEEP_DISPLAY_FORMAT, "display16", "fs_display16"),
-            display_ocio: make_ocio(unencoded(SRGB_FORMAT), "display-ocio", "fs_ocio"),
-            display_bgra_ocio: make_ocio(
-                unencoded(wgpu::TextureFormat::Bgra8UnormSrgb),
-                "display-bgra-ocio",
-                "fs_ocio",
-            ),
-            display16_ocio: make_ocio(DEEP_DISPLAY_FORMAT, "display16-ocio", "fs_ocio16"),
+            display: display.wait(),
+            display_bgra: display_bgra.wait(),
+            display16: display16.wait(),
+            display_ocio: display_ocio.wait(),
+            display_bgra_ocio: display_bgra_ocio.wait(),
+            display16_ocio: display16_ocio.wait(),
             shader,
             pipeline_layout,
             ocio_pipeline_layout,
@@ -2957,6 +2970,35 @@ impl ColourEngine {
         drop(data);
         buffer.unmap();
         Ok(out)
+    }
+}
+
+/// A pipeline compiling on the thread pool.
+///
+/// Compiling shaders is nearly all of what building an engine costs and no
+/// pipeline waits on another, so an engine starts all of its own first and
+/// collects them as it is put together.
+pub(crate) struct Compiling<T> {
+    done: std::sync::mpsc::Receiver<T>,
+    compile: std::sync::Arc<dyn Fn() -> T + Send + Sync>,
+}
+
+impl<T: Send + 'static> Compiling<T> {
+    pub(crate) fn start(compile: impl Fn() -> T + Send + Sync + 'static) -> Self {
+        let compile: std::sync::Arc<dyn Fn() -> T + Send + Sync> = std::sync::Arc::new(compile);
+        let (send, done) = std::sync::mpsc::channel();
+        let job = std::sync::Arc::clone(&compile);
+        rayon::spawn(move || {
+            let _ = send.send(job());
+        });
+        Self { done, compile }
+    }
+
+    /// The pipeline, compiled here if the pool never answered.
+    // ponytail: this blocks, so an engine built from inside the pool on a
+    // one-core machine would wait on itself. Nothing builds one there.
+    pub(crate) fn wait(self) -> T {
+        self.done.recv().unwrap_or_else(|_| (self.compile)())
     }
 }
 

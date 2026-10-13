@@ -282,16 +282,27 @@ impl FxEngine {
                     source: wgpu::ShaderSource::Wgsl(wgsl.into()),
                 })
         };
-        let pipeline = |shader: &wgpu::ShaderModule, name: &str, entry: &str| {
-            ctx.device
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        // Compiling the kernels is nearly all of what building the engine
+        // costs and no kernel waits on another, so each is started on the
+        // thread pool here and collected where the engine is put together.
+        let pipeline_on = |layout: &wgpu::PipelineLayout,
+                           shader: &wgpu::ShaderModule,
+                           name: &'static str,
+                           entry: &'static str| {
+            let (device, layout, shader) = (ctx.device.clone(), layout.clone(), shader.clone());
+            crate::Compiling::start(move || {
+                device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(name),
-                    layout: Some(&pipeline_layout),
-                    module: shader,
+                    layout: Some(&layout),
+                    module: &shader,
                     entry_point: Some(entry),
                     compilation_options: Default::default(),
                     cache: None,
                 })
+            })
+        };
+        let pipeline = |shader: &wgpu::ShaderModule, name: &'static str, entry: &'static str| {
+            pipeline_on(&pipeline_layout, shader, name, entry)
         };
         let blur_mod = module(include_str!("../fx_blur.wgsl"), "fx-blur");
         let dir_blur_mod = module(include_str!("../fx_dirblur.wgsl"), "fx-dir-blur");
@@ -567,123 +578,29 @@ impl FxEngine {
         let echo_accumulate = pipeline(&echo_mod, "fx-echo-accumulate", "echo_accumulate");
         let accum_shutter = pipeline(&accum_shutter_mod, "fx-accum-shutter", "accum_shutter");
         let echo_mix = pipeline(&echo_mod, "fx-echo-mix", "echo_mix");
-        let motion_blur = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-motion-blur"),
-                layout: Some(&mb_pl),
-                module: &motion_blur_mod,
-                entry_point: Some("motion_blur"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let mb_tilemax = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-mb-tilemax"),
-                layout: Some(&mb_tile_pl),
-                module: &mb_tilemax_mod,
-                entry_point: Some("mb_tilemax"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let motion_blur = pipeline_on(&mb_pl, &motion_blur_mod, "fx-motion-blur", "motion_blur");
+        let mb_tilemax = pipeline_on(&mb_tile_pl, &mb_tilemax_mod, "fx-mb-tilemax", "mb_tilemax");
         // The supplied Motion vectors layer read as a flow field: the
         // same layout, since it is also "a picture in, an rgba32float field
         // out", and so no seam of its own.
-        let mb_vectors = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-mb-vectors"),
-                layout: Some(&mb_tile_pl),
-                module: &mb_tilemax_mod,
-                entry_point: Some("mb_vectors"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let datamosh = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-datamosh"),
-                layout: Some(&mb_pl),
-                module: &datamosh_mod,
-                entry_point: Some("datamosh"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let dof = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-dof"),
-                layout: Some(&mb_pl),
-                module: &dof_mod,
-                entry_point: Some("dof"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let adjust = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-adjust"),
-                layout: Some(&adjust_pl),
-                module: &adjust_mod,
-                entry_point: Some("adjust_blend"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let mb_vectors = pipeline_on(&mb_tile_pl, &mb_tilemax_mod, "fx-mb-vectors", "mb_vectors");
+        let datamosh = pipeline_on(&mb_pl, &datamosh_mod, "fx-datamosh", "datamosh");
+        let dof = pipeline_on(&mb_pl, &dof_mod, "fx-dof", "dof");
+        let adjust = pipeline_on(&adjust_pl, &adjust_mod, "fx-adjust", "adjust_blend");
         // The generic Matte dissolve. Same three-sampled-inputs shape
         // as the adjustment blend, so it borrows that layout rather than
         // declaring an identical one.
-        let matte_mix = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-matte-mix"),
-                layout: Some(&adjust_pl),
-                module: &matte_mix_mod,
-                entry_point: Some("matte_mix"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let matte_mix = pipeline_on(&adjust_pl, &matte_mix_mod, "fx-matte-mix", "matte_mix");
         // The seam's two passes, on the same layout for the same reason.
-        let matte_prepare = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-matte-prepare"),
-                layout: Some(&adjust_pl),
-                module: &matte_prepare_mod,
-                entry_point: Some("matte_prepare"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let blend_mix = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-blend-mix"),
-                layout: Some(&adjust_pl),
-                module: &blend_mix_mod,
-                entry_point: Some("blend_mix"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let lut = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-lut"),
-                layout: Some(&lut_pl),
-                module: &lut_mod,
-                entry_point: Some("lut_apply"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-        let ocio = ctx
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("fx-ocio"),
-                layout: Some(&ocio_pl),
-                module: &ocio_mod,
-                entry_point: Some("ocio_effect"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
+        let matte_prepare = pipeline_on(
+            &adjust_pl,
+            &matte_prepare_mod,
+            "fx-matte-prepare",
+            "matte_prepare",
+        );
+        let blend_mix = pipeline_on(&adjust_pl, &blend_mix_mod, "fx-blend-mix", "blend_mix");
+        let lut = pipeline_on(&lut_pl, &lut_mod, "fx-lut", "lut_apply");
+        let ocio = pipeline_on(&ocio_pl, &ocio_mod, "fx-ocio", "ocio_effect");
         let lens_flare = super::LazyFlare::spawn(ctx);
         // Particulate (docs/08 §3.86): four compute passes and one instanced
         // draw off one module, so the closed forms and the quad that shows them
@@ -710,114 +627,114 @@ impl FxEngine {
             particulate_scatter: particulate.scatter,
             particulate_draw: particulate.draw,
             lens_flare,
-            blur,
-            dir_blur,
-            radial_blur,
-            sharpen_unpremultiply,
-            sharpen_combine,
-            sharpen_simple,
-            sprite_flare,
-            light_wrap_pack,
-            light_wrap_combine,
-            rgb_split,
-            spectral_split,
-            chromatic_aberration,
-            flash,
-            colour_balance,
-            saturation,
-            vibrancy,
-            matte_key,
-            matte_key_screen,
-            matte_key_combine,
-            matte_morph,
-            matte_despot,
-            stroke_morph,
-            stroke_combine,
-            matte_mask,
-            vignette,
-            exposure,
-            lighting,
-            temperature,
-            invert,
-            tint,
-            hue_shift,
-            contrast,
-            gamma,
-            curves,
-            levels,
-            brightness,
-            hue_saturation,
-            posterize,
-            threshold,
-            tritone,
-            photo_filter,
-            black_and_white,
-            shadow_highlight,
-            fill,
-            gradient,
-            noise,
-            fractal_noise,
-            beam,
-            lightning,
-            radio_waves,
-            vegas,
-            path_draw,
-            add_grain,
-            turbulent_displace,
-            tile,
-            offset,
-            mirror,
-            lens_distort,
-            corner_pin,
-            displacement_map,
-            polar_coordinates,
-            twirl,
-            spherize,
-            ripple,
-            wave_warp,
-            bezier_warp,
-            warp,
-            roughen_edges,
-            median,
-            mosaic,
-            find_edges,
-            emboss,
-            texturize,
-            mood_lighting,
-            pixel_sort,
-            broadcast_safe,
-            channel_blur,
-            drop_shadow,
-            set_matte,
-            set_channels,
-            linear_wipe,
-            radial_wipe,
-            venetian_blinds,
-            iris_wipe,
-            card_wipe,
-            transform,
-            shake_mb,
-            glow_bright,
-            glow_combine,
-            glow_exp_down,
-            glow_exp_conv,
-            glow_exp_up,
-            block_glitch,
-            scanlines,
-            echo_accumulate,
-            accum_shutter,
-            echo_mix,
-            motion_blur,
-            mb_tilemax,
-            mb_vectors,
-            datamosh,
-            dof,
-            adjust,
-            matte_mix,
-            matte_prepare,
-            blend_mix,
-            lut,
-            ocio,
+            blur: blur.wait(),
+            dir_blur: dir_blur.wait(),
+            radial_blur: radial_blur.wait(),
+            sharpen_unpremultiply: sharpen_unpremultiply.wait(),
+            sharpen_combine: sharpen_combine.wait(),
+            sharpen_simple: sharpen_simple.wait(),
+            sprite_flare: sprite_flare.wait(),
+            light_wrap_pack: light_wrap_pack.wait(),
+            light_wrap_combine: light_wrap_combine.wait(),
+            rgb_split: rgb_split.wait(),
+            spectral_split: spectral_split.wait(),
+            chromatic_aberration: chromatic_aberration.wait(),
+            flash: flash.wait(),
+            colour_balance: colour_balance.wait(),
+            saturation: saturation.wait(),
+            vibrancy: vibrancy.wait(),
+            matte_key: matte_key.wait(),
+            matte_key_screen: matte_key_screen.wait(),
+            matte_key_combine: matte_key_combine.wait(),
+            matte_morph: matte_morph.wait(),
+            matte_despot: matte_despot.wait(),
+            stroke_morph: stroke_morph.wait(),
+            stroke_combine: stroke_combine.wait(),
+            matte_mask: matte_mask.wait(),
+            vignette: vignette.wait(),
+            exposure: exposure.wait(),
+            lighting: lighting.wait(),
+            temperature: temperature.wait(),
+            invert: invert.wait(),
+            tint: tint.wait(),
+            hue_shift: hue_shift.wait(),
+            contrast: contrast.wait(),
+            gamma: gamma.wait(),
+            curves: curves.wait(),
+            levels: levels.wait(),
+            brightness: brightness.wait(),
+            hue_saturation: hue_saturation.wait(),
+            posterize: posterize.wait(),
+            threshold: threshold.wait(),
+            tritone: tritone.wait(),
+            photo_filter: photo_filter.wait(),
+            black_and_white: black_and_white.wait(),
+            shadow_highlight: shadow_highlight.wait(),
+            fill: fill.wait(),
+            gradient: gradient.wait(),
+            noise: noise.wait(),
+            fractal_noise: fractal_noise.wait(),
+            beam: beam.wait(),
+            lightning: lightning.wait(),
+            radio_waves: radio_waves.wait(),
+            vegas: vegas.wait(),
+            path_draw: path_draw.wait(),
+            add_grain: add_grain.wait(),
+            turbulent_displace: turbulent_displace.wait(),
+            tile: tile.wait(),
+            offset: offset.wait(),
+            mirror: mirror.wait(),
+            lens_distort: lens_distort.wait(),
+            corner_pin: corner_pin.wait(),
+            displacement_map: displacement_map.wait(),
+            polar_coordinates: polar_coordinates.wait(),
+            twirl: twirl.wait(),
+            spherize: spherize.wait(),
+            ripple: ripple.wait(),
+            wave_warp: wave_warp.wait(),
+            bezier_warp: bezier_warp.wait(),
+            warp: warp.wait(),
+            roughen_edges: roughen_edges.wait(),
+            median: median.wait(),
+            mosaic: mosaic.wait(),
+            find_edges: find_edges.wait(),
+            emboss: emboss.wait(),
+            texturize: texturize.wait(),
+            mood_lighting: mood_lighting.wait(),
+            pixel_sort: pixel_sort.wait(),
+            broadcast_safe: broadcast_safe.wait(),
+            channel_blur: channel_blur.wait(),
+            drop_shadow: drop_shadow.wait(),
+            set_matte: set_matte.wait(),
+            set_channels: set_channels.wait(),
+            linear_wipe: linear_wipe.wait(),
+            radial_wipe: radial_wipe.wait(),
+            venetian_blinds: venetian_blinds.wait(),
+            iris_wipe: iris_wipe.wait(),
+            card_wipe: card_wipe.wait(),
+            transform: transform.wait(),
+            shake_mb: shake_mb.wait(),
+            glow_bright: glow_bright.wait(),
+            glow_combine: glow_combine.wait(),
+            glow_exp_down: glow_exp_down.wait(),
+            glow_exp_conv: glow_exp_conv.wait(),
+            glow_exp_up: glow_exp_up.wait(),
+            block_glitch: block_glitch.wait(),
+            scanlines: scanlines.wait(),
+            echo_accumulate: echo_accumulate.wait(),
+            accum_shutter: accum_shutter.wait(),
+            echo_mix: echo_mix.wait(),
+            motion_blur: motion_blur.wait(),
+            mb_tilemax: mb_tilemax.wait(),
+            mb_vectors: mb_vectors.wait(),
+            datamosh: datamosh.wait(),
+            dof: dof.wait(),
+            adjust: adjust.wait(),
+            matte_mix: matte_mix.wait(),
+            matte_prepare: matte_prepare.wait(),
+            blend_mix: blend_mix.wait(),
+            lut: lut.wait(),
+            ocio: ocio.wait(),
             custom_shader: super::custom_shader::CustomShaderPipelines::new(ctx),
             layout,
             adjust_layout,

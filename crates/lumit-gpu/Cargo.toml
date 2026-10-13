@@ -19,6 +19,8 @@ bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 glam = "0.29"
 half = "2"
 pollster = "0.4"
+# The effect kernels compile side by side on its pool.
+rayon = "1"
 thiserror = "2"
 # `counters` turns on wgpu's live-object tallies — how many textures and
 # buffers the driver is holding right now, which is what says whether a frame
