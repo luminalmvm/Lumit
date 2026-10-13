@@ -93,6 +93,10 @@ pub struct VideoDecoder {
     index: FrameIndex,
     /// Frame number the decoder will produce next if we keep reading forward.
     next_sequential: Option<usize>,
+    /// The picture handed out last, with its pts. A conformed variable frame
+    /// rate index names the same picture for several frames running, and the
+    /// decoder has already moved past it by the second ask.
+    last: Option<(i64, AVFrame)>,
     /// How many times this decoder has had to seek. Exposed by [`Self::seeks`]
     /// because seeking is the difference between realtime playback and a
     /// slideshow, and "did that need a seek?" is a far steadier thing to assert
@@ -228,6 +232,7 @@ impl VideoDecoder {
             stream_index,
             index,
             next_sequential: Some(0),
+            last: None,
             seeks: 0,
             hardware,
         })
@@ -279,6 +284,15 @@ impl VideoDecoder {
             .index
             .pts_of_frame(n)
             .ok_or_else(|| MediaError::Ffmpeg(format!("frame {n} out of range")))?;
+
+        // The same picture as last time, which the decoder cannot give twice.
+        // The decoder itself has not moved, so where it reads on from is left
+        // as it was.
+        if let Some((pts, frame)) = &self.last {
+            if *pts == want_pts {
+                return Ok(frame.clone());
+            }
+        }
 
         // Where a seek would land, and therefore whether one is worth doing.
         let key = self.index.nearest_keyframe_at_or_before(n);
@@ -353,6 +367,7 @@ impl VideoDecoder {
                         sw
                     }
                 };
+                self.last = Some((want_pts, frame.clone()));
                 return Ok(frame);
             }
             if pts > want_pts {
