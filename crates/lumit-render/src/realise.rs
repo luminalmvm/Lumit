@@ -1385,7 +1385,11 @@ impl Realiser<'_> {
         let mut neighbours = Vec::with_capacity(l.flow_below.len());
         let mut fields = Vec::with_capacity(l.flow_below.len());
         for (offset, draws, camera, measure) in &l.flow_below {
+            // A Precomp in the frame after this one is that frame's own
+            // picture of it, so it is kept for then.
+            self.fx_cache.borrow_mut().carry_nested(*offset > 0);
             let then = self.realise(*camera, width, height, background, draws);
+            self.fx_cache.borrow_mut().carry_nested(false);
             // Only an offset a flow consumer asked for is measured. An Echo
             // or a plugin reads the neighbour picture and nothing more.
             if let Some(field) = measure.then(|| self.measure_flow(now, &then)).flatten() {
