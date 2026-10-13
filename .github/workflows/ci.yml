@@ -28,6 +28,20 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  # Line numbers in a backtrace and nothing more. Full debug info is for a
+  # debugger, which nobody attaches to a runner, and writing it for a hundred
+  # test binaries is a good share of every build here, most of all on Windows.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+# Caches, which every job below leans on. A repository gets 10 GB and the
+# least recently used go first, so two rules keep the ones that matter in:
+#
+# - Only main saves a Rust cache (`save-if`). A pull request can read main's
+#   but its own are no use to any other branch, and a day of pull requests
+#   pushed main's out. The job that lost one compiled every dependency again,
+#   which on Windows is half an hour.
+# - The Flutter SDK is downloaded, not cached. It is 3.7 GB across two
+#   platforms and the download is as quick as the restore.
 
 jobs:
   check:
@@ -61,6 +75,7 @@ jobs:
       # outlive its keg, so the keg's version is part of the Rust cache key.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -121,6 +136,8 @@ jobs:
         run: |
           "LIBCLANG_PATH=$env:RUNNER_TEMP\llvm\bin" >> $env:GITHUB_ENV
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The shipping target runs the full gate, media included — this is the parity
       # the desktop-dev setup unlocked (previously Windows built --no-default-features).
       - run: cargo clippy --workspace --all-targets -- -D warnings
@@ -213,6 +230,8 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # GPU crates included: the tests share one device under a lock (see the
       # `windows` job), so a software rasteriser neither races nor thrashes.
@@ -299,6 +318,8 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Released, always: the harness's own loop is only comparable with itself
       # when the whole thing is optimised, and a debug number means nothing.
       #
@@ -405,11 +426,12 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
       - name: Cache pub packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -476,8 +498,7 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev \
             libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
             libwayland-dev mesa-vulkan-drivers libclang-18-dev \
-            clang cmake ninja-build libgtk-3-dev libwebkit2gtk-4.1-dev \
-            xvfb libgl1-mesa-dri libegl-mesa0
+            clang cmake ninja-build libgtk-3-dev libwebkit2gtk-4.1-dev
           # libgles-dev provides GLES2/gl2*.h + glesv2.pc; libegl-dev provides
           # EGL/egl*.h + egl.pc. The Linux zero-copy Viewer plugin
           # (linux/runner/viewer_texture_bridge.cc) imports engine DMA-BUF
@@ -504,16 +525,17 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Flutter stable pinned to the SAME version the desktop dev box runs
       # (3.47.1), so CI and the owner's machine agree. It has to be: the runner
       # calls `DartProject::set_impeller_switch`, which 3.44.7's Windows
-      # embedder does not have, so a stale pin fails to compile main.cpp. `cache: true` caches the
-      # SDK; the pub cache is cached separately below.
+      # embedder does not have, so a stale pin fails to compile main.cpp. The pub
+      # cache is cached below; the SDK is not (see the note on caches above).
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
       - name: Cache pub packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -598,20 +620,6 @@ jobs:
       - name: flutter build linux --release
         working-directory: flutter_ui
         run: flutter build linux --release
-      # An extension's page is drawn by WebKitGTK from the runner
-      # (linux/runner/extension_views.cc), which no `flutter test` reaches:
-      # there is no window and no runner in one. This puts a page up on a real
-      # window under Xvfb and has it report back. WebKit starts a page in a
-      # sandbox of its own, which a hosted runner does not always allow, so
-      # that is off for this step and nowhere else.
-      - name: An extension's page on a real window (Xvfb)
-        working-directory: flutter_ui
-        env:
-          LUMIT_NO_ZERO_COPY_VIEWER: "1"
-          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
-        run: |
-          xvfb-run -a -s "-screen 0 1920x1080x24" \
-            flutter test integration_test/extension_page_test.dart -d linux
       # The runner's two decisions about a machine with two graphics cards:
       # whether to take the engine's texture, and whether to ask for the NVIDIA
       # card. Wrong answers crash a laptop nobody here has, so they sit in a
@@ -623,6 +631,79 @@ jobs:
           out="$RUNNER_TEMP/gpu_device_match_test"
           c++ -std=c++17 -Wall -Wextra -Werror gpu_device_match_test.cc -o "$out"
           "$out"
+
+  # An extension's page is drawn by WebKitGTK from the runner
+  # (linux/runner/extension_views.cc), which no `flutter test` reaches: there
+  # is no window and no runner in one. This puts a page up on a real window
+  # under Xvfb and has it report back.
+  #
+  # A job of its own because `flutter test -d linux` builds the debug app, the
+  # engine with it, from nothing. As a step of `flutter-linux`, behind that
+  # job's release build, it took the job past half an hour.
+  #
+  # Setup is the `ui-budget` job's.
+  extension-page-linux:
+    name: extension page on a real window (Linux)
+    runs-on: ubuntu-latest
+    env:
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+      - name: Install desktop, Flutter and Xvfb dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libgl-dev libegl-dev libgles-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
+            libwayland-dev mesa-vulkan-drivers libclang-18-dev \
+            clang cmake ninja-build libgtk-3-dev libwebkit2gtk-4.1-dev \
+            xvfb libgl1-mesa-dri libegl-mesa0
+      # Identical to the `linux` job's; see there for the .pc prefix rewrite.
+      - name: Install FFmpeg 8.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL --retry 5 --retry-all-errors "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: 3.47.1
+          channel: stable
+      - name: Cache pub packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('flutter_ui/pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+      - name: flutter pub get
+        working-directory: flutter_ui
+        run: flutter pub get
+      # WebKit starts a page in a sandbox of its own, which a hosted runner
+      # does not always allow, so that is off for this step and nowhere else.
+      - name: An extension's page on a real window (Xvfb)
+        working-directory: flutter_ui
+        env:
+          LUMIT_NO_ZERO_COPY_VIEWER: "1"
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
+        run: |
+          xvfb-run -a -s "-screen 0 1920x1080x24" \
+            flutter test integration_test/extension_page_test.dart -d linux
 
   flutter-macos:
     name: flutter frontend (macOS runner build)
@@ -637,7 +718,7 @@ jobs:
       # the bridge crate, so rusty_ffmpeg needs the keg here, and the podspec's
       # -L flags name its opt prefix — which the action creates on both the
       # build and the cache-restore path. The exported pkg-config path stays for
-      # the same reason as the `check` and `coverage` jobs. Xcode's
+      # the same reason as the `check` job. Xcode's
       # build environment inherits it from $GITHUB_ENV; it is not supplied by
       # .cargo/config.toml, which deliberately sets no [env] block.
       - name: FFmpeg 8.1.2 (extracted formula, cached keg)
@@ -645,13 +726,13 @@ jobs:
         uses: ./.github/actions/ffmpeg8-macos
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # The same pinned Flutter the Linux job takes, so the two agree.
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
       - name: Cache pub packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -661,11 +742,18 @@ jobs:
       - name: flutter pub get
         working-directory: flutter_ui
         run: flutter pub get
-      # The gate. `flutter build macos` runs CocoaPods for macos/Runner, so it
+      # The gate. Building the app runs CocoaPods for macos/Runner, so it
       # resolves rust_builder/macos/lumit_bridge.podspec by the plugin's pubspec
       # name — a podspec named anything else fails here — then compiles the Swift
       # runner (MainFlutterWindow, the IOSurface ViewerTextureBridge) and
       # links the bridge static library with the podspec's OTHER_LDFLAGS.
+      #
+      # It is the debug build the page test at the end makes, and the only one
+      # here. A release build beside it compiled the engine from nothing a
+      # second time and took this job past half an hour, on the runners GitHub
+      # hands out fewest of. The release build is the nightly's (`macos-dmg` in
+      # release.yml), so a fault only it can show turns up there the next
+      # morning.
       #
       # analyze and test are not repeated: the Linux job already runs both, and
       # neither is platform-specific. This job exists for the parts only a mac
@@ -694,16 +782,10 @@ jobs:
             echo "::error::Xcode $ver cannot compile assets/brand/lumit-icon.icon (needs 26+)"
             exit 1
           }
-      - name: flutter build macos --release
-        working-directory: flutter_ui
-        env:
-          FLUTTER_XCODE_ARCHS: arm64
-          FLUTTER_XCODE_ONLY_ACTIVE_ARCH: "YES"
-        run: flutter build macos --release
       # The macOS half of extension panels (macos/Runner/ExtensionViews.swift)
-      # compiles in the step above and runs in this one: a page is put up in
-      # the real runner and reports back. See the same step in `flutter-linux`.
-      - name: An extension's page on a real window
+      # compiles and runs in this step: a page is put up in the real runner and
+      # reports back. See `extension-page-linux` for the other half.
+      - name: Build the runner and put an extension's page on a real window
         working-directory: flutter_ui
         env:
           FLUTTER_XCODE_ARCHS: arm64
@@ -737,7 +819,6 @@ jobs:
         with:
           flutter-version: 3.47.1
           channel: stable
-          cache: true
       # Generating compiles lumit-bridge, so this job needs the same native
       # dependencies the `linux` job installs — FFmpeg for rusty_ffmpeg and
       # libclang 18 for bindgen. Without them `generate` fails while building
@@ -768,6 +849,8 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The version is pinned once, on the runtime crate the generated glue links
       # against (`flutter_rust_bridge = { version = "=2.12.0", … }`). Read it from
       # there rather than restating it here: a generator that drifts from its
@@ -820,15 +903,11 @@ jobs:
       - uses: taiki-e/install-action@5f8ff1a44efd92cf3d48505f1adfee33393eb853 # main
         with:
           tool: cargo-llvm-cov
-      # As in the `check` job above, which explains the extracted formula: the
-      # action exports the pkg-config path rather than .cargo/config.toml
-      # carrying it.
-      - name: FFmpeg 8.1.2 (extracted formula, cached keg)
-        id: ffmpeg
-        uses: ./.github/actions/ffmpeg8-macos
+      # No FFmpeg here: none of the crates below reaches lumit-media, so this
+      # job has nothing to link it into.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Engine crates must hold the line; the threshold may rise, never fall.
       # The FFmpeg-free engine crates are all gated (measured 83–99% locally).
       # lumit-gpu is held out while its kernel tests skip on adapterless runners,
@@ -897,6 +976,8 @@ jobs:
       - name: Point bindgen at libclang
         run: echo "LIBCLANG_PATH=/usr/lib/llvm-18/lib" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # The **bundles only**, not the checkouts they were built from: the
       # runner's `ensure` hands back a folder that already has bundles in it
       # without looking at a compiler, so a green run pays for the eighty
@@ -954,6 +1035,8 @@ jobs:
         with:
           toolchain: nightly
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # `+nightly` explicitly: rust-toolchain.toml pins stable for the whole
       # repository, and it wins over whichever toolchain the step above made the
       # default - so without this cargo runs stable and `-Zsanitizer` is refused.
