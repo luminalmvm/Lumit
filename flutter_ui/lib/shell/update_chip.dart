@@ -12,7 +12,9 @@ import 'package:provider/provider.dart';
 
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
+import '../l10n/strings.dart';
 import '../state/updates.dart';
+import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'menu_bar_frb.dart' show saveProjectFrb;
 import 'profile_chip.dart' show SyncRing;
@@ -32,6 +34,8 @@ class UpdateChip extends StatelessWidget {
       builder: (context, _) => LumitTooltip(
         // The Help menu's row says the same thing in words.
         message: updates.menuLabel,
+        maxWidth: 380,
+        body: _changes(ThemeScope.of(context).theme, updates),
         child: HouseButton(
           key: const ValueKey('status-update'),
           frameless: true,
@@ -51,6 +55,52 @@ class UpdateChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What the waiting update brings, for under the tip: a heading per build
+/// and a line per change, newest first. Null when there is nothing to list.
+Widget? _changes(LumitTheme t, UpdateService updates) {
+  // ponytail: a tip can't be scrolled, so it lists twelve changes and counts
+  // the rest. A window of its own if the whole list is ever wanted.
+  var room = 12;
+  var more = 0;
+  final rows = <Widget>[];
+  for (final build in updates.builds) {
+    final shown = build.changes.take(room).toList();
+    room -= shown.length;
+    more += build.changes.length - shown.length;
+    if (shown.isEmpty) continue;
+    rows.add(Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      child: Text(build.version, style: t.bodyStrong),
+    ));
+    for (final change in shown) {
+      rows.add(Row(
+        children: [
+          SizedBox(width: 10, child: Text('•', style: t.body)),
+          Expanded(
+            child: Text(change,
+                style: t.bodyPrimary,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      ));
+    }
+  }
+  if (rows.isEmpty) return null;
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      ...rows,
+      if (more > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(l10n.updateMoreChanges(more), style: t.small),
+        ),
+    ],
+  );
 }
 
 /// The mark for where [updates] has got to. Quiet while there is nothing to

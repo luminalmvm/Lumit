@@ -9309,6 +9309,15 @@
   "@updateNotInManifest": {
     "description": "Why an update was rejected: the signature held up, but the signed list of files does not name this download, or names it at a different size or checksum."
   },
+  "updateMoreChanges": "{count} more",
+  "@updateMoreChanges": {
+    "description": "Last line of the list of changes shown when the pointer rests on the update button in a nightly build: how many changes there was no room to list. {count} is a whole number.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "updateClickToUpdate": "Click to update - v{version}",
   "@updateClickToUpdate": {
     "description": "Help menu row when a new version is waiting.",
