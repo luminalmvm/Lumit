@@ -238,6 +238,9 @@ pub struct Note {
     pub colour: u32,
     /// Its top-left corner on the canvas.
     pub at: [f64; 2],
+    /// Folded down to its first line.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub collapsed: bool,
 }
 
 /// Why a graph was refused (§1.5).

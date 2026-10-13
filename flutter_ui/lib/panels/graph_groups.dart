@@ -13,7 +13,8 @@
 //
 // A note is a few words on the canvas. It is not a box: it has no sockets,
 // nothing reads it and it is not part of the pick. It is dragged by its body,
-// reworded on a double-click and has a menu on a right-click.
+// reworded on a double-click and has a menu on a right-click. Its twirl folds
+// it down to its first line.
 //
 // The layer canvas and the node graph canvas hold different boxes and write
 // different lists. Each tells [GraphGroups] what its groups and notes are and
@@ -31,6 +32,7 @@ import 'package:lumit_flutter/src/rust/api/graph.dart' show BridgeGraphNote;
 import 'package:lumit_flutter/src/rust/api/keymap.dart' show BridgeKeyContext;
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 
+import '../icons/icons.dart' show LumitIcon, lumitIcon;
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
@@ -68,7 +70,7 @@ String graphGroupFile(String dir, String name, String extension) {
 enum _GroupDo { rename, colour, save, ungroup }
 
 /// What a row of a note's menu does.
-enum _NoteDo { edit, colour, delete }
+enum _NoteDo { edit, fold, colour, delete }
 
 /// How wide a note is drawn, in canvas units. Its height is its words'.
 const double graphNoteWidth = 180;
@@ -510,13 +512,23 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
       });
 
   BridgeGraphNote _note(BridgeGraphNote from,
-          {String? text, int? colour, Offset? at}) =>
+          {String? text, int? colour, Offset? at, bool? collapsed}) =>
       BridgeGraphNote(
         text: text ?? from.text,
         colour: colour ?? from.colour,
         x: at?.dx ?? from.x,
         y: at?.dy ?? from.y,
+        collapsed: collapsed ?? from.collapsed,
       );
+
+  /// Fold a note down to its first line, or open it again.
+  void _noteFold(int at) {
+    if (at >= notes.length) return;
+    commitNotes([
+      for (final (i, n) in notes.indexed)
+        i == at ? _note(n, collapsed: !n.collapsed) : n,
+    ]);
+  }
 
   /// The words typed into a note. One left with none is taken away, and a
   /// new one with none is never made.
@@ -530,7 +542,12 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
       commitNotes([
         ...all,
         BridgeGraphNote(
-            text: text, colour: _noteColour, x: fresh.dx, y: fresh.dy),
+          text: text,
+          colour: _noteColour,
+          x: fresh.dx,
+          y: fresh.dy,
+          collapsed: false,
+        ),
       ]);
     } else if (at < all.length && text != all[at].text) {
       commitNotes([
@@ -552,6 +569,13 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
           child: Text(l10n.graphNoteEdit),
         ),
         MenuRow(
+          key: const ValueKey('graph-note-menu-fold'),
+          onPressed: () => close(_NoteDo.fold),
+          child: Text(notes[at].collapsed
+              ? l10n.graphNoteExpand
+              : l10n.graphNoteCollapse),
+        ),
+        MenuRow(
           key: const ValueKey('graph-note-menu-colour'),
           onPressed: () => close(_NoteDo.colour),
           child: Text(l10n.graphGroupColour),
@@ -567,6 +591,8 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
     switch (picked) {
       case _NoteDo.edit:
         setState(() => noteEditing = at);
+      case _NoteDo.fold:
+        _noteFold(at);
       case _NoteDo.colour:
         final colour =
             await showLabelPicker(context, position, keyPrefix: 'graph-note');
@@ -623,7 +649,9 @@ mixin GraphGroups<W extends StatefulWidget> on State<W> {
           child: GraphNoteCard(
             text: note.text,
             colour: t.labelColour(note.colour),
+            collapsed: note.collapsed,
             editing: noteEditing == i,
+            onFold: () => _noteFold(i),
             onOwnPress: noteEditing == i ? typing : onOwnPress,
             onDone: (text) => _noteDone(i, text),
             onCancel: () => setState(() => noteEditing = null),
@@ -869,7 +897,11 @@ class GraphGroupWash extends StatelessWidget {
 class GraphNoteCard extends StatelessWidget {
   final String text;
   final Color colour;
+
+  /// Folded down to its first line.
+  final bool collapsed;
   final bool editing;
+  final VoidCallback? onFold;
   final VoidCallback onOwnPress;
   final ValueChanged<String> onDone;
   final VoidCallback onCancel;
@@ -886,6 +918,8 @@ class GraphNoteCard extends StatelessWidget {
     required this.onOwnPress,
     required this.onDone,
     required this.onCancel,
+    this.collapsed = false,
+    this.onFold,
     this.onEdit,
     this.onMenu,
     this.onDrag,
@@ -923,19 +957,53 @@ class GraphNoteCard extends StatelessWidget {
         onOwnPress();
         if (event.buttons == kSecondaryMouseButton) onMenu?.call(event.position);
       },
-      child: MouseRegion(
-        cursor: SystemMouseCursors.grab,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onDoubleTap: onEdit,
-          onPanUpdate: (details) => onDrag?.call(details.delta),
-          onPanEnd: (_) => onDragEnd?.call(),
-          child: Container(
-            decoration: card,
-            padding: const EdgeInsets.fromLTRB(10, 6, 8, 7),
-            child: Text(text,
-                style: t.body.copyWith(color: t.textPrimary, height: 1.35)),
-          ),
+      child: DecoratedBox(
+        decoration: card,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The twirl sits beside the words and not over them, so its
+            // click is not held back to see whether it is a double one.
+            HoverMark(
+              builder: (context, lit) => GestureDetector(
+                key: const ValueKey('graph-note-twirl'),
+                behavior: HitTestBehavior.opaque,
+                onTap: onFold,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 8, 2, 6),
+                  child: TwirlTurn(
+                    open: !collapsed,
+                    child: lumitIcon(
+                      collapsed ? LumitIcon.twirlClosed : LumitIcon.twirlOpen,
+                      size: graphTwirlSize,
+                      color: Color.lerp(t.textMuted, t.textPrimary, lit)!,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              child: MouseRegion(
+                cursor: SystemMouseCursors.grab,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onDoubleTap: onEdit,
+                  onPanUpdate: (details) => onDrag?.call(details.delta),
+                  onPanEnd: (_) => onDragEnd?.call(),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 6, 8, 7),
+                    child: Text(
+                      text,
+                      style:
+                          t.body.copyWith(color: t.textPrimary, height: 1.35),
+                      maxLines: collapsed ? 1 : null,
+                      overflow: collapsed ? TextOverflow.ellipsis : null,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

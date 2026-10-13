@@ -586,6 +586,8 @@ pub struct BridgeGraphNote {
     pub colour: u32,
     pub x: f64,
     pub y: f64,
+    /// Folded down to its first line.
+    pub collapsed: bool,
 }
 
 impl BridgeGraphNote {
@@ -596,6 +598,7 @@ impl BridgeGraphNote {
             colour: note.colour,
             x: note.at[0],
             y: note.at[1],
+            collapsed: note.collapsed,
         }
     }
 
@@ -605,6 +608,7 @@ impl BridgeGraphNote {
             text: self.text,
             colour: self.colour,
             at: [self.x, self.y],
+            collapsed: self.collapsed,
         }
     }
 }

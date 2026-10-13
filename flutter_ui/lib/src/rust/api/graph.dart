@@ -104,15 +104,24 @@ class BridgeGraphNote {
   final double x;
   final double y;
 
+  /// Folded down to its first line.
+  final bool collapsed;
+
   const BridgeGraphNote({
     required this.text,
     required this.colour,
     required this.x,
     required this.y,
+    required this.collapsed,
   });
 
   @override
-  int get hashCode => text.hashCode ^ colour.hashCode ^ x.hashCode ^ y.hashCode;
+  int get hashCode =>
+      text.hashCode ^
+      colour.hashCode ^
+      x.hashCode ^
+      y.hashCode ^
+      collapsed.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -122,7 +131,8 @@ class BridgeGraphNote {
           text == other.text &&
           colour == other.colour &&
           x == other.x &&
-          y == other.y;
+          y == other.y &&
+          collapsed == other.collapsed;
 }
 
 /// The half of the graph the user edits: wires, positions, which boxes are

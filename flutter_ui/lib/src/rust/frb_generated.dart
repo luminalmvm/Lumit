@@ -21472,13 +21472,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeGraphNote dco_decode_bridge_graph_note(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return BridgeGraphNote(
       text: dco_decode_String(arr[0]),
       colour: dco_decode_u_32(arr[1]),
       x: dco_decode_f_64(arr[2]),
       y: dco_decode_f_64(arr[3]),
+      collapsed: dco_decode_bool(arr[4]),
     );
   }
 
@@ -27725,8 +27726,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_colour = sse_decode_u_32(deserializer);
     var var_x = sse_decode_f_64(deserializer);
     var var_y = sse_decode_f_64(deserializer);
+    var var_collapsed = sse_decode_bool(deserializer);
     return BridgeGraphNote(
-        text: var_text, colour: var_colour, x: var_x, y: var_y);
+        text: var_text,
+        colour: var_colour,
+        x: var_x,
+        y: var_y,
+        collapsed: var_collapsed);
   }
 
   @protected
@@ -34725,6 +34731,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.colour, serializer);
     sse_encode_f_64(self.x, serializer);
     sse_encode_f_64(self.y, serializer);
+    sse_encode_bool(self.collapsed, serializer);
   }
 
   @protected

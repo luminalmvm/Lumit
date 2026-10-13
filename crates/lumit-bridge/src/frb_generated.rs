@@ -23120,11 +23120,13 @@ impl SseDecode for crate::api::graph::BridgeGraphNote {
         let mut var_colour = <u32>::sse_decode(deserializer);
         let mut var_x = <f64>::sse_decode(deserializer);
         let mut var_y = <f64>::sse_decode(deserializer);
+        let mut var_collapsed = <bool>::sse_decode(deserializer);
         return crate::api::graph::BridgeGraphNote {
             text: var_text,
             colour: var_colour,
             x: var_x,
             y: var_y,
+            collapsed: var_collapsed,
         };
     }
 }
@@ -32582,6 +32584,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::graph::BridgeGraphNote {
             self.colour.into_into_dart().into_dart(),
             self.x.into_into_dart().into_dart(),
             self.y.into_into_dart().into_dart(),
+            self.collapsed.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -38950,6 +38953,7 @@ impl SseEncode for crate::api::graph::BridgeGraphNote {
         <u32>::sse_encode(self.colour, serializer);
         <f64>::sse_encode(self.x, serializer);
         <f64>::sse_encode(self.y, serializer);
+        <bool>::sse_encode(self.collapsed, serializer);
     }
 }
 

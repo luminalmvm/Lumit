@@ -11977,6 +11977,14 @@
   "@graphNoteHint": {
     "description": "Graph panel: shown quietly in an empty note while nothing has been typed into it. A noun."
   },
+  "graphNoteCollapse": "Collapse",
+  "@graphNoteCollapse": {
+    "description": "Graph panel: a row of the menu on a note. Folds the note down to its first line. A verb."
+  },
+  "graphNoteExpand": "Expand",
+  "@graphNoteExpand": {
+    "description": "Graph panel: a row of the menu on a collapsed note. Opens it to show all of its words again. A verb."
+  },
   "graphNoteEdit": "Edit",
   "@graphNoteEdit": {
     "description": "Graph panel: a row of the menu on a note. Opens the note's words for typing. A verb."
