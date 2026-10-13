@@ -14,7 +14,8 @@ An **expression** is a line of script on a property, calculated every frame.
 
 An editor opens over the row, seeded with the value that was there. The number under the
 text is what the expression comes to at the playhead, and the function names complete as
-you type.
+you type. When the expression fails, the reason is written there instead, and the row
+shows its value in red.
 
 | | |
 | --- | --- |

@@ -2970,11 +2970,29 @@ class ExpressionTextEditingController extends TextEditingController {
 class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
   late ValueNotifier<int> playhead;
 
+  /// Why the expression gives no number, or null when it does.
+  // ponytail: asked when the text changes, not on every frame, so one that
+  // only fails at some times is not caught. Ask per frame if that matters.
+  String? _fault;
+
+  String? _faultNow() => expressionFault(
+      expression: widget.value.field0,
+      language: widget.value.field1,
+      time: timeOfFrame(widget.comp, playhead.value),
+      layer: widget.layer);
+
+  @override
+  void didUpdateWidget(covariant EffectParamRowExpression oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) _fault = _faultNow();
+  }
+
   @override
   void initState() {
     super.initState();
     playhead = Provider.of<LumitUiState>(context, listen: false).playheadFrame;
     playhead.addListener(_redraw);
+    _fault = _faultNow();
     // Set expression was just chosen on this row, so the editor opens with it.
     if (tookSetExpression()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3026,6 +3044,15 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    final fault = _fault;
+    // A broken expression's number is drawn in red, and says why when
+    // pointed at.
+    final Widget readout = Text(
+      _value.toStringAsPrecision(6),
+      style: t.mono.copyWith(color: fault == null ? t.textMuted : t.error),
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
+    );
 
     return HouseContextMenu(
       itemBuilder: (close) {
@@ -3096,12 +3123,13 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
                       // ("1.00000e+16"), which is wider than this readout: it
                       // gives way rather than striping the row.
                       Flexible(
-                        child: Text(
-                          _value.toStringAsPrecision(6),
-                          style: t.mono.copyWith(color: t.textMuted),
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        child: fault == null
+                            ? readout
+                            : LumitTooltip(
+                                message: fault,
+                                maxWidth: 360,
+                                child: readout,
+                              ),
                       ),
                     ],
                   ),

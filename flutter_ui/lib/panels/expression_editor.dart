@@ -63,6 +63,11 @@ Future<void> showExpressionEditor({
       fresh: fresh,
       sample: (scalar) =>
           sampleScalarWithContext(scalar: scalar, time: time, layer: layer),
+      fault: (scalar) => expressionFault(
+          expression: scalar.field0,
+          language: scalar.field1,
+          time: time,
+          layer: layer),
       onDraft: (next) {
         draft = next;
         onLive?.call(next);
@@ -97,6 +102,9 @@ class _ExpressionEditor extends StatefulWidget {
   final BridgeScalar_Expression value;
   final bool fresh;
   final double Function(BridgeScalar_Expression scalar) sample;
+
+  /// Why the expression gives no number, or null when it does.
+  final String? Function(BridgeScalar_Expression scalar) fault;
   final ValueChanged<BridgeScalar_Expression> onDraft;
   final VoidCallback onDone;
   final VoidCallback onCancel;
@@ -107,6 +115,7 @@ class _ExpressionEditor extends StatefulWidget {
     required this.value,
     required this.fresh,
     required this.sample,
+    required this.fault,
     required this.onDraft,
     required this.onDone,
     required this.onCancel,
@@ -158,6 +167,7 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
     // The well grows with what is written, between a few lines and a page.
     final lines = '\n'.allMatches(_text.text).length + 1;
     final lineHeight = (t.mono.fontSize ?? 11) * (t.mono.height ?? 1.4);
+    final fault = widget.fault(_draft);
     return FloatSurface(
       width: widget.width,
       // Ctrl+Enter is done, since Enter alone is a new line.
@@ -198,14 +208,24 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
               padding: const EdgeInsets.only(top: 6),
               child: Row(
                 children: [
+                  // What it comes to, or why it comes to nothing. The engine
+                  // words the reason, and it names the line.
                   Expanded(
-                    child: Text(
-                      '= ${widget.sample(_draft).toStringAsPrecision(6)}',
-                      key: const ValueKey('expression-editor-value'),
-                      style: t.mono.copyWith(color: t.textMuted),
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: fault != null
+                        ? Text(
+                            fault,
+                            key: const ValueKey('expression-editor-fault'),
+                            style: t.small.copyWith(color: t.error),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        : Text(
+                            '= ${widget.sample(_draft).toStringAsPrecision(6)}',
+                            key: const ValueKey('expression-editor-value'),
+                            style: t.mono.copyWith(color: t.textMuted),
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                   ),
                   HouseButton(
                     key: const ValueKey('expression-editor-remove'),
