@@ -48,13 +48,12 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import '../widgets/layer_picker.dart';
+import 'expression_editor.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'graph_editor_frb.dart';
 import 'graph_panel.dart' show portColour;
 import 'keyframe_controls_frb.dart';
-import 'package:lumit_flutter/src/rust/api/state.dart';
-import 'package:lumit_flutter/widgets/autofill.dart';
 import 'package:syntax_highlight/syntax_highlight.dart';
 
 /// Where a **logarithmic** slider's thumb sits, and what it is worth there.
@@ -2939,11 +2938,10 @@ class ExpressionTextEditingController extends TextEditingController {
 
   ExpressionTextEditingController({super.text, this.language = "rhai"});
 
-  @override
-  TextSpan buildTextSpan(
-      {required BuildContext context,
-      TextStyle? style,
-      required bool withComposing}) {
+  /// [text] in [language]'s colours, for anything that draws an expression
+  /// without editing it.
+  static TextSpan spanOf(BuildContext context, String text, String language,
+      {TextStyle? style}) {
     final theme = ThemeScope.of(context).theme.mode == ThemeMode2.dark
         ? darkTheme
         : lightTheme;
@@ -2954,205 +2952,165 @@ class ExpressionTextEditingController extends TextEditingController {
     // plainly until it is ready rather than throwing, which is the same choice
     // the completion list already makes when the engine has not answered.
     if (theme == null) {
-      return super.buildTextSpan(
-          context: context, style: style, withComposing: withComposing);
+      return TextSpan(
+          text: text, style: style ?? ThemeScope.of(context).theme.mono);
     }
 
-    var highlighter = Highlighter(
-      language: language,
-      theme: theme,
-    );
-
-    var span = highlighter.highlight(text);
-    return span;
+    return Highlighter(language: language, theme: theme).highlight(text);
   }
+
+  @override
+  TextSpan buildTextSpan(
+          {required BuildContext context,
+          TextStyle? style,
+          required bool withComposing}) =>
+      spanOf(context, text, language, style: style);
 }
 
 class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
-  late ExpressionTextEditingController controller;
-
-  double value = 0.0;
   late ValueNotifier<int> playhead;
-
-  String lastText = "";
 
   @override
   void initState() {
-    playhead = Provider.of<LumitUiState>(context, listen: false).playheadFrame;
-
-    Provider.of<LumitState>(context, listen: false)
-        .onChange
-        .listen(onProjectChanged);
-
-    playhead.addListener(onFrameChanged);
-
-    controller = ExpressionTextEditingController(
-        text: widget.value.field0,
-        language: expressionGrammar(widget.value.field1));
-    controller.addListener(onTextChanged);
-    lastText = controller.text;
-
-    value = sampleScalarWithContext(
-        scalar: widget.value,
-        time: timeOfFrame(widget.comp, playhead.value),
-        layer: widget.layer);
     super.initState();
-  }
-
-  void onProjectChanged(ScopedChange event) {
-    // print(event.layer);
-    // print("Project changed!");
-
-    // setState(() {
-    //   controller.text = widget.value.field0;
-    // });
+    playhead = Provider.of<LumitUiState>(context, listen: false).playheadFrame;
+    playhead.addListener(_redraw);
+    // Set expression was just chosen on this row, so the editor opens with it.
+    if (tookSetExpression()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _edit(fresh: true);
+      });
+    }
   }
 
   @override
   void dispose() {
-    playhead.removeListener(onFrameChanged);
-    controller.removeListener(onTextChanged);
-
+    playhead.removeListener(_redraw);
     super.dispose();
   }
 
-  @override
-  void didUpdateWidget(covariant EffectParamRowExpression oldWidget) {
-    // The row is rebuilding, so the field redraws in the new colours.
-    controller.language = expressionGrammar(widget.value.field1);
-    if (widget.value.field0 != controller.text) {
-      // we dont want to trigger the update when setting text manually, so remove it then add it back
-      controller.removeListener(onTextChanged);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        controller.text = widget.value.field0;
-        controller.addListener(onTextChanged);
-      });
-    }
-    super.didUpdateWidget(oldWidget);
+  void _redraw() => setState(() {});
+
+  double get _value => sampleScalarWithContext(
+      scalar: widget.value,
+      time: timeOfFrame(widget.comp, playhead.value),
+      layer: widget.layer);
+
+  /// Open the editor over the row. The row itself may be rebuilt away while
+  /// it is up, so what it writes through is taken now.
+  void _edit({bool fresh = false}) {
+    final box = context.findRenderObject() as RenderBox;
+    final set = widget.set;
+    final setLive = widget.setLive;
+    showExpressionEditor(
+      context: context,
+      over: box.localToGlobal(Offset.zero) & box.size,
+      value: widget.value,
+      comp: widget.comp,
+      layer: widget.layer,
+      fresh: fresh,
+      onLive: (draft) => setLive(BridgeEffectValue.float(draft)),
+      onCommit: (next) => set(BridgeEffectValue.float(next)),
+    );
   }
 
-  void onFrameChanged() {
-    final expr = controller.text;
-
-    setState(() {
-      value = sampleScalarWithContext(
-          scalar: BridgeScalar_Expression(expr, _language),
-          time: timeOfFrame(widget.comp, playhead.value),
-          layer: widget.layer);
-    });
-  }
-
-  void onTextChanged() {
-    final expr = controller.text;
-    if (expr != lastText) {
-      widget.setLive(
-          BridgeEffectValue.float(BridgeScalar.expression(expr, _language)));
-
-      setState(() {
-        value = sampleScalarWithContext(
-            scalar: BridgeScalar_Expression(expr, _language),
-            time: timeOfFrame(widget.comp, playhead.value),
-            layer: widget.layer);
-      });
-    }
-
-    lastText = expr;
-  }
-
-  /// The language the row's expression is written in. The text field edits
-  /// the text and leaves this alone; the row's menu changes it.
+  /// The language the row's expression is written in.
   BridgeExpressionLanguage get _language => widget.value.field1;
 
   void _setLanguage(BridgeExpressionLanguage language) {
     if (language == _language) return;
     widget.set(BridgeEffectValue.float(
-        BridgeScalar.expression(controller.text, language)));
-  }
-
-  void removeExpression() {
-    final expr = controller.text;
-
-    var v = sampleScalarWithContext(
-        scalar: BridgeScalar_Expression(expr, _language),
-        time: timeOfFrame(widget.comp, playhead.value),
-        layer: widget.layer);
-
-    widget.set(BridgeEffectValue.float(BridgeScalar_Static(v)));
+        BridgeScalar.expression(widget.value.field0, language)));
   }
 
   @override
   Widget build(BuildContext context) {
-    return _build(context);
-  }
-
-  Widget _build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
 
-    return Row(
-      spacing: 4,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Flexible(
-            child: HouseContextMenu(
-          itemBuilder: (close) {
-            return [
-              MenuRow(
-                onPressed: () {
-                  removeExpression();
-                  close();
-                },
-                child: Text(l10n.removeExpression),
-              ),
-              // A row has no room for a dropdown, so the language is two
-              // lines of its menu with the current one marked.
-              for (final language in expressionLanguages)
-                MenuRow(
-                  selected: language == _language,
-                  onPressed: () {
-                    _setLanguage(language);
-                    close();
-                  },
-                  child: Text(expressionLanguageLabel(language)),
-                ),
-            ];
-          },
-          child: HouseTextField(
-            controller: controller,
-            width: double.infinity,
-            style: t.mono,
-            submitOnLostFocus: true,
-            autofill: ExpressionAutofillGenerator(),
-            onSubmitted: (value) {
-              widget.set(BridgeEffectValue.float(
-                  BridgeScalar_Expression(value, _language)));
-              onTextChanged();
+    return HouseContextMenu(
+      itemBuilder: (close) {
+        return [
+          MenuRow(
+            onPressed: () {
+              widget.set(BridgeEffectValue.float(BridgeScalar_Static(_value)));
+              close();
             },
+            child: Text(l10n.removeExpression),
           ),
-        )),
-        SizedBox(
-          width: 78,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                " = ",
-                style: t.body.copyWith(color: t.textMuted),
-              ),
-              // Six significant figures can run to twelve characters
-              // ("1.00000e+16"), which is wider than this readout: it gives
-              // way rather than striping the row.
-              Flexible(
-                child: Text(
-                  value.toStringAsPrecision(6),
-                  style: t.mono.copyWith(color: t.textMuted),
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
+          // A row has no room for a dropdown, so the language is two
+          // lines of its menu with the current one marked.
+          for (final language in expressionLanguages)
+            MenuRow(
+              selected: language == _language,
+              onPressed: () {
+                _setLanguage(language);
+                close();
+              },
+              child: Text(expressionLanguageLabel(language)),
+            ),
+        ];
+      },
+      // The whole row opens the editor: a row is too narrow to write in.
+      child: HoverMark(
+        cursor: SystemMouseCursors.text,
+        builder: (context, lit) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _edit(),
+          child: LayoutBuilder(
+            builder: (context, box) => Row(
+              spacing: 4,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // The Timeline's value column is too narrow to show any of
+                // the code, so there the row is the number alone and the code
+                // is in the lane.
+                if (box.maxWidth >= 150)
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: t.surface0,
+                        borderRadius: wellCorners(t),
+                        border: wellBorder(t,
+                            Color.lerp(t.hairline, t.hairlineStrong, lit)!),
+                      ),
+                      child: Text.rich(
+                        expressionLine(context, widget.value),
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 78),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        " = ",
+                        style: t.body.copyWith(color: t.textMuted),
+                      ),
+                      // Six significant figures can run to twelve characters
+                      // ("1.00000e+16"), which is wider than this readout: it
+                      // gives way rather than striping the row.
+                      Flexible(
+                        child: Text(
+                          _value.toStringAsPrecision(6),
+                          style: t.mono.copyWith(color: t.textMuted),
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        )
-      ],
+        ),
+      ),
     );
   }
 }
