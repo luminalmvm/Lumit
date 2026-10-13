@@ -660,7 +660,7 @@ jobs:
       # the bridge crate, so rusty_ffmpeg needs the keg here, and the podspec's
       # -L flags name its opt prefix — which the action creates on both the
       # build and the cache-restore path. The exported pkg-config path stays for
-      # the same reason as the `check` and `coverage` jobs. Xcode's
+      # the same reason as the `check` job. Xcode's
       # build environment inherits it from $GITHUB_ENV; it is not supplied by
       # .cargo/config.toml, which deliberately sets no [env] block.
       - name: FFmpeg 8.1.2 (extracted formula, cached keg)
@@ -844,16 +844,11 @@ jobs:
       - uses: taiki-e/install-action@5f8ff1a44efd92cf3d48505f1adfee33393eb853 # main
         with:
           tool: cargo-llvm-cov
-      # As in the `check` job above, which explains the extracted formula: the
-      # action exports the pkg-config path rather than .cargo/config.toml
-      # carrying it.
-      - name: FFmpeg 8.1.2 (extracted formula, cached keg)
-        id: ffmpeg
-        uses: ./.github/actions/ffmpeg8-macos
+      # No FFmpeg here: none of the crates below reaches lumit-media, so this
+      # job has nothing to link it into.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
-          key: ffmpeg-${{ steps.ffmpeg.outputs.version }}
       # Engine crates must hold the line; the threshold may rise, never fall.
       # The FFmpeg-free engine crates are all gated (measured 83–99% locally).
       # lumit-gpu is held out while its kernel tests skip on adapterless runners,
