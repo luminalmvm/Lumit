@@ -334,11 +334,12 @@ impl AudioEngine {
         let shared = Arc::new(Shared::new(None));
         let cb = shared.clone();
         let mut scrub = Scrub::default();
+        let mut edge = Edge::default();
 
         let stream = device
             .build_output_stream(
                 &config.config(),
-                move |out: &mut [f32], _| fill(&cb, &mut scrub, out, channels),
+                move |out: &mut [f32], _| fill_smooth(&cb, &mut scrub, &mut edge, out, channels),
                 |_err| { /* device hiccup: next callback continues; never panic */ },
                 None,
             )
@@ -562,6 +563,52 @@ fn fill_ahead(shared: &Shared, rate: u32) -> bool {
         return plan.fill_step(0, plan.total_frames, until);
     }
     false
+}
+
+/// What the callback remembers of the buffer before, to join this one to it.
+#[derive(Debug, Default)]
+struct Edge {
+    /// Whether the last buffer was playing, and where the next was to begin.
+    playing: bool,
+    next: usize,
+    /// The last frame handed to the card.
+    last: [f32; 2],
+}
+
+/// [`fill`], with the join made good where the sound stops, starts or moves.
+///
+/// Each of those cuts the wave off wherever it happened to be, which is heard
+/// as a click: at every stop and start, and at every turn of a loop. The
+/// first [`SCRUB_FADE_FRAMES`] of such a buffer are blended up from the last
+/// frame of the one before, so the wave arrives where it is going and does
+/// not jump there.
+fn fill_smooth(
+    shared: &Shared,
+    scrub: &mut Scrub,
+    edge: &mut Edge,
+    out: &mut [f32],
+    channels: usize,
+) {
+    let playing = shared.playing.load(Ordering::Relaxed);
+    let began = shared.playhead.load(Ordering::Relaxed);
+    fill(shared, scrub, out, channels);
+    if channels == 0 {
+        return;
+    }
+    if playing != edge.playing || (playing && began != edge.next) {
+        let frames = out.chunks_exact_mut(channels).take(SCRUB_FADE_FRAMES);
+        for (n, frame) in frames.enumerate() {
+            let up = n as f32 / SCRUB_FADE_FRAMES as f32;
+            for (sample, last) in frame.iter_mut().zip(edge.last) {
+                *sample = *sample * up + last * (1.0 - up);
+            }
+        }
+    }
+    edge.playing = playing;
+    edge.next = shared.playhead.load(Ordering::Relaxed);
+    if let Some(frame) = out.chunks_exact(channels).last() {
+        edge.last = [frame[0], frame.get(1).copied().unwrap_or(frame[0])];
+    }
 }
 
 /// The realtime callback: lock-free reads, no allocation, silence on any miss.
