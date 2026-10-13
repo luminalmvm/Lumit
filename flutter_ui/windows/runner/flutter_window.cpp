@@ -2,9 +2,13 @@
 
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
+#include <shlobj.h>
+#include <wrl/client.h>
 
+#include <filesystem>
 #include <optional>
 #include <string>
+#include <thread>
 #include <variant>
 
 #include "flutter/generated_plugin_registrant.h"
@@ -25,6 +29,63 @@ namespace {
 // by its own safety net.
 constexpr UINT_PTR kShowAnywayTimer = 1;
 constexpr UINT kShowAnywayAfterMs = 10000;
+
+// The Start menu and a pinned taskbar button draw a shortcut's icon, not the
+// window's. So every shortcut that starts this executable is given |icon| as
+// its picture, or the executable's own when |icon| is empty.
+//
+// Explorer is then told each one changed, whether it did or not. It keeps the
+// picture it drew first, and an update that swaps the executable's icon (a
+// stable release for a nightly, or back) is otherwise not noticed for weeks.
+void RefreshShortcutIcons(const std::wstring& icon) {
+  wchar_t exe[MAX_PATH];
+  if (::GetModuleFileNameW(nullptr, exe, MAX_PATH) == 0) {
+    return;
+  }
+  // Up to and including the last backslash: the folder Lumit is installed in.
+  const size_t home = std::wstring(exe).find_last_of(L'\\') + 1;
+  // The Start menu's own folder, and the one that holds what is pinned to the
+  // taskbar and to Start.
+  for (const KNOWNFOLDERID& id : {FOLDERID_Programs, FOLDERID_UserPinned}) {
+    wchar_t* folder = nullptr;
+    if (FAILED(::SHGetKnownFolderPath(id, 0, nullptr, &folder))) {
+      continue;
+    }
+    std::error_code error;
+    for (std::filesystem::recursive_directory_iterator entry(folder, error),
+         end;
+         !error && entry != end; entry.increment(error)) {
+      const std::wstring path = entry->path().wstring();
+      if (_wcsicmp(entry->path().extension().c_str(), L".lnk") != 0) {
+        continue;
+      }
+      Microsoft::WRL::ComPtr<IShellLinkW> link;
+      Microsoft::WRL::ComPtr<IPersistFile> file;
+      wchar_t target[MAX_PATH];
+      if (FAILED(::CoCreateInstance(CLSID_ShellLink, nullptr,
+                                    CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARGS(&link))) ||
+          FAILED(link.As(&file)) ||
+          FAILED(file->Load(path.c_str(), STGM_READWRITE)) ||
+          FAILED(link->GetPath(target, MAX_PATH, nullptr, SLGP_RAWPATH)) ||
+          _wcsicmp(target, exe) != 0) {
+        continue;
+      }
+      // Only a picture of Lumit's own is replaced. One the user chose for the
+      // shortcut is theirs to keep.
+      wchar_t current[MAX_PATH];
+      int index = 0;
+      if (SUCCEEDED(link->GetIconLocation(current, MAX_PATH, &index)) &&
+          (current[0] == L'\0' || _wcsnicmp(current, exe, home) == 0) &&
+          _wcsicmp(current, icon.c_str()) != 0) {
+        link->SetIconLocation(icon.c_str(), 0);
+        file->Save(nullptr, TRUE);
+      }
+      ::SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, path.c_str(), nullptr);
+    }
+    ::CoTaskMemFree(folder);
+  }
+}
 
 }  // namespace
 
@@ -60,9 +121,9 @@ bool FlutterWindow::OnCreate() {
   }
 
   // A nightly may wear the regular icon (lib/state/app_icon.dart): a path
-  // puts that .ico on the window, and so on the taskbar, and none puts the
-  // executable's own back. It lasts as long as Lumit runs; the Start menu
-  // always draws the executable's.
+  // puts that .ico on the window, the taskbar and the Start menu, and none
+  // puts the executable's own back. The window's lasts as long as Lumit runs.
+  // The shortcuts keep theirs.
   flutter::MethodChannel<> app_icon(
       flutter_controller_->engine()->messenger(), "lumit/app_icon",
       &flutter::StandardMethodCodec::GetInstance());
@@ -70,6 +131,7 @@ bool FlutterWindow::OnCreate() {
       [this](const flutter::MethodCall<>& call,
              std::unique_ptr<flutter::MethodResult<>> result) {
         HICON icon = nullptr;
+        std::wstring shortcut_icon;
         if (const auto* path = std::get_if<std::string>(call.arguments())) {
           // The length asked for with -1 counts the terminator, which the
           // string then holds as a spare character; c_str() stops before it.
@@ -82,7 +144,18 @@ bool FlutterWindow::OnCreate() {
           icon = static_cast<HICON>(
               ::LoadImageW(nullptr, wide.c_str(), IMAGE_ICON, 0, 0,
                            LR_LOADFROMFILE | LR_DEFAULTSIZE));
+          if (icon) {
+            shortcut_icon = wide.c_str();
+          }
         }
+        // On a thread of its own: reading every shortcut in the Start menu
+        // takes about a seventh of a second, and this one draws the window.
+        std::thread([shortcut_icon] {
+          if (SUCCEEDED(::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
+            RefreshShortcutIcons(shortcut_icon);
+            ::CoUninitialize();
+          }
+        }).detach();
         // No path, or a file that would not load: the icon it was built with.
         if (!icon) {
           icon = ::LoadIcon(::GetModuleHandle(nullptr),

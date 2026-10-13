@@ -340,9 +340,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         // The update check follows the questions rather than racing them:
         // the setup screen is where somebody may have just switched it off.
         ui.maybeCheckForUpdates();
-        // Only when the regular icon was asked for: the build's own icon is
-        // already up, and the common launch should not ask what it is running.
-        if (!ui.workspace.nightlyIcon) ui.applyAppIcon();
+        // Every launch, whichever icon was asked for: Windows keeps the
+        // picture a pinned shortcut had before an update changed the icon,
+        // until it is told to look again.
+        ui.applyAppIcon();
         // And the tour follows them too, in the look just chosen. Like the
         // questions it opens by itself once.
         if (!mounted) return;
