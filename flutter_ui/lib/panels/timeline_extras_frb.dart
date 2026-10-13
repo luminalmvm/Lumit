@@ -2221,17 +2221,22 @@ class _TimelineRulerState extends State<TimelineRuler> {
           children: [
             Positioned.fill(
               child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _RulerTicksPainter(
-                    axis: axis,
-                    fps: widget.fps,
-                    style: style,
-                    tick: t.hairlineStrong,
-                    minorTick: t.hairline,
-                    // Mono at 9, per §7.1: a clock is a number, and the
-                    // ruler's numbers set in the face every other number in
-                    // the interface does.
-                    label: t.mono.copyWith(fontSize: 9, color: t.textMuted),
+                // Its own layer, so a moving playhead does not lay out every
+                // label again.
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _RulerTicksPainter(
+                      axis: axis,
+                      fps: widget.fps,
+                      style: style,
+                      tick: t.hairlineStrong,
+                      minorTick: t.hairline,
+                      // Mono at 9, per §7.1: a clock is a number, and the
+                      // ruler's numbers set in the face every other number
+                      // in the interface does.
+                      label:
+                          t.mono.copyWith(fontSize: 9, color: t.textMuted),
+                    ),
                   ),
                 ),
               ),
