@@ -3324,6 +3324,32 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // and a hash comparison — and the reason a config edited on disk
             // retires the frames it made.
             state.renderer.sync_colour(&document);
+            // Adaptive steps down so that a frame costs less to composite. One
+            // already held at the Viewer's own size costs nothing at all, so it
+            // is shown as it is. Without this a span cached at Full was
+            // composited again, smaller, whenever the tier had stepped down.
+            let quality = if matches!(playback.mode, BridgePlaybackMode::Adaptive) && tier > 1 {
+                let own = quality_for(playback.scale);
+                let (next, view) = (
+                    playback.next,
+                    state.view_id.load(std::sync::atomic::Ordering::Relaxed),
+                );
+                let name =
+                    state
+                        .names
+                        .get_or_compute(revision, view, comp_id, next, own.tag(), || {
+                            state
+                                .renderer
+                                .frame_key_presynced(&document, comp_id, next, own)
+                        });
+                if name.is_some_and(|key| held_in_a_tier(&state.renderer, &state.disk, key, bgra)) {
+                    own
+                } else {
+                    quality
+                }
+            } else {
+                quality
+            };
             // Every-frame only: when the NEXT frame's bytes are on their way
             // up from disk, hold the composite a bounded moment — the copy is
             // far cheaper than making the frame again, and every-frame
