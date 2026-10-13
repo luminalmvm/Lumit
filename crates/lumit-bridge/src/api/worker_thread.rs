@@ -42,6 +42,10 @@ pub struct WorkerState {
     /// Playback, when it is running. `None` means the worker is idle and blocks
     /// waiting for something to do.
     playback: Option<Playback>,
+    /// When the picture after the last one shown was due, in every-frame
+    /// playback. The next run starts on it, so a loop turns on the beat
+    /// instead of cutting its last frame short.
+    present_due: Option<std::time::Instant>,
     /// The decode-ahead thread (docs/impl/playback-scheduler.md §5): playback
     /// posts the source decodes coming frames will need, and files the results
     /// into the renderer's cache, so decode runs alongside compositing rather
@@ -1762,6 +1766,11 @@ pub struct PlayRequest {
     /// How many times the comp's rate the leg runs at: the J and L shuttle.
     /// Above 1 the leg keeps time by skipping frames, whatever `mode` says.
     pub speed: u32,
+    /// The frame the leg ends on: the end of the work area going forwards,
+    /// its start going back. `None` runs to the end of the composition.
+    /// Without it the frames past the end of a loop were composited every
+    /// time round and never shown.
+    pub until: Option<u64>,
     /// The document the mix is to be built from, snapshotted where play was
     /// asked for rather than read on this thread — the mix must be of the comp
     /// as it was when the button was pressed. The sound itself is started here,
@@ -1801,8 +1810,10 @@ struct Playback {
     view: u32,
     /// The frame to render next.
     next: u64,
-    /// The last frame of the composition — playback ends after it.
+    /// The last frame of the leg: playback ends after it.
     last: u64,
+    /// The frame a reverse leg ends on.
+    first: u64,
     /// Counting down rather than up. A reverse leg ends after frame zero.
     reverse: bool,
     /// How many frames each step of the leg covers: 1, or a shuttle's 2, 4 or
@@ -1860,6 +1871,9 @@ struct Playback {
     /// one included. Reset by one late picture. The sound needs
     /// [`AUDIO_REALTIME_FRAMES`] of these before it starts again.
     on_time_run: u32,
+    /// Until when the audio clock is not to be believed, because the sound
+    /// has just been moved and the move may not have landed yet.
+    audio_settles: Option<std::time::Instant>,
     /// How many frames the last [`Self::advance`] had to jump over to catch the
     /// clock. Zero while playback is keeping up.
     ///
@@ -1880,6 +1894,12 @@ struct Playback {
 }
 
 impl Playback {
+    /// The sound has just been moved: leave its clock alone for a moment.
+    fn settle_audio(&mut self) {
+        const SETTLE: std::time::Duration = std::time::Duration::from_millis(100);
+        self.audio_settles = Some(std::time::Instant::now() + SETTLE);
+    }
+
     /// Print where a playback frame's time is going, at most every couple of
     /// seconds — the stopwatch docs/TODO.md's "measure first" asks for before
     /// the shared-texture present is rebuilt around GPU-side sync. The present
@@ -1910,9 +1930,17 @@ impl Playback {
     /// still decoding, or on a machine with no sound device — the wall clock
     /// stands in, so silence never stops the picture.
     fn elapsed_seconds(&self) -> f64 {
+        // The sound is this run's own only once the run has started it and
+        // the start has landed. Before that the clock may still be reading
+        // the run before, which at a loop's turn is the far end of the span,
+        // and a leg that believed it began on its last frame.
+        let ours = self.pre_rolled
+            && self
+                .audio_settles
+                .is_none_or(|at| std::time::Instant::now() >= at);
         match clock_seconds() {
-            Some(seconds) => seconds,
-            None => self.started.elapsed().as_secs_f64() + self.from as f64 / self.fps,
+            Some(seconds) if ours => seconds,
+            _ => self.started.elapsed().as_secs_f64() + self.from as f64 / self.fps,
         }
     }
 
@@ -2073,24 +2101,17 @@ impl Playback {
         // mistaken for falling behind.
         self.skipped = frame.abs_diff(self.next) / self.speed;
         if self.reverse {
-            // Counting down never leaves the composition: the leg ends after
-            // frame zero, which `next` cannot step below to say.
-            self.ended = frame == 0;
-            self.next = frame.saturating_sub(self.speed);
+            // Counting down never leaves the leg: it ends after its first
+            // frame, which `next` cannot step below to say.
+            let frame = frame.max(self.first);
+            self.ended = frame == self.first;
+            self.next = frame.saturating_sub(self.speed).max(self.first);
             return Some(frame);
         }
-        // A shuttle strides over frames, and one that cleared the last frame
-        // would end the leg without showing it. The frontend's loop turns on
-        // seeing the end, so a shuttle is held to it.
-        let frame = if self.speed > 1 {
-            frame.min(self.last)
-        } else {
-            frame
-        };
-        if frame > self.last {
-            self.next = frame;
-            return None;
-        }
+        // A shuttle strides over frames and a clock can run past them, and
+        // either would end the leg without showing its last frame. The
+        // frontend's loop turns on seeing the end, so every leg is held to it.
+        let frame = frame.min(self.last);
         self.next = if frame < self.last {
             (frame + self.speed).min(self.last)
         } else {
@@ -2167,6 +2188,7 @@ fn refresh_audio(playback: &mut Playback, document: &std::sync::Arc<lumit_core::
                 .front()
                 .map_or(playback.next, |(frame, _)| *frame);
             crate::audio::play(comp, frame as f64 / playback.fps, document);
+            playback.settle_audio();
         }
     }
     #[cfg(not(feature = "media"))]
@@ -2757,6 +2779,7 @@ fn worker_loop(
         project,
         renderer,
         playback: None,
+        present_due: None,
         prefetcher: lumit_render::Prefetcher::default(),
         last_shown: None,
         // The first view a frontend asks for. It sends the real look as soon
@@ -2999,6 +3022,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             // banked. A silent leg needs the baseline too.
             playback.started = std::time::Instant::now();
             start_audio(playback.comp.id, start, document);
+            playback.settle_audio();
         }
     }
 
@@ -3031,6 +3055,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                     now,
                     period,
                 ));
+                state.present_due = playback.next_present_due;
             }
             // Playback moves the playhead: keep the idle fill's anchor with
             // it, so a stop resumes filling from where the user actually is.
@@ -3319,8 +3344,20 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
                 return;
             }
         }
-        // Nothing left to schedule: playback ends once the ring has drained.
+        // Nothing left to schedule: playback ends once the ring has drained
+        // and the last picture has had its frame on screen. That frame is
+        // also when a loop's next leg is asked for, and a leg that arrives
+        // inside it carries on from this one without the frontend hearing of
+        // an end in between.
         if playback.ring.is_empty() {
+            let period = std::time::Duration::from_secs_f64(1.0 / playback.fps.max(1.0));
+            if playback
+                .last_presented
+                .is_some_and(|at| at.elapsed() < period)
+            {
+                std::thread::sleep(std::time::Duration::from_micros(500));
+                return;
+            }
             state.playback = None;
             _ = stream.add(WorkerResponse::PlaybackEnded);
             return;
@@ -3445,6 +3482,12 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         .frame_rate
         .frame_at(lumit_core::time::CompTime(comp.duration.0));
     let last = frames.max(1).saturating_sub(1) as u64;
+    // A leg stops where it was told to, inside the composition.
+    let (first, last) = match req.until {
+        Some(until) if req.reverse => (until.min(last), last),
+        Some(until) => (0, until.min(last)),
+        None => (0, last),
+    };
 
     // A forward leg asked for at the end starts over; a reverse one starts
     // at the end, and counts down from wherever it was asked for.
@@ -3528,6 +3571,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         pending_audio: req.audio,
         next: from,
         last,
+        first,
         reverse: req.reverse,
         speed: speed as u64,
         ended: false,
@@ -3544,7 +3588,8 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         from,
         started: std::time::Instant::now(),
         last_presented: None,
-        next_present_due: None,
+        // Where the run before left off. One long past is due at once.
+        next_present_due: state.present_due.take(),
         ring: std::collections::VecDeque::new(),
         revision,
         costs: crate::playback::CostWindow::default(),
@@ -3552,6 +3597,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
         cut_ahead_to: None,
         audio_held_for_picture: false,
         on_time_run: 0,
+        audio_settles: None,
         skipped: 0,
         present_costs: crate::playback::CostWindow::default(),
         pace_reported: std::time::Instant::now(),
@@ -5490,6 +5536,7 @@ mod tests {
             project,
             renderer,
             playback: None,
+            present_due: None,
             prefetcher: lumit_render::Prefetcher::default(),
             last_shown: None,
             view_id: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0)),
@@ -5825,6 +5872,7 @@ mod tests {
             view: 0,
             next: 0,
             last,
+            first: 0,
             reverse: false,
             speed: 1,
             ended: false,
@@ -5843,6 +5891,7 @@ mod tests {
             cut_ahead_to: None,
             audio_held_for_picture: false,
             on_time_run: 0,
+            audio_settles: None,
             pending_audio: None,
             skipped: 0,
             present_costs: crate::playback::CostWindow::default(),

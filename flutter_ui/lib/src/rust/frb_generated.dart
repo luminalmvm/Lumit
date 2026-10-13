@@ -674,7 +674,8 @@ abstract class BridgeLibApi extends BaseApi {
       required BridgePlaybackMode mode,
       required int view,
       required bool reverse,
-      required int speed});
+      required int speed,
+      BigInt? until});
 
   int crateApiCompositionCompositionReferencePlaybackTier(
       {required CompositionReference that});
@@ -6613,7 +6614,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required BridgePlaybackMode mode,
       required int view,
       required bool reverse,
-      required int speed}) {
+      required int speed,
+      BigInt? until}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -6624,6 +6626,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_u_32(view, serializer);
         sse_encode_bool(reverse, serializer);
         sse_encode_u_32(speed, serializer);
+        sse_encode_opt_box_autoadd_u_64(until, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 155)!;
       },
       codec: SseCodec(
@@ -6632,7 +6635,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferencePlayConstMeta,
-      argValues: [that, from, scale, mode, view, reverse, speed],
+      argValues: [that, from, scale, mode, view, reverse, speed, until],
       apiImpl: this,
     ));
   }
@@ -6640,7 +6643,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiCompositionCompositionReferencePlayConstMeta =>
       const TaskConstMeta(
         debugName: "composition_reference_play",
-        argNames: ["that", "from", "scale", "mode", "view", "reverse", "speed"],
+        argNames: [
+          "that",
+          "from",
+          "scale",
+          "mode",
+          "view",
+          "reverse",
+          "speed",
+          "until"
+        ],
       );
 
   @override

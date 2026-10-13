@@ -1090,6 +1090,8 @@ class LumitUiState extends ChangeNotifier {
         view: views.previewing?.engineId ?? activeViewId,
         reverse: _reverse,
         speed: _speed,
+        // Where the leg ends, so nothing past it is made.
+        until: BigInt.from(_clockEnd),
       );
 
   /// Stop the transport, and — unless the user is taking hold of the playhead
