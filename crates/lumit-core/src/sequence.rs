@@ -19,7 +19,7 @@
 //! elsewhere; cutting (§8) and the graph lenses (§9) build on top.
 
 use crate::anim::{Animation, CubicSpan, Keyframe, Property, SideInterp};
-use crate::model::{default_true, is_true, is_zero, Composition, EffectInstance};
+use crate::model::{default_true, is_true, is_zero, Composition, EffectInstance, Layer, LayerKind};
 use crate::retime::Interpolation;
 use crate::time::Rational;
 use serde::{Deserialize, Serialize};
@@ -209,6 +209,11 @@ pub struct Clip {
     /// otherwise, and left out of the file until then.
     #[serde(default, skip_serializing_if = "crate::model::AudioStreams::is_first")]
     pub audio_streams: crate::model::AudioStreams,
+    /// The clip's own blend mode, used in place of the layer's while this
+    /// clip is the one showing. Unset is "the layer's", and is left out of
+    /// the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blend: Option<crate::model::BlendMode>,
     /// Unknown fields from newer Lumit versions (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -240,6 +245,7 @@ impl Clip {
             gain_db: 0.0,
             link: None,
             audio_streams: crate::model::AudioStreams::default(),
+            blend: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -685,6 +691,7 @@ impl Clip {
             gain_db: self.gain_db,
             link: self.link,
             audio_streams: self.audio_streams.clone(),
+            blend: self.blend,
             extra: self.extra.clone(),
         };
         let right = Clip {
@@ -698,11 +705,20 @@ impl Clip {
             interpolation: self.interpolation.clone(),
             fade_in: Fade::default(),
             fade_out: self.fade_out,
-            effects: respawn(&self.effects),
+            // A clip's effects are keyed from the clip's own start, and the
+            // later piece starts at the cut.
+            effects: {
+                let mut effects = respawn(&self.effects);
+                if let Ok(back) = Rational::ZERO.checked_sub(tau_clip) {
+                    crate::preset::shift_keys(&mut effects, back);
+                }
+                effects
+            },
             fx: self.fx,
             gain_db: self.gain_db,
             link: self.link,
             audio_streams: self.audio_streams.clone(),
+            blend: self.blend,
             extra: self.extra.clone(),
         };
         Some((left, right))
@@ -1453,6 +1469,90 @@ pub fn shown_at(clips: &[Clip], lt: f64) -> Shown<'_> {
         outgoing,
         incoming,
         gain: opacity(incoming.fade_in.shape, u),
+    }
+}
+
+/// A Sequence layer as it draws at `lt`: wearing the effects and the blend mode
+/// of the clip it is showing. `None` where the layer draws as it is stored,
+/// which is every layer that is not a Sequence layer and every moment whose
+/// clip sets neither.
+///
+/// The clip's stack runs ahead of the layer's own, as it does in the sound
+/// mix. Its keys are stored from the clip's start and are moved onto the
+/// layer's clock here, so everything downstream reads one stack at one time.
+///
+/// Inside a dissolve the layer wears both clips' stacks, the outgoing clip's
+/// first, each with its effects' Mix scaled by that clip's share of the
+/// picture. So an effect arrives and leaves with its clip and nothing changes
+/// at once. A blend mode cannot be part way between two, so the layer takes
+/// the mode of whichever clip is more than half of the picture.
+///
+/// ponytail: the two stacks run on the picture already mixed, not each on its
+/// own clip's, and an effect whose Mix is an expression or which has none is
+/// worn whole from the first frame of the dissolve. The upgrade is to run
+/// each clip's stack on its own picture ahead of the mix. And the copy takes
+/// the row's other clips with it, which a row of thousands would feel. The
+/// upgrade there is a copy that carries only the clips near this moment.
+#[must_use]
+pub fn worn_at(layer: &Layer, lt: f64) -> Option<Layer> {
+    let LayerKind::Sequence { clips } = &layer.kind else {
+        return None;
+    };
+    if layer.audio_only {
+        return None;
+    }
+    // Each clip showing with its share of the picture, the earlier first, and
+    // the one that is most of it.
+    let (shares, lead): (Vec<(&Clip, f64)>, &Clip) = match shown_at(clips, lt) {
+        Shown::Nothing => return None,
+        Shown::One { clip, .. } => (vec![(clip, 1.0)], clip),
+        Shown::Two {
+            outgoing,
+            incoming,
+            gain,
+        } => (
+            vec![(outgoing, 1.0 - gain), (incoming, gain)],
+            if gain >= 0.5 { incoming } else { outgoing },
+        ),
+    };
+    let stacked = |clip: &Clip| clip.fx && !clip.effects.is_empty();
+    if !shares.iter().any(|(clip, _)| stacked(clip)) && lead.blend.is_none() {
+        return None;
+    }
+    let mut worn = layer.clone();
+    let mut effects = Vec::new();
+    for (clip, share) in shares {
+        if !stacked(clip) {
+            continue;
+        }
+        let mut stack = clip.effects.clone();
+        crate::preset::shift_keys(&mut stack, clip.place_start);
+        if share < 1.0 {
+            scale_mix(&mut stack, share);
+        }
+        effects.extend(stack);
+    }
+    effects.extend(worn.effects);
+    worn.effects = effects;
+    if let Some(blend) = lead.blend {
+        worn.blend = blend;
+    }
+    Some(worn)
+}
+
+/// Every effect's Mix made `share` of what it was, keys and all.
+fn scale_mix(effects: &mut [EffectInstance], share: f64) {
+    for effect in effects {
+        for param in &mut effect.params {
+            if param.id != crate::fx::MIX_PARAM {
+                continue;
+            }
+            if let crate::model::EffectValue::Float(mix) = &mut param.value {
+                if let Some(scaled) = crate::ops::remapped(&mix.animation, share, 0.0) {
+                    mix.animation = scaled;
+                }
+            }
+        }
     }
 }
 

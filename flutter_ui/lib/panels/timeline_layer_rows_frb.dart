@@ -730,7 +730,8 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
     // A clip's row: the fourth place a stack can be read from, and the commit
     // routes to the clip's own list by the same shared lookup.
     _editor.clipStack = switch (row.clip) {
-      final c? => () => widget.layer.getClipEffects(clip: c),
+      final c? => () =>
+          widget.layer.getClipEffects(clip: c, onCompClock: false),
       null => null,
     };
     return EffectParamRowFrb(

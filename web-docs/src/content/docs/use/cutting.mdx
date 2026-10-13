@@ -26,6 +26,11 @@ the same composition opens in the [Timeline](/panels/timeline/) and the Audio ti
 - A footage layer with sound also draws its sound on a track below the line. Both tracks are
   the same layer.
 
+Drag the lower edge of a track's header to make the track taller or shorter. Double-click
+the edge to put it back. Heights are saved with the project.
+
+Double-clicking the bar of a Precomp layer opens its composition.
+
 ## The source view
 
 Double-click footage in the [Project panel](/panels/project/) to load it into the source
@@ -94,6 +99,19 @@ beside the pointer counts the frames moved.
 **Snap** holds a dragged edge to edit points, the playhead and markers. `S` turns it on and
 off, and `Ctrl` suspends it. `Esc` abandons a drag.
 
+## Switches
+
+| Switch | Key | While it is on |
+| --- | --- | --- |
+| **Auto ripple** | `Shift`+`B` | `Delete` closes the gap, an edge dragged with **Select** is a ripple trim, and a moved clip takes everything after it along. |
+| **Auto crossfade** | `Shift`+`X` | A clip dragged across the end of another keeps the overlap, which dissolves or crossfades. A clip dropped wholly over another is **refused**. |
+| **Quantise** | `Alt`+`F8` | Sound clips move in whole frames. Off, a sound clip dragged alone lands where the pointer is, between frames. |
+
+With **Auto crossfade** off, a moved clip overwrites what it lands on.
+
+**Quantise** is also **Settings ▸ Timeline ▸ Sound moves in whole frames**. Sound clips in
+the Audio timeline and Audio layers in the Timeline follow it.
+
 ## Editing at the playhead
 
 | Key | What it does |
@@ -132,6 +150,26 @@ that overlap crossfade.
 - With **Select**, drag the handle at a clip's top corner to set the length of its fade.
   Dragged back to the corner, the fade is removed.
 - A dissolve between two clips with no spare media at the cut is **refused**.
+
+## Effects and blend mode on a clip
+
+A clip carries an effect stack of its own, which runs ahead of its track's. Selecting one
+clip shows its stack in [Effect controls](/panels/effect-controls/), marked **Clip**. An
+effect or a preset dragged from [Effects & presets](/panels/effects-presets/) onto a clip
+lands on that clip, and a double-click there applies to the selected clip. Click a track's
+name to see the track's own stack.
+
+A clip with effects wears an **fx** mark. **Bypass effects** on the clip's menu turns its
+stack off.
+
+**Blend mode** on a picture clip's menu gives the clip a blend mode of its own. **From
+track** hands it back to the track's.
+
+Keyframes on a clip's effects move with the clip. A cut gives each piece its own copy of
+the stack.
+
+Inside a dissolve each clip's effects fade out or in with the clip. The blend mode is that
+of the clip that is more than half of the picture.
 
 ## Clips as compositions
 

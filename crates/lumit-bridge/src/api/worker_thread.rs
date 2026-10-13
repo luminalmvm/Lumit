@@ -4546,6 +4546,21 @@ fn apply_text_preview(
 /// `Op::SetLayerEffects` over it. Here the whole effect list rides along with the
 /// render request instead. Worth converging on one of the two when this path is
 /// finished.
+/// The clip of a Sequence layer a staged list belongs to, read off the ids as
+/// the styles are: the clip whose own stack holds the list's first effect.
+fn staged_clip<'a>(
+    layer: &'a mut lumit_core::model::Layer,
+    staged: &[lumit_core::model::EffectInstance],
+) -> Option<&'a mut lumit_core::sequence::Clip> {
+    let first = staged.first()?.id;
+    let lumit_core::model::LayerKind::Sequence { clips } = &mut layer.kind else {
+        return None;
+    };
+    clips
+        .iter_mut()
+        .find(|c| c.effects.iter().any(|e| e.id == first))
+}
+
 fn render_comp_with_preview(
     req: RenderCompRequestWithPreview,
     state: &mut WorkerState,
@@ -4617,6 +4632,8 @@ fn render_comp_with_preview(
             .is_some_and(|f| layer.styles.iter().any(|s| s.id == f.id))
         {
             layer.styles = effects;
+        } else if let Some(clip) = staged_clip(layer, &effects) {
+            clip.effects = effects;
         } else {
             layer.effects = effects;
         }

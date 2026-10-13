@@ -57,6 +57,26 @@ pub enum BridgeCutResult {
     WrongLayer,
 }
 
+/// The grid a part-frame move is counted on: forty-eight thousand to the
+/// second, so a tick is one sample of the mix.
+const NUDGE_TICKS: i64 = 48_000;
+
+/// How a move in the Cut timeline treats what it meets, set by the timeline's
+/// own switches.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeCutMove {
+    /// Leave what the clips land on in place, so that where a clip crosses
+    /// the end of another the two dissolve or crossfade. Without it a move
+    /// overwrites.
+    pub overlap: bool,
+    /// Carry everything after the moved clips along by as much.
+    pub ripple: bool,
+    /// The part of a frame to add to the move, in samples at 48 kHz. Read
+    /// only when every clip that moves is sound.
+    pub nudge_ticks: i64,
+}
+
 /// How a paste ended, and where the playhead goes after it.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -492,9 +512,31 @@ impl<'a> Edit<'a> {
 
     /// Put clips down, each on its row, overwriting what it lands on and
     /// never a clip that came with it: two that overlapped before still do.
-    fn land(&mut self, clips: Vec<(usize, Clip)>) {
+    /// With `overlap` nothing is overwritten, and where a clip lands across
+    /// one end of another the two dissolve or crossfade.
+    fn land(&mut self, clips: Vec<(usize, Clip)>, overlap: bool) -> Cut {
         for (landing, clip) in &clips {
             let row = &mut self.rows[*landing];
+            if overlap {
+                // A row shows two clips at most at any moment, so a clip may
+                // cross one end of a neighbour and never cover or sit inside
+                // one, and never reach a third.
+                let (start, end) = (clip.place_start, clip.place_end());
+                let met: Vec<&Clip> = row.clips.iter().filter(|o| covers(o, start, end)).collect();
+                let crossing = |o: &&Clip| {
+                    (o.place_start < start && o.place_end() < end)
+                        || (start < o.place_start && end < o.place_end())
+                };
+                let crowded = met.iter().enumerate().any(|(i, a)| {
+                    met[i + 1..]
+                        .iter()
+                        .any(|b| covers(a, b.place_start, b.place_end()))
+                });
+                if !met.iter().all(crossing) || met.len() > 2 || crowded {
+                    return Err(BridgeCutResult::Overlap.into());
+                }
+                continue;
+            }
             row.clips.push(clip.clone());
             row.clips = placed(std::mem::take(&mut row.clips), clip.id, false);
             row.clips.retain(|c| c.id != clip.id);
@@ -502,6 +544,7 @@ impl<'a> Edit<'a> {
         for (landing, clip) in clips {
             self.rows[landing].clips.push(clip);
         }
+        Ok(())
     }
 
     /// The ripple rule. On every unlocked Sequence layer the clips starting
@@ -1026,6 +1069,7 @@ impl<'a> Edit<'a> {
         self.commit()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn move_by(
         mut self,
         clips: &[Uuid],
@@ -1034,11 +1078,29 @@ impl<'a> Edit<'a> {
         target: Option<LayerReference>,
         linked: bool,
         copy: bool,
+        how: BridgeCutMove,
     ) -> Cut {
-        let delta = self.time(by_frames)?;
+        let mut delta = self.time(by_frames)?;
         let mut named = clips.to_vec();
         named.push(grabbed);
         let moving = self.chosen(&named, linked)?;
+        // Sound may sit between two frames and a picture may not, so the part
+        // of a frame is taken only when nothing that moves is a picture.
+        let all_sound = self
+            .rows
+            .iter()
+            .filter(|row| row.clips.iter().any(|c| moving.contains(&c.id)))
+            .all(|row| row.audio_only);
+        if all_sound && how.nudge_ticks != 0 {
+            delta = delta.checked_add(Rational::new(how.nudge_ticks, NUDGE_TICKS)?)?;
+        }
+        // The earliest start among what moves, which is where a ripple takes
+        // everything after from.
+        let moved = self.rows.iter().flat_map(|row| &row.clips);
+        let from_time = moved
+            .filter(|c| moving.contains(&c.id))
+            .map(|c| c.place_start)
+            .min();
         let (from, _) = self.find(grabbed)?;
         let to = match target {
             Some(layer) => self.row_of(layer.id()).ok_or(BridgeError::NotSequence)?,
@@ -1090,7 +1152,11 @@ impl<'a> Edit<'a> {
         if copy {
             renew(lifted.iter_mut().map(|(_, clip)| clip));
         }
-        self.land(lifted);
+        if let (true, false, Some(at)) = (how.ripple, copy, from_time) {
+            // What followed the clips goes with them, by as much.
+            self.ripple(at, delta)?;
+        }
+        self.land(lifted, how.overlap)?;
         self.commit()
     }
 
@@ -1506,7 +1572,7 @@ impl<'a> Edit<'a> {
             }
         }
         renew(lifted.iter_mut().map(|(_, clip)| clip));
-        self.land(lifted);
+        self.land(lifted, false)?;
         *end_frame = self.frame_up(last)?;
         self.commit()
     }
@@ -1681,7 +1747,8 @@ impl CompositionReference {
     /// layer it was dropped on, or `None` to stay on its own. The other
     /// clips of its kind, picture or sound, cross as many layers of that
     /// kind as it does, and clips of the other kind keep their layer. With
-    /// `linked` the clips linked to any of them move too.
+    /// `linked` the clips linked to any of them move too. `how` carries the
+    /// timeline's own switches ([`BridgeCutMove`]).
     #[frb(sync)]
     pub fn cut_move(
         &self,
@@ -1690,9 +1757,10 @@ impl CompositionReference {
         by_frames: i64,
         target: Option<LayerReference>,
         linked: bool,
+        how: BridgeCutMove,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| {
-            edit.move_by(&clips, grabbed, by_frames, target, linked, false)
+            edit.move_by(&clips, grabbed, by_frames, target, linked, false, how)
         })
     }
 
@@ -1708,9 +1776,10 @@ impl CompositionReference {
         by_frames: i64,
         target: Option<LayerReference>,
         linked: bool,
+        how: BridgeCutMove,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| {
-            edit.move_by(&clips, grabbed, by_frames, target, linked, true)
+            edit.move_by(&clips, grabbed, by_frames, target, linked, true, how)
         })
     }
 

@@ -42,10 +42,11 @@ clip's own ends, or a retime driven by an expression.
 
 ## What applies to the whole layer
 
-Effects, masks, transforms, and switches on a Sequence layer apply to its **whole
-output**, once the clips have been retimed. They are not per-clip.
+Masks, transforms and switches on a Sequence layer apply to its **whole output**, once
+the clips have been retimed. So do the layer's own effects.
 
-Apply something to one shot only by splitting it out, or by using a separate layer.
+A clip also carries an effect stack and a blend mode of its own, set in the
+[Cut workspace](/use/cutting/#effects-and-blend-mode-on-a-clip).
 
 ## Related
 

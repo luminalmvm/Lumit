@@ -906,6 +906,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.transformInEffectControls = shipped.transformInEffectControls;
         settings.easingInPopup = shipped.easingInPopup;
         settings.layerNamesOnBars = shipped.layerNamesOnBars;
+        settings.markerLines = shipped.markerLines;
+        settings.quantiseSound = shipped.quantiseSound;
         settings.timelineMinimap = shipped.timelineMinimap;
         settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
         settings.tabOpensNodeSearch = shipped.tabOpensNodeSearch;
@@ -1939,6 +1941,18 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.layerNamesOnBars = on;
             changed();
           }),
+          _flag(t, 'settings-marker-lines', l10n.settingsMarkerLines,
+              value: settings.markerLines, set: (on) {
+            settings.markerLines = on;
+            changed();
+          }),
+          // The Cut timeline's Quantise switch, here as well because the
+          // Audio timeline reads it and has no switch of its own.
+          _flag(t, 'settings-quantise-sound', l10n.settingsQuantiseSound,
+              value: settings.quantiseSound, set: (on) {
+            settings.quantiseSound = on;
+            changed();
+          }),
           // Unset, it follows the style: on in Lantern, off in the others.
           _flag(t, 'settings-timeline-minimap', l10n.settingsTimelineMinimap,
               value: settings.timelineMinimap ?? t.shape == ThemeShape.lantern,
@@ -2761,6 +2775,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                       if (mounted) setState(() {});
                     },
                     child: Text(l10n.keymapAfterEffects, style: t.small),
+                  ),
+                  const SizedBox(width: 6),
+                  HouseButton(
+                    key: const ValueKey('keymap-preset-vegas'),
+                    small: true,
+                    onPressed: () async {
+                      await km.loadPreset(BridgeKeymapPreset.vegas);
+                      if (mounted) setState(() {});
+                    },
+                    child: Text(l10n.firstRunVegasName, style: t.small),
                   ),
                 ],
               ),

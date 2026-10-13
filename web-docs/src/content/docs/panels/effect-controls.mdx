@@ -15,6 +15,7 @@ Effect Controls lists every effect on the selected layer in the order they are c
 | --- | --- |
 | **Parameter widgets** | Sliders, dials, colour pickers, dropdowns, point controls. |
 | **Stopwatch** | Start animating and keyframing a parameter. |
+| **Keyframe strip** | A small timeline at the right of the panel that spans the selected layer, or the selected clip, with a lane of keyframes beside each parameter. Keys select, drag and delete as they do in the Timeline, and a click on its ruler moves the playhead. The diamond in the header shows or hides it, and the divider sets its width. In a panel under 560 pixels wide the ruler runs across the top and each animated parameter has its lane beneath it. |
 | **Drag to reorder** | Move an effect up or down the stack. |
 | **Preset save/load** | Store configured effects and apply them again later. |
 | **Text rows** | One line of text, up to 128 bytes. Enter or clicking away commits it, and `Esc` puts the stored text back. |
@@ -22,6 +23,12 @@ Effect Controls lists every effect on the selected layer in the order they are c
 | **Compositing** | The fold at the foot of each effect, holding its Mix and Matte. See [Effects](/use/effects/#every-effect-has-a-matte). |
 
 Order matters: the stack runs top to bottom. See [Effects](/use/effects/).
+
+With one clip selected in the [Cut timeline](/use/cutting/#effects-and-blend-mode-on-a-clip)
+the panel shows that clip's own effects, marked **Clip**. **Blend mode** under the header
+sets the clip's own, and **From layer** hands it back to its layer's.
+
+Right-click an effect's heading for **Save preset…**, which saves that effect alone.
 
 Right-click a value box for **Reset**, **Copy** and **Paste**. A value box takes a number
 or a sum. Text it cannot work out flashes the edge of the box and changes nothing.

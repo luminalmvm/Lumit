@@ -795,7 +795,7 @@ class LayerBlock extends StatefulWidget {
   /// An effect dragged from Effects & presets and let go on this layer, by
   /// the name `addEffect` takes. Both halves of the table take the drop, so
   /// the row and its bar are the same target.
-  final ValueChanged<String>? onEffectDropped;
+  final ValueChanged<EffectDragData>? onEffectDropped;
 
   /// Watch the lit state alone, not the whole slice — what the lane half
   /// wants: a bar draws a layer's span and whether the layer is chosen, and a
@@ -858,7 +858,7 @@ class _LayerBlockState extends State<LayerBlock> {
     final dropped = widget.onEffectDropped;
     if (dropped == null) return block;
     return DragTarget<EffectDragData>(
-      onAcceptWithDetails: (details) => dropped(details.data.name),
+      onAcceptWithDetails: (details) => dropped(details.data),
       builder: (context, candidate, _) {
         final t = ThemeScope.of(context).theme;
         // Always there, lit or not: a box that came and went with the drag
@@ -1006,15 +1006,8 @@ class Outline extends StatelessWidget {
         child: LayerBlock(
           selection: selection,
           layerId: rows[i].id,
-          onEffectDropped: (name) {
-            try {
-              rows[i].entry.layer.addEffect(name: name);
-            } catch (_) {
-              // A name this build does not know: the engine refused calmly
-              // and the drop did nothing.
-            }
-            onChanged();
-          },
+          onEffectDropped: (data) =>
+              data.landOn(rows[i].entry.layer).then((_) => onChanged()),
           builder: (context, mine) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

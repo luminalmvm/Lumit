@@ -135,10 +135,125 @@ class _KeyFieldsPopoverState extends State<_KeyFieldsPopover> {
   }
 }
 
+/// Open the box on one **speed point**: its playback speed in per cent, with
+/// the editor already up and the number selected, so the next keys typed are
+/// the new speed. `Enter` writes it and shuts the box, `Escape` shuts it and
+/// writes nothing.
+///
+/// The graph's speed envelope and the sequence view's open the same box. The
+/// graph gives [frame] too, and the point's frame is then a second well above
+/// the speed, held between [minFrame] and [maxFrame].
+///
+/// [onApply] hears the speed, and the frame where there is one. It is not
+/// called for a speed left as it was shown: the well reads to two places, and
+/// writing that back would round a point somebody had put somewhere finer.
+Future<void> showSpeedFieldPopover({
+  required BuildContext context,
+  required Offset position,
+  required double percent,
+  double? frame,
+  double minFrame = 0,
+  double maxFrame = 0,
+  required void Function(double percent, double? frame) onApply,
+}) =>
+    showLumitPopup<void>(
+      context: context,
+      position: position,
+      builder: (close) => _SpeedFieldPopover(
+        percent: percent,
+        frame: frame,
+        minFrame: minFrame,
+        maxFrame: maxFrame,
+        onApply: onApply,
+        onDone: () => close(null),
+      ),
+    );
+
+class _SpeedFieldPopover extends StatefulWidget {
+  final double percent;
+  final double? frame;
+  final double minFrame;
+  final double maxFrame;
+  final void Function(double percent, double? frame) onApply;
+  final VoidCallback onDone;
+
+  const _SpeedFieldPopover({
+    required this.percent,
+    required this.frame,
+    required this.minFrame,
+    required this.maxFrame,
+    required this.onApply,
+    required this.onDone,
+  });
+
+  @override
+  State<_SpeedFieldPopover> createState() => _SpeedFieldPopoverState();
+}
+
+class _SpeedFieldPopoverState extends State<_SpeedFieldPopover> {
+  /// How many places the speed well reads to, the Clip speed dialogue's own.
+  static const int _places = 2;
+
+  late double _percent = widget.percent;
+  late double? _frame = widget.frame;
+
+  /// A scope of its own, so the well takes the keyboard as the box opens
+  /// whatever held it before, and hands it back when the box shuts.
+  final FocusScopeNode _scope = FocusScopeNode(debugLabel: 'speed field');
+
+  @override
+  void dispose() {
+    _scope.dispose();
+    super.dispose();
+  }
+
+  void _setSpeed(double v) {
+    if (v.toStringAsFixed(_places) == _percent.toStringAsFixed(_places)) return;
+    setState(() => _percent = v);
+    widget.onApply(v, _frame);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return FocusScope(
+      node: _scope,
+      child: FloatSurface(
+        width: _keyFieldsWidth,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_frame case final frame?)
+              keyFieldRow(t, l10n.graphKeyFrameField, 'speed-field-frame', frame,
+                  min: widget.minFrame,
+                  max: widget.maxFrame,
+                  decimals: 0,
+                  set: (v) {
+                    setState(() => _frame = v);
+                    widget.onApply(_percent, v);
+                  }),
+            keyFieldRow(t, l10n.graphKeySpeedField, 'speed-field', _percent,
+                // Either way round, and well past anything footage survives.
+                min: -10000,
+                max: 10000,
+                decimals: _places,
+                suffix: l10n.unitSymbolPercent,
+                autofocus: true,
+                submitted: widget.onDone,
+                set: _setSpeed),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// One labelled well, the row every small box of key numbers is made of: the
 /// label in a fixed column, the well taking the rest. [set] hears a committed
 /// number, and [live] hears each tick of a well drag, for a caller that shows the
-/// number as it goes and writes it once on release.
+/// number as it goes and writes it once on release. [autofocus] opens the well
+/// ready to type into, and [submitted] hears `Enter` after [set] has.
 Widget keyFieldRow(
   LumitTheme t,
   String label,
@@ -149,6 +264,8 @@ Widget keyFieldRow(
   required int decimals,
   String? suffix,
   double labelWidth = _keyFieldsLabel,
+  bool autofocus = false,
+  VoidCallback? submitted,
   ValueChanged<double>? live,
   required ValueChanged<double> set,
 }) =>
@@ -171,6 +288,8 @@ Widget keyFieldRow(
               decimals: decimals,
               suffix: suffix,
               keyed: true,
+              autofocus: autofocus,
+              onSubmitted: submitted,
               onChangeLive: live == null ? null : (v) => live(v.toDouble()),
               onChanged: (v) => set(v.toDouble()),
             ),

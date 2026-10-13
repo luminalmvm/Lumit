@@ -53,6 +53,7 @@ typedef CutLaneColours = ({
   Color falling,
   Color handle,
   Color handleFill,
+  Color drop,
   WaveformColours wave,
 });
 
@@ -100,6 +101,14 @@ class CutTrackPainter extends CustomPainter {
   /// one that drags them.
   final bool handles;
 
+  /// The clip an effect or a preset in hand is over, by id, which is ringed
+  /// so it is plain where the drop will land.
+  final ValueListenable<String?> dropOn;
+
+  /// The engine's blend mode names, for the chip a clip with a mode of its
+  /// own wears.
+  final List<String> blendNames;
+
   final CutLaneColours colours;
   final WaveformStyle style;
   final double radius;
@@ -119,6 +128,8 @@ class CutTrackPainter extends CustomPainter {
     required this.compGlyph,
     required this.nameOf,
     required this.handles,
+    required this.dropOn,
+    required this.blendNames,
     required this.colours,
     required this.style,
     required this.radius,
@@ -172,8 +183,7 @@ class CutTrackPainter extends CustomPainter {
         }
         final span = cutDraggedSpan(clip, held, locked: locked);
         spans.add(span);
-        final (start, end) = span;
-        final (left, width) = cutClipBox(axis, start, end);
+        final (left, width) = _boxOf(clip, span, held, sound: track.sound);
         if (left > viewLeft + viewWidth || left + width < viewLeft) continue;
         final box = Rect.fromLTWH(
             left, cutClipInset, width, size.height - cutClipInset * 2);
@@ -206,13 +216,31 @@ class CutTrackPainter extends CustomPainter {
     for (var i = lo; i < hi; i++) {
       final clip = other.clips[i];
       if (!held.clips.contains(clip.id.toString())) continue;
-      final (start, end) = cutDraggedSpan(clip, held);
-      final (left, width) = cutClipBox(axis, start, end);
+      final (left, width) =
+          _boxOf(clip, cutDraggedSpan(clip, held), held, sound: other.sound);
       if (left > viewLeft + viewWidth || left + width < viewLeft) continue;
       final box = Rect.fromLTWH(
           left, cutClipInset, width, size.height - cutClipInset * 2);
       _clipBox(canvas, clip, box, held, null, sound: other.sound);
     }
+  }
+
+  /// A clip's box for its dragged [span]. A sound clip may sit between two
+  /// frames, so its box is drawn where it is to the part of a frame, and a
+  /// move with Frames off carries the part of a frame the pointer has gone.
+  (double, double) _boxOf(BridgeClip clip, (int, int) span, CutDrag? held,
+      {required bool sound}) {
+    if (!sound) return cutClipBox(axis, span.$1, span.$2);
+    var start = span.$1 + (clip.startExact - clip.startFrame.toInt());
+    var end = span.$2 + (clip.endExact - clip.endFrame.toInt());
+    if (held != null &&
+        held.sub != 0 &&
+        held.grab == BarGrab.move &&
+        held.clips.contains(clip.id.toString())) {
+      start += held.sub;
+      end += held.sub;
+    }
+    return cutClipBox(axis, start, end);
   }
 
   /// The fades at the ends nothing overlaps, drawn as the Audio timeline
@@ -397,15 +425,27 @@ class CutTrackPainter extends CustomPainter {
   /// all of it for a picture clip, and the header a sound clip keeps above its
   /// wave.
   void _name(Canvas canvas, String name, Rect box,
-      {required double from, double? band}) {
-    if (name.isEmpty || box.width - from < 12) return;
+      {required double from,
+      double? band,
+      double room = 0,
+      bool ground = false}) {
+    if (name.isEmpty || box.width - from - room < 12) return;
     final text = nameOf(name);
     canvas.save();
-    canvas.clipRect(box.deflate(1));
-    text.paint(
-        canvas,
-        Offset(box.left + from,
-            box.top + ((band ?? box.height) - text.height) / 2));
+    canvas.clipRect(Rect.fromLTRB(
+        box.left + 1, box.top + 1, box.right - 1 - room, box.bottom - 1));
+    final at = Offset(
+        box.left + from, box.top + ((band ?? box.height) - text.height) / 2);
+    // A sound clip on a track too short for a header has its name over its
+    // wave, so the name stands on a ground of its own.
+    if (ground) {
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(
+              Rect.fromLTWH(at.dx - 3, at.dy, text.width + 6, text.height),
+              Radius.circular(radius)),
+          Paint()..color = colours.handleFill.withValues(alpha: 0.75));
+    }
+    text.paint(canvas, at);
     canvas.restore();
   }
 
@@ -423,11 +463,22 @@ class CutTrackPainter extends CustomPainter {
     if (mark != null && mark.fade == null && mark.clips.contains(id)) {
       _hoverEdge(canvas, box, mark);
     }
+    if (dropOn.value == id) {
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(box.deflate(1), Radius.circular(radius)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..color = colours.drop);
+    }
     if (sound) {
       final header = _soundHeader(box);
       _wave(canvas, clip, box, held);
+      final chips = _chips(canvas, clip, box, band: header > 0 ? header : null);
       _name(canvas, clip.sourceName, box,
           band: header > 0 ? header : null,
+          ground: header == 0,
+          room: chips,
           from: _glyph(canvas, clip, box,
               from: clipEdgeWidth + 4, band: header > 0 ? header : null));
       return;
@@ -437,20 +488,67 @@ class CutTrackPainter extends CustomPainter {
     final image = thumbs[cutThumbKey(clip)];
     if (image != null && image.height > 0) {
       final inner = box.height - 2;
-      final wide = inner * image.width / image.height;
+      // The whole frame on a track of the usual height. On a tall one it
+      // would fill the box, so it keeps to the head of it and shows the
+      // middle of the frame, and the name still has its room.
+      final whole = inner * image.width / image.height;
+      final wide = min(whole, box.width * 0.6);
+      final shown = image.width * wide / whole;
       canvas.save();
       canvas.clipRect(box.deflate(1));
       canvas.drawImageRect(
         image,
-        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        Rect.fromLTWH((image.width - shown) / 2, 0, shown,
+            image.height.toDouble()),
         Rect.fromLTWH(box.left + clipEdgeWidth, box.top + 1, wide, inner),
         Paint()..filterQuality = FilterQuality.low,
       );
       canvas.restore();
       from += wide + 2;
     }
+    final chips = _chips(canvas, clip, box);
     _name(canvas, clip.sourceName, box,
-        from: _glyph(canvas, clip, box, from: from));
+        room: chips, from: _glyph(canvas, clip, box, from: from));
+  }
+
+  /// What a clip carries of its own, said at the right of its name line: its
+  /// blend mode where it has one, and "fx" where it has effects, faint while
+  /// they are bypassed. Answers the width they took, which the name gives up.
+  double _chips(Canvas canvas, BridgeClip clip, Rect box, {double? band}) {
+    final words = <(TextPainter, bool)>[
+      if (clip.blend case final blend? when blend < blendNames.length)
+        (nameOf(blendNames[blend]), true),
+      if (clip.effects.isNotEmpty) (nameOf('fx'), clip.fx),
+    ];
+    if (words.isEmpty) return 0;
+    const pad = 4.0;
+    const gap = 3.0;
+    final tall = band ?? box.height;
+    var right = box.right - pad;
+    canvas.save();
+    canvas.clipRect(box.deflate(1));
+    for (final (text, lit) in words.reversed) {
+      final wide = text.width + pad * 2;
+      // Over the thumbnail where the box is short, since what a clip
+      // carries matters more than the far side of its picture. None on a
+      // box too short even for that.
+      if (right - wide < box.left + clipEdgeWidth + 4) break;
+      final high = min(text.height + 2, tall - 2);
+      final chip = Rect.fromLTWH(
+          right - wide, box.top + (tall - high) / 2, wide, high);
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(chip, Radius.circular(radius)),
+          Paint()..color = colours.handleFill.withValues(alpha: lit ? 0.9 : 0.5));
+      if (!lit) {
+        canvas.saveLayer(chip, Paint()..color = colours.edge.withValues(alpha: 0.45));
+      }
+      text.paint(canvas,
+          Offset(chip.left + pad, chip.top + (high - text.height) / 2));
+      if (!lit) canvas.restore();
+      right = chip.left - gap;
+    }
+    canvas.restore();
+    return box.right - right;
   }
 
   /// The composition glyph the Project panel gives a composition, at the
@@ -524,6 +622,7 @@ class CutTrackPainter extends CustomPainter {
       old.selected != selected ||
       old.compGlyph != compGlyph ||
       old.handles != handles ||
+      old.blendNames != blendNames ||
       old.colours != colours ||
       old.style != style ||
       old.radius != radius;

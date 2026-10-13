@@ -25,11 +25,14 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeKeyframe;
+
 import '../icons/icons.dart';
 import '../theme/theme.dart';
 import '../widgets/share_marks.dart';
 import '../widgets/controls.dart';
 import '../widgets/dashed_outline.dart';
+import 'fx_key_strip.dart';
 
 /// **The fixed column edges** (docs/15 §12A.3). Every row in the panel
 /// lays out on the same four x positions: the stopwatch, then a keyframe-
@@ -382,6 +385,11 @@ class FxSection extends StatelessWidget {
   /// was set to. Sections that cannot be switched off leave it true.
   final bool enabled;
 
+  /// Every key under this heading, for the keyframe strip's summary lane on
+  /// the heading while the section is shut. Empty on a section with none, or
+  /// one that does not say.
+  final List<BridgeKeyframe> summaryKeys;
+
   const FxSection({
     super.key,
     required this.title,
@@ -404,6 +412,7 @@ class FxSection extends StatelessWidget {
     this.onRenamed,
     this.onRenameCancelled,
     this.enabled = true,
+    this.summaryKeys = const [],
   });
 
   @override
@@ -592,6 +601,19 @@ class FxSection extends StatelessWidget {
           child: Row(children: actions),
         ),
         if (trailing case final widget?) widget,
+        // The keyframe strip's column, kept on the heading too so the close
+        // mark stands clear of it. Shut, it carries the section's keys.
+        Builder(
+          builder: (context) {
+            final strip = FxKeyStripScope.widthOf(context);
+            if (strip <= 0) return const SizedBox.shrink();
+            return SizedBox(
+              width: strip,
+              height: fxHeadingHeight - 4,
+              child: open ? null : FxKeySummaryLane(keys: summaryKeys),
+            );
+          },
+        ),
       ],
     );
     final picked = pick;
@@ -754,37 +776,63 @@ class _RenameFieldState extends State<_RenameField> {
 ///
 /// [grows] lets the row be taller than one line, for a control that drops
 /// part of itself onto a second line when the panel is narrow.
+///
+/// [lane] is the row's lane in the keyframe strip ([FxKeyLane]), drawn in the
+/// column every row reserves at its right edge while the strip is shown. A
+/// row with nothing to key leaves the column empty, so the rows above and
+/// below still line up on it.
 Widget fxTwoColumnRow({
   required BuildContext context,
   required Widget name,
   Widget? keyframeControls,
   required Widget control,
   bool grows = false,
-}) =>
-    ConstrainedBox(
-      constraints: grows
-          ? BoxConstraints(minHeight: fxRowHeight(ThemeScope.of(context).theme))
-          : BoxConstraints.tightFor(
-              height: fxRowHeight(ThemeScope.of(context).theme)),
-      child: LayoutBuilder(
-        builder: (context, constraints) => Row(
-          children: [
-            SizedBox(
-              width: fxKeyColumnWidth,
-              child: keyframeControls == null
-                  ? null
-                  : Align(
-                      alignment: Alignment.centerLeft, child: keyframeControls),
+  Widget? lane,
+}) {
+  final height = fxRowHeight(ThemeScope.of(context).theme);
+  final strip = FxKeyStripScope.widthOf(context);
+  // In a narrow panel the lane has a line of its own under an animated row.
+  final under = FxKeyStripScope.stackedLane(context, lane);
+  final row = ConstrainedBox(
+    constraints: grows
+        ? BoxConstraints(minHeight: height)
+        : BoxConstraints.tightFor(height: height),
+    child: Row(
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                SizedBox(
+                  width: fxKeyColumnWidth,
+                  child: keyframeControls == null
+                      ? null
+                      : Align(
+                          alignment: Alignment.centerLeft,
+                          child: keyframeControls),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                    width: fxLabelWidthFor(constraints.maxWidth), child: name),
+                Expanded(
+                  child:
+                      Align(alignment: Alignment.centerLeft, child: control),
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            SizedBox(width: fxLabelWidthFor(constraints.maxWidth), child: name),
-            Expanded(
-              child: Align(alignment: Alignment.centerLeft, child: control),
-            ),
-          ],
+          ),
         ),
-      ),
-    );
+        if (strip > 0) SizedBox(width: strip, height: height, child: lane),
+      ],
+    ),
+  );
+  if (under == null) return row;
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [row, under],
+  );
+}
 
 /// A parameter group's own twirl inside a section (P4): the sub-heading
 /// an effect tucks its advanced controls behind — Bokeh's Depth map, Shake's
@@ -830,8 +878,12 @@ Widget fxGroupHeaderRow(
                 color: Color.lerp(t.kicker.color, t.kickerOn.color, lit)),
         overflow: TextOverflow.ellipsis,
       );
-      return SizedBox(
+      // The keyframe strip's column is kept clear here too, so the rows
+      // under this fold line up with the ones above it.
+      final strip = FxKeyStripScope.widthOf(context);
+      return Container(
         height: fxRowHeight(t),
+        margin: EdgeInsets.only(right: strip),
         child: LayoutBuilder(
           builder: (context, constraints) => Row(
             children: [

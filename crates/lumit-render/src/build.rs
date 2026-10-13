@@ -2943,6 +2943,10 @@ fn comp_walk(
             continue;
         }
         let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+        // A Sequence layer wears the effects and blend mode of the clip it is
+        // showing, so everything below reads the one stack.
+        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let layer = worn.as_ref().unwrap_or(layer);
         // The true frame time in this layer's own time base, for effects a
         // held/sub-frame re-render must not re-sample (docs/impl/
         // temporal-rerender.md §5). Equal to `lt` on an ordinary render.

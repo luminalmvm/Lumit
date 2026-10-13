@@ -48,6 +48,7 @@ import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import '../widgets/curve_editor.dart';
 import '../widgets/layer_picker.dart';
+import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'graph_editor_frb.dart';
 import 'graph_panel.dart' show portColour;
@@ -400,6 +401,18 @@ class EffectParamRowFrb extends StatelessWidget {
         keyframeControls: keyframeSlot,
         control: control,
         grows: riders.isNotEmpty,
+        // The keyframe strip's lane: the same channels and write the
+        // stopwatch has, so a key moved there is committed as one added here.
+        lane: scalars == null || driven != null
+            ? null
+            : FxKeyLane(
+                rowKey: '$id-${param.id}',
+                scalars: scalars,
+                onWrite: (next) => _set(next.length == 4
+                    ? BridgeEffectValue.colour(BridgeColour(
+                        r: next[0], g: next[1], b: next[2], a: next[3]))
+                    : BridgeEffectValue.float(next.single)),
+              ),
       );
     }
 
@@ -2141,6 +2154,18 @@ class EffectPointRowFrb extends StatelessWidget {
         name: label,
         keyframeControls: keyframes == null ? null : greyed(keyframes),
         control: greyed(control),
+        lane: sx == null || sy == null
+            ? null
+            : FxKeyLane(
+                rowKey: '$id-${xParam.id}-pair',
+                scalars: [sx, sy],
+                onWrite: (next) {
+                  if (next.length == 2) {
+                    writeBoth(BridgeEffectValue.float(next[0]),
+                        BridgeEffectValue.float(next[1]));
+                  }
+                },
+              ),
       );
     }
     // No padding of its own: the Timeline's fold-out row is 22 and a
@@ -2665,9 +2690,9 @@ class EffectStackEditor {
     // release only. Upgrade: a group overlay on render_frame_with_preview.
     // Trigger: the owner asking why the drag does not show.
     //
-    // A clip's rows stand down for the same reason and one more: a clip's
-    // stack is audio, and a picture render has nothing to show of it.
-    if (groupStack != null || clipStack != null) return;
+    // A clip's rows do preview: the staged list is found by its ids on the
+    // clip that holds it, and a picture clip's stack is on the picture.
+    if (groupStack != null) return;
     // The stack is read *inside* the closure: a held tick must send the newest
     // staged value, not the one that was current when it was held.
     _throttle.request(() => comp.renderFrameWithPreview(

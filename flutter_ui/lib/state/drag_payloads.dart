@@ -8,7 +8,10 @@
 // first.
 
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart' show readEffectPreset;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:uuid/uuid.dart' show UuidValue;
 
 /// Footage dragged from the Project panel onto the Timeline, or onto the New
 /// composition button.
@@ -41,10 +44,32 @@ class CompDragData {
   const CompDragData(this.comp, this.label);
 }
 
-/// An effect dragged from the Effects & presets panel onto a layer.
+/// An effect, or a saved preset, dragged from the Effects & presets panel
+/// onto a layer or a clip.
 class EffectDragData {
-  /// The stable match name `addEffect` takes.
+  /// The stable match name `addEffect` takes. Empty for a preset.
   final String name;
   final String label;
-  const EffectDragData(this.name, this.label);
+
+  /// The preset's file, for a saved preset.
+  final String? presetPath;
+  const EffectDragData(this.name, this.label) : presetPath = null;
+  const EffectDragData.preset(String path, this.label)
+      : name = '',
+        presetPath = path;
+
+  /// Put what was dragged onto [layer]'s stack, or with [clip] onto that
+  /// clip's own. Quiet when the engine refuses or the file has gone: the
+  /// drop then simply did nothing.
+  Future<void> landOn(LayerReference layer, {UuidValue? clip}) async {
+    try {
+      if (presetPath case final path?) {
+        layer.loadPreset(text: await readEffectPreset(path: path), clip: clip);
+      } else if (clip != null) {
+        layer.addClipEffect(clip: clip, name: name);
+      } else {
+        layer.addEffect(name: name);
+      }
+    } catch (_) {}
+  }
 }

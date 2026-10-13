@@ -26,6 +26,8 @@ void main() {
         gainDb: 0,
         startFrame: start,
         endFrame: end,
+        startExact: start.toDouble(),
+        endExact: end.toDouble(),
         retimed: false,
         retime: const BridgeScalar.static_(0),
         fadeIn: BridgeClipFade(seconds: fadeIn, shape: shape),

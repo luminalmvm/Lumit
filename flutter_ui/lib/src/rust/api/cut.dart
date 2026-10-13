@@ -11,7 +11,41 @@ import 'package:uuid/uuid.dart';
 
 // These functions are ignored because they are not marked as `pub`: `add_row`, `chosen`, `close_gap`, `commit`, `copy`, `covers`, `cut`, `delete`, `find`, `follows`, `forget_copied`, `frame_up`, `has_sound`, `is_still`, `land`, `make_composition`, `merge_streams`, `move_by`, `open`, `paste`, `place`, `razor_at`, `razor`, `relink`, `remove_span`, `renew`, `retrimmed`, `ripple`, `roll`, `room`, `row_of`, `same_stretch`, `slide`, `slip`, `sounding`, `split_streams`, `streams_of`, `time`, `transition`, `trim`, `with_linked`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Edit`, `Held`, `Row`, `Stop`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`
+
+/// How a move in the Cut timeline treats what it meets, set by the timeline's
+/// own switches.
+class BridgeCutMove {
+  /// Leave what the clips land on in place, so that where a clip crosses
+  /// the end of another the two dissolve or crossfade. Without it a move
+  /// overwrites.
+  final bool overlap;
+
+  /// Carry everything after the moved clips along by as much.
+  final bool ripple;
+
+  /// The part of a frame to add to the move, in samples at 48 kHz. Read
+  /// only when every clip that moves is sound.
+  final PlatformInt64 nudgeTicks;
+
+  const BridgeCutMove({
+    required this.overlap,
+    required this.ripple,
+    required this.nudgeTicks,
+  });
+
+  @override
+  int get hashCode => overlap.hashCode ^ ripple.hashCode ^ nudgeTicks.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCutMove &&
+          runtimeType == other.runtimeType &&
+          overlap == other.overlap &&
+          ripple == other.ripple &&
+          nudgeTicks == other.nudgeTicks;
+}
 
 /// How a paste ended, and where the playhead goes after it.
 class BridgeCutPaste {

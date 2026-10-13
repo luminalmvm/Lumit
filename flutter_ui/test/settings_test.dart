@@ -57,6 +57,10 @@ void main() {
       showToneMap: true,
       easingInPopup: true,
       layerNamesOnBars: true,
+      markerLines: false,
+      cutAutoRipple: true,
+      cutAutoCrossfade: true,
+      quantiseSound: false,
       projectThumbnails: true,
       timelineMinimap: true,
       compact: true,
@@ -86,6 +90,10 @@ void main() {
     expect(back.showToneMap, isTrue);
     expect(back.easingInPopup, isTrue);
     expect(back.layerNamesOnBars, isTrue);
+    expect(back.markerLines, isFalse);
+    expect(back.cutAutoRipple, isTrue);
+    expect(back.cutAutoCrossfade, isTrue);
+    expect(back.quantiseSound, isFalse);
     expect(back.projectThumbnails, isTrue);
     expect(back.timelineMinimap, isTrue);
     expect(back.compact, isTrue);
@@ -100,7 +108,7 @@ void main() {
     expect(back.labelCase, LabelCase.lower);
     // Every field is one of the above: a new one added without a line here is
     // a setting nothing checks survives the file.
-    expect(all.toJson().keys.length, 30);
+    expect(all.toJson().keys.length, 34);
   });
 
   // The whole first-run rule in two lines: no file means ask, a file means

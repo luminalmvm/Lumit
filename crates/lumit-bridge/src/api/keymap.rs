@@ -144,6 +144,8 @@ pub enum BridgeKeymapPreset {
     Lumit,
     /// The After Effects muscle-memory alternate.
     AfterEffects,
+    /// The Vegas Pro muscle-memory alternate.
+    Vegas,
 }
 
 /// The session's keymap. One window means one keymap, and every call here is a
@@ -334,6 +336,7 @@ fn preset_map(preset: BridgeKeymapPreset) -> Keymap {
     match preset {
         BridgeKeymapPreset::Lumit => lumit_keymap::default_keymap(),
         BridgeKeymapPreset::AfterEffects => lumit_keymap::after_effects_preset(),
+        BridgeKeymapPreset::Vegas => lumit_keymap::vegas_preset(),
     }
 }
 

@@ -150,7 +150,7 @@ bool audioBelowTracks(List<AudioTrackRow> tracks, double y) =>
 /// Where a box covering [start] to [end] comp frames begins and how wide it is
 /// drawn. Never under two pixels, so a clip of a single frame is still
 /// something the pointer can find.
-(double, double) audioClipBox(TimelineAxis axis, int start, int end) {
+(double, double) audioClipBox(TimelineAxis axis, num start, num end) {
   final left = axis.xOf(start);
   return (left, (axis.xOf(end) - left).clamp(2.0, double.infinity));
 }
@@ -186,11 +186,14 @@ bool audioTrackTakesClips(BridgeLayerInfo info) =>
 /// [clip] is null on an unconverted Audio layer, whose bar is its one clip
 /// before the conversion has been made. [shift] is the travel in whole frames
 /// with the magnet already applied, and [at] is where the pointer let go, which
-/// is what says whether the clip crossed on to another track.
+/// is what says whether the clip crossed on to another track. [sub] is the
+/// part of a frame a move carries past [shift]: where the pointer is while
+/// sound is free of the frame grid, back on to a frame while it is not.
 typedef AudioClipEdit = ({
   BridgeClip? clip,
   BarGrab grab,
   int shift,
+  double sub,
   Offset at,
 });
 
@@ -226,6 +229,10 @@ class AudioClipStrip extends StatefulWidget {
   final ScrollController? hScroll;
 
   final List<SnapTarget> snapTargets;
+
+  /// Whether a moved clip lands on a whole frame. Off, it goes where the
+  /// pointer puts it.
+  final bool quantise;
 
   /// Where the box stands while a drag is on, for the fade layer the panel
   /// stacks over this strip. They are siblings, so without it the ramps and the
@@ -278,6 +285,7 @@ class AudioClipStrip extends StatefulWidget {
     required this.style,
     required this.hScroll,
     required this.snapTargets,
+    this.quantise = true,
     required this.preview,
     required this.selected,
     this.openClips = const {},
@@ -351,11 +359,22 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   }
 
   /// How far a drag has travelled in whole frames, with the magnet applied.
+  int _shiftOf(_ClipDrag drag) => _travelOf(drag).$1;
+
+  /// The part of a frame a move carries past [_shiftOf].
+  double _subOf(_ClipDrag drag) => _travelOf(drag).$2;
+
+  /// A drag's travel: whole frames, and for a move the part of a frame past
+  /// them.
   ///
   /// Taken afresh from the raw pixel travel every time it is asked for, never
   /// from the snapped answer, so an edge caught on a target can still be pulled
   /// off it. `Ctrl` held suspends the snap; this panel's bar carries no magnet.
-  int _shiftOf(_ClipDrag drag) {
+  ///
+  /// A move with [AudioClipStrip.quantise] off goes where the pointer is,
+  /// unless it has caught on a target. With it on, or caught, a clip that sat
+  /// between two frames lands on one.
+  (int, double) _travelOf(_ClipDrag drag) {
     final info = widget.track.entry.info;
     final from = drag.clip?.startFrame.toInt() ?? info.inFrame.toInt();
     final to = drag.clip?.endFrame.toInt() ?? info.outFrame.toInt();
@@ -371,8 +390,9 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       BarGrab.move => null,
     };
     final sound = reach == edge ? null : reach;
-    return snappedDelta(
-      rawFrames: widget.axis.framesOfPx(drag.at.dx - drag.from.dx),
+    final raw = widget.axis.framesOfPx(drag.at.dx - drag.from.dx);
+    final snapped = snappedDelta(
+      rawFrames: raw,
       perFrame: widget.axis.perFrame,
       sources: switch (drag.grab) {
         BarGrab.move => [from.toDouble(), to.toDouble()],
@@ -388,7 +408,17 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       ],
       magnet: !snapSuspended(
           controlPressed: HardwareKeyboard.instance.isControlPressed),
-    ).delta;
+    );
+    if (drag.grab != BarGrab.move) return (snapped.delta, 0);
+    // An unconverted Audio layer's bar is its one clip, and moves the same.
+    if (!widget.quantise && snapped.caught == null) {
+      return (raw.floor(), raw - raw.floor());
+    }
+    final clip = drag.clip;
+    return (
+      snapped.delta,
+      clip == null ? 0 : -(clip.startExact - clip.startFrame.toInt()),
+    );
   }
 
   // ------------------------------------------------------------ the gestures
@@ -497,8 +527,13 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     // A trim that moved nothing is not an edit. A move that moved no frames
     // still is: it may have crossed on to another track.
     if (shift == 0 && held.grab != BarGrab.move) return;
-    widget.onCommit(
-        (clip: held.clip, grab: held.grab, shift: shift, at: held.at));
+    widget.onCommit((
+      clip: held.clip,
+      grab: held.grab,
+      shift: shift,
+      sub: _subOf(held),
+      at: held.at,
+    ));
   }
 
   // ---------------------------------------------------------------- the gain
@@ -706,7 +741,15 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   /// a strip cannot sit anywhere but on its own clip.
   (double, double) _place(BridgeClip clip) {
     final (start, end) = _span(clip);
-    return audioClipBox(widget.axis, start, end);
+    // To the part of a frame: where the clip sits, and where a move in hand
+    // has carried it.
+    final drag = _drag;
+    final sub = drag != null && drag.clip?.id == clip.id ? _subOf(drag) : 0.0;
+    return audioClipBox(
+      widget.axis,
+      start + (clip.startExact - clip.startFrame.toInt()) + sub,
+      end + (clip.endExact - clip.endFrame.toInt()) + sub,
+    );
   }
 
   double _widthOf(BridgeClip clip) => _place(clip).$2;
@@ -715,11 +758,11 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   /// hairline and nothing in it, so the box under the pointer is read as the
   /// clip and this as the place it is leaving.
   Widget _ghost(LumitTheme t, BridgeClip clip) {
-    final left = widget.axis.xOf(clip.startFrame.toInt());
+    final left = widget.axis.xOf(clip.startExact);
     return Positioned(
       key: ValueKey<String>('atl-clip-ghost-${clip.id}'),
       left: left,
-      width: (widget.axis.xOf(clip.endFrame.toInt()) - left)
+      width: (widget.axis.xOf(clip.endExact) - left)
           .clamp(1.0, double.infinity),
       top: 2,
       bottom: 2,

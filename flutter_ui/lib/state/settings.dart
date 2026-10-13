@@ -325,6 +325,18 @@ class InterfaceSettings {
   /// Still images never do: there is nothing to cut in a single frame.
   bool videoAsSequenceLayer;
 
+  /// The Cut timeline's Ripple switch: a delete, a trim and a move carry
+  /// everything after them along.
+  bool cutAutoRipple;
+
+  /// The Cut timeline's Crossfade switch: a clip dragged across the end of
+  /// another keeps the overlap, which is a dissolve or a crossfade.
+  bool cutAutoCrossfade;
+
+  /// The Frames switch on the Cut and Audio timelines: sound moves in whole
+  /// frames. Off, a sound clip goes where the pointer puts it.
+  bool quantiseSound;
+
   /// What a file with more than one audio stream becomes when it is added to
   /// a composition.
   StreamsArrival streamsArrival;
@@ -400,6 +412,14 @@ class InterfaceSettings {
   /// copy of the outline, which is already spelling out exactly those names a
   /// few pixels to the left. Turning it on gives the labels back, unchanged.
   bool layerNamesOnBars;
+
+  /// Whether each composition marker draws a line down through the rows of
+  /// the Timeline, the Cut timeline and the Audio timeline.
+  ///
+  /// On by default: a flag on the ruler says which frame a marker is on, and
+  /// the line is what lets a clip's edge be read against that frame without
+  /// looking up.
+  bool markerLines;
 
   /// Whether each footage row in the Project panel carries its poster frame
   /// in place of the type glyph.
@@ -517,6 +537,9 @@ class InterfaceSettings {
     this.retimeOpensToSpeed = false,
     this.retimeInSeconds = false,
     this.videoAsSequenceLayer = false,
+    this.cutAutoRipple = false,
+    this.cutAutoCrossfade = false,
+    this.quantiseSound = true,
     this.streamsArrival = StreamsArrival.mixed,
     this.playheadStaysOnStop = false,
     this.pasteLayersAtOriginalTime = false,
@@ -525,6 +548,7 @@ class InterfaceSettings {
     this.showToneMap = false,
     this.easingInPopup = false,
     this.layerNamesOnBars = false,
+    this.markerLines = true,
     this.projectThumbnails = false,
     this.timelineMinimap,
     this.compact = false,
@@ -553,6 +577,9 @@ class InterfaceSettings {
         'retime_opens_to_speed': retimeOpensToSpeed,
         'retime_in_seconds': retimeInSeconds,
         'video_as_sequence_layer': videoAsSequenceLayer,
+        'cut_auto_ripple': cutAutoRipple,
+        'cut_auto_crossfade': cutAutoCrossfade,
+        'quantise_sound': quantiseSound,
         'audio_streams_arrival': streamsArrival.name,
         'playhead_stays_on_stop': playheadStaysOnStop,
         'paste_layers_at_original_time': pasteLayersAtOriginalTime,
@@ -561,6 +588,7 @@ class InterfaceSettings {
         'show_tone_map': showToneMap,
         'easing_in_popup': easingInPopup,
         'layer_names_on_bars': layerNamesOnBars,
+        'marker_lines': markerLines,
         'project_thumbnails': projectThumbnails,
         'timeline_minimap': timelineMinimap,
         'compact': compact,
@@ -610,6 +638,9 @@ class InterfaceSettings {
         // settings file written before this field existed adopts it.
         retimeInSeconds: j['retime_in_seconds'] as bool? ?? false,
         videoAsSequenceLayer: j['video_as_sequence_layer'] as bool? ?? false,
+        cutAutoRipple: j['cut_auto_ripple'] as bool? ?? false,
+        cutAutoCrossfade: j['cut_auto_crossfade'] as bool? ?? false,
+        quantiseSound: j['quantise_sound'] as bool? ?? true,
         // 0.7.0 kept this under `streams_arrival` and wrote the first stream
         // there whether or not anybody had chosen it, so only a layer each is
         // believed from that key. Anything else gets the default.
@@ -649,6 +680,9 @@ class InterfaceSettings {
         // ruling on what the editor should look like, and the labels are one
         // click away for anyone who wants them back.
         layerNamesOnBars: j['layer_names_on_bars'] as bool? ?? false,
+        // Absent means on: the lines are the default, and a settings file
+        // written before this field existed adopts them.
+        markerLines: j['marker_lines'] as bool? ?? true,
         // Absent means off: the glyph is what every file written before this
         // field existed was drawing.
         projectThumbnails: j['project_thumbnails'] as bool? ?? false,

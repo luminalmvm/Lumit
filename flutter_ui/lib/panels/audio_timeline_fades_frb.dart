@@ -243,6 +243,7 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
         clip: held.clip,
         grab: held.into ? BarGrab.trimIn : BarGrab.trimOut,
         shift: shift,
+        sub: 0,
         at: held.at,
       ));
       return;

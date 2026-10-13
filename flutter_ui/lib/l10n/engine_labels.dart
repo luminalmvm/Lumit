@@ -1213,6 +1213,10 @@ Map<String, String> get _built => {
       "Select the clip at the playhead": l10n.keySelectTheClipAtThePlayhead,
       "Turn snapping on or off": l10n.keyTurnSnappingOnOrOff,
       "Turn linked selection on or off": l10n.keyTurnLinkedSelectionOnOrOff,
+      "Turn auto ripple on or off": l10n.keyTurnAutoRippleOnOrOff,
+      "Turn automatic crossfades on or off":
+          l10n.keyTurnAutomaticCrossfadesOnOrOff,
+      "Turn quantise to frames on or off": l10n.keyTurnQuantiseToFramesOnOrOff,
       "Lift the work area": l10n.keyLiftTheWorkArea,
       "Extract the work area": l10n.keyExtractTheWorkArea,
       "Match frame": l10n.keyMatchFrame,

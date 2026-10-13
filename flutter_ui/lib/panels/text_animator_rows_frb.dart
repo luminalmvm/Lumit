@@ -24,6 +24,7 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../widgets/controls.dart';
+import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart' show animatorsPath;
@@ -316,6 +317,7 @@ class TextAnimatorRowsFrb extends StatelessWidget {
         // columns.
         fixedColumns: true,
       ),
+      lane: FxKeyLane(rowKey: keyName, scalars: scalars, onWrite: write),
       name: Text(t.propertyCase(label),
           style: t.body, overflow: TextOverflow.ellipsis),
       control: Row(

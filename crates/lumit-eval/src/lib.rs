@@ -441,6 +441,10 @@ fn feed_comp(
             continue; // folded in through camera_pose above
         }
         let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+        // As the build draws it: a Sequence layer wearing its clip's effects
+        // and blend mode, so a change to either retires the frame.
+        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let layer = worn.as_ref().unwrap_or(layer);
         feed_layer(h, doc, comp, layer, t, lt, quality, stamper, visited)?;
     }
     // **Live group headers** (docs/impl/group-effects.md §4). A group

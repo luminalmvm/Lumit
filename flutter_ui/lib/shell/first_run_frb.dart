@@ -88,6 +88,11 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
     case FirstRunEditor.vegas:
       workspace.setEditingStyle(
           speedGraph: true, sequenceLayers: answer!.sequenceLayers);
+      // The Vegas keys come with the card, as the After Effects ones do with
+      // theirs, unless only the Retime graph was asked for.
+      if (answer.sequenceLayers) {
+        await keymap?.loadPreset(BridgeKeymapPreset.vegas);
+      }
     case FirstRunEditor.cut:
       // Sequence layers, the Retime graph as it is, and no keymap preset: the
       // Cut timeline's own keys already follow an editor's habits. The
@@ -185,6 +190,9 @@ class _FirstRunState extends State<_FirstRun> {
                                 editor: FirstRunEditor.vegas,
                                 title: l10n.firstRunVegasName,
                                 blurb: l10n.firstRunVegas,
+                                note: _retimeOnly
+                                    ? null
+                                    : l10n.firstRunVegasKeys,
                                 chosen: _editor == FirstRunEditor.vegas,
                                 onTap: () => setState(
                                     () => _editor = FirstRunEditor.vegas),

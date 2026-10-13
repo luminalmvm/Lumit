@@ -2301,12 +2301,12 @@ fn a_preset_round_trips_with_fresh_instance_ids() {
     let comp = CompositionReference::new(project.id, first.comp_id());
     first.add_effect("blur".into()).expect("an effect to save");
 
-    let text = first.save_preset("My look".into()).expect("saved");
+    let text = first.save_preset("My look".into(), None).expect("saved");
     assert!(text.contains("\"format\""), "it is a .lumfx document");
     assert!(text.contains("My look"), "and carries its name");
 
     let second = comp.add_adjustment_layer(None).expect("a second layer");
-    second.load_preset(text.clone()).expect("loaded");
+    second.load_preset(text.clone(), None).expect("loaded");
 
     let source = first.get_effects().expect("effects");
     let copy = second.get_effects().expect("effects");
@@ -2315,7 +2315,7 @@ fn a_preset_round_trips_with_fresh_instance_ids() {
     assert_ne!(copy[0].id(), source[0].id(), "but its own instance");
 
     // Loading appends, so a second load stacks rather than replacing.
-    second.load_preset(text).expect("loaded again");
+    second.load_preset(text, None).expect("loaded again");
     assert_eq!(second.get_effects().expect("effects").len(), 2);
 
     // …and it is one undo step per load.
@@ -2471,7 +2471,7 @@ fn precompose_sound_mix_nests_a_comp_per_row_and_clears_the_mark() {
         .expect("a second clip, landing on the first");
     // And the first slid past the second, so the row is stored out of time
     // order and the layers have to be put back into it.
-    row.slide_clip(first.id, first.end_frame, true)
+    row.slide_clip(first.id, first.end_frame, true, 0)
         .expect("slid past the second");
     row.add_effect("blur".into()).expect("a rack on the row");
 
@@ -4272,7 +4272,7 @@ fn sliding_a_clip_on_an_offset_row_travels_the_frames_asked() {
     let length = before.end_frame - before.start_frame;
 
     layer
-        .slide_clip(before.id, before.start_frame + 5, false)
+        .slide_clip(before.id, before.start_frame + 5, false, 0)
         .expect("slid");
     let after = layer.get_clips().expect("clips").remove(0);
     assert_eq!(after.start_frame, before.start_frame + 5);
@@ -4541,6 +4541,102 @@ fn extracting_a_span_cuts_both_ends_and_closes_it_in_one_step() {
     assert_eq!(row_frames(&top), [(0, from), (to, 2 * join)]);
 }
 
+/// A move follows the timeline's three switches. With overlap a clip dragged
+/// across the end of another keeps both, and one that would cover another is
+/// refused. With ripple everything after the moved clip goes as far. A part
+/// of a frame is taken by sound alone.
+#[test]
+fn a_move_follows_the_timelines_switches() {
+    use crate::api::cut::{BridgeCutMove, BridgeCutResult};
+    let plain = BridgeCutMove {
+        overlap: false,
+        ripple: false,
+        nudge_ticks: 0,
+    };
+    let (project, comp, top, length) = cut_row(3);
+    let ids: Vec<Uuid> = row_clips(&top).iter().map(|c| c.id).collect();
+    let rest = [(0, length), (length, 2 * length), (2 * length, 3 * length)];
+
+    // Overlap: the last clip pulled back across the end of the middle one.
+    let over = BridgeCutMove {
+        overlap: true,
+        ..plain
+    };
+    let done = comp.cut_move(vec![], ids[2], -10, None, false, over);
+    assert_eq!(done.expect("moved"), BridgeCutResult::Done);
+    assert_eq!(
+        row_frames(&top),
+        [
+            (0, length),
+            (length, 2 * length),
+            (2 * length - 10, 3 * length - 10)
+        ],
+        "nothing was cut away, and the two share ten frames"
+    );
+    project.undo().expect("undo");
+    // Right on top of the middle clip is not a crossfade.
+    let done = comp.cut_move(vec![], ids[2], -length, None, false, over);
+    assert_eq!(done.expect("answered"), BridgeCutResult::Overlap);
+    assert_eq!(row_frames(&top), rest);
+
+    // Ripple: the first clip moves later and the two after it go with it.
+    let ripple = BridgeCutMove {
+        ripple: true,
+        ..plain
+    };
+    let done = comp.cut_move(vec![], ids[0], 12, None, false, ripple);
+    assert_eq!(done.expect("moved"), BridgeCutResult::Done);
+    assert_eq!(
+        row_frames(&top),
+        [
+            (12, length + 12),
+            (length + 12, 2 * length + 12),
+            (2 * length + 12, 3 * length + 12)
+        ]
+    );
+    project.undo().expect("undo");
+
+    // A part of a frame: a picture clip does not take it, a sound clip does.
+    let nudge = BridgeCutMove {
+        nudge_ticks: 480,
+        ..plain
+    };
+    let done = comp.cut_move(vec![], ids[2], 0, None, false, nudge);
+    assert_eq!(done.expect("answered"), BridgeCutResult::Done);
+    assert_eq!(
+        row_clips(&top)[2].place_start,
+        lumit_core::Rational::new(4, 1).expect("4 s"),
+        "a picture stays on its frame"
+    );
+    let footage = FootageReference {
+        project: project.id,
+        id: match row_clips(&top)[0].source {
+            lumit_core::sequence::ClipSource::Footage(id) => id,
+            other => panic!("a footage clip, not {other:?}"),
+        },
+    };
+    comp.add_audio_layer(&footage, None).expect("placed");
+    let below = comp.get_layers().expect("layers").remove(0);
+    below.convert_to_sequenced().expect("a row of clips");
+    let sound = row_clips(&below)[0].clone();
+    let done = comp.cut_move(vec![], sound.id, 0, None, false, nudge);
+    assert_eq!(done.expect("moved"), BridgeCutResult::Done);
+    let moved = &row_clips(&below)[0];
+    assert_eq!(
+        moved
+            .place_start
+            .checked_sub(sound.place_start)
+            .expect("travel"),
+        lumit_core::Rational::new(1, 100).expect("480 samples"),
+        "sound goes a hundredth of a second, between two frames"
+    );
+    let drawn = &below.get_clips().expect("clips")[0];
+    assert!(
+        drawn.start_exact > drawn.start_frame as f64,
+        "and is drawn where it is"
+    );
+}
+
 /// A paste puts copies down as clips of their own, linked to each other and
 /// not to the clips they were copied from, and answers where they end. With
 /// no layer to land on it makes one for the picture and one for the sound.
@@ -4661,7 +4757,9 @@ fn a_clips_effects_round_trip_through_the_instance_lookup() {
     layer
         .add_clip_effect(clip.id, "blur".into())
         .expect("added");
-    let stack = layer.get_clip_effects(clip.id).expect("the clip's stack");
+    let stack = layer
+        .get_clip_effects(clip.id, false)
+        .expect("the clip's stack");
     assert_eq!(stack.len(), 1);
     assert!(
         layer.get_effects().expect("the layer's stack").is_empty(),
@@ -4677,7 +4775,10 @@ fn a_clips_effects_round_trip_through_the_instance_lookup() {
     assert!(!drawn.effects[0].enabled);
 
     layer.remove_effect(&stack[0]).expect("removed");
-    assert!(layer.get_clip_effects(clip.id).expect("stack").is_empty());
+    assert!(layer
+        .get_clip_effects(clip.id, false)
+        .expect("stack")
+        .is_empty());
 
     // A staged commit of the now-empty clip stack needs the clip named: an
     // empty list carries no id to route by, and without it the write would be

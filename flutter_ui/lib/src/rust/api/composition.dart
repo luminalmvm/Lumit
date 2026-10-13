@@ -931,7 +931,8 @@ class CompositionReference {
           required UuidValue grabbed,
           required PlatformInt64 byFrames,
           LayerReference? target,
-          required bool linked}) =>
+          required bool linked,
+          required BridgeCutMove how}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceCutDuplicate(
               that: this,
@@ -939,7 +940,8 @@ class CompositionReference {
               grabbed: grabbed,
               byFrames: byFrames,
               target: target,
-              linked: linked);
+              linked: linked,
+              how: how);
 
   /// Match frame: the footage item and the moment of it that the clip
   /// under `frame` is showing, read through the clip's Retime.
@@ -968,20 +970,23 @@ class CompositionReference {
   /// layer it was dropped on, or `None` to stay on its own. The other
   /// clips of its kind, picture or sound, cross as many layers of that
   /// kind as it does, and clips of the other kind keep their layer. With
-  /// `linked` the clips linked to any of them move too.
+  /// `linked` the clips linked to any of them move too. `how` carries the
+  /// timeline's own switches ([`BridgeCutMove`]).
   BridgeCutResult cutMove(
           {required List<UuidValue> clips,
           required UuidValue grabbed,
           required PlatformInt64 byFrames,
           LayerReference? target,
-          required bool linked}) =>
+          required bool linked,
+          required BridgeCutMove how}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutMove(
           that: this,
           clips: clips,
           grabbed: grabbed,
           byFrames: byFrames,
           target: target,
-          linked: linked);
+          linked: linked,
+          how: how);
 
   /// Paste the copied clips with the earliest of them at `at_frame`,
   /// overwriting what they land on. They arrive as clips of their own,
@@ -2298,10 +2303,16 @@ class CompositionReference {
   /// whole slide; the Timeline hands over the unlocked share of the
   /// selection, which is how a locked sibling sits still while the rest
   /// move.
+  ///
+  /// `nudge_ticks` is a part of a frame to add, in samples at 48 kHz, read
+  /// only when every layer that moves is audio-only: sound may sit between
+  /// two frames and a picture may not.
   void slideLayers(
-          {required List<UuidValue> layerIds, required PlatformInt64 delta}) =>
+          {required List<UuidValue> layerIds,
+          required PlatformInt64 delta,
+          required PlatformInt64 nudgeTicks}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSlideLayers(
-          that: this, layerIds: layerIds, delta: delta);
+          that: this, layerIds: layerIds, delta: delta, nudgeTicks: nudgeTicks);
 
   /// Whether this comp has been **mixed** (docs/impl/audio-timeline.md §2):
   /// false until the first edit is made in the Audio timeline, and false

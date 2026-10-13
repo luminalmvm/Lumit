@@ -452,6 +452,10 @@ pub fn collect_comp_jobs(
         if l.audio_only {
             continue;
         }
+        // As the build draws it, so a layer a clip's effect reads is decoded.
+        let worn =
+            lumit_core::sequence::worn_at(l, lumit_core::time::layer_time(t, l.start_offset.0));
+        let l = worn.as_ref().unwrap_or(l);
         if l.switches.visible
             && (in_span(l) || moment_in_span(idx, l))
             && !(any_solo && !l.switches.solo)
@@ -551,6 +555,10 @@ pub fn collect_comp_jobs(
             continue;
         }
         let lt = lumit_core::time::layer_time(sample_times[idx], layer.start_offset.0);
+        // As the build draws it, so a clip's temporal effect is planned its
+        // neighbours.
+        let worn = lumit_core::sequence::worn_at(layer, lt);
+        let layer = worn.as_ref().unwrap_or(layer);
         match &layer.kind {
             // No footage source to decode (an adjustment layer processes
             // the composite below; solids/text/cameras rasterise elsewhere).

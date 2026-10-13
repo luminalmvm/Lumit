@@ -1622,6 +1622,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     // that matters, because the conversion would be the whole of the edit.
     if (edit.grab == BarGrab.move &&
         edit.shift == 0 &&
+        edit.sub == 0 &&
         onward == null &&
         !toNewTrack) {
       return;
@@ -1639,11 +1640,21 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         switch (edit.grab) {
           case BarGrab.move:
             final to = clip.startFrame + edit.shift;
+            final fps = _ui?.model.fps ?? 0;
+            final ticks = fps > 0 ? (edit.sub / fps * 48000).round() : 0;
             if (onward != null || toNewTrack) {
               layer.moveClip(
                   clip: clip.id, target: onward, toFrame: to, overlap: true);
-            } else if (edit.shift != 0) {
-              layer.slideClip(clip: clip.id, toFrame: to, overlap: true);
+              // On to another track and between two frames: the move puts it
+              // on the frame, and the part of a frame follows on its new
+              // layer, inside the same undo step.
+              if (onward != null && ticks != 0) {
+                onward.slideClip(
+                    clip: clip.id, toFrame: to, overlap: true, nudgeTicks: ticks);
+              }
+            } else if (edit.shift != 0 || ticks != 0) {
+              layer.slideClip(
+                  clip: clip.id, toFrame: to, overlap: true, nudgeTicks: ticks);
             }
           case BarGrab.trimIn:
             layer.trimClip(
@@ -1700,7 +1711,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     if (effectId == null) return;
     for (final clip in track.entry.info.clips) {
       if (path != effectPath(clipFoldPrefix(clip.id), effectId)) continue;
-      for (final instance in track.entry.layer.getClipEffects(clip: clip.id)) {
+      for (final instance in track.entry.layer
+          .getClipEffects(clip: clip.id, onCompClock: false)) {
         if (instance.id().toString() != effectId) continue;
         track.entry.layer.setEffectEnabled(effect: instance, enabled: on);
         _afterStackEdit();
@@ -2252,6 +2264,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               ),
             ],
           ),
+          // Each marker's line, from the ruler down through every track.
+          MarkerLinesGround(comp: comp, axis: axis, hScroll: _hLane),
           // The playhead rides above every lane, and it is the only thing here
           // that redraws when it moves - on its own layer, so that is true of
           // the painting and not only of the rebuilding.
@@ -2382,6 +2396,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       style: _waveformStyle,
       hScroll: _hLane,
       snapTargets: snap,
+      quantise: _ui?.workspace.interface.quantiseSound ?? true,
       preview: _clipDragOf(track.id),
       selected: _selectedClip?.track == track.id ? _selectedClip?.clip : null,
       openClips: {

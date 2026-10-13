@@ -1395,6 +1395,14 @@
   "@effectControlsNoLayer": {
     "description": "Empty-state line in the Effect controls panel when no layer is selected."
   },
+  "tipShowKeyStrip": "Show keyframes",
+  "@tipShowKeyStrip": {
+    "description": "Tooltip on the Effect controls header button that shows the keyframe strip beside the parameter rows."
+  },
+  "tipHideKeyStrip": "Hide keyframes",
+  "@tipHideKeyStrip": {
+    "description": "Tooltip on the same button while the keyframe strip is shown."
+  },
   "expressionHint": "value * 2",
   "@expressionHint": {
     "description": "Placeholder text in the Add expression dialogue's code well, standing in for a small Rhai expression while the well is empty. Not a translated sentence — it is example code."
@@ -1614,6 +1622,10 @@
   "firstRunVegasRetimeOnly": "Only change default Retime graph",
   "@firstRunVegasRetimeOnly": {
     "description": "First run: a tick on the Vegas card. Ticked, the Retime graph opens to speed and nothing else changes: video still arrives as an ordinary layer. Retime is a Lumit product term."
+  },
+  "firstRunVegasKeys": "The Vegas shortcuts are loaded too.",
+  "@firstRunVegasKeys": {
+    "description": "First-run screen, a note under the Vegas card: choosing it also loads the Vegas keyboard shortcuts. Shown unless the card's own tick asks for the Retime graph alone."
   },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
@@ -5087,6 +5099,18 @@
   "@keyTurnLinkedSelectionOnOrOff": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
   },
+  "keyTurnAutoRippleOnOrOff": "Turn auto ripple on or off",
+  "@keyTurnAutoRippleOnOrOff": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyTurnAutomaticCrossfadesOnOrOff": "Turn automatic crossfades on or off",
+  "@keyTurnAutomaticCrossfadesOnOrOff": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
+  "keyTurnQuantiseToFramesOnOrOff": "Turn quantise to frames on or off",
+  "@keyTurnQuantiseToFramesOnOrOff": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut."
+  },
   "keyLiftTheWorkArea": "Lift the work area",
   "@keyLiftTheWorkArea": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column. A Cut timeline shortcut. An editing term: delete the clips inside the work area and leave the gap."
@@ -6311,6 +6335,14 @@
   "noEffectsMatch": "No effects match",
   "@noEffectsMatch": {
     "description": "Shown in the Effects & presets panel when the search finds nothing."
+  },
+  "noEffectsOnClipYet": "No effects on this clip yet",
+  "@noEffectsOnClipYet": {
+    "description": "Empty-state line in the Effect controls panel while one clip of a Sequence layer is picked in the Cut timeline."
+  },
+  "effectControlsClip": "Clip",
+  "@effectControlsClip": {
+    "description": "A small mark beside the name in the Effect controls panel's header: the effects shown belong to one clip, not to the whole track. One word, drawn in capitals."
   },
   "noEffectsYet": "No effects on this layer yet",
   "@noEffectsYet": {
@@ -9481,6 +9513,64 @@
   "@cutLinked": {
     "description": "A toggle on the Cut timeline's strip: whether a picture clip and the clip carrying its sound are selected and edited together."
   },
+  "cutAutoRipple": "Auto ripple",
+  "@cutAutoRipple": {
+    "description": "A toggle on the Cut timeline's strip: while on, deleting, trimming or moving a clip moves everything after it by as much. Two words."
+  },
+  "tipCutAutoRipple": "Edits move what follows",
+  "@tipCutAutoRipple": {
+    "description": "Tooltip on the Cut timeline's Auto ripple toggle. A few words."
+  },
+  "cutAutoCrossfade": "Auto crossfade",
+  "@cutAutoCrossfade": {
+    "description": "A toggle on the Cut timeline's strip: while on, a clip dragged across the end of another keeps the overlap, which plays as a dissolve or a crossfade. Two words."
+  },
+  "tipCutAutoCrossfade": "Overlaps become crossfades",
+  "@tipCutAutoCrossfade": {
+    "description": "Tooltip on the Cut timeline's Auto crossfade toggle. A few words."
+  },
+  "cutQuantise": "Quantise",
+  "@cutQuantise": {
+    "description": "A toggle on the Cut timeline's strip: while on, sound clips move in whole frames. Off, a sound clip can sit between two frames. One word."
+  },
+  "tipCutQuantise": "Sound moves in whole frames",
+  "@tipCutQuantise": {
+    "description": "Tooltip on the Cut timeline's Quantise toggle. A few words."
+  },
+  "cutSwitchOn": "{name} on",
+  "@cutSwitchOn": {
+    "description": "Status line, after a Cut timeline switch is turned on from the keyboard. {name} is the switch's own label, such as Auto ripple.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "cutSwitchOff": "{name} off",
+  "@cutSwitchOff": {
+    "description": "Status line, after a Cut timeline switch is turned off from the keyboard. {name} is the switch's own label, such as Auto ripple.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetSavedNotice": "Preset saved",
+  "@presetSavedNotice": {
+    "description": "Status line, after one effect has been saved as a preset from its heading's menu in the Effect controls panel."
+  },
+  "clipBlendFromLayer": "From layer",
+  "@clipBlendFromLayer": {
+    "description": "Effect controls panel, with one clip of a Sequence layer picked: the first choice in the clip's Blend mode list. The clip uses its layer's blend mode and has none of its own. The Cut timeline's own menu says From track for the same choice."
+  },
+  "cutBlendFromTrack": "From track",
+  "@cutBlendFromTrack": {
+    "description": "Cut timeline, right-click on a clip, first row of the Blend mode list: the clip uses its track's blend mode and has none of its own."
+  },
+  "cutBypassEffects": "Bypass effects",
+  "@cutBypassEffects": {
+    "description": "Cut timeline, right-click on a clip that has effects of its own: a ticked row that turns them all off without removing them."
+  },
   "cutCloseGap": "Close gap",
   "@cutCloseGap": {
     "description": "Cut timeline, right-click on empty room between clips: everything after the gap moves earlier to close it."
@@ -12409,6 +12499,24 @@
   "@graphKeyValueField": {
     "description": "Timeline, Graph mode: the label beside the editable field holding a keyframe's exact value, in the small box that opens when a keyframe is double-clicked."
   },
+  "graphKeySpeedField": "Speed",
+  "@graphKeySpeedField": {
+    "description": "The label beside the editable field holding a speed point's exact playback speed in per cent, in the small box that opens when a point on a speed envelope is double-clicked. Speed, never velocity (docs/01-GLOSSARY.md)."
+  },
+  "menuSetSpeed": "Set speed…",
+  "@menuSetSpeed": {
+    "description": "Context-menu item on a point of a speed envelope: opens a small box to type the point's exact playback speed in per cent."
+  },
+  "speedGuideEveryFrame": "Every frame {speed}",
+  "@speedGuideEveryFrame": {
+    "description": "A tiny label at the left end of a dashed guide line across a speed envelope. The line marks the playback speed at which footage with a higher frame rate than the composition shows each of its frames exactly once. Two words at most, then the speed, such as 8%.",
+    "placeholders": {
+      "speed": {
+        "type": "String",
+        "example": "8%"
+      }
+    }
+  },
   "graphTangentAuto": "Auto",
   "graphTangentClamp": "Clamp",
   "graphTangentFree": "Free",
@@ -12803,6 +12911,14 @@
   "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
   "@settingsLayerNamesOnLaneBars": {
     "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
+  },
+  "settingsQuantiseSound": "Sound moves in whole frames",
+  "@settingsQuantiseSound": {
+    "description": "Settings window, Timeline page: the name of one setting. On, a sound clip dragged in the Cut or Audio timeline lands on a whole frame. Off, it goes where the pointer puts it, between frames. On by default."
+  },
+  "settingsMarkerLines": "Marker lines",
+  "@settingsMarkerLines": {
+    "description": "Settings window, Timeline page: the name of one setting - whether each composition marker draws a thin line down through the rows of the Timeline, the Cut timeline and the Audio timeline. On by default."
   },
   "settingsThumbnailsOnFootageRows": "Thumbnails on footage rows",
   "@settingsThumbnailsOnFootageRows": {

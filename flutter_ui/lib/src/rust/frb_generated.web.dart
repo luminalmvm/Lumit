@@ -198,6 +198,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompWiring dco_decode_box_autoadd_bridge_comp_wiring(dynamic raw);
 
   @protected
+  BridgeCutMove dco_decode_box_autoadd_bridge_cut_move(dynamic raw);
+
+  @protected
   BridgeDrmNode dco_decode_box_autoadd_bridge_drm_node(dynamic raw);
 
   @protected
@@ -566,6 +569,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCrop dco_decode_bridge_crop(dynamic raw);
+
+  @protected
+  BridgeCutMove dco_decode_bridge_cut_move(dynamic raw);
 
   @protected
   BridgeCutPaste dco_decode_bridge_cut_paste(dynamic raw);
@@ -1945,6 +1951,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeCutMove sse_decode_box_autoadd_bridge_cut_move(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeDrmNode sse_decode_box_autoadd_bridge_drm_node(
       SseDeserializer deserializer);
 
@@ -2381,6 +2391,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCrop sse_decode_bridge_crop(SseDeserializer deserializer);
+
+  @protected
+  BridgeCutMove sse_decode_bridge_cut_move(SseDeserializer deserializer);
 
   @protected
   BridgeCutPaste sse_decode_bridge_cut_paste(SseDeserializer deserializer);
@@ -3973,6 +3986,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeCompWiring self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_bridge_cut_move(
+      BridgeCutMove self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_bridge_drm_node(
       BridgeDrmNode self, SseSerializer serializer);
 
@@ -4441,6 +4458,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_crop(BridgeCrop self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_cut_move(BridgeCutMove self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_cut_paste(
