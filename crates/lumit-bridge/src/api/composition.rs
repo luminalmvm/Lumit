@@ -656,21 +656,46 @@ impl CompositionReference {
             ..comp.motion_blur
         };
 
+        let (width, height) = (
+            settings.width.clamp(16, 16384),
+            settings.height.clamp(16, 16384),
+        );
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.begin_undo_group();
+        // The other settings first, at the size the frame has, so the step
+        // is named for the settings in the undo list. Then a new frame size,
+        // which keeps the picture's middle in the middle: the frame is
+        // cropped (or grown) evenly about its centre, which moves the layers
+        // with it. Without this every layer stays where it was against the
+        // top-left corner and a narrower comp shows them pushed to one side.
         let applied = proj
             .store
             .commit(lumit_core::Op::SetCompSettings {
                 comp: self.id,
                 name: settings.name,
-                width: settings.width.clamp(16, 16384),
-                height: settings.height.clamp(16, 16384),
+                width: comp.width,
+                height: comp.height,
                 frame_rate,
                 duration,
                 background: lumit_core::model::LinearColour(settings.background),
             })
             .map_err(BridgeError::OpError)
+            .and_then(|_| {
+                if (width, height) == (comp.width, comp.height) {
+                    return Ok(());
+                }
+                proj.store
+                    .commit(lumit_core::Op::CropCompToRegion {
+                        comp: self.id,
+                        x: (f64::from(comp.width) - f64::from(width)) / 2.0,
+                        y: (f64::from(comp.height) - f64::from(height)) / 2.0,
+                        width,
+                        height,
+                    })
+                    .map(|_| ())
+                    .map_err(BridgeError::OpError)
+            })
             .and_then(|_| {
                 if motion_blur == comp.motion_blur {
                     return Ok(());

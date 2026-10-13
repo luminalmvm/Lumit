@@ -544,6 +544,12 @@ fn composition_settings_round_trip_including_a_drop_frame_rate() {
 
     let before = comp.get_settings().expect("settings");
     assert_eq!((before.fps_num, before.fps_den), (30, 1));
+    let layer = comp.add_solid_layer(None).expect("layer");
+    let place = |l: &LayerReference| {
+        let t = l.item().expect("layer").transform;
+        (t.position_x.value_at(0.0), t.position_y.value_at(0.0))
+    };
+    let was = place(&layer);
 
     comp.set_settings(BridgeCompSettings {
         name: "Renamed".into(),
@@ -572,6 +578,21 @@ fn composition_settings_round_trip_including_a_drop_frame_rate() {
         "the length is the exact seconds it was given"
     );
     assert_eq!(comp.duration_frames().expect("frames"), 239, "8 s at 29.97");
+    let now = place(&layer);
+    assert_eq!(
+        (now.0 - was.0, now.1 - was.1),
+        (
+            (1280.0 - f64::from(before.width)) / 2.0,
+            (720.0 - f64::from(before.height)) / 2.0
+        ),
+        "a new size keeps the picture centred"
+    );
+    project.undo().expect("undo");
+    assert_eq!(
+        place(&layer),
+        was,
+        "and one step takes the size and the move back"
+    );
 }
 
 /// **The frame-rate regression.** Changing only the rate must change only
