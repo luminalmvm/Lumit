@@ -47,6 +47,9 @@ import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
+import '../icons/icons.dart' show iconSize;
+import '../icons/lumit_icon.dart' as glyph_set;
+import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../shell/menu_bar_frb.dart' show exportFrb;
 import '../shell/precompose_dialog_frb.dart' show showPrecomposeDialogFrb;
@@ -2895,7 +2898,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (!_graph) return false;
 
     if (action == 'graph.fit') {
-      _graphPane.currentState?.fitNow();
+      _fitGraph();
       return true;
     }
     return false;
@@ -3393,6 +3396,67 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     } else {
       _scrollFrameToLeftEdge(start);
     }
+  }
+
+  /// The graph's framing buttons, beside the zoom they belong with: Auto fit,
+  /// which keeps the values framed, and Fit selection, which frames once.
+  List<Widget> _graphViewButtons(LumitTheme t) {
+    Widget button(String key, String glyph, String label,
+            {required String tip,
+            String? action,
+            required bool on,
+            required VoidCallback onPressed}) =>
+        LumitTooltip(
+          message: tip,
+          action: action,
+          child: HouseButton(
+            key: ValueKey<String>(key),
+            small: true,
+            // On reads as the magnet beside it does: framed and bright.
+            frameless: !on,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            onPressed: onPressed,
+            child: glyph_set.LumitIcon(glyph,
+                size: iconSize,
+                colour: on ? t.textPrimary : t.textMuted,
+                semanticLabel: label),
+          ),
+        );
+    return [
+      const SizedBox(width: 2),
+      button('graph-autofit', LumitIcons.fit, l10n.graphAutoFit,
+          tip: _graphAutoFit ? l10n.tipAutoFitOn : l10n.tipAutoFitOff,
+          on: _graphAutoFit,
+          onPressed: () => setState(() => _graphAutoFit = !_graphAutoFit)),
+      const SizedBox(width: 2),
+      button('graph-fit-selection', LumitIcons.frameAll, l10n.graphFitSelection,
+          tip: l10n.tipFitSelection,
+          action: 'graph.fit',
+          on: false,
+          onPressed: _fitGraph),
+    ];
+  }
+
+  /// Frame the selected keys in the graph, in time and in value, or every
+  /// curve when none is picked. After Effects calls it Fit selection to view.
+  void _fitGraph() {
+    final pane = _graphPane.currentState;
+    final span = pane?.fitSelection();
+    final fps = _ui?.model.fps ?? 0;
+    final viewport = positionOf(_hLane)?.viewportDimension ?? _laneViewport;
+    if (span == null || fps <= 0 || viewport <= graphGutterWidth) {
+      pane?.fitNow();
+      return;
+    }
+    // A little air each side, and the value gutter's width off the right.
+    final frames = (span.$2 - span.$1) * fps;
+    final margin = frames * 0.06;
+    _navigateTo(
+      max(0.0, span.$1 * fps - margin),
+      (frames + margin * 2) * viewport / (viewport - graphGutterWidth),
+      pan: false,
+    );
+    _zoomDragEnd();
   }
 
   /// Put [frame] at the lanes' left edge, at the width the lanes have now.
@@ -4515,9 +4579,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   _graphLens = lens;
                   _publishEasingClaim();
                 }),
-                autoFit: _graphAutoFit,
-                onToggleAutoFit: () =>
-                    setState(() => _graphAutoFit = !_graphAutoFit),
                 breakHandles: _graphBreakHandles,
                 onToggleBreakHandles: () => setState(
                     () => _graphBreakHandles = !_graphBreakHandles),
@@ -4690,6 +4751,8 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     snapTargets: snap,
                                     lens: _graphLens,
                                     autoFit: _graphAutoFit,
+                                    onAutoFitOff: () =>
+                                        setState(() => _graphAutoFit = false),
                                     vegas: _vegas(context),
                                     penArmed:
                                         ui.tools.tool.group == ToolGroup.pen,
@@ -4754,6 +4817,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           maxZoom: _maxZoom,
           perFrame: axis.perFrame,
           fps: ui.model.fps,
+          viewButtons: _graphViewButtons(ThemeScope.of(context).theme),
         ),
       ],
     );

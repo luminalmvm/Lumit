@@ -4691,6 +4691,10 @@
   "@graphAutoFit": {
     "description": "Graph editor button: keep the curves framed in the view."
   },
+  "graphFitSelection": "Fit selection",
+  "@graphFitSelection": {
+    "description": "Graph editor button: zoom the view, in time and in value, to the selected keyframes, or to every curve when none is selected."
+  },
   "graphBreakHandles": "Break handles",
   "@graphBreakHandles": {
     "description": "Graph editor button: while it is on, dragging one handle of a keyframe leaves the handle on its other side where it is."
@@ -7714,6 +7718,10 @@
   "tipBreakHandlesOff": "Handles joined",
   "@tipBreakHandlesOff": {
     "description": "Tooltip on the graph editor's Break handles button, when it is off. One or two words."
+  },
+  "tipFitSelection": "Fit selection",
+  "@tipFitSelection": {
+    "description": "Tooltip on the graph editor's Fit selection button. One or two words."
   },
   "tipBreakHandlesOn": "Handles broken",
   "@tipBreakHandlesOn": {
