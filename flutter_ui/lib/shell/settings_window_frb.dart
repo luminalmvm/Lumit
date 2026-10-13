@@ -2784,7 +2784,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           t,
           l10n.settingsGroupKeymap,
           [
-            settingsRow(
+            _saying(settingsRow(
               t,
               l10n.settingsPreset,
               _presetMessage ?? '',
@@ -2822,11 +2822,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ),
                 ],
               ),
-            ),
+            )),
             // What the last import said, when it had something to say. Kept beside
             // the buttons rather than thrown as a dialogue: a keymap that would not
             // read is a fact about the file, not an emergency.
-            settingsRow(
+            _saying(settingsRow(
               t,
               l10n.settingsKeymapFile,
               _keymapMessage ?? '',
@@ -2848,8 +2848,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ),
                 ],
               ),
-            ),
-            settingsRow(
+            )),
+            _saying(settingsRow(
               t,
               l10n.settingsKeymapAfterEffects,
               _afterEffectsMessage ?? '',
@@ -2859,7 +2859,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 onPressed: () => _importAfterEffects(km),
                 child: Text(l10n.menuImport, style: t.small),
               ),
-            ),
+            )),
           ],
           first: true),
       // The picture shows the whole map, so it steps aside for a search.
@@ -2989,6 +2989,20 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// Which preset the row's buttons last loaded, said beside them: the table
   /// under it changes all at once and names nothing.
   String? _presetMessage;
+
+  /// A row whose message arrives after a press. It opens for the line and
+  /// the rows under it move down, where they used to jump.
+  Widget _saying(Widget row) {
+    final reveal = ThemeScope.of(context).motion.reveal;
+    // With motion off the spec has no length, which a size animation refuses.
+    if (reveal.duration == Duration.zero) return row;
+    return AnimatedSize(
+      duration: reveal.duration,
+      curve: reveal.curve,
+      alignment: Alignment.topCenter,
+      child: row,
+    );
+  }
 
   void _presetLoaded(String name) {
     if (!mounted) return;
