@@ -289,16 +289,19 @@ pub struct FxCache {
     /// in between — so the planner's lookup takes a handle, and the handle
     /// lives until the next frame's plan drops it.
     pins: std::collections::HashMap<u128, Tex>,
-    /// Nested frames a flow neighbour made, kept for the one frame after it.
+    /// Nested frames the last frame used, kept for the one frame after it.
     ///
-    /// The picture a neighbour shows a Precomp at is the next frame's own
-    /// picture of it, and playback adds nothing to the store, so every such
-    /// Precomp was made twice a frame. `ahead` is what this frame's neighbours
-    /// are making and `carried` what the last frame's made; nothing here
-    /// outlives the frame after the one that made it.
+    /// Playback adds nothing to the store, so a Precomp that had not changed
+    /// was made again on every frame, and one under a flow effect's neighbour
+    /// twice. `ahead` is what this frame has used and `carried` what the last
+    /// one did; nothing here outlives the frame after the one that used it.
+    ///
+    /// ponytail: held to half the store's budget, first come. A frame with
+    /// more Precomps than that makes the rest again each frame, as all of
+    /// them were before. Order them by what they cost if that shows.
     carried: std::collections::HashMap<u128, Tex>,
     ahead: std::collections::HashMap<u128, Tex>,
-    carrying: bool,
+    ahead_bytes: usize,
     /// The planes tier's uploaded textures, by (effect instance, source
     /// frame, run) (docs/impl/addons.md §6.1).
     ///
@@ -337,7 +340,7 @@ impl FxCache {
             pins: std::collections::HashMap::new(),
             carried: std::collections::HashMap::new(),
             ahead: std::collections::HashMap::new(),
-            carrying: false,
+            ahead_bytes: 0,
             planes: std::collections::HashMap::new(),
             runs: 0,
             hits: 0,
@@ -397,9 +400,8 @@ impl FxCache {
             .or_else(|| self.ahead.get(&key))
             .cloned()
             .or_else(|| self.lru.get(&key).map(|t| t.0.clone()));
-        // One a neighbour found made already is the next frame's all the same.
-        if let Some(found) = held.as_ref().filter(|_| self.carrying) {
-            self.ahead.insert(key, found.clone());
+        if let Some(found) = &held {
+            self.carry(key, found);
         }
         if held.is_some() {
             self.nested_served += 1;
@@ -409,12 +411,11 @@ impl FxCache {
         held
     }
 
-    /// File a nested comp's finished frame under its name, when the
-    /// cache is taking entries ([`Self::keep_outputs`]).
+    /// File a nested comp's finished frame under its name: for the frame
+    /// after this one always, and in the store when it is taking entries
+    /// ([`Self::keep_outputs`]).
     pub fn put_nested(&mut self, key: u128, tex: Tex) {
-        if self.carrying {
-            self.ahead.insert(key, tex.clone());
-        }
+        self.carry(key, &tex);
         if self.keep {
             self.lru.insert(key, CachedTex(tex));
         }
@@ -423,24 +424,36 @@ impl FxCache {
     /// Whether a nested frame is held, for the decode planner — and if
     /// it is, hold it for the frame about to be rendered (see `pins`).
     pub fn pin_nested(&mut self, key: u128) -> bool {
-        if let Some(t) = self.lru.get(&key) {
-            self.pins.insert(key, t.0.clone());
-            true
-        } else {
-            false
+        let held = self
+            .carried
+            .get(&key)
+            .cloned()
+            .or_else(|| self.lru.get(&key).map(|t| t.0.clone()));
+        match held {
+            Some(t) => {
+                self.pins.insert(key, t);
+                true
+            }
+            None => false,
         }
+    }
+
+    /// Keep a nested frame this frame used for the frame after it, while
+    /// there is room.
+    fn carry(&mut self, key: u128, tex: &Tex) {
+        let bytes = intermediate_bytes(tex.width(), tex.height());
+        if self.ahead.contains_key(&key) || self.ahead_bytes + bytes > self.lru.budget_bytes() / 2 {
+            return;
+        }
+        self.ahead_bytes += bytes;
+        self.ahead.insert(key, tex.clone());
     }
 
     /// Drop the previous frame's pins: called as each frame's plan begins.
     pub fn unpin_nested(&mut self) {
         self.pins.clear();
         self.carried = std::mem::take(&mut self.ahead);
-    }
-
-    /// Whether the nested frames made from here on are a flow neighbour's, to
-    /// be kept for the frame after this one.
-    pub fn carry_nested(&mut self, carrying: bool) {
-        self.carrying = carrying;
+        self.ahead_bytes = 0;
     }
 
     /// Whether the renders that follow may *add* to the cache. Lookups always
@@ -458,6 +471,7 @@ impl FxCache {
         self.pins.clear();
         self.carried.clear();
         self.ahead.clear();
+        self.ahead_bytes = 0;
         // The planes as well: a user who asked for an empty cache meant all of
         // it, and these are textures on the card like any other.
         self.planes.clear();
@@ -484,7 +498,13 @@ impl FxCache {
         {
             return false;
         }
-        self.lru.evict_cold_half()
+        // What was kept for the next frame goes first: it saves one frame's
+        // work, and a pin still holds whatever this frame's plan counted on.
+        let carried = !self.carried.is_empty() || !self.ahead.is_empty();
+        self.carried.clear();
+        self.ahead.clear();
+        self.ahead_bytes = 0;
+        self.lru.evict_cold_half() || carried
     }
 
     /// `(used_bytes, budget_bytes, entries)`.
