@@ -42,6 +42,7 @@ whoever sent the preview, or us.
 - To keep the servers safe from abuse, which is a legitimate interest of ours.
 
 Nothing is sold, used for adverts, or used to track you. This website has no analytics.
+An account is for people aged 13 or over, and we never ask for or store your age.
 The only emails we send are about your account, and about comments on your previews
 unless you turn those off.
 
