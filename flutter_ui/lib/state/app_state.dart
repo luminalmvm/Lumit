@@ -807,11 +807,37 @@ class LumitState extends ChangeNotifier {
   /// about it.
   ///
   /// The engine reports each phase of the read as it begins and hands over the
-  /// share of the whole open that sits behind it; the last stretch — the render
-  /// worker starting and answering — is the frontend's own, and [previewReady]
-  /// closes it at 1. Weighted phases, not a timer: the card would rather move
-  /// in four honest steps than sweep a bar that knows nothing.
+  /// share of the whole open that sits behind it; the last stretch is the
+  /// first frame, which fills it as it is made ([previewProgress]), and
+  /// [previewReady] closes it at 1. Weighted phases, not a timer: the card
+  /// would rather move in honest steps than sweep a bar that knows nothing.
   final ValueNotifier<OpenProgress?> openProgress = ValueNotifier(null);
+
+  /// Where the bar stood when the first frame began to report, so the frame
+  /// fills what is left of it.
+  double _previewFrom = 0;
+
+  /// How long the first frame has been reporting.
+  final Stopwatch _firstFrame = Stopwatch();
+
+  /// The first frame saying how far it has got, 0..1.
+  void previewProgress(double fraction) {
+    final last = openProgress.value;
+    if (!opening.value || last == null) return;
+    if (!_firstFrame.isRunning) {
+      _previewFrom = last.fraction;
+      _firstFrame.start();
+    }
+    // A frame this slow has its own bar in the Viewer, and the shell is more
+    // use with that over it than with the card.
+    if (_firstFrame.elapsed > const Duration(seconds: 3)) {
+      previewReady();
+      return;
+    }
+    _reportOpenProgress(OpenProgress(
+        phase: OpenPhase.startingPreview,
+        fraction: _previewFrom + (1 - _previewFrom) * fraction));
+  }
 
   /// The open in progress reporting its phases, held so the next one can let
   /// it go.
@@ -893,12 +919,14 @@ class LumitState extends ChangeNotifier {
   /// The Viewer has something to show, or there is nothing for it to show —
   /// either way the shell can come out from behind its progress bar.
   ///
-  /// Called on the first sign of life from the new project's worker (any reply
-  /// at all, not only a frame: a project whose first render faults must not
-  /// leave the interface covered), and by the session restore when it fronts no
-  /// composition, which is a project with no picture to wait for.
+  /// Called when the new project's worker has made its first frame or given up
+  /// on it (a project whose first render faults must not leave the interface
+  /// covered), and by the session restore when it has no frame to ask for.
   void previewReady() {
     if (!opening.value) return;
+    _firstFrame
+      ..stop()
+      ..reset();
     // Full, then gone: the bar reaching its end is what "open" means, and a
     // card that vanished at eighty per cent would read as one that gave up.
     final last = openProgress.value;

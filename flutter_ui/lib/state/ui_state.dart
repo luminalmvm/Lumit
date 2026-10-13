@@ -2525,10 +2525,16 @@ class LumitUiState extends ChangeNotifier {
       model.refreshIfMoved();
     });
     sub = state.onWorkerResponse.listen((msg) {
-      // Any reply at all means the new project's worker is up and answering,
-      // which is what the opening card is waiting on. Not the frame alone: a
-      // first render that faults would otherwise leave the shell covered.
-      state.previewReady();
+      // The opening card waits for the first frame and its bar follows that
+      // frame. Every frame asked for ends with a finished report, so a first
+      // render that faults doesn't leave the shell covered. The cache bar's
+      // nudge says nothing about the frame.
+      if (msg case WorkerResponse_RenderProgress(:final field0)
+          when !field0.done) {
+        state.previewProgress(field0.fraction);
+      } else if (msg is! WorkerResponse_CacheFilled) {
+        state.previewReady();
+      }
       switch (msg) {
         case WorkerResponse_RenderedDMABuf frame:
           previewTier.value = frame.field0.tier;
@@ -3933,11 +3939,15 @@ class LumitUiState extends ChangeNotifier {
       // left (docs/07 §1.6, the session-restore promise), and that account
       // includes which tabs were fronted — the more specific rule wins.
       if (!restoredArrangement) frontPanel(Panel.project);
-      // A project that opens with no composition fronted has no picture to
-      // wait for, so the opening card would stand for ever waiting on a frame
-      // nobody is going to ask for. In the `finally` because every early
-      // return above is one of those cases.
-      if (selectedComp == null) _app.previewReady();
+      // The opening card waits for the first frame, so it is asked for here
+      // and not left to a Viewer that may not be on screen. A project with
+      // nothing to ask for has no frame to wait for, and the card would
+      // stand for ever. In the `finally` because every early return above is
+      // one of those cases.
+      for (final view in views.views) {
+        _askForView(view);
+      }
+      if (_askedFor.isEmpty) _app.previewReady();
     }
   }
 

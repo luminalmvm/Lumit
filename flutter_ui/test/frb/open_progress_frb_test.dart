@@ -3,8 +3,8 @@
 // The bar used to sweep, because nothing reported anything: it said "working"
 // and nothing else, for however many seconds a project full of precomps took.
 // The engine now names each phase of the read as it begins and says what share
-// of the whole open sits behind it, and the frontend closes the last stretch —
-// the render worker starting and answering — at one.
+// of the whole open sits behind it, and the first frame fills the last stretch
+// as it is made.
 //
 // Two promises are worth holding to, and both are here: the engine's own
 // report only ever rises and never claims the frame it has not made, and the

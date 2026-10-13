@@ -775,7 +775,8 @@ enum OpenPhase {
   preparingProject,
 
   /// The engine's part is done. What is left belongs to the frontend: start
-  /// the render worker and wait for its first reply.
+  /// the render worker and wait for its first frame, which fills the rest of
+  /// the bar as it is made.
   startingPreview,
   ;
 }
