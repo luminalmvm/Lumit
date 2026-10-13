@@ -2,11 +2,12 @@
 //
 // # In plain terms
 //
-// On Windows Lumit's window has no title bar. The menu bar is its top line, the
-// three buttons a title bar would hold stand at that line's right end, and the
-// empty part of the line moves the window the way a title bar does. The runner
-// does the moving and the closing (windows/runner/flutter_window.cpp); this
-// file draws the buttons and says what was pressed.
+// On Windows and Linux Lumit's window has no title bar. The menu bar is its top
+// line, the three buttons a title bar would hold stand at that line's right
+// end, and the empty part of the line moves the window the way a title bar
+// does. The runner does the moving and the closing (windows/runner/
+// flutter_window.cpp, linux/runner/my_application.cc); this file draws the
+// buttons and says what was pressed.
 //
 // The buttons are laid over the whole window rather than put in the menu bar,
 // because the menu bar is not always there: the splash, the welcome screen and
@@ -14,8 +15,7 @@
 // to close it is the worse fault.
 //
 // macOS keeps its title bar. Its menus are in the system's bar, so Lumit has
-// no line of its own there to put the buttons in. Linux keeps its title bar
-// too, until its runner can do what the Windows one does.
+// no line of its own there to put the buttons in.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -30,8 +30,10 @@ import '../theme/theme.dart';
 const MethodChannel _channel = MethodChannel('lumit/window');
 
 /// Whether Lumit draws the window's buttons itself here. Asked of the target
-/// platform, so a widget test draws none unless it says it is Windows.
-bool get windowFrameDrawn => defaultTargetPlatform == TargetPlatform.windows;
+/// platform, so a widget test draws none unless it says it is a desktop.
+bool get windowFrameDrawn =>
+    defaultTargetPlatform == TargetPlatform.windows ||
+    defaultTargetPlatform == TargetPlatform.linux;
 
 /// One button's width, and so a third of what the menu bar leaves clear at its
 /// right end.

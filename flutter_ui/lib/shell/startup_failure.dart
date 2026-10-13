@@ -38,8 +38,8 @@ class StartupFailureApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       localizationsDelegates: Strings.localizationsDelegates,
       supportedLocales: Strings.supportedLocales,
-      // The window has no title bar on Windows, and this of all screens
-      // needs a way to close it.
+      // The window has no title bar on Windows and Linux, and this of all
+      // screens needs a way to close it.
       builder: (context, child) => WindowFrame(
         theme: theme,
         child: WindowDragStrip(theme: theme, child: child!),
