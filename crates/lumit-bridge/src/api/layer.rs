@@ -7573,9 +7573,10 @@ impl LayerReference {
     ///
     /// The engine hands back the text and Dart chooses where it goes, exactly
     /// as an effect preset does: the engine never opens a file dialogue. What
-    /// is saved is the driver boxes, the wires with both ends inside the set,
-    /// and where they sat relative to one another; a wire leaving the set is
-    /// not saved, because it names something the group does not carry.
+    /// is saved is the drivers and the stack's effects among `nodes`, the
+    /// wires with both ends inside the set, and where they sat relative to one
+    /// another; a wire leaving the set is not saved, because it names
+    /// something the group does not carry.
     #[frb(sync)]
     pub fn save_node_group(
         &self,
@@ -7586,7 +7587,13 @@ impl LayerReference {
         let layer = self.item()?;
         let members: Vec<lumit_core::graph::NodeRef> =
             nodes.into_iter().map(|n| n.core()).collect();
-        let preset = lumit_core::preset::group_from_graph(&layer.graph, &name, colour, &members);
+        let preset = lumit_core::preset::group_from_graph(
+            &layer.graph,
+            &layer.effects,
+            &name,
+            colour,
+            &members,
+        );
         lumit_core::preset::group_to_json(&preset).map_err(|_| BridgeError::InvalidEffect)
     }
 
@@ -7597,27 +7604,48 @@ impl LayerReference {
     /// makes two boxes share an instance. Unlike `new_driver` this is not
     /// staged: dropping a saved rig *is* the whole gesture, there being nothing
     /// left to decide once the spot is chosen.
+    ///
+    /// The effects a group carries join the end of this layer's stack, as an
+    /// effect preset's do.
     #[frb(sync)]
     pub fn insert_node_group(&self, text: String, x: f64, y: f64) -> Result<(), BridgeError> {
         let preset =
             lumit_core::preset::group_from_json(&text).map_err(|_| BridgeError::InvalidEffect)?;
         let added = lumit_core::preset::group_instantiated(&preset, [x, y]);
 
-        let mut graph = self.item()?.graph;
+        let layer = self.item()?;
+        let mut graph = layer.graph;
         graph.nodes.extend(added.nodes);
         graph.edges.extend(added.edges);
         graph.layout.extend(added.layout);
         graph.groups.push(added.group);
+        let graph = lumit_core::Op::SetLayerGraph {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            graph: Box::new(graph),
+        };
+        // The stack first, so the wires have their boxes by the time the
+        // graph is checked.
+        let op = if added.effects.is_empty() {
+            graph
+        } else {
+            let mut effects = layer.effects;
+            effects.extend(added.effects);
+            lumit_core::Op::Batch {
+                ops: vec![
+                    lumit_core::Op::SetLayerEffects {
+                        comp: self.comp_id,
+                        layer: self.layer_id,
+                        effects,
+                    },
+                    graph,
+                ],
+            }
+        };
 
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
-        proj.store
-            .commit(lumit_core::Op::SetLayerGraph {
-                comp: self.comp_id,
-                layer: self.layer_id,
-                graph: Box::new(graph),
-            })
-            .map_err(BridgeError::OpError)?;
+        proj.store.commit(op).map_err(BridgeError::OpError)?;
         Ok(())
     }
 

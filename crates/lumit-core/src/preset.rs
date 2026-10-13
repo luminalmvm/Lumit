@@ -236,7 +236,7 @@ pub fn list_presets(dir: &std::path::Path) -> Vec<PresetEntry> {
 // A wire that left the group is not saved: it named something the group does
 // not carry, and inventing an end for it on the way back in would be a guess.
 
-/// A saved set of driver boxes and the wires between them.
+/// A saved set of a layer graph's boxes and the wires between them.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GroupPreset {
     pub format: u32,
@@ -253,6 +253,15 @@ pub struct GroupPreset {
     /// group dropped anywhere keeps the shape it was saved in.
     #[serde(default)]
     pub layout: Vec<[f64; 2]>,
+    /// The stack's effects in the set, in stack order. They join the end of
+    /// the stack they are dropped on, as an effect preset's do. Absent from a
+    /// group of drivers alone, so a file saved before effects could be
+    /// grouped reads and writes as it did.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effects: Vec<EffectInstance>,
+    /// One position per effect, from the same corner as [`Self::layout`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_layout: Vec<[f64; 2]>,
 }
 
 /// The current on-disk format version for a group.
@@ -262,70 +271,74 @@ pub const GROUP_FORMAT: u32 = 1;
 /// `.lumfx` effect presets in the same per-user library.
 pub const GROUP_EXTENSION: &str = "lumgrp";
 
-/// The id of a node this group could carry — `None` for the derived boxes and
-/// for the stack's effects, which belong to the effect list rather than here.
-fn driver_id(node: crate::graph::NodeRef) -> Option<uuid::Uuid> {
-    match node {
-        crate::graph::NodeRef::Driver(id) => Some(id),
-        _ => None,
-    }
-}
-
-/// Gather `members` out of `graph` as a saveable group.
+/// Gather `members` out of `graph` and the stack it sits beside as a saveable
+/// group.
 ///
-/// Only the driver boxes are taken: the Source, the Layer out and the stack's
-/// effects are *derived* from the layer, so a saved group naming one could only
-/// ever be re-inserted onto a layer that happened to have the same stack.
+/// The drivers and the stack's effects are taken. The Source and the Layer out
+/// are not: every layer has its own, so there is nothing of them to carry.
 ///
-/// Deterministic: the nodes come out in the graph's own order, never the
-/// selection's, so saving the same three boxes twice writes the same file.
+/// Deterministic: the drivers come out in the graph's own order and the
+/// effects in the stack's, never the selection's, so saving the same three
+/// boxes twice writes the same file.
 #[must_use]
 pub fn group_from_graph(
     graph: &crate::graph::LayerGraph,
+    stack: &[EffectInstance],
     name: &str,
     colour: u32,
     members: &[crate::graph::NodeRef],
 ) -> GroupPreset {
-    let wanted: std::collections::BTreeSet<uuid::Uuid> =
-        members.iter().copied().filter_map(driver_id).collect();
-    let nodes: Vec<EffectInstance> = graph
-        .nodes
+    use crate::graph::{InputRef, NodeRef, OutputRef};
+    let wanted: std::collections::BTreeSet<NodeRef> = members
         .iter()
-        .filter(|n| wanted.contains(&n.id))
-        .cloned()
+        .copied()
+        .filter(|node| matches!(node, NodeRef::Driver(_) | NodeRef::Effect(_)))
         .collect();
+    let taken = |from: &[EffectInstance], as_ref: fn(uuid::Uuid) -> NodeRef| {
+        from.iter()
+            .filter(|n| wanted.contains(&as_ref(n.id)))
+            .cloned()
+            .collect::<Vec<EffectInstance>>()
+    };
+    let nodes = taken(&graph.nodes, NodeRef::Driver);
+    let effects = taken(stack, NodeRef::Effect);
 
-    let at = |id: uuid::Uuid| {
+    let at = |node: NodeRef| {
         graph
             .layout
             .iter()
-            .find(|(node, _)| driver_id(*node) == Some(id))
+            .find(|(placed, _)| *placed == node)
             .map_or([0.0, 0.0], |(_, xy)| *xy)
     };
-    let places: Vec<[f64; 2]> = nodes.iter().map(|n| at(n.id)).collect();
+    let places: Vec<[f64; 2]> = nodes.iter().map(|n| at(NodeRef::Driver(n.id))).collect();
+    let effect_places: Vec<[f64; 2]> = effects.iter().map(|n| at(NodeRef::Effect(n.id))).collect();
     // The set's top-left corner. An empty set has no corner and no layout, so
     // the fold's identity never reaches the subtraction below.
-    let origin = places.iter().fold([f64::MAX, f64::MAX], |acc, p| {
-        [acc[0].min(p[0]), acc[1].min(p[1])]
-    });
-    let layout: Vec<[f64; 2]> = places
+    let origin = places
         .iter()
-        .map(|p| [p[0] - origin[0], p[1] - origin[1]])
-        .collect();
+        .chain(&effect_places)
+        .fold([f64::MAX, f64::MAX], |acc, p| {
+            [acc[0].min(p[0]), acc[1].min(p[1])]
+        });
+    let from_corner = |places: &[[f64; 2]]| -> Vec<[f64; 2]> {
+        places
+            .iter()
+            .map(|p| [p[0] - origin[0], p[1] - origin[1]])
+            .collect()
+    };
 
-    let inside =
-        |node: crate::graph::NodeRef| driver_id(node).is_some_and(|id| wanted.contains(&id));
     let edges: Vec<crate::graph::Edge> = graph
         .edges
         .iter()
         .filter(|e| {
             let from = match &e.from {
-                crate::graph::OutputRef::Driver { node, .. } => wanted.contains(node),
-                _ => false,
+                OutputRef::Driver { node, .. } => wanted.contains(&NodeRef::Driver(*node)),
+                OutputRef::EffectData { effect, .. } => wanted.contains(&NodeRef::Effect(*effect)),
+                OutputRef::SourceMatte => false,
             };
             let to = match &e.to {
-                crate::graph::InputRef::Param { node, .. } => inside(*node),
-                crate::graph::InputRef::Matte { .. } => false,
+                InputRef::Param { node, .. } => wanted.contains(node),
+                InputRef::Matte { .. } => false,
             };
             from && to
         })
@@ -336,9 +349,11 @@ pub fn group_from_graph(
         format: GROUP_FORMAT,
         name: name.to_owned(),
         colour,
+        layout: from_corner(&places),
+        effect_layout: from_corner(&effect_places),
         nodes,
         edges,
-        layout,
+        effects,
     }
 }
 
@@ -353,10 +368,12 @@ pub fn group_from_json(text: &str) -> Result<GroupPreset, String> {
     serde_json::from_str::<GroupPreset>(text).map_err(|e| e.to_string())
 }
 
-/// Everything one insert adds to a graph — handed over in a piece so the caller
-/// extends four lists and commits once.
+/// Everything one insert adds to a layer, handed over in a piece so the caller
+/// extends its lists and commits once.
 #[derive(Debug, Clone)]
 pub struct InsertedGroup {
+    /// What joins the end of the layer's effect stack.
+    pub effects: Vec<EffectInstance>,
     pub nodes: Vec<EffectInstance>,
     pub edges: Vec<crate::graph::Edge>,
     pub layout: Vec<(crate::graph::NodeRef, [f64; 2])>,
@@ -372,25 +389,23 @@ pub struct InsertedGroup {
 /// preset, and for the same reason.
 #[must_use]
 pub fn group_instantiated(preset: &GroupPreset, at: [f64; 2]) -> InsertedGroup {
+    use crate::graph::{InputRef, NodeRef, OutputRef};
     let mut fresh = std::collections::BTreeMap::new();
-    let nodes: Vec<EffectInstance> = preset
-        .nodes
-        .iter()
-        .cloned()
-        .map(|mut n| {
-            let id = uuid::Uuid::now_v7();
-            fresh.insert(n.id, id);
-            n.id = id;
-            n
-        })
-        .collect();
-
-    let renamed = |node: crate::graph::NodeRef| match node {
-        crate::graph::NodeRef::Driver(id) => {
-            fresh.get(&id).copied().map(crate::graph::NodeRef::Driver)
-        }
-        other => Some(other),
+    let mut minted = |saved: &[EffectInstance]| -> Vec<EffectInstance> {
+        saved
+            .iter()
+            .cloned()
+            .map(|mut n| {
+                let id = uuid::Uuid::now_v7();
+                fresh.insert(n.id, id);
+                n.id = id;
+                n
+            })
+            .collect()
     };
+    let nodes = minted(&preset.nodes);
+    let effects = minted(&preset.effects);
+
     let edges: Vec<crate::graph::Edge> = preset
         .edges
         .iter()
@@ -399,44 +414,51 @@ pub fn group_instantiated(preset: &GroupPreset, at: [f64; 2]) -> InsertedGroup {
             // than landing dangling: the graph would refuse the whole insert
             // for it, and one bad wire must not cost the rig.
             let from = match &e.from {
-                crate::graph::OutputRef::Driver { node, port } => crate::graph::OutputRef::Driver {
+                OutputRef::Driver { node, port } => OutputRef::Driver {
                     node: *fresh.get(node)?,
                     port: port.clone(),
                 },
-                _ => return None,
-            };
-            let to = match &e.to {
-                crate::graph::InputRef::Param { node, port } => crate::graph::InputRef::Param {
-                    node: renamed(*node)?,
+                OutputRef::EffectData { effect, port } => OutputRef::EffectData {
+                    effect: *fresh.get(effect)?,
                     port: port.clone(),
                 },
-                crate::graph::InputRef::Matte { .. } => return None,
+                OutputRef::SourceMatte => return None,
+            };
+            let to = match &e.to {
+                InputRef::Param { node, port } => InputRef::Param {
+                    node: match node {
+                        NodeRef::Driver(id) => NodeRef::Driver(*fresh.get(id)?),
+                        NodeRef::Effect(id) => NodeRef::Effect(*fresh.get(id)?),
+                        NodeRef::Source | NodeRef::Out => return None,
+                    },
+                    port: port.clone(),
+                },
+                InputRef::Matte { .. } => return None,
             };
             Some(crate::graph::Edge { from, to })
         })
         .collect();
 
-    let layout: Vec<(crate::graph::NodeRef, [f64; 2])> = nodes
-        .iter()
-        .enumerate()
-        .map(|(i, n)| {
-            let rel = preset.layout.get(i).copied().unwrap_or([0.0, 0.0]);
-            (
-                crate::graph::NodeRef::Driver(n.id),
-                [at[0] + rel[0], at[1] + rel[1]],
-            )
-        })
-        .collect();
+    let placed =
+        |made: &[EffectInstance], saved: &[[f64; 2]], as_ref: fn(uuid::Uuid) -> NodeRef| {
+            made.iter()
+                .enumerate()
+                .map(|(i, n)| {
+                    let rel = saved.get(i).copied().unwrap_or([0.0, 0.0]);
+                    (as_ref(n.id), [at[0] + rel[0], at[1] + rel[1]])
+                })
+                .collect::<Vec<(NodeRef, [f64; 2])>>()
+        };
+    let mut layout = placed(&nodes, &preset.layout, NodeRef::Driver);
+    layout.extend(placed(&effects, &preset.effect_layout, NodeRef::Effect));
 
     let group = crate::graph::NodeGroup {
         name: preset.name.clone(),
         colour: preset.colour,
-        members: nodes
-            .iter()
-            .map(|n| crate::graph::NodeRef::Driver(n.id))
-            .collect(),
+        members: layout.iter().map(|(node, _)| *node).collect(),
     };
     InsertedGroup {
+        effects,
         nodes,
         edges,
         layout,
@@ -719,14 +741,20 @@ mod tests {
 
     // --- Node groups ------------------------------------------------------
 
-    /// Two drivers wired to each other, a third outside them, and one wire
-    /// leaving the pair — the shape every group claim is made against.
-    fn wired_graph() -> (crate::graph::LayerGraph, Vec<crate::graph::NodeRef>) {
+    /// Two drivers wired to each other and on into a blur in the stack, a
+    /// third outside them, and one wire leaving the set: the shape every
+    /// group claim is made against.
+    fn wired_graph() -> (
+        crate::graph::LayerGraph,
+        Vec<EffectInstance>,
+        Vec<crate::graph::NodeRef>,
+    ) {
         use crate::graph::{Edge, InputRef, LayerGraph, NodeRef, OutputRef};
         let wiggle = crate::fx::instantiate("wiggle").unwrap();
         let smooth = crate::fx::instantiate("smooth").unwrap();
         let outside = crate::fx::instantiate("wiggle").unwrap();
-        let (a, b, c) = (wiggle.id, smooth.id, outside.id);
+        let blur = crate::fx::instantiate("blur").unwrap();
+        let (a, b, c, d) = (wiggle.id, smooth.id, outside.id, blur.id);
         let graph = LayerGraph {
             out_unwired: false,
             nodes: vec![wiggle, smooth, outside],
@@ -742,7 +770,7 @@ mod tests {
                         port: "value".into(),
                     },
                 },
-                // Out of the pair, into the box left behind.
+                // Out of the set, into the box left behind.
                 Edge {
                     from: OutputRef::Driver {
                         node: b,
@@ -753,37 +781,61 @@ mod tests {
                         port: "amount".into(),
                     },
                 },
+                // Inside the set, into the stack's blur.
+                Edge {
+                    from: OutputRef::Driver {
+                        node: b,
+                        port: "value".into(),
+                    },
+                    to: InputRef::Param {
+                        node: NodeRef::Effect(d),
+                        port: "radius".into(),
+                    },
+                },
             ],
             layout: vec![
                 (NodeRef::Driver(a), [100.0, 60.0]),
                 (NodeRef::Driver(b), [260.0, 90.0]),
                 (NodeRef::Driver(c), [500.0, 300.0]),
+                (NodeRef::Effect(d), [420.0, 60.0]),
             ],
             exposed: Vec::new(),
             groups: Vec::new(),
         };
-        (graph, vec![NodeRef::Driver(a), NodeRef::Driver(b)])
+        let members = vec![NodeRef::Driver(a), NodeRef::Driver(b), NodeRef::Effect(d)];
+        (graph, vec![blur], members)
     }
 
     #[test]
     fn inserting_a_group_mints_fresh_ids_and_re_points_the_wires() {
-        let (graph, members) = wired_graph();
+        let (graph, stack, members) = wired_graph();
         let preset = group_from_json(
-            &group_to_json(&group_from_graph(&graph, "Audio rig", 4, &members)).unwrap(),
+            &group_to_json(&group_from_graph(&graph, &stack, "Audio rig", 4, &members)).unwrap(),
         )
         .unwrap();
 
         let added = group_instantiated(&preset, [400.0, 200.0]);
         let (nodes, edges, layout, group) = (added.nodes, added.edges, added.layout, added.group);
         assert_eq!(nodes.len(), 2);
+        // The blur came too, as a fresh effect for the stack, still driven.
+        assert_eq!(added.effects.len(), 1);
+        assert_ne!(added.effects[0].id, stack[0].id);
+        assert_eq!(
+            edges[1].to,
+            crate::graph::InputRef::Param {
+                node: crate::graph::NodeRef::Effect(added.effects[0].id),
+                port: "radius".into(),
+            }
+        );
+        assert_eq!(layout[2].1, [720.0, 200.0]);
         assert!(
             nodes
                 .iter()
                 .all(|n| !preset.nodes.iter().any(|s| s.id == n.id)),
             "every instance id is fresh, so inserting twice never shares one"
         );
-        // The wire came back pointing at the *new* boxes, not the saved ones.
-        assert_eq!(edges.len(), 1);
+        // The wires came back pointing at the *new* boxes, not the saved ones.
+        assert_eq!(edges.len(), 2);
         let crate::graph::OutputRef::Driver { node: from, .. } = edges[0].from else {
             panic!("a driver wire");
         };
@@ -800,7 +852,7 @@ mod tests {
         assert_eq!(layout[0].1, [400.0, 200.0]);
         assert_eq!(layout[1].1, [560.0, 230.0]);
         assert_eq!(group.name, "Audio rig");
-        assert_eq!(group.members.len(), 2);
+        assert_eq!(group.members.len(), 3);
     }
 
     // -- 5.8, a node graph's groups -------------------------------------------

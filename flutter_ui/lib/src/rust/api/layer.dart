@@ -3128,6 +3128,9 @@ class LayerReference {
   /// makes two boxes share an instance. Unlike `new_driver` this is not
   /// staged: dropping a saved rig *is* the whole gesture, there being nothing
   /// left to decide once the spot is chosen.
+  ///
+  /// The effects a group carries join the end of this layer's stack, as an
+  /// effect preset's do.
   void insertNodeGroup(
           {required String text, required double x, required double y}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceInsertNodeGroup(
@@ -3424,9 +3427,10 @@ class LayerReference {
   ///
   /// The engine hands back the text and Dart chooses where it goes, exactly
   /// as an effect preset does: the engine never opens a file dialogue. What
-  /// is saved is the driver boxes, the wires with both ends inside the set,
-  /// and where they sat relative to one another; a wire leaving the set is
-  /// not saved, because it names something the group does not carry.
+  /// is saved is the drivers and the stack's effects among `nodes`, the
+  /// wires with both ends inside the set, and where they sat relative to one
+  /// another; a wire leaving the set is not saved, because it names
+  /// something the group does not carry.
   String saveNodeGroup(
           {required String name,
           required int colour,
