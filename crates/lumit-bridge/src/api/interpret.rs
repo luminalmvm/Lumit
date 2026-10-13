@@ -356,6 +356,9 @@ impl FootageReference {
             let src: Option<()> = None;
             (f.clone(), src)
         };
+        // With no decoder there is nothing to read off the file, and these
+        // stand as they are.
+        #[cfg_attr(not(feature = "media"), allow(unused_mut))]
         let mut file = BridgeFootageFacts {
             has_picture: false,
             is_still: false,
