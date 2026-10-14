@@ -115,6 +115,12 @@ static void my_application_activate(GApplication* application) {
   gtk_window_set_title(window, "lumit_flutter");
 
   gtk_window_set_default_size(window, 1280, 720);
+  // The smallest it can be made, as on Windows (windows/runner/
+  // win32_window.cpp): room for the default workspace's narrowest panels.
+  GdkGeometry smallest = {};
+  smallest.min_width = 840;
+  smallest.min_height = 560;
+  gtk_window_set_geometry_hints(window, nullptr, &smallest, GDK_HINT_MIN_SIZE);
 
   // Lumit opens maximised, as it does on Windows (windows/runner/
   // win32_window.cpp) and macOS — but the asking happens in `first_frame_cb`,

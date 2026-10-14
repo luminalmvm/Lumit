@@ -1220,6 +1220,18 @@ class CompositionReference {
         that: this,
       );
 
+  /// **Duplicate**: a copy of this comp under a free name ("Scene copy"),
+  /// filed beside it, keeping everything it holds: layers, node graph,
+  /// positions, markers and work area.
+  ///
+  /// The nested comps are shared with the original unless `separate` asks
+  /// for copies, which go all the way down, one copy per comp however often
+  /// it is used. Every layer, effect and box in a copy gets a fresh id, so
+  /// nothing is mistaken for its original. One undo step.
+  CompositionReference duplicate({required bool separate}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceDuplicate(
+          that: this, separate: separate);
+
   /// How many frames the comp is long at its own rate — the Timeline's axis,
   /// and one past the last frame the transport can reach.
   ///
@@ -1495,6 +1507,13 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceGroupLayers(
           that: this, layerIds: layerIds, name: name);
 
+  /// Whether this comp nests another composition, which is when Duplicate
+  /// asks whether the copy shares it or gets its own.
+  bool hasNestedComps() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceHasNestedComps(
+        that: this,
+      );
+
   /// Insert a saved graph group at canvas point `(x, y)`: **one commit**, so
   /// one undo step however many boxes and wires it carries.
   ///
@@ -1668,10 +1687,11 @@ class CompositionReference {
   /// into the Compositions folder however it was made, and the whole
   /// move is one [`Op::Batch`], so one undo step puts the layers back.
   ///
-  /// A packed layer whose parent or matte stayed behind keeps the id it
-  /// pointed at, and the engine reads a link it cannot resolve as no link —
-  /// the parent chain stops there (`layer_parent_chain`). Nothing dangles
-  /// into a crash, and clearing them here would only spell the same result.
+  /// A parent or matte link that would cross the new comp's edge is kept by
+  /// a hidden copy of the layer at the far end, made on the near side with
+  /// its parent chain ([`crate::edits::link_copies`]), so the picture does
+  /// not change. [`Self::precompose_splits_links`] says beforehand whether
+  /// there will be any.
   /// `group` names the layer group being pre-composed, when the command came
   /// from a group header's *Pre-compose group*: the header's
   /// effect stack moves onto the new Precomp layer — where it means exactly
@@ -1736,6 +1756,16 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferencePrecomposeSoundMix(
               that: this, name: name);
+
+  /// Whether [`Self::precompose`] with these arguments would have to copy
+  /// layers to keep a parent or matte link: a packed layer leans on one left
+  /// outside, or one left outside leans on a packed layer. The dialogue asks
+  /// before it goes ahead.
+  bool precomposeSplitsLinks(
+          {required List<UuidValue> layerIds, required bool leaveAttributes}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferencePrecomposeSplitsLinks(
+              that: this, layerIds: layerIds, leaveAttributes: leaveAttributes);
 
   /// Add this composition to the export queue, and start the queue when
   /// `start` is set.

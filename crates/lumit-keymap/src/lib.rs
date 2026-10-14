@@ -227,6 +227,7 @@ impl ActionId {
             "timeline.zoom.in" => "Zoom in",
             "timeline.zoom.out" => "Zoom out",
             "timeline.zoom.fit" => "Zoom to fit",
+            "timeline.fit.keys" => "Fit the keyframes to the panel",
             "layer.rename" => "Rename the layer",
             "effect.rename" => "Rename the selected effect",
             "layer.toggle.visible" => "Show or hide the layer",
@@ -1028,6 +1029,9 @@ pub fn default_keymap() -> Keymap {
         row(Timeline, "=", "timeline.zoom.in"),
         row(Timeline, "-", "timeline.zoom.out"),
         row(Timeline, "\\", "timeline.zoom.fit"),
+        // Layers mode's own F, beside the graph's: the keys of the selected
+        // layers, or of every layer, across the lanes.
+        row(Timeline, "F", "timeline.fit.keys"),
         row(Timeline, "Enter", "layer.rename"),
         // Enter renames the selected thing wherever one is selected:
         // the item in the Project panel, the effect in Effect controls — the

@@ -100,6 +100,7 @@ import '../widgets/zoom_anchored_scroll.dart';
 import 'waveform_frb.dart';
 import 'timeline_group_row_frb.dart';
 import 'transform_rows_frb.dart';
+import 'viewer_tool_cursor.dart' show handPanLayer;
 
 // The parts this file was split into (the split rule): every name they
 // hold was reachable through this file before the split, and still is.
@@ -2480,6 +2481,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           child: Text(l10n.keyMenuEase),
         ),
         MenuRow(
+          key: const ValueKey('tl-key-menu-copy-ease'),
+          onPressed: () {
+            close(null);
+            _copyEase();
+          },
+          child: Text(l10n.keyMenuCopyEase),
+        ),
+        if (easeClipboard.isNotEmpty)
+          MenuRow(
+            key: const ValueKey('tl-key-menu-paste-ease'),
+            onPressed: () {
+              close(null);
+              _pasteEase();
+            },
+            child: Text(l10n.keyMenuPasteEase),
+          ),
+        MenuRow(
           key: const ValueKey('tl-key-menu-delete'),
           onPressed: () {
             close(null);
@@ -2550,7 +2568,31 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       count: _selectedKeyCount,
       onOpenGraph: () => _setMode(TimelineMode.graph),
       onApply: _applyEaseRequest,
+      onCopyEase: _copyEase,
+      onPasteEase: _pasteEase,
     );
+  }
+
+  /// Copy ease: the easing of the selected keys, for Paste ease.
+  void _copyEase() {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final channels = _selectionChannels(ui);
+    copySelectedEase(
+        channels: channels, selectedKeys: _actionKeySelection(channels));
+  }
+
+  /// Paste ease onto the selected keys, as one undo step.
+  void _pasteEase() {
+    if (!mounted) return;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final channels = _selectionChannels(ui);
+    if (pasteEaseOnSelection(
+      project: _project,
+      channels: channels,
+      selectedKeys: _actionKeySelection(channels),
+    )) {
+      ui.model.refresh();
+    }
   }
 
   /// One press of the popover's Apply: the shape onto every span the selection
@@ -2879,6 +2921,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
         _setZoom((was ?? 1).clamp(1.0, _maxZoom));
       }
       return true;
+    }
+    if (action == 'timeline.fit.keys') {
+      return _fitKeys(ui);
     }
     if (action == 'graph.ease' ||
         action == 'graph.ease.in' ||
@@ -3402,6 +3447,33 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     } else {
       _scrollFrameToLeftEdge(start);
     }
+  }
+
+  /// Layers mode's F: the lanes span the keys of the selected layers, or of
+  /// every layer when none is selected, with a little room either side.
+  bool _fitKeys(LumitUiState ui) {
+    final ids = ui.selectedLayerIds;
+    double? first, last;
+    for (final entry in ui.model.layers) {
+      if (ids.isNotEmpty && !ids.contains(entry.layer.internallayerId)) {
+        continue;
+      }
+      for (final key in layerKeys(
+        entry: entry,
+        flowParams: entry.info.flow ? entry.layer.getFlowParams() : null,
+        volumeDb: entry.info.volumeDb,
+      )) {
+        final frame = keyFrame(key, ui.model.fps);
+        first = min(first ?? frame, frame);
+        last = max(last ?? frame, frame);
+      }
+    }
+    if (first == null || last == null) return false;
+    final pad = max(2.0, (last - first) * 0.05);
+    _zoomBeforeFit = null;
+    _navigateTo(max(0.0, first - pad), last - first + pad * 2, pan: false);
+    _zoomAnchorHeld = false;
+    return true;
   }
 
   /// The graph's framing buttons, beside the zoom they belong with: Auto fit,
@@ -4674,7 +4746,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: ClipRRect(
+                child: Stack(
+                fit: StackFit.passthrough,
+                children: [
+                ClipRRect(
                   // The same clip as the layer view's, so switching views
                   // updates one scroll view in place rather than mounting a
                   // second one on the same controller.
@@ -4812,6 +4887,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ),
                 ),
                 ),
+                // The Hand tool pans the curves, in the same place as the
+                // lanes' so the scroll view below stays the one it was.
+                handPanLayer(ui.tools, t,
+                    (d) => _graphPane.currentState?.panBy(d)),
+                ],
+                ),
               ),
               // The pane frames itself vertically
               // (or the wheel does); the gutter
@@ -4891,7 +4972,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: ClipRRect(
+                child: Stack(
+                fit: StackFit.passthrough,
+                children: [
+                ClipRRect(
                   // Lantern's lane area is a sub-card with the section's
                   // corners; the other shapes clip nothing at all, so what a
                   // graph draws past its box still shows.
@@ -4966,6 +5050,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     ),
                   ),
                 ),
+                ),
+                // The Hand tool pans the lanes, over everything in them.
+                handPanLayer(ui.tools, t, _panLanes),
+                ],
                 ),
               ),
               // The lanes' thumb, pinned to the

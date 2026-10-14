@@ -44,6 +44,7 @@ import 'layer_fold_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'timeline_snap.dart';
 import 'graph_channels.dart';
+import 'graph_clipboard.dart';
 import 'graph_edits.dart';
 import 'graph_key_fields.dart';
 import 'graph_painters.dart';
@@ -640,6 +641,19 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   /// Delete the selected keys — the Timeline's Delete shortcut.
   void deleteSelectedKeys() => _deleteSelection();
+
+  /// The Hand tool's drag: time moves with it, and the values do too once
+  /// auto-fit is off, as they do under the wheel.
+  void panBy(Offset delta) {
+    final c = widget.hScroll;
+    if (c != null && c.hasClients) {
+      c.jumpTo((c.offset - delta.dx).clamp(0.0, c.position.maxScrollExtent));
+    }
+    if (widget.autoFit || _paneSize.height <= 0) return;
+    final (lo, hi) = _manual[widget.lens] ??= _lastRange;
+    final shift = delta.dy / _paneSize.height * (hi - lo);
+    setState(() => _manual[widget.lens] = (lo + shift, hi + shift));
+  }
 
   List<List<BridgeKeyframe>> get _channelKeys =>
       [for (final c in widget.channels) c.keys];
@@ -2268,6 +2282,16 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     ? l10n.menuSetSpeed
                     : l10n.menuKeyframeSpeed)),
             MenuRow(
+                onPressed: () => close('copyEase'),
+                child: Text(l10n.keyMenuCopyEase)),
+            if (easeClipboard.isNotEmpty)
+              MenuRow(
+                  onPressed: () => close('pasteEase'),
+                  child: Text(l10n.keyMenuPasteEase)),
+            MenuRow(
+                onPressed: () => close('join'),
+                child: Text(l10n.keyMenuJoinHandles)),
+            MenuRow(
                 onPressed: () => close('delete'), child: Text(l10n.deleteKey)),
           ],
         ),
@@ -2277,6 +2301,25 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final id = '${channel.id}#$index';
     if (picked == 'delete') {
       _deleteSelection(fallback: id);
+      return;
+    }
+    final keys = widget.selectedKeys.contains(id) ? widget.selectedKeys : {id};
+    if (picked == 'copyEase') {
+      copySelectedEase(channels: widget.channels, selectedKeys: keys);
+      return;
+    }
+    if (!mounted) return;
+    if (picked == 'pasteEase' || picked == 'join') {
+      if (picked == 'join') {
+        joinHandlesOnSelection(channels: widget.channels, selectedKeys: keys);
+      } else {
+        pasteEaseOnSelection(
+          project: Provider.of<LumitState>(context, listen: false).project,
+          channels: widget.channels,
+          selectedKeys: keys,
+        );
+      }
+      widget.onChanged();
       return;
     }
     if (picked == 'speed') {
