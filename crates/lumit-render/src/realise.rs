@@ -2554,7 +2554,20 @@ mod tests {
     /// a submission is where wgpu hands back what a render has finished with,
     /// and the question here is what the render made, not what survived it.
     /// The lease is exclusive, so nothing else is allocating on this device.
+    ///
+    /// A texture dropped before the count can still be handed back during it,
+    /// which only ever makes the count smaller, so the largest of three counts
+    /// is the real one. Seen on CI as one texture short.
     fn made(ctx: &lumit_gpu::GpuContext, f: impl Fn() -> wgpu::Texture) -> (Vec<f32>, u64) {
+        let mut most = (Vec::new(), 0);
+        for _ in 0..3 {
+            let (px, count) = made_once(ctx, &f);
+            most = (px, most.1.max(count));
+        }
+        most
+    }
+
+    fn made_once(ctx: &lumit_gpu::GpuContext, f: &impl Fn() -> wgpu::Texture) -> (Vec<f32>, u64) {
         // Two throwaway renders first, each followed by a command buffer of its
         // own and a wait. A render's dropped textures come back only when a
         // LATER submission finishes, so without something behind them they sit
