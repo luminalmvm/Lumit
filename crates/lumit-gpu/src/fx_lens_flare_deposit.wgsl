@@ -145,9 +145,12 @@ fn add_fixed(idx: u32, v: f32) {
 }
 
 // Widest kernel span, px, a splat deposits at full resolution —
-// past this it moves to a coarser pyramid level. The twin of lumit_core's
-// DEPOSIT_SPAN_PX, pinned by test.
-const DEPOSIT_SPAN_PX: f32 = 48.0;
+// past this it moves to a coarser pyramid level while it stays at least
+// DEPOSIT_THIN_PX across there, and past DEPOSIT_SPAN_MAX_PX whatever its
+// width. The twins of lumit_core's constants, pinned by test.
+const DEPOSIT_SPAN_PX: f32 = 16.0;
+const DEPOSIT_THIN_PX: f32 = 8.0;
+const DEPOSIT_SPAN_MAX_PX: f32 = 48.0;
 
 @compute @workgroup_size(64)
 fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -173,15 +176,21 @@ fn deposit(@builtin(global_invocation_id) gid: vec3<u32>) {
     var ext = 3.0 * (abs(a1) + abs(a2));
 
     // The pyramid level this splat can afford: halve the span until
-    // it fits. Exact halving, so the CPU twin picks the same level for the
-    // same splat. Everything then scales into the level's pixels; the
-    // kernel below is unchanged by the scale — (u, v) solve the same system
+    // it fits, unless that would make it too thin to keep its edge.
+    // Exact halving, in squares, so the CPU twin picks the same level for
+    // the same splat (lumit_core `deposit_level`). Everything then scales
+    // into the level's pixels; the kernel below is unchanged by the scale — (u, v) solve the same system
     // when both sides carry it, and `peak` is a density per level-0 pixel,
     // which the resolve's upsample reads back out at level 0.
     var span = 2.0 * max(ext.x, ext.y);
+    let thin2 = 36.0 * det * det;
+    let long2 = max(dot(a1, a1), dot(a2, a2));
+    var floor2 = DEPOSIT_THIN_PX * DEPOSIT_THIN_PX * 4.0 * long2;
     var level = 0u;
-    while (span > DEPOSIT_SPAN_PX && level + 1u < dims.head.w) {
+    while (level + 1u < dims.head.w
+        && (span > DEPOSIT_SPAN_MAX_PX || (span > DEPOSIT_SPAN_PX && thin2 >= floor2))) {
         span = span * 0.5;
+        floor2 = floor2 * 4.0;
         level = level + 1u;
     }
     let s2l = f32(1u << level);

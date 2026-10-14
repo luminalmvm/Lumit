@@ -128,10 +128,17 @@ const XYZ_TO_LINEAR_709: [[f32; 3]; 3] = [
     [0.055_63, -0.203_977, 1.056_972],
 ];
 
+/// The D65 white in XYZ. The flare's light is an even spread of every
+/// wavelength, and the table above sums that to XYZ (1, 1, 1), which is not
+/// D65. Taken as it is, white light came out 27% too red, so every ghost
+/// drifted towards pink. Scaling X and Z to D65 first makes it neutral.
+const D65_WHITE: [f32; 3] = [0.950_47, 1.0, 1.088_83];
+
 /// Convert one XYZ triple to linear working-space RGB (may go negative for
 /// out-of-gamut spectral colours; callers clamp at the edge they need).
 pub fn xyz_to_linear_rgb(xyz: [f32; 3]) -> [f32; 3] {
     let m = &XYZ_TO_LINEAR_709;
+    let xyz = [xyz[0] * D65_WHITE[0], xyz[1], xyz[2] * D65_WHITE[2]];
     [
         m[0][0] * xyz[0] + m[0][1] * xyz[1] + m[0][2] * xyz[2],
         m[1][0] * xyz[0] + m[1][1] * xyz[1] + m[1][2] * xyz[2],

@@ -445,7 +445,7 @@ pub const MAX_SOURCES: u32 = 16;
 
 /// Detection tile side — must equal `lens_flare::DETECT_TILE` (pinned by
 /// the same test).
-const DETECT_TILE: u32 = 32;
+const DETECT_TILE: u32 = 16;
 
 /// Byte budget for the per-frame trace scratch — rays and splats
 /// together. A **hard** cap, not a hint: where the earlier batch size
@@ -1817,10 +1817,12 @@ impl FxEngine {
                 let tiles_y = mh.div_ceil(DETECT_TILE);
                 let tiles_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("fx-lens-flare-tiles"),
-                    // Ten words per tile: the brightest pixel's
-                    // luma and index, then the gated coverage, colour and
-                    // flux moments that describe the whole lit area of it.
-                    size: u64::from(tiles_x * tiles_y) * 40,
+                    // Twenty words per tile: the brightest pixel's
+                    // luma and index, the gated coverage, colour and flux
+                    // moments that describe the whole lit area of it, the
+                    // patch it joins and that patch's sums, and which of
+                    // its edge pixels are lit.
+                    size: u64::from(tiles_x * tiles_y) * 80,
                     usage: wgpu::BufferUsages::STORAGE,
                     mapped_at_creation: false,
                 });
