@@ -2101,6 +2101,7 @@ fn comp_walk(
                         return GraphDraw {
                             width: comp.width,
                             height: comp.height,
+                            room: doc.graph_room.frames(),
                             steps: Vec::new(),
                             output: None,
                         };
@@ -2108,6 +2109,7 @@ fn comp_walk(
                     let mut plan = GraphDraw {
                         width: inner_comp.width,
                         height: inner_comp.height,
+                        room: doc.graph_room.frames(),
                         steps: Vec::new(),
                         output: None,
                     };
@@ -4145,6 +4147,7 @@ fn graph_comp_draw(
     let mut plan = GraphDraw {
         width: comp.width,
         height: comp.height,
+        room: lower.doc.graph_room.frames(),
         steps: Vec::new(),
         output: None,
     };
@@ -6080,6 +6083,7 @@ mod render_below_at_tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         };
         // A softbox in front of the comp, big enough to rake across it.
         let mut light = text_layer(160.0);
@@ -6190,6 +6194,7 @@ mod render_below_at_tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         };
         let comp = Composition {
             graph: None,
@@ -6394,6 +6399,7 @@ mod render_below_at_tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         };
         let comp = posterize_comp();
         let doc = Document::new();
@@ -6539,6 +6545,7 @@ mod render_below_at_tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         };
         let doc = Document::new();
         let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
@@ -6674,6 +6681,7 @@ mod render_below_at_tests {
                 colour_config: None,
                 flow: Some(&self.flow),
                 late_clones: None,
+                graph_reach: None,
             }
         }
 

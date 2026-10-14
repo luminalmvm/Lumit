@@ -523,6 +523,13 @@ class ProjectReference {
         that: this,
       );
 
+  /// How far past the frame a node graph box keeps its picture, in frames
+  /// past each edge: 1, 2, or 0 for as far as the widest texture allows.
+  int graphRoom() =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceGraphRoom(
+        that: this,
+      );
+
   /// Whether there is anything to undo or redo, for greying the menu items.
   BridgeHistory history() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceHistory(
@@ -883,6 +890,11 @@ class ProjectReference {
       BridgeLib.instance.api
           .crateApiProjectProjectReferenceSetColourWorkingSpace(
               that: this, fromConfig: fromConfig);
+
+  /// Set [`Self::graph_room`]. Anything but 1, 2 or 0 reads as 1. An
+  /// ordinary op, so it is undoable and saved in the `.lum`.
+  void setGraphRoom({required int frames}) => BridgeLib.instance.api
+      .crateApiProjectProjectReferenceSetGraphRoom(that: this, frames: frames);
 
   /// Replace the colour shelf whole — which is how a colour is kept and how
   /// one is forgotten (`Op::SetProjectSwatches`).

@@ -79,6 +79,7 @@ pub fn footprint(before: &Document, after: &Document) -> BTreeSet<Key> {
         auto_pack,
         anti_aliasing,
         colour_depth,
+        graph_room,
         colour,
         swatches,
         extra

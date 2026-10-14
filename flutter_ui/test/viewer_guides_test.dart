@@ -147,7 +147,7 @@ void main() {
   test('the session carries the overlays and the guides', () {
     const session = SavedSession(
       activeComp: 'a',
-      viewerOverlays: {'a': (grid: true, safeAreas: false, rulers: true)},
+      viewerOverlays: {'a': (grid: true, safeAreas: false, rulers: true, reach: false)},
       guides: {
         'a': [(at: 960, vertical: true), (at: 540, vertical: false)],
       },
@@ -155,7 +155,7 @@ void main() {
     final back =
         SavedSession.fromJson(jsonDecode(jsonEncode(session.toJson())) as Map<String, dynamic>);
     expect(back.viewerOverlays['a'],
-        (grid: true, safeAreas: false, rulers: true));
+        (grid: true, safeAreas: false, rulers: true, reach: false));
     expect(back.guides['a'], session.guides['a']);
     // Equal sessions must compare equal, or the session file would be
     // rewritten on every frame (the reason the regions are keyed as text).

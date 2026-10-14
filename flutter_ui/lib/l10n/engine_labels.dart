@@ -1488,6 +1488,7 @@ Map<String, String> get _built => {
       "Set cache location": l10n.histSetCacheLocation,
       "Set anti-aliasing": l10n.histSetAntiAliasing,
       "Set colour depth": l10n.histSetColourDepth,
+      "Set node graph overscan": l10n.histSetGraphRoom,
       "Edit swatches": l10n.histEditSwatches,
       "Set colour management": l10n.histSetColourManagement,
       "Set footage colour space": l10n.histSetFootageColourSpace,

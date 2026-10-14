@@ -47,16 +47,22 @@ typedef CompView = ({int frame, double zoom, double scroll, double scrollY});
 const CompView newCompView = (frame: 0, zoom: 1.0, scroll: 0.0, scrollY: 0.0);
 
 /// Which of the Viewer's marks are drawn over one composition: the proportional
-/// grid, the title/action safe rectangles, and the rulers along the picture's
-/// top and left edges.
+/// grid, the title/action safe rectangles, the rulers along the picture's
+/// top and left edges, and the outline of how far a node graph's picture
+/// reaches past the frame.
 ///
-/// A record for [ViewerLook]'s reason — three switches with no behaviour,
+/// A record for [ViewerLook]'s reason — switches with no behaviour,
 /// compared by value, which is what [SavedSession]'s equality needs.
-typedef ViewerOverlays = ({bool grid, bool safeAreas, bool rulers});
+typedef ViewerOverlays = ({bool grid, bool safeAreas, bool rulers, bool reach});
 
 /// Nothing drawn: what a composition nobody has asked anything of shows.
 const ViewerOverlays noViewerOverlays =
-    (grid: false, safeAreas: false, rulers: false);
+    (grid: false, safeAreas: false, rulers: false, reach: false);
+
+/// How far a node graph composition's picture reaches past its frame, in
+/// comp pixels from the frame's top-left corner, and whether it got as far as
+/// a box may keep.
+typedef ViewerReach = ({Rect rect, bool atLimit});
 
 /// One guide dragged out of a ruler: where it sits in **comp pixels**, and
 /// which way it runs.
@@ -195,6 +201,7 @@ class SavedSession {
               'grid': e.value.grid,
               'safe_areas': e.value.safeAreas,
               'rulers': e.value.rulers,
+              'reach': e.value.reach,
             },
         },
         'guides': {
@@ -406,6 +413,7 @@ Map<String, ViewerOverlays> _overlaysFromJson(Object? raw) {
       grid: v['grid'] == true,
       safeAreas: v['safe_areas'] == true,
       rulers: v['rulers'] == true,
+      reach: v['reach'] == true,
     );
     if (overlays != noViewerOverlays) out[k] = overlays;
   }

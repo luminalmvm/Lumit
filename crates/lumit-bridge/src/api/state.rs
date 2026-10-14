@@ -202,6 +202,14 @@ pub struct BridgeSharedFrameInfoLinux {
     /// texture, so a frame that did not say who it was for could only be shown
     /// by the one that asked last.
     pub view: u32,
+    /// How far a node graph composition's picture reaches past the frame,
+    /// `[left, top, right, bottom]` in the composition's pixels from the
+    /// frame's top-left corner, for the Viewer's outline. `None` when it stays
+    /// inside the frame.
+    pub reach: Option<[f64; 4]>,
+    /// Whether that reaches as far as a box may keep, so some of the picture
+    /// was cut there.
+    pub reach_at_limit: bool,
 }
 
 /// The Windows zero-copy Viewer frame: an NT handle to a shared D3D12
@@ -234,6 +242,14 @@ pub struct BridgeSharedFrameInfo {
     /// texture, so a frame that did not say who it was for could only be shown
     /// by the one that asked last.
     pub view: u32,
+    /// How far a node graph composition's picture reaches past the frame,
+    /// `[left, top, right, bottom]` in the composition's pixels from the
+    /// frame's top-left corner, for the Viewer's outline. `None` when it stays
+    /// inside the frame.
+    pub reach: Option<[f64; 4]>,
+    /// Whether that reaches as far as a box may keep, so some of the picture
+    /// was cut there.
+    pub reach_at_limit: bool,
 }
 
 /// A small still picture as plain pixels — the thumbnail payload
@@ -674,6 +690,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // reported rather than fall through silently.
         | Op::SetAntiAliasing { .. }
         | Op::SetColourDepth { .. }
+        | Op::SetGraphRoom { .. }
         // Which OCIO config the project's colour names come from, and what one
         // footage item arrives as. Both rename frames — the config
         // every frame of every comp, the assignment every frame reading that
