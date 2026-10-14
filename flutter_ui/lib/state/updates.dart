@@ -46,15 +46,14 @@ export 'download.dart' show AssetDownloader;
 /// The repository releases are published from (the website reads the same one).
 const String updatesRepository = 'luminalmvm/lumit';
 
-/// Where the newest release is described.
-Uri get latestReleaseUrl => Uri.parse(
-    'https://api.github.com/repos/$updatesRepository/releases/latest');
-
-/// The recent releases, pre-releases among them. What the nightly channel
-/// reads: GitHub has no "latest nightly" to ask for, so the newest is picked
-/// out of this list.
+/// The recent releases, pre-releases among them. Both channels read it: the
+/// newest is picked out of it, and every release skipped on the way there
+/// lists its changes under the update button.
+// ponytail: one page of 100. A stable build only misses its update if a
+// hundred nightlies go out between two releases; page through if that ever
+// happens.
 Uri get recentReleasesUrl => Uri.parse(
-    'https://api.github.com/repos/$updatesRepository/releases?per_page=30');
+    'https://api.github.com/repos/$updatesRepository/releases?per_page=100');
 
 /// Whether [version] is a nightly build — `0.6.1-nightly.20261012.57`, cut
 /// from `main` by the release pipeline's schedule and published as a
@@ -589,8 +588,8 @@ class UpdateService extends ChangeNotifier {
   UpdateRelease? get release => _release;
 
   /// What the waiting update brings, a build at a time and newest first: the
-  /// one on offer and every nightly skipped on the way to it. Only those with
-  /// a change of their own to list, and empty off the nightly channel.
+  /// one on offer and every release on its channel skipped on the way to it.
+  /// Only those with a change of their own to list.
   List<UpdateBuild> get builds => _builds;
 
   /// What the waiting release says to read first, less what the build that is
@@ -657,9 +656,10 @@ class UpdateService extends ChangeNotifier {
         return;
       }
       final nightly = followsNightly;
-      final json = await _fetch(nightly ? recentReleasesUrl : latestReleaseUrl);
-      // The newest release this machine can install: the one `latest` named,
-      // or on the nightly channel the best of the recent ones.
+      final json = await _fetch(recentReleasesUrl);
+      // The newest release this machine can install, out of the recent ones.
+      // Off the nightly channel [UpdateRelease.parse] refuses every
+      // pre-release, so a stable build only ever sees stable releases.
       UpdateRelease? found;
       final seen = <UpdateRelease>[];
       _said = const [];
@@ -673,7 +673,7 @@ class UpdateService extends ChangeNotifier {
           nightly: nightly,
         );
         if (release?.version == current) _said = release!.notice;
-        if (release != null && nightly) seen.add(release);
+        if (release != null) seen.add(release);
         if (release != null &&
             (found == null ||
                 compareVersions(release.version, found.version) > 0)) {

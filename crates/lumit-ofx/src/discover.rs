@@ -292,6 +292,15 @@ fn scan_through_broker(
             return;
         }
     };
+    for refused in broker.refused() {
+        outcome.skipped.push(skip_line(binary, refused));
+    }
+    if descriptors.is_empty() {
+        outcome
+            .skipped
+            .push(skip_line(binary, "it holds no effect this host can drive"));
+        return;
+    }
     let shared = Arc::new(SharedBroker::new(broker));
     for (index, descriptor) in descriptors.iter().enumerate() {
         let plugin = u32::try_from(index).unwrap_or(u32::MAX);

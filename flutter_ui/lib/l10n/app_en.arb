@@ -5566,6 +5566,10 @@
   "@keyZoomToFit": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyFitTheKeyframesToThePanel": "Fit the keyframes to the panel",
+  "@keyFitTheKeyframesToThePanel": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. F in the Timeline's Layers mode: zoom time to span the keyframes of the selected layers, or of all layers."
+  },
   "keyZoomTool": "Zoom tool",
   "@keyZoomTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6030,6 +6034,26 @@
   "menuDuplicate": "Duplicate",
   "@menuDuplicate": {
     "description": "Menu item."
+  },
+  "menuDuplicateComposition": "Duplicate composition",
+  "@menuDuplicateComposition": {
+    "description": "Composition menu item: make a copy of the open composition, under a free name beside it in the Project panel."
+  },
+  "duplicateNestedTitle": "Nested compositions",
+  "@duplicateNestedTitle": {
+    "description": "Title of the question asked when a composition being duplicated has other compositions inside it."
+  },
+  "duplicateNestedQuestion": "The copy can share the compositions inside this one, so an edit shows in both, or get copies of its own.",
+  "@duplicateNestedQuestion": {
+    "description": "The question asked when duplicating a composition that has other compositions nested in it. Sharing means one nested composition used by both; separate copies means each gets its own."
+  },
+  "duplicateNestedShare": "Share with the original",
+  "@duplicateNestedShare": {
+    "description": "Button: the copy uses the same nested compositions as the original, so editing one shows in both."
+  },
+  "duplicateNestedSeparate": "Make separate copies",
+  "@duplicateNestedSeparate": {
+    "description": "Button: the copy gets its own copies of every nested composition, all the way down."
   },
   "menuEdit": "Edit",
   "@menuEdit": {
@@ -6760,6 +6784,18 @@
   "precomposeFailed": "Those layers could not be pre-composed.",
   "@precomposeFailed": {
     "description": "Shown when pre-composing did not work."
+  },
+  "precomposeLinksTitle": "Linked layers",
+  "@precomposeLinksTitle": {
+    "description": "Title of the question asked before pre-composing when a parent or track matte links the chosen layers to layers that stay outside."
+  },
+  "precomposeLinksQuestion": "A parent or matte links these layers to others outside. Duplicate them so both sides keep their links?",
+  "@precomposeLinksQuestion": {
+    "description": "The question asked before pre-composing would cut a parent or track matte link. Duplicating copies the layer at the other end of each link, hidden, so the picture stays the same."
+  },
+  "precomposeDuplicate": "Duplicate",
+  "@precomposeDuplicate": {
+    "description": "Button: go ahead with pre-compose, duplicating the linked layers so every parent and matte link is kept."
   },
   "precomposeLeave": "Leave all attributes in '{comp}'",
   "@precomposeLeave": {
@@ -9336,7 +9372,7 @@
   },
   "updateMoreChanges": "{count} more",
   "@updateMoreChanges": {
-    "description": "Last line of the list of changes shown when the pointer rests on the update button in a nightly build: how many changes there was no room to list. {count} is a whole number.",
+    "description": "Last line of the list of changes shown when the pointer rests on the update button: how many changes there was no room to list. {count} is a whole number.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -12754,6 +12790,18 @@
   "@keyMenuEase": {
     "description": "Timeline lanes: the row of a keyframe's right-click menu that opens the Ease popover on the selected keyframes. The ellipsis says it opens something."
   },
+  "keyMenuCopyEase": "Copy ease",
+  "@keyMenuCopyEase": {
+    "description": "Keyframe right-click menu and the Ease popover: copy only the easing of the selected keyframes (interpolation and handles), not their values or times."
+  },
+  "keyMenuPasteEase": "Paste ease",
+  "@keyMenuPasteEase": {
+    "description": "Keyframe right-click menu and the Ease popover: apply the copied easing to the selected keyframes, leaving their values and times alone."
+  },
+  "keyMenuJoinHandles": "Join handles",
+  "@keyMenuJoinHandles": {
+    "description": "Graph editor keyframe right-click menu: make the two bezier handles of a keyframe that were split apart move together again."
+  },
   "timelineStretchHint": "f{first}–f{last}",
   "@timelineStretchHint": {
     "description": "Timeline lanes: the small readout pill beside the handle while a block of keyframes is being stretched, saying which frames the block now reaches from and to. Very small mono type; an en dash between the two.",
@@ -15142,6 +15190,28 @@
   "exportAddonMissing": "An addon this project needs is not installed",
   "@exportAddonMissing": {
     "description": "Export dialogue footer, in place of the summary: a layer asks for a model engine this machine cannot run, so the export is refused rather than written with something else."
+  },
+  "exportOverwriteTitle": "File exists",
+  "@exportOverwriteTitle": {
+    "description": "Title of the window asked before an export would write over a file that is already there."
+  },
+  "exportOverwriteQuestion": "\"{name}\" is already there.",
+  "@exportOverwriteQuestion": {
+    "description": "The one line of the window asked before an export would write over a file: the name in the Destination row. For an image sequence it is asked when the first frame's file is there.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Scene.mp4"
+      }
+    }
+  },
+  "exportOverwrite": "Overwrite",
+  "@exportOverwrite": {
+    "description": "Button: export over the file that is already there."
+  },
+  "exportKeepBoth": "Keep both",
+  "@exportKeepBoth": {
+    "description": "Button: keep the file that is there and export to a numbered name beside it, such as Scene_2.mp4."
   },
   "planeNotAnalysed": "Not analysed yet",
   "@planeNotAnalysed": {

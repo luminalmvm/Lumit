@@ -70,6 +70,7 @@ import 'placeholder.dart';
 import 'shader_editor.dart' show InstanceHome;
 import 'shader_graph.dart' show ShaderGraphPanel, ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
+import 'viewer_tool_cursor.dart' show handPanLayer;
 
 // --- The drawing's own numbers (NodeGraph, Nodes-workspace) ---------------
 //
@@ -2943,6 +2944,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                     ),
             ),
           ),
+          handPanLayer(_ui!.tools, t, (d) => setState(() => _pan += d)),
         ],
       ),
     );

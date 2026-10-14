@@ -1328,6 +1328,7 @@ Map<String, String> get _built => {
       "Zoom in": l10n.keyZoomIn,
       "Zoom out": l10n.keyZoomOut,
       "Zoom to fit": l10n.keyZoomToFit,
+      "Fit the keyframes to the panel": l10n.keyFitTheKeyframesToThePanel,
       "Rename the layer": l10n.keyRenameTheLayer,
       "Rename the selected item": l10n.keyRenameTheSelectedItem,
       "Interpret the selected footage": l10n.keyInterpretTheSelectedFootage,

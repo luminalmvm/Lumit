@@ -25,6 +25,7 @@ import '../main.dart';
 import '../state/workspace.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart' show askLumitChoice;
 
 /// Show the dialogue and, on confirm, precompose. Returns when it closes.
 ///
@@ -61,7 +62,25 @@ Future<void> showPrecomposeDialogFrb({
       initialMoveAttributes: workspace.precomposeMoveAttributes,
       initialAdjustDuration: workspace.precomposeAdjustDuration,
       initialOpenNewComp: workspace.precomposeOpenNewComp,
-      onConfirm: (name, moveAttributes, adjustDuration, openNewComp) {
+      onConfirm: (name, moveAttributes, adjustDuration, openNewComp) async {
+        final ids = [for (final l in layers) l.internallayerId];
+        final leave = !moveAttributes && layers.length == 1;
+        // A parent or matte that would cross the new comp's edge: the engine
+        // keeps it by duplicating a layer, which is asked about first.
+        var splits = false;
+        try {
+          splits =
+              comp.precomposeSplitsLinks(layerIds: ids, leaveAttributes: leave);
+        } catch (_) {}
+        if (splits && context.mounted) {
+          final go = await askLumitChoice<bool>(
+            context: context,
+            title: l10n.precomposeLinksTitle,
+            question: l10n.precomposeLinksQuestion,
+            answers: [(l10n.precomposeDuplicate, true)],
+          );
+          if (go != true) return null;
+        }
         workspace.setPrecomposeSettings(
           moveAttributes: moveAttributes,
           adjustDuration: adjustDuration,
@@ -70,9 +89,9 @@ Future<void> showPrecomposeDialogFrb({
         final LayerReference precomp;
         try {
           precomp = comp.precompose(
-            layerIds: [for (final l in layers) l.internallayerId],
+            layerIds: ids,
             name: name,
-            leaveAttributes: !moveAttributes && layers.length == 1,
+            leaveAttributes: leave,
             adjustDuration: adjustDuration,
             group: group,
           );
@@ -100,9 +119,10 @@ Future<void> showPrecomposeDialogFrb({
   );
 }
 
-/// `onConfirm` returns null when the move went through, or the sentence to
-/// show when it did not — the dialogue stays open on a refusal.
-typedef _Confirm = String? Function(
+/// `onConfirm` returns null when the move went through or was called off, or
+/// the sentence to show when it did not — the dialogue stays open on a
+/// refusal.
+typedef _Confirm = Future<String?> Function(
   String name,
   bool moveAttributes,
   bool adjustDuration,
@@ -162,9 +182,9 @@ class _PrecomposeBodyState extends State<_PrecomposeBody> {
     super.dispose();
   }
 
-  void _confirm() {
+  Future<void> _confirm() async {
     final typed = _name.text.trim();
-    final refusal = widget.onConfirm(
+    final refusal = await widget.onConfirm(
       typed.isEmpty ? widget.defaultName : typed,
       _moveAttributes,
       _adjustDuration,

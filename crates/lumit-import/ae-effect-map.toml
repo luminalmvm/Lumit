@@ -584,3 +584,165 @@ name = "FL Out of Focus"
 lumit = "dof"
 conversion = "nearest"
 pending_audit = true
+
+# The third-party effects editors use most, from a count of 309 editors'
+# projects (2026-10-14). The match names are as those projects store them.
+# The Magic Bullet Looks and Universe identifiers were read off an installed
+# copy. The Sapphire ones are the shape of the rows above, with the category
+# the audit records. RE:Vision's and Twixtor's OFX identifiers were not read
+# off an install, so they are left out, as Lenscare's are.
+
+[[effect]]
+ae = "MB LookSuite3"
+name = "Magic Bullet Looks"
+suggest = "the grade is rebuilt with Curves, Levels or a LUT"
+ofx = ["com.redgiant.magicbullet.looks.x64"]
+pending_audit = true
+
+[[effect]]
+ae = "Videocopilot Twitch"
+name = "Twitch"
+lumit = "shake"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "VIDEOCOPILOT OpticalFlares"
+name = "Optical Flares"
+lumit = "lens_flare"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "tc Shine"
+name = "Shine"
+lumit = "glow"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "S_Flicker"
+name = "S_Flicker"
+lumit = "flash"
+conversion = "nearest"
+ofx = ["com.genarts.sapphire.Time.S_Flicker", "com.borisfx.sapphire.Time.S_Flicker"]
+pending_audit = true
+
+[[effect]]
+ae = "Smart Motion Blur 3.x"
+name = "RSMB"
+lumit = "motion_blur"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "RS Motion Blur Pro A 3.x"
+name = "RSMB Pro"
+lumit = "motion_blur"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "tc Particular"
+name = "Particular"
+lumit = "particulate"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "tc Form"
+name = "Form"
+lumit = "particulate"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "S_FilmDamage"
+name = "S_FilmDamage"
+lumit = "add_grain"
+conversion = "nearest"
+ofx = [
+  "com.genarts.sapphire.Stylize.S_FilmDamage",
+  "com.borisfx.sapphire.Stylize.S_FilmDamage",
+]
+pending_audit = true
+
+[[effect]]
+ae = "Red Giant MisFire Flicker"
+name = "MisFire Flicker"
+lumit = "flash"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "Magic Bullet MisFire Flicker"
+name = "MisFire Flicker"
+lumit = "flash"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "Twixtor 45 Lite"
+name = "Twixtor"
+suggest = "Retime with flow frame interpolation does the same job"
+pending_audit = true
+
+[[effect]]
+ae = "VIDEOCOPILOT VIBRANCE"
+name = "VC Color Vibrance"
+lumit = "vibrancy"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "S_WarpChroma"
+name = "S_WarpChroma"
+lumit = "chromatic_aberration"
+conversion = "nearest"
+ofx = [
+  "com.genarts.sapphire.Distort.S_WarpChroma",
+  "com.borisfx.sapphire.Distort.S_WarpChroma",
+]
+pending_audit = true
+
+[[effect]]
+ae = "S_QuadTone"
+name = "S_QuadTone"
+lumit = "tritone"
+conversion = "nearest"
+ofx = ["com.genarts.sapphire.Adjust.S_QuadTone", "com.borisfx.sapphire.Adjust.S_QuadTone"]
+pending_audit = true
+
+[[effect]]
+ae = "PEDG"
+name = "Deep Glow"
+lumit = "glow"
+conversion = "nearest"
+pending_audit = true
+
+[[effect]]
+ae = "S_Vignette"
+name = "S_Vignette"
+lumit = "vignette"
+conversion = "nearest"
+ofx = [
+  "com.genarts.sapphire.Stylize.S_Vignette",
+  "com.borisfx.sapphire.Stylize.S_Vignette",
+]
+pending_audit = true
+
+[[effect]]
+ae = "Universe_Stylize_Carousel"
+name = "uni.Carousel"
+lumit = "tile"
+conversion = "nearest"
+ofx = ["com.redgiantsoftware.Universe_Stylize_Carousel_OFX"]
+pending_audit = true
+
+[[effect]]
+ae = "S_TimeWarpRGB"
+name = "S_TimeWarpRGB"
+lumit = "rgb_split"
+conversion = "nearest"
+ofx = ["com.genarts.sapphire.Time.S_TimeWarpRGB", "com.borisfx.sapphire.Time.S_TimeWarpRGB"]
+pending_audit = true

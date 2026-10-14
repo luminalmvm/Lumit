@@ -214,6 +214,8 @@ pub enum BrokerMessage {
     Described {
         /// One per plugin that described itself successfully.
         plugins: Vec<PluginDescriptor>,
+        /// One line per plugin that did not, naming it and saying why.
+        refused: Vec<String>,
     },
     /// The instance exists.
     Created,

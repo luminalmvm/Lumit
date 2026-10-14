@@ -204,7 +204,8 @@ class ViewerStage extends StatelessWidget {
   /// a box round, and **a layer switched off is not on the picture at all**,
   /// so it gets no wireframe and takes no click. Switching a layer's eye off
   /// is how you get it out of the way; a box round something invisible, and a
-  /// click that selected it, put it right back in the way.
+  /// click that selected it, put it right back in the way. A locked layer is
+  /// left out for the same reason, so a click goes through to the one behind.
   ///
   /// A keyed transform channel is read **at the playhead**, through the same
   /// batched sampler the Timeline's rows use, so an animated layer's box sits
@@ -262,7 +263,7 @@ class ViewerStage extends StatelessWidget {
     final out = <LayerBox>[];
     for (final entry in model.heldLayers) {
       if (entry.info.kind == BridgeLayerKind.camera) continue;
-      if (!entry.info.switches.visible) continue;
+      if (!entry.info.switches.visible || entry.info.switches.locked) continue;
       // A value scrub in the property rows previews the picture at a
       // provisional transform while the document still holds the old one, so
       // the box is drawn from that same provisional value and the two move

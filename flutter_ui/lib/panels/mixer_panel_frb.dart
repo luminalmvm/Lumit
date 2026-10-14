@@ -37,17 +37,47 @@ import 'audio_meters_feed.dart';
 import 'keyframe_controls_frb.dart';
 import 'placeholder.dart';
 
-/// The fader's travel in decibels: silence to a small push. The +12 the value
-/// field allows is still reachable by typing in the Audio panel; a fader that
-/// spent a third of its throw above unity would waste it.
-const double _faderFloorDb = -60.0;
-const double _faderCeilingDb = 6.0;
+/// The fader's floor: the engine's own knee, at or below which the sound is
+/// exactly off (`lumit_audio::mix::VOLUME_FLOOR_DB`).
+const double _faderFloorDb = -100.0;
 
-double _faderFraction(double db) =>
-    ((db - _faderFloorDb) / (_faderCeilingDb - _faderFloorDb)).clamp(0.0, 1.0);
+/// The fader's taper, as a console prints it: points of travel against dB,
+/// silence at the bottom, unity three quarters of the way up and +6 at the
+/// top, with most of the throw spent near unity. The +12 the value field
+/// allows is still reachable by typing in the Audio panel.
+const List<(double, double)> _taper = [
+  (0.0, _faderFloorDb),
+  (0.05, -60),
+  (0.15, -40),
+  (0.25, -30),
+  (0.375, -20),
+  (0.55, -10),
+  (0.75, 0),
+  (1.0, 6),
+];
 
-double _faderDb(double fraction) =>
-    _faderFloorDb + fraction.clamp(0.0, 1.0) * (_faderCeilingDb - _faderFloorDb);
+/// Where [db] sits on the fader's travel, nought to one.
+double _faderFraction(double db) {
+  for (var i = 1; i < _taper.length; i++) {
+    final (f0, d0) = _taper[i - 1];
+    final (f1, d1) = _taper[i];
+    if (db <= d1) {
+      return (f0 + (db - d0) / (d1 - d0) * (f1 - f0)).clamp(0.0, 1.0);
+    }
+  }
+  return 1;
+}
+
+/// The dB a point of the fader's travel reads.
+double _faderDb(double fraction) {
+  final f = fraction.clamp(0.0, 1.0);
+  for (var i = 1; i < _taper.length; i++) {
+    final (f0, d0) = _taper[i - 1];
+    final (f1, d1) = _taper[i];
+    if (f <= f1) return d0 + (f - f0) / (f1 - f0) * (d1 - d0);
+  }
+  return _taper.last.$2;
+}
 
 class MixerPanelFrb extends StatefulWidget {
   /// A test's own feed, silent and hand-pulsed. The application passes none
@@ -771,7 +801,7 @@ class _DbWell extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     return Container(
-      width: 44,
+      width: 54,
       height: 15,
       alignment: Alignment.centerRight,
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -781,7 +811,7 @@ class _DbWell extends StatelessWidget {
         borderRadius: BorderRadius.circular(2),
       ),
       child: Text(
-        db <= -60 ? l10n.volumeNegInf : db.toStringAsFixed(1),
+        '${db <= _faderFloorDb ? l10n.volumeNegInf : db.toStringAsFixed(1)} dB',
         style: t.mono.copyWith(fontSize: 9, color: t.textPrimary),
         maxLines: 1,
       ),

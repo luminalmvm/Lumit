@@ -322,7 +322,8 @@ class LumitTooltip extends StatelessWidget {
   /// window. Null leaves it on one line.
   final double? maxWidth;
 
-  /// More to say under the message, for the rare tip that is a list.
+  /// More to say under the message, for the rare tip that is a list. A tip
+  /// with one stays up while the pointer moves onto it, so it can scroll.
   final Widget? body;
   final Widget child;
   const LumitTooltip(
@@ -416,31 +417,37 @@ class _HoverTipState extends State<_HoverTip> {
     _entry = OverlayEntry(
       builder: (_) => Positioned.fill(
         child: IgnorePointer(
+          ignoring: body == null,
           // Pulled back on screen when it would hang off an edge — a control
           // near the bottom (the Viewer's transport) would otherwise tip below
           // the window entirely.
           child: CustomSingleChildLayout(
             delegate: _PopupLayout(origin, above: above),
-            child: Entrance(
-              spec: scope.motion.tooltip,
-              rise: scope.motion.tooltipRise,
-              child: Container(
-                constraints: BoxConstraints(
-                    maxWidth: widget.maxWidth ?? double.infinity),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: t.surface3,
-                  borderRadius: BorderRadius.circular(t.tokens.floatRadius),
-                  border: Border.all(color: t.hairline),
-                  boxShadow: t.floatShadow,
+            child: MouseRegion(
+              onEnter: (_) => _pending?.cancel(),
+              onExit: (_) => _leave(),
+              child: Entrance(
+                spec: scope.motion.tooltip,
+                rise: scope.motion.tooltipRise,
+                child: Container(
+                  constraints: BoxConstraints(
+                      maxWidth: widget.maxWidth ?? double.infinity),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: t.surface3,
+                    borderRadius: BorderRadius.circular(t.tokens.floatRadius),
+                    border: Border.all(color: t.hairline),
+                    boxShadow: t.floatShadow,
+                  ),
+                  child: body == null
+                      ? says
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [says, body],
+                        ),
                 ),
-                child: body == null
-                    ? says
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [says, body],
-                      ),
               ),
             ),
           ),
@@ -457,6 +464,14 @@ class _HoverTipState extends State<_HoverTip> {
     _entry = null;
   }
 
+  /// The pointer has left the control or the tip. A tip with a body waits a
+  /// moment, so the pointer can cross the gap onto it.
+  void _leave() {
+    if (_entry == null || widget.body == null) return _hide();
+    _pending?.cancel();
+    _pending = Timer(const Duration(milliseconds: 150), _hide);
+  }
+
   @override
   void dispose() {
     _hide();
@@ -466,7 +481,7 @@ class _HoverTipState extends State<_HoverTip> {
   @override
   Widget build(BuildContext context) => MouseRegion(
         onEnter: _show,
-        onExit: (_) => _hide(),
+        onExit: (_) => _leave(),
         child: widget.child,
       );
 }
