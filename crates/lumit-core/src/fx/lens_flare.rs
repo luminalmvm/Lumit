@@ -282,11 +282,10 @@ pub const STARBURST_FIELDS: usize = 8;
 /// slot table that existed only to hold the copies.
 pub const MAX_SOURCES: usize = 16;
 
-/// Detection tile side, raster pixels (impl note §6).
-pub const DETECT_TILE: u32 = 32;
-/// Non-max suppression radius, in tiles (Chebyshev): one highlight must not
-/// spend the whole light budget on its own neighbouring tiles.
-pub const SUPPRESS_TILES: i64 = 2;
+/// Detection tile side, raster pixels (impl note §6). Sixteen, so each edge
+/// of a tile fits one 16-bit mask of which of its pixels are lit — see
+/// [`detect_lights`].
+pub const DETECT_TILE: u32 = 16;
 
 /// Ghost pairs dimmer than this on the on-axis probe are dropped at bake
 /// (FlareSim's `min_intensity`).
@@ -533,16 +532,26 @@ pub fn threshold_gate(luma: f32, threshold: f32, softness: f32) -> f32 {
 /// Matte-mode source detection (impl note §6), the CPU twin of the WGSL
 /// kernels: tile the matte into [`DETECT_TILE`]-sided cells, keep each cell's
 /// brightest pixel (Rec. 709 luma of the premultiplied buffer; ties break to
-/// the lowest linear index), then pick the top [`MAX_SOURCES`] cells by luma
-/// (ties to the lower cell index) with [`SUPPRESS_TILES`] Chebyshev
-/// suppression, gating each through [`threshold_gate`]. Deterministic by
-/// construction — no float reduction order depends on threading.
+/// the lowest linear index). A cell is lit when that pixel passes
+/// [`threshold_gate`]. Lit cells whose lit pixels touch across the edge
+/// between them, corners included, form one patch, and each patch is one
+/// light: the [`MAX_SOURCES`] patches with the
+/// most light flare (ties to the patch with the lower first cell), the rest
+/// are dropped. Deterministic by construction — no float reduction order
+/// depends on threading.
 ///
-/// Each light's colour is the summed flux of every gated tile nearest it —
+/// Each light's colour is the summed flux of its patch's tiles —
 /// `(use_source ? tile rgb : white) × gate` per tile, times the tint — so the
 /// same function serves "the practical's own colour flares", "this matte only
 /// says *where*", and area sources whose light is their whole lit extent
 /// rather than one pixel.
+///
+/// Patches replaced folding every lit tile into the nearest of the brightest
+/// cells. On a street of lamps that merged lamps far apart into one light
+/// sitting in the dark between them, and as the camera moved it jumped and
+/// changed size from frame to frame. Joining cells only because they touch
+/// still did it for small lamps a few cells apart down a street, so cells now
+/// join only where their lit pixels do.
 /// What one detection tile knows about the light inside it.
 ///
 /// A tile used to be a single pair — its brightest pixel's luma and
@@ -568,6 +577,11 @@ struct TileStat {
     fsum: f32,
     fx: f32,
     fy: f32,
+    /// Which pixels along the tile's edges are lit, one bit a pixel: the
+    /// left column in the low 16 bits and the right in the high, then the
+    /// top row and the bottom. Two tiles join only where these touch.
+    edge_lr: u32,
+    edge_tb: u32,
 }
 
 impl TileStat {
@@ -579,7 +593,20 @@ impl TileStat {
         fsum: 0.0,
         fx: 0.0,
         fy: 0.0,
+        edge_lr: 0,
+        edge_tb: 0,
     };
+}
+
+/// How much of a kept light's strength survives the cut: none at the light
+/// of the strongest patch that missed it, all at half as much again, smoothly between.
+/// Everything is kept whole when nothing missed the cut.
+pub fn cut_fade(flux: f32, cut: f32) -> f32 {
+    if cut <= 0.0 {
+        return 1.0;
+    }
+    let t = ((flux - cut) / (0.5 * cut)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -635,108 +662,139 @@ pub fn detect_lights(
                 tile.fsum += f;
                 tile.fx += x as f32 * f;
                 tile.fy += y as f32 * f;
-            }
-        }
-    }
-    let mut suppressed = vec![false; tx * ty];
-    // Anchors: the top-K picks, ranked by their brightest pixel so a small
-    // bright source is still found; where the light is reported is the flux
-    // centroid worked out below, not this pixel.
-    let mut anchors: Vec<(usize, u32)> = Vec::new();
-    for _ in 0..MAX_SOURCES {
-        let mut best: Option<usize> = None;
-        for (t, stat) in tiles.iter().enumerate() {
-            if suppressed[t] || stat.luma_max <= 0.0 {
-                continue;
-            }
-            match best {
-                Some(b) if tiles[b].luma_max >= stat.luma_max => {}
-                _ => best = Some(t),
-            }
-        }
-        let Some(b) = best else { break };
-        let (luma, idx) = (tiles[b].luma_max, tiles[b].index);
-        if threshold_gate(luma, threshold, softness) <= 0.0 {
-            // Cells are visited brightest-first, so nothing dimmer passes.
-            break;
-        }
-        anchors.push((b, idx));
-        let (bx, by) = ((b % tx) as i64, (b / tx) as i64);
-        for sy in (by - SUPPRESS_TILES)..=(by + SUPPRESS_TILES) {
-            for sx in (bx - SUPPRESS_TILES)..=(bx + SUPPRESS_TILES) {
-                if sx >= 0 && sy >= 0 && (sx as usize) < tx && (sy as usize) < ty {
-                    suppressed[sy as usize * tx + sx as usize] = true;
+                let (ox, oy) = (x % DETECT_TILE, y % DETECT_TILE);
+                if ox == 0 {
+                    tile.edge_lr |= 1 << oy;
+                }
+                if ox == DETECT_TILE - 1 {
+                    tile.edge_lr |= 1 << (16 + oy);
+                }
+                if oy == 0 {
+                    tile.edge_tb |= 1 << ox;
+                }
+                if oy == DETECT_TILE - 1 {
+                    tile.edge_tb |= 1 << (16 + ox);
                 }
             }
         }
     }
-    // Area sources: every gated tile's flux — its brightest pixel's
-    // colour (or white) times its gate — lands on the NEAREST anchor
-    // (Chebyshev in tiles; ties to the lowest anchor index), tile order
-    // fixed for determinism. A one-tile point source is its own anchor's
-    // only contributor, so it reads exactly as it always did; a practical
-    // spanning many tiles finally weighs as its whole lit area instead of
-    // one pixel.
-    let mut acc = vec![[0.0_f32; 3]; anchors.len()];
-    // Per anchor: the flux centroid as (Σ f·x, Σ f·y, Σ f), and the second
+    // A tile is lit when its brightest pixel passes the gate.
+    let lit: Vec<bool> = tiles
+        .iter()
+        .map(|s| s.luma_max > 0.0 && threshold_gate(s.luma_max, threshold, softness) > 0.0)
+        .collect();
+    // Patches: lit tiles whose lit pixels touch across the edge between
+    // them, corners included, joined in reading order with each patch named
+    // after its first tile. The shader runs the same loop, so both sides find
+    // the same patches.
+    let mut parent: Vec<usize> = (0..tiles.len()).collect();
+    let find = |parent: &mut Vec<usize>, mut t: usize| {
+        while parent[t] != t {
+            parent[t] = parent[parent[t]];
+            t = parent[t];
+        }
+        t
+    };
+    for t in 0..tiles.len() {
+        if !lit[t] {
+            continue;
+        }
+        let (x, y) = (t % tx, t / tx);
+        let here = &tiles[t];
+        // A lit edge pixel touches the three facing pixels across the edge.
+        let meets = |a: u32, b: u32| a & (b | b << 1 | b >> 1) & 0xffff != 0;
+        // The four neighbours already visited: left, and the three above,
+        // each with whether lit pixels meet across the shared edge or corner.
+        let earlier = [
+            (x > 0).then(|| (t - 1, meets(here.edge_lr, tiles[t - 1].edge_lr >> 16))),
+            (x > 0 && y > 0).then(|| {
+                let n = t - tx - 1;
+                (n, here.edge_tb & 1 != 0 && tiles[n].edge_tb >> 31 != 0)
+            }),
+            (y > 0).then(|| (t - tx, meets(here.edge_tb, tiles[t - tx].edge_tb >> 16))),
+            (x + 1 < tx && y > 0).then(|| {
+                let n = t - tx + 1;
+                (
+                    n,
+                    here.edge_tb >> 15 & 1 != 0 && tiles[n].edge_tb >> 16 & 1 != 0,
+                )
+            }),
+        ];
+        for (n, touching) in earlier.into_iter().flatten() {
+            if lit[n] && touching {
+                let (a, b) = (find(&mut parent, t), find(&mut parent, n));
+                parent[a.max(b)] = a.min(b);
+            }
+        }
+    }
+    // Each patch's light, summed tile by tile in reading order.
+    let mut acc = vec![[0.0_f32; 3]; tiles.len()];
+    // Per patch: the flux centroid as (Σ f·x, Σ f·y, Σ f), and the second
     // moment (Σ f·x², Σ f·y²) that gives the source its EXTENT — how wide the
     // light actually is, which is what an area source needs sampling across.
-    let mut centroid = vec![[0.0_f32; 3]; anchors.len()];
-    let mut spread = vec![[0.0_f32; 2]; anchors.len()];
-    if !anchors.is_empty() {
-        for (t, stat) in tiles.iter().enumerate() {
-            if stat.luma_max <= 0.0 {
-                continue;
-            }
-            let weight = threshold_gate(stat.luma_max, threshold, softness);
-            if weight <= 0.0 {
-                continue;
-            }
-            let (cx, cy) = ((t % tx) as i64, (t / tx) as i64);
-            let mut nearest = 0usize;
-            let mut nearest_d = i64::MAX;
-            for (a, &(at, _)) in anchors.iter().enumerate() {
-                let (ax, ay) = ((at % tx) as i64, (at / tx) as i64);
-                let d = (cx - ax).abs().max((cy - ay).abs());
-                if d < nearest_d {
-                    nearest_d = d;
-                    nearest = a;
-                }
-            }
-            // The tile's MEAN colour over its lit pixels, not its brightest
-            // pixel's. One sparkle among a thousand lit pixels now
-            // shifts the colour by a thousandth instead of defining it.
-            let src = if !use_source_colour {
-                [1.0, 1.0, 1.0]
-            } else if stat.wsum > 0.0 {
-                [
-                    stat.csum[0] / stat.wsum,
-                    stat.csum[1] / stat.wsum,
-                    stat.csum[2] / stat.wsum,
-                ]
-            } else {
-                let c = rgb((stat.index * 4) as usize);
-                [c[0].max(0.0), c[1].max(0.0), c[2].max(0.0)]
-            };
-            for c in 0..3 {
-                acc[nearest][c] += src[c] * weight;
-            }
-            // The tile's own first moments carry straight over: summing them
-            // across a source's tiles gives that source's flux centroid, with
-            // no pixel anywhere able to move it on its own.
-            centroid[nearest][0] += stat.fx;
-            centroid[nearest][1] += stat.fy;
-            centroid[nearest][2] += stat.fsum;
-            // Σ f·x² is accumulated from the tile's mean position rather than
-            // per pixel: the tiles are what span a source, and a tile-grained
-            // extent is all the sampling below can use anyway.
-            if stat.fsum > 0.0 {
-                let (mx, my) = (stat.fx / stat.fsum, stat.fy / stat.fsum);
-                spread[nearest][0] += stat.fsum * mx * mx;
-                spread[nearest][1] += stat.fsum * my * my;
-            }
+    let mut centroid = vec![[0.0_f32; 3]; tiles.len()];
+    let mut spread = vec![[0.0_f32; 2]; tiles.len()];
+    for (t, stat) in tiles.iter().enumerate() {
+        if !lit[t] {
+            continue;
+        }
+        let root = find(&mut parent, t);
+        let weight = threshold_gate(stat.luma_max, threshold, softness);
+        // The tile's MEAN colour over its lit pixels, not its brightest
+        // pixel's. One sparkle among a thousand lit pixels now
+        // shifts the colour by a thousandth instead of defining it.
+        let src = if !use_source_colour {
+            [1.0, 1.0, 1.0]
+        } else if stat.wsum > 0.0 {
+            [
+                stat.csum[0] / stat.wsum,
+                stat.csum[1] / stat.wsum,
+                stat.csum[2] / stat.wsum,
+            ]
+        } else {
+            let c = rgb((stat.index * 4) as usize);
+            [c[0].max(0.0), c[1].max(0.0), c[2].max(0.0)]
+        };
+        for c in 0..3 {
+            acc[root][c] += src[c] * weight;
+        }
+        // The tile's own first moments carry straight over: summing them
+        // across a patch's tiles gives that light's flux centroid, with no
+        // pixel anywhere able to move it on its own.
+        centroid[root][0] += stat.fx;
+        centroid[root][1] += stat.fy;
+        centroid[root][2] += stat.fsum;
+        // Σ f·x² is accumulated from the tile's mean position rather than
+        // per pixel: the tiles are what span a source, and a tile-grained
+        // extent is all the sampling below can use anyway.
+        if stat.fsum > 0.0 {
+            let (mx, my) = (stat.fx / stat.fsum, stat.fy / stat.fsum);
+            spread[root][0] += stat.fsum * mx * mx;
+            spread[root][1] += stat.fsum * my * my;
         }
     }
+    // The patches with the most light flare, brightest first. Ranked on the
+    // whole patch, so lamps that all clip at the same value no longer swap
+    // places from frame to frame on their single brightest pixel.
+    let mut roots: Vec<usize> = (0..tiles.len())
+        .filter(|&t| lit[t] && parent[t] == t)
+        .collect();
+    roots.sort_by(|&a, &b| centroid[b][2].total_cmp(&centroid[a][2]).then(a.cmp(&b)));
+    // The strongest patch that missed the cut. Each light kept fades out as
+    // its light falls towards that one's, so two lights swapping places at
+    // the cut are both dark at that moment and neither pops in or out.
+    let cut = roots.get(MAX_SOURCES).map_or(0.0, |&r| centroid[r][2]);
+    roots.truncate(MAX_SOURCES);
+    let anchors: Vec<(usize, u32)> = roots.iter().map(|&r| (r, tiles[r].index)).collect();
+    let acc: Vec<[f32; 3]> = roots
+        .iter()
+        .map(|&r| {
+            let fade = cut_fade(centroid[r][2], cut);
+            [acc[r][0] * fade, acc[r][1] * fade, acc[r][2] * fade]
+        })
+        .collect();
+    let centroid: Vec<[f32; 3]> = roots.iter().map(|&r| centroid[r]).collect();
+    let spread: Vec<[f32; 2]> = roots.iter().map(|&r| spread[r]).collect();
     anchors
         .iter()
         .zip(acc.iter().zip(centroid.iter().zip(&spread)))

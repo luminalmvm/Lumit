@@ -4769,7 +4769,7 @@ fn lens_flare_detects_matte_sources_deterministically() {
         matte[i + 3] = 1.0;
     };
     // A bright white source, a dimmer warm one far away, and a neighbour 8 px
-    // from the bright one that suppression must fold into it.
+    // from the bright one, in the same tile, which joins it.
     put(20, 24, [4.0, 4.0, 4.0]);
     put(28, 24, [3.0, 3.0, 3.0]);
     put(100, 70, [1.5, 1.0, 0.5]);
@@ -4778,7 +4778,7 @@ fn lens_flare_detects_matte_sources_deterministically() {
     assert_eq!(
         lights.len(),
         2,
-        "the neighbour must be suppressed: {lights:?}"
+        "the neighbour must join the bright source: {lights:?}"
     );
     // Brightest first — and the light sits at the flux centre of
     // everything folded into it, not on its brightest pixel. Both pixels are
@@ -4815,6 +4815,60 @@ fn lens_flare_detects_matte_sources_deterministically() {
         lights,
         detect_lights(&matte, w, h, 1.0, 0.0, true, [1.0; 3], false)
     );
+
+    // **Separate lamps stay separate.** Twenty lamps a tile apart, each a
+    // little brighter than the last: every light sits on a lamp, never in the
+    // dark between two, and only the sixteen brightest flare. Folding lamps
+    // into the nearest bright one made a street of lamps flicker. The lamps
+    // kept fade towards the strongest one dropped, so the brightest flares
+    // whole and the last one kept is nearly dark.
+    let (sw, sh) = (32 * 40u32, 32u32);
+    let mut street = vec![0.0f32; (sw * sh * 4) as usize];
+    for k in 0..20u32 {
+        let i = ((16 * sw + 64 * k + 16) * 4) as usize;
+        street[i..i + 3].fill(2.0 + k as f32 * 0.2);
+    }
+    let lamps = detect_lights(&street, sw, sh, 1.0, 0.0, true, [1.0; 3], false);
+    assert_eq!(lamps.len(), MAX_SOURCES);
+    assert_eq!(lamps[0].rgb, [5.8; 3], "far above the cut flares whole");
+    assert!(
+        lamps[15].rgb[1] < 0.3,
+        "just above the cut fades: {:?}",
+        lamps[15]
+    );
+    for (n, light) in lamps.iter().enumerate() {
+        let k = 19 - n as u32;
+        assert!(
+            (light.pos[0] * sw as f32 - (64 * k + 16) as f32 - 0.5).abs() < 1e-3,
+            "light {n} must sit on lamp {k}: {light:?}"
+        );
+        assert!(
+            light.extent[0] * (sw as f32) < 1.0,
+            "a one-tile lamp is a point"
+        );
+    }
+    // Two lamps ten pixels apart in neighbouring tiles stay two lights, and
+    // a strip of light across the edge between the same tiles is one.
+    let lamp_pair = |xs: &[u32]| {
+        let mut m = vec![0.0f32; (sw * sh * 4) as usize];
+        for &x in xs {
+            let i = ((16 * sw + x) * 4) as usize;
+            m[i..i + 3].fill(2.0);
+        }
+        detect_lights(&m, sw, sh, 1.0, 0.0, true, [1.0; 3], false)
+    };
+    assert_eq!(
+        lamp_pair(&[10, 20]).len(),
+        2,
+        "separate lamps stay separate"
+    );
+    let strip = lamp_pair(&(12..20).collect::<Vec<u32>>());
+    assert_eq!(
+        strip.len(),
+        1,
+        "a strip across a tile edge is one light: {strip:?}"
+    );
+    assert!((strip[0].pos[0] * sw as f32 - 16.0).abs() < 1e-3);
 
     // The gate itself (one-sided): closed at and below the threshold,
     // open a softness above it. The two cases the owner asked for by name:
