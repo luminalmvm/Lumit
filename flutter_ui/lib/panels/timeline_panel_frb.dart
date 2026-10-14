@@ -2922,6 +2922,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       }
       return true;
     }
+    if (action == 'timeline.fit.keys') {
+      return _fitKeys(ui);
+    }
     if (action == 'graph.ease' ||
         action == 'graph.ease.in' ||
         action == 'graph.ease.out') {
@@ -3444,6 +3447,33 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     } else {
       _scrollFrameToLeftEdge(start);
     }
+  }
+
+  /// Layers mode's F: the lanes span the keys of the selected layers, or of
+  /// every layer when none is selected, with a little room either side.
+  bool _fitKeys(LumitUiState ui) {
+    final ids = ui.selectedLayerIds;
+    double? first, last;
+    for (final entry in ui.model.layers) {
+      if (ids.isNotEmpty && !ids.contains(entry.layer.internallayerId)) {
+        continue;
+      }
+      for (final key in layerKeys(
+        entry: entry,
+        flowParams: entry.info.flow ? entry.layer.getFlowParams() : null,
+        volumeDb: entry.info.volumeDb,
+      )) {
+        final frame = keyFrame(key, ui.model.fps);
+        first = min(first ?? frame, frame);
+        last = max(last ?? frame, frame);
+      }
+    }
+    if (first == null || last == null) return false;
+    final pad = max(2.0, (last - first) * 0.05);
+    _zoomBeforeFit = null;
+    _navigateTo(max(0.0, first - pad), last - first + pad * 2, pan: false);
+    _zoomAnchorHeld = false;
+    return true;
   }
 
   /// The graph's framing buttons, beside the zoom they belong with: Auto fit,

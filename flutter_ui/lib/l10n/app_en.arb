@@ -5566,6 +5566,10 @@
   "@keyZoomToFit": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyFitTheKeyframesToThePanel": "Fit the keyframes to the panel",
+  "@keyFitTheKeyframesToThePanel": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column. F in the Timeline's Layers mode: zoom time to span the keyframes of the selected layers, or of all layers."
+  },
   "keyZoomTool": "Zoom tool",
   "@keyZoomTool": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
