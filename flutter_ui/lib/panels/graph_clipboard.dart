@@ -399,3 +399,69 @@ Future<bool> pasteKeysAtPlayhead({
   asOneUndoStep(project, () => commitChannelEdits(edits));
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Copy ease and Paste ease: the easing of keys, without their values or times.
+// ---------------------------------------------------------------------------
+
+/// What Copy ease took: each copied key's way in and way out, in time order.
+List<(BridgeSideInterp, BridgeSideInterp)> easeClipboard = const [];
+
+/// Copy ease: the sides of the selected keys on the first channel that has
+/// any selected. Returns whether anything was taken.
+bool copySelectedEase({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+}) {
+  for (final channel in channels) {
+    final keys = channel.keys;
+    final picked = [
+      for (var i = 0; i < keys.length; i++)
+        if (selectedKeys.contains('${channel.id}#$i'))
+          (keys[i].interpIn, keys[i].interpOut),
+    ];
+    if (picked.isEmpty) continue;
+    easeClipboard = picked;
+    return true;
+  }
+  return false;
+}
+
+/// Paste ease: the copied sides onto each channel's selected keys, in time
+/// order, as one undo step. One copied key goes onto every key; a longer run
+/// repeats span by span, so a copied pair shapes every selected pair.
+bool pasteEaseOnSelection({
+  required ProjectReference? project,
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+}) {
+  final copied = easeClipboard;
+  if (copied.isEmpty) return false;
+  final period = copied.length - 1;
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in channels) {
+    final keys = channel.keys;
+    final picked = [
+      for (var i = 0; i < keys.length; i++)
+        if (selectedKeys.contains('${channel.id}#$i')) i,
+    ];
+    if (picked.isEmpty) continue;
+    final next = [...keys];
+    for (var p = 0; p < picked.length; p++) {
+      // Which copied key lends this one its way in and its way out.
+      final into = period == 0 || p == 0 ? 0 : (p - 1) % period + 1;
+      final out = period == 0 || p == picked.length - 1 ? into : p % period;
+      final key = keys[picked[p]];
+      next[picked[p]] = BridgeKeyframe(
+        time: key.time,
+        value: key.value,
+        interpIn: copied[into].$1,
+        interpOut: copied[out].$2,
+      );
+    }
+    edits[channel] = BridgeScalar.keyframed(next);
+  }
+  if (edits.isEmpty) return false;
+  asOneUndoStep(project, () => commitChannelEdits(edits));
+  return true;
+}

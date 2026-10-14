@@ -44,6 +44,7 @@ import 'layer_fold_frb.dart';
 import 'timeline_extras_frb.dart';
 import 'timeline_snap.dart';
 import 'graph_channels.dart';
+import 'graph_clipboard.dart';
 import 'graph_edits.dart';
 import 'graph_key_fields.dart';
 import 'graph_painters.dart';
@@ -2281,6 +2282,16 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     ? l10n.menuSetSpeed
                     : l10n.menuKeyframeSpeed)),
             MenuRow(
+                onPressed: () => close('copyEase'),
+                child: Text(l10n.keyMenuCopyEase)),
+            if (easeClipboard.isNotEmpty)
+              MenuRow(
+                  onPressed: () => close('pasteEase'),
+                  child: Text(l10n.keyMenuPasteEase)),
+            MenuRow(
+                onPressed: () => close('join'),
+                child: Text(l10n.keyMenuJoinHandles)),
+            MenuRow(
                 onPressed: () => close('delete'), child: Text(l10n.deleteKey)),
           ],
         ),
@@ -2290,6 +2301,25 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     final id = '${channel.id}#$index';
     if (picked == 'delete') {
       _deleteSelection(fallback: id);
+      return;
+    }
+    final keys = widget.selectedKeys.contains(id) ? widget.selectedKeys : {id};
+    if (picked == 'copyEase') {
+      copySelectedEase(channels: widget.channels, selectedKeys: keys);
+      return;
+    }
+    if (!mounted) return;
+    if (picked == 'pasteEase' || picked == 'join') {
+      if (picked == 'join') {
+        joinHandlesOnSelection(channels: widget.channels, selectedKeys: keys);
+      } else {
+        pasteEaseOnSelection(
+          project: Provider.of<LumitState>(context, listen: false).project,
+          channels: widget.channels,
+          selectedKeys: keys,
+        );
+      }
+      widget.onChanged();
       return;
     }
     if (picked == 'speed') {

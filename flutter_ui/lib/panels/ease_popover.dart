@@ -22,6 +22,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'easing_curve.dart';
 import 'easing_editor.dart' show easingPresetName;
+import 'graph_clipboard.dart' show easeClipboard;
 import 'key_block.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
@@ -66,6 +67,8 @@ Future<void> showEasePopover({
   required int count,
   required ValueChanged<EaseRequest> onApply,
   required VoidCallback onOpenGraph,
+  required VoidCallback onCopyEase,
+  required VoidCallback onPasteEase,
 }) =>
     showLumitPopup<void>(
       context: context,
@@ -77,6 +80,8 @@ Future<void> showEasePopover({
           close(null);
           onOpenGraph();
         },
+        onCopyEase: onCopyEase,
+        onPasteEase: onPasteEase,
       ),
     );
 
@@ -84,11 +89,15 @@ class _EasePopover extends StatefulWidget {
   final int count;
   final ValueChanged<EaseRequest> onApply;
   final VoidCallback onOpenGraph;
+  final VoidCallback onCopyEase;
+  final VoidCallback onPasteEase;
 
   const _EasePopover({
     required this.count,
     required this.onApply,
     required this.onOpenGraph,
+    required this.onCopyEase,
+    required this.onPasteEase,
   });
 
   @override
@@ -190,6 +199,8 @@ class _EasePopoverState extends State<_EasePopover> {
                   _row(t, l10n.easeInfluence, _influence(t)),
                   const SizedBox(height: 6),
                   _row(t, l10n.easeStagger, _staggerRow(t)),
+                  const SizedBox(height: 6),
+                  _clipboard(t),
                   const SizedBox(height: 8),
                   _buttons(t),
                 ],
@@ -324,6 +335,32 @@ class _EasePopoverState extends State<_EasePopover> {
           ),
         ],
       );
+
+  /// Copy ease and Paste ease: the easing of keys, without values or times.
+  Widget _clipboard(LumitTheme t) {
+    Widget button(String key, String label, VoidCallback? onPressed) =>
+        Expanded(
+          child: HouseButton(
+            key: ValueKey(key),
+            small: true,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            onPressed: onPressed,
+            child: Text(label,
+                style: t.body, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+        );
+    return Row(
+      children: [
+        button('ease-copy', l10n.keyMenuCopyEase, () {
+          widget.onCopyEase();
+          setState(() {});
+        }),
+        const SizedBox(width: 6),
+        button('ease-paste', l10n.keyMenuPasteEase,
+            easeClipboard.isEmpty ? null : widget.onPasteEase),
+      ],
+    );
+  }
 
   /// The way out and the way on. Open graph is a kicker, not a button: it goes
   /// somewhere rather than doing something, which is the same grammar the

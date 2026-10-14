@@ -12754,6 +12754,18 @@
   "@keyMenuEase": {
     "description": "Timeline lanes: the row of a keyframe's right-click menu that opens the Ease popover on the selected keyframes. The ellipsis says it opens something."
   },
+  "keyMenuCopyEase": "Copy ease",
+  "@keyMenuCopyEase": {
+    "description": "Keyframe right-click menu and the Ease popover: copy only the easing of the selected keyframes (interpolation and handles), not their values or times."
+  },
+  "keyMenuPasteEase": "Paste ease",
+  "@keyMenuPasteEase": {
+    "description": "Keyframe right-click menu and the Ease popover: apply the copied easing to the selected keyframes, leaving their values and times alone."
+  },
+  "keyMenuJoinHandles": "Join handles",
+  "@keyMenuJoinHandles": {
+    "description": "Graph editor keyframe right-click menu: make the two bezier handles of a keyframe that were split apart move together again."
+  },
   "timelineStretchHint": "f{first}–f{last}",
   "@timelineStretchHint": {
     "description": "Timeline lanes: the small readout pill beside the handle while a block of keyframes is being stretched, saying which frames the block now reaches from and to. Very small mono type; an en dash between the two.",

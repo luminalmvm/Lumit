@@ -2481,6 +2481,23 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           child: Text(l10n.keyMenuEase),
         ),
         MenuRow(
+          key: const ValueKey('tl-key-menu-copy-ease'),
+          onPressed: () {
+            close(null);
+            _copyEase();
+          },
+          child: Text(l10n.keyMenuCopyEase),
+        ),
+        if (easeClipboard.isNotEmpty)
+          MenuRow(
+            key: const ValueKey('tl-key-menu-paste-ease'),
+            onPressed: () {
+              close(null);
+              _pasteEase();
+            },
+            child: Text(l10n.keyMenuPasteEase),
+          ),
+        MenuRow(
           key: const ValueKey('tl-key-menu-delete'),
           onPressed: () {
             close(null);
@@ -2551,7 +2568,31 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       count: _selectedKeyCount,
       onOpenGraph: () => _setMode(TimelineMode.graph),
       onApply: _applyEaseRequest,
+      onCopyEase: _copyEase,
+      onPasteEase: _pasteEase,
     );
+  }
+
+  /// Copy ease: the easing of the selected keys, for Paste ease.
+  void _copyEase() {
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final channels = _selectionChannels(ui);
+    copySelectedEase(
+        channels: channels, selectedKeys: _actionKeySelection(channels));
+  }
+
+  /// Paste ease onto the selected keys, as one undo step.
+  void _pasteEase() {
+    if (!mounted) return;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final channels = _selectionChannels(ui);
+    if (pasteEaseOnSelection(
+      project: _project,
+      channels: channels,
+      selectedKeys: _actionKeySelection(channels),
+    )) {
+      ui.model.refresh();
+    }
   }
 
   /// One press of the popover's Apply: the shape onto every span the selection
