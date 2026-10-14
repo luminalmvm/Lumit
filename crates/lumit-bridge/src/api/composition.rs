@@ -1275,10 +1275,11 @@ impl CompositionReference {
     /// into the Compositions folder however it was made, and the whole
     /// move is one [`Op::Batch`], so one undo step puts the layers back.
     ///
-    /// A packed layer whose parent or matte stayed behind keeps the id it
-    /// pointed at, and the engine reads a link it cannot resolve as no link —
-    /// the parent chain stops there (`layer_parent_chain`). Nothing dangles
-    /// into a crash, and clearing them here would only spell the same result.
+    /// A parent or matte link that would cross the new comp's edge is kept by
+    /// a hidden copy of the layer at the far end, made on the near side with
+    /// its parent chain ([`crate::edits::link_copies`]), so the picture does
+    /// not change. [`Self::precompose_splits_links`] says beforehand whether
+    /// there will be any.
     /// `group` names the layer group being pre-composed, when the command came
     /// from a group header's *Pre-compose group*: the header's
     /// effect stack moves onto the new Precomp layer — where it means exactly
@@ -1444,6 +1445,32 @@ impl CompositionReference {
             inner_layers.push(layer);
         }
 
+        // A parent or matte link that would cross the new comp's edge is kept
+        // by a hidden copy of the layer at the far end, on the near side.
+        let ids: Vec<Uuid> = packed.iter().map(|l| l.id).collect();
+        let copies = if leave_attributes {
+            crate::edits::LinkCopies::default()
+        } else {
+            crate::edits::link_copies(&comp.layers, &ids)
+        };
+        for layer in &mut inner_layers {
+            if let Some(copy) = layer.parent.and_then(|p| copies.inside_ids.get(&p)) {
+                layer.parent = Some(*copy);
+            }
+            if let Some(matte) = &mut layer.matte {
+                if let Some(copy) = copies.inside_ids.get(&matte.layer) {
+                    matte.layer = *copy;
+                }
+            }
+        }
+        for copy in &copies.inside {
+            let mut copy = copy.clone();
+            copy.in_point = shift_back(copy.in_point)?;
+            copy.out_point = shift_back(copy.out_point)?;
+            copy.start_offset = shift_back(copy.start_offset)?;
+            inner_layers.push(copy);
+        }
+
         let inner = Composition {
             graph: None,
             master_volume_db: 0.0,
@@ -1579,8 +1606,65 @@ impl CompositionReference {
             layer: Box::new(layer),
         });
 
+        // The copies left behind go to the bottom of the stack, and what
+        // pointed at a packed layer points at its copy.
+        let bottom = comp.layers.len() - packed.len() + 1;
+        for (n, copy) in copies.outside.into_iter().enumerate() {
+            ops.push(Op::AddLayer {
+                comp: self.id,
+                index: bottom + n,
+                layer: Box::new(copy),
+            });
+        }
+        for layer in comp.layers.iter().filter(|l| !ids.contains(&l.id)) {
+            if let Some(copy) = layer.parent.and_then(|p| copies.outside_ids.get(&p)) {
+                ops.push(Op::SetLayerParent {
+                    comp: self.id,
+                    layer: layer.id,
+                    parent: Some(*copy),
+                });
+            }
+            if let Some(matte) = &layer.matte {
+                if let Some(copy) = copies.outside_ids.get(&matte.layer) {
+                    ops.push(Op::SetLayerMatte {
+                        comp: self.id,
+                        layer: layer.id,
+                        matte: Some(lumit_core::model::MatteRef {
+                            layer: *copy,
+                            ..matte.clone()
+                        }),
+                    });
+                }
+            }
+        }
+
         self.commit(Op::Batch { ops })?;
         Ok(LayerReference::new(self.project, self.id, layer_id))
+    }
+
+    /// Whether [`Self::precompose`] with these arguments would have to copy
+    /// layers to keep a parent or matte link: a packed layer leans on one left
+    /// outside, or one left outside leans on a packed layer. The dialogue asks
+    /// before it goes ahead.
+    #[frb(sync)]
+    pub fn precompose_splits_links(
+        &self,
+        layer_ids: Vec<Uuid>,
+        leave_attributes: bool,
+    ) -> Result<bool, BridgeError> {
+        let comp = self.composition()?;
+        let ids: Vec<Uuid> = comp
+            .layers
+            .iter()
+            .filter(|l| layer_ids.contains(&l.id))
+            .map(|l| l.id)
+            .collect();
+        // A single layer that leaves its attributes behind keeps its links on
+        // the Precomp layer, which stands in its place under its id.
+        if leave_attributes && ids.len() == 1 {
+            return Ok(false);
+        }
+        Ok(!crate::edits::link_copies(&comp.layers, &ids).is_empty())
     }
 
     /// Add a Text layer with the "Text" starter document, centred.
@@ -4315,6 +4399,69 @@ mod group_tests {
             .effects
             .is_empty());
         assert!(comp.get_group_effects(Uuid::now_v7()).is_err());
+    }
+
+    /// A link that would cross the new comp's edge is kept by a hidden copy on
+    /// the near side, both ways, and the whole thing is one undo.
+    #[test]
+    fn precompose_keeps_split_links_with_hidden_copies() {
+        use crate::api::layer::BridgeMatte;
+        let (project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        layers[1].set_parent(Some(all[0]), 0).expect("parented");
+        layers[3]
+            .set_matte(Some(BridgeMatte {
+                layer: all[2],
+                luma: false,
+                inverted: false,
+            }))
+            .expect("matted");
+        assert!(comp
+            .precompose_splits_links(all[1..3].to_vec(), false)
+            .expect("asked"));
+        assert!(!comp
+            .precompose_splits_links(vec![all[0]], true)
+            .expect("asked"));
+
+        let pre = comp
+            .precompose(all[1..3].to_vec(), "Packed".into(), false, false, None)
+            .expect("precomposed");
+        let Some(crate::api::project_item::ItemReference::Composition(inner)) =
+            pre.get_source_item().expect("source")
+        else {
+            panic!("a Precomp layer's source is a composition");
+        };
+        let inside = inner.get_model().expect("model").layers;
+        assert_eq!(inside.len(), 3, "the parent was copied in");
+        let parent = layers[1].layer_id;
+        let moved = inside
+            .iter()
+            .find(|e| e.layer.layer_id == parent)
+            .expect("moved");
+        let copy = inside
+            .iter()
+            .find(|e| !e.info.switches.visible)
+            .expect("copy");
+        assert_eq!(
+            moved.layer.get_parent().expect("parent"),
+            Some(copy.layer.layer_id)
+        );
+
+        let outside = comp.get_model().expect("model").layers;
+        assert_eq!(outside.len(), 4, "the matte was left behind as a copy");
+        let left = outside
+            .iter()
+            .find(|e| !e.info.switches.visible)
+            .expect("copy");
+        let matte = layers[3].get_matte().expect("matte").expect("still matted");
+        assert_eq!(matte.layer, left.layer.layer_id);
+
+        project.undo().expect("undo");
+        assert_eq!(comp.get_model().expect("model").layers.len(), 4);
+        assert_eq!(
+            layers[3].get_matte().expect("matte").expect("matted").layer,
+            all[2]
+        );
     }
 
     /// *Pre-compose group* carries the header's stack onto the new Precomp

@@ -6761,6 +6761,18 @@
   "@precomposeFailed": {
     "description": "Shown when pre-composing did not work."
   },
+  "precomposeLinksTitle": "Linked layers",
+  "@precomposeLinksTitle": {
+    "description": "Title of the question asked before pre-composing when a parent or track matte links the chosen layers to layers that stay outside."
+  },
+  "precomposeLinksQuestion": "A parent or matte links these layers to others outside. Duplicate them so both sides keep their links?",
+  "@precomposeLinksQuestion": {
+    "description": "The question asked before pre-composing would cut a parent or track matte link. Duplicating copies the layer at the other end of each link, hidden, so the picture stays the same."
+  },
+  "precomposeDuplicate": "Duplicate",
+  "@precomposeDuplicate": {
+    "description": "Button: go ahead with pre-compose, duplicating the linked layers so every parent and matte link is kept."
+  },
   "precomposeLeave": "Leave all attributes in '{comp}'",
   "@precomposeLeave": {
     "description": "Pre-compose choice. {comp} is the name of the composition the layers are in.",
