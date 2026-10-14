@@ -32,6 +32,13 @@ constexpr const wchar_t kGetPreferredBrightnessRegValue[] = L"AppsUseLightTheme"
 // The number of Win32Window objects that currently exist.
 static int g_active_window_count = 0;
 
+// The smallest the window can be made, in logical pixels: room for the default
+// workspace's narrowest panels side by side at the default interface scale.
+// The same on every platform (linux/runner/my_application.cc,
+// macos/Runner/MainFlutterWindow.swift).
+constexpr int kMinimumWidth = 840;
+constexpr int kMinimumHeight = 560;
+
 using EnableNonClientDpiScaling = BOOL __stdcall(HWND hwnd);
 
 // Scale helper to convert logical scaler values to physical using passed in
@@ -374,6 +381,14 @@ Win32Window::MessageHandler(HWND hwnd,
       return point.x < corner
                  ? HTTOPLEFT
                  : point.x >= client.right - corner ? HTTOPRIGHT : HTTOP;
+    }
+
+    case WM_GETMINMAXINFO: {
+      auto* info = reinterpret_cast<MINMAXINFO*>(lparam);
+      const double scale = FlutterDesktopGetDpiForHWND(hwnd) / 96.0;
+      info->ptMinTrackSize.x = Scale(kMinimumWidth, scale);
+      info->ptMinTrackSize.y = Scale(kMinimumHeight, scale);
+      return 0;
     }
 
     case WM_DPICHANGED: {
