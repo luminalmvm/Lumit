@@ -315,7 +315,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
           subject: footage.length == 1
               ? (_itemById[_selectedIds.first]?.name() ?? '')
               : l10n.interpretSeveral(footage.length),
-          spaces: ui.colourSummary.loaded ? ui.colourSummary.spaces : const [],
+          colour: ui.colourSummary,
         ).then((applied) {
           if (applied && mounted) _documentChanged();
         });

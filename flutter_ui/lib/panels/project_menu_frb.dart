@@ -578,7 +578,7 @@ Future<void> showProjectMenuFrb({
         subject: picked.length == 1
             ? item.name()
             : l10n.interpretSeveral(picked.length),
-        spaces: colourSpaces,
+        colour: ui.colourSummary,
       );
       if (applied) onLocalEdit();
     case _ProjectMenuAction.rememberInterpretation:
