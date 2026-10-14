@@ -2099,6 +2099,7 @@ fn comp_walk(
                         return GraphDraw {
                             width: comp.width,
                             height: comp.height,
+                            room: doc.graph_room.frames(),
                             steps: Vec::new(),
                             output: None,
                         };
@@ -2106,6 +2107,7 @@ fn comp_walk(
                     let mut plan = GraphDraw {
                         width: inner_comp.width,
                         height: inner_comp.height,
+                        room: doc.graph_room.frames(),
                         steps: Vec::new(),
                         output: None,
                     };
@@ -4129,6 +4131,7 @@ fn graph_comp_draw(
     let mut plan = GraphDraw {
         width: comp.width,
         height: comp.height,
+        room: lower.doc.graph_room.frames(),
         steps: Vec::new(),
         output: None,
     };

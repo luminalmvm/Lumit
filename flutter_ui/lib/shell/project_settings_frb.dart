@@ -37,6 +37,16 @@ const List<int> _depths = [8, 16, 32];
 
 String _depthLabel(int bits) => l10n.bitsPerChannel('$bits');
 
+/// How far past the frame a node graph box keeps its picture, in frames past
+/// each edge. 0 is as far as the widest texture allows.
+const List<int> _rooms = [1, 2, 0];
+
+String _roomLabel(int frames) => switch (frames) {
+      1 => l10n.graphRoomOne,
+      2 => l10n.graphRoomTwo,
+      _ => l10n.graphRoomMost,
+    };
+
 const Size _windowSize = Size(560, 420);
 
 Future<void> showProjectSettingsFrb(
@@ -152,6 +162,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
     final inUse = project.antiAliasingInUse();
     final depth = project.colourDepth();
     final depthInUse = project.colourDepthInUse();
+    final room = project.graphRoom();
     return [
       settingsSection(t, l10n.settingsGroupRendering, [
         settingsRow(
@@ -212,6 +223,21 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
               style: t.small,
             ),
           ),
+        settingsRow(
+          t,
+          l10n.settingsGraphRoom,
+          l10n.settingsGraphRoomHint,
+          SizedBox(
+            width: 130,
+            child: BareDropdown<int>(
+              key: const ValueKey('project-graph-room'),
+              value: room,
+              options: _rooms,
+              label: _roomLabel,
+              onChanged: (n) => setState(() => project.setGraphRoom(frames: n)),
+            ),
+          ),
+        ),
       ]),
     ];
   }

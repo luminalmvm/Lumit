@@ -325,6 +325,12 @@ fn feed_comp(
             .samples_for(comp.width, comp.height)
             .to_le_bytes(),
     );
+    // How far a graph box keeps its picture. Only when moved off the
+    // default, so every frame name from before it existed still holds.
+    if !doc.graph_room.is_default() {
+        h.update(b"room");
+        h.update(&doc.graph_room.frames().to_le_bytes());
+    }
     for c in comp.background.0 {
         h.update(&c.to_le_bytes());
     }

@@ -1510,6 +1510,29 @@ impl ProjectReference {
         Ok(())
     }
 
+    /// How far past the frame a node graph box keeps its picture, in frames
+    /// past each edge: 1, 2, or 0 for as far as the widest texture allows.
+    #[frb(sync)]
+    pub fn graph_room(&self) -> Result<u32, BridgeError> {
+        let state = self.state()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        Ok(state.store.snapshot().graph_room.frames())
+    }
+
+    /// Set [`Self::graph_room`]. Anything but 1, 2 or 0 reads as 1. An
+    /// ordinary op, so it is undoable and saved in the `.lum`.
+    #[frb(sync)]
+    pub fn set_graph_room(&self, frames: u32) -> Result<(), BridgeError> {
+        let graph_room = lumit_core::model::GraphRoom::from_frames(frames);
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        state
+            .store
+            .commit(Op::SetGraphRoom { graph_room })
+            .map_err(BridgeError::OpError)?;
+        Ok(())
+    }
+
     /// The project's colour shelf, in the order the colours were kept.
     ///
     /// Empty for a project nobody has kept a colour in. The picker reads this

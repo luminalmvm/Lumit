@@ -711,6 +711,11 @@ pub enum Op {
     SetColourDepth {
         colour_depth: crate::model::ColourDepth,
     },
+    /// Set how far past the frame a node graph box keeps its picture. An op
+    /// for `SetAntiAliasing`'s reason: it changes the picture.
+    SetGraphRoom {
+        graph_room: crate::model::GraphRoom,
+    },
     /// Replace the project's colour shelf whole ([`crate::model::Swatch`]).
     ///
     /// **The whole list, not an add and a remove pair.** Keeping a colour and
@@ -910,6 +915,7 @@ impl Op {
             Op::SetCacheLocation { .. } => "Set cache location",
             Op::SetAntiAliasing { .. } => "Set anti-aliasing",
             Op::SetColourDepth { .. } => "Set colour depth",
+            Op::SetGraphRoom { .. } => "Set room past the frame",
             Op::SetProjectSwatches { .. } => "Edit swatches",
             Op::SetColourConfig { .. } | Op::SetColourWorkingSpace { .. } => {
                 "Set colour management"
@@ -2331,6 +2337,12 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             let previous = std::mem::replace(&mut doc.colour_depth, *colour_depth);
             Ok(Op::SetColourDepth {
                 colour_depth: previous,
+            })
+        }
+        Op::SetGraphRoom { graph_room } => {
+            let previous = std::mem::replace(&mut doc.graph_room, *graph_room);
+            Ok(Op::SetGraphRoom {
+                graph_room: previous,
             })
         }
         Op::SetProjectSwatches { swatches } => {

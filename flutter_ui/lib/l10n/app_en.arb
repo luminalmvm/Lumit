@@ -7191,6 +7191,26 @@
   "@settingsColourDepthInUse": {
     "description": "Project settings: the name of the row showing which colour depth the graphics card is actually working at."
   },
+  "settingsGraphRoom": "Room past the frame",
+  "@settingsGraphRoom": {
+    "description": "Project settings: the name of the row choosing how far past the composition's frame a node graph box keeps its picture, so a later box can bring it back."
+  },
+  "settingsGraphRoomHint": "For node graphs. More room uses more memory.",
+  "@settingsGraphRoomHint": {
+    "description": "Project settings: the line under Room past the frame."
+  },
+  "graphRoomOne": "One frame",
+  "@graphRoomOne": {
+    "description": "Project settings, Room past the frame: a node graph box keeps one frame's width and height past each edge of the frame."
+  },
+  "graphRoomTwo": "Two frames",
+  "@graphRoomTwo": {
+    "description": "Project settings, Room past the frame: a node graph box keeps two frames past each edge of the frame."
+  },
+  "graphRoomMost": "As much as fits",
+  "@graphRoomMost": {
+    "description": "Project settings, Room past the frame: a node graph box keeps as much past the frame as the largest picture the graphics card can hold."
+  },
   "settingsAntiAliasingInUse": "In use on this machine",
   "@settingsAntiAliasingInUse": {
     "description": "Project settings: the name of the row showing what the graphics card is actually doing."
@@ -14148,6 +14168,10 @@
   },
   "histSetColourDepth": "Set colour depth",
   "@histSetColourDepth": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetGraphRoom": "Set room past the frame",
+  "@histSetGraphRoom": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histEditSwatches": "Edit swatches",
