@@ -34,7 +34,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
@@ -89,6 +90,7 @@ import 'settings_rows.dart';
 import 'theme_editor_frb.dart';
 import 'theme_name_dialog.dart';
 import 'update_dialog_frb.dart';
+import 'window_frame.dart';
 
 /// The smallest budget worth setting, in MiB. Below this the cache holds a
 /// frame or two and costs more in bookkeeping than it saves.
@@ -1446,6 +1448,19 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.commandBox = on;
             ui.workspace.settingsChanged();
           }),
+          // Off unless asked for on Linux. Windows always has it, and macOS
+          // keeps its own.
+          if (defaultTargetPlatform == TargetPlatform.linux)
+            _row(
+              t,
+              l10n.settingsOwnTitleBar,
+              description: l10n.settingsOwnTitleBarNote,
+              HouseToggle(
+                key: const ValueKey<String>('settings-own-title-bar'),
+                value: linuxOwnTitleBar,
+                onChanged: (on) => setState(() => linuxOwnTitleBar = on),
+              ),
+            ),
           _row(
             t,
             l10n.settingsIconSet,
