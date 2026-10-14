@@ -807,13 +807,14 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
 
   void _wheel(PointerScrollEvent event) {
     final keymap = Provider.of<LumitUiState>(context, listen: false).keymap;
+    final zoomValues = keymap.wheelHeld(BridgeWheelAction.zoomValues);
     if (keymap.wheelHeld(BridgeWheelAction.zoomTime) ||
         keymap.wheelHeld(BridgeWheelAction.scrollSideways)) {
       widget.onWheelTime(event, event.localPosition.dx);
-      return;
+      // Time and values can share a modifier, and then it zooms both.
+      if (!zoomValues) return;
     }
     if (_paneSize.height <= 0) return;
-    final zoomValues = keymap.wheelHeld(BridgeWheelAction.zoomValues);
     // The vertical axis is the user's only once auto-fit is off, and zooming
     // the values is what turns it off.
     if (widget.autoFit) {
