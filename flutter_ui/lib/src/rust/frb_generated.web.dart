@@ -1836,6 +1836,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   F64Array2? dco_decode_opt_f_64_array_2(dynamic raw);
 
   @protected
+  F64Array4? dco_decode_opt_f_64_array_4(dynamic raw);
+
+  @protected
   List<String>? dco_decode_opt_list_String(dynamic raw);
 
   @protected
@@ -3944,6 +3947,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   F64Array2? sse_decode_opt_f_64_array_2(SseDeserializer deserializer);
+
+  @protected
+  F64Array4? sse_decode_opt_f_64_array_4(SseDeserializer deserializer);
 
   @protected
   List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
@@ -6196,6 +6202,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_opt_f_64_array_2(F64Array2? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_f_64_array_4(F64Array4? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);

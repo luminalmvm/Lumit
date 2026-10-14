@@ -26015,6 +26015,8 @@ impl SseDecode for crate::api::state::BridgeSharedFrameInfo {
         let mut var_height = <u32>::sse_decode(deserializer);
         let mut var_tier = <u32>::sse_decode(deserializer);
         let mut var_view = <u32>::sse_decode(deserializer);
+        let mut var_reach = <Option<[f64; 4]>>::sse_decode(deserializer);
+        let mut var_reachAtLimit = <bool>::sse_decode(deserializer);
         return crate::api::state::BridgeSharedFrameInfo {
             handle: var_handle,
             frame: var_frame,
@@ -26022,6 +26024,8 @@ impl SseDecode for crate::api::state::BridgeSharedFrameInfo {
             height: var_height,
             tier: var_tier,
             view: var_view,
+            reach: var_reach,
+            reach_at_limit: var_reachAtLimit,
         };
     }
 }
@@ -26043,6 +26047,8 @@ impl SseDecode for crate::api::state::BridgeSharedFrameInfoLinux {
             <Option<crate::api::state::BridgeDrmNode>>::sse_decode(deserializer);
         let mut var_tier = <u32>::sse_decode(deserializer);
         let mut var_view = <u32>::sse_decode(deserializer);
+        let mut var_reach = <Option<[f64; 4]>>::sse_decode(deserializer);
+        let mut var_reachAtLimit = <bool>::sse_decode(deserializer);
         return crate::api::state::BridgeSharedFrameInfoLinux {
             fd: var_fd,
             frame: var_frame,
@@ -26056,6 +26062,8 @@ impl SseDecode for crate::api::state::BridgeSharedFrameInfoLinux {
             primary_node: var_primaryNode,
             tier: var_tier,
             view: var_view,
+            reach: var_reach,
+            reach_at_limit: var_reachAtLimit,
         };
     }
 }
@@ -29110,6 +29118,17 @@ impl SseDecode for Option<[f64; 2]> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<[f64; 2]>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<[f64; 4]> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<[f64; 4]>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -36240,6 +36259,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::state::BridgeSharedFrameInfo 
             self.height.into_into_dart().into_dart(),
             self.tier.into_into_dart().into_dart(),
             self.view.into_into_dart().into_dart(),
+            self.reach.into_into_dart().into_dart(),
+            self.reach_at_limit.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -36271,6 +36292,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::state::BridgeSharedFrameInfoL
             self.primary_node.into_into_dart().into_dart(),
             self.tier.into_into_dart().into_dart(),
             self.view.into_into_dart().into_dart(),
+            self.reach.into_into_dart().into_dart(),
+            self.reach_at_limit.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -41232,6 +41255,8 @@ impl SseEncode for crate::api::state::BridgeSharedFrameInfo {
         <u32>::sse_encode(self.height, serializer);
         <u32>::sse_encode(self.tier, serializer);
         <u32>::sse_encode(self.view, serializer);
+        <Option<[f64; 4]>>::sse_encode(self.reach, serializer);
+        <bool>::sse_encode(self.reach_at_limit, serializer);
     }
 }
 
@@ -41250,6 +41275,8 @@ impl SseEncode for crate::api::state::BridgeSharedFrameInfoLinux {
         <Option<crate::api::state::BridgeDrmNode>>::sse_encode(self.primary_node, serializer);
         <u32>::sse_encode(self.tier, serializer);
         <u32>::sse_encode(self.view, serializer);
+        <Option<[f64; 4]>>::sse_encode(self.reach, serializer);
+        <bool>::sse_encode(self.reach_at_limit, serializer);
     }
 }
 
@@ -43613,6 +43640,16 @@ impl SseEncode for Option<[f64; 2]> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <[f64; 2]>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<[f64; 4]> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <[f64; 4]>::sse_encode(value, serializer);
         }
     }
 }

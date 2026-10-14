@@ -11594,6 +11594,10 @@
   "@viewerOverlayRulers": {
     "description": "Entry in the Viewer bar's view menu, with a tick beside it when they are on: the two strips along the top and left edges of the picture, counting the composition's own pixels. Guides are dragged out of them."
   },
+  "viewerOverlayReach": "Picture bounds",
+  "@viewerOverlayReach": {
+    "description": "Entry in the Viewer bar's view menu, shown only for a node graph composition, with a tick beside it when it is on. It draws a dotted outline round how far the graph's picture reaches past the composition's frame, with that size in pixels at its corner."
+  },
   "viewerOverlaySnap": "Snap to guides",
   "@viewerOverlaySnap": {
     "description": "Entry in the Viewer bar's view menu, with a tick beside it when it is on: whether a layer dragged on the picture is pulled onto the nearest guide. The same switch as the magnet on the toolbar."

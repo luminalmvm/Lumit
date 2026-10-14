@@ -19,6 +19,7 @@ import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../state/workspace.dart' show ViewerReach;
 import '../widgets/controls.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 import 'viewer_panel_frb.dart'
@@ -77,6 +78,7 @@ class ViewerGuidesMenu extends StatelessWidget {
     final lit = on.grid ||
         on.safeAreas ||
         on.rulers ||
+        (on.reach && ui.model.isNodeGraph) ||
         ui.guides.isNotEmpty ||
         ui.regionOfInterest != null ||
         ui.armingRegion;
@@ -230,6 +232,15 @@ List<ViewerToggle> viewerOverlayToggles(LumitUiState ui) => [
         on: ui.viewerOverlays.rulers,
         pick: () => ui.setViewerOverlays(rulers: !ui.viewerOverlays.rulers),
       ),
+      // How far a node graph's picture reaches past the frame. Only a node
+      // graph has one, so only a node graph offers it.
+      if (ui.model.isNodeGraph)
+        (
+          key: 'viewer-guides-reach',
+          text: l10n.viewerOverlayReach,
+          on: ui.viewerOverlays.reach,
+          pick: () => ui.setViewerOverlays(reach: !ui.viewerOverlays.reach),
+        ),
       (
         key: 'viewer-guides-snap',
         text: l10n.viewerOverlaySnap,
@@ -237,6 +248,89 @@ List<ViewerToggle> viewerOverlayToggles(LumitUiState ui) => [
         pick: () => ui.tools.snapping = !ui.tools.snapping,
       ),
     ];
+
+/// How far a node graph's picture reaches past the frame: a dotted outline
+/// round it, and its size in comp pixels under the bottom right corner. The
+/// outline turns to the warning colour where the picture reached as far as a
+/// box may keep, and was cut there.
+class ViewerReachPainter extends CustomPainter {
+  /// Where the frame is drawn in the panel.
+  final Rect picture;
+
+  /// The comp's own pixel size, which [reach] is measured in.
+  final Size comp;
+  final ViewerReach reach;
+  final Color line;
+  final Color limitLine;
+
+  const ViewerReachPainter({
+    required this.picture,
+    required this.comp,
+    required this.reach,
+    required this.line,
+    required this.limitLine,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (comp.isEmpty || picture.isEmpty) return;
+    final sx = picture.width / comp.width;
+    final sy = picture.height / comp.height;
+    final r = reach.rect;
+    final outline = Rect.fromLTRB(
+      picture.left + r.left * sx,
+      picture.top + r.top * sy,
+      picture.left + r.right * sx,
+      picture.top + r.bottom * sy,
+    );
+    final colour = reach.atLimit ? limitLine : line;
+    // Bounded by the panel, which the outline is often bigger than.
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    final paint = Paint()
+      ..color = colour
+      ..strokeWidth = 1;
+    const dash = 4.0;
+    void dashed(Offset a, Offset b) {
+      final length = (b - a).distance;
+      if (length == 0) return;
+      final step = (b - a) / length;
+      for (var d = 0.0; d < length; d += dash * 2) {
+        final end = d + dash < length ? d + dash : length;
+        canvas.drawLine(a + step * d, a + step * end, paint);
+      }
+    }
+
+    dashed(outline.topLeft, outline.topRight);
+    dashed(outline.topRight, outline.bottomRight);
+    dashed(outline.bottomRight, outline.bottomLeft);
+    dashed(outline.bottomLeft, outline.topLeft);
+    final text = TextPainter(
+      text: TextSpan(
+        text: '${r.width.round()}×${r.height.round()}',
+        style: TextStyle(color: colour, fontSize: 9),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    // Under the bottom right corner, or as near it as the panel shows.
+    double within(double v, double room) => v > room ? room : (v < 2 ? 2 : v);
+    final at = Offset(
+      within(outline.right - text.width, size.width - text.width - 2),
+      within(outline.bottom + 2, size.height - text.height - 2),
+    );
+    text.paint(canvas, at);
+    text.dispose();
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(ViewerReachPainter old) =>
+      old.picture != picture ||
+      old.comp != comp ||
+      old.reach != reach ||
+      old.line != line ||
+      old.limitLine != limitLine;
+}
 
 /// [row] as a menu row: its tick and its name. Picking it closes the menu.
 Widget viewerToggleRow(ViewerToggle row, VoidCallback close) => MenuRow(

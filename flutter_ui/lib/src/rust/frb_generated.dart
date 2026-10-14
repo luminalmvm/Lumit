@@ -23591,8 +23591,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeSharedFrameInfo dco_decode_bridge_shared_frame_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return BridgeSharedFrameInfo(
       handle: dco_decode_u_64(arr[0]),
       frame: dco_decode_u_64(arr[1]),
@@ -23600,6 +23600,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       height: dco_decode_u_32(arr[3]),
       tier: dco_decode_u_32(arr[4]),
       view: dco_decode_u_32(arr[5]),
+      reach: dco_decode_opt_f_64_array_4(arr[6]),
+      reachAtLimit: dco_decode_bool(arr[7]),
     );
   }
 
@@ -23608,8 +23610,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 12)
-      throw Exception('unexpected arr length: expect 12 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return BridgeSharedFrameInfoLinux(
       fd: dco_decode_i_32(arr[0]),
       frame: dco_decode_u_64(arr[1]),
@@ -23623,6 +23625,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       primaryNode: dco_decode_opt_box_autoadd_bridge_drm_node(arr[9]),
       tier: dco_decode_u_32(arr[10]),
       view: dco_decode_u_32(arr[11]),
+      reach: dco_decode_opt_f_64_array_4(arr[12]),
+      reachAtLimit: dco_decode_bool(arr[13]),
     );
   }
 
@@ -25393,6 +25397,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   F64Array2? dco_decode_opt_f_64_array_2(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_f_64_array_2(raw);
+  }
+
+  @protected
+  F64Array4? dco_decode_opt_f_64_array_4(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_f_64_array_4(raw);
   }
 
   @protected
@@ -29982,13 +29992,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_height = sse_decode_u_32(deserializer);
     var var_tier = sse_decode_u_32(deserializer);
     var var_view = sse_decode_u_32(deserializer);
+    var var_reach = sse_decode_opt_f_64_array_4(deserializer);
+    var var_reachAtLimit = sse_decode_bool(deserializer);
     return BridgeSharedFrameInfo(
         handle: var_handle,
         frame: var_frame,
         width: var_width,
         height: var_height,
         tier: var_tier,
-        view: var_view);
+        view: var_view,
+        reach: var_reach,
+        reachAtLimit: var_reachAtLimit);
   }
 
   @protected
@@ -30009,6 +30023,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_decode_opt_box_autoadd_bridge_drm_node(deserializer);
     var var_tier = sse_decode_u_32(deserializer);
     var var_view = sse_decode_u_32(deserializer);
+    var var_reach = sse_decode_opt_f_64_array_4(deserializer);
+    var var_reachAtLimit = sse_decode_bool(deserializer);
     return BridgeSharedFrameInfoLinux(
         fd: var_fd,
         frame: var_frame,
@@ -30021,7 +30037,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         renderNode: var_renderNode,
         primaryNode: var_primaryNode,
         tier: var_tier,
-        view: var_view);
+        view: var_view,
+        reach: var_reach,
+        reachAtLimit: var_reachAtLimit);
   }
 
   @protected
@@ -32748,6 +32766,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_f_64_array_2(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  F64Array4? sse_decode_opt_f_64_array_4(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_f_64_array_4(deserializer));
     } else {
       return null;
     }
@@ -36517,6 +36546,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.height, serializer);
     sse_encode_u_32(self.tier, serializer);
     sse_encode_u_32(self.view, serializer);
+    sse_encode_opt_f_64_array_4(self.reach, serializer);
+    sse_encode_bool(self.reachAtLimit, serializer);
   }
 
   @protected
@@ -36535,6 +36566,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_box_autoadd_bridge_drm_node(self.primaryNode, serializer);
     sse_encode_u_32(self.tier, serializer);
     sse_encode_u_32(self.view, serializer);
+    sse_encode_opt_f_64_array_4(self.reach, serializer);
+    sse_encode_bool(self.reachAtLimit, serializer);
   }
 
   @protected
@@ -38752,6 +38785,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_f_64_array_2(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_f_64_array_4(F64Array4? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_f_64_array_4(self, serializer);
     }
   }
 

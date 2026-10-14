@@ -49,6 +49,7 @@ import 'package:lumit_flutter/src/rust/api/shell.dart'
         setFullResDragPreviews,
         setHardwareDecode;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/src/rust/lib.dart' show F64Array4;
 import 'package:lumit_flutter/src/rust/api/streams.dart'
     show BridgeStreamsArrival;
 import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share
@@ -2539,9 +2540,13 @@ class LumitUiState extends ChangeNotifier {
       switch (msg) {
         case WorkerResponse_RenderedDMABuf frame:
           previewTier.value = frame.field0.tier;
+          _showReach(frame.field0.view, frame.field0.reach,
+              frame.field0.reachAtLimit);
           _showDmabuf(frame.field0);
         case WorkerResponse_RenderedSharedTexture frame:
           previewTier.value = frame.field0.tier;
+          _showReach(frame.field0.view, frame.field0.reach,
+              frame.field0.reachAtLimit);
           _showSharedTexture(frame.field0);
         // Scope traces ride the same stream; the Scopes panel subscribes to it
         // directly, so there is nothing for the Viewer to do with one.
@@ -2637,6 +2642,24 @@ class LumitUiState extends ChangeNotifier {
 
   ValueNotifier<int?> textureOf(int engineId) =>
       _viewTextures.putIfAbsent(engineId, () => ValueNotifier<int?>(null));
+
+  /// How far each view's node graph picture reaches past the frame, in comp
+  /// pixels, and whether it got as far as a box may keep. Null while the
+  /// picture stays inside the frame. Every frame says, so it follows the
+  /// playhead.
+  final Map<int, ValueNotifier<ViewerReach?>> _viewReach = {};
+
+  ValueNotifier<ViewerReach?> reachOf(int engineId) =>
+      _viewReach.putIfAbsent(engineId, () => ValueNotifier<ViewerReach?>(null));
+
+  void _showReach(int engineId, F64Array4? rect, bool atLimit) {
+    reachOf(engineId).value = rect == null
+        ? null
+        : (
+            rect: Rect.fromLTRB(rect[0], rect[1], rect[2], rect[3]),
+            atLimit: atLimit,
+          );
+  }
 
   /// A frame has come from the engine: the playhead follows it.
   ///
@@ -3440,7 +3463,8 @@ class LumitUiState extends ChangeNotifier {
   /// arguments rather than a whole record, for [setViewerStops]'s reason: a
   /// caller that rebuilt the set from what it was *drawn* with would carry a
   /// stale reading for the other switches into the write.
-  void setViewerOverlays({bool? grid, bool? safeAreas, bool? rulers}) {
+  void setViewerOverlays(
+      {bool? grid, bool? safeAreas, bool? rulers, bool? reach}) {
     final id = _selectedComp?.internalid.toString();
     if (id == null) return;
     final now = viewerOverlays;
@@ -3448,6 +3472,7 @@ class LumitUiState extends ChangeNotifier {
       grid: grid ?? now.grid,
       safeAreas: safeAreas ?? now.safeAreas,
       rulers: rulers ?? now.rulers,
+      reach: reach ?? now.reach,
     );
     if (next != noViewerOverlays) {
       viewerOverlaysByComp[id] = next;

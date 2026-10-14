@@ -6003,6 +6003,7 @@ mod render_below_at_tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         };
         // A softbox in front of the comp, big enough to rake across it.
         let mut light = text_layer(160.0);
@@ -6113,6 +6114,7 @@ mod render_below_at_tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         };
         let comp = Composition {
             graph: None,
@@ -6317,6 +6319,7 @@ mod render_below_at_tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         };
         let comp = posterize_comp();
         let doc = Document::new();
@@ -6462,6 +6465,7 @@ mod render_below_at_tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         };
         let doc = Document::new();
         let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
@@ -6597,6 +6601,7 @@ mod render_below_at_tests {
                 colour_config: None,
                 flow: Some(&self.flow),
                 late_clones: None,
+                graph_reach: None,
             }
         }
 

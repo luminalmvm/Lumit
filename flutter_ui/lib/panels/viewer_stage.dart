@@ -28,7 +28,7 @@ import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
 import '../state/share.dart';
 import '../state/tools.dart';
-import '../state/workspace.dart' show ViewerOverlays;
+import '../state/workspace.dart' show ViewerOverlays, ViewerReach;
 import '../theme/theme.dart';
 import 'viewer_texture_controller.dart';
 import '../widgets/controls.dart';
@@ -489,6 +489,30 @@ class ViewerStage extends StatelessWidget {
                       gridLine: t.hairline,
                       safeLine: t.hairlineStrong,
                     ),
+                  ),
+                ),
+              ),
+            // How far a node graph's picture reaches past the frame, which is
+            // drawn round the frame and so can sit outside it. Each frame
+            // brings its own, so it follows the playhead.
+            if (overlays.reach && uiState.model.isNodeGraph)
+              Positioned.fill(
+                key: const ValueKey('viewer-overlay-reach'),
+                child: IgnorePointer(
+                  child: ValueListenableBuilder<ViewerReach?>(
+                    valueListenable: uiState.reachOf(viewId),
+                    builder: (context, reach, _) => reach == null
+                        ? const SizedBox.shrink()
+                        : CustomPaint(
+                            painter: ViewerReachPainter(
+                              picture: fitted,
+                              comp: Size(compSize.width.toDouble(),
+                                  compSize.height.toDouble()),
+                              reach: reach,
+                              line: t.hairlineStrong,
+                              limitLine: t.warning,
+                            ),
+                          ),
                   ),
                 ),
               ),

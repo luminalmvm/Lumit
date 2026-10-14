@@ -5,6 +5,7 @@
 
 import '../api.dart';
 import '../frb_generated.dart';
+import '../lib.dart';
 import 'composition.dart';
 import 'folder.dart';
 import 'footage.dart';
@@ -619,6 +620,16 @@ class BridgeSharedFrameInfo {
   /// by the one that asked last.
   final int view;
 
+  /// How far a node graph composition's picture reaches past the frame,
+  /// `[left, top, right, bottom]` in the composition's pixels from the
+  /// frame's top-left corner, for the Viewer's outline. `None` when it stays
+  /// inside the frame.
+  final F64Array4? reach;
+
+  /// Whether that reaches as far as a box may keep, so some of the picture
+  /// was cut there.
+  final bool reachAtLimit;
+
   const BridgeSharedFrameInfo({
     required this.handle,
     required this.frame,
@@ -626,6 +637,8 @@ class BridgeSharedFrameInfo {
     required this.height,
     required this.tier,
     required this.view,
+    this.reach,
+    required this.reachAtLimit,
   });
 
   @override
@@ -635,7 +648,9 @@ class BridgeSharedFrameInfo {
       width.hashCode ^
       height.hashCode ^
       tier.hashCode ^
-      view.hashCode;
+      view.hashCode ^
+      reach.hashCode ^
+      reachAtLimit.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -647,7 +662,9 @@ class BridgeSharedFrameInfo {
           width == other.width &&
           height == other.height &&
           tier == other.tier &&
-          view == other.view;
+          view == other.view &&
+          reach == other.reach &&
+          reachAtLimit == other.reachAtLimit;
 }
 
 class BridgeSharedFrameInfoLinux {
@@ -700,6 +717,16 @@ class BridgeSharedFrameInfoLinux {
   /// by the one that asked last.
   final int view;
 
+  /// How far a node graph composition's picture reaches past the frame,
+  /// `[left, top, right, bottom]` in the composition's pixels from the
+  /// frame's top-left corner, for the Viewer's outline. `None` when it stays
+  /// inside the frame.
+  final F64Array4? reach;
+
+  /// Whether that reaches as far as a box may keep, so some of the picture
+  /// was cut there.
+  final bool reachAtLimit;
+
   const BridgeSharedFrameInfoLinux({
     required this.fd,
     required this.frame,
@@ -713,6 +740,8 @@ class BridgeSharedFrameInfoLinux {
     this.primaryNode,
     required this.tier,
     required this.view,
+    this.reach,
+    required this.reachAtLimit,
   });
 
   @override
@@ -728,7 +757,9 @@ class BridgeSharedFrameInfoLinux {
       renderNode.hashCode ^
       primaryNode.hashCode ^
       tier.hashCode ^
-      view.hashCode;
+      view.hashCode ^
+      reach.hashCode ^
+      reachAtLimit.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -746,7 +777,9 @@ class BridgeSharedFrameInfoLinux {
           renderNode == other.renderNode &&
           primaryNode == other.primaryNode &&
           tier == other.tier &&
-          view == other.view;
+          view == other.view &&
+          reach == other.reach &&
+          reachAtLimit == other.reachAtLimit;
 }
 
 /// Which part of opening a project is under way.

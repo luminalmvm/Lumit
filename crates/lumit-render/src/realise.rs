@@ -86,6 +86,32 @@ impl Bounds {
         }
     }
 
+    /// The most a box may keep round a `w × h` frame.
+    fn limit(w: u32, h: u32) -> Self {
+        Self::covering(
+            [
+                f32::NEG_INFINITY,
+                f32::NEG_INFINITY,
+                f32::INFINITY,
+                f32::INFINITY,
+            ],
+            w,
+            h,
+        )
+    }
+
+    /// Whether this reaches the limit on any side the limit is past the
+    /// frame.
+    fn at_limit(self, w: u32, h: u32) -> bool {
+        let limit = Self::limit(w, h);
+        let [x0, y0, x1, y1] = self.rect();
+        let [lx0, ly0, lx1, ly1] = limit.rect();
+        (lx0 < 0.0 && x0 <= lx0)
+            || (ly0 < 0.0 && y0 <= ly0)
+            || (lx1 > w as f32 && x1 >= lx1)
+            || (ly1 > h as f32 && y1 >= ly1)
+    }
+
     fn union(self, other: Self) -> Self {
         let (x0, y0) = (self.x.min(other.x), self.y.min(other.y));
         let x1 = (self.x + self.w as i32).max(other.x + other.w as i32);
@@ -190,6 +216,21 @@ pub struct Realiser<'a> {
     /// and this walk holds neither. `None`, which is every builder in the
     /// tests, leaves such a list absent, so nothing is stamped.
     pub late_clones: Option<&'a LateCloneMaker<'a>>,
+    /// Where the walk tells the Viewer how far a node graph composition's
+    /// picture reaches past its frame. Each graph walked on its own sets it
+    /// as its Output is cut back to the frame, so the outermost graph, which
+    /// finishes last, is the one left in it. `None` for every render that
+    /// draws no outline.
+    pub graph_reach: Option<&'a std::cell::Cell<Option<Reach>>>,
+}
+
+/// How far a node graph composition's picture reaches past its frame:
+/// `[left, top, right, bottom]` in the composition's own pixels from the
+/// frame's top-left corner, and whether it got as far as a box may keep.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Reach {
+    pub rect: [f32; 4],
+    pub at_limit: bool,
 }
 
 /// What [`Realiser::late_clones`] calls.
@@ -1081,13 +1122,27 @@ impl Realiser<'_> {
             };
             made.push(tex);
         }
+        let shown = plan
+            .output
+            .and_then(|step| made.get(step).cloned().flatten());
+        // A graph walked as a composition of its own tells the Viewer how far
+        // its picture reaches. One applied to a layer has no outline to draw.
+        if let (None, Some(cell)) = (provided, self.graph_reach) {
+            let scale = scale.max(1e-6);
+            cell.set(
+                shown
+                    .as_ref()
+                    .map(|(_, bounds)| *bounds)
+                    .filter(|bounds| *bounds != frame)
+                    .map(|bounds| Reach {
+                        rect: bounds.rect().map(|v| v / scale),
+                        at_limit: bounds.at_limit(w, h),
+                    }),
+            );
+        }
         match plan.output {
             // Cut back to the frame, the one place that happens.
-            Some(step) => made
-                .get(step)
-                .cloned()
-                .flatten()
-                .map_or_else(|| self.transparent(w, h), |pic| place(pic, frame)),
+            Some(_) => shown.map_or_else(|| self.transparent(w, h), |pic| place(pic, frame)),
             // Nothing wired to the Output, and the passthrough a dangling
             // Node graph effect degrades to.
             None => provided.cloned().unwrap_or_else(|| self.transparent(w, h)),
@@ -2624,6 +2679,7 @@ mod tests {
             colour_config: None,
             flow: None,
             late_clones: None,
+            graph_reach: None,
         }
     }
 

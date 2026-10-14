@@ -3773,6 +3773,8 @@ fn present_ring_frame(
                     height: shared.height,
                     tier: crate::realtime::tier(),
                     view,
+                    reach: prepared.reach().map(|r| r.rect.map(f64::from)),
+                    reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
                 },
             ));
         }
@@ -3799,6 +3801,8 @@ fn present_ring_frame(
                     .map(|(major, minor)| BridgeDrmNode { major, minor }),
                 tier: crate::realtime::tier(),
                 view,
+                reach: prepared.reach().map(|r| r.rect.map(f64::from)),
+                reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
             }));
         }
         Err(err) => note!("Shared DMA-BUF present failed, dropping frame: {err}"),
@@ -5404,6 +5408,8 @@ fn publish_zero_copy(
         // so it must not report a tier it was not rendered at.
         tier: lumit_eval::schedule::FINEST_TIER,
         view: state.view_id(),
+        reach: prepared.reach().map(|r| r.rect.map(f64::from)),
+        reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
     }));
 }
 
@@ -5471,6 +5477,8 @@ fn publish_zero_copy(
             // at.
             tier: lumit_eval::schedule::FINEST_TIER,
             view: state.view_id(),
+            reach: prepared.reach().map(|r| r.rect.map(f64::from)),
+            reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
         },
     ));
 }
