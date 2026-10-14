@@ -30,6 +30,7 @@ import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/state/tools.dart';
 
 import '../icons/icons.dart';
+import '../theme/theme.dart';
 
 /// Where the pointer is, for a tool that draws its own, and the hidden system
 /// cursor that goes with it.
@@ -529,6 +530,24 @@ class _ViewerHandLayerState extends State<ViewerHandLayer> {
     );
   }
 }
+
+/// The Hand tool over a panel other than the Viewer: the same drawn hand,
+/// and a left-drag that pans the panel, for as long as the Hand is armed.
+/// A child of the panel's [Stack], over everything the drag must not reach.
+Widget handPanLayer(
+  ToolsState tools,
+  LumitTheme t,
+  ValueChanged<Offset> onPan,
+) =>
+    ListenableBuilder(
+      listenable: tools,
+      builder: (context, _) => ViewerHandLayer(
+        active: tools.tool.group == ToolGroup.hand,
+        onPan: onPan,
+        mark: t.textPrimary,
+        outline: t.surface0,
+      ),
+    );
 
 /// The Zoom tool's pointer: a magnifier with a plus in it, or a minus while Alt
 /// says the click will zoom out.

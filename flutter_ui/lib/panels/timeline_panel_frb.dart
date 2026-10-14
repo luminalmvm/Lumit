@@ -100,6 +100,7 @@ import '../widgets/zoom_anchored_scroll.dart';
 import 'waveform_frb.dart';
 import 'timeline_group_row_frb.dart';
 import 'transform_rows_frb.dart';
+import 'viewer_tool_cursor.dart' show handPanLayer;
 
 // The parts this file was split into (the split rule): every name they
 // hold was reachable through this file before the split, and still is.
@@ -4674,7 +4675,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: ClipRRect(
+                child: Stack(
+                fit: StackFit.passthrough,
+                children: [
+                ClipRRect(
                   // The same clip as the layer view's, so switching views
                   // updates one scroll view in place rather than mounting a
                   // second one on the same controller.
@@ -4812,6 +4816,12 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ),
                 ),
                 ),
+                // The Hand tool pans the curves, in the same place as the
+                // lanes' so the scroll view below stays the one it was.
+                handPanLayer(ui.tools, t,
+                    (d) => _graphPane.currentState?.panBy(d)),
+                ],
+                ),
               ),
               // The pane frames itself vertically
               // (or the wheel does); the gutter
@@ -4891,7 +4901,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: ClipRRect(
+                child: Stack(
+                fit: StackFit.passthrough,
+                children: [
+                ClipRRect(
                   // Lantern's lane area is a sub-card with the section's
                   // corners; the other shapes clip nothing at all, so what a
                   // graph draws past its box still shows.
@@ -4966,6 +4979,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     ),
                   ),
                 ),
+                ),
+                // The Hand tool pans the lanes, over everything in them.
+                handPanLayer(ui.tools, t, _panLanes),
+                ],
                 ),
               ),
               // The lanes' thumb, pinned to the

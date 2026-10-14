@@ -641,6 +641,19 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
   /// Delete the selected keys — the Timeline's Delete shortcut.
   void deleteSelectedKeys() => _deleteSelection();
 
+  /// The Hand tool's drag: time moves with it, and the values do too once
+  /// auto-fit is off, as they do under the wheel.
+  void panBy(Offset delta) {
+    final c = widget.hScroll;
+    if (c != null && c.hasClients) {
+      c.jumpTo((c.offset - delta.dx).clamp(0.0, c.position.maxScrollExtent));
+    }
+    if (widget.autoFit || _paneSize.height <= 0) return;
+    final (lo, hi) = _manual[widget.lens] ??= _lastRange;
+    final shift = delta.dy / _paneSize.height * (hi - lo);
+    setState(() => _manual[widget.lens] = (lo + shift, hi + shift));
+  }
+
   List<List<BridgeKeyframe>> get _channelKeys =>
       [for (final c in widget.channels) c.keys];
 
