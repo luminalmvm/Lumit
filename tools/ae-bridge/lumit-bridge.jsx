@@ -395,6 +395,7 @@ var LumitBridge = (function () {
         node.loop = attempt(function () { return source.loop; });
         node.fields = enumName(attempt(function () { return source.fieldSeparationType; }),
             FieldSeparationType, FIELD_NAMES);
+        node.high_quality_fields = attempt(function () { return source.highQualityFieldSeparation; });
         node.remove_pulldown = enumName(attempt(function () { return source.removePulldown; }),
             PulldownPhase, PULLDOWN_NAMES);
         node.is_still = attempt(function () { return source.isStill; });
@@ -525,7 +526,11 @@ var LumitBridge = (function () {
                 working_space: attempt(function () { return project.workingSpace; }),
                 linear_blending: attempt(function () { return project.linearBlending; }),
                 linearize_working_space: attempt(function () { return project.linearizeWorkingSpace; }),
-                expression_engine: attempt(function () { return project.expressionEngine; })
+                expression_engine: attempt(function () { return project.expressionEngine; }),
+                colour_system: attempt(function () {
+                    return project.colorManagementSystem === ColorManagementSystem.OCIO ? "OCIO" : "ADOBE";
+                }),
+                ocio_config: attempt(function () { return project.ocioConfigurationFile; })
             },
             items: [],
             comps: []

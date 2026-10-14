@@ -309,7 +309,92 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
     }
 
     doc.extra = project_extra(&mut report, capture);
+    doc.colour = project_colour(&mut report, capture);
     (doc, report)
+}
+
+/// A project After Effects colour managed with OCIO brings its config, and
+/// composites in the config's scene-linear space as After Effects does.
+fn project_colour(
+    report: &mut ImportReport,
+    capture: &Capture,
+) -> lumit_core::model::ColourManagement {
+    let config = capture
+        .project
+        .as_ref()
+        .filter(|project| project.colour_system.as_deref() == Some("OCIO"))
+        .and_then(|project| project.ocio_config.as_deref());
+    let Some(config) = config else {
+        return lumit_core::model::ColourManagement::default();
+    };
+    let Some(path) = ocio_config_path(config) else {
+        report.row(
+            ItemPath::default(),
+            Outcome::Adjusted,
+            Reason::OcioConfigNotFound {
+                config: config.to_string(),
+            },
+        );
+        return lumit_core::model::ColourManagement::default();
+    };
+    lumit_core::model::ColourManagement {
+        config: Some(MediaRef {
+            relative_path: path.clone(),
+            absolute_path: path,
+            fingerprint: None,
+            extra: serde_json::Map::new(),
+        }),
+        working_space: lumit_core::model::WorkingSpace::ConfigSceneLinear,
+    }
+}
+
+/// The config file After Effects names: a path, or one of the configs it
+/// ships, found in the newest install that has it.
+fn ocio_config_path(config: &str) -> Option<String> {
+    if std::path::Path::new(config).is_file() {
+        return Some(config.to_string());
+    }
+    let year = |install: &std::path::Path| -> String {
+        let name = install
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned());
+        name.unwrap_or_default()
+            .chars()
+            .filter(char::is_ascii_digit)
+            .collect()
+    };
+    let mut installs: Vec<std::path::PathBuf> = [
+        r"C:\Program Files\Adobe",
+        r"C:\Program Files (x86)\Adobe",
+        "/Applications",
+    ]
+    .iter()
+    .filter_map(|base| std::fs::read_dir(base).ok())
+    .flatten()
+    .flatten()
+    .map(|entry| entry.path())
+    .filter(|path| {
+        path.file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with("Adobe After Effects"))
+    })
+    .collect();
+    installs.sort_by_key(|install| std::cmp::Reverse(year(install)));
+    installs.iter().find_map(|install| {
+        let folder = install
+            .join("Support Files")
+            .join("OpenColorIO-Configs")
+            .join(config);
+        let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(folder)
+            .ok()?
+            .flatten()
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "ocio"))
+            .collect();
+        files.sort();
+        files
+            .first()
+            .map(|file| file.to_string_lossy().into_owned())
+    })
 }
 
 /// docs/11 §3's colour note: an 8-bpc project without linear blending did its
@@ -394,6 +479,15 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
             Reason::MediaPlaceholder,
         );
     }
+    if let Some(profile) = &item.colour_profile {
+        report.row(
+            ItemPath::item(name),
+            Outcome::Adjusted,
+            Reason::ColourProfileIgnored {
+                profile: profile.clone(),
+            },
+        );
+    }
     FootageItem {
         id,
         name: name.to_string(),
@@ -403,14 +497,18 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
             fingerprint: None,
             extra: serde_json::Map::new(),
         },
-        // A folder of numbered stills is one item, at the default rate:
-        // After Effects' own conform rate for a sequence is a
-        // preference rather than something the project file carries, so
-        // reading a number out of these bytes would be a guess. The path is
+        // A folder of numbered stills is one item, at the rate After Effects
+        // played it at, or the default when that is unknown. The path is
         // the *folder* the run lives in — which is what the alias names —
         // and resolution turns it into the run's first file
         // (`lumit_project::resolve_all_media`).
-        sequence: (item.is_sequence == Some(true)).then(SequenceRef::default),
+        sequence: (item.is_sequence == Some(true)).then(|| SequenceRef {
+            frame_rate: item
+                .fps
+                .and_then(time::frame_rate_of)
+                .unwrap_or(SequenceRef::default().frame_rate),
+            ..SequenceRef::default()
+        }),
         // Everything AE knew about how to read the file. What Lumit reads the
         // same way is in `interpretation` below, and the `ae` namespace keeps
         // the lot as it arrived.
@@ -435,7 +533,7 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
             ("width", serde_json::json!(item.width)),
             ("height", serde_json::json!(item.height)),
         ]),
-        colour_space: None,
+        colour_space: item.colour_space.clone(),
         source_layer: None,
         interpretation: interpretation(item),
     }
@@ -446,7 +544,9 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
 /// another rate keeps that rate, and with it the length every layer cut from
 /// it was timed against.
 fn interpretation(item: &Item) -> lumit_core::interpretation::Interpretation {
-    use lumit_core::interpretation::{AlphaMode, FieldOrder, Interpretation, Pulldown};
+    use lumit_core::interpretation::{
+        AlphaMode, FieldOrder, Interpretation, LinearLight, Pulldown,
+    };
     let byte = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     let fields = match item.fields.as_deref() {
         Some("UPPER_FIELD_FIRST") => FieldOrder::Upper,
@@ -485,6 +585,7 @@ fn interpretation(item: &Item) -> lumit_core::interpretation::Interpretation {
             .filter(|fps| item.native_fps.is_none_or(|own| (own - fps).abs() > 1e-4))
             .and_then(time::frame_rate_of),
         fields,
+        preserve_edges: fields != FieldOrder::Off && item.high_quality_fields == Some(true),
         pulldown: match fields {
             FieldOrder::Off => Pulldown::Off,
             _ if cadence.ends_with("_24P_ADVANCE") => {
@@ -518,6 +619,12 @@ fn interpretation(item: &Item) -> lumit_core::interpretation::Interpretation {
             1 => 0,
             n => n as u32,
         },
+        linear_light: if item.linear_light == Some(true) {
+            LinearLight::On
+        } else {
+            LinearLight::Auto
+        },
+        preserve_rgb: item.preserve_rgb == Some(true),
         ..Interpretation::default()
     }
 }

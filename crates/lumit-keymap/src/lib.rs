@@ -547,8 +547,16 @@ impl WheelAction {
 
     /// Whether both actions are live in one panel, so they can't share a modifier.
     /// The first three all meet in the Graph editor, the dropper is on its own.
+    /// Zooming time and values can share one, and the Graph editor then zooms both.
     fn shares_a_panel_with(self, other: WheelAction) -> bool {
-        self != other && self != WheelAction::DropperSample && other != WheelAction::DropperSample
+        use WheelAction::{DropperSample, ZoomTime, ZoomValues};
+        self != other
+            && self != DropperSample
+            && other != DropperSample
+            && !matches!(
+                (self, other),
+                (ZoomTime, ZoomValues) | (ZoomValues, ZoomTime)
+            )
     }
 }
 
@@ -1238,8 +1246,9 @@ pub fn after_effects_preset() -> Keymap {
             km.rebind_action(context, &action.into(), chord);
         }
     }
-    // AE zooms time on Alt and the graph's values on Ctrl, which this swaps to.
+    // AE zooms time on Alt and the graph's values on Ctrl.
     km.wheel.set(WheelAction::ZoomTime, WheelModifier::Alt);
+    km.wheel.set(WheelAction::ZoomValues, WheelModifier::Ctrl);
     km
 }
 

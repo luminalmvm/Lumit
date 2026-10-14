@@ -119,12 +119,15 @@ every selected footage item at once.
 **Remember interpretation** on the same menu keeps one item's settings, and **Apply
 interpretation** gives them to every selected item.
 
-Footage from a Lumit Bridge bundle keeps the interpretation it had in After Effects.
+Footage from an After Effects project keeps the interpretation it had there, opened
+directly or through a Lumit Bridge bundle. Its OCIO colour space comes across from an
+opened `.aep`, and an ICC colour profile, which Lumit can't use, is named in the import
+report. A project colour managed with OCIO opens with the same config, and one After
+Effects ships is found in its install.
 
 :::note[Not built yet]
-An `.aep` opened directly does not carry its footage interpretation over. A proxy is not
-read while fields are separated. A looped item's sound plays once. The fields and pixel
-aspect ratio a file declares are shown and not applied until chosen.
+A proxy is not read while fields are separated. A looped item's sound plays once. The
+fields and pixel aspect ratio a file declares are shown and not applied until chosen.
 :::
 
 ## Missing files

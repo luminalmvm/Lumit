@@ -6,9 +6,11 @@
 // file", asked again after each edit and never worked out here.
 
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/interpret.dart';
 
+import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../state/timecode.dart';
 import '../theme/theme.dart';
@@ -75,13 +77,13 @@ void applyRememberedInterpretation(List<FootageReference> items) {
 }
 
 /// Open the window on [items], which are all read alike on OK. [subject] is
-/// what the title names them as, and [spaces] the colour configuration's own
-/// names. True when something was applied.
+/// what the title names them as, and [colour] the colour configuration, whose
+/// spaces are offered. True when something was applied.
 Future<bool> showInterpretFootageFrb({
   required BuildContext context,
   required List<FootageReference> items,
   required String subject,
-  List<String> spaces = const [],
+  BridgeColourSummary? colour,
 }) async {
   if (items.isEmpty) return false;
   final BridgeFootageReading reading;
@@ -97,7 +99,7 @@ Future<bool> showInterpretFootageFrb({
     builder: (close) => _InterpretBody(
       items: items,
       subject: subject,
-      spaces: spaces,
+      colour: colour,
       reading: reading,
       onDone: () => close(true),
       onCancel: () => close(false),
@@ -111,7 +113,7 @@ enum _Page { main, colour }
 class _InterpretBody extends StatefulWidget {
   final List<FootageReference> items;
   final String subject;
-  final List<String> spaces;
+  final BridgeColourSummary? colour;
   final BridgeFootageReading reading;
   final VoidCallback onDone;
   final VoidCallback onCancel;
@@ -119,7 +121,7 @@ class _InterpretBody extends StatefulWidget {
   const _InterpretBody({
     required this.items,
     required this.subject,
-    required this.spaces,
+    this.colour,
     required this.reading,
     required this.onDone,
     required this.onCancel,
@@ -640,7 +642,9 @@ class _InterpretBodyState extends State<_InterpretBody> {
       );
 
   Widget _spaceRow(LumitTheme t) {
-    final spaces = widget.spaces;
+    final colour = widget.colour;
+    final spaces =
+        colour != null && colour.loaded ? colour.spaces : const <String>[];
     return dialogDropdown<String?>(
       t,
       id: 'interpret-colour-space',
@@ -653,6 +657,10 @@ class _InterpretBodyState extends State<_InterpretBody> {
           _colourSpace,
       ],
       label: (space) => space ?? l10n.colourSpaceFromFile,
+      // The same spaces the Project panel's menu greys out, for the same reason.
+      disabledReason: (space) => space == null || colour == null
+          ? null
+          : colourItemProblem(colour, BridgeColourItem.input, space),
       // Preserved numbers take no colour space at all.
       onChanged:
           _preserveRgb ? null : (space) => _set(() => _colourSpace = space),
