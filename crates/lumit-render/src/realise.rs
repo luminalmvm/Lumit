@@ -23,6 +23,92 @@ use crate::draw::{
 /// draw the plan came from.
 type GraphClosure<'a> = Box<dyn Fn(wgpu::Texture, u32, u32) -> wgpu::Texture + 'a>;
 
+/// Where a node graph box's picture sits, in raster pixels from the frame's
+/// top-left corner.
+///
+/// Never smaller than the frame, so a graph whose pictures all stay inside it
+/// runs exactly as it did before a box kept anything past the edge. Past it, a
+/// box keeps what a Read, a Transform or an undistort puts there, so the box
+/// after it can bring it back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Bounds {
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+}
+
+impl Bounds {
+    fn frame(w: u32, h: u32) -> Self {
+        Self { x: 0, y: 0, w, h }
+    }
+
+    /// `[left, top, right, bottom]`, as [`lumit_core::fx::EffectDef::bounds`]
+    /// takes it.
+    fn rect(self) -> [f32; 4] {
+        [
+            self.x as f32,
+            self.y as f32,
+            self.x as f32 + self.w as f32,
+            self.y as f32 + self.h as f32,
+        ]
+    }
+
+    /// The whole pixels that cover `rect` and the `w × h` frame.
+    fn covering(rect: [f32; 4], w: u32, h: u32) -> Self {
+        // ponytail: a picture keeps at most one frame past each edge, and
+        // never more than the widest texture. Raise it if a real graph needs
+        // to bring back something further out.
+        let room = |n: u32| n.min(crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n) / 2) as f32;
+        let (rx, ry) = (room(w), room(h));
+        // Nothing sensible to cover reads as the frame's own edge.
+        let low = |v: f32, room: f32| {
+            if v.is_nan() {
+                0.0
+            } else {
+                v.floor().clamp(-room, 0.0)
+            }
+        };
+        let high = |v: f32, n: u32, room: f32| {
+            if v.is_nan() {
+                n as f32
+            } else {
+                v.ceil().clamp(n as f32, n as f32 + room)
+            }
+        };
+        let (x0, y0) = (low(rect[0], rx), low(rect[1], ry));
+        let (x1, y1) = (high(rect[2], w, rx), high(rect[3], h, ry));
+        Self {
+            x: x0 as i32,
+            y: y0 as i32,
+            w: (x1 - x0) as u32,
+            h: (y1 - y0) as u32,
+        }
+    }
+
+    fn union(self, other: Self) -> Self {
+        let (x0, y0) = (self.x.min(other.x), self.y.min(other.y));
+        let x1 = (self.x + self.w as i32).max(other.x + other.w as i32);
+        let y1 = (self.y + self.h as i32).max(other.y + other.h as i32);
+        Self {
+            x: x0,
+            y: y0,
+            w: (x1 - x0) as u32,
+            h: (y1 - y0) as u32,
+        }
+    }
+
+    /// This window of the frame's space, for the compositor.
+    fn region(self) -> lumit_gpu::Region {
+        lumit_gpu::Region {
+            x: self.x as f32,
+            y: self.y as f32,
+            w: self.w as f32,
+            h: self.h as f32,
+        }
+    }
+}
+
 /// The GPU primitives that turn a comp draw list into a linear texture,
 /// borrowed from whichever owner is compositing — a frontend's viewer, the
 /// headless renderer, or the export renderer. Factoring the realise logic behind
@@ -676,6 +762,9 @@ impl Realiser<'_> {
     /// group header takes: neighbour frames, flow fields, the below-stack,
     /// paint, lighting and mask paths. Each is a carriage a step would grow,
     /// and none blocks the compositing the graph is for.
+    ///
+    /// Each step keeps its picture with its [`Bounds`], which can reach past
+    /// the frame. Only the Output is cut back to it.
     pub fn realise_graph(
         &self,
         plan: &GraphDraw,
@@ -685,18 +774,26 @@ impl Realiser<'_> {
         scale: f32,
     ) -> wgpu::Texture {
         use crate::fxops::LayerInput;
-        // One texture per step, `None` where the step reads transparent - an
+        let frame = Bounds::frame(w, h);
+        // A picture moved onto another window of the frame's space, cut or
+        // padded with transparent to fit it.
+        let place = |(tex, from): (wgpu::Texture, Bounds), to: Bounds| {
+            lumit_gpu::fx::fit_at(&self.ctx, tex, to.w, to.h, [from.x - to.x, from.y - to.y])
+        };
+        // One picture per step, `None` where the step reads transparent - an
         // unwired socket, a Read of an item somebody deleted, a Switch pointed
         // past its last picture. Nothing is allocated for one until a consumer
         // actually needs a picture to work on.
-        let mut made: Vec<Option<wgpu::Texture>> = Vec::with_capacity(plan.steps.len());
-        let held = |made: &[Option<wgpu::Texture>],
+        let mut made: Vec<Option<(wgpu::Texture, Bounds)>> = Vec::with_capacity(plan.steps.len());
+        let held = |made: &[Option<(wgpu::Texture, Bounds)>],
                     step: &Option<usize>|
-         -> Option<wgpu::Texture> { made.get((*step)?).cloned().flatten() };
+         -> Option<(wgpu::Texture, Bounds)> {
+            made.get((*step)?).cloned().flatten()
+        };
         for step in &plan.steps {
             let tex = match step {
                 // The picture handed in, or nothing at all.
-                GraphStep::Provided => provided.cloned(),
+                GraphStep::Provided => provided.cloned().map(|t| (t, frame)),
                 // A further picture Input: a layer rendered alone, on the
                 // depth pass's own road.
                 GraphStep::Picture(input) => {
@@ -705,7 +802,7 @@ impl Realiser<'_> {
                         .into_iter()
                         .next()
                     {
-                        Some(LayerInput::Texture(t)) => Some(t),
+                        Some(LayerInput::Texture(t)) => Some((t, frame)),
                         // `ThisLayer` cannot reach here: a graph has no layer
                         // for a reference to name.
                         _ => None,
@@ -739,32 +836,66 @@ impl Realiser<'_> {
                         // ever regresses.
                         DrawSource::Adjust | DrawSource::Graph(_) => self.transparent(1, 1),
                     };
-                    Some(self.compositor.composite_with_camera(
-                        &self.ctx,
-                        w,
-                        h,
-                        [0.0, 0.0, 0.0, 0.0],
-                        &[lumit_gpu::CompositeLayer {
-                            texture: &linear,
-                            // The placement is in the graph's own pixels, so
-                            // it is carried into the raster by the one factor
-                            // everything else in this walk is.
-                            size: (draw.natural_size.0 * scale, draw.natural_size.1 * scale),
-                            position: (draw.position.0 * scale, draw.position.1 * scale),
-                            anchor: (draw.anchor.0 * scale, draw.anchor.1 * scale),
-                            scale: draw.scale,
-                            rotation_deg: draw.rotation_deg,
-                            opacity: draw.opacity,
-                            matte: None,
-                            blend: lumit_gpu::Blend::Normal,
-                            z: 0.0,
-                            rotation_x_deg: 0.0,
-                            rotation_y_deg: 0.0,
-                            three_d: false,
-                            layer_mask: None,
-                            pre: None,
-                        }],
-                        None,
+                    // The placement is in the graph's own pixels, so it is
+                    // carried into the raster by the one factor everything
+                    // else in this walk is.
+                    let size = (draw.natural_size.0 * scale, draw.natural_size.1 * scale);
+                    let position = (draw.position.0 * scale, draw.position.1 * scale);
+                    let anchor = (draw.anchor.0 * scale, draw.anchor.1 * scale);
+                    // The whole picture is kept, wherever it lands, so a
+                    // file bigger than the frame can still be scaled down
+                    // into it by a box further on.
+                    let m = lumit_gpu::place_matrix(
+                        position,
+                        anchor,
+                        draw.scale,
+                        draw.rotation_deg,
+                        0.0,
+                        0.0,
+                        0.0,
+                    );
+                    let mut reach = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+                    for (x, y) in [(0.0, 0.0), (size.0, 0.0), (0.0, size.1), size] {
+                        let px = m[0][0] * x + m[1][0] * y + m[3][0];
+                        let py = m[0][1] * x + m[1][1] * y + m[3][1];
+                        reach = [
+                            reach[0].min(px),
+                            reach[1].min(py),
+                            reach[2].max(px),
+                            reach[3].max(py),
+                        ];
+                    }
+                    let bounds = Bounds::covering(reach, w, h);
+                    Some((
+                        self.compositor.composite_seeded(
+                            &self.ctx,
+                            w,
+                            h,
+                            [0.0, 0.0, 0.0, 0.0],
+                            &[lumit_gpu::CompositeLayer {
+                                texture: &linear,
+                                size,
+                                position,
+                                anchor,
+                                scale: draw.scale,
+                                rotation_deg: draw.rotation_deg,
+                                opacity: draw.opacity,
+                                matte: None,
+                                blend: lumit_gpu::Blend::Normal,
+                                z: 0.0,
+                                rotation_x_deg: 0.0,
+                                rotation_y_deg: 0.0,
+                                three_d: false,
+                                layer_mask: None,
+                                pre: None,
+                            }],
+                            None,
+                            None,
+                            1.0,
+                            1,
+                            (bounds != frame).then(|| bounds.region()),
+                        ),
+                        bounds,
                     ))
                 }
                 GraphStep::Fx {
@@ -779,38 +910,60 @@ impl Realiser<'_> {
                     baked_from,
                     ..
                 } => {
-                    let tex = held(&made, input).unwrap_or_else(|| self.transparent(w, h));
+                    let (tex, from) =
+                        held(&made, input).unwrap_or_else(|| (self.transparent(w, h), frame));
                     // The box's px parameters were resolved in the graph's own
                     // frame; this is the raster they run on.
                     let mut ops = ops.clone();
                     ops.rescale_spatial(scale);
+                    // Where the box's picture can reach, asked of each op with
+                    // its places still measured from the frame's corner. The
+                    // box runs on a raster that holds both that and what it
+                    // was handed, with every place moved in to match.
+                    let mut probe = ops.clone();
+                    probe.set_in([0.0, 0.0], [0.0, 0.0, w as f32, h as f32]);
+                    let want = Bounds::covering(
+                        probe
+                            .iter()
+                            .fold(from.rect(), |rect, op| op.def.bounds(op.params, rect)),
+                        w,
+                        h,
+                    );
+                    let room = from.union(want);
+                    if room != frame {
+                        let (x, y) = (-room.x as f32, -room.y as f32);
+                        ops.set_in([x, y], [x, y, w as f32, h as f32]);
+                    }
+                    let tex = place((tex, from), room);
                     let luts = self.load_tables(colour_tables);
                     let flare_lens = self.load_flare_lens(flare_lens_files);
                     let bind = |step: &Option<usize>| match held(&made, step) {
-                        Some(t) => LayerInput::Texture(t),
+                        Some(t) => LayerInput::Texture(place(t, room)),
                         None => LayerInput::Absent,
                     };
                     // What an analysis filed for the file this box reads, laid
                     // where that file's own picture is laid: the Read step it
                     // was made from says where. One op, so one slot apiece.
-                    let from = baked_from.and_then(|i| match plan.steps.get(i) {
+                    let read = baked_from.and_then(|i| match plan.steps.get(i) {
                         Some(GraphStep::Read(draw)) => Some(&**draw),
                         _ => None,
                     });
-                    let roto = [roto.as_ref().zip(from).map(|(m, read)| {
+                    let roto = [roto.as_ref().zip(read).map(|(m, read)| {
                         let matte = upload_roto_matte(&self.ctx, m);
-                        self.lay_as_read(&matte, (m.width, m.height), read, w, h, scale)
+                        let laid = self.lay_as_read(&matte, (m.width, m.height), read, w, h, scale);
+                        place((laid, frame), room)
                     })];
-                    let planes = [plane.as_ref().zip(from).map(|(p, read)| {
+                    let planes = [plane.as_ref().zip(read).map(|(p, read)| {
                         let plane = self.upload_plane(p);
-                        self.lay_as_read(&plane, (p.width, p.height), read, w, h, scale)
+                        let laid = self.lay_as_read(&plane, (p.width, p.height), read, w, h, scale);
+                        place((laid, frame), room)
                     })];
                     let out = crate::fxops::run_ops(
                         self.fx,
                         &self.ctx,
                         tex,
-                        w,
-                        h,
+                        room.w,
+                        room.h,
                         &ops,
                         &[],
                         &[],
@@ -835,10 +988,19 @@ impl Realiser<'_> {
                         // frame key as any comp is.
                         None,
                     );
-                    // Every box's picture is the graph's frame, so an op that
-                    // grew its raster is cropped back to it. `fit_centred`
-                    // returns its argument when the size already matches.
-                    Some(lumit_gpu::fx::fit_centred(&self.ctx, out, w, h))
+                    // An op that spreads, a blur, grows the raster evenly on
+                    // each side. The picture keeps that, and what the ops
+                    // said it reaches, and no more.
+                    let grown = Bounds {
+                        x: room.x - lumit_gpu::fx::centred(out.width(), room.w),
+                        y: room.y - lumit_gpu::fx::centred(out.height(), room.h),
+                        w: out.width(),
+                        h: out.height(),
+                    };
+                    let [x0, y0, x1, y1] = want.rect();
+                    let (gx, gy) = ((room.x - grown.x) as f32, (room.y - grown.y) as f32);
+                    let keep = Bounds::covering([x0 - gx, y0 - gy, x1 + gx, y1 + gy], w, h);
+                    Some((place((out, grown), keep), keep))
                 }
                 // A over B, both full-frame at identity on a transparent
                 // ground: B first at Normal and full opacity, then A with the
@@ -854,16 +1016,16 @@ impl Realiser<'_> {
                     if a.is_none() && b.is_none() {
                         None
                     } else {
+                        // Each laid where it sits, on a raster that holds both.
                         fn full(
-                            texture: &wgpu::Texture,
-                            (w, h): (u32, u32),
+                            (texture, at): &(wgpu::Texture, Bounds),
                             blend: lumit_gpu::Blend,
                             opacity: f32,
                         ) -> lumit_gpu::CompositeLayer<'_> {
                             lumit_gpu::CompositeLayer {
                                 texture,
-                                size: (w as f32, h as f32),
-                                position: (0.0, 0.0),
+                                size: (at.w as f32, at.h as f32),
+                                position: (at.x as f32, at.y as f32),
                                 anchor: (0.0, 0.0),
                                 scale: (100.0, 100.0),
                                 rotation_deg: 0.0,
@@ -878,24 +1040,35 @@ impl Realiser<'_> {
                                 pre: None,
                             }
                         }
+                        let bounds = [&a, &b]
+                            .into_iter()
+                            .flatten()
+                            .fold(frame, |all, (_, at)| all.union(*at));
                         let mut layers = Vec::with_capacity(2);
                         if let Some(b) = &b {
-                            layers.push(full(b, (w, h), lumit_gpu::Blend::Normal, 100.0));
+                            layers.push(full(b, lumit_gpu::Blend::Normal, 100.0));
                         }
                         if let Some(a) = &a {
                             let mode = lumit_core::model::BlendMode::ALL
                                 .get(*mode as usize)
                                 .copied()
                                 .unwrap_or(lumit_core::model::BlendMode::Normal);
-                            layers.push(full(a, (w, h), crate::build::blend_of(mode), *opacity));
+                            layers.push(full(a, crate::build::blend_of(mode), *opacity));
                         }
-                        Some(self.compositor.composite_with_camera(
-                            &self.ctx,
-                            w,
-                            h,
-                            [0.0, 0.0, 0.0, 0.0],
-                            &layers,
-                            None,
+                        Some((
+                            self.compositor.composite_seeded(
+                                &self.ctx,
+                                w,
+                                h,
+                                [0.0, 0.0, 0.0, 0.0],
+                                &layers,
+                                None,
+                                None,
+                                1.0,
+                                1,
+                                (bounds != frame).then(|| bounds.region()),
+                            ),
+                            bounds,
                         ))
                     }
                 }
@@ -909,11 +1082,12 @@ impl Realiser<'_> {
             made.push(tex);
         }
         match plan.output {
+            // Cut back to the frame, the one place that happens.
             Some(step) => made
                 .get(step)
                 .cloned()
                 .flatten()
-                .unwrap_or_else(|| self.transparent(w, h)),
+                .map_or_else(|| self.transparent(w, h), |pic| place(pic, frame)),
             // Nothing wired to the Output, and the passthrough a dangling
             // Node graph effect degrades to.
             None => provided.cloned().unwrap_or_else(|| self.transparent(w, h)),

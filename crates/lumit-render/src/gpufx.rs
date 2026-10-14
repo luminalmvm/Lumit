@@ -1610,7 +1610,7 @@ impl GpuEffect for LensDistort {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let l = effects::lens_distort::LensDistort::read(p).packed();
+        let l = effects::lens_distort::LensDistort::packed_in(p);
         fx.lens_distort(
             ctx,
             tex,
@@ -1625,6 +1625,7 @@ impl GpuEffect for LensDistort {
                 centre: l.centre,
                 edge: l.edge,
                 mix: l.mix,
+                frame: l.frame,
             },
         )
     }

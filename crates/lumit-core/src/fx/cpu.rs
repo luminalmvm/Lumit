@@ -2746,6 +2746,9 @@ pub struct LensDistortParams {
     pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// The frame's width and height in raster pixels, which the field of
+    /// view spans. Zero for the raster's own, which is every layer's.
+    pub frame: [f32; 2],
 }
 
 /// Lens distort (docs/08 §3.42): barrel and pincushion by field of view. The
@@ -2764,7 +2767,8 @@ pub fn lens_distort(rgba: &mut [f32], w: u32, h: u32, p: &LensDistortParams) {
 /// destination pixel. An empty matte is the unmatted path to the byte.
 pub fn lens_distort_matted(rgba: &mut [f32], w: u32, h: u32, p: &LensDistortParams, matte: &[f32]) {
     let original = rgba.to_vec();
-    let (fw, fh) = (w as f32, h as f32);
+    let frame = |n: f32, raster: u32| if n > 0.0 { n } else { raster as f32 };
+    let (fw, fh) = (frame(p.frame[0], w), frame(p.frame[1], h));
     let half = match p.half_kind {
         1 => fh * 0.5,
         2 => (fw * fw + fh * fh).sqrt() * 0.5,

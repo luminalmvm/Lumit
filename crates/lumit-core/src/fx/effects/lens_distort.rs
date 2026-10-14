@@ -128,7 +128,19 @@ impl LensDistort {
                 .unwrap_or(EdgesMode::Transparent)
                 .code(),
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
+            frame: [0.0, 0.0],
         }
+    }
+
+    /// [`Self::packed`] for the op whose parameters are `p`, told the frame's
+    /// size when a node graph box has set its picture down on a bigger raster.
+    #[must_use]
+    pub fn packed_in(p: Params<'_>) -> cpu::LensDistortParams {
+        let mut packed = Self::read(p).packed();
+        if let Some([_, _, w, h]) = crate::fx::frame_rect(p) {
+            packed.frame = [w, h];
+        }
+        packed
     }
 }
 
@@ -141,6 +153,55 @@ impl EffectDef for LensDistortDef {
     }
 
     fn apply_cpu(&self, rgba: &mut [f32], w: u32, h: u32, p: Params<'_>) {
-        cpu::lens_distort(rgba, w, h, &LensDistort::read(p).packed());
+        cpu::lens_distort(rgba, w, h, &LensDistort::packed_in(p));
+    }
+
+    /// Taking the bend away pushes the picture outward, so it can reach well
+    /// past where it was. Adding it pulls the picture in, and a matte or a Mix
+    /// can leave it where it was, so the rectangle it was handed is always
+    /// kept as well.
+    fn bounds(&self, p: Params<'_>, rect: [f32; 4]) -> [f32; 4] {
+        let l = LensDistort::packed_in(p);
+        if !l.active || !l.reverse || l.frame == [0.0, 0.0] {
+            return rect;
+        }
+        let [fw, fh] = l.frame;
+        let half = match l.half_kind {
+            1 => fh * 0.5,
+            2 => (fw * fw + fh * fh).sqrt() * 0.5,
+            _ => fw * 0.5,
+        };
+        let f = half / l.tan_half_fov.max(1e-6);
+        // Where a point of the picture lands: the kernel reads it through
+        // `atan`, so it lands where `tan` puts it.
+        let lands = |x: f32, y: f32| {
+            let (dx, dy) = (x - l.centre[0], y - l.centre[1]);
+            let r = (dx * dx + dy * dy).sqrt();
+            if r <= 0.0 {
+                return (x, y);
+            }
+            let radius = f * (r / f).min(cpu::LENS_MAX_THETA).tan();
+            (l.centre[0] + dx * radius / r, l.centre[1] + dy * radius / r)
+        };
+        // The map is radial and keeps its order, so the edge of the picture
+        // lands on the edge of where it went. Walked in steps, from half a
+        // pixel out for the bilinear tap, which is close enough with a pixel
+        // of margin.
+        const STEPS: usize = 32;
+        let [x0, y0, x1, y1] = [rect[0] - 0.5, rect[1] - 0.5, rect[2] + 0.5, rect[3] + 0.5];
+        let mut out = rect;
+        for i in 0..=STEPS {
+            let t = i as f32 / STEPS as f32;
+            let (x, y) = (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+            for (px, py) in [lands(x, y0), lands(x, y1), lands(x0, y), lands(x1, y)] {
+                out = [
+                    out[0].min(px),
+                    out[1].min(py),
+                    out[2].max(px),
+                    out[3].max(py),
+                ];
+            }
+        }
+        [out[0] - 1.0, out[1] - 1.0, out[2] + 1.0, out[3] + 1.0]
     }
 }

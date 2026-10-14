@@ -7673,6 +7673,7 @@ fn wgsl_lens_distort_matches_the_cpu_oracle() {
                 centre: p.centre,
                 edge: p.edge,
                 mix: p.mix,
+                frame: p.frame,
             },
         );
         let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
@@ -13696,6 +13697,7 @@ fn the_matte_scales_the_lens_distortion() {
         centre: p.centre,
         edge: p.edge,
         mix: p.mix,
+        frame: p.frame,
     };
     check_matte_claim(
         &ctx,

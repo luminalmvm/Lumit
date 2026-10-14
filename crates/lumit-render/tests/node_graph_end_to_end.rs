@@ -26,8 +26,8 @@
 //!   own.
 //!
 //! The oracles are deliberately Precomp layers rather than plain solids. Every
-//! box's picture is the graph's own frame (§1.6), while a layer's picture is its
-//! own raster, so only a comp-sized intermediate makes the two comparable at a
+//! box's picture holds at least the graph's own frame (§1.6), while a layer's
+//! picture is its own raster, so only a comp-sized intermediate makes the two comparable at a
 //! reduced preview - which is exactly what a Precomp layer is.
 
 // A test binary: a failed setup step should stop this test, loudly, and the
@@ -984,6 +984,72 @@ fn linear_at(r: &mut HeadlessRenderer, (doc, comp): (Arc<Document>, Uuid)) -> [f
 
 fn near(a: [f32; 4], b: [f32; 4]) -> bool {
     a.iter().zip(b).all(|(x, y)| (x - y).abs() < 0.01)
+}
+
+/// **A box keeps what lands past the frame.** A plate twice the graph's size,
+/// scaled to a quarter, shows all of it and not just the middle that fitted.
+/// Taking a lens bend away pushes the corners out of the frame, and putting it
+/// back brings them in again rather than leaving them empty.
+#[test]
+fn a_box_keeps_the_picture_past_the_frame() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    fn chain(plate_size: u32, boxes: Vec<EffectInstance>) -> (Arc<Document>, Uuid) {
+        let mut doc = Document::new();
+        let plate = Uuid::now_v7();
+        doc.items
+            .push(solid(plate, "plate", PLATE, plate_size, plate_size));
+        let mut nodes = vec![read(plate)];
+        nodes.extend(boxes.into_iter().map(GraphNode::Fx));
+        nodes.push(output());
+        let edges = nodes
+            .windows(2)
+            .map(|p| wire(p[0].id(), "output", p[1].id(), "input"))
+            .collect();
+        let comp = graph_comp("graph", nodes, edges);
+        let id = comp.id;
+        doc.items.push(ProjectItem::Composition(comp));
+        (Arc::new(doc), id)
+    }
+    fn lit(r: &mut HeadlessRenderer, (doc, comp): (Arc<Document>, Uuid), x: u32, y: u32) -> bool {
+        let (px, w, _) = r.render_rgba(&doc, comp, 0, 1.0).unwrap();
+        rgb(&px, w, x, y) != [0, 0, 0]
+    }
+    let middle = f64::from(COMP / 2);
+    let about_middle = [
+        ("anchor_x", middle),
+        ("anchor_y", middle),
+        ("position_x", middle),
+        ("position_y", middle),
+    ];
+    let quarter = effect(
+        "transform",
+        &[
+            about_middle.as_slice(),
+            &[("scale_x", 25.0), ("scale_y", 25.0)],
+        ]
+        .concat(),
+    );
+    // A quarter of 128 is 32 wide, from 16 to 48. The middle 64 alone would
+    // have been 16 wide, from 24 to 40.
+    assert!(lit(&mut r, chain(COMP * 2, vec![quarter]), 18, COMP / 2));
+
+    let lens = |reverse: bool| {
+        let mut inst = effect(
+            "lens_distort",
+            &[("fov", 60.0), ("centre_x", middle), ("centre_y", middle)],
+        );
+        set_value(&mut inst, "reverse", EffectValue::Bool(reverse));
+        inst
+    };
+    assert!(lit(
+        &mut r,
+        chain(COMP, vec![lens(true), lens(false)]),
+        1,
+        1
+    ));
 }
 
 /// **Split then Combine is the identity** on a pixel with any alpha, and a

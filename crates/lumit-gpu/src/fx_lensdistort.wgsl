@@ -21,8 +21,7 @@ struct Params {
     reverse: u32,         // 1 = remove the fisheye rather than add it
     matte_on: f32,        // 1 = the matte scales the displacement
     _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
+    frame: vec2<f32>,     // the frame the field of view spans; 0 is the raster
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -102,8 +101,10 @@ fn lens_distort(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = textureLoad(src, xy, 0);
-    let fw = f32(size.x);
-    let fh = f32(size.y);
+    // The frame, which is the raster unless a node graph box has set the
+    // picture down on a bigger one (== cpu::lens_distort_matted).
+    let fw = select(f32(size.x), p.frame.x, p.frame.x > 0.0);
+    let fh = select(f32(size.y), p.frame.y, p.frame.y > 0.0);
     var half_extent = fw * 0.5;
     if (p.half_kind == 1u) {
         half_extent = fh * 0.5;

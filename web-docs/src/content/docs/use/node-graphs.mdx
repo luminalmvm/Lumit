@@ -41,6 +41,12 @@ box's rows.
 
 A Read box places its item centred at its natural size, as a fresh layer would.
 
+A box keeps the picture that reaches past the composition's frame, up to one frame width
+or height past each edge. A Read keeps all of an item bigger than the frame, a
+[Transform](/effects/utility/transform/) keeps what it moves out, and
+[Lens distort](/effects/distortion/lens-distort/) with **Reverse** on keeps the corners it
+pushes out. Only the Output is cut to the frame.
+
 Double-click a Read of a composition, or a Node graph box, to open what it names.
 Double-click a [Custom shader](/effects/utility/custom-shader/) box to open its inner
 graph. `Escape` comes back out.
