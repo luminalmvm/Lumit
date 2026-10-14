@@ -21,6 +21,7 @@
 import 'dart:async';
 import 'dart:io' show File;
 
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart';
 import 'package:lumit_flutter/main.dart';
@@ -732,19 +733,21 @@ class _CodeWell extends StatelessWidget {
                 child: SizedBox(
                   width: width,
                   height: double.infinity,
-                  child: HouseTextField(
-                    key: const ValueKey<String>('shader-editor-code'),
-                    controller: text,
-                    multiline: true,
-                    indentOnTab: true,
-                    scrollController: scroll,
-                    autofocus: true,
-                    topAlign: true,
-                    style: code,
-                    // The width is the box above's, not a number of this
-                    // field's own - an infinity inside a horizontal viewport
-                    // has nothing to be infinite against.
-                    width: width,
+                  child: _RevealCaret(
+                    child: HouseTextField(
+                      key: const ValueKey<String>('shader-editor-code'),
+                      controller: text,
+                      multiline: true,
+                      indentOnTab: true,
+                      scrollController: scroll,
+                      autofocus: true,
+                      topAlign: true,
+                      style: code,
+                      // The width is the box above's, not a number of this
+                      // field's own - an infinity inside a horizontal viewport
+                      // has nothing to be infinite against.
+                      width: width,
+                    ),
                   ),
                 ),
               );
@@ -753,5 +756,54 @@ class _CodeWell extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Keeps the sideways scroll on the caret, or on the pointer during a drag.
+///
+/// With text selected, the field asks to show the last selected box rather
+/// than the caret, and on a long line that box runs to the line's end. So a
+/// drag down past one swung the code sideways. Mid-drag the caret is no
+/// better: on a short line it sits at the line's end, well left of the
+/// pointer when the code is scrolled right. So while a button is held the
+/// request is narrowed to the pointer's column, and otherwise to the caret.
+class _RevealCaret extends SingleChildRenderObjectWidget {
+  const _RevealCaret({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderRevealCaret();
+}
+
+class _RenderRevealCaret extends RenderProxyBox {
+  /// Where the pointer is while a button is held, in global coordinates.
+  Offset? _pressed;
+
+  @override
+  void handleEvent(PointerEvent event, BoxHitTestEntry entry) {
+    if (event is PointerDownEvent || event is PointerMoveEvent) {
+      _pressed = event.position;
+    } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      _pressed = null;
+    }
+  }
+
+  @override
+  void showOnScreen({
+    RenderObject? descendant,
+    Rect? rect,
+    Duration duration = Duration.zero,
+    Curve curve = Curves.ease,
+  }) {
+    if (rect != null && descendant is RenderEditable) {
+      final double? x = switch ((_pressed, descendant.selection)) {
+        (final pressed?, _) => descendant.globalToLocal(pressed).dx,
+        (_, final selection?) =>
+          descendant.getLocalRectForCaret(selection.extent).left,
+        _ => null,
+      };
+      if (x != null) rect = Rect.fromLTRB(x, rect.top, x + 1, rect.bottom);
+    }
+    super.showOnScreen(
+        descendant: descendant, rect: rect, duration: duration, curve: curve);
   }
 }
