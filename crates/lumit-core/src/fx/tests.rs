@@ -5715,13 +5715,13 @@ fn a_text_row_round_trips_resolves_and_feeds_the_key() {
     assert_eq!(read(&long).0, "é".repeat(TEXT_MAX_BYTES / 2));
 }
 
-/// **Spectral radiometry preserves exposure and actually resolves the
+/// **Spectral radiometry keeps white light white and actually resolves the
 /// coating** (entry A2). Two halves:
 ///
-/// The bands' sub-weights sum to what `lambda_weights` gave each whole band
-/// — XYZ→RGB is linear, so splitting the CIE integral must split the RGB
-/// weight exactly. If this drifts, every flare changes brightness on a
-/// change that promised colour accuracy only.
+/// The bands keep `lambda_weights`' geometry ladder, and their sub-weights
+/// sum to exactly one in every channel, so an even spectrum through a
+/// colourless lens lands white at the exposure it always had. The weights
+/// once summed to a quarter more red than blue, and every ghost leaned pink.
 ///
 /// And a coated ghost's band-integrated energy must differ from the old
 /// band-centre sample — the whole point: a 7-layer stack's reflectance
@@ -5733,32 +5733,21 @@ fn spectral_bands_preserve_exposure_and_resolve_the_coating() {
         let old = lambda_weights(count, 1.0);
         let new = spectral_bands(count, 1.0);
         assert_eq!(old.len(), new.len());
-        for (k, (o, n)) in old.iter().zip(&new).enumerate() {
+        for (o, n) in old.iter().zip(&new) {
             assert!(
                 (o.0 - n.traced_nm).abs() < 1e-4,
                 "geometry ladder unchanged"
             );
-            // In XYZ the subs sum exactly to the band mean; in RGB the
-            // out-of-gamut clamp now applies per sub-sample rather than per
-            // band, and Σ max(xᵢ, 0) ≥ max(Σ xᵢ, 0) — so every channel is
-            // AT LEAST the old weight (violet bands clamp G and R), and a
-            // band no clamp touches is exact. "Strictly less thrown away"
-            // is the property; never-dimmer is its testable face.
-            let mut any_exact = false;
-            for c in 0..3 {
-                let sum: f32 = n.sub_rgb.iter().map(|s| s[c]).sum();
-                assert!(
-                    sum + 1e-3 >= o.1[c],
-                    "band {k} channel {c}: spectral must never be dimmer                      ({sum} vs {})",
-                    o.1[c]
-                );
-                if (sum - o.1[c]).abs() < 2e-3 {
-                    any_exact = true;
-                }
-            }
+        }
+        for c in 0..3 {
+            let sum: f32 = new
+                .iter()
+                .flat_map(|b| b.sub_rgb.iter())
+                .map(|s| s[c])
+                .sum();
             assert!(
-                any_exact,
-                "band {k}: at least one channel must match the old weight                  exactly — every channel drifting means the normalisation                  changed, not the clamp"
+                (sum - 1.0).abs() < 1e-4,
+                "{count} bands, channel {c}: an even spectrum must sum to white ({sum})"
             );
         }
     }

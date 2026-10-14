@@ -3374,12 +3374,9 @@ pub const SPECTRAL_SUB: usize = 8;
 
 /// One traced wavelength band with its radiometric sub-samples:
 /// the geometry wavelength, and per sub-sample the reflectance table's
-/// lambda index plus the CIE weight (already through XYZ to RGB and the
-/// ladder's Y-normalisation). The sub-weights of a band sum to what
-/// [`lambda_weights`] gave the whole band — exactly in Y, and up to the
-/// out-of-gamut clamp in R and B, which now applies per sub-sample rather
-/// than per band and so throws strictly less away — so a spectrally flat
-/// throughput renders at the old exposure.
+/// lambda index plus the CIE weight (already through XYZ to RGB). Across
+/// every band the sub-weights sum to one in each channel, so a spectrally
+/// flat throughput renders white.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpectralBand {
     /// The wavelength the geometry is traced at (dispersion-scaled).
@@ -3392,10 +3389,9 @@ pub struct SpectralBand {
 }
 
 /// The traced bands with their radiometric sub-samples - [`lambda_weights`]
-/// refined. Same geometry ladder, same total normalisation; each
-/// band's single RGB weight becomes [`SPECTRAL_SUB`] weights whose sum is
-/// the old value (XYZ to RGB is linear, so splitting the band's CIE
-/// integral splits its RGB weight exactly).
+/// refined. Same geometry ladder; each band's single RGB weight becomes
+/// [`SPECTRAL_SUB`] weights, balanced at the end so an even spectrum is
+/// white.
 pub fn spectral_bands(count: u32, dispersion: f32) -> Vec<SpectralBand> {
     let ladder = cie::wavelength_ladder(count as usize, dispersion);
     let count = count.max(1) as usize;
@@ -3428,7 +3424,7 @@ pub fn spectral_bands(count: u32, dispersion: f32) -> Vec<SpectralBand> {
         bands_xyz.push(subs);
     }
     let norm = 1.0 / sum_y.max(1e-6);
-    ladder
+    let mut bands: Vec<SpectralBand> = ladder
         .iter()
         .zip(bands_xyz)
         .enumerate()
@@ -3453,7 +3449,23 @@ pub fn spectral_bands(count: u32, dispersion: f32) -> Vec<SpectralBand> {
                 sub_rgb,
             }
         })
-        .collect()
+        .collect();
+    // The clamp above only ever adds light, and mostly red: the blue-greens
+    // sit far outside Rec. 709 with a large negative red. So the weights are
+    // scaled per channel until an even spectrum sums to white, or every ghost
+    // leans pink.
+    let mut sum = [0.0_f32; 3];
+    for sub in bands.iter().flat_map(|b| b.sub_rgb.iter()) {
+        for c in 0..3 {
+            sum[c] += sub[c];
+        }
+    }
+    for sub in bands.iter_mut().flat_map(|b| b.sub_rgb.iter_mut()) {
+        for c in 0..3 {
+            sub[c] /= sum[c].max(1e-6);
+        }
+    }
+    bands
 }
 
 /// A wavelength snapped to the reflectance table's 5 nm grid.
