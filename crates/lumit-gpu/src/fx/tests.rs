@@ -4460,15 +4460,18 @@ fn lens_flare_accumulator_scale_matches_the_shader_and_clears_any_real_frame() {
         ((u32::MAX as f32 / ACCUM_SCALE) - ACCUM_CEILING).abs() < 0.01,
         "the ceiling is the scale's own consequence"
     );
-    // The deposit pyramid's two spellings: the level-changeover span and the
-    // uniform's level-table capacity.
-    assert!(
-        src.contains(&format!(
-            "const DEPOSIT_SPAN_PX: f32 = {:.1};",
-            lf::DEPOSIT_SPAN_PX
-        )),
-        "the deposit shader must declare lumit-core's DEPOSIT_SPAN_PX"
-    );
+    // The deposit pyramid's spellings: the level-changeover rule's three
+    // numbers and the uniform's level-table capacity.
+    for (name, value) in [
+        ("DEPOSIT_SPAN_PX", lf::DEPOSIT_SPAN_PX),
+        ("DEPOSIT_THIN_PX", lf::DEPOSIT_THIN_PX),
+        ("DEPOSIT_SPAN_MAX_PX", lf::DEPOSIT_SPAN_MAX_PX),
+    ] {
+        assert!(
+            src.contains(&format!("const {name}: f32 = {value:.1};")),
+            "the deposit shader must declare lumit-core's {name}"
+        );
+    }
     assert_eq!(
         crate::fx::lens_flare::MAX_DEPOSIT_LEVELS,
         lf::MAX_DEPOSIT_LEVELS,

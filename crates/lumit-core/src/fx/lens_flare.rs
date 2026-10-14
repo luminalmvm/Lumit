@@ -3575,12 +3575,26 @@ pub(crate) type Corner = ([f32; 2], f32, [f32; 3]);
 /// Widest kernel span, px, a splat deposits at full resolution.
 /// Past this it moves to a coarser accumulator level — halved once per
 /// doubling — so one splat never costs more than about this many pixels
-/// squared, however large the ghost. The smoothing that costs is about a
-/// twenty-fourth of the splat's own size: invisible on the smooth defocused
-/// ghosts that have splats this big, and precisely the deal the owner asked
-/// for ("use the grid to speed things up then smooth it"). Spelled in
+/// squared, however large the ghost. The smoothing that costs is a small
+/// part of the splat's own size: invisible on the smooth defocused ghosts
+/// that have splats this big, and precisely the deal the owner asked for
+/// ("use the grid to speed things up then smooth it"). Spelled in
 /// `fx_lens_flare_deposit.wgsl` too, pinned by test.
-pub const DEPOSIT_SPAN_PX: f32 = 48.0;
+///
+/// It was 48. At 16 a heavy Ultra flare takes about half the time, and no
+/// pixel moves by more than a couple of 255ths.
+pub const DEPOSIT_SPAN_PX: f32 = 16.0;
+
+/// Past [`DEPOSIT_SPAN_PX`] a splat only moves down a level while it stays
+/// at least this many pixels across at its thinnest there. The long thin
+/// splats along a caustic rim are what keep a rim sharp, and coarsened by
+/// length alone they came back as a row of beads.
+pub const DEPOSIT_THIN_PX: f32 = 8.0;
+
+/// Past this span a splat moves down a level however thin it is, as every
+/// splat did before [`DEPOSIT_THIN_PX`]. Without it a long sliver along a
+/// fold stays at full size and walks a box thousands of pixels square.
+pub const DEPOSIT_SPAN_MAX_PX: f32 = 48.0;
 
 /// Most accumulator levels a deposit pyramid holds — level 11 is a
 /// 2048-fold reduction, past any raster the engine renders. Pinned against
@@ -3604,15 +3618,32 @@ pub fn deposit_levels(w: u32, h: u32) -> Vec<(u32, u32)> {
 }
 
 /// Which pyramid level a splat with kernel reach `ext` (px each way, level
-/// 0) deposits at: the shallowest whose span is within
-/// [`DEPOSIT_SPAN_PX`]. By repeated exact halving, not a logarithm — the
-/// shader does the identical loop, and halving is exact in floating point,
-/// so the two twins pick the same level for every splat.
-pub fn deposit_level(ext_x: f32, ext_y: f32, level_count: u32) -> u32 {
+/// 0) and half-axes `a1`, `a2` deposits at: the shallowest whose span is
+/// within [`DEPOSIT_SPAN_PX`], unless the splat would be thinner than
+/// [`DEPOSIT_THIN_PX`] there (see [`DEPOSIT_SPAN_MAX_PX`]). By repeated
+/// exact halving, not a logarithm, and in squares rather than roots: the
+/// shader does the identical loop, so the two twins pick the same level for
+/// every splat.
+pub fn deposit_level(
+    ext_x: f32,
+    ext_y: f32,
+    a1: [f32; 2],
+    a2: [f32; 2],
+    det: f32,
+    level_count: u32,
+) -> u32 {
     let mut span = 2.0 * ext_x.max(ext_y);
+    // The kernel's width across its longer axis is 6·|det|/|longer axis|.
+    // Squared on both sides, and the floor doubles with each level.
+    let thin2 = 36.0 * det * det;
+    let long2 = (a1[0] * a1[0] + a1[1] * a1[1]).max(a2[0] * a2[0] + a2[1] * a2[1]);
+    let mut floor2 = DEPOSIT_THIN_PX * DEPOSIT_THIN_PX * 4.0 * long2;
     let mut level = 0u32;
-    while span > DEPOSIT_SPAN_PX && level + 1 < level_count {
+    while level + 1 < level_count
+        && (span > DEPOSIT_SPAN_MAX_PX || (span > DEPOSIT_SPAN_PX && thin2 >= floor2))
+    {
         span *= 0.5;
+        floor2 *= 4.0;
         level += 1;
     }
     level
@@ -3868,7 +3899,7 @@ pub(crate) fn splat_ray(
     // (u, v) solve the same system whether both sides carry the 1/s, and
     // `peak` is a density per level-0 pixel, which the resolve's upsample
     // reads back out at level 0.
-    let level = deposit_level(ext_x, ext_y, levels.dims.len() as u32);
+    let level = deposit_level(ext_x, ext_y, a1, a2, det, levels.dims.len() as u32);
     let s = (1u32 << level) as f32;
     let (lw, lh) = levels.dims[level as usize];
     let out = &mut levels.bufs[level as usize];
