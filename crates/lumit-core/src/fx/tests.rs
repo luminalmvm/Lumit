@@ -3953,15 +3953,19 @@ fn lens_flare_coatings_are_per_element_and_colour_the_ghosts() {
     );
     let _ = green;
 
-    // Uncoated is brighter than any coating, at every wavelength tried.
+    // Uncoated is brighter than any coating, at every wavelength tried, and
+    // from either side: light leaving the glass meets the same coating from
+    // the inside, and once met it inside out, at three times bare glass.
     for nm in [450.0_f32, 550.0, 650.0] {
-        let bare = surface_reflectance(1.0, 1.0, 1.5, 1.0, 1.0, nm, 1.0);
-        for design in 2..COATING_DESIGNS {
-            let coated = surface_reflectance(1.0, 1.0, 1.5, design as f32, 1.0, nm, 1.0);
-            assert!(
-                coated < bare,
-                "design {design} at {nm} nm reflects {coated}, more than bare {bare}"
-            );
+        for (n1, n2) in [(1.0, 1.5), (1.5, 1.0)] {
+            let bare = surface_reflectance(1.0, n1, n2, 1.0, 1.0, nm, 1.0);
+            for design in 2..COATING_DESIGNS {
+                let coated = surface_reflectance(1.0, n1, n2, design as f32, 1.0, nm, 1.0);
+                assert!(
+                    coated < bare,
+                    "design {design} at {nm} nm from n {n1} reflects {coated}, more than bare {bare}"
+                );
+            }
         }
     }
 

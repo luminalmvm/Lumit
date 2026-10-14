@@ -1380,6 +1380,19 @@ pub fn stack_reflectance(
 ) -> f32 {
     let stack = &design.stack;
     let cos_i = cos_i.abs().clamp(1e-6, 1.0);
+    // The stack is written outermost first, so it has to face the thinner
+    // medium, which is the air. Light leaving the glass meets it from the
+    // inside, and taken as written the coating sat the wrong way round: it
+    // reflected 12 to 18% where it should reflect under 1%, in the
+    // complement of its colour. Clear films reflect the same from either
+    // side, so that crossing is worked out from the air side instead.
+    if n1 > n2 {
+        let s = n1 / n2.max(1e-6) * (1.0 - cos_i * cos_i).max(0.0).sqrt();
+        if s >= 1.0 {
+            return 1.0;
+        }
+        return stack_reflectance((1.0 - s * s).sqrt(), n2, n1, design, lambda_nm);
+    }
     // Snell's invariant: n·sinθ is the same in every medium of the stack.
     let sin_i = n1 * (1.0 - cos_i * cos_i).max(0.0).sqrt();
     let cos_in_medium = |n: f32| -> Option<f32> {
