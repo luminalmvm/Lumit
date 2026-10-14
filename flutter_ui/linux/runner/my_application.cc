@@ -99,11 +99,19 @@ static void my_application_activate(GApplication* application) {
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
-  // No title bar. Lumit's menu bar is the window's top line and carries the
-  // window's buttons (lib/shell/window_frame.dart). A header bar that is never
-  // shown is how GTK is told so: the window still gets the frame GTK draws for
-  // itself, with its shadow and its resize edges, and nothing along the top.
-  gtk_window_set_titlebar(window, gtk_header_bar_new());
+  // Lumit's own title bar is switched on in Settings, which leaves this file
+  // beside the settings (lib/shell/window_frame.dart). Without it the window
+  // manager's title bar stays.
+  //
+  // With it there is no title bar. Lumit's menu bar is the window's top line
+  // and carries the window's buttons. A header bar that is never shown is how
+  // GTK is told so: the window still gets the frame GTK draws for itself, with
+  // its shadow and its resize edges, and nothing along the top.
+  g_autofree gchar* own_title_bar = g_build_filename(
+      g_get_home_dir(), ".config", "lumit", "own-title-bar", nullptr);
+  if (g_file_test(own_title_bar, G_FILE_TEST_EXISTS)) {
+    gtk_window_set_titlebar(window, gtk_header_bar_new());
+  }
   gtk_window_set_title(window, "lumit_flutter");
 
   gtk_window_set_default_size(window, 1280, 720);

@@ -208,6 +208,14 @@
   "@cloneSourceSet": {
     "description": "Notice after alt-clicking with the clone stamp."
   },
+  "settingsOwnTitleBar": "Lumit's own title bar",
+  "@settingsOwnTitleBar": {
+    "description": "Settings window, Linux only: the switch that replaces the system's title bar with Lumit's menu bar carrying the minimise, maximise and close buttons."
+  },
+  "settingsOwnTitleBarNote": "From the next start.",
+  "@settingsOwnTitleBarNote": {
+    "description": "Settings window, Linux only: the line under the title bar switch saying a change shows once Lumit is opened again."
+  },
   "windowMinimise": "Minimise",
   "@windowMinimise": {
     "description": "Screen reader name of the button at the top right of Lumit's window that minimises the window. Use the operating system's own word for it."
