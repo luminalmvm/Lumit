@@ -30,8 +30,11 @@ struct LumitHeader {
 //__LUMIT_PARAMS__
 @group(0) @binding(6) var<uniform> p: Params;
 
+// The frame's size. On a node graph box whose picture reaches past the
+// frame, the raster is bigger and `lumit.roi_offset` says where the frame is
+// on it; everywhere else the two are the same.
 fn lumit_size() -> vec2<f32> {
-    return vec2<f32>(textureDimensions(src));
+    return vec2<f32>(lumit.roi_size);
 }
 
 fn lumit_clamp_xy(xy: vec2<i32>) -> vec2<i32> {
@@ -39,17 +42,17 @@ fn lumit_clamp_xy(xy: vec2<i32>) -> vec2<i32> {
     return clamp(xy, vec2<i32>(0, 0), max(last, vec2<i32>(0, 0)));
 }
 
+// `xy` is in the frame's pixels, as `uv * lumit_size()` gives them.
 fn lumit_load(xy: vec2<i32>) -> vec4<f32> {
-    return textureLoad(src, lumit_clamp_xy(xy), 0);
+    return textureLoad(src, lumit_clamp_xy(xy + vec2<i32>(lumit.roi_offset)), 0);
 }
 
 // Bilinear from a texture there is no sampler for: the four loads and the two
 // lerps, written once so that no two shaders disagree about the half-texel.
 fn lumit_bilinear(t: texture_2d<f32>, uv: vec2<f32>) -> vec4<f32> {
-    let size = vec2<f32>(textureDimensions(src));
     let last = vec2<i32>(textureDimensions(src)) - vec2<i32>(1, 1);
     let hi = max(last, vec2<i32>(0, 0));
-    let f = uv * size - vec2<f32>(0.5, 0.5);
+    let f = uv * vec2<f32>(lumit.roi_size) + vec2<f32>(lumit.roi_offset) - vec2<f32>(0.5, 0.5);
     let base = floor(f);
     let frac = f - base;
     let i0 = clamp(vec2<i32>(base), vec2<i32>(0, 0), hi);

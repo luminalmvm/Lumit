@@ -15,7 +15,9 @@ Custom shader is a **Utility** effect.
 
 Runs a program you write. **Edit shader…** opens a code editor, or
 **Load from file…** reads a `.wgsl` file. The
-program is one WGSL function, `fn shade(uv: vec2<f32>) -> vec4<f32>`.
+program is one WGSL function, `fn shade(uv: vec2<f32>) -> vec4<f32>`. `uv` runs from 0 to
+1 across the frame. On a box in a node graph whose picture reaches past the frame, it runs
+below 0 and above 1 there.
 
 Parameters the shader declares become ordinary rows in Effect controls, with sliders,
 keyframes and expressions like any built-in effect's.

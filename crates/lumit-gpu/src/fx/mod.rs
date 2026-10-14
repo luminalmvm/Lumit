@@ -594,21 +594,50 @@ impl FxEngine {
 /// the same pixel, bit for bit.
 #[must_use]
 pub fn fit_centred(ctx: &GpuContext, tex: wgpu::Texture, nw: u32, nh: u32) -> wgpu::Texture {
-    if tex.width() == nw && tex.height() == nh {
+    let at = [centred(nw, tex.width()), centred(nh, tex.height())];
+    fit_at(ctx, tex, nw, nh, at)
+}
+
+/// How far in [`fit_centred`] puts the old picture's corner, on one axis:
+/// half the margin when it grows, half the cut, the other way, when it
+/// shrinks.
+#[must_use]
+pub fn centred(n: u32, old: u32) -> i32 {
+    if n >= old {
+        ((n - old) / 2) as i32
+    } else {
+        -(((old - n) / 2) as i32)
+    }
+}
+
+/// [`fit_centred`] with the old picture's top-left corner put `at` texels
+/// into the new `nw × nh` raster, which may be left of or above it. A node
+/// graph box sets its picture down off centre on a raster that reaches past
+/// the frame.
+#[must_use]
+pub fn fit_at(
+    ctx: &GpuContext,
+    tex: wgpu::Texture,
+    nw: u32,
+    nh: u32,
+    at: [i32; 2],
+) -> wgpu::Texture {
+    if tex.width() == nw && tex.height() == nh && at == [0, 0] {
         return tex;
     }
     let out = work_texture(ctx, nw, nh, "fx-fit-centred");
-    let (cw, ch) = (tex.width().min(nw), tex.height().min(nh));
-    let src_origin = wgpu::Origin3d {
-        x: (tex.width() - cw) / 2,
-        y: (tex.height() - ch) / 2,
-        z: 0,
+    // The overlap, on each axis: where it starts in the old picture and in the
+    // new one, and how long it is.
+    let span = |at: i32, old: u32, n: u32| {
+        let src = at.min(0).unsigned_abs();
+        let dst = at.max(0) as u32;
+        let len = old.saturating_sub(src).min(n.saturating_sub(dst));
+        (src, dst, len)
     };
-    let dst_origin = wgpu::Origin3d {
-        x: (nw - cw) / 2,
-        y: (nh - ch) / 2,
-        z: 0,
-    };
+    let (sx, dx, cw) = span(at[0], tex.width(), nw);
+    let (sy, dy, ch) = span(at[1], tex.height(), nh);
+    let src_origin = wgpu::Origin3d { x: sx, y: sy, z: 0 };
+    let dst_origin = wgpu::Origin3d { x: dx, y: dy, z: 0 };
     let mut enc = ctx.encoder("fx-fit-centred");
     {
         // Clear first and explicitly: the copy below writes only the overlap,
@@ -630,25 +659,28 @@ pub fn fit_centred(ctx: &GpuContext, tex: wgpu::Texture, nw: u32, nh: u32) -> wg
             occlusion_query_set: None,
         });
     }
-    enc.copy_texture_to_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &tex,
-            mip_level: 0,
-            origin: src_origin,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyTextureInfo {
-            texture: &out,
-            mip_level: 0,
-            origin: dst_origin,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::Extent3d {
-            width: cw,
-            height: ch,
-            depth_or_array_layers: 1,
-        },
-    );
+    // Nothing overlaps: the cleared raster is the whole answer.
+    if cw > 0 && ch > 0 {
+        enc.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &tex,
+                mip_level: 0,
+                origin: src_origin,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &out,
+                mip_level: 0,
+                origin: dst_origin,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: cw,
+                height: ch,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
     drop(enc);
     out
 }

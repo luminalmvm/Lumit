@@ -140,6 +140,9 @@ pub struct LensDistortOp {
     pub edge: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// The frame's width and height in raster pixels, which the field of
+    /// view spans. Zero for the raster's own, which is every layer's.
+    pub frame: [f32; 2],
 }
 
 #[repr(C)]
@@ -157,7 +160,8 @@ struct LensDistortParams {
     reverse: u32,
     /// 1 = scale the displacement by the matte.
     matte_on: f32,
-    _pad: [f32; 3],
+    _pad: f32,
+    frame: [f32; 2],
 }
 
 /// One resolved Corner pin (docs/08 §3.48). Mirrors
@@ -946,7 +950,8 @@ impl FxEngine {
                 enabled: u32::from(op.active),
                 reverse: u32::from(op.reverse),
                 matte_on: f32::from(matte.is_some()),
-                _pad: [0.0; 3],
+                _pad: 0.0,
+                frame: op.frame,
             }),
         );
         out

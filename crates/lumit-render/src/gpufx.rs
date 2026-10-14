@@ -776,8 +776,8 @@ impl CustomShader {
     /// generator.
     #[allow(clippy::too_many_arguments)]
     fn header(
-        w: u32,
-        h: u32,
+        roi_offset: [u32; 2],
+        roi_size: [u32; 2],
         comp_scale: f32,
         lt: f64,
         seed: u32,
@@ -786,8 +786,8 @@ impl CustomShader {
         input2_on: bool,
     ) -> Vec<u8> {
         let head = lumit_core::fx::shader::ShaderHeader {
-            roi_offset: [0, 0],
-            roi_size: [w, h],
+            roi_offset,
+            roi_size,
             comp_scale,
             time: lt as f32,
             seed,
@@ -864,9 +864,13 @@ impl GpuEffect for CustomShader {
         let seed = (instance.as_u128() as u64 ^ (instance.as_u128() >> 64) as u64) as u32;
         let matte = aux.matte_whatever_its_role();
         let layer_input = aux.layer_input();
+        // UV 0 to 1 spans the frame. On a node graph box whose picture
+        // reaches past it, the room either side is below 0 and above 1.
+        let [fx0, fy0, fw, fh] =
+            lumit_core::fx::frame_rect(p).unwrap_or([0.0, 0.0, w as f32, h as f32]);
         let header = Self::header(
-            w,
-            h,
+            [fx0 as u32, fy0 as u32],
+            [fw as u32, fh as u32],
             p.float(cs::COMP_SCALE, 1.0),
             lt,
             seed,
@@ -1610,7 +1614,7 @@ impl GpuEffect for LensDistort {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        let l = effects::lens_distort::LensDistort::read(p).packed();
+        let l = effects::lens_distort::LensDistort::packed_in(p);
         fx.lens_distort(
             ctx,
             tex,
@@ -1625,6 +1629,7 @@ impl GpuEffect for LensDistort {
                 centre: l.centre,
                 edge: l.edge,
                 mix: l.mix,
+                frame: l.frame,
             },
         )
     }

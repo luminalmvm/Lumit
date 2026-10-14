@@ -15,7 +15,9 @@ fn lumit_shade(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (xy.x >= size.x || xy.y >= size.y) {
         return;
     }
-    let uv = (vec2<f32>(xy) + vec2<f32>(0.5, 0.5)) / vec2<f32>(size);
+    // 0 to 1 across the frame, and past either end on room beyond it.
+    let uv = (vec2<f32>(xy - vec2<i32>(lumit.roi_offset)) + vec2<f32>(0.5, 0.5))
+        / vec2<f32>(lumit.roi_size);
     var c = shade(uv);
     // NaN: the only value that is not equal to itself.
     c = select(c, vec4<f32>(0.0, 0.0, 0.0, 0.0), c != c);

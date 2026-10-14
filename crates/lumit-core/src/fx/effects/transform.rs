@@ -154,4 +154,47 @@ impl EffectDef for TransformDef {
             mix,
         );
     }
+
+    /// The picture's corners carried through the transform. Under a Mix the
+    /// untouched picture shows too, so it keeps where it was as well.
+    fn bounds(&self, p: Params<'_>, rect: [f32; 4]) -> [f32; 4] {
+        let (anchor, position, scale, rotation_deg, skew, opacity, mix) =
+            Transform::read(p).packed();
+        // The kernel's map runs from where a pixel lands back to where it was
+        // read, so the corners go through its inverse.
+        let Some(([a, b, c, d], [ox, oy])) =
+            crate::fx::transform_inverse(anchor, position, scale, rotation_deg, skew)
+        else {
+            return rect;
+        };
+        let det = a * d - b * c;
+        if det == 0.0 || opacity <= 0.0 {
+            return rect;
+        }
+        // The bilinear tap reads half a pixel past the picture's edge, so that
+        // much more goes through, and a pixel shows if its centre lands inside.
+        let [x0, y0, x1, y1] = [rect[0] - 0.5, rect[1] - 0.5, rect[2] + 0.5, rect[3] + 0.5];
+        let mut out = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+        for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
+            let (u, v) = (x - ox, y - oy);
+            let (px, py) = ((d * u - b * v) / det, (a * v - c * u) / det);
+            out = [
+                out[0].min(px),
+                out[1].min(py),
+                out[2].max(px),
+                out[3].max(py),
+            ];
+        }
+        let out = [out[0] + 0.5, out[1] + 0.5, out[2] - 0.5, out[3] - 0.5];
+        if mix < 1.0 {
+            [
+                out[0].min(rect[0]),
+                out[1].min(rect[1]),
+                out[2].max(rect[2]),
+                out[3].max(rect[3]),
+            ]
+        } else {
+            out
+        }
+    }
 }

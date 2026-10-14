@@ -825,6 +825,24 @@ pub const MIX_PARAM: &str = "mix";
 /// [`MIX_PARAM`]'s resolved id.
 pub const MIX_ID: super::params::ParamId = super::params::ParamId::new(MIX_PARAM);
 
+/// Where the frame sits on the raster an op runs on, `[x, y, width, height]`
+/// in raster pixels. Only a node graph box whose picture reaches past the
+/// frame sets it; everywhere else the raster is the frame and it is absent.
+pub const FRAME_RECT: super::params::ParamId = super::params::ParamId::new("derived.frame_rect");
+
+/// [`FRAME_RECT`] when the op was told one.
+#[must_use]
+pub fn frame_rect(p: super::params::Params<'_>) -> Option<[f32; 4]> {
+    match p.get(FRAME_RECT)? {
+        super::params::Value::Vec4(r) => Some(r),
+        _ => None,
+    }
+}
+
+/// The x and y pairs in pixels that are a distance and not a place on the
+/// picture, by the name they share: Offset's Shift.
+const DISTANCES: &[&str] = &["shift"];
+
 /// The id of the Blend choice injected beside every Mix slider: how
 /// the effect's result combines with its input, by index into
 /// [`BlendMode::ALL`](crate::model::BlendMode::ALL) — the layer modes, verbatim.
@@ -1038,6 +1056,20 @@ impl EffectSchema {
                 y: w[1].id,
             })
         })
+    }
+
+    /// The x and y pairs that are a place on the picture, as a Centre or a
+    /// noise field's origin is. They move with the picture when it is given
+    /// room or set further in on a bigger raster. A pair that is a distance,
+    /// as Offset's Shift is, does not.
+    pub fn place_pairs(&self) -> impl Iterator<Item = ParamPair> + '_ {
+        let px = |id: &str| {
+            self.params
+                .iter()
+                .any(|row| row.id == id && row.unit == Unit::Px)
+        };
+        self.pairs()
+            .filter(move |pair| px(pair.x) && px(pair.y) && !DISTANCES.contains(&pair.stem))
     }
 
     #[must_use]
