@@ -177,6 +177,21 @@ class PickedColour {
     return peak > 1 ? peak : 1;
   }
 
+  /// Where the square and the strip put this colour: divided down by its own
+  /// peak, so an over-range colour still lands somewhere on them. Read from
+  /// the channels themselves rather than rounded to bytes: near black a byte
+  /// is a large share of a channel, so dragging a number moved the ring and
+  /// the hue in jumps.
+  Hsv get hsv {
+    final peak = gain;
+    return rgbToHsv(Color.from(
+      alpha: 1,
+      red: (r / peak).clamp(0.0, 1.0),
+      green: (g / peak).clamp(0.0, 1.0),
+      blue: (b / peak).clamp(0.0, 1.0),
+    ));
+  }
+
   @override
   bool operator ==(Object other) =>
       other is PickedColour && other.r == r && other.g == g && other.b == b;
@@ -432,8 +447,9 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
     super.initState();
     _shelf = widget.shelf?.swatches ?? const [];
     _colour = widget.initial;
-    _hue = rgbToHsv(_colour.clipped).$1;
-    _sat = rgbToHsv(_colour.clipped).$2;
+    final hsv = _colour.hsv;
+    _hue = hsv.$1;
+    _sat = hsv.$2;
     _hexController = TextEditingController(text: formatHex(_colour.clipped));
     _hexFocus.addListener(() {
       if (!_hexFocus.hasFocus) _commitHex();
@@ -451,19 +467,12 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
     super.dispose();
   }
 
-  /// The colour as the square and the strip see it: divided down by its own
-  /// peak, so an over-range colour still lands somewhere on them. Editing them
-  /// multiplies that peak back in, so dragging the square about does not
-  /// quietly throw away a value above white.
+  /// The colour as the square and the strip see it, with the hue and, at
+  /// black, the saturation it has been carrying. Editing them multiplies the
+  /// colour's peak back in, so dragging the square about does not quietly
+  /// throw away a value above white.
   Hsv get _hsv {
-    final g = _colour.gain;
-    final normalised = documentColour(
-      ((_colour.r / g).clamp(0.0, 1.0) * 255).round(),
-      ((_colour.g / g).clamp(0.0, 1.0) * 255).round(),
-      ((_colour.b / g).clamp(0.0, 1.0) * 255).round(),
-      0xff,
-    );
-    final hsv = rgbToHsv(normalised);
+    final hsv = _colour.hsv;
     return (_hue, hsv.$3 > 0 ? hsv.$2 : _sat, hsv.$3);
   }
 
@@ -526,7 +535,7 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
 
   /// A colour arriving whole — a preset, a hex, Cancel's restore.
   void _setColour(PickedColour colour, {required bool settled}) {
-    final hsv = rgbToHsv(colour.clipped);
+    final hsv = colour.hsv;
     // Keep the chosen hue when the pick is a pure grey (hue undefined) — the
     // square would otherwise jump to red the moment saturation reached zero.
     _apply(colour,
