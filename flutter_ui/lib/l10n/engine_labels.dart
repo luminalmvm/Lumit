@@ -768,7 +768,6 @@ Map<String, String> get _built => {
       "Flag": l10n.fxFlag,
       "Flare options": l10n.fxFlareOptions,
       "Flash": l10n.fxFlash,
-      "Focus (m)": l10n.fxFocusM,
       "Focus distance": l10n.fxFocusDistance,
       "Focus map": l10n.fxFocusMap,
       "Focus point x": l10n.fxFocusPointX,

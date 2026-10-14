@@ -51,7 +51,6 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "Lens options",
         params: &[
-            "focus",
             "anamorphic",
             "blades",
             "aperture_rotation",
@@ -357,22 +356,6 @@ pub struct LensFlare {
     #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
-    /// The working f-stop: stops the iris down from the lens's native f-number.
-    /// Wider (a smaller number) grows the ghost discs and softens the starburst
-    /// ringing. The default is the default lens's native stop (the Master
-    /// Prime is a T1.3), so a dropped-on flare starts wide open and at its
-    /// brightest - stopping down dims it honestly.
-    #[slider(
-        label = "F-stop",
-        min = 1.0,
-        max = 22.0,
-        default = 1.3,
-        hard_min = 0.7,
-        hard_max = 32.0,
-        unit = Raw
-    )]
-    pub fstop: f32,
-
     /// The embedded prescription library (curated to twenty):
     /// real lenses, transcribed patent data, chosen for maximally different flare
     /// characters. Sorted by name; the default is the Master Prime 50, the
@@ -409,20 +392,36 @@ pub struct LensFlare {
     #[action(label = "Edit lens…")]
     pub edit_lens: (),
 
-    // ---- The Lens options twirl ----
+    /// The working f-stop: stops the iris down from the lens's native f-number.
+    /// Wider (a smaller number) grows the ghost discs and softens the starburst
+    /// ringing. The default is the default lens's native stop (the Master
+    /// Prime is a T1.3), so a dropped-on flare starts wide open and at its
+    /// brightest - stopping down dims it honestly.
+    #[slider(
+        label = "F-stop",
+        min = 0.95,
+        max = 22.0,
+        default = 1.3,
+        hard_min = 0.7,
+        hard_max = 32.0,
+        unit = Raw
+    )]
+    pub fstop: f32,
+
     /// Focus distance in metres: shifts the sensor from its calibrated
     /// infinity position by the thin-lens image shift, changing the whole flare's
     /// shape — real flares breathe with focus. Large values are infinity.
     #[slider(
-        label = "Focus (m)",
-        min = 0.5,
+        label = "Focus distance (m)",
+        min = 0.3,
         max = 100.0,
         default = 100.0,
-        hard_min = 0.2,
+        hard_min = 0.05,
         unit = Raw
     )]
     pub focus: f32,
 
+    // ---- The Lens options twirl ----
     /// Horizontal stretch of the whole flare about the frame centre
     /// (1 = spherical, 1.33 / 2 = anamorphic looks).
     #[slider(

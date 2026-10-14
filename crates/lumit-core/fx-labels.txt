@@ -381,7 +381,6 @@ Flip order
 Flow points
 Flow resolution
 Flow smoothness
-Focus (m)
 Focus distance
 Focus distance (m)
 Focus map
