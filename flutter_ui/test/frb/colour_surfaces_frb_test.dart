@@ -1,12 +1,12 @@
-// The four places a colour config reaches the interface (docs/impl/ocio.md
-// §6.2–§6.5).
+// The places a colour config reaches the interface (docs/impl/ocio.md §6.2 to
+// §6.4).
 //
 // `colour_seam_frb_test` proves the seam: the summary arrives whole, the two
 // edits are ordinary ops, a refusal crosses as an id. This file is about the
-// surfaces built on it — the Viewer's picker, the export's colour dropdown, the
-// Project panel's per-item submenu, and the Project settings row where the
-// config itself is chosen. One config fixture serves all four, because what is
-// being asserted is that each surface says the *same* thing about it.
+// surfaces built on it — the Viewer's picker, the export's colour dropdown and
+// the Project settings row where the config itself is chosen. One config
+// fixture serves all three, because what is being asserted is that each surface
+// says the *same* thing about it.
 //
 // Two claims run through every group and are the ones a regression would break
 // quietly:
@@ -21,11 +21,9 @@
 
 import 'dart:io';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/panels/project_panel_frb.dart';
 import 'package:lumit_flutter/panels/viewer_panel_frb.dart';
 import 'package:lumit_flutter/shell/export_dialog_frb.dart';
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
@@ -235,63 +233,6 @@ void main() {
             .data,
         contains('untagged'),
       );
-    });
-  });
-
-  group("The Project panel's colour-space submenu (§6.5)", () {
-    testWidgets('a footage row takes a space from the config, and gives it up',
-        (tester) async {
-      final p = freshProject();
-      final footage = p.state.project!.importFootage(path: 'C:/clips/shot.mov');
-      useConfig(p, writeConfig());
-
-      await tester.pumpWidget(hostPanel(
-        child: const ProjectPanelFrb(),
-        state: p.state,
-        uiState: p.uiState,
-      ));
-      await tester.pump();
-
-      Future<void> openSubmenu() async {
-        await tester.tapAt(
-          tester.getCenter(find.descendant(
-              of: find.byType(ListView), matching: find.text('shot.mov'))),
-          buttons: kSecondaryButton,
-        );
-        await tester.pumpAndSettle();
-        await tester
-            .tap(find.byKey(const ValueKey('project-menu-colour-space')));
-        await tester.pumpAndSettle();
-      }
-
-      await openSubmenu();
-      expect(find.text('As the file says'), findsOneWidget,
-          reason: 'the built-in interpretation, which every clip starts on');
-      expect(find.text('srgb_texture'), findsOneWidget,
-          reason: "the config's own names, verbatim");
-
-      await tester.tap(
-          find.byKey(const ValueKey('project-menu-colour-space-srgb_texture')));
-      await tester.pumpAndSettle();
-      expect(footage.colourSpace(), 'srgb_texture',
-          reason: 'one gesture writes through to the document');
-
-      // An ordinary op: one gesture, one undo step.
-      p.state.project!.undo();
-      expect(footage.colourSpace(), isNull);
-
-      // And the row that clears it back to the built-in defaults.
-      await openSubmenu();
-      await tester.tap(
-          find.byKey(const ValueKey('project-menu-colour-space-out_srgb')));
-      await tester.pumpAndSettle();
-      expect(footage.colourSpace(), 'out_srgb');
-
-      await openSubmenu();
-      await tester
-          .tap(find.byKey(const ValueKey('project-menu-colour-space-none')));
-      await tester.pumpAndSettle();
-      expect(footage.colourSpace(), isNull);
     });
   });
 

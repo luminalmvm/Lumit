@@ -7,14 +7,12 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
-import 'package:lumit_flutter/src/rust/api/colour.dart' show BridgeColourItem;
 import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/share.dart'
     show BridgeFootageHere, BridgeFootageShare;
 import 'package:provider/provider.dart';
 
-import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
 import '../shell/interpret_footage_frb.dart';
@@ -135,19 +133,9 @@ Future<void> showProjectMenuFrb({
   // the row's build: the menu is a gesture, not a rebuild path.
   final ui = Provider.of<LumitUiState>(context, listen: false);
   final openComp = ui.selectedComp;
-  // The colour config's own space names, off the summary the shell holds, and
-  // what this item is set to now. Both read here — raising a menu is a
-  // gesture, and `colour_space` is a document read.
-  final colourSpaces =
-      ui.colourSummary.loaded ? ui.colourSummary.spaces : const <String>[];
-  final colourSpace = switch (item) {
-    ItemReference_Footage(:final field0) => field0.colourSpace(),
-    _ => null,
-  };
   // The rate a run of stills plays at, null for everything that is not a run —
   // which is what decides whether the field below is offered at all. Read here
-  // with the colour space, for the same reason: a document read belongs to the
-  // gesture, not to a rebuild.
+  // because a document read belongs to the gesture, not to a rebuild.
   final sequenceRate = switch (item) {
     ItemReference_Footage(:final field0) => field0.sequenceRate(),
     _ => null,
@@ -358,95 +346,6 @@ Future<void> showProjectMenuFrb({
               ),
             ],
           ],
-          // **What colour space this footage arrived in** (docs/impl/ocio.md
-          // §6.5). A submenu rather than a row, because the answer is a name
-          // out of the project's colour config and there may be forty of them.
-          // This is the smallest honest surface until *Interpret footage…*
-          // exists as drawn (docs/07 §3.2), and it is replaced when that
-          // dialogue lands.
-          //
-          // The names are the config's own and cross verbatim. A name
-          // assigned while a config that has since gone was loaded is still
-          // listed, ticked, because it is the user's statement about the file
-          // and the menu must not pretend it was never made.
-          if (item case ItemReference_Footage(:final field0))
-            SubmenuRow(
-              key: const ValueKey('project-menu-colour-space'),
-              closeParent: () => close(null),
-              submenu: (dismiss) => FloatSurface(
-                width: 210,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // The built-in interpretation: what a file says about
-                    // itself, which is where every footage item starts.
-                    MenuRow(
-                      key: const ValueKey('project-menu-colour-space-none'),
-                      onPressed: () {
-                        dismiss();
-                        field0.setColourSpace();
-                        onLocalEdit();
-                      },
-                      child: Row(children: [
-                        menuTick(colourSpace == null),
-                        Expanded(child: Text(l10n.colourSpaceFromFile)),
-                      ]),
-                    ),
-                    if (colourSpaces.isNotEmpty ||
-                        (colourSpace != null &&
-                            !colourSpaces.contains(colourSpace)))
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
-                        child: Text(l10n.colourSpaceFromConfig,
-                            style: menuTheme.small
-                                .copyWith(color: menuTheme.textMuted)),
-                      ),
-                    for (final space in [
-                      if (colourSpace != null &&
-                          !colourSpaces.contains(colourSpace))
-                        colourSpace,
-                      ...colourSpaces,
-                    ])
-                      // A space the config cannot read footage from stays
-                      // listed, drawn quiet, with its reason on hover.
-                      if (colourItemProblem(
-                              ui.colourSummary, BridgeColourItem.input, space)
-                          case final why?)
-                        LumitTooltip(
-                          message: why,
-                          child: MenuRow(
-                            key: ValueKey<String>(
-                                'project-menu-colour-space-$space'),
-                            onPressed: () {},
-                            child: Row(children: [
-                              menuTick(space == colourSpace),
-                              Expanded(
-                                  child: Text(space,
-                                      style: TextStyle(
-                                          color: menuTheme.textDisabled))),
-                            ]),
-                          ),
-                        )
-                      else
-                        MenuRow(
-                          key: ValueKey<String>(
-                              'project-menu-colour-space-$space'),
-                          onPressed: () {
-                            dismiss();
-                            field0.setColourSpace(space: space);
-                            onLocalEdit();
-                          },
-                          child: Row(children: [
-                            menuTick(space == colourSpace),
-                            Expanded(child: Text(space)),
-                          ]),
-                        ),
-                  ],
-                ),
-              ),
-              child: Text(l10n.colourSpace),
-            ),
           // The colour tag, as the strip itself rather than a submenu: the
           // chips ARE the choice, so putting them on the menu row costs one
           // click where a submenu costs two and a hover in between. The same
