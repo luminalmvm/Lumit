@@ -12,8 +12,8 @@
 //! footage to defocus it with a lens's character.
 //!
 //! In a node graph the Depth view hands on the metres it used, and Focus
-//! distance and F-stop hand out how it is set, so the other lens effects can
-//! follow it.
+//! distance, F-stop and Glass curvature hand out how it is set, so the other
+//! lens effects can follow it.
 
 use crate::fx::{
     lens_blur, DriverCx, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen,
@@ -275,6 +275,7 @@ pub struct DofPro {
 pub const LENS_OUT: &[Port] = &[
     Port::new("focus_out", "Focus distance (m)", PortType::Number),
     Port::new("fstop_out", "F-stop", PortType::Number),
+    Port::new("curvature_out", "Glass curvature", PortType::Number),
 ];
 
 impl DofPro {
@@ -331,5 +332,12 @@ impl EffectDef for DofProDef {
         let e = DofPro::read(cx.params);
         push("focus_out", Value::Float(e.focus_m));
         push("fstop_out", Value::Float(e.fstop));
+        let text = crate::fx::lens::embedded(cx.inst)
+            .map(|(_, text)| text)
+            .unwrap_or(crate::fx::lens_flare::lens_entry(e.lens_model).text);
+        push(
+            "curvature_out",
+            Value::Float(crate::fx::lens::front_curvature(text)),
+        );
     }
 }

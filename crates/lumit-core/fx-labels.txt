@@ -29,6 +29,7 @@ Alpha bias
 Alpha blur
 Alpha from
 Altitude
+Ambient
 Amount
 Amplitude
 Analyse
@@ -191,6 +192,7 @@ Colour name
 Colour noise
 Colour overlay
 Colour ramp
+Colour variation
 Columns
 Combine
 Combine channels
@@ -266,6 +268,9 @@ Direction x
 Direction y
 Direction z
 Directional blur
+Dirt
+Dirt alone
+Dirt scale
 Disc
 Dispersion
 Displacement
@@ -285,8 +290,10 @@ Drive
 Drivers
 Drop shadow
 Drop the rest
+Droplets
 Dry
 Duration
+Dust
 Echo
 Echoes
 Edge
@@ -409,6 +416,7 @@ Ghost size
 Ghost softness
 Ghost spacing
 Ghosts
+Glass curvature
 Glass dirt
 Glow
 Glow colour
@@ -426,14 +434,17 @@ Green blur
 Green from
 Greens
 Grid
+Grit
 Group
 Group name
+Hairs
 Half
 Hard
 Hard colour
 Hard light
 Hard mix
 Hardness
+Haze
 Height
 Hexagons
 High
@@ -523,6 +534,7 @@ Left top tangent y
 Left trim
 Length
 Lens
+Lens dirt
 Lens distort
 Lens file
 Lens flare
@@ -533,6 +545,7 @@ Life
 Life jitter
 Lifespan
 Lift
+Light
 Light colour
 Light direction
 Light distance (m)
@@ -785,6 +798,7 @@ Reds
 Reduce brightness
 Reduce saturation
 Refine radius
+Refraction
 Region size
 Relax points
 Release
@@ -847,6 +861,7 @@ Scale x %
 Scale y %
 Scanlines
 Scatter
+Scratches
 Screen
 Screen balance
 Screen colour
@@ -857,6 +872,7 @@ Screen shrink/grow
 Screen softness
 Scribble
 Second input
+Second tint
 Seed
 Seed from
 Segment
@@ -889,6 +905,7 @@ Shutter angle
 Shutter phase
 Sides
 Sine
+Single
 Single layer, straw
 Size
 Size from width
@@ -900,6 +917,7 @@ Slice repeat
 Slider
 Slider control
 Smooth
+Smudges
 Soft colour
 Soft light
 Softness

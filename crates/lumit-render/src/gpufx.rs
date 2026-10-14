@@ -385,6 +385,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &OcioFile,
     &Dof,
     &DofPro,
+    &LensDirt,
     &ChannelBlur,
     &Transform,
     &Shake,
@@ -2627,6 +2628,58 @@ impl GpuEffect for DofPro {
                     azimuth_bins: lens_blur::AZIMUTH_BINS as u32,
                     kernel_res: lens_blur::KERNEL_RES as u32,
                 })
+            },
+        )
+    }
+}
+
+struct LensDirt;
+impl GpuEffect for LensDirt {
+    fn match_name(&self) -> &'static str {
+        "lens_dirt"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let e = effects::lens_dirt::LensDirt::read(p);
+        fx.lens_dirt(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::LensDirtOp {
+                seed: e.seed,
+                intensity: e.intensity.max(0.0),
+                defocus: e.defocus(),
+                scale: (e.scale / 100.0).max(0.01),
+                dust: e.dust.clamp(0.0, 1.0),
+                smudges: e.smudges.clamp(0.0, 1.0),
+                haze: e.haze.clamp(0.0, 1.0),
+                scratches: e.scratches.clamp(0.0, 1.0),
+                droplets: e.droplets.clamp(0.0, 1.0),
+                refraction: e.refraction.max(0.0),
+                grit: e.grit.clamp(0.0, 1.0),
+                hairs: e.hairs.clamp(0.0, 1.0),
+                ambient: e.ambient.max(0.0),
+                alone: e.display == 1,
+                blades: e.blades.clamp(3, 16) as u32,
+                roundness: e.roundness.clamp(0.0, 1.0),
+                rotation_deg: e.rotation,
+                threshold: e.threshold.max(0.0),
+                spread: e.spread.max(0.0),
+                tint: [e.tint[0], e.tint[1], e.tint[2]],
+                tint_2: [e.tint_2[0], e.tint_2[1], e.tint_2[2]],
+                gradient: e.colour == 1,
+                variation: e.variation.clamp(0.0, 1.0),
+                curvature: e.curvature.clamp(-2.0, 2.0),
+                mix: (e.mix / 100.0).clamp(0.0, 1.0),
             },
         )
     }

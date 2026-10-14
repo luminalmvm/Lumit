@@ -20727,6 +20727,416 @@
       "matte_role": "own"
     },
     {
+      "slug": "lens-dirt",
+      "match_name": "lens_dirt",
+      "label": "Lens dirt",
+      "version": 1,
+      "category": "Stylise",
+      "category_slug": "stylise",
+      "params": [
+        {
+          "id": "intensity",
+          "label": "Intensity",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.35,
+          "slider_min": 0.0,
+          "slider_max": 2.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "fstop",
+          "label": "F-stop",
+          "kind": "float",
+          "unit": "raw",
+          "default": 2.8,
+          "slider_min": 0.95,
+          "slider_max": 22.0,
+          "hard_min": 0.7,
+          "hard_max": 32.0
+        },
+        {
+          "id": "focus_m",
+          "label": "Focus distance (m)",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": 0.3,
+          "slider_max": 100.0,
+          "hard_min": 0.05
+        },
+        {
+          "id": "scale",
+          "label": "Dirt scale",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 25.0,
+          "slider_max": 400.0,
+          "hard_min": 5.0,
+          "hard_max": 2000.0
+        },
+        {
+          "id": "curvature",
+          "label": "Glass curvature",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.3,
+          "slider_min": -1.0,
+          "slider_max": 1.0,
+          "hard_min": -2.0,
+          "hard_max": 2.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
+          "id": "dust",
+          "label": "Dust",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.35,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "grit",
+          "label": "Grit",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.2,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "hairs",
+          "label": "Hairs",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "smudges",
+          "label": "Smudges",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "haze",
+          "label": "Haze",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.2,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "scratches",
+          "label": "Scratches",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.15,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "droplets",
+          "label": "Droplets",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "refraction",
+          "label": "Refraction",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 2.0
+        },
+        {
+          "id": "blades",
+          "label": "Blades",
+          "kind": "int",
+          "unit": "raw",
+          "default": 9,
+          "slider_min": 3.0,
+          "slider_max": 16.0,
+          "hard_min": 3.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "roundness",
+          "label": "Roundness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.6,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "rotation",
+          "label": "Rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.9,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "spread",
+          "label": "Spread",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.35,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 2.0
+        },
+        {
+          "id": "ambient",
+          "label": "Ambient",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "colour",
+          "label": "Colour",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Single",
+            "Gradient"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "tint",
+          "label": "Tint",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "tint_2",
+          "label": "Second tint",
+          "kind": "colour",
+          "unit": "raw",
+          "default": [
+            0.75,
+            0.8,
+            1.2,
+            1.0
+          ],
+          "slider_min": 0.0,
+          "slider_max": 4.0
+        },
+        {
+          "id": "variation",
+          "label": "Colour variation",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.15,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "display",
+          "label": "Display",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Final",
+            "Dirt alone"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Dirt",
+          "params": [
+            "dust",
+            "grit",
+            "hairs",
+            "smudges",
+            "haze",
+            "scratches",
+            "droplets",
+            "refraction"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Iris",
+          "params": [
+            "blades",
+            "roundness",
+            "rotation"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Light",
+          "params": [
+            "threshold",
+            "spread",
+            "ambient"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Colour",
+          "params": [
+            "colour",
+            "tint",
+            "tint_2",
+            "variation"
+          ],
+          "collapsed": true
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "tint_2",
+          "on": "colour",
+          "cond": "choice_is",
+          "value": 1
+        }
+      ],
+      "matte_role": "strength"
+    },
+    {
       "slug": "drop-shadow",
       "match_name": "drop_shadow",
       "label": "Drop shadow",

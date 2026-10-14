@@ -130,6 +130,20 @@ pub fn embedded(e: &EffectInstance) -> Option<(&str, &str)> {
     Some((name, text))
 }
 
+/// How far the front glass bulges: its clear radius over its radius of
+/// curvature, the sine of the angle its rim makes at the centre of the sphere.
+/// Positive bulges out towards the subject, negative is dished, 0 is flat. The
+/// `semi_ap` column holds the clear diameter.
+pub fn front_curvature(text: &str) -> f32 {
+    let Some(front) = rows(text).and_then(|l| l.rows.first().copied()) else {
+        return 0.0;
+    };
+    if front.radius_mm.abs() < 1e-6 {
+        return 0.0;
+    }
+    (0.5 * front.semi_ap_mm / front.radius_mm).clamp(-0.95, 0.95)
+}
+
 /// Keep `text` in the instance, or forget the kept lens with `None`.
 pub fn set_embedded(e: &mut EffectInstance, lens: Option<(&str, &str)>) {
     match lens {

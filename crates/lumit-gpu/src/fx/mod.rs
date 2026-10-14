@@ -20,6 +20,7 @@ mod dof;
 mod engine;
 mod generate;
 mod lens_blur;
+mod lens_dirt;
 mod lens_flare;
 mod lighting;
 mod particulate;
@@ -41,6 +42,7 @@ pub use distort::*;
 pub use dof::*;
 pub use generate::*;
 pub use lens_blur::*;
+pub use lens_dirt::*;
 pub use lens_flare::*;
 pub use lighting::*;
 pub use particulate::*;
@@ -357,6 +359,8 @@ pub struct FxEngine {
     /// Depth of field pro: its own layouts, pipelines and traced lenses, built
     /// the first time one is drawn.
     lens_blur: lens_blur::LazyLensBlur,
+    /// Lens dirt, built the first time one is drawn.
+    lens_dirt: lens_dirt::LazyLensDirt,
     /// Particulate (docs/08 §3.86): the second effect to own a render
     /// pass, and the first to own a compute pipeline that writes a buffer
     /// rather than a picture. Its four passes and two layouts are built with

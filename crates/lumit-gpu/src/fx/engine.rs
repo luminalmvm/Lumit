@@ -737,6 +737,7 @@ impl FxEngine {
             ocio: ocio.wait(),
             custom_shader: super::custom_shader::CustomShaderPipelines::new(ctx),
             lens_blur: Default::default(),
+            lens_dirt: Default::default(),
             layout,
             adjust_layout,
             mb_layout,

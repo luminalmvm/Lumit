@@ -19356,13 +19356,85 @@
   "@fxFarthestM": {
     "description": "Effect controls — a control on Depth of field pro: the distance in metres that the brightest value of the depth matte means."
   },
+  "fxDirt": "Dirt",
+  "@fxDirt": {
+    "description": "Effect controls: the group on Lens dirt holding how much of each kind of dirt is on the glass."
+  },
+  "fxAmbient": "Ambient",
+  "@fxAmbient": {
+    "description": "Effect controls: a control on Lens dirt, light on all of the glass whatever the picture."
+  },
+  "fxDirtAlone": "Dirt alone",
+  "@fxDirtAlone": {
+    "description": "Effect controls: a Display choice on Lens dirt, the lit dirt over black rather than over the picture."
+  },
+  "fxDirtScale": "Dirt scale",
+  "@fxDirtScale": {
+    "description": "Effect controls: a control on Lens dirt, the size of the dirt pattern, per cent."
+  },
+  "fxDroplets": "Droplets",
+  "@fxDroplets": {
+    "description": "Effect controls: a control on Lens dirt, how much water is on the glass."
+  },
+  "fxDust": "Dust",
+  "@fxDust": {
+    "description": "Effect controls: a control on Lens dirt, how much dust is on the glass."
+  },
   "fxGlassDirt": "Glass dirt",
   "@fxGlassDirt": {
     "description": "Effect controls: a control on Depth of field pro, smears and specks on the front glass seen inside out-of-focus highlights."
   },
+  "fxColourVariation": "Colour variation",
+  "@fxColourVariation": {
+    "description": "Effect controls: a control on Lens dirt, how far each speck's hue and brightness stray either side of its colour."
+  },
+  "fxGlassCurvature": "Glass curvature",
+  "@fxGlassCurvature": {
+    "description": "Effect controls: a control on Lens dirt, and an output of Depth of field pro, for how far the front glass of the lens bulges."
+  },
+  "fxSecondTint": "Second tint",
+  "@fxSecondTint": {
+    "description": "Effect controls: a control on Lens dirt, the far colour that Gradient picks each speck's colour towards."
+  },
+  "fxSingle": "Single",
+  "@fxSingle": {
+    "description": "Effect controls: a Colour choice on Lens dirt, every speck the one Tint rather than a gradient of two."
+  },
+  "fxGrit": "Grit",
+  "@fxGrit": {
+    "description": "Effect controls: a control on Lens dirt, how many fine sharp specks are on the glass."
+  },
+  "fxHairs": "Hairs",
+  "@fxHairs": {
+    "description": "Effect controls: a control on Lens dirt, how many curling fibres are on the glass."
+  },
+  "fxHaze": "Haze",
+  "@fxHaze": {
+    "description": "Effect controls: a control on Lens dirt, a thin film over the whole glass."
+  },
+  "fxLensDirt": "Lens dirt",
+  "@fxLensDirt": {
+    "description": "An effect's name: dust, smudges and water on the lens, lit by the bright parts of the picture."
+  },
+  "fxLight": "Light",
+  "@fxLight": {
+    "description": "Effect controls: the group on Lens dirt holding how the picture's highlights light the dirt."
+  },
+  "fxRefraction": "Refraction",
+  "@fxRefraction": {
+    "description": "Effect controls: a control on Lens dirt, how hard water droplets bend the picture behind them."
+  },
+  "fxScratches": "Scratches",
+  "@fxScratches": {
+    "description": "Effect controls: a control on Lens dirt, how many fine scratches are on the glass."
+  },
+  "fxSmudges": "Smudges",
+  "@fxSmudges": {
+    "description": "Effect controls: a control on Lens dirt, greasy streaks and fingerprints on the glass."
+  },
   "fxFinal": "Final",
   "@fxFinal": {
-    "description": "Effect controls: a Display choice on Depth of field pro, the finished blur rather than the depth it used."
+    "description": "Effect controls: a Display choice on Depth of field pro and Lens dirt, the finished picture rather than the depth or the dirt alone."
   },
   "fxLightDistanceM": "Light distance (m)",
   "@fxLightDistanceM": {

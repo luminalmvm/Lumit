@@ -111,6 +111,7 @@ use super::effects::{
     invert::{Invert, InvertDef},
     iris_wipe::{IrisWipe, IrisWipeDef},
     label_points::{LabelPoints, LabelPointsDef},
+    lens_dirt::{LensDirt, LensDirtDef},
     lens_distort::{LensDistort, LensDistortDef},
     lens_flare::{LensFlare, LensFlareDef},
     levels::{Levels, LevelsDef},
@@ -349,6 +350,7 @@ crate::catalogue![
     BlackAndWhiteDef => BlackAndWhite,
     ShadowHighlightDef => ShadowHighlight,
     LensFlareDef => LensFlare,
+    LensDirtDef => LensDirt,
     // Drop shadow, at the Stylise family's end.
     DropShadowDef => DropShadow,
     // Roughen edges (docs/08 §3.57), at the Stylise family's end after it.

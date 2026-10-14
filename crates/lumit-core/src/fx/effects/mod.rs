@@ -67,6 +67,7 @@ pub mod hue_shift;
 pub mod invert;
 pub mod iris_wipe;
 pub mod label_points;
+pub mod lens_dirt;
 pub mod lens_distort;
 pub mod lens_flare;
 pub mod levels;
