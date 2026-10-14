@@ -423,7 +423,9 @@ class FlowRateControl extends StatelessWidget {
             key: const ValueKey('flow-input-rate'),
             value: shown,
             min: 0,
-            max: 240,
+            // High-speed cameras shoot well past 240, and a conform only
+            // has to sit below the clip's own rate to do anything.
+            max: 10000,
             decimals: 2,
             // 0 is Auto rather than "zero frames per second", which is not
             // a thing — so the field says so instead of showing a number
