@@ -156,12 +156,12 @@ void main() {
         version: '0.2.0',
         fetch: (url) async {
           asked = url;
-          return _releaseJson(tag: 'v0.2.0');
+          return recent();
         },
       );
       expect(service.followsNightly, isFalse);
       await service.check();
-      expect(asked, latestReleaseUrl);
+      expect(asked, recentReleasesUrl);
       expect(service.stage, UpdateStage.upToDate);
     });
 

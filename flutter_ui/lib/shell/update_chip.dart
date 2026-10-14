@@ -58,11 +58,11 @@ class UpdateChip extends StatelessWidget {
 }
 
 /// What the waiting update brings, for under the tip: a heading per build
-/// and a line per change, newest first. Null when there is nothing to list.
+/// and a line per change, newest first, scrolling once it is taller than the
+/// tip. Null when there is nothing to list.
 Widget? _changes(LumitTheme t, UpdateService updates) {
-  // ponytail: a tip can't be scrolled, so it lists twelve changes and counts
-  // the rest. A window of its own if the whole list is ever wanted.
-  var room = 12;
+  // Somebody many releases behind needs the gist, not every line since.
+  var room = 60;
   var more = 0;
   final rows = <Widget>[];
   for (final build in updates.builds) {
@@ -89,17 +89,22 @@ Widget? _changes(LumitTheme t, UpdateService updates) {
     }
   }
   if (rows.isEmpty) return null;
-  return Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      ...rows,
-      if (more > 0)
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(l10n.updateMoreChanges(more), style: t.small),
-        ),
-    ],
+  return ConstrainedBox(
+    constraints: const BoxConstraints(maxHeight: 320),
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...rows,
+          if (more > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(l10n.updateMoreChanges(more), style: t.small),
+            ),
+        ],
+      ),
+    ),
   );
 }
 
