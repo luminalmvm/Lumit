@@ -1,0 +1,131 @@
+---
+title: Depth of field pro
+description: "Depth of field traced through a real lens."
+---
+
+Depth of field pro is a [Blur & sharpen](/effects/#blur--sharpen) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+A depth of field blur traced through a real lens prescription. The out-of-focus shape
+changes across the frame and through focus as that lens's does: cat's eyes towards the
+corners, bright or soft edges either side of focus, and coloured fringes from the glass.
+Something near and blurred goes soft at its edges over what is behind it, which shows
+through, the way a real lens sees a little round it.
+Bright pixels are drawn as whole bokeh shapes.
+
+The **Matte** is a depth pass from 0 to 1. Without one, the whole frame sits at
+**Farthest (m)**.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Lens** | Dropdown | 7Artisans · 50mm F0.95 · Angenieux · DEM 180mm F2.3 APO · Canon · 50mm f1.2 (1956) · Canon · 85mm f1.5 (1952) · Canon · EF 100mm f2.8 Macro · Canon · EF 400mm f2.8L IS II · Canon · EF 70-200mm f2.8L · Canon · FD 300mm f2.8 SSC Fluorite · Leica · Elmarit 90mm F2.8 · Leica · Summilux 35mm f1.4 · Leica · Summilux-C 100mm T1.4 · Meyer Görlitz · Kino Plasmat 100mm F2 · Meyer Görlitz · Orestor 135mm F2.8 · Ross · F10 APO Process Xpres · Voigtländer · Nokton 35mm F1.2 Asph · Voigtländer · Nokton 50mm F1.0 Asph · Zeiss · Arri Master Prime T1.3 50mm · Zeiss · Biotar 50mm F1.4 · Zeiss · Tessar 100mm F4.5 · Zeiss · Ultra Prime Sonnar 135mm T1.9 | Zeiss · Biotar 50mm F1.4 | - |
+| **Edit lens…** | Button | - | - | - |
+| **F-stop** | Slider | 0.95 to 22; down to 0.7 and up to 32 | 1.4 | - |
+| **Focus distance (m)** | Slider | 0.3 to 100; down to 0.05 and higher | 3 | - |
+| **Use focus point** | Checkbox | On or off | Off | - |
+| **Focus point x** | Slider | 0 to 3840; any value by typing | 960 | Pixels at composition size |
+| **Focus point y** | Slider | 0 to 2160; any value by typing | 540 | Pixels at composition size |
+| **Sensor** | Dropdown | Full frame · Super 35 · APS-C · Micro Four Thirds | Full frame | - |
+| **Blur size** | Slider | 0 to 4; up to 16 | 1 | - |
+| **Colour fringing** | Slider | 0 to 3; up to 10 | 1 | - |
+| **Glass dirt** | Slider | 0 to 1 | 0 | - |
+| **Blades** | Slider, whole numbers | 3 to 16 | 9 | - |
+| **Roundness** | Slider | 0 to 1 | 0.6 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Highlight threshold** | Slider | 0 to 4; higher | 0.9 | - |
+| **Highlight boost** | Slider | 0 to 8; up to 64 | 1 | - |
+| **Depth channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+| **Nearest (m)** | Slider | 0.1 to 20; down to 0.01 and higher | 0.5 | - |
+| **Farthest (m)** | Slider | 1 to 1000; down to 0.02 and higher | 30 | - |
+| **Display** | Dropdown | Final · Depth | Final | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+
+In the Effect Controls panel:
+
+- **Iris** groups **Blades**, **Roundness**, **Rotation**, and starts closed.
+- **Highlights** groups **Highlight threshold**, **Highlight boost**, and starts closed.
+- **Depth map** groups **Depth channel**, **Nearest (m)**, **Farthest (m)**, and starts closed.
+- **Focus distance (m)** is editable while **Use focus point** is off.
+- **Focus point x** is editable while **Use focus point** is on.
+- **Focus point y** is editable while **Use focus point** is on.
+- **Use focus point** is editable while **Matte** names a layer.
+- **Depth channel** is editable while **Matte** names a layer.
+- **Nearest (m)** is editable while **Matte** names a layer.
+- **Matte** a depth pass: 0 is the nearest distance and 1 the farthest, and each pixel is blurred by how far it sits from the focus distance. **Invert** reads that matte inverted.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Matte** is the depth pass, 0 at **Nearest (m)** and 1 at **Farthest (m)**.
+- **Invert** reads the depth pass inverted.
+- **Lens** picks a bundled lens. A lens chosen in the lens window replaces it.
+- **Edit lens…** opens the lens window. See [The lens window](#the-lens-window).
+- **F-stop** is the working aperture. It cannot open wider than the lens.
+- **Focus distance (m)** is where the lens is focused, in metres.
+- **Use focus point** with **Focus point x** and **Focus point y** focus on the depth
+  under that spot.
+- **Sensor** is the sensor size the footage was shot on. A smaller sensor sees less of
+  the lens's edge and blurs less.
+- **Blur size** scales every blur after the optics.
+- **Colour fringing** scales how much the glass splits colour.
+- **Glass dirt** smears and specks the front glass. It shows as streaks inside the
+  out-of-focus highlights.
+
+The **Iris** group shapes the aperture:
+
+- **Blades** is how many straight edges the iris has.
+- **Roundness** blends the blades towards a circle.
+- **Rotation** rotates the iris.
+
+The **Highlights** group:
+
+- **Highlight threshold** is the brightness above which a pixel is drawn as its own bokeh
+  shape.
+- **Highlight boost** multiplies what is above the threshold.
+
+The **Depth map** group:
+
+- **Depth channel** selects the channel read as depth.
+- **Nearest (m)** is the distance a depth of 0 means.
+- **Farthest (m)** is the distance a depth of 1 means.
+
+Additional properties:
+
+- **Display**: **Final** is the blur, **Depth** the distance in metres it used.
+- **Mix**: how much of the result replaces the original.
+
+## The lens window
+
+**Edit lens…** opens the same window on Depth of field pro and on Lens flare. It lists the
+bundled lenses, your own lenses, and the lens kept in the effect. **Import…** opens a
+`.lens` file.
+
+Every surface of the open lens can be changed: radius, thickness, index, Abbe number,
+diameter, coating, and which surface is the stop.
+
+- **Use lens** puts the lens on the effect. An edited or imported lens is kept in the
+  effect and saved with the project.
+- **Save to your lenses** saves it to your own lenses, offered in every project. Bundled
+  lenses are never changed.
+
+## Related
+
+- [Depth of field](/effects/blur-sharpen/depth-of-field/)
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Blur & sharpen](/effects/#blur--sharpen)
+- [Effects](/use/effects/)

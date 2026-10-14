@@ -6400,6 +6400,8 @@ fn every_parameter_declares_a_unit() {
             ("dof", "focus_point_y"),
             ("dof", "near_aperture"),
             ("dof", "far_aperture"),
+            ("dof_pro", "focus_point_x"),
+            ("dof_pro", "focus_point_y"),
             ("channel_blur", "red"),
             ("channel_blur", "green"),
             ("channel_blur", "blue"),
@@ -7385,6 +7387,7 @@ fn every_effect_carries_a_matte_row() {
         let claims = matches!(
             s.match_name,
             "dof"
+                | "dof_pro"
                 | "rgb_split"
                 | "chromatic_aberration"
                 | "shake"
@@ -7520,14 +7523,14 @@ fn every_effect_carries_a_matte_row() {
         );
         // The Channel choice rides beside the injected pair on every
         // effect that does not pick its matte's channels itself. The four that
-        // do — Depth of field (`depth_channel`), Displacement map (its two
+        // do — Depth of field and Depth of field pro (`depth_channel`), Displacement map (its two
         // channel choices), the Lens flare (source detection) and Scatter,
         // which reads **alpha and only alpha** — carry none, and the
         // seam leaves their matte raw. Set matte used to be a fifth, and
         // carries no Matte row at all now.
         let owns_channel = matches!(
             s.match_name,
-            "dof" | "displacement_map" | "lens_flare" | "scatter"
+            "dof" | "dof_pro" | "displacement_map" | "lens_flare" | "scatter"
         );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(

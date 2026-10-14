@@ -384,6 +384,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &OcioLook,
     &OcioFile,
     &Dof,
+    &DofPro,
     &ChannelBlur,
     &Transform,
     &Shake,
@@ -2549,6 +2550,80 @@ impl GpuEffect for Dof {
                 detect_edge_threshold: d.detect_edge_threshold,
                 display: d.display,
                 mix: d.mix,
+            },
+        )
+    }
+}
+
+struct DofPro;
+impl GpuEffect for DofPro {
+    fn match_name(&self) -> &'static str {
+        "dof_pro"
+    }
+    /// A lens kept in the effect, on the flare's lens carriage.
+    fn aux(&self) -> AuxKind {
+        AuxKind::LensFile
+    }
+    /// The depth is the matte read as a 0..1 pass, as Depth of field's is.
+    /// Without one the whole frame sits at the far distance. The lens is traced in lumit-core only when no table for these
+    /// optics is kept.
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::lens_blur;
+        let e = effects::dof_pro::DofPro::read(p);
+        let custom = aux.lens_file();
+        let optics = e.bake_inputs(w, h);
+        let text = custom.map(|(_, text)| text.clone());
+        let depth = aux.matte();
+        fx.lens_blur(
+            ctx,
+            tex,
+            w,
+            h,
+            depth,
+            &lumit_gpu::fx::LensBlurOp {
+                bake_key: lens_blur::bake_key(&optics, custom.map(|(hash, _)| *hash)),
+                depth_bound: depth.is_some(),
+                display_depth: e.display == 1,
+                depth_channel: e
+                    .depth_channel
+                    .min(lumit_core::fx::CHANNEL_OPTIONS.len() as u32 - 1),
+                depth_invert: e.depth_invert,
+                focus_m: e.focus_m.max(0.01),
+                use_focus_point: e.use_focus_point,
+                focus_point: [e.focus_point_x, e.focus_point_y],
+                near_m: e.near_m.max(0.01),
+                far_m: e.far_m.max(0.01),
+                sensor_w_mm: e.sensor_w_mm(),
+                size: e.size.max(0.0),
+                blades: optics.blades,
+                rotation_deg: e.rotation,
+                threshold: e.threshold.max(0.0),
+                boost: e.boost.max(0.0),
+                mix: (e.mix / 100.0).clamp(0.0, 1.0),
+                max_span_px: lens_blur::MAX_SPAN_PX,
+            },
+            &move || {
+                let b = lens_blur::bake(&optics, text.as_deref())?;
+                Some(lumit_gpu::fx::LensBlurBakeData {
+                    kernels: b.kernels,
+                    span_mm: b.span_mm,
+                    dz_max_mm: b.dz_max_mm,
+                    field_max_mm: b.field_max_mm,
+                    focal_mm: b.focal_mm,
+                    field_bins: lens_blur::FIELD_BINS as u32,
+                    defocus_bins: lens_blur::DEFOCUS_BINS as u32,
+                    azimuth_bins: lens_blur::AZIMUTH_BINS as u32,
+                    kernel_res: lens_blur::KERNEL_RES as u32,
+                })
             },
         )
     }

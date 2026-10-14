@@ -55,6 +55,7 @@ import 'graph_panel.dart'
 import 'placeholder.dart';
 import 'plane_display_frb.dart';
 import 'roto_display_frb.dart';
+import 'lens_window.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphThumb;
@@ -468,6 +469,16 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
     if (picked.info.name == 'custom_shader' &&
         home != null &&
         pressShaderButton(
+          context: context,
+          home: home,
+          effect: effect,
+          param: param,
+          onApplied: ui.model.refresh,
+        )) {
+      return;
+    }
+    if (home != null &&
+        pressLensButton(
           context: context,
           home: home,
           effect: effect,

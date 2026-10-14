@@ -312,7 +312,7 @@ pub enum GraphStep {
         /// 1:1 with the op, as [`CompLayerDraw::lut_files`] is with its stack.
         colour_tables: Vec<Option<crate::colour::TableRequest>>,
         /// 1:1 with the op, as [`CompLayerDraw::flare_lens_files`] is.
-        flare_lens_files: Vec<Option<String>>,
+        flare_lens_files: Vec<Option<lumit_core::fx::lens::LensSource>>,
         /// What a background analysis filed for this box at this frame: a Roto
         /// brush's matte, or a planes-tier plane. Both describe the **file**
         /// the box reads, which is the footage of the Read its picture comes
@@ -613,12 +613,12 @@ pub struct CompLayerDraw {
     /// gets everywhere else. Empty on every layer that applies no graph, which
     /// is almost all of them.
     pub graph_fx: Vec<GraphDraw>,
-    /// The `lens_file` paths of the layer's enabled built-in `lens_flare`
-    /// effects, 1:1 with the stack's `lens_flare` ops —
-    /// None = unset. The caller reads and hashes each file and passes the
-    /// parallel `flare_lens` texts to `run_ops`; a missing or unreadable
-    /// file degrades to the picked library lens (labelled fallback).
-    pub flare_lens_files: Vec<Option<String>>,
+    /// The lens each of the layer's enabled built-in lens effects reads other
+    /// than its Lens row (a kept lens or a Lens file), 1:1 with the stack's
+    /// lens ops, `None` for the Lens row. The caller reads and hashes each and
+    /// passes the parallel `flare_lens` texts to `run_ops`; a missing or
+    /// unreadable file degrades to the picked library lens (labelled fallback).
+    pub flare_lens_files: Vec<Option<lumit_core::fx::lens::LensSource>>,
     /// The raster width this layer's `fx` were RESOLVED against, when it
     /// can differ from the raster they will RUN on — set for
     /// Adjust layers (the comp width; their stack runs on the render

@@ -40,12 +40,12 @@ pub fn user_facing_labels() -> BTreeSet<String> {
         out.insert(schema.label.to_owned());
         for param in schema.params {
             out.insert(param.label.to_owned());
-            // The Lens flare's lens picker lists the lens library by name —
+            // The lens effects' Lens row lists the lens library by name —
             // manufacturer and model, proper nouns in every language. They are
             // deliberately not translated: the table's fallback shows an
             // unlisted label as it arrived, which for a Leica Summilux is the
             // only correct rendering. Every other Choice list is real UI copy.
-            if schema.match_name == "lens_flare" && param.id == "lens_model" {
+            if param.id == "lens_model" {
                 continue;
             }
             if let ParamKind::Choice { options, .. } = param.kind {

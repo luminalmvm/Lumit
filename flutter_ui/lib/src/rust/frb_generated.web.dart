@@ -27,6 +27,7 @@ import 'api/import.dart';
 import 'api/interpret.dart';
 import 'api/keymap.dart';
 import 'api/layer.dart';
+import 'api/lens.dart';
 import 'api/planes.dart';
 import 'api/project.dart';
 import 'api/project_item.dart';
@@ -249,6 +250,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeInterpretation dco_decode_box_autoadd_bridge_interpretation(
       dynamic raw);
+
+  @protected
+  BridgeLens dco_decode_box_autoadd_bridge_lens(dynamic raw);
 
   @protected
   BridgeMask dco_decode_box_autoadd_bridge_mask(dynamic raw);
@@ -821,6 +825,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLayerTiming dco_decode_bridge_layer_timing(dynamic raw);
+
+  @protected
+  BridgeLens dco_decode_bridge_lens(dynamic raw);
+
+  @protected
+  BridgeLensFile dco_decode_bridge_lens_file(dynamic raw);
+
+  @protected
+  BridgeLensLine dco_decode_bridge_lens_line(dynamic raw);
+
+  @protected
+  BridgeLensRow dco_decode_bridge_lens_row(dynamic raw);
 
   @protected
   BridgeLinearLight dco_decode_bridge_linear_light(dynamic raw);
@@ -1433,6 +1449,15 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeLayerTiming> dco_decode_list_bridge_layer_timing(dynamic raw);
 
   @protected
+  List<BridgeLensFile> dco_decode_list_bridge_lens_file(dynamic raw);
+
+  @protected
+  List<BridgeLensLine> dco_decode_list_bridge_lens_line(dynamic raw);
+
+  @protected
+  List<BridgeLensRow> dco_decode_list_bridge_lens_row(dynamic raw);
+
+  @protected
   List<BridgeMarker> dco_decode_list_bridge_marker(dynamic raw);
 
   @protected
@@ -1708,6 +1733,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeImportedProject? dco_decode_opt_box_autoadd_bridge_imported_project(
       dynamic raw);
+
+  @protected
+  BridgeLens? dco_decode_opt_box_autoadd_bridge_lens(dynamic raw);
 
   @protected
   BridgeMatchFrame? dco_decode_opt_box_autoadd_bridge_match_frame(dynamic raw);
@@ -2080,6 +2108,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeInterpretation sse_decode_box_autoadd_bridge_interpretation(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeLens sse_decode_box_autoadd_bridge_lens(SseDeserializer deserializer);
 
   @protected
   BridgeMask sse_decode_box_autoadd_bridge_mask(SseDeserializer deserializer);
@@ -2752,6 +2783,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   BridgeLayerTiming sse_decode_bridge_layer_timing(
       SseDeserializer deserializer);
+
+  @protected
+  BridgeLens sse_decode_bridge_lens(SseDeserializer deserializer);
+
+  @protected
+  BridgeLensFile sse_decode_bridge_lens_file(SseDeserializer deserializer);
+
+  @protected
+  BridgeLensLine sse_decode_bridge_lens_line(SseDeserializer deserializer);
+
+  @protected
+  BridgeLensRow sse_decode_bridge_lens_row(SseDeserializer deserializer);
 
   @protected
   BridgeLinearLight sse_decode_bridge_linear_light(
@@ -3465,6 +3508,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeLensFile> sse_decode_list_bridge_lens_file(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeLensLine> sse_decode_list_bridge_lens_line(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeLensRow> sse_decode_list_bridge_lens_row(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeMarker> sse_decode_list_bridge_marker(
       SseDeserializer deserializer);
 
@@ -3801,6 +3856,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeImportedProject? sse_decode_opt_box_autoadd_bridge_imported_project(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLens? sse_decode_opt_box_autoadd_bridge_lens(
       SseDeserializer deserializer);
 
   @protected
@@ -4193,6 +4252,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_interpretation(
       BridgeInterpretation self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_lens(
+      BridgeLens self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_mask(
@@ -4931,6 +4994,20 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_layer_timing(
       BridgeLayerTiming self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_lens(BridgeLens self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_lens_file(
+      BridgeLensFile self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_lens_line(
+      BridgeLensLine self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_lens_row(BridgeLensRow self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_linear_light(
@@ -5708,6 +5785,18 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeLayerTiming> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_lens_file(
+      List<BridgeLensFile> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_lens_line(
+      List<BridgeLensLine> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_lens_row(
+      List<BridgeLensRow> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_marker(
       List<BridgeMarker> self, SseSerializer serializer);
 
@@ -6054,6 +6143,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_imported_project(
       BridgeImportedProject? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_lens(
+      BridgeLens? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_match_frame(

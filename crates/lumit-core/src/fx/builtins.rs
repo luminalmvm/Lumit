@@ -164,7 +164,7 @@ pub fn instantiate_for_raster(match_name: &str, w: f64, h: f64) -> Option<Effect
     // declares (0, 0) because it cannot know the raster; landing focus in the
     // top-left corner is exactly the "drop it on and it already looks right"
     // failure (§1.2).
-    if match_name == "dof" {
+    if match_name == "dof" || match_name == "dof_pro" {
         for p in &mut inst.params {
             let v = match p.id.as_str() {
                 "focus_point_x" => w * 0.5,

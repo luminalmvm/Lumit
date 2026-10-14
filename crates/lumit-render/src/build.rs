@@ -4066,19 +4066,22 @@ fn colour_tables(
         .collect()
 }
 
-/// The `lens_file` paths of the enabled built-in `lens_flare` effects, 1:1
-/// and in order with the stack's `lens_flare` ops — the LUT-files
-/// pattern for the flare's custom prescription.
-fn flare_lens_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Option<String>> {
+/// The lens each enabled built-in lens effect reads other than its Lens row,
+/// 1:1 and in order with the stack's lens ops, as the LUT files are.
+fn flare_lens_files(
+    effects: &[lumit_core::model::EffectInstance],
+    lt: f64,
+) -> Vec<Option<lumit_core::fx::lens::LensSource>> {
+    use lumit_core::fx::lens;
     use lumit_core::model::EffectNamespace;
     effects
         .iter()
         .filter(|e| {
             e.enabled
                 && e.effect.namespace == EffectNamespace::Builtin
-                && e.effect.match_name == "lens_flare"
+                && lens::takes_a_lens(&e.effect.match_name)
         })
-        .map(|e| e.path_at("lens_file", lt).map(str::to_owned))
+        .map(|e| lens::source_at(e, lt))
         .collect()
 }
 

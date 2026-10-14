@@ -90,6 +90,7 @@ use super::effects::{
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
     displacement_map::{DisplacementMap, DisplacementMapDef},
     dof::{Dof, DofDef},
+    dof_pro::{DofPro, DofProDef},
     drop_shadow::{DropShadow, DropShadowDef},
     echo::{Echo, EchoDef},
     emboss::{Emboss, EmbossDef},
@@ -217,6 +218,7 @@ crate::catalogue![
     OcioLookDef => OcioLook,
     OcioFileDef => OcioFile,
     DofDef => Dof,
+    DofProDef => DofPro,
     // The utility batch's blur, at the Blur & sharpen family's end.
     ChannelBlurDef => ChannelBlur,
     TransformDef => Transform,

@@ -386,6 +386,11 @@ pub struct LensFlare {
     #[file(filter = ["lens"], filter_name = "Lens prescription")]
     pub lens_file: Option<u32>,
 
+    /// Opens the lens window, shared with Depth of field pro. A lens chosen there
+    /// is kept in the effect and wins over both rows above.
+    #[action(label = "Edit lens…")]
+    pub edit_lens: (),
+
     // ---- The Lens options twirl ----
     /// Focus distance in metres: shifts the sensor from its calibrated
     /// infinity position by the thin-lens image shift, changing the whole flare's

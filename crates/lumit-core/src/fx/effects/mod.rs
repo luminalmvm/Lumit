@@ -46,6 +46,7 @@ pub mod depth;
 pub mod directional_blur;
 pub mod displacement_map;
 pub mod dof;
+pub mod dof_pro;
 pub mod drop_shadow;
 pub mod echo;
 pub mod emboss;

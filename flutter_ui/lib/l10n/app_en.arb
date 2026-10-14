@@ -19331,5 +19331,145 @@
   "shareJoinLookOff": "The invite to look is off. Ask the host to turn it on.",
   "@shareJoinLookOff": {
     "description": "Join a project page, under the invite link: the link is the one people can look at a project by and not change it, and the host has that invite switched off."
+  },
+  "fxApsC": "APS-C",
+  "@fxApsC": {
+    "description": "Effect controls — a Sensor choice on Depth of field pro: the APS-C sensor size."
+  },
+  "fxBlurSize": "Blur size",
+  "@fxBlurSize": {
+    "description": "Effect controls — a control on Depth of field pro that scales every blur after the lens's own optics."
+  },
+  "fxColourFringing": "Colour fringing",
+  "@fxColourFringing": {
+    "description": "Effect controls — a control on Depth of field pro: how much the lens's glass splits colour at the edges of its blur."
+  },
+  "fxEditLens": "Edit lens…",
+  "@fxEditLens": {
+    "description": "Effect controls — the row on Lens flare and Depth of field pro that opens the lens window."
+  },
+  "fxFarthestM": "Farthest (m)",
+  "@fxFarthestM": {
+    "description": "Effect controls — a control on Depth of field pro: the distance in metres that the brightest value of the depth matte means."
+  },
+  "fxGlassDirt": "Glass dirt",
+  "@fxGlassDirt": {
+    "description": "Effect controls: a control on Depth of field pro, smears and specks on the front glass seen inside out-of-focus highlights."
+  },
+  "fxFinal": "Final",
+  "@fxFinal": {
+    "description": "Effect controls: a Display choice on Depth of field pro, the finished blur rather than the depth it used."
+  },
+  "fxFocusDistanceM": "Focus distance (m)",
+  "@fxFocusDistanceM": {
+    "description": "Effect controls — a control on Depth of field pro: where the lens is focused, in metres."
+  },
+  "fxFullFrame": "Full frame",
+  "@fxFullFrame": {
+    "description": "Effect controls — a Sensor choice on Depth of field pro: the 36 mm full frame sensor size."
+  },
+  "fxHighlightBoost": "Highlight boost",
+  "@fxHighlightBoost": {
+    "description": "Effect controls — a control on Depth of field pro that brightens what is above the highlight threshold before it is blurred."
+  },
+  "fxDepthOfFieldPro": "Depth of field pro",
+  "@fxDepthOfFieldPro": {
+    "description": "An effect's name: depth of field traced through a real lens."
+  },
+  "fxMicroFourThirds": "Micro Four Thirds",
+  "@fxMicroFourThirds": {
+    "description": "Effect controls — a Sensor choice on Depth of field pro: the Micro Four Thirds sensor size. A format name, usually left as it is."
+  },
+  "fxNearestM": "Nearest (m)",
+  "@fxNearestM": {
+    "description": "Effect controls — a control on Depth of field pro: the distance in metres that the darkest value of the depth matte means."
+  },
+  "fxSensor": "Sensor",
+  "@fxSensor": {
+    "description": "Effect controls — a control on Depth of field pro: the size of camera sensor the footage was shot on."
+  },
+  "fxSuper35": "Super 35",
+  "@fxSuper35": {
+    "description": "Effect controls — a Sensor choice on Depth of field pro: the Super 35 sensor size. A format name, usually left as it is."
+  },
+  "lensWindowTitle": "Lens",
+  "@lensWindowTitle": {
+    "description": "The lens window, opened from Edit lens… on Lens flare or Depth of field pro: its title."
+  },
+  "lensKept": "In this effect",
+  "@lensKept": {
+    "description": "Lens window, list heading: the lens kept inside this effect, saved with the project."
+  },
+  "lensBuiltIn": "Built in",
+  "@lensBuiltIn": {
+    "description": "Lens window, list heading: the lenses that come with Lumit."
+  },
+  "lensYours": "Your lenses",
+  "@lensYours": {
+    "description": "Lens window, list heading: lenses the user has saved, offered in every project."
+  },
+  "lensImport": "Import…",
+  "@lensImport": {
+    "description": "Lens window, button under the list: open a .lens prescription file."
+  },
+  "lensFileType": "Lens prescription",
+  "@lensFileType": {
+    "description": "Lens window, the file type shown in the open file dialogue for .lens files."
+  },
+  "lensFocalLength": "Focal length",
+  "@lensFocalLength": {
+    "description": "Lens window, beside the lens's focal length in millimetres."
+  },
+  "lensRadius": "Radius",
+  "@lensRadius": {
+    "description": "Lens window, surface table column: the curvature radius of a glass surface, in millimetres."
+  },
+  "lensThickness": "Thickness",
+  "@lensThickness": {
+    "description": "Lens window, surface table column: the distance to the next surface, in millimetres."
+  },
+  "lensIndex": "Index",
+  "@lensIndex": {
+    "description": "Lens window, surface table column: the refractive index of the glass after a surface."
+  },
+  "lensAbbe": "Abbe",
+  "@lensAbbe": {
+    "description": "Lens window, surface table column: the Abbe number of the glass, how much it splits colour. A technical name, usually left as it is."
+  },
+  "lensDiameter": "Diameter",
+  "@lensDiameter": {
+    "description": "Lens window, surface table column: the clear width of a surface, in millimetres."
+  },
+  "lensCoating": "Coating",
+  "@lensCoating": {
+    "description": "Lens window, surface table column: how many anti-reflection layers a surface has."
+  },
+  "lensStop": "Stop",
+  "@lensStop": {
+    "description": "Lens window, surface table column: the tick that marks the surface where the iris sits."
+  },
+  "lensRemove": "Remove surface",
+  "@lensRemove": {
+    "description": "Lens window, the mark at the end of a surface table row that removes that surface. Read out by screen readers."
+  },
+  "lensAddSurface": "Add surface",
+  "@lensAddSurface": {
+    "description": "Lens window, button under the surface table: add a surface to the lens."
+  },
+  "lensSave": "Save to your lenses",
+  "@lensSave": {
+    "description": "Lens window, footer button: save this lens to the user's own lenses, offered in every project. Never changes a built-in lens."
+  },
+  "lensUse": "Use lens",
+  "@lensUse": {
+    "description": "Lens window, footer button: put this lens on the effect and close the window."
+  },
+  "lensNotALens": "That file is not a lens.",
+  "@lensNotALens": {
+    "description": "Lens window, footer line: the chosen file could not be read as a lens prescription."
+  },
+  "lensNotSaved": "The lens could not be saved.",
+  "@lensNotSaved": {
+    "description": "Lens window, footer line: saving to the user's lenses failed."
   }
 }

@@ -69,6 +69,7 @@ import 'effect_param_row_frb.dart'
 import 'graph_groups.dart';
 import 'graph_panel.dart';
 import 'placeholder.dart';
+import 'lens_window.dart';
 import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphThumb;
@@ -742,6 +743,18 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                 _reload();
               },
             )) {
+          return;
+        }
+        if (pressLensButton(
+          context: context,
+          home: InstanceHome.graph(widget.comp),
+          effect: effect,
+          param: param,
+          onApplied: () {
+            ui.model.refresh();
+            _reload();
+          },
+        )) {
           return;
         }
         if (node.matchName == 'expression' &&

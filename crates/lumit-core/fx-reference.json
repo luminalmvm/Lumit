@@ -3519,6 +3519,372 @@
       "matte_role": "own"
     },
     {
+      "slug": "depth-of-field-pro",
+      "match_name": "dof_pro",
+      "label": "Depth of field pro",
+      "version": 1,
+      "category": "Blur & sharpen",
+      "category_slug": "blur-sharpen",
+      "params": [
+        {
+          "id": "depth",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "depth_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "lens_model",
+          "label": "Lens",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 17,
+          "options": [
+            "7Artisans · 50mm F0.95",
+            "Angenieux · DEM 180mm F2.3 APO",
+            "Canon · 50mm f1.2 (1956)",
+            "Canon · 85mm f1.5 (1952)",
+            "Canon · EF 100mm f2.8 Macro",
+            "Canon · EF 400mm f2.8L IS II",
+            "Canon · EF 70-200mm f2.8L",
+            "Canon · FD 300mm f2.8 SSC Fluorite",
+            "Leica · Elmarit 90mm F2.8",
+            "Leica · Summilux 35mm f1.4",
+            "Leica · Summilux-C 100mm T1.4",
+            "Meyer Görlitz · Kino Plasmat 100mm F2",
+            "Meyer Görlitz · Orestor 135mm F2.8",
+            "Ross · F10 APO Process Xpres",
+            "Voigtländer · Nokton 35mm F1.2 Asph",
+            "Voigtländer · Nokton 50mm F1.0 Asph",
+            "Zeiss · Arri Master Prime T1.3 50mm",
+            "Zeiss · Biotar 50mm F1.4",
+            "Zeiss · Tessar 100mm F4.5",
+            "Zeiss · Ultra Prime Sonnar 135mm T1.9"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "edit_lens",
+          "label": "Edit lens…",
+          "kind": "action",
+          "unit": "raw"
+        },
+        {
+          "id": "fstop",
+          "label": "F-stop",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.4,
+          "slider_min": 0.95,
+          "slider_max": 22.0,
+          "hard_min": 0.7,
+          "hard_max": 32.0
+        },
+        {
+          "id": "focus_m",
+          "label": "Focus distance (m)",
+          "kind": "float",
+          "unit": "raw",
+          "default": 3.0,
+          "slider_min": 0.3,
+          "slider_max": 100.0,
+          "hard_min": 0.05
+        },
+        {
+          "id": "use_focus_point",
+          "label": "Use focus point",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "focus_point_x",
+          "label": "Focus point x",
+          "kind": "float",
+          "unit": "px",
+          "default": 960.0,
+          "slider_min": 0.0,
+          "slider_max": 3840.0
+        },
+        {
+          "id": "focus_point_y",
+          "label": "Focus point y",
+          "kind": "float",
+          "unit": "px",
+          "default": 540.0,
+          "slider_min": 0.0,
+          "slider_max": 2160.0
+        },
+        {
+          "id": "sensor",
+          "label": "Sensor",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Full frame",
+            "Super 35",
+            "APS-C",
+            "Micro Four Thirds"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "size",
+          "label": "Blur size",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "fringing",
+          "label": "Colour fringing",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 3.0,
+          "hard_min": 0.0,
+          "hard_max": 10.0
+        },
+        {
+          "id": "glass_dirt",
+          "label": "Glass dirt",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "blades",
+          "label": "Blades",
+          "kind": "int",
+          "unit": "raw",
+          "default": 9,
+          "slider_min": 3.0,
+          "slider_max": 16.0,
+          "hard_min": 3.0,
+          "hard_max": 16.0
+        },
+        {
+          "id": "roundness",
+          "label": "Roundness",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.6,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0,
+          "hard_max": 1.0
+        },
+        {
+          "id": "rotation",
+          "label": "Rotation",
+          "kind": "angle",
+          "unit": "degrees",
+          "default": 0.0,
+          "dial_step": 15.0
+        },
+        {
+          "id": "threshold",
+          "label": "Highlight threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.9,
+          "slider_min": 0.0,
+          "slider_max": 4.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "boost",
+          "label": "Highlight boost",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1.0,
+          "slider_min": 0.0,
+          "slider_max": 8.0,
+          "hard_min": 0.0,
+          "hard_max": 64.0
+        },
+        {
+          "id": "depth_channel",
+          "label": "Depth channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "near_m",
+          "label": "Nearest (m)",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.5,
+          "slider_min": 0.1,
+          "slider_max": 20.0,
+          "hard_min": 0.01
+        },
+        {
+          "id": "far_m",
+          "label": "Farthest (m)",
+          "kind": "float",
+          "unit": "raw",
+          "default": 30.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.02
+        },
+        {
+          "id": "display",
+          "label": "Display",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Final",
+            "Depth"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [
+        {
+          "label": "Iris",
+          "params": [
+            "blades",
+            "roundness",
+            "rotation"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Highlights",
+          "params": [
+            "threshold",
+            "boost"
+          ],
+          "collapsed": true
+        },
+        {
+          "label": "Depth map",
+          "params": [
+            "depth_channel",
+            "near_m",
+            "far_m"
+          ],
+          "collapsed": true
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "focus_m",
+          "on": "use_focus_point",
+          "cond": "bool_is",
+          "value": false
+        },
+        {
+          "param": "focus_point_x",
+          "on": "use_focus_point",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "focus_point_y",
+          "on": "use_focus_point",
+          "cond": "bool_is",
+          "value": true
+        },
+        {
+          "param": "use_focus_point",
+          "on": "depth",
+          "cond": "layer_set"
+        },
+        {
+          "param": "depth_channel",
+          "on": "depth",
+          "cond": "layer_set"
+        },
+        {
+          "param": "near_m",
+          "on": "depth",
+          "cond": "layer_set"
+        }
+      ],
+      "matte": {
+        "param": "depth",
+        "meaning": "a depth pass: 0 is the nearest distance and 1 the farthest, and each pixel is blurred by how far it sits from the focus distance"
+      },
+      "matte_role": "own"
+    },
+    {
       "slug": "channel-blur",
       "match_name": "channel_blur",
       "label": "Channel blur",
@@ -19418,6 +19784,12 @@
             "lens"
           ],
           "file_filter_name": "Lens prescription"
+        },
+        {
+          "id": "edit_lens",
+          "label": "Edit lens…",
+          "kind": "action",
+          "unit": "raw"
         },
         {
           "id": "focus",

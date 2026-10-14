@@ -31,6 +31,10 @@ pub mod effects;
 pub mod fft;
 /// The Lens flare optics core, bake, and CPU reference (docs/08 §3.27).
 pub mod labels;
+/// Lenses as both lens effects read them, and a lens kept in the effect.
+pub mod lens;
+/// Depth of field pro's bake: a lens traced into its out-of-focus shapes.
+pub mod lens_blur;
 pub mod lens_flare;
 /// The bundled lens prescription library: 1303 .lens files as
 /// embedded text, generated from the FlareSim / PhotonsToPhotos collection.

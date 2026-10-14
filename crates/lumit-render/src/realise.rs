@@ -314,23 +314,27 @@ impl Realiser<'_> {
         p.layer_done(l.layer, ms, effects);
     }
 
-    /// Read a layer's `lens_file` paths into (content hash, text) slots,
-    /// 1:1 with the stack's `lens_flare` ops. A `None`
+    /// Read a layer's lenses (a kept lens's text, or a `lens_file` path) into
+    /// (content hash, text) slots, 1:1 with the stack's lens ops. A `None`
     /// slot (unset, missing on disk, unreadable) degrades to the picked
     /// library lens inside the bake — a labelled fallback, never a fault.
     /// No cache, deliberately: a .lens file is about a kilobyte, the read
     /// is microseconds beside the frame it feeds, and the GPU bake cache
     /// keys on the CONTENT hash — so an edited file takes effect on the
     /// next frame instead of whenever a path-keyed cache is purged.
-    fn load_flare_lens(&self, files: &[Option<String>]) -> Vec<Option<(u64, String)>> {
+    fn load_flare_lens(
+        &self,
+        files: &[Option<lumit_core::fx::lens::LensSource>],
+    ) -> Vec<Option<(u64, String)>> {
+        use lumit_core::fx::lens::LensSource;
         files
             .iter()
             .map(|slot| {
-                slot.as_ref().and_then(|path| {
-                    std::fs::read_to_string(path)
-                        .ok()
-                        .map(|text| (lumit_core::fx::lens_flare::lens_text_hash(&text), text))
-                })
+                let text = match slot.as_ref()? {
+                    LensSource::Text(text) => text.clone(),
+                    LensSource::File(path) => std::fs::read_to_string(path).ok()?,
+                };
+                Some((lumit_core::fx::lens_flare::lens_text_hash(&text), text))
             })
             .collect()
     }
