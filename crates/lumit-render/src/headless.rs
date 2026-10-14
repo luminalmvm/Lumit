@@ -191,6 +191,13 @@ pub struct HeadlessRenderer {
     upload_pool: Vec<std::sync::Arc<wgpu::Texture>>,
     /// How many `render_prepared` calls were served from [`Self::frame_textures`].
     frame_texture_hits: u64,
+    /// The reach of the last node graph composition walked, read by the call
+    /// that walked it.
+    reach_seen: Option<crate::realise::Reach>,
+    /// Each named frame's reach, so a frame served from a cache keeps its
+    /// outline without being walked again. Only frames that reach past the
+    /// frame are in it.
+    reach_by_frame: HashMap<u128, crate::realise::Reach>,
     /// Bumped whenever the held set changes — see [`Self::frame_texture_version`].
     frame_texture_version: u64,
     /// Where "this frame is such-and-such far along" reports go, when the owner
@@ -655,9 +662,18 @@ pub struct PreparedFrame {
     /// what tells the pool of textures for re-use that a present still needs
     /// this one ([`HeadlessRenderer::upload_frame_texture`]).
     texture: std::sync::Arc<wgpu::Texture>,
+    /// How far a node graph composition's picture reaches past the frame, for
+    /// the Viewer's outline. `None` for every other frame.
+    reach: Option<crate::realise::Reach>,
 }
 
 impl PreparedFrame {
+    /// See the field.
+    #[must_use]
+    pub fn reach(&self) -> Option<crate::realise::Reach> {
+        self.reach
+    }
+
     /// The frame's ACTUAL pixel dimensions — the comp size times the preview
     /// scale the composite ran at, not the logical comp size. Every present
     /// path sizes its shared surface off these, so a coarser tier shares a
@@ -781,6 +797,8 @@ impl HeadlessRenderer {
             upload_pool: Vec::new(),
             frame_texture_version: 0,
             frame_texture_hits: 0,
+            reach_seen: None,
+            reach_by_frame: HashMap::new(),
             progress: None,
             profile: None,
             watching: false,
@@ -1402,6 +1420,7 @@ impl HeadlessRenderer {
         let built =
             crate::colour::InputTransforms::build(doc, &self.colour, &self.gpu, &parts.colour);
         let inputs = (!built.is_empty()).then_some(built);
+        let reach = std::cell::Cell::new(None);
         let out = {
             let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained
                 .pixels
@@ -1415,6 +1434,7 @@ impl HeadlessRenderer {
                 crate::build::late_clone_pictures(doc, spec, points, &pixels_by_layer)
             };
             let realiser = crate::realise::Realiser {
+                graph_reach: Some(&reach),
                 ctx: self.gpu.clone_handle(),
                 engine: &parts.colour,
                 compositor: &parts.compositor,
@@ -1521,6 +1541,9 @@ impl HeadlessRenderer {
         // Return the engines to the pool even on error, so one failed frame does
         // not discard the compiled shaders.
         self.parts = Some(parts);
+        // Only this composition's own graph: a graph placed in a layer comp
+        // has walked too, and its outline is not this frame's.
+        self.reach_seen = reach.get().filter(|_| comp.graph.is_some());
         // A frame that faulted is not published as a measurement: half a walk's
         // numbers would read as a comp that got cheaper.
         if out.is_ok() {
@@ -2086,6 +2109,7 @@ impl HeadlessRenderer {
                 self.frame_texture_hits += 1;
                 return Ok(PreparedFrame {
                     texture: held.texture.clone(),
+                    reach: self.reach_by_frame.get(&key.0).copied(),
                 });
             }
         }
@@ -2106,6 +2130,13 @@ impl HeadlessRenderer {
         )?;
         let key = key.filter(|_| self.flare_substitutions() == subs_before);
         let texture = std::sync::Arc::new(texture);
+        let reach = self.reach_seen;
+        if let (Some(key), Some(reach)) = (key, reach) {
+            // ponytail: never trimmed, about 40 bytes a frame for the life of
+            // the renderer. Trim with the frame caches if a long session
+            // shows it.
+            self.reach_by_frame.insert(key.0, reach);
+        }
         if let Some(key) = key {
             // What it actually cost, so the store's cost-aware eviction has
             // something true to weigh (docs §5.3: stale × cheap × large) and the
@@ -2131,7 +2162,7 @@ impl HeadlessRenderer {
             self.frame_texture_version += 1;
             self.start_demotions();
         }
-        Ok(PreparedFrame { texture })
+        Ok(PreparedFrame { texture, reach })
     }
 
     /// Start reading back whatever that insert pushed out of VRAM, so it can
@@ -2396,7 +2427,10 @@ impl HeadlessRenderer {
         // An upload can displace something, exactly as a render can; the frame it
         // displaces has the same right to fall downstairs.
         self.start_demotions();
-        Some(PreparedFrame { texture })
+        Some(PreparedFrame {
+            texture,
+            reach: self.reach_by_frame.get(&frame.key).copied(),
+        })
     }
 
     /// Read a held frame's pixels back off the card, as tight 8-bit bytes in

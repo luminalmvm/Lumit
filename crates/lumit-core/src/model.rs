@@ -3219,6 +3219,11 @@ pub struct Document {
     /// match.
     #[serde(default)]
     pub colour_depth: ColourDepth,
+    /// How far past the frame a node graph box keeps its picture. A project
+    /// property for `anti_aliasing`'s reason: it changes what a graph looks
+    /// like, so it travels in the `.lum`. Absent from the file at the default.
+    #[serde(default, skip_serializing_if = "GraphRoom::is_default")]
+    pub graph_room: GraphRoom,
     /// Where *this project's* rendered frames are parked, overriding the
     /// application-wide choice (docs/06-RENDER-PIPELINE.md §5.4, docs/07 §15).
     ///
@@ -3374,6 +3379,49 @@ pub enum ColourDepth {
     Sixteen,
     /// Full floats: the range of sixteen with the precision depth work needs.
     ThirtyTwo,
+}
+
+/// How far past each edge of the frame a node graph box keeps its picture.
+/// More room brings back more of a wide undistort, and costs memory in every
+/// box whose picture reaches out.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, Hash,
+)]
+pub enum GraphRoom {
+    /// One frame past each edge.
+    #[default]
+    OneFrame,
+    /// Two frames past each edge.
+    TwoFrames,
+    /// As far as the widest texture allows.
+    Most,
+}
+
+impl GraphRoom {
+    /// Frames past each edge, with 0 for as far as the widest texture allows.
+    #[must_use]
+    pub fn frames(self) -> u32 {
+        match self {
+            Self::OneFrame => 1,
+            Self::TwoFrames => 2,
+            Self::Most => 0,
+        }
+    }
+
+    /// The setting [`Self::frames`] gives; anything else reads as the default.
+    #[must_use]
+    pub fn from_frames(frames: u32) -> Self {
+        match frames {
+            2 => Self::TwoFrames,
+            0 => Self::Most,
+            _ => Self::OneFrame,
+        }
+    }
+
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl ColourDepth {
@@ -3556,6 +3604,7 @@ impl Document {
             auto_pack: false,
             anti_aliasing: AntiAliasing::default(),
             colour_depth: ColourDepth::default(),
+            graph_room: GraphRoom::default(),
             cache_location: None,
             colour: ColourManagement::default(),
             swatches: Vec::new(),

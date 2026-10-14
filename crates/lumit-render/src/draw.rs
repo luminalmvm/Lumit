@@ -271,6 +271,9 @@ pub struct GraphDraw {
     /// Only what the Output reaches, in document order with the wires
     /// respected, so an idle branch costs nothing.
     pub steps: Vec<GraphStep>,
+    /// How far past the frame a box keeps its picture, in frames past each
+    /// edge, with 0 for as far as the widest texture allows.
+    pub room: u32,
     /// The step wired into the Output. `None` hands the picture back
     /// unchanged: an Output nothing feeds, a graph this build could not lower,
     /// and the passthrough a dangling Node graph effect degrades to.
