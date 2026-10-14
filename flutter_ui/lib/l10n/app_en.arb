@@ -15155,6 +15155,28 @@
   "@exportAddonMissing": {
     "description": "Export dialogue footer, in place of the summary: a layer asks for a model engine this machine cannot run, so the export is refused rather than written with something else."
   },
+  "exportOverwriteTitle": "File exists",
+  "@exportOverwriteTitle": {
+    "description": "Title of the window asked before an export would write over a file that is already there."
+  },
+  "exportOverwriteQuestion": "\"{name}\" is already there.",
+  "@exportOverwriteQuestion": {
+    "description": "The one line of the window asked before an export would write over a file: the name in the Destination row. For an image sequence it is asked when the first frame's file is there.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Scene.mp4"
+      }
+    }
+  },
+  "exportOverwrite": "Overwrite",
+  "@exportOverwrite": {
+    "description": "Button: export over the file that is already there."
+  },
+  "exportKeepBoth": "Keep both",
+  "@exportKeepBoth": {
+    "description": "Button: keep the file that is there and export to a numbered name beside it, such as Scene_2.mp4."
+  },
   "planeNotAnalysed": "Not analysed yet",
   "@planeNotAnalysed": {
     "description": "Status line on the Depth and Remove background effects, before Analyse has been pressed. Nothing has been read and nothing is claimed."

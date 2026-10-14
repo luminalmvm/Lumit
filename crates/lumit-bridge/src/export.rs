@@ -865,6 +865,52 @@ pub(crate) fn queue_move(id: u32, index: usize) -> Result<(), String> {
     driving::queue_move(id, index)
 }
 
+/// The first file an export to `path` writes: the file itself, or frame one
+/// of an image sequence, which is the one to ask about for the whole run.
+fn first_file(path: &str, codec: &str) -> std::path::PathBuf {
+    #[cfg(feature = "media")]
+    if let Ok(lumit_render::export::ExportFormat::Images(_)) = export_format(codec) {
+        return lumit_media::encode::sequence_frame_path(std::path::Path::new(path), 1);
+    }
+    let _ = codec;
+    std::path::PathBuf::from(path)
+}
+
+/// Whether an export to `out_path` would write over something: a file already
+/// there, or an export still waiting or running in the queue under that name.
+pub(crate) fn path_taken(out_path: &str, codec: &str) -> bool {
+    let path = with_format_extension(out_path, codec);
+    first_file(&path, codec).exists()
+        || queue_list().iter().any(|row| {
+            row.out_path == path
+                && matches!(
+                    row.state,
+                    QueueRowState::Waiting | QueueRowState::Running { .. }
+                )
+        })
+}
+
+/// The first of `name_2.ext`, `name_3.ext`, … that writes over nothing, for
+/// Keep both. `out_path` itself when every number up to the cap is taken.
+pub(crate) fn free_path(out_path: &str, codec: &str) -> String {
+    let path = with_format_extension(out_path, codec);
+    let file = std::path::Path::new(&path);
+    let stem = file
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("export");
+    let ext = file
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{e}"))
+        .unwrap_or_default();
+    (2..10_000)
+        .map(|n| file.with_file_name(format!("{stem}_{n}{ext}")))
+        .map(|p| p.to_string_lossy().into_owned())
+        .find(|p| !path_taken(p, codec))
+        .unwrap_or(path)
+}
+
 mod driving {
     use super::{err_json, to_export_spec, with_format_extension, BridgeExportSpec};
     use lumit_render::export::{ExportEvent, ExportHandle};
@@ -1551,5 +1597,23 @@ mod tests {
             .contains(&"rec2020".to_owned()));
         assert!(format_caps("png").colour_spaces == vec![String::new()]);
         assert!(format_caps("wav").colour_spaces.is_empty());
+    }
+
+    /// Keep both never writes over a file: not the export's own name, and not
+    /// frame one of a sequence under a numbered name either.
+    #[test]
+    #[cfg(feature = "media")]
+    fn keep_both_finds_a_name_that_writes_over_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let at = |name: &str| dir.path().join(name).to_string_lossy().into_owned();
+        std::fs::write(at("shot.mp4"), b"").unwrap();
+        std::fs::write(at("shot_2.mp4"), b"").unwrap();
+        assert!(path_taken(&at("shot.mp4"), "h264"));
+        assert_eq!(free_path(&at("shot.mp4"), "h264"), at("shot_3.mp4"));
+
+        std::fs::write(at("frames.00001.png"), b"").unwrap();
+        assert!(path_taken(&at("frames.png"), "png"));
+        assert_eq!(free_path(&at("frames.png"), "png"), at("frames_2.png"));
+        assert!(!path_taken(&at("other.png"), "png"));
     }
 }

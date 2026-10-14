@@ -378,6 +378,10 @@ class _ExportDialogState extends State<_ExportDialog> {
   List<int> _sampleRates = const [48000];
 
   String? _path;
+
+  /// The path the system's Save dialogue handed back, which has already asked
+  /// about writing over a file. Any other path is asked about here.
+  String? _picked;
   bool _openFolder = false;
   bool _makeANoise = false;
   String? _refused;
@@ -2564,15 +2568,34 @@ class _ExportDialogState extends State<_ExportDialog> {
             label: _format.pickerLabel,
             numbered: _format.type == ExportOutputType.imageSequence,
           );
-    if (path != null) _edit(() => _path = path);
+    if (path != null) _edit(() => _path = _picked = path);
   }
 
   /// Queue the export, and show the queue. A refusal — a spec the encoder will
   /// not take — is shown in the footer where the summary was, rather than
   /// swallowed.
-  void _queue({required bool start}) {
-    final path = _path;
+  Future<void> _queue({required bool start}) async {
+    var path = _path;
     if (path == null) return;
+    // A sequence's frames were never in the Save dialogue's question, so its
+    // first frame is always asked about.
+    if ((path != _picked || _images) &&
+        exportPathTaken(path: path, codec: _format.key)) {
+      final keep = await askLumitChoice<bool>(
+        context: context,
+        title: l10n.exportOverwriteTitle,
+        question: l10n.exportOverwriteQuestion(_leaf(path)),
+        answers: [
+          (l10n.exportOverwrite, false),
+          (l10n.exportKeepBoth, true),
+        ],
+      );
+      if (keep == null || !mounted) return;
+      if (keep) {
+        path = exportFreePath(path: path, codec: _format.key);
+        setState(() => _path = path);
+      }
+    }
     setState(() {
       _refused = null;
       _refusedForAddon = false;
