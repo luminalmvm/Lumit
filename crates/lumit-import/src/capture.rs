@@ -77,6 +77,11 @@ pub struct Project {
     pub linearize_working_space: Option<bool>,
     /// `extendscript` or `javascript-1.0` — which engine the expressions expect.
     pub expression_engine: Option<String>,
+    /// `OCIO` when the project is colour managed with OpenColorIO, `ADOBE`
+    /// otherwise.
+    pub colour_system: Option<String>,
+    /// The OCIO config: a path, or the name of one After Effects ships.
+    pub ocio_config: Option<String>,
 }
 
 /// One row of the project panel: a folder, a comp, a footage item, or a solid.
@@ -119,6 +124,17 @@ pub struct Item {
     pub fields: Option<String>,
     /// AE's pulldown phase, stringified.
     pub remove_pulldown: Option<String>,
+    /// Separate fields with high quality, which keeps the edges.
+    pub high_quality_fields: Option<bool>,
+    /// Interpret As Linear Light set to On.
+    pub linear_light: Option<bool>,
+    /// Preserve RGB.
+    pub preserve_rgb: Option<bool>,
+    /// The OCIO colour space the file is read in, by the config's own name.
+    pub colour_space: Option<String>,
+    /// A colour profile chosen for the file that has no OCIO name, such as an
+    /// ICC profile. Reported, since Lumit can't read the file through it.
+    pub colour_profile: Option<String>,
     pub is_still: Option<bool>,
     /// The footage is a folder of numbered stills read as one item, not a
     /// single file. After Effects says so in the file alias, which

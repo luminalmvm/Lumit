@@ -54,11 +54,9 @@
 //!    `fps_override`, `alpha`, `premul_colour`, `invert_alpha`, `loop`,
 //!    `fields`, `remove_pulldown`, `is_still`, `is_placeholder`,
 //!    `is_missing`) — the golden project contains no file footage at all, only
-//!    solids, so not one of these offsets could be checked against After
-//!    Effects. Reading them unchecked is precisely the silently-wrong import
-//!    this route exists to avoid, so the parser does not read them and this
-//!    test does not pretend otherwise. Owed: a fixture with real footage
-//!    (docs/TODO.md). `path` is **not** in this list: it comes out of the
+//!    solids, so none of these can be compared here. The offsets were checked
+//!    against other projects After Effects saved, and `aep::tests` keeps one
+//!    real record. `path` is **not** in this list: it comes out of the
 //!    self-naming JSON in `LIST Als2` ▸ `alas` rather than out of an offset,
 //!    and `aep::tests` covers it directly.
 //! 5. **A negative-stretch layer's `in_point` and `out_point`** — compared
@@ -207,7 +205,7 @@ fn the_item_tree_matches_entry_for_entry() {
         want.iter()
             .all(|item| item.kind.as_deref() != Some("footage")),
         "this exemption stops being honest the moment the fixture gains real \
-         footage — implement the interpretation fields then"
+         footage — compare the interpretation fields then"
     );
 }
 

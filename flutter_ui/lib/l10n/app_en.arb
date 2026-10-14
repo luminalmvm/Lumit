@@ -10736,6 +10736,24 @@
   "@aeMediaPlaceholder": {
     "description": "Import report row reason, lower case. The project item stood in for a file that was never chosen."
   },
+  "aeOcioConfigNotFound": "the OCIO config {config} isn't on this machine, so Lumit's own colour is used",
+  "@aeOcioConfigNotFound": {
+    "description": "Import report row reason, lower case. The After Effects project was colour managed with an OCIO config that Lumit couldn't find, either a file path or the name of a config After Effects ships.",
+    "placeholders": {
+      "config": {
+        "type": "String"
+      }
+    }
+  },
+  "aeColourProfileIgnored": "the {profile} colour profile has no equivalent, so the file's own colour is used",
+  "@aeColourProfileIgnored": {
+    "description": "Import report row reason, lower case. After Effects read the footage through a colour profile, such as an ICC profile, that Lumit has no way to apply.",
+    "placeholders": {
+      "profile": {
+        "type": "String"
+      }
+    }
+  },
   "aeLayerUnreadable": "the layer had no place in the stack and was skipped",
   "@aeLayerUnreadable": {
     "description": "Import report row reason, lower case. The capture recorded no stacking position for the layer."

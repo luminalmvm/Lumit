@@ -345,12 +345,31 @@ fn read_project(root: &[Chunk<'_>]) -> Project {
             }
         });
 
+    // The colour management settings are a `Utf8` of JSON at the root, told
+    // apart by the key it always has. 1 is OCIO.
+    let colour: Option<serde_json::Value> = root
+        .iter()
+        .filter(|chunk| chunk.id == *b"Utf8")
+        .filter_map(|chunk| serde_json::from_str::<serde_json::Value>(&chunk.text()).ok())
+        .find(|json| json.get("colorManagementSystem").is_some());
+    let colour_system = colour
+        .as_ref()
+        .and_then(|json| json.get("colorManagementSystem")?.as_u64())
+        .map(|system| if system == 1 { "OCIO" } else { "ADOBE" }.to_string());
+    let ocio_config = colour
+        .as_ref()
+        .and_then(|json| json.get("ocioConfigurationFile")?.as_str())
+        .filter(|config| !config.is_empty())
+        .map(str::to_string);
+
     Project {
         bits_per_channel: depth,
         working_space,
         linear_blending: Some(root.iter().any(|chunk| chunk.id == *b"lnrb")),
         linearize_working_space: Some(root.iter().any(|chunk| chunk.id == *b"lnrp")),
         expression_engine: engine,
+        colour_system,
+        ocio_config,
     }
 }
 
@@ -462,11 +481,13 @@ fn describe(inside: &[Chunk<'_>]) -> Option<(u16, i64, Option<String>)> {
 /// is a field naming itself rather than a byte offset, which is why it can be
 /// read here.
 ///
-/// The remaining interpretation fields (frame rate, alpha handling, fields,
-/// pulldown, loop) stay unread: Lumit has no field for any of them — they would
-/// ride in the `ae` namespace and nothing downstream would read them — and an
-/// unchecked offset is exactly the silently-wrong import this route exists to
-/// avoid.
+/// The **interpretation** (Interpret Footage) is in `sspc` too, and is read
+/// into the same fields a Lumit Bridge bundle fills, so both routes map it
+/// one way. The offsets were checked against projects saved by After Effects
+/// beside what its scripting reports for them. The colour settings are their
+/// own records in `LIST CLRS`: `linl` holds Interpret As Linear Light, a
+/// `prgb` is Preserve RGB, `ipws` set is Working Color Space, and the `Utf8`
+/// after `ocsp` names the colour space the file is read in.
 fn read_footage(
     id: i64,
     parent_id: Option<i64>,
@@ -565,6 +586,108 @@ fn read_footage(
         .and_then(|chunk| u8_at(chunk.body, 115))
         .is_some_and(|flag| flag != 0);
 
+    // Rates are 16.16 fixed point. The file's own rate has a four-byte whole
+    // part and the conform rate a two-byte one, and nought means no conform.
+    let body = settings.map_or(&[][..], |chunk| chunk.body);
+    let rate = |whole: Option<u32>, at: usize| {
+        Some(f64::from(whole?) + f64::from(u16_at(body, at)?) / 65536.0)
+    };
+    let native_fps = rate(u32_at(body, 56), 60);
+    let fps_override = rate(u16_at(body, 148).map(u32::from), 150);
+    let fps = rate(u16_at(body, 152).map(u32::from), 154);
+    let alpha = u8_at(body, 73).and_then(|mode| match mode {
+        0 => Some("STRAIGHT"),
+        1 => Some("PREMULTIPLIED"),
+        2 => Some("IGNORE"),
+        // 3 is a file with no alpha at all.
+        _ => None,
+    });
+    let premul_colour = body
+        .get(70..73)
+        .map(|rgb| rgb.iter().map(|c| f64::from(*c) / 255.0).collect());
+    let fields = match (u8_at(body, 83), u8_at(body, 87)) {
+        (Some(0), _) | (None, _) => "OFF",
+        (_, Some(1)) => "LOWER_FIELD_FIRST",
+        _ => "UPPER_FIELD_FIRST",
+    };
+    const CADENCES: [&str; 10] = [
+        "WSSWW",
+        "SSWWW",
+        "SWWWS",
+        "WWWSS",
+        "WWSSW",
+        "WWWSW_24P_ADVANCE",
+        "WWSWW_24P_ADVANCE",
+        "WSWWW_24P_ADVANCE",
+        "SWWWW_24P_ADVANCE",
+        "WWWWS_24P_ADVANCE",
+    ];
+    let remove_pulldown = u8_at(body, 147)
+        .and_then(|n| CADENCES.get(usize::from(n).checked_sub(1)?))
+        .map(|cadence| cadence.to_string());
+    let pixel_aspect = match (u32_at(body, 136), u32_at(body, 140)) {
+        (Some(n), Some(d)) if n > 0 && d > 0 => Some(f64::from(n) / f64::from(d)),
+        _ => None,
+    };
+    let clrs: Vec<Chunk<'_>> = within
+        .iter()
+        .find(|chunk| chunk.is_list(b"CLRS"))
+        .map(|list| list.children().ok().collect())
+        .unwrap_or_default();
+    // 0 is off and 2 on for 32 bpc, which is what Lumit does unasked.
+    let linear_light = clrs
+        .iter()
+        .find(|chunk| chunk.id == *b"linl")
+        .and_then(|chunk| u8_at(chunk.body, 0))
+        .map(|mode| mode == 1);
+    // Media in the working space is taken as it is, the same as Preserve RGB.
+    let preserve_rgb = clrs.iter().any(|chunk| chunk.id == *b"prgb")
+        || clrs
+            .iter()
+            .find(|chunk| chunk.id == *b"ipws")
+            .and_then(|chunk| u8_at(chunk.body, 0))
+            == Some(1);
+    let profile: Option<serde_json::Value> = clrs
+        .iter()
+        .skip_while(|chunk| chunk.id != *b"ocsp")
+        .nth(1)
+        .filter(|chunk| chunk.id == *b"Utf8")
+        .and_then(|chunk| serde_json::from_str(&chunk.text()).ok());
+    let profile_name = profile
+        .as_ref()
+        .and_then(|p| p.get("baseColorProfile")?.get("colorProfileName")?.as_str())
+        .map(str::to_string);
+    // Type 3 is an OCIO space, whose config's own name is in the profile's
+    // data as base64 JSON. A display and view pair has a second name and no
+    // single space to give.
+    let ocio = profile
+        .as_ref()
+        .filter(|p| p.get("baseProfileType").and_then(serde_json::Value::as_u64) == Some(3))
+        .and_then(|p| p.get("baseColorProfile")?.get("colorProfileData")?.as_str())
+        .and_then(base64)
+        .and_then(|data| serde_json::from_slice::<serde_json::Value>(&data).ok());
+    let colour_space = ocio
+        .as_ref()
+        .filter(|data| data.get("colorSpace2").is_none())
+        .and_then(|data| data.get("colorSpace1")?.as_str())
+        .map(str::to_string);
+    // An ICC profile chosen in place of the file's own sets `apid`, which is
+    // all FF otherwise.
+    let icc = clrs
+        .iter()
+        .find(|chunk| chunk.id == *b"apid")
+        .is_some_and(|chunk| chunk.body.iter().any(|byte| *byte != 0xFF));
+    // sRGB is what After Effects gives a file with no profile of its own, and
+    // what Lumit assumes anyway.
+    let colour_profile = if icc || (ocio.is_some() && colour_space.is_none()) {
+        profile_name.filter(|name| !name.starts_with("sRGB"))
+    } else {
+        None
+    };
+    // A solid or a placeholder has no file to read, and a placeholder's
+    // settings would stick to the file it's later relinked to.
+    let file = solid.is_none() && placeholder.is_none();
+
     Item {
         id: Some(id),
         name,
@@ -583,6 +706,21 @@ fn read_footage(
         height: settings
             .and_then(|chunk| u16_at(chunk.body, 36))
             .map(u32::from),
+        fps,
+        native_fps,
+        fps_override,
+        pixel_aspect,
+        alpha: alpha.map(str::to_string),
+        premul_colour,
+        invert_alpha: u8_at(body, 69).map(|flags| bit(flags, 1)),
+        loop_count: u32_at(body, 126).map(i64::from),
+        fields: settings.map(|_| fields.to_string()),
+        remove_pulldown,
+        high_quality_fields: u8_at(body, 159).map(|flags| bit(flags, 0)),
+        linear_light: linear_light.filter(|_| file),
+        preserve_rgb: (file && preserve_rgb).then_some(true),
+        colour_space: colour_space.filter(|_| file),
+        colour_profile: colour_profile.filter(|_| file),
         ..Item::default()
     }
 }
@@ -606,6 +744,29 @@ fn alias_record(within: &[Chunk<'_>]) -> Option<serde_json::Value> {
         .find(|chunk| chunk.id == *b"alas")?
         .text();
     serde_json::from_str(&alias).ok()
+}
+
+/// Standard base64, or `None` if it isn't.
+fn base64(text: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() * 3 / 4);
+    let (mut acc, mut bits) = (0_u32, 0_u32);
+    for c in text.bytes().filter(|c| *c != b'=') {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        };
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
 }
 
 /// The last component of a path written on **either** platform's separator —
@@ -1188,6 +1349,56 @@ mod tests {
         assert_eq!(item.is_missing, Some(false));
         assert_eq!(item.is_placeholder, None);
         assert_eq!((item.width, item.height), (Some(1920), Some(1080)));
+    }
+
+    /// **A clip conformed to another rate in After Effects keeps that rate.**
+    ///
+    /// The source settings are the bytes After Effects saved for a 30 fps clip
+    /// conformed to 24. Opening the project without them put every layer cut
+    /// from the clip on the wrong frames.
+    #[test]
+    fn a_conformed_clip_keeps_its_rate() {
+        let hex = concat!(
+            "000000000000000000000000000000000000000000004d4f6f56000000000000",
+            "01e00000010e000003850000001e000000000000001e00000000001e00000018",
+            "0101000000000000000300000000000100000000000000000000000000000000",
+            "00030004000200000000000000000000080000000000e5a929220000000c0000",
+            "0001000000000000000000010000000100000000001800000018000000000008",
+            "40e77000000000000000000000000000000000000000000000000000ffffffff",
+            "ffffffff000000010002000000000000000ad48401000000000000000000",
+        );
+        let sspc: Vec<u8> = (0..hex.len())
+            .step_by(2)
+            .filter_map(|at| u8::from_str_radix(hex.get(at..at + 2)?, 16).ok())
+            .collect();
+        let alias = r#"{"fullpath":"C:\clip.mov","target_is_folder":false}"#;
+        let mut pin = chunk(b"sspc", &sspc);
+        pin.extend(list(b"Als2", &chunk(b"alas", alias.as_bytes())));
+        let mut item = idta(enums::ITEM_FOOTAGE, 3);
+        item.extend(chunk(b"Utf8", b""));
+        item.extend(list(b"Pin ", &pin));
+
+        let parsed =
+            parse_capture(&file(&list(b"Fold", &list(b"Item", &item)))).expect("the walk survives");
+        let found = &parsed.capture.items[0];
+        assert_eq!(
+            (found.native_fps, found.fps_override),
+            (Some(30.0), Some(24.0))
+        );
+
+        let (doc, _) = crate::map_capture(&parsed.capture);
+        let footage = doc
+            .items
+            .iter()
+            .find_map(|item| match item {
+                lumit_core::model::ProjectItem::Footage(footage) => Some(footage),
+                _ => None,
+            })
+            .expect("the clip imports");
+        assert_eq!(
+            footage.interpretation.frame_rate,
+            lumit_core::time::FrameRate::new(24, 1).ok()
+        );
     }
 
     /// A layer descriptor: stretch 1, and the three rationals the timing is

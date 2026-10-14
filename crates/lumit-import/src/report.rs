@@ -142,6 +142,12 @@ pub enum Reason {
     MediaNotFound,
     /// The item was an After Effects placeholder, not a real file.
     MediaPlaceholder,
+    /// The file was read through a colour profile with no OCIO name, such as
+    /// an ICC profile, so it arrives in its own colour.
+    ColourProfileIgnored { profile: String },
+    /// The project's OCIO config isn't on this machine, so the project uses
+    /// Lumit's own colour until one is chosen.
+    OcioConfigNotFound { config: String },
 
     // --- layers ---
     /// A layer the walker recorded with no stacking index: it cannot be
@@ -344,6 +350,14 @@ impl std::fmt::Display for Reason {
                 "the file is not on this machine — imported offline, ready to relink"
             ),
             Self::MediaPlaceholder => write!(f, "an After Effects placeholder, not a real file"),
+            Self::ColourProfileIgnored { profile } => write!(
+                f,
+                "the {profile} colour profile has no equivalent, so the file's own colour is used"
+            ),
+            Self::OcioConfigNotFound { config } => write!(
+                f,
+                "the OCIO config {config} isn't on this machine, so Lumit's own colour is used"
+            ),
             Self::LayerUnreadable => {
                 write!(f, "the layer had no place in the stack and was skipped")
             }

@@ -1524,6 +1524,10 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeMediaNotFound;
     case 'media_placeholder':
       return l10n.aeMediaPlaceholder;
+    case 'colour_profile_ignored':
+      return l10n.aeColourProfileIgnored(a('profile'));
+    case 'ocio_config_not_found':
+      return l10n.aeOcioConfigNotFound(a('config'));
 
     // Layers.
     case 'layer_unreadable':
