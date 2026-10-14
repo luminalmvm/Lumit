@@ -915,7 +915,7 @@ impl Op {
             Op::SetCacheLocation { .. } => "Set cache location",
             Op::SetAntiAliasing { .. } => "Set anti-aliasing",
             Op::SetColourDepth { .. } => "Set colour depth",
-            Op::SetGraphRoom { .. } => "Set room past the frame",
+            Op::SetGraphRoom { .. } => "Set node graph overscan",
             Op::SetProjectSwatches { .. } => "Edit swatches",
             Op::SetColourConfig { .. } | Op::SetColourWorkingSpace { .. } => {
                 "Set colour management"

@@ -23,6 +23,7 @@ import '../l10n/strings.dart';
 import '../state/file_dialogs.dart' show pickOcioConfig;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'pro_window.dart' show writtenBytes;
 import 'settings_rows.dart';
 
 /// The coverage-sample counts on offer — the ones graphics hardware actually
@@ -238,6 +239,19 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
             ),
           ),
         ),
+        // Maximum lets a box grow to the widest texture (8192 a side), so say
+        // what that costs at the depth the card is working in.
+        if (room == 0)
+          Padding(
+            key: const ValueKey('project-graph-room-memory'),
+            padding: const EdgeInsets.fromLTRB(
+                settingsRowPadding, 0, settingsRowPadding, 6),
+            child: Text(
+              l10n.settingsGraphRoomMemory(
+                  writtenBytes(8192 * 8192 * depthInUse ~/ 2)),
+              style: t.small.copyWith(color: t.warning),
+            ),
+          ),
       ]),
     ];
   }
