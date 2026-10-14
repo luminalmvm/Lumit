@@ -383,6 +383,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                 controller: _code,
                 autofill: ExpressionAutofillGenerator(),
                 multiline: true,
+                indentOnTab: true,
                 topAlign: true,
                 style: t.mono,
                 hint: l10n.expressionHint,

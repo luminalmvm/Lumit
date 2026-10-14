@@ -80,6 +80,10 @@ class HouseTextField extends StatefulWidget {
   /// caller gets: a well is one line unless somebody asks for a page.
   final bool multiline;
 
+  /// Tab indents instead of moving focus on, for a well that holds code.
+  /// Only with [multiline]; a note or a description keeps Tab for moving on.
+  final bool indentOnTab;
+
   /// The well's scroll position, owned by the caller — for a gutter that has
   /// to follow the text it numbers. Null and [EditableText] makes its own, as
   /// every single-line caller wants.
@@ -124,6 +128,7 @@ class HouseTextField extends StatefulWidget {
     this.topAlign = false,
     this.hint,
     this.multiline = false,
+    this.indentOnTab = false,
     this.scrollController,
     this.leading,
     this.leadingInteractive = false,
@@ -140,6 +145,11 @@ class _HouseTextFieldState extends State<HouseTextField>
   late FocusNode _focus;
   final GlobalKey<EditableTextState> textFieldKey = GlobalKey();
   final layerLink = LayerLink();
+
+  // Made once, not per build: it keeps where a drag started, and the field
+  // rebuilds on every selection change. A new one mid-drag forgot how far the
+  // text had scrolled, so selecting in scrolled code jumped.
+  late final _gestures = TextSelectionGestureDetectorBuilder(delegate: this);
   OverlayEntry? _overlay;
 
   @override
@@ -230,7 +240,57 @@ class _HouseTextFieldState extends State<HouseTextField>
       }
     }
 
+    // In a page of code Tab indents and Shift+Tab takes it back out. Left
+    // alone, the framework takes either as a move to another control and the
+    // caret leaves the code. Four spaces rather than a tab, so the shader
+    // well's width sum stays one character per column.
+    if (widget.multiline &&
+        widget.indentOnTab &&
+        event is! KeyUpEvent &&
+        event.logicalKey == LogicalKeyboardKey.tab) {
+      final value = widget.controller.value;
+      if (value.selection.isValid) {
+        widget.controller.value = HardwareKeyboard.instance.isShiftPressed
+            ? _outdent(value)
+            : value.replaced(value.selection, '    ');
+      }
+      return KeyEventResult.handled;
+    }
+
     return KeyEventResult.ignored;
+  }
+
+  /// Up to four spaces off the start of every line the selection touches,
+  /// with the selection kept on the same text.
+  static TextEditingValue _outdent(TextEditingValue value) {
+    final text = value.text;
+    final sel = value.selection;
+    final cuts = <(int, int)>[];
+    var line = sel.start == 0 ? 0 : text.lastIndexOf('\n', sel.start - 1) + 1;
+    while (true) {
+      var n = 0;
+      while (n < 4 && line + n < text.length && text[line + n] == ' ') {
+        n++;
+      }
+      if (n > 0) cuts.add((line, n));
+      final next = text.indexOf('\n', line);
+      if (next < 0 || next >= sel.end) break;
+      line = next + 1;
+    }
+    if (cuts.isEmpty) return value;
+    int moved(int at) =>
+        at - cuts.fold(0, (sum, c) => sum + (at - c.$1).clamp(0, c.$2));
+    var out = text;
+    for (final (at, n) in cuts.reversed) {
+      out = out.replaceRange(at, at + n, '');
+    }
+    return TextEditingValue(
+      text: out,
+      selection: sel.copyWith(
+        baseOffset: moved(sel.baseOffset),
+        extentOffset: moved(sel.extentOffset),
+      ),
+    );
   }
 
   void showOverlay() {
@@ -373,8 +433,7 @@ class _HouseTextFieldState extends State<HouseTextField>
               onPointerDown: (_) {
                 if (!_focus.hasFocus) _focus.requestFocus();
               },
-              child: TextSelectionGestureDetectorBuilder(delegate: this)
-                  .buildGestureDetector(
+              child: _gestures.buildGestureDetector(
                 child: CompositedTransformTarget(
                   link: layerLink,
                   child: EditableText(

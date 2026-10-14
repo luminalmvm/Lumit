@@ -197,6 +197,7 @@ class _ExpressionEditorState extends State<_ExpressionEditor> {
                 width: double.infinity,
                 autofocus: true,
                 multiline: true,
+                indentOnTab: true,
                 topAlign: true,
                 style: t.mono,
                 hint: l10n.expressionHint,
