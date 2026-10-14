@@ -54,12 +54,15 @@ impl Bounds {
         ]
     }
 
-    /// The whole pixels that cover `rect` and the `w × h` frame.
-    fn covering(rect: [f32; 4], w: u32, h: u32) -> Self {
-        // ponytail: a picture keeps at most one frame past each edge, and
-        // never more than the widest texture. Raise it if a real graph needs
-        // to bring back something further out.
-        let room = |n: u32| n.min(crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n) / 2) as f32;
+    /// The whole pixels that cover `rect` and the `w × h` frame, keeping at
+    /// most `frames` frames past each edge (0 for no limit of its own) and
+    /// never more than the widest texture.
+    fn covering(rect: [f32; 4], w: u32, h: u32, frames: u32) -> Self {
+        let frames = if frames == 0 { u32::MAX } else { frames };
+        let room = |n: u32| {
+            n.saturating_mul(frames)
+                .min(crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n) / 2) as f32
+        };
         let (rx, ry) = (room(w), room(h));
         // Nothing sensible to cover reads as the frame's own edge.
         let low = |v: f32, room: f32| {
@@ -87,7 +90,7 @@ impl Bounds {
     }
 
     /// The most a box may keep round a `w × h` frame.
-    fn limit(w: u32, h: u32) -> Self {
+    fn limit(w: u32, h: u32, frames: u32) -> Self {
         Self::covering(
             [
                 f32::NEG_INFINITY,
@@ -97,13 +100,14 @@ impl Bounds {
             ],
             w,
             h,
+            frames,
         )
     }
 
     /// Whether this reaches the limit on any side the limit is past the
     /// frame.
-    fn at_limit(self, w: u32, h: u32) -> bool {
-        let limit = Self::limit(w, h);
+    fn at_limit(self, w: u32, h: u32, frames: u32) -> bool {
+        let limit = Self::limit(w, h, frames);
         let [x0, y0, x1, y1] = self.rect();
         let [lx0, ly0, lx1, ly1] = limit.rect();
         (lx0 < 0.0 && x0 <= lx0)
@@ -906,7 +910,7 @@ impl Realiser<'_> {
                             reach[3].max(py),
                         ];
                     }
-                    let bounds = Bounds::covering(reach, w, h);
+                    let bounds = Bounds::covering(reach, w, h, plan.room);
                     Some((
                         self.compositor.composite_seeded(
                             &self.ctx,
@@ -969,6 +973,7 @@ impl Realiser<'_> {
                             .fold(from.rect(), |rect, op| op.def.bounds(op.params, rect)),
                         w,
                         h,
+                        plan.room,
                     );
                     let room = from.union(want);
                     if room != frame {
@@ -1040,7 +1045,8 @@ impl Realiser<'_> {
                     };
                     let [x0, y0, x1, y1] = want.rect();
                     let (gx, gy) = ((room.x - grown.x) as f32, (room.y - grown.y) as f32);
-                    let keep = Bounds::covering([x0 - gx, y0 - gy, x1 + gx, y1 + gy], w, h);
+                    let keep =
+                        Bounds::covering([x0 - gx, y0 - gy, x1 + gx, y1 + gy], w, h, plan.room);
                     Some((place((out, grown), keep), keep))
                 }
                 // A over B, both full-frame at identity on a transparent
@@ -1136,7 +1142,7 @@ impl Realiser<'_> {
                     .filter(|bounds| *bounds != frame)
                     .map(|bounds| Reach {
                         rect: bounds.rect().map(|v| v / scale),
-                        at_limit: bounds.at_limit(w, h),
+                        at_limit: bounds.at_limit(w, h, plan.room),
                     }),
             );
         }

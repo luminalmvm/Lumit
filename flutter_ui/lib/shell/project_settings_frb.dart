@@ -23,6 +23,7 @@ import '../l10n/strings.dart';
 import '../state/file_dialogs.dart' show pickOcioConfig;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'pro_window.dart' show writtenBytes;
 import 'settings_rows.dart';
 
 /// The coverage-sample counts on offer — the ones graphics hardware actually
@@ -36,6 +37,16 @@ String _aaLabel(int samples) =>
 const List<int> _depths = [8, 16, 32];
 
 String _depthLabel(int bits) => l10n.bitsPerChannel('$bits');
+
+/// How far past the frame a node graph box keeps its picture, in frames past
+/// each edge. 0 is as far as the widest texture allows.
+const List<int> _rooms = [1, 2, 0];
+
+String _roomLabel(int frames) => switch (frames) {
+      1 => l10n.graphRoomOne,
+      2 => l10n.graphRoomTwo,
+      _ => l10n.graphRoomMost,
+    };
 
 const Size _windowSize = Size(560, 420);
 
@@ -152,6 +163,7 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
     final inUse = project.antiAliasingInUse();
     final depth = project.colourDepth();
     final depthInUse = project.colourDepthInUse();
+    final room = project.graphRoom();
     return [
       settingsSection(t, l10n.settingsGroupRendering, [
         settingsRow(
@@ -210,6 +222,34 @@ class _ProjectSettingsWindowState extends State<_ProjectSettingsWindow> {
               _aaLabel(inUse),
               key: const ValueKey('project-anti-aliasing-in-use'),
               style: t.small,
+            ),
+          ),
+        settingsRow(
+          t,
+          l10n.settingsGraphRoom,
+          l10n.settingsGraphRoomHint,
+          SizedBox(
+            width: 130,
+            child: BareDropdown<int>(
+              key: const ValueKey('project-graph-room'),
+              value: room,
+              options: _rooms,
+              label: _roomLabel,
+              onChanged: (n) => setState(() => project.setGraphRoom(frames: n)),
+            ),
+          ),
+        ),
+        // Maximum lets a box grow to the widest texture (8192 a side), so say
+        // what that costs at the depth the card is working in.
+        if (room == 0)
+          Padding(
+            key: const ValueKey('project-graph-room-memory'),
+            padding: const EdgeInsets.fromLTRB(
+                settingsRowPadding, 0, settingsRowPadding, 6),
+            child: Text(
+              l10n.settingsGraphRoomMemory(
+                  writtenBytes(8192 * 8192 * depthInUse ~/ 2)),
+              style: t.small.copyWith(color: t.warning),
             ),
           ),
       ]),

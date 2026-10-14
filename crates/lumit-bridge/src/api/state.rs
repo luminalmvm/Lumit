@@ -690,6 +690,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // reported rather than fall through silently.
         | Op::SetAntiAliasing { .. }
         | Op::SetColourDepth { .. }
+        | Op::SetGraphRoom { .. }
         // Which OCIO config the project's colour names come from, and what one
         // footage item arrives as. Both rename frames — the config
         // every frame of every comp, the assignment every frame reading that

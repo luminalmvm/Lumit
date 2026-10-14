@@ -7191,6 +7191,36 @@
   "@settingsColourDepthInUse": {
     "description": "Project settings: the name of the row showing which colour depth the graphics card is actually working at."
   },
+  "settingsGraphRoom": "Node graph overscan",
+  "@settingsGraphRoom": {
+    "description": "Project settings: the name of the row choosing how far past the composition's frame a node graph box keeps its picture, so a later box can bring it back."
+  },
+  "settingsGraphRoomHint": "How far past the frame each box keeps its picture. More uses more memory.",
+  "@settingsGraphRoomHint": {
+    "description": "Project settings: the line under Node graph overscan."
+  },
+  "graphRoomOne": "One frame",
+  "@graphRoomOne": {
+    "description": "Project settings, Node graph overscan: a node graph box keeps one frame's width and height past each edge of the frame."
+  },
+  "graphRoomTwo": "Two frames",
+  "@graphRoomTwo": {
+    "description": "Project settings, Node graph overscan: a node graph box keeps two frames past each edge of the frame."
+  },
+  "graphRoomMost": "Maximum",
+  "@graphRoomMost": {
+    "description": "Project settings, Node graph overscan: a node graph box keeps as much past the frame as the largest picture the graphics card can hold."
+  },
+  "settingsGraphRoomMemory": "Each box in a node graph can use up to {size} of memory.",
+  "@settingsGraphRoomMemory": {
+    "description": "Project settings: shown in the warning colour under Node graph overscan when Maximum is picked.",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "537 MB"
+      }
+    }
+  },
   "settingsAntiAliasingInUse": "In use on this machine",
   "@settingsAntiAliasingInUse": {
     "description": "Project settings: the name of the row showing what the graphics card is actually doing."
@@ -14148,6 +14178,10 @@
   },
   "histSetColourDepth": "Set colour depth",
   "@histSetColourDepth": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetGraphRoom": "Set node graph overscan",
+  "@histSetGraphRoom": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histEditSwatches": "Edit swatches",
