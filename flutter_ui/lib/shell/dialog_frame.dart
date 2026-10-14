@@ -661,3 +661,52 @@ class FittedText extends StatelessWidget {
         },
       );
 }
+
+/// A short question with a button per answer, beside Cancel: the shape the
+/// unsaved-changes window has. The last answer is the default, focused on
+/// open. Cancel, Escape and the close mark answer null. [stacked] puts the
+/// buttons in a column, for answers too long to sit in a row.
+Future<T?> askLumitChoice<T>({
+  required BuildContext context,
+  required String title,
+  required String question,
+  required List<(String, T)> answers,
+  bool stacked = false,
+}) =>
+    showLumitModal<T>(
+      context: context,
+      builder: (close) => Builder(builder: (context) {
+        final t = ThemeScope.of(context).theme;
+        return DialogFrame(
+          width: 360,
+          children: [
+            dialogTitleBar(t,
+                title: title, onClose: () => close(null), keyPrefix: 'choice'),
+            Padding(
+              padding: const EdgeInsets.all(dialogPadding),
+              child: Text(question, style: t.body),
+            ),
+            dialogFooter(
+              t,
+              keyPrefix: 'choice',
+              stacked: stacked,
+              actions: [
+                HouseButton(
+                  key: const ValueKey('choice-cancel'),
+                  onPressed: () => close(null),
+                  child: Text(l10n.cancel),
+                ),
+                for (final (i, (label, value)) in answers.indexed)
+                  HouseButton(
+                    key: ValueKey('choice-$i'),
+                    primary: i == answers.length - 1,
+                    autofocus: i == answers.length - 1,
+                    onPressed: () => close(value),
+                    child: Text(label),
+                  ),
+              ],
+            ),
+          ],
+        );
+      }),
+    );

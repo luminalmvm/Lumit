@@ -102,6 +102,34 @@ const List<(String, int, int, int, int)> _compPresets = [
   ('Vertical 1080', 1080, 1920, 30, 1),
 ];
 
+/// Duplicate [comp], the Project panel's and the Composition menu's one road.
+/// A comp with others nested in it asks once whether the copy shares them or
+/// gets its own. Returns the copy, or null when cancelled or refused.
+Future<CompositionReference?> duplicateCompositionFrb(
+    BuildContext context, CompositionReference comp) async {
+  var separate = false;
+  try {
+    if (comp.hasNestedComps()) {
+      final pick = await askLumitChoice<bool>(
+        context: context,
+        title: l10n.duplicateNestedTitle,
+        question: l10n.duplicateNestedQuestion,
+        answers: [
+          (l10n.duplicateNestedSeparate, true),
+          (l10n.duplicateNestedShare, false),
+        ],
+        stacked: true,
+      );
+      if (pick == null) return null;
+      separate = pick;
+    }
+    return comp.duplicate(separate: separate);
+  } catch (_) {
+    // The project closed, or the comp went, while the question was up.
+    return null;
+  }
+}
+
 /// Edit an existing comp. Returns true when settings were applied, so the caller
 /// can refresh; false when cancelled.
 Future<bool> showCompSettingsFrb({

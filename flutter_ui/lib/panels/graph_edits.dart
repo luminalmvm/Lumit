@@ -327,6 +327,48 @@ void applyTangentModeToSelection({
   if (edits.isNotEmpty) commitChannelEdits(edits);
 }
 
+/// Join handles: every selected key whose two sides were split takes one
+/// speed on both, the mean of the two, and keeps each side's influence.
+void joinHandlesOnSelection({
+  required List<GraphChannel> channels,
+  required Set<String> selectedKeys,
+}) {
+  bool eased(BridgeSideInterp s) =>
+      s is BridgeSideInterp_Bezier || s is BridgeSideInterp_Auto;
+  final edits = <GraphChannel, BridgeScalar>{};
+  for (final channel in channels) {
+    final keys = channel.keys;
+    final next = [...keys];
+    var touched = false;
+    for (var i = 0; i < keys.length; i++) {
+      final key = keys[i];
+      // An end key has one side to aim, so nothing to join.
+      if (i == 0 ||
+          i == keys.length - 1 ||
+          !selectedKeys.contains('${channel.id}#$i') ||
+          !eased(key.interpIn) ||
+          !eased(key.interpOut)) {
+        continue;
+      }
+      final into = sideSpeedAtKey(keys, i, isOut: false);
+      final out = sideSpeedAtKey(keys, i, isOut: true);
+      if ((into - out).abs() < 1e-9) continue;
+      final speed = (into + out) / 2;
+      touched = true;
+      next[i] = BridgeKeyframe(
+        time: key.time,
+        value: key.value,
+        interpIn: BridgeSideInterp.bezier(BridgeBezierSide(
+            speed: speed, influence: sideInfluence(key.interpIn))),
+        interpOut: BridgeSideInterp.bezier(BridgeBezierSide(
+            speed: speed, influence: sideInfluence(key.interpOut))),
+      );
+    }
+    if (touched) edits[channel] = BridgeScalar.keyframed(next);
+  }
+  if (edits.isNotEmpty) commitChannelEdits(edits);
+}
+
 /// Plant a key at [frame] on every channel here, each taking the value its own
 /// curve already reads there — so the picture does not move. Adding a key is a
 /// place to grab, not an edit (docs/07 §4.3, the lane gesture).

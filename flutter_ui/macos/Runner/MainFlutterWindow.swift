@@ -19,6 +19,10 @@ class MainFlutterWindow: NSWindow {
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
 
+    // The smallest it can be made, as on Windows (windows/runner/
+    // win32_window.cpp): room for the default workspace's narrowest panels.
+    self.contentMinSize = NSSize(width: 840, height: 560)
+
     RegisterGeneratedPlugins(registry: flutterViewController)
     viewerTextureBridge = ViewerTextureBridge(controller: flutterViewController)
     // A double-clicked project or a clicked invite link reaches Dart through

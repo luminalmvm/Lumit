@@ -73,6 +73,7 @@ import 'shader_editor.dart'
     show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
+import 'viewer_tool_cursor.dart' show handPanLayer;
 
 /// This canvas's idea of identity, as [graphNodeKey] is the layer canvas's.
 String compNodeKey(UuidValue id) => 'node:$id';
@@ -2133,7 +2134,10 @@ class _CompGraphPanelState extends State<CompGraphPanel>
         }
         return KeyEventResult.ignored;
       },
-      child: DragTarget<Object>(
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+      DragTarget<Object>(
         onWillAcceptWithDetails: (details) =>
             details.data is FootageDragData ||
             details.data is CompDragData ||
@@ -2243,6 +2247,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
             ),
           ),
         ),
+      ),
+      handPanLayer(_ui!.tools, t, (d) => setState(() => _pan += d)),
+        ],
       ),
     );
   }

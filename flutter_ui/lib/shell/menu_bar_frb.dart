@@ -1169,6 +1169,16 @@ List<MenuSection> lumitMenus(
             MenuEntry(l10n.compositionSettingsEllipsis,
                 comp == null ? null : () => _compSettings(context, app),
                 action: 'comp.settings'),
+            MenuEntry(
+                l10n.menuDuplicateComposition,
+                comp == null
+                    ? null
+                    : () async {
+                        if (await duplicateCompositionFrb(context, comp) !=
+                            null) {
+                          app.notifyDocumentChanged();
+                        }
+                      }),
             MenuEntry(l10n.menuFlowchart,
                 comp == null ? null : () => openFlowchartFrb(context, ui),
                 action: 'comp.flowchart'),

@@ -25,6 +25,7 @@ import 'project_columns_frb.dart';
 enum _ProjectMenuAction {
   newNodeGraph,
   compSettings,
+  duplicate,
   interpret,
   rememberInterpretation,
   applyInterpretation,
@@ -165,6 +166,12 @@ Future<void> showProjectMenuFrb({
             MenuRow(
               onPressed: () => close(_ProjectMenuAction.compSettings),
               child: Text(l10n.compositionSettingsEllipsis),
+            ),
+          if (isComp)
+            MenuRow(
+              key: const ValueKey('project-menu-duplicate'),
+              onPressed: () => close(_ProjectMenuAction.duplicate),
+              child: Text(l10n.menuDuplicate),
             ),
           // Every kind can be renamed from here. It matters most for a comp,
           // whose second click opens it rather than renaming it.
@@ -463,6 +470,12 @@ Future<void> showProjectMenuFrb({
         // Reachable now that the dialog takes a CompositionReference rather than
         // an AppStateStub; the port had to drop this entry until it did.
         if (await showCompSettingsFrb(context: context, comp: field0)) {
+          onLocalEdit();
+        }
+      }
+    case _ProjectMenuAction.duplicate:
+      if (item case ItemReference_Composition(:final field0)) {
+        if (await duplicateCompositionFrb(context, field0) != null) {
           onLocalEdit();
         }
       }

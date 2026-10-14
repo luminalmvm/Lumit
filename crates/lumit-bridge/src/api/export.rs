@@ -729,6 +729,20 @@ pub fn export_queue_move(id: u32, index: u32) -> Result<(), BridgeError> {
     crate::export::queue_move(id, index as usize).map_err(BridgeError::ExportFailed)
 }
 
+/// Whether an export in format `codec` to `path` would write over a file
+/// already there, or over one still waiting in the queue. For an image
+/// sequence the file asked about is frame one.
+#[frb(sync)]
+pub fn export_path_taken(path: String, codec: String) -> bool {
+    crate::export::path_taken(&path, &codec)
+}
+
+/// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
+#[frb(sync)]
+pub fn export_free_path(path: String, codec: String) -> String {
+    crate::export::free_path(&path, &codec)
+}
+
 #[frb(ignore)]
 fn reply_ok(reply: &str) -> bool {
     serde_json::from_str::<Value>(reply)
