@@ -290,6 +290,7 @@ fn layer_kind(
                     blur_level: scalar(conv, path, props, "ADBE Camera Blur Level", 0, 100.0),
                     lock_to_zoom: false,
                     film_size_mm: lumit_core::camera::FILM_MM,
+                    px_per_metre: lumit_core::model::CameraOptions::DEFAULT_PX_PER_METRE,
                 }),
                 zoom,
                 // An imported camera is the file's own; nothing has been solved,

@@ -22012,11 +22012,13 @@ impl SseDecode for crate::api::layer::BridgeCameraSettings {
         let mut var_depthOfField = <bool>::sse_decode(deserializer);
         let mut var_lockToZoom = <bool>::sse_decode(deserializer);
         let mut var_filmSizeMm = <f64>::sse_decode(deserializer);
+        let mut var_pxPerMetre = <f64>::sse_decode(deserializer);
         return crate::api::layer::BridgeCameraSettings {
             two_node: var_twoNode,
             depth_of_field: var_depthOfField,
             lock_to_zoom: var_lockToZoom,
             film_size_mm: var_filmSizeMm,
+            px_per_metre: var_pxPerMetre,
         };
     }
 }
@@ -25090,6 +25092,7 @@ impl SseDecode for crate::api::graph::BridgePortType {
             4 => crate::api::graph::BridgePortType::Shape,
             5 => crate::api::graph::BridgePortType::Points,
             6 => crate::api::graph::BridgePortType::Audio,
+            7 => crate::api::graph::BridgePortType::Depth,
             _ => unreachable!("Invalid variant for BridgePortType: {}", inner),
         };
     }
@@ -31293,6 +31296,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeCameraSettings {
             self.depth_of_field.into_into_dart().into_dart(),
             self.lock_to_zoom.into_into_dart().into_dart(),
             self.film_size_mm.into_into_dart().into_dart(),
+            self.px_per_metre.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -35130,6 +35134,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::graph::BridgePortType {
             Self::Shape => 4.into_dart(),
             Self::Points => 5.into_dart(),
             Self::Audio => 6.into_dart(),
+            Self::Depth => 7.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -38479,6 +38484,7 @@ impl SseEncode for crate::api::layer::BridgeCameraSettings {
         <bool>::sse_encode(self.depth_of_field, serializer);
         <bool>::sse_encode(self.lock_to_zoom, serializer);
         <f64>::sse_encode(self.film_size_mm, serializer);
+        <f64>::sse_encode(self.px_per_metre, serializer);
     }
 }
 
@@ -40774,6 +40780,7 @@ impl SseEncode for crate::api::graph::BridgePortType {
                 crate::api::graph::BridgePortType::Shape => 4,
                 crate::api::graph::BridgePortType::Points => 5,
                 crate::api::graph::BridgePortType::Audio => 6,
+                crate::api::graph::BridgePortType::Depth => 7,
                 _ => {
                     unimplemented!("");
                 }

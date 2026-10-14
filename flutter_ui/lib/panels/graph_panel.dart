@@ -220,10 +220,13 @@ const double graphDragSlop = 3;
 Color graphShaderHeader(LumitTheme t) =>
     Color.alphaBlend(t.curve.first.withValues(alpha: 0.14), t.surface2);
 
-/// Which theme token a port type draws in: seven types, five
+/// Which theme token a port type draws in: eight types, five
 /// colours, grouped as the drawing's legend groups them.
 Color portColour(LumitTheme t, BridgePortType type) => switch (type) {
-      BridgePortType.image || BridgePortType.matte => t.port.image,
+      BridgePortType.image ||
+      BridgePortType.matte ||
+      BridgePortType.depth =>
+        t.port.image,
       BridgePortType.number => t.port.number,
       BridgePortType.colour => t.port.colour,
       BridgePortType.shape || BridgePortType.points => t.port.geometry,

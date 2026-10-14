@@ -339,6 +339,9 @@ fn feed_comp(
                 pose.rotation_deg.0,
                 pose.rotation_deg.1,
                 pose.rotation_deg.2,
+                // Scene depth's scale: a lens effect reading this comp's
+                // distance draws differently when it moves.
+                comp.px_per_metre(t),
             ] {
                 feed_f64(h, v);
             }

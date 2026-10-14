@@ -20687,13 +20687,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeCameraSettings dco_decode_bridge_camera_settings(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return BridgeCameraSettings(
       twoNode: dco_decode_bool(arr[0]),
       depthOfField: dco_decode_bool(arr[1]),
       lockToZoom: dco_decode_bool(arr[2]),
       filmSizeMm: dco_decode_f_64(arr[3]),
+      pxPerMetre: dco_decode_f_64(arr[4]),
     );
   }
 
@@ -26948,11 +26949,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_depthOfField = sse_decode_bool(deserializer);
     var var_lockToZoom = sse_decode_bool(deserializer);
     var var_filmSizeMm = sse_decode_f_64(deserializer);
+    var var_pxPerMetre = sse_decode_f_64(deserializer);
     return BridgeCameraSettings(
         twoNode: var_twoNode,
         depthOfField: var_depthOfField,
         lockToZoom: var_lockToZoom,
-        filmSizeMm: var_filmSizeMm);
+        filmSizeMm: var_filmSizeMm,
+        pxPerMetre: var_pxPerMetre);
   }
 
   @protected
@@ -34385,6 +34388,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self.depthOfField, serializer);
     sse_encode_bool(self.lockToZoom, serializer);
     sse_encode_f_64(self.filmSizeMm, serializer);
+    sse_encode_f_64(self.pxPerMetre, serializer);
   }
 
   @protected

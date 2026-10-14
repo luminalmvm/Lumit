@@ -6,12 +6,18 @@
 //! metres and then into how far that point's image lands from the sensor, and
 //! blurs each pixel with the shape the lens gives there.
 //!
-//! With no matte every pixel sits at the far distance, so the effect can be
-//! dropped on footage to defocus it with a lens's character.
+//! The **Depth** row takes distance in metres instead, from a 3D precomp's
+//! Scene depth or another lens effect, and wins over the matte. With neither,
+//! every pixel sits at the far distance, so the effect can be dropped on
+//! footage to defocus it with a lens's character.
+//!
+//! In a node graph the Depth view hands on the metres it used, and Focus
+//! distance and F-stop hand out how it is set, so the other lens effects can
+//! follow it.
 
 use crate::fx::{
-    lens_blur, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup,
-    CHANNEL_OPTIONS,
+    lens_blur, DriverCx, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen,
+    ParamGroup, Port, PortType, Signature, Value, CHANNEL_OPTIONS,
 };
 use lumit_fx_macros::Effect;
 
@@ -99,6 +105,11 @@ pub struct DofPro {
 
     #[toggle(label = "Invert", default = false)]
     pub depth_invert: bool,
+
+    /// Distance in metres per pixel. Set, it wins over the matte and the
+    /// Depth map rows. Decided by the render, so always `false` here.
+    #[layer(label = "Depth", self_default = false)]
+    pub depth_m: bool,
 
     /// The bundled lens. A lens kept in the effect wins over it.
     #[choice(
@@ -259,6 +270,13 @@ pub struct DofPro {
     pub mix: f32,
 }
 
+/// Where the lens is focused, in metres, and its f-stop, for the other lens
+/// effects to follow.
+pub const LENS_OUT: &[Port] = &[
+    Port::new("focus_out", "Focus distance (m)", PortType::Number),
+    Port::new("fstop_out", "F-stop", PortType::Number),
+];
+
 impl DofPro {
     /// The bake's inputs for a frame of `w` by `h`.
     pub fn bake_inputs(&self, w: u32, h: u32) -> lens_blur::BokehLens {
@@ -289,5 +307,29 @@ impl EffectDef for DofProDef {
 
     fn view(&self) -> Option<&'static str> {
         Some("display")
+    }
+
+    fn view_types(&self) -> &'static [PortType] {
+        &[PortType::Image, PortType::Depth]
+    }
+
+    fn depth_inputs(&self) -> &'static [&'static str] {
+        &["depth_m"]
+    }
+
+    fn signature(&self) -> Signature {
+        Signature::Image {
+            inputs: &[],
+            extra: LENS_OUT,
+        }
+    }
+
+    /// ponytail: with Use focus point on, focus is read off the depth on the
+    /// card, after this has run, so this hands out the Focus distance row.
+    /// Read the depth back here if following a focus point matters.
+    fn eval_driver(&self, cx: &DriverCx<'_>, push: &mut dyn FnMut(&'static str, Value)) {
+        let e = DofPro::read(cx.params);
+        push("focus_out", Value::Float(e.focus_m));
+        push("fstop_out", Value::Float(e.fstop));
     }
 }

@@ -2343,6 +2343,7 @@ pub struct BridgeCameraSettings {
     pub depth_of_field: bool,
     pub lock_to_zoom: bool,
     pub film_size_mm: f64,
+    pub px_per_metre: f64,
 }
 
 impl BridgeCameraSettings {
@@ -2353,6 +2354,7 @@ impl BridgeCameraSettings {
             depth_of_field: s.depth_of_field,
             lock_to_zoom: s.lock_to_zoom,
             film_size_mm: s.film_size_mm,
+            px_per_metre: s.px_per_metre,
         }
     }
 
@@ -2363,6 +2365,7 @@ impl BridgeCameraSettings {
             depth_of_field: self.depth_of_field,
             lock_to_zoom: self.lock_to_zoom,
             film_size_mm: self.film_size_mm,
+            px_per_metre: self.px_per_metre,
         }
     }
 }

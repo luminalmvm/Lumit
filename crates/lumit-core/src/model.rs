@@ -894,9 +894,20 @@ pub struct CameraOptions {
     /// dialog converts zoom through. Never read by the renderer.
     #[serde(default = "CameraOptions::film")]
     pub film_size_mm: f64,
+    /// How many comp pixels make a metre, so the comp's 3D layers have a
+    /// distance a lens effect can read (Scene depth).
+    #[serde(default = "CameraOptions::ppm")]
+    pub px_per_metre: f64,
 }
 
 impl CameraOptions {
+    /// Puts the default camera's focus about 2.7 m away, a usual shooting
+    /// distance.
+    pub const DEFAULT_PX_PER_METRE: f64 = 1000.0;
+
+    fn ppm() -> f64 {
+        Self::DEFAULT_PX_PER_METRE
+    }
     fn zero3() -> [Property; 3] {
         [Property::zero(), Property::zero(), Property::zero()]
     }
@@ -924,6 +935,7 @@ impl CameraOptions {
             blur_level: Self::hundred(),
             lock_to_zoom: false,
             film_size_mm: Self::film(),
+            px_per_metre: Self::ppm(),
         }
     }
 
@@ -935,6 +947,7 @@ impl CameraOptions {
             depth_of_field: self.depth_of_field,
             lock_to_zoom: self.lock_to_zoom,
             film_size_mm: self.film_size_mm,
+            px_per_metre: self.px_per_metre,
         }
     }
 
@@ -943,6 +956,7 @@ impl CameraOptions {
         self.depth_of_field = s.depth_of_field;
         self.lock_to_zoom = s.lock_to_zoom;
         self.film_size_mm = s.film_size_mm;
+        self.px_per_metre = s.px_per_metre;
     }
 }
 
@@ -957,6 +971,7 @@ impl Default for CameraOptions {
             blur_level: Self::hundred(),
             lock_to_zoom: false,
             film_size_mm: Self::film(),
+            px_per_metre: Self::ppm(),
         }
     }
 }
@@ -968,6 +983,8 @@ pub struct CameraSettings {
     pub depth_of_field: bool,
     pub lock_to_zoom: bool,
     pub film_size_mm: f64,
+    #[serde(default = "CameraOptions::ppm")]
+    pub px_per_metre: f64,
 }
 
 /// How a layer-input parameter samples the layer it references, in place of the
@@ -2215,6 +2232,16 @@ impl Composition {
     /// and what **Convert to keyframes** writes back.
     pub fn camera_pose(&self, t: f64) -> Option<CameraPose> {
         self.active_camera(t).and_then(|l| stored_camera_pose(l, t))
+    }
+
+    /// How many comp pixels make a metre at comp time `t`: the active
+    /// camera's setting, or the default with no camera.
+    #[must_use]
+    pub fn px_per_metre(&self, t: f64) -> f64 {
+        match self.active_camera(t).map(|l| &l.kind) {
+            Some(LayerKind::Camera { options, .. }) => options.px_per_metre,
+            _ => CameraOptions::DEFAULT_PX_PER_METRE,
+        }
     }
 
     /// Every visible Light layer whose span contains `t`, evaluated at its own

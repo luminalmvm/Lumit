@@ -14,6 +14,8 @@ pub struct LensBlurOp {
     /// Names the bake; equal keys must mean equal tables.
     pub bake_key: u64,
     pub depth_bound: bool,
+    /// The depth texture holds metres rather than a 0..1 pass.
+    pub depth_metres: bool,
     /// Draw the metres used instead of the blur.
     pub display_depth: bool,
     pub depth_channel: u32,
@@ -67,7 +69,7 @@ struct Params {
     depth_invert: u32,
     use_focus_point: u32,
     blades: u32,
-    _p1: u32,
+    depth_metres: u32,
     display: u32,
     focal_mm: f32,
     dz_max_mm: f32,
@@ -460,7 +462,7 @@ impl FxEngine {
                     depth_invert: u32::from(op.depth_invert),
                     use_focus_point: u32::from(op.use_focus_point),
                     blades: op.blades.max(3),
-                    _p1: 0,
+                    depth_metres: u32::from(op.depth_metres),
                     display: u32::from(op.display_depth),
                     focal_mm: b.focal_mm,
                     dz_max_mm: b.dz_max_mm,

@@ -98,6 +98,10 @@
   "@cameraFilmSize": {
     "description": "Camera settings row: the width of the sensor the focal length is measured against, in millimetres."
   },
+  "cameraPixelsPerMetre": "Pixels per metre",
+  "@cameraPixelsPerMetre": {
+    "description": "Camera settings row: how many composition pixels make one metre, which gives the 3D layers a real distance for the lens effects' depth."
+  },
   "cameraFocalLength": "Focal length",
   "@cameraFocalLength": {
     "description": "Camera settings row: the lens length in millimetres, such as 50."
@@ -11959,9 +11963,9 @@
   "@graphTypes": {
     "description": "Graph panel: the heading of the legend strip along the bottom of the canvas, which says what each wire colour carries."
   },
-  "graphTypeImage": "image · matte",
+  "graphTypeImage": "image · matte · depth",
   "@graphTypeImage": {
-    "description": "Graph panel legend: the two kinds of picture a blue wire carries, an image and a matte. Lower case, joined by a middle dot."
+    "description": "Graph panel legend: the three kinds of picture a blue wire carries, an image, a matte and a depth (distance from the camera). Lower case, joined by middle dots."
   },
   "graphTypeNumber": "number",
   "@graphTypeNumber": {
@@ -19359,6 +19363,10 @@
   "fxFinal": "Final",
   "@fxFinal": {
     "description": "Effect controls: a Display choice on Depth of field pro, the finished blur rather than the depth it used."
+  },
+  "fxLightDistanceM": "Light distance (m)",
+  "@fxLightDistanceM": {
+    "description": "Effect controls: a control on Lens flare, how far away a placed light is in metres, read against a depth."
   },
   "fxFocusDistanceM": "Focus distance (m)",
   "@fxFocusDistanceM": {

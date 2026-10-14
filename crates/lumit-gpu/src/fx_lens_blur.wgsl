@@ -27,7 +27,7 @@ struct P {
     depth_invert: u32,
     use_focus_point: u32,
     blades: u32,
-    _p1: u32,
+    depth_metres: u32,
     display: u32,
     focal_mm: f32,
     dz_max_mm: f32,
@@ -83,6 +83,9 @@ fn metres_at(xy: vec2<i32>) -> f32 {
         return p.far_m;
     }
     let c = textureLoad(depth, xy, 0);
+    if (p.depth_metres == 1u) {
+        return max(c.r, 0.01);
+    }
     var d = clamp(channel_of(c), 0.0, 1.0);
     if (p.depth_invert == 1u) {
         d = 1.0 - d;

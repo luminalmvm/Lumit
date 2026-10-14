@@ -299,6 +299,7 @@ Map<String, String> get _built => {
       "Life jitter": l10n.fxLifeJitter,
       "Lifespan": l10n.fxLifespan,
       "Lighter colour": l10n.blendLighterColour,
+      "Light distance (m)": l10n.fxLightDistanceM,
       "Lightning": l10n.fxLightning,
       "Limiter": l10n.fxLimiter,
       "Line": l10n.fxLine,

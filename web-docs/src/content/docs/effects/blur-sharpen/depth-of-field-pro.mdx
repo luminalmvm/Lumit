@@ -20,8 +20,8 @@ Something near and blurred goes soft at its edges over what is behind it, which 
 through, the way a real lens sees a little round it.
 Bright pixels are drawn as whole bokeh shapes.
 
-The **Matte** is a depth pass from 0 to 1. Without one, the whole frame sits at
-**Farthest (m)**.
+The **Matte** is a depth pass from 0 to 1, and **Depth** is distance in metres. Without
+either, the whole frame sits at **Farthest (m)**.
 
 ## Parameters
 
@@ -31,6 +31,7 @@ The **Matte** is a depth pass from 0 to 1. Without one, the whole frame sits at
 | --- | --- | --- | --- | --- |
 | **Matte** | Layer | Any layer in the composition | None | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Depth** | Layer | Any layer in the composition | None | - |
 | **Lens** | Dropdown | 7Artisans · 50mm F0.95 · Angenieux · DEM 180mm F2.3 APO · Canon · 50mm f1.2 (1956) · Canon · 85mm f1.5 (1952) · Canon · EF 100mm f2.8 Macro · Canon · EF 400mm f2.8L IS II · Canon · EF 70-200mm f2.8L · Canon · FD 300mm f2.8 SSC Fluorite · Leica · Elmarit 90mm F2.8 · Leica · Summilux 35mm f1.4 · Leica · Summilux-C 100mm T1.4 · Meyer Görlitz · Kino Plasmat 100mm F2 · Meyer Görlitz · Orestor 135mm F2.8 · Ross · F10 APO Process Xpres · Voigtländer · Nokton 35mm F1.2 Asph · Voigtländer · Nokton 50mm F1.0 Asph · Zeiss · Arri Master Prime T1.3 50mm · Zeiss · Biotar 50mm F1.4 · Zeiss · Tessar 100mm F4.5 · Zeiss · Ultra Prime Sonnar 135mm T1.9 | Zeiss · Biotar 50mm F1.4 | - |
 | **Edit lens…** | Button | - | - | - |
 | **F-stop** | Slider | 0.95 to 22; down to 0.7 and up to 32 | 1.4 | - |
@@ -73,6 +74,8 @@ In the Effect Controls panel:
 
 - **Matte** is the depth pass, 0 at **Nearest (m)** and 1 at **Farthest (m)**.
 - **Invert** reads the depth pass inverted.
+- **Depth** is distance in metres, from a Precomp of a 3D composition or another lens
+  effect. It wins over the **Matte**.
 - **Lens** picks a bundled lens. A lens chosen in the lens window replaces it.
 - **Edit lens…** opens the lens window. See [The lens window](#the-lens-window).
 - **F-stop** is the working aperture. It cannot open wider than the lens.
@@ -108,6 +111,10 @@ Additional properties:
 
 - **Display**: **Final** is the blur, **Depth** the distance in metres it used.
 - **Mix**: how much of the result replaces the original.
+
+In a [node graph](/use/node-graphs/), **Depth** is a socket, the **Depth** view hands on
+the distance, **Focus distance (m)** hands out where the lens is focused, for Lens flare's
+**Focus (m)** to follow, and **F-stop** its aperture.
 
 ## The lens window
 

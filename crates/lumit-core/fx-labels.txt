@@ -535,6 +535,7 @@ Lifespan
 Lift
 Light colour
 Light direction
+Light distance (m)
 Light tint
 Light wrap
 Light x

@@ -118,6 +118,11 @@ A **Matte** socket takes an image wire as well as a matte wire. A row that picks
 a layer's stack is an image socket here: Light wrap's **Background**, Texturize's
 **Texture** and Set matte's source all arrive on a wire.
 
+A **Depth** socket carries distance in metres and takes only a depth wire. A Read box of a
+composition hands out how far its 3D layers are from its camera on **Depth**. Depth
+of field pro and Lens flare take one. Depth of field pro's **Focus distance (m)** and **F-stop**
+outputs are numbers.
+
 An effect with a view dropdown has an output socket for each view beside **Output**:
 Depth of field's **Rendered**, **Depth map** and **Focus map**, Motion blur's four views
 and Matte key's three. A view socket draws that view whatever the dropdown says, so the

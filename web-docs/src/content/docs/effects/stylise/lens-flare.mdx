@@ -60,6 +60,8 @@ aperture.
 | **Invert** | Checkbox | On or off | Off | - |
 | **Threshold** | Slider | 0 to 1; higher | 1 | - |
 | **Threshold softness** | Slider | 0 to 1; higher | 0.25 | - |
+| **Depth** | Layer | Any layer in the composition | None | - |
+| **Light distance (m)** | Slider | 1 to 1000; down to 0.01 and higher | 1000 | - |
 | **Quality** | Dropdown | Draft · Normal · High · Ultra | Normal | - |
 | **Blend** | Dropdown | Normal · Add · Screen · Multiply · Overlay · Soft light · Hard light · Lighten · Darken · Difference · Exclusion · Subtract · Divide | Add | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
@@ -68,6 +70,7 @@ In the Effect Controls panel:
 
 - **Lens options** groups **Focus (m)**, **Anamorphic squeeze**, **Blades**, **Rotation**, **Coating**, **Roundness**, **Softness**, and starts closed.
 - **Flare options** groups **Ghost intensity**, **Ghost softness**, **Max ghosts**, **Detail**, **Dispersion**, **Starburst intensity**, **Scale**, and starts closed.
+- **Light distance (m)** is editable while **Depth** names a layer.
 - **Matte** where the flare looks for its light sources, in Matte source mode: the parts of the matte brighter than Detect threshold are the lights, and everything else contributes nothing. **Invert** reads that matte inverted.
 
 {/* END GENERATED */}
@@ -123,6 +126,11 @@ The **Source** group:
 - **Threshold**: how bright a pixel must be to count as a light.
 - **Threshold softness**: how gradually sources fade in as they cross the
   threshold.
+- **Depth**: distance in metres, from a Precomp of a 3D composition or Depth of field pro. A
+  light with something nearer in front of it makes no flare, and each light's starburst
+  fades as the light goes out of focus.
+- **Light distance (m)**: how far away a Manual light or a Light layer is, read against
+  **Depth**.
 
 The remaining properties:
 

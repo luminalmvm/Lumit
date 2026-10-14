@@ -392,6 +392,8 @@ struct PipelineSet {
     /// `copy_texture_to_texture` cannot cross sample counts, and copying into
     /// the resolve target instead would be discarded by the first pass's load.
     seed: wgpu::RenderPipeline,
+    /// Scene depth: each 3D layer's distance, replacing what is under it.
+    depth: wgpu::RenderPipeline,
 }
 
 /// A running weighted sum of textures, in fp32, fed one at a time.
@@ -820,6 +822,7 @@ impl Compositor {
             // composites itself from the dst snapshot and writes the final value.
             snapshot: make("fs_layer_snapshot", None, "composite-snapshot"),
             seed: make("fs_seed", None, "composite-seed"),
+            depth: make("fs_layer_depth", None, "composite-depth"),
         }
     }
 
@@ -876,6 +879,128 @@ impl Compositor {
             Ok(mut map) => std::sync::Arc::clone(map.entry(key).or_insert_with(build)),
             Err(_) => build(),
         }
+    }
+
+    /// **Scene depth**: how far from the camera each pixel of the 3D layers is,
+    /// metres, drawn in the colour pass's own order so it matches what the
+    /// picture shows. A pixel no 3D layer covers at least half reads as far as
+    /// a half float goes. `metres_per_w` is the camera's zoom over its pixels
+    /// per metre.
+    ///
+    /// ponytail: track mattes and blend modes are not read here, so a layer
+    /// a matte cuts away still has a distance. Read them if a scene needs it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn composite_depth(
+        &self,
+        ctx: &GpuContext,
+        width: u32,
+        height: u32,
+        layers: &[CompositeLayer<'_>],
+        camera: Mat4,
+        metres_per_w: f32,
+        render_scale: f32,
+    ) -> wgpu::Texture {
+        let (tw, th) = scaled_size(width, height, render_scale);
+        let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("comp-depth"),
+            size: wgpu::Extent3d {
+                width: tw,
+                height: th,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: ctx.working(),
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let pipelines = self.pipelines(ctx, 1);
+        let binds: Vec<wgpu::BindGroup> = layers
+            .iter()
+            .filter(|l| l.three_d)
+            .map(|layer| {
+                let uniform = LayerUniform {
+                    matrix: layer
+                        .matrix(width as f32, height as f32, Some(&camera), None)
+                        .to_cols_array_2d(),
+                    params: [(layer.opacity / 100.0).clamp(0.0, 1.0), 0.0, 0.0, 0.0],
+                    target: [tw as f32, th as f32, 0.0, metres_per_w],
+                };
+                let buffer = wgpu::util::DeviceExt::create_buffer_init(
+                    &ctx.device,
+                    &wgpu::util::BufferInitDescriptor {
+                        label: Some("layer-depth-uniform"),
+                        contents: bytemuck::bytes_of(&uniform),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    },
+                );
+                let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+                ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("composite-depth-layer"),
+                    layout: &self.layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(&view(layer.texture)),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::TextureView(&view(&self.white)),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::TextureView(&view(&self.black)),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 5,
+                            resource: wgpu::BindingResource::TextureView(&view(
+                                layer.layer_mask.unwrap_or(&self.white),
+                            )),
+                        },
+                    ],
+                })
+            })
+            .collect();
+        let target_view = target.create_view(&Default::default());
+        let mut encoder = ctx.encoder("composite-depth");
+        {
+            let far = f64::from(half::f16::MAX.to_f32());
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("composite-depth"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: far,
+                            g: far,
+                            b: far,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            pass.set_pipeline(&pipelines.depth);
+            for bind in &binds {
+                pass.set_bind_group(0, bind, &[]);
+                pass.draw(0..6, 0..1);
+            }
+        }
+        drop(encoder);
+        target
     }
 
     /// Render layers bottom-up over a linear background colour; returns the

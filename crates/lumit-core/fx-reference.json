@@ -3541,6 +3541,13 @@
           "default": false
         },
         {
+          "id": "depth_m",
+          "label": "Depth",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
           "id": "lens_model",
           "label": "Lens",
           "kind": "choice",
@@ -20407,6 +20414,23 @@
           "hard_min": 0.0
         },
         {
+          "id": "depth_m",
+          "label": "Depth",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "light_distance_m",
+          "label": "Light distance (m)",
+          "kind": "float",
+          "unit": "raw",
+          "default": 1000.0,
+          "slider_min": 1.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.01
+        },
+        {
           "id": "quality",
           "label": "Quality",
           "kind": "choice",
@@ -20673,6 +20697,27 @@
               1
             ]
           }
+        },
+        {
+          "label": "",
+          "params": [
+            "light_distance_m"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "source_type",
+            "values": [
+              0,
+              2
+            ]
+          }
+        }
+      ],
+      "enabled_when": [
+        {
+          "param": "light_distance_m",
+          "on": "depth_m",
+          "cond": "layer_set"
         }
       ],
       "matte": {

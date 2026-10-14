@@ -37,7 +37,8 @@
 
 use crate::fx::lens_flare as lf;
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, ResolveCx, Value,
+    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
+    ResolveCx, Value,
 };
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;
@@ -239,7 +240,23 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
         visible_when: Some(("source_type", &[1])),
         visible_when_lens_elements: None,
     },
+    // A placed light's own distance: headerless, and only where the light is
+    // placed rather than found in the picture.
+    ParamGroup {
+        label: "",
+        params: &["light_distance_m"],
+        collapsed: false,
+        visible_when: Some(("source_type", &[0, 2])),
+        visible_when_lens_elements: None,
+    },
 ];
+
+/// Light distance only means something against a depth.
+pub const LENS_FLARE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "light_distance_m",
+    on: "depth_m",
+    cond: EnabledCond::LayerSet,
+}];
 
 /// The Lens flare's controls.
 ///
@@ -270,6 +287,7 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     // An additive light overlay, the Glow shape.
     premultiplied = true,
     groups = LENS_FLARE_GROUPS,
+    enabled_when = LENS_FLARE_ENABLED_WHEN,
     // The flare already declares a parameter called `matte`, and it means
     // something deeper than strength — it is where the flare *detects its
     // sources*. Naming the id claims it inside the flare's own maths and puts it
@@ -759,6 +777,25 @@ pub struct LensFlare {
     #[slider(min = 0.0, max = 1.0, default = 0.25, hard_min = 0.0, unit = Raw)]
     pub threshold_softness: f32,
 
+    /// Distance in metres per pixel, from a 3D precomp's Scene depth or Depth
+    /// of field pro. Set, a light with something nearer in front of it makes no
+    /// flare, and each light's starburst fades as it goes out of focus.
+    /// Decided by the render, so always `false` here.
+    #[layer(label = "Depth", self_default = false)]
+    pub depth_m: bool,
+
+    /// How far away a placed light is, metres, read against the Depth. A
+    /// found light sits at the depth under it.
+    #[slider(
+        label = "Light distance (m)",
+        min = 1.0,
+        max = 1000.0,
+        default = 1000.0,
+        hard_min = 0.01,
+        unit = Raw
+    )]
+    pub light_distance_m: f32,
+
     /// The ray-grid density and traced wavelength count; Draft renders the flare
     /// buffer at half resolution.
     #[choice(options = ["Draft", "Normal", "High", "Ultra"], default = 1)]
@@ -1016,6 +1053,10 @@ pub struct LensFlareDef;
 impl EffectDef for LensFlareDef {
     fn schema(&self) -> &'static EffectSchema {
         &<LensFlare as EffectMetadata>::SCHEMA
+    }
+
+    fn depth_inputs(&self) -> &'static [&'static str] {
+        &["depth_m"]
     }
 
     /// **Lights mode's sources**: the comp's own Light layers,

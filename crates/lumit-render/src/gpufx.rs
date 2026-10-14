@@ -2564,8 +2564,9 @@ impl GpuEffect for DofPro {
     fn aux(&self) -> AuxKind {
         AuxKind::LensFile
     }
-    /// The depth is the matte read as a 0..1 pass, as Depth of field's is.
-    /// Without one the whole frame sits at the far distance. The lens is traced in lumit-core only when no table for these
+    /// The depth is the Depth row's metres, else the matte read as a 0..1 pass,
+    /// as Depth of field's is. With neither the whole frame sits at the far
+    /// distance. The lens is traced in lumit-core only when no table for these
     /// optics is kept.
     fn run(
         &self,
@@ -2582,7 +2583,8 @@ impl GpuEffect for DofPro {
         let custom = aux.lens_file();
         let optics = e.bake_inputs(w, h);
         let text = custom.map(|(_, text)| text.clone());
-        let depth = aux.matte();
+        let metres = aux.layer_input();
+        let depth = metres.or(aux.matte());
         fx.lens_blur(
             ctx,
             tex,
@@ -2592,6 +2594,7 @@ impl GpuEffect for DofPro {
             &lumit_gpu::fx::LensBlurOp {
                 bake_key: lens_blur::bake_key(&optics, custom.map(|(hash, _)| *hash)),
                 depth_bound: depth.is_some(),
+                depth_metres: metres.is_some(),
                 display_depth: e.display == 1,
                 depth_channel: e
                     .depth_channel
@@ -3772,6 +3775,11 @@ impl GpuEffect for LensFlare {
     ) -> Tex {
         use lumit_core::fx::lens_flare as lf;
         let (matte, custom) = (aux.matte(), aux.lens_file());
+        // The Depth row's metres, with a placed light's own distance.
+        let depth = aux.layer_input().map(|d| {
+            let e = effects::lens_flare::LensFlare::read(p);
+            (d, e.light_distance_m.max(0.01))
+        });
         let (lights, light_count) = effects::lens_flare::LensFlare::lights_of(p);
         let params = effects::lens_flare::LensFlare::read(p).packed(lights, light_count);
         let p = &params;
@@ -3865,13 +3873,14 @@ impl GpuEffect for LensFlare {
             );
             lf::plan_frame_grids(grid, pb.spreads, &needs)
         };
-        fx.lens_flare(
+        fx.lens_flare_at_depth(
             ctx,
             tex,
             w,
             h,
             &op,
             matte,
+            depth,
             // The bake as something the bake thread can own and run: one
             // small `Arc` a flare a frame, beside a pass that traces hundreds of
             // thousands of rays. Whether it is actually run beside the frame or
