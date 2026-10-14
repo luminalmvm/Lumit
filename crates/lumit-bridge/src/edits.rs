@@ -377,3 +377,139 @@ pub(crate) fn link_copies(layers: &[Layer], moving: &[Uuid]) -> LinkCopies {
     }
     out
 }
+
+/// Hand `f` every composition id `comp` names: a Precomp layer's, a Sequence
+/// clip's, a node graph Read box's (which may be any project item) and a Node
+/// graph effect's. What `f` writes back is what the comp then names.
+pub(crate) fn visit_comp_refs(
+    comp: &mut lumit_core::model::Composition,
+    f: &mut dyn FnMut(&mut Uuid),
+) {
+    use lumit_core::comp_graph::GraphNode;
+    use lumit_core::fx::effects::node_graph;
+
+    fn effects(list: &mut [lumit_core::model::EffectInstance], f: &mut dyn FnMut(&mut Uuid)) {
+        for inst in list {
+            if inst.effect.match_name != lumit_core::comp_graph::NODE_GRAPH {
+                continue;
+            }
+            let Some(was) = node_graph::comp_of(inst) else {
+                continue;
+            };
+            let mut id = was;
+            f(&mut id);
+            if id != was {
+                if let Some(serde_json::Value::Object(bound)) =
+                    inst.extra.get_mut(node_graph::EXTRA_KEY)
+                {
+                    bound.insert("comp".into(), id.to_string().into());
+                }
+            }
+        }
+    }
+
+    for layer in &mut comp.layers {
+        match &mut layer.kind {
+            LayerKind::Precomp { comp } => f(comp),
+            LayerKind::Sequence { clips } => {
+                for clip in clips {
+                    if let lumit_core::sequence::ClipSource::Comp(id) = &mut clip.source {
+                        f(id);
+                    }
+                }
+            }
+            _ => {}
+        }
+        effects(&mut layer.effects, f);
+    }
+    for group in &mut comp.groups {
+        effects(&mut group.effects, f);
+    }
+    if let Some(graph) = &mut comp.graph {
+        for node in &mut graph.nodes {
+            match node {
+                GraphNode::Read { item, .. } => f(item),
+                GraphNode::Fx(inst) => effects(std::slice::from_mut(inst), f),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// The compositions `comp` nests directly, each once, in the order met.
+pub(crate) fn nested_comps(
+    doc: &lumit_core::model::Document,
+    comp: &lumit_core::model::Composition,
+) -> Vec<Uuid> {
+    let mut found = Vec::new();
+    visit_comp_refs(&mut comp.clone(), &mut |id| {
+        if doc.comp(*id).is_some() && !found.contains(id) {
+            found.push(*id);
+        }
+    });
+    found
+}
+
+/// Give everything `comps` hold fresh ids: layers, effects, graph boxes,
+/// masks, clips, markers, anything stored with an `id` of its own. Whatever
+/// names one of them inside `comps` (a parent, a matte, a layer parameter, a
+/// wire, a box's place) follows it to the new id. What they name outside
+/// keeps pointing where it did. The comps' own ids are left alone.
+pub(crate) fn fresh_ids(comps: &mut [lumit_core::model::Composition]) -> Option<()> {
+    use serde_json::Value;
+    use std::collections::HashMap;
+
+    fn collect(value: &Value, fresh: &mut HashMap<String, String>) {
+        match value {
+            Value::Object(fields) => {
+                if let Some(Value::String(id)) = fields.get("id") {
+                    if Uuid::try_parse(id).is_ok() {
+                        fresh
+                            .entry(id.clone())
+                            .or_insert_with(|| Uuid::now_v7().to_string());
+                    }
+                }
+                fields.values().for_each(|v| collect(v, fresh));
+            }
+            Value::Array(list) => list.iter().for_each(|v| collect(v, fresh)),
+            _ => {}
+        }
+    }
+
+    fn repoint(value: &mut Value, fresh: &HashMap<String, String>) {
+        match value {
+            Value::String(s) => {
+                if let Some(id) = fresh.get(s.as_str()) {
+                    s.clone_from(id);
+                }
+            }
+            Value::Object(fields) => {
+                *fields = std::mem::take(fields)
+                    .into_iter()
+                    .map(|(k, mut v)| {
+                        repoint(&mut v, fresh);
+                        (fresh.get(&k).cloned().unwrap_or(k), v)
+                    })
+                    .collect();
+            }
+            Value::Array(list) => list.iter_mut().for_each(|v| repoint(v, fresh)),
+            _ => {}
+        }
+    }
+
+    let values: Vec<Value> = comps
+        .iter()
+        .map(serde_json::to_value)
+        .collect::<Result<_, _>>()
+        .ok()?;
+    let mut fresh = HashMap::new();
+    values.iter().for_each(|v| collect(v, &mut fresh));
+    for comp in comps.iter() {
+        fresh.remove(&comp.id.to_string());
+    }
+    for (comp, mut value) in comps.iter_mut().zip(values) {
+        repoint(&mut value, &fresh);
+        *comp = serde_json::from_value(value).ok()?;
+    }
+    Some(())
+}

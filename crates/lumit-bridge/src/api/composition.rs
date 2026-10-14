@@ -2109,6 +2109,109 @@ impl CompositionReference {
         self.add_at(layer, None)
     }
 
+    /// Whether this comp nests another composition, which is when Duplicate
+    /// asks whether the copy shares it or gets its own.
+    #[frb(sync)]
+    pub fn has_nested_comps(&self) -> Result<bool, BridgeError> {
+        let doc = self.document()?;
+        Ok(!crate::edits::nested_comps(&doc, &self.composition()?).is_empty())
+    }
+
+    /// **Duplicate**: a copy of this comp under a free name ("Scene copy"),
+    /// filed beside it, keeping everything it holds: layers, node graph,
+    /// positions, markers and work area.
+    ///
+    /// The nested comps are shared with the original unless `separate` asks
+    /// for copies, which go all the way down, one copy per comp however often
+    /// it is used. Every layer, effect and box in a copy gets a fresh id, so
+    /// nothing is mistaken for its original. One undo step.
+    #[frb(sync)]
+    pub fn duplicate(&self, separate: bool) -> Result<CompositionReference, BridgeError> {
+        use lumit_core::model::ProjectItem;
+        use lumit_core::Op;
+        use std::collections::HashMap;
+
+        let doc = self.document()?;
+        let mut copies: HashMap<Uuid, Uuid> = HashMap::from([(self.id, Uuid::now_v7())]);
+        let mut order = vec![self.id];
+        let mut next = 0;
+        while separate && next < order.len() {
+            let comp = doc.comp(order[next]).ok_or(BridgeError::InvalidComp)?;
+            for nested in crate::edits::nested_comps(&doc, comp) {
+                if let std::collections::hash_map::Entry::Vacant(slot) = copies.entry(nested) {
+                    slot.insert(Uuid::now_v7());
+                    order.push(nested);
+                }
+            }
+            next += 1;
+        }
+
+        let mut names: Vec<String> = doc.items.iter().map(|i| i.name().to_owned()).collect();
+        let mut folders: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+        let mut made = Vec::new();
+        for id in &order {
+            let mut comp = doc.comp(*id).ok_or(BridgeError::InvalidComp)?.clone();
+            comp.id = copies[id];
+            let base = format!("{} copy", comp.name);
+            comp.name = (1..)
+                .map(|n| {
+                    if n == 1 {
+                        base.clone()
+                    } else {
+                        format!("{base} {n}")
+                    }
+                })
+                .find(|name| !names.contains(name))
+                .unwrap_or_default();
+            names.push(comp.name.clone());
+            crate::edits::visit_comp_refs(&mut comp, &mut |nested| {
+                if let Some(copy) = copies.get(nested) {
+                    *nested = *copy;
+                }
+            });
+            made.push(comp);
+            // Filed in the original's folder, just after it.
+            let home = doc.items.iter().find_map(|i| match i {
+                ProjectItem::Folder(f) if f.children.contains(id) => Some(f),
+                _ => None,
+            });
+            if let Some(folder) = home {
+                let children = folders
+                    .entry(folder.id)
+                    .or_insert_with(|| folder.children.clone());
+                let at = children
+                    .iter()
+                    .position(|c| c == id)
+                    .map_or(children.len(), |i| i + 1);
+                children.insert(at, copies[id]);
+            }
+        }
+        // All at once, so a separate copy that names a layer in another one
+        // follows it to its new id.
+        crate::edits::fresh_ids(&mut made).ok_or(BridgeError::InvalidComp)?;
+        let mut ops: Vec<Op> = made
+            .into_iter()
+            .enumerate()
+            .map(|(n, comp)| Op::AddItem {
+                index: doc.items.len() + n,
+                item: Box::new(ProjectItem::Composition(comp)),
+            })
+            .collect();
+        for (id, copy) in &copies {
+            if let Some(label) = doc.item_labels.get(id) {
+                ops.push(Op::SetItemLabel {
+                    id: *copy,
+                    label: *label,
+                });
+            }
+        }
+        for (folder, children) in folders {
+            ops.push(Op::SetFolderChildren { folder, children });
+        }
+        self.commit(Op::Batch { ops })?;
+        Ok(CompositionReference::new(self.project, copies[&self.id]))
+    }
+
     /// Insert `layer` on `row`, soloed if the comp is showing only soloed
     /// layers ([`crate::edits::solo_on_arrival`]).
     #[frb(ignore)]
@@ -4462,6 +4565,49 @@ mod group_tests {
             layers[3].get_matte().expect("matte").expect("matted").layer,
             all[2]
         );
+    }
+
+    /// A duplicate is a comp of its own: fresh layer and effect ids, parent
+    /// and matte on its own layers, the original untouched, one undo.
+    #[test]
+    fn duplicating_a_comp_gives_its_layers_fresh_ids() {
+        use crate::api::layer::BridgeMatte;
+        let (project, comp, layers) = comp_with_four();
+        let all = ids(&layers);
+        layers[1].set_parent(Some(all[0]), 0).expect("parented");
+        layers[3]
+            .set_matte(Some(BridgeMatte {
+                layer: all[2],
+                luma: false,
+                inverted: false,
+            }))
+            .expect("matted");
+        layers[2].add_effect("blur".into()).expect("an effect");
+        let before = comp.composition().expect("original");
+
+        let copy = comp
+            .duplicate(false)
+            .expect("duplicated")
+            .composition()
+            .expect("copy");
+        let every_id = |c: &lumit_core::model::Composition| -> Vec<Uuid> {
+            c.layers
+                .iter()
+                .flat_map(|l| std::iter::once(l.id).chain(l.effects.iter().map(|e| e.id)))
+                .collect()
+        };
+        let (old, new) = (every_id(&before), every_id(&copy));
+        assert_eq!(new.len(), 5);
+        assert!(new.iter().all(|id| !old.contains(id)), "no id is kept");
+        assert_eq!(copy.layers[1].parent, Some(copy.layers[0].id));
+        assert_eq!(
+            copy.layers[3].matte.map(|m| m.layer),
+            Some(copy.layers[2].id)
+        );
+        assert_eq!(comp.composition().expect("original"), before);
+
+        project.undo().expect("undo");
+        assert!(comp.document().expect("document").comp(copy.id).is_none());
     }
 
     /// *Pre-compose group* carries the header's stack onto the new Precomp

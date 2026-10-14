@@ -135,6 +135,18 @@ void exportQueueRemove({required int id}) =>
 void exportQueueMove({required int id, required int index}) =>
     BridgeLib.instance.api.crateApiExportExportQueueMove(id: id, index: index);
 
+/// Whether an export in format `codec` to `path` would write over a file
+/// already there, or over one still waiting in the queue. For an image
+/// sequence the file asked about is frame one.
+bool exportPathTaken({required String path, required String codec}) =>
+    BridgeLib.instance.api
+        .crateApiExportExportPathTaken(path: path, codec: codec);
+
+/// Keep both: the first free `name_2.ext`, `name_3.ext`, … beside `path`.
+String exportFreePath({required String path, required String codec}) =>
+    BridgeLib.instance.api
+        .crateApiExportExportFreePath(path: path, codec: codec);
+
 /// The crop an export actually applies, and the frame it leaves — the answer
 /// `crop_for` gives for the typed insets and the Viewer's region together.
 class BridgeCrop {

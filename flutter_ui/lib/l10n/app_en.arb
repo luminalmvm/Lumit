@@ -6031,6 +6031,26 @@
   "@menuDuplicate": {
     "description": "Menu item."
   },
+  "menuDuplicateComposition": "Duplicate composition",
+  "@menuDuplicateComposition": {
+    "description": "Composition menu item: make a copy of the open composition, under a free name beside it in the Project panel."
+  },
+  "duplicateNestedTitle": "Nested compositions",
+  "@duplicateNestedTitle": {
+    "description": "Title of the question asked when a composition being duplicated has other compositions inside it."
+  },
+  "duplicateNestedQuestion": "The copy can share the compositions inside this one, so an edit shows in both, or get copies of its own.",
+  "@duplicateNestedQuestion": {
+    "description": "The question asked when duplicating a composition that has other compositions nested in it. Sharing means one nested composition used by both; separate copies means each gets its own."
+  },
+  "duplicateNestedShare": "Share with the original",
+  "@duplicateNestedShare": {
+    "description": "Button: the copy uses the same nested compositions as the original, so editing one shows in both."
+  },
+  "duplicateNestedSeparate": "Make separate copies",
+  "@duplicateNestedSeparate": {
+    "description": "Button: the copy gets its own copies of every nested composition, all the way down."
+  },
   "menuEdit": "Edit",
   "@menuEdit": {
     "description": "Menu item."
