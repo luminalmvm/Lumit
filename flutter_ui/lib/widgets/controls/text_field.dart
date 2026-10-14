@@ -145,6 +145,11 @@ class _HouseTextFieldState extends State<HouseTextField>
   late FocusNode _focus;
   final GlobalKey<EditableTextState> textFieldKey = GlobalKey();
   final layerLink = LayerLink();
+
+  // Made once, not per build: it keeps where a drag started, and the field
+  // rebuilds on every selection change. A new one mid-drag forgot how far the
+  // text had scrolled, so selecting in scrolled code jumped.
+  late final _gestures = TextSelectionGestureDetectorBuilder(delegate: this);
   OverlayEntry? _overlay;
 
   @override
@@ -428,8 +433,7 @@ class _HouseTextFieldState extends State<HouseTextField>
               onPointerDown: (_) {
                 if (!_focus.hasFocus) _focus.requestFocus();
               },
-              child: TextSelectionGestureDetectorBuilder(delegate: this)
-                  .buildGestureDetector(
+              child: _gestures.buildGestureDetector(
                 child: CompositedTransformTarget(
                   link: layerLink,
                   child: EditableText(
