@@ -285,6 +285,7 @@ pub struct Broker {
     ring_frame: (usize, usize),
     link: Option<Link>,
     descriptors: Vec<PluginDescriptor>,
+    refused: Vec<String>,
     instances: BTreeMap<InstanceId, InstanceRecord>,
     next_instance: InstanceId,
     next_slot: Slot,
@@ -338,6 +339,7 @@ impl Broker {
             ring_frame,
             link: None,
             descriptors: Vec::new(),
+            refused: Vec::new(),
             instances: BTreeMap::new(),
             next_instance: 1,
             next_slot: 0,
@@ -478,8 +480,9 @@ impl Broker {
     pub fn describe(&mut self) -> Result<&[PluginDescriptor], BrokerError> {
         let deadline = describe_deadline(&self.config.quirks);
         match self.action(&HostMessage::Describe, deadline, None) {
-            Ok(BrokerMessage::Described { plugins }) => {
+            Ok(BrokerMessage::Described { plugins, refused }) => {
                 self.descriptors = plugins;
+                self.refused = refused;
                 Ok(&self.descriptors)
             }
             Ok(_) => Err(BrokerError::Unexpected(
@@ -507,6 +510,12 @@ impl Broker {
     #[must_use]
     pub fn descriptors(&self) -> &[PluginDescriptor] {
         &self.descriptors
+    }
+
+    /// The plugins the last description turned away, one line each saying why.
+    #[must_use]
+    pub fn refused(&self) -> &[String] {
+        &self.refused
     }
 
     /// The plugin's render deadline, as the quirks table set it.
@@ -1061,7 +1070,7 @@ impl Broker {
         self.start(&fresh_identifier()?)?;
 
         let control = self.config.quirks.control_timeout;
-        if let Ok(BrokerMessage::Described { plugins }) =
+        if let Ok(BrokerMessage::Described { plugins, .. }) =
             self.exchange(&HostMessage::Describe, control, None)
         {
             self.descriptors = plugins;
