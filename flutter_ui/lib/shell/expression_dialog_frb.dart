@@ -96,6 +96,7 @@ class _ExpressionBodyState extends State<_ExpressionBody> {
               width: double.infinity,
               autofocus: true,
               multiline: true,
+              indentOnTab: true,
               style: t.mono,
               hint: l10n.expressionHint,
             ),

@@ -736,6 +736,7 @@ class _CodeWell extends StatelessWidget {
                     key: const ValueKey<String>('shader-editor-code'),
                     controller: text,
                     multiline: true,
+                    indentOnTab: true,
                     scrollController: scroll,
                     autofocus: true,
                     topAlign: true,
