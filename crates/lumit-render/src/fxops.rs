@@ -801,28 +801,15 @@ fn spread_room(
     [texels(across, w), texels(down, h)]
 }
 
-/// The x and y pairs in pixels that are a distance and not a place on the
-/// picture, by the name they share: Offset's Shift. Every other one is a
-/// place, as a Centre or a noise field's origin is, and goes in with the
-/// picture when an op above has given it room.
-const DISTANCES: &[&str] = &["shift"];
-
 /// `p` with every place it names moved `by` texels right and down.
 fn places_moved(
     schema: &lumit_core::fx::EffectSchema,
     p: lumit_core::fx::Params<'_>,
     by: [u32; 2],
 ) -> Vec<(lumit_core::fx::ParamId, lumit_core::fx::Value)> {
-    use lumit_core::fx::{ParamId, Unit, Value};
-    let px = |id: &str| {
-        schema
-            .params
-            .iter()
-            .any(|row| row.id == id && row.unit == Unit::Px)
-    };
+    use lumit_core::fx::{ParamId, Value};
     let slides: Vec<(ParamId, f32)> = schema
-        .pairs()
-        .filter(|pair| px(pair.x) && px(pair.y) && !DISTANCES.contains(&pair.stem))
+        .place_pairs()
         .flat_map(|pair| {
             [
                 (ParamId::new(pair.x), by[0] as f32),

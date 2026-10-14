@@ -780,6 +780,40 @@ impl ResolvedStack {
         }
     }
 
+    /// Set every op down on a bigger raster: each place it names moved `by`
+    /// raster pixels right and down, and told where the frame is on that
+    /// raster under [`super::FRAME_RECT`]. A node graph box whose picture
+    /// reaches past the frame runs this way.
+    pub fn set_in(&mut self, by: [f32; 2], frame: [f32; 4]) {
+        let mut entries = Vec::with_capacity(self.entries.len() + self.ops.len());
+        for op in &mut self.ops {
+            let places: Vec<_> = op.def.schema().place_pairs().collect();
+            let start = entries.len() as u32;
+            for &(id, value) in self
+                .entries
+                .get(op.span.start as usize..op.span.end as usize)
+                .unwrap_or(&[])
+            {
+                let shift = places.iter().find_map(|pair| {
+                    if id == ParamId::new(pair.x) {
+                        Some(by[0])
+                    } else if id == ParamId::new(pair.y) {
+                        Some(by[1])
+                    } else {
+                        None
+                    }
+                });
+                entries.push(match (value, shift) {
+                    (Value::Float(v), Some(d)) => (id, Value::Float(v + d)),
+                    _ => (id, value),
+                });
+            }
+            entries.push((super::FRAME_RECT, Value::Vec4(frame)));
+            op.span = start..entries.len() as u32;
+        }
+        self.entries = entries;
+    }
+
     /// Feed the whole stack into a frame key, field by field — every op's
     /// [`ResolvedFx::feed_hash`] in stack order.
     ///

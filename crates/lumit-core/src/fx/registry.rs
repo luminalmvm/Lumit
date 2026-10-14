@@ -492,6 +492,17 @@ pub trait EffectDef: Sync + Send + 'static {
         [0.0, 0.0]
     }
 
+    /// Where this op's picture can reach, given where the picture it is
+    /// handed reaches: `[left, top, right, bottom]` in the raster pixels its
+    /// places are measured in. A node graph box gives its picture that much
+    /// room, so a Transform that moves it off the frame keeps what it moved.
+    ///
+    /// The rectangle it was handed for every effect that stays inside its
+    /// picture, which is the default.
+    fn bounds(&self, _p: super::params::Params<'_>, rect: [f32; 4]) -> [f32; 4] {
+        rect
+    }
+
     /// The source-relative frame offsets **this instance** reads at this layer
     /// frame, the picture-side twin of [`driver_window`](EffectDef::driver_window).
     ///
