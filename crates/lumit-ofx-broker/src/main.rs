@@ -185,8 +185,8 @@ impl Session {
                 Ok(())
             }
             HostMessage::Describe => {
-                let plugins = self.describe_all();
-                self.reply(&BrokerMessage::Described { plugins })
+                let (plugins, refused) = self.describe_all();
+                self.reply(&BrokerMessage::Described { plugins, refused })
             }
             HostMessage::CreateInstance {
                 instance,
@@ -264,21 +264,26 @@ impl Session {
         }
     }
 
-    /// Describe every plugin in the bundle, keeping the ones that succeeded.
-    fn describe_all(&mut self) -> Vec<PluginDescriptor> {
+    /// Describe every plugin in the bundle, keeping the ones that succeeded,
+    /// and say why each of the others was turned away.
+    fn describe_all(&mut self) -> (Vec<PluginDescriptor>, Vec<String>) {
         self.described.clear();
+        let mut refused = Vec::new();
         for (index, plugin) in self.bundle.plugins().iter().enumerate() {
             if !plugin.is_supported_image_effect() {
                 continue;
             }
-            if let Ok(descriptor) = describe(plugin) {
-                self.described.push((index, descriptor));
+            match describe(plugin) {
+                Ok(descriptor) => self.described.push((index, descriptor)),
+                Err(reason) => refused.push(format!("{}: {reason}", plugin.identifier)),
             }
         }
-        self.described
+        let plugins = self
+            .described
             .iter()
             .map(|(_, descriptor)| descriptor.clone())
-            .collect()
+            .collect();
+        (plugins, refused)
     }
 
     /// Make one instance.

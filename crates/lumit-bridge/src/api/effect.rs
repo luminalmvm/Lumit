@@ -353,6 +353,17 @@ pub fn rescan_plugins() -> BridgePluginScan {
         skipped: outcome.skipped,
     };
     scan_audio_plugins(&prefs, &mut scan);
+    // Written beside plugins.json so someone whose plugin is missing can send
+    // us why. Only when something was turned away, so the last report stays.
+    if !scan.skipped.is_empty() {
+        if let Some(dir) = lumit_project::plugin_prefs_path()
+            .as_deref()
+            .and_then(std::path::Path::parent)
+        {
+            let _ = std::fs::create_dir_all(dir);
+            let _ = std::fs::write(dir.join("plugin-scan.txt"), scan.skipped.join("\n"));
+        }
+    }
     scan
 }
 

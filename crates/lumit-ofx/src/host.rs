@@ -180,6 +180,13 @@ pub fn host_for_presentation(name: Option<&str>) -> Result<*const OfxHost, Statu
     };
     let mut props = host_property_set();
     props.set(keys::NAME, PropValue::string(name)?);
+    // Newer Universe also checks the version, and only takes Resolve 19 and
+    // up, so Resolve's name comes with a Resolve version and label.
+    if name == "DaVinciResolve" {
+        props.set(keys::LABEL, PropValue::string("DaVinci Resolve")?);
+        props.set(keys::VERSION, PropValue::Int(vec![20, 0, 0]));
+        props.set(keys::VERSION_LABEL, PropValue::string("20.0.0")?);
+    }
     let handle = state().props.insert(props)?;
     Ok(Box::into_raw(Box::new(OfxHost {
         host: handle.as_ptr(),
