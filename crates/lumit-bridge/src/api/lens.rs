@@ -234,6 +234,47 @@ pub fn lens_drawing(lens: BridgeLens) -> Vec<BridgeLensLine> {
         .collect()
 }
 
+/// One ray of the drawing: (z, y) pairs in mm, as [`BridgeLensLine`] has them.
+#[derive(Debug, Clone)]
+pub struct BridgeLensRay {
+    pub points: Vec<f32>,
+    /// An element edge or the iris stopped it.
+    pub clipped: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct BridgeLensRays {
+    pub rays: Vec<BridgeLensRay>,
+    pub sensor_z_mm: f32,
+    /// The iris's radius at this f-stop, and wide open, mm.
+    pub stop_r_mm: f32,
+    pub stop_full_mm: f32,
+    /// The widest the lens opens.
+    pub native_fstop: f32,
+}
+
+/// Parallel rays through the lens at `field_deg` off the axis, at `fstop`.
+/// `None` for a lens with no stop.
+#[frb(sync)]
+pub fn lens_rays(lens: BridgeLens, fstop: f32, field_deg: f32) -> Option<BridgeLensRays> {
+    let fan =
+        lumit_core::fx::lens_blur::ray_fan(&lens::write(&rows_of(&lens)), fstop, field_deg, 21)?;
+    Some(BridgeLensRays {
+        rays: fan
+            .rays
+            .into_iter()
+            .map(|r| BridgeLensRay {
+                points: r.points.into_iter().flatten().collect(),
+                clipped: r.clipped,
+            })
+            .collect(),
+        sensor_z_mm: fan.sensor_z_mm,
+        stop_r_mm: fan.stop_r_mm,
+        stop_full_mm: fan.stop_full_mm,
+        native_fstop: fan.native_fstop,
+    })
+}
+
 impl BridgeEffectInstance {
     /// The lens this effect keeps, which wins over its Lens row.
     #[frb(sync)]

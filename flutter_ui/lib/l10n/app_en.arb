@@ -19638,7 +19638,11 @@
   },
   "lensAddSurface": "Add surface",
   "@lensAddSurface": {
-    "description": "Lens window, button under the surface table: add a surface to the lens."
+    "description": "Lens window, tooltip on the plus under the surface table's last row: add a surface to the lens."
+  },
+  "lensFieldAngle": "Field angle",
+  "@lensFieldAngle": {
+    "description": "Lens window, slider under the lens drawing: how far off centre the drawn rays come in, in degrees. Only changes the drawing."
   },
   "lensSave": "Save to your lenses",
   "@lensSave": {

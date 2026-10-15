@@ -640,3 +640,145 @@ pub fn bake(p: &BokehLens, lens_text: Option<&str>) -> Option<BokehBake> {
         focal_mm: lens.focal,
     })
 }
+
+/// One ray of the lens window's drawing: `(z, y)` points in mm, front vertex
+/// at z 0, and whether an element edge or the iris stopped it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FanRay {
+    pub points: Vec<[f32; 2]>,
+    pub clipped: bool,
+}
+
+/// The lens window's ray drawing.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RayFan {
+    pub rays: Vec<FanRay>,
+    /// Where the sensor sits at best focus, mm.
+    pub sensor_z_mm: f32,
+    /// The iris's radius at this f-stop, and wide open, mm.
+    pub stop_r_mm: f32,
+    pub stop_full_mm: f32,
+    /// The widest the lens opens.
+    pub native_fstop: f32,
+}
+
+impl Lens {
+    /// One green ray in the drawing's plane, every hit kept, run on a little
+    /// past the sensor if it gets through.
+    fn path(&self, mut p: [f32; 3], mut d: [f32; 3]) -> FanRay {
+        let mut points = vec![[p[2], p[1]]];
+        let mut n1 = 1.0;
+        for s in &self.surfaces {
+            let Some((hit, n)) = intersect(p, d, s.radius_mm, s.z_mm) else {
+                return FanRay::stopped(points);
+            };
+            points.push([hit[2], hit[1]]);
+            let r = if s.is_stop > 0.5 {
+                self.stop_r
+            } else {
+                s.semi_ap_mm
+            };
+            if hit[1].abs() > r {
+                return FanRay::stopped(points);
+            }
+            let n2 = ior_at(s, LAMBDA_UM[1], 1.0);
+            let Some(next) = refract3(d, n, n1 / n2) else {
+                return FanRay::stopped(points);
+            };
+            (d, n1, p) = (next, n2, hit);
+        }
+        let last = self.surfaces.last().map_or(0.0, |s| s.z_mm);
+        let end = self.sensor_z + 0.3 * (self.sensor_z - last).abs();
+        if d[2] > 1e-6 {
+            points.push([end, p[1] + d[1] * (end - p[2]) / d[2]]);
+        }
+        FanRay {
+            points,
+            clipped: false,
+        }
+    }
+}
+
+impl FanRay {
+    fn stopped(points: Vec<[f32; 2]>) -> Self {
+        Self {
+            points,
+            clipped: true,
+        }
+    }
+}
+
+/// `count` parallel rays across the front glass at `field_deg` off the axis,
+/// traced with the bake's own surfaces, iris and best focus.
+pub fn ray_fan(text: &str, fstop: f32, field_deg: f32, count: usize) -> Option<RayFan> {
+    let mut rx = parse_lens(text)?;
+    for s in &mut rx.surfaces {
+        s.semi_ap_mm *= 0.5;
+    }
+    let stop_full = rx
+        .surfaces
+        .iter()
+        .find(|s| s.is_stop > 0.5)
+        .map(|s| s.semi_ap_mm)?;
+    let front_z = rx.surfaces[0].z_mm;
+    let start_z = front_z - 10.0;
+    let mut lens = Lens {
+        surfaces: rx.surfaces,
+        stop_r: stop_full,
+        sensor_z: rx.sensor_z_mm,
+        focal: rx.focal_mm,
+        glass_dirt: 0.0,
+    };
+    let native = lens.focal / (2.0 * lens.entrance_pupil(start_z).max(0.05));
+    lens.stop_r = stop_full * (native / fstop.max(native)).clamp(0.02, 1.0);
+    let front = lens.surfaces[0].semi_ap_mm;
+    let across = |n: usize, i: usize| front * ((i as f32 + 0.5) / n as f32 * 2.0 - 1.0);
+
+    // Best focus as the bake finds it, from rays on the axis, each weighted by
+    // its height so the fan counts like the round pupil.
+    let iris = Iris {
+        blades: 16,
+        roundness: 1.0,
+        rot: 0.0,
+    };
+    let (mut ab, mut bb) = (0.0_f32, 0.0_f32);
+    for i in 0..64 {
+        let y = across(64, i);
+        if let Some(r) = lens.trace(
+            [0.0, y, start_z],
+            [0.0, 0.0, 1.0],
+            LAMBDA_UM[1],
+            1.0,
+            Some(iris),
+        ) {
+            let a = r.p[1] + r.t[1] * (lens.sensor_z - r.p[2]);
+            ab += y.abs() * a * r.t[1];
+            bb += y.abs() * r.t[1] * r.t[1];
+        }
+    }
+    if bb > 0.0 {
+        lens.sensor_z -= ab / bb;
+    }
+
+    let theta = field_deg.to_radians();
+    let dir = [0.0, theta.sin(), theta.cos()];
+    let rays = (0..count.max(1))
+        .map(|i| {
+            lens.path(
+                [
+                    0.0,
+                    across(count, i) - theta.tan() * (front_z - start_z),
+                    start_z,
+                ],
+                dir,
+            )
+        })
+        .collect();
+    Some(RayFan {
+        rays,
+        sensor_z_mm: lens.sensor_z,
+        stop_r_mm: lens.stop_r,
+        stop_full_mm: stop_full,
+        native_fstop: native,
+    })
+}
