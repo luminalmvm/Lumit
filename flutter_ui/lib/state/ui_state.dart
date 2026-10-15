@@ -494,7 +494,9 @@ class LumitUiState extends ChangeNotifier {
 
   /// The extensions installed, and which pane each is shown in. Not lazy:
   /// the dock asks it what to call an extension's tab from the first frame.
-  late final ExtensionService extensions = ExtensionService(workspace);
+  /// So it is made in the constructor: given its value here it would wait
+  /// for its first use.
+  late final ExtensionService extensions;
 
   /// Whether the extension [id] has its panel in the arrangement.
   bool extensionShown(String id) =>
@@ -2473,6 +2475,7 @@ class LumitUiState extends ChangeNotifier {
     // every keypress goes through it and the settings page edits it, so it
     // wants the same lifetime as the rest of the session's UI state.
     keymap = KeymapState(workspace: this.workspace);
+    extensions = ExtensionService(this.workspace);
     // The cache budgets: live engine state with no store behind it, so the
     // settings file carries the user's choice and hands it back here (the
     // engine's own sizing only picks the *default*). Null means untouched —
