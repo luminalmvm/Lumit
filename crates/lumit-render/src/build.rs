@@ -4316,10 +4316,6 @@ impl GraphLower<'_> {
         use lumit_core::graph::{INPUT_PORT, MATTE_PORT, OUTPUT_PORT};
 
         let output = graph.output_id()?;
-        // What the Output reaches, in the order a box's sources land before
-        // the box. A box nothing consumes never enters the plan, and one
-        // inside a loop - refused at the edit - is simply left out.
-        let order = graph.cone_of(output);
 
         // The value half, once for the whole graph (§2.2): the Inputs baked
         // into the parameters they feed, and the driver wires as the layer
@@ -4350,6 +4346,45 @@ impl GraphLower<'_> {
         // rescales them to whatever raster it walks at - the same correction a
         // Precomp layer's stack takes.
         let diag = ((plan.width as f32).powi(2) + (plan.height as f32).powi(2)).sqrt();
+        // The socket each Switch shows at this frame, worked out before
+        // anything is lowered, so what sits behind the other sockets is never
+        // decoded or drawn. A bypassed Switch shows its first.
+        let picks: Vec<(Uuid, i64)> = graph
+            .nodes
+            .iter()
+            .filter_map(|node| match node {
+                GraphNode::Fx(inst) if inst.effect.match_name == lumit_core::comp_graph::SWITCH => {
+                    let inst = projection
+                        .effects
+                        .iter()
+                        .find(|p| p.id == inst.id)
+                        .unwrap_or(inst);
+                    let index = if inst.enabled {
+                        let rows = lumit_core::fx::resolve_instance(
+                            inst,
+                            &drivers,
+                            self.t,
+                            diag,
+                            1.0,
+                            &markers,
+                            context.clone(),
+                        );
+                        let index = rows.iter().next().map_or(0, |op| {
+                            op.params.int(lumit_core::fx::ParamId::new("index"), 0)
+                        });
+                        index
+                    } else {
+                        0
+                    };
+                    Some((inst.id, i64::from(index)))
+                }
+                _ => None,
+            })
+            .collect();
+        // What the Output reaches, in the order a box's sources land before
+        // the box. A box nothing consumes never enters the plan, and one
+        // inside a loop - refused at the edit - is simply left out.
+        let order = graph.cone_picked(output, &picks);
 
         // Which step each box's output landed on, in the order they were
         // lowered. Keyed by socket too, since a Split channels box has four
@@ -4522,18 +4557,7 @@ impl GraphLower<'_> {
                             Some(plan.steps.len() - 1)
                         }
                         lumit_core::comp_graph::SWITCH => {
-                            let rows = lumit_core::fx::resolve_instance(
-                                inst,
-                                &drivers,
-                                self.t,
-                                diag,
-                                1.0,
-                                &markers,
-                                context.clone(),
-                            );
-                            let index = rows.iter().next().map_or(0, |op| {
-                                op.params.int(lumit_core::fx::ParamId::new("index"), 0)
-                            });
+                            let index = picks.iter().find(|(p, _)| *p == id).map_or(0, |p| p.1);
                             // As many sockets as are wired. Capped for the
                             // reason `ports_of` caps: the highest index comes
                             // out of a file, and a hand-edited one must not
@@ -4552,10 +4576,7 @@ impl GraphLower<'_> {
                                         .collect()
                                 })
                                 .unwrap_or_default();
-                            plan.steps.push(GraphStep::Switch {
-                                inputs,
-                                index: i64::from(index),
-                            });
+                            plan.steps.push(GraphStep::Switch { inputs, index });
                             Some(plan.steps.len() - 1)
                         }
                         // Each output something in the cone reads is one pass:

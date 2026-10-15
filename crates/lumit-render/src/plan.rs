@@ -1071,7 +1071,31 @@ fn collect_graph_jobs(
         probes,
         held,
     } = *ctx;
-    for node in &graph.nodes {
+    // Only what the Output reaches is fetched, and a Switch whose Index the box
+    // alone settles, the same at every moment, is followed down the socket it
+    // shows. A wired Index is only known to the builder, so all of its sockets
+    // are fetched.
+    let picks: Vec<(Uuid, i64)> = graph
+        .nodes
+        .iter()
+        .filter_map(|node| match node {
+            lumit_core::comp_graph::GraphNode::Fx(inst)
+                if inst.effect.match_name == lumit_core::comp_graph::SWITCH =>
+            {
+                let at = graph.plain_switch_index(inst, t)?;
+                moments
+                    .iter()
+                    .all(|m| graph.plain_switch_index(inst, *m) == Some(at))
+                    .then_some((inst.id, at))
+            }
+            _ => None,
+        })
+        .collect();
+    let live = graph
+        .output_id()
+        .map(|output| graph.cone_picked(output, &picks))
+        .unwrap_or_default();
+    for node in graph.nodes.iter().filter(|n| live.contains(&n.id())) {
         // A nested Node graph box lowers the graph it names into this plan
         // (§2.3), so the inner Read boxes' footage is planned here too.
         if let lumit_core::comp_graph::GraphNode::Fx(inst) = node {
@@ -2234,5 +2258,56 @@ mod tests {
         let jobs = plan_comp_frame(&doc, &grouped, 0.0, Quality::default(), &probes);
         assert_eq!(jobs.len(), 1, "a graph on a header plans its own Read");
         assert_eq!(jobs[0].layer, read);
+
+        // A Switch on Index 1 with a Read on each of two sockets fetches only
+        // the second. With a driver wired into the Index only the builder
+        // knows the pick, so both are fetched.
+        let switch_jobs = |driven: bool| {
+            let (a, b, out) = (Uuid::now_v7(), Uuid::now_v7(), Uuid::now_v7());
+            let mut switch = lumit_core::fx::instantiate("switch").expect("the effect exists");
+            if let Some(p) = switch.params.iter_mut().find(|p| p.id == "index") {
+                p.value = EffectValue::Float(lumit_core::anim::Property::fixed(1.0));
+            }
+            let switch_id = switch.id;
+            let reader = |id| GraphNode::Read {
+                id,
+                item,
+                custom_name: None,
+            };
+            let mut nodes = vec![
+                reader(a),
+                reader(b),
+                GraphNode::Fx(switch),
+                GraphNode::Output { id: out },
+            ];
+            let mut edges = vec![
+                wire(a, "output", switch_id, "in0"),
+                wire(b, "output", switch_id, "in1"),
+                wire(switch_id, "output", out, "input"),
+            ];
+            if driven {
+                let wiggle = lumit_core::fx::instantiate("wiggle").expect("the driver exists");
+                edges.push(wire(wiggle.id, "value", switch_id, "index"));
+                nodes.push(GraphNode::Fx(wiggle));
+            }
+            let comp = comp_of(
+                Vec::new(),
+                Some(CompGraph {
+                    notes: Vec::new(),
+                    nodes,
+                    edges,
+                    layout: Vec::new(),
+                    exposed: Vec::new(),
+                    groups: Vec::new(),
+                }),
+            );
+            let jobs = plan_comp_frame(&doc, &comp, 0.0, Quality::default(), &probes);
+            (a, b, jobs)
+        };
+        let (_, b, jobs) = switch_jobs(false);
+        assert_eq!(jobs.len(), 1, "only the socket the Switch shows is fetched");
+        assert_eq!(jobs[0].layer, b);
+        let (_, _, jobs) = switch_jobs(true);
+        assert_eq!(jobs.len(), 2, "a wired Index fetches every socket");
     }
 }
