@@ -448,3 +448,68 @@ fn a_multiply_blend_darkens_where_normal_lifts() {
         );
     }
 }
+
+/// **A map is read where its layer sits.** Emit from image pointed at a small
+/// white square off to one side of the comp puts its points on that square,
+/// not over the whole frame as a stretched read did. The layer the effect is
+/// on is moved as well, so the points only land right if the read follows
+/// both layers into the comp.
+#[test]
+fn emit_from_image_reads_its_source_where_the_source_sits() {
+    use lumit_core::anim::Property;
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (black_def, white_def) = (Uuid::now_v7(), Uuid::now_v7());
+    let mut doc = Document::new();
+    doc.items
+        .push(solid(black_def, "black", [0.0, 0.0, 0.0, 1.0], COMP, COMP));
+    doc.items
+        .push(solid(white_def, "logo", [1.0, 1.0, 1.0, 1.0], 16, 16));
+
+    // The square covers x 40..56 and y 8..24 of the comp, and is only read.
+    let mut logo = layer("logo", LayerKind::Solid { def: white_def });
+    logo.transform.position_x = Property::fixed(40.0);
+    logo.transform.position_y = Property::fixed(8.0);
+    logo.switches.visible = false;
+
+    let mut base = layer("base", LayerKind::Solid { def: black_def });
+    base.transform.position_x = Property::fixed(8.0);
+    base.transform.position_y = Property::fixed(4.0);
+    let mut emit = lumit_core::fx::instantiate("emit_from_image").expect("a built-in");
+    for p in &mut emit.params {
+        match p.id.as_str() {
+            "source" => p.value = EffectValue::Layer(Some(logo.id)),
+            // Enough candidates that the square gets well over a hundred.
+            "density" => p.value = EffectValue::Float(Property::fixed(5000.0)),
+            "size" => p.value = EffectValue::Float(Property::fixed(2.0)),
+            _ => {}
+        }
+    }
+    base.effects = vec![emit];
+
+    let comp = comp_of("Comp", vec![logo, base]);
+    let comp_id = comp.id;
+    doc.items.push(ProjectItem::Composition(comp));
+    let (rgba, w, _) = r
+        .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
+        .expect("the render");
+
+    // A point is a disc two pixels wide, so it may reach a pixel past the
+    // square's edge.
+    let (mut inside, mut outside) = (0, 0);
+    for (i, px) in rgba.chunks_exact(4).enumerate() {
+        let (x, y) = (i as u32 % w, i as u32 / w);
+        if px[0] < 64 {
+            continue;
+        }
+        if (39..57).contains(&x) && (7..25).contains(&y) {
+            inside += 1;
+        } else {
+            outside += 1;
+        }
+    }
+    assert!(inside > 20, "only {inside} lit pixels on the square");
+    assert_eq!(outside, 0, "{outside} lit pixels away from the square");
+}

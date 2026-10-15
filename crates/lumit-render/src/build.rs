@@ -302,6 +302,21 @@ pub fn parent_world_placement(
     world
 }
 
+/// Where `layer` sits in `comp` at comp time `t_comp`, parents and all: its
+/// own pixels to comp pixels, as the compositor places it.
+fn world_placement(
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    t_comp: f64,
+    context: Arc<ExpressionContext>,
+) -> [[f32; 4]; 4] {
+    let own = own_placement(layer, t_comp, &context);
+    match parent_world_placement(comp, layer, t_comp, context) {
+        Some(pre) => lumit_gpu::concat_place(pre, own),
+        None => own,
+    }
+}
+
 /// `layer`'s own placement at comp time `t_comp`, before any parent's.
 fn own_placement(
     layer: &lumit_core::model::Layer,
@@ -1862,6 +1877,8 @@ fn comp_walk(
             // A comp's layers were each interpreted as themselves while it was
             // realised; the picture that comes out is already working-space.
             colour_space: None,
+            // Filled in by `layer_slot`, which is the slot everything reads.
+            place: None,
         })
     };
 
@@ -2022,6 +2039,7 @@ fn comp_walk(
                 natural: [natural.0, natural.1],
                 // Filled in by `layer_slot`, which is the slot everything reads.
                 graph_fx: Vec::new(),
+                place: None,
             })
         };
 
@@ -2155,6 +2173,60 @@ fn comp_walk(
                 .collect()
         };
 
+    // **Where a map sits**, for an effect with a Map placement row beside the
+    // Layer row. As placed, the referenced layer's own pixels are carried
+    // into the pixels of the layer the effect is on, so the two line up in
+    // the comp however either is moved, scaled or parented. An adjustment
+    // layer and a group header run their stacks on the comp itself.
+    let map_place = |e: &lumit_core::model::EffectInstance,
+                     param: &str|
+     -> Option<Box<crate::draw::MapPlace>> {
+        use lumit_core::fx::MapPlacement;
+        // Mid-grey is no push at all, whichever channel steers it, so the
+        // frame round a placed map stays still.
+        let ground = if e.effect.match_name == "displacement_map" {
+            [0.5; 4]
+        } else {
+            [0.0; 4]
+        };
+        let placed = match lumit_core::fx::map_placement(e, param) {
+            MapPlacement::Stretch => return None,
+            MapPlacement::Centre => None,
+            MapPlacement::AsPlaced => {
+                let src = comp
+                    .layers
+                    .iter()
+                    .find(|l| Some(l.id) == e.layer_ref(param))?;
+                let owner = comp
+                    .layers
+                    .iter()
+                    .find(|l| l.effects.iter().any(|x| x.id == e.id))
+                    .filter(|l| !l.is_adjustment());
+                let context = Arc::new(ExpressionContext {
+                    document: expr_doc.clone(),
+                    comp: Some(comp.id),
+                    layer: Some(src.id),
+                    comp_time: t_comp,
+                    current_depth: 0,
+                    inputs: None,
+                });
+                let to_comp = world_placement(comp, src, t_comp, context.clone());
+                Some(match owner {
+                    // A layer scaled to nothing shows nothing, so any answer
+                    // will do.
+                    Some(owner) => {
+                        lumit_gpu::invert_place(world_placement(comp, owner, t_comp, context))
+                            .map_or(to_comp, |from_comp| {
+                                lumit_gpu::concat_place(from_comp, to_comp)
+                            })
+                    }
+                    None => to_comp,
+                })
+            }
+        };
+        Some(Box::new(crate::draw::MapPlace { placed, ground }))
+    };
+
     // **The slot everything reads**: the referenced layer as above, with the
     // plans of its own Node graph effects beside its stack. Without them a
     // layer that applies a graph lost it the moment another effect read the
@@ -2177,6 +2249,7 @@ fn comp_walk(
             input.graph_fx =
                 graph_fx_with(Some(src), &src.effects, slt, frame_slt, &layer_slot_plain);
         }
+        input.place = map_place(e, param);
         Some(input)
     };
     let graph_fx_for =

@@ -96,6 +96,7 @@ A stream carries at most 64 names. One more is not written.
 | **Wave** | Dropdown | Sine · Triangle · Square · Sawtooth | Sine | - |
 | **Rings** | Checkbox | On or off | Off | - |
 | **Image layer** | Layer | Any layer in the composition | None | - |
+| **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Colour from image** | Checkbox | On or off | Off | - |
 | **Size** | Slider | 0 to 400; higher | 100 | Per cent |
 | **Opacity** | Slider | 0 to 100 | 100 | Per cent |
@@ -131,7 +132,7 @@ A stream carries at most 64 names. One more is not written.
 In the Effect Controls panel:
 
 - **Pattern** groups **Pattern**, **Curve**.
-- **Image** groups **Image layer**, **Colour from image**.
+- **Image** groups **Image layer**, **Map placement**, **Colour from image**.
 - **Change** groups **Size**, **Opacity**, **Stretch x**, **Stretch y**, **Start colour**, **Use middle colour**, **Middle colour**, **Colour**, **Both ways**, **Rotation**, **Offset x**, **Offset y**, **Offset z**, **Offset forward**, **Offset sideways**.
 - **Colour ramp** groups **Use colour ramp**, **Red**, **Green**, **Blue**.
 - **Number** groups **Set number**, **Name**, **Store**, **Number from**, **Number to**.
@@ -196,6 +197,9 @@ In the Effect Controls panel:
 - **Rings**: the waves run out from the centre as rings, not across as bands.
 - **Image layer**: the layer whose picture the Image pattern and Colour from image read.
   Unset reads this effect's own input picture.
+- **Map placement**: where the Image layer's picture sits on this layer. **As placed in
+  comp** reads it where that layer sits in the composition. **Stretch to fit** stretches
+  it over this layer. **Centre** centres it at its own size.
 - **Colour from image**: the point takes the colour of the picture under it. Its own alpha
   still multiplies it.
 - **Size**: the size a point takes where the pattern reads 1, as a per cent of its own.

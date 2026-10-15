@@ -169,11 +169,26 @@ pub struct DofInputDraw {
     /// The picture is stretched over the consuming layer's raster on its way
     /// in, so this is the only place its shape survives.
     pub natural: [f32; 2],
+    /// Where the picture sits on the consuming layer, from the effect's Map
+    /// placement row. `None` stretches it over the consuming layer's raster,
+    /// as every read did before the row existed.
+    pub place: Option<Box<MapPlace>>,
     /// The plans of the referenced layer's own Node graph effects, 1:1 with
     /// the `node_graph` ops in `fx` exactly as [`CompLayerDraw::graph_fx`] is
     /// with a layer's own. Empty unless its stack is folded in and applies a
     /// graph.
     pub graph_fx: Vec<GraphDraw>,
+}
+
+/// A layer picture read as a map, set down on the consuming layer rather than
+/// stretched over it.
+pub struct MapPlace {
+    /// The referenced layer's own pixels to the consuming layer's, both px at
+    /// comp size, as the two sit in the composition. `None` centres the
+    /// picture at its own size.
+    pub placed: Option<[[f32; 4]; 4]>,
+    /// What the map reads where the layer's picture is not.
+    pub ground: [f64; 4],
 }
 
 impl LayerInputDraw {
@@ -192,6 +207,8 @@ impl LayerInputDraw {
 /// layer-input.md): nothing, this effect's own input, or another
 /// layer's picture. One of these per op that declares a Layer parameter,
 /// 1:1 and in order with those ops.
+// A handful of these a frame, so the picture is kept inline.
+#[allow(clippy::large_enum_variant)]
 pub enum LayerInputDraw {
     /// Unset, dangling, out of its time span, or not in a mode that reads
     /// one — the effect degrades to its labelled no-op, never a fault.

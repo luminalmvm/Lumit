@@ -13,7 +13,7 @@ use crate::fx::effects::vary_points::{Pattern, PatternKind, POINTS_IN, POINTS_OU
 use crate::fx::points::PointsStream;
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
-    ResolveCx, ShortText, Signature, Value,
+    ResolveCx, ShortText, Signature, Value, MAP_PLACEMENT_OPTIONS,
 };
 use lumit_fx_macros::Effect;
 
@@ -51,7 +51,11 @@ pub const PICK_GROUPS: &[ParamGroup] = &[
     group("", &["spacing", "angle"], Some(("pattern", &[11, 12, 13]))),
     group("", &["band_width"], Some(("pattern", &[11]))),
     group("", &["wave", "rings"], Some(("pattern", &[13]))),
-    group("", &["image_layer"], Some(("pattern", &[8]))),
+    group(
+        "",
+        &["image_layer", "image_layer_placement"],
+        Some(("pattern", &[8])),
+    ),
     group("Count", &["every_nth", "nth_offset"], None),
     group("Point", &["feather"], None),
 ];
@@ -246,6 +250,11 @@ pub struct PickPoints {
     /// effect's own input picture.
     #[layer(label = "Image layer")]
     pub image_layer: bool,
+
+    /// Where the Image layer's picture sits on this one: as it sits in the
+    /// comp, stretched over the frame, or centred at its own size.
+    #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
+    pub image_layer_placement: u32,
 
     /// Keep one point in this many, counted by `id` so a particle is in or out
     /// for its whole life. 1 keeps them all.

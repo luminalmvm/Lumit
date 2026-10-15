@@ -62,6 +62,7 @@ split its points between two [Clone to points](/effects/generate/clone-to-points
 | **Wave** | Dropdown | Sine · Triangle · Square · Sawtooth | Sine | - |
 | **Rings** | Checkbox | On or off | Off | - |
 | **Image layer** | Layer | Any layer in the composition | None | - |
+| **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Every nth** | Slider, whole numbers | 1 to 100; up to 1000000 | 1 | - |
 | **Offset** | Slider, whole numbers | 0 to 100; up to 1000000 | 0 | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
@@ -129,6 +130,9 @@ In the Effect Controls panel:
 - **Rings**: the waves run out from the centre as rings, not across as bands.
 - **Image layer**: the layer whose picture the Image pattern reads. Unset reads this
   effect's own input picture. It shows for Image.
+- **Map placement**: where the Image layer's picture sits on this layer. **As placed in
+  comp** reads it where that layer sits in the composition. **Stretch to fit** stretches
+  it over this layer. **Centre** centres it at its own size.
 - **Every nth**: keeps one point in that many, counted by id. A particle stays in or out
   for its whole life.
 - **Offset**: which point of each run is kept.

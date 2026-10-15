@@ -14,7 +14,7 @@ use crate::fx::noise::value3;
 use crate::fx::points::{self, Column, PointsStream};
 use crate::fx::{
     CurvePoints, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup,
-    ParamId, Params, Port, PortType, ResolveCx, ShortText, Signature, Value,
+    ParamId, Params, Port, PortType, ResolveCx, ShortText, Signature, Value, MAP_PLACEMENT_OPTIONS,
 };
 use lumit_fx_macros::Effect;
 
@@ -287,7 +287,11 @@ pub const VARY_GROUPS: &[ParamGroup] = &[
     group("", &["wave", "rings"], Some(("pattern", &[13]))),
     // Always shown, since the Image pattern and Colour from image both read
     // the layer and a group can only follow one row.
-    group("Image", &["image_layer", "image_colour"], None),
+    group(
+        "Image",
+        &["image_layer", "image_layer_placement", "image_colour"],
+        None,
+    ),
     group(
         "Change",
         &[
@@ -529,6 +533,11 @@ pub struct VaryPoints {
     /// Unset reads this effect's own input picture.
     #[layer(label = "Image layer")]
     pub image_layer: bool,
+
+    /// Where the Image layer's picture sits on this one: as it sits in the
+    /// comp, stretched over the frame, or centred at its own size.
+    #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
+    pub image_layer_placement: u32,
 
     /// The point takes the picture's colour under it. Its own alpha still
     /// multiplies it.

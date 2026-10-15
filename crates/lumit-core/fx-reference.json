@@ -6170,6 +6170,19 @@
           "slider_max": 500.0
         },
         {
+          "id": "matte_placement",
+          "label": "Map placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "edge",
           "label": "Edges",
           "kind": "choice",
@@ -11008,6 +11021,19 @@
           "self_default": false
         },
         {
+          "id": "source_placement",
+          "label": "Map placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "threshold",
           "label": "Threshold",
           "kind": "float",
@@ -11162,6 +11188,7 @@
           "label": "Source",
           "params": [
             "source",
+            "source_placement",
             "threshold",
             "density",
             "seed"
@@ -13531,6 +13558,19 @@
           "self_default": false
         },
         {
+          "id": "image_layer_placement",
+          "label": "Map placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "image_colour",
           "label": "Colour from image",
           "kind": "bool",
@@ -14020,6 +14060,7 @@
           "label": "Image",
           "params": [
             "image_layer",
+            "image_layer_placement",
             "image_colour"
           ],
           "collapsed": false
@@ -14374,6 +14415,19 @@
           "self_default": false
         },
         {
+          "id": "image_layer_placement",
+          "label": "Map placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "every_nth",
           "label": "Every nth",
           "kind": "int",
@@ -14629,7 +14683,8 @@
         {
           "label": "",
           "params": [
-            "image_layer"
+            "image_layer",
+            "image_layer_placement"
           ],
           "collapsed": false,
           "visible_when": {

@@ -664,6 +664,73 @@ pub fn render_layer_input(
     )
 }
 
+/// [`render_layer_input`]'s sibling for a picture read as a map: set down on
+/// the consuming layer's raster `(w, h)` where the Map placement row says,
+/// rather than stretched over it. `size` is the referenced layer's own size
+/// and `of` the consuming layer's, both px at comp size. Where the picture
+/// does not reach, the map reads `place.ground`.
+#[allow(clippy::too_many_arguments)]
+pub fn place_layer_input(
+    compositor: &lumit_gpu::Compositor,
+    ctx: &GpuContext,
+    w: u32,
+    h: u32,
+    linear: &Tex,
+    size: [f32; 2],
+    place: &crate::draw::MapPlace,
+    of: (f32, f32),
+) -> Tex {
+    let (sw, sh) = (size[0].max(1.0), size[1].max(1.0));
+    let (ow, oh) = (of.0.max(1.0), of.1.max(1.0));
+    // The consuming layer's pixels onto its raster, which is smaller under a
+    // reduced-resolution preview.
+    let raster = lumit_gpu::place_matrix(
+        (0.0, 0.0),
+        (0.0, 0.0),
+        (w as f32 / ow * 100.0, h as f32 / oh * 100.0),
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    );
+    let onto = place.placed.unwrap_or_else(|| {
+        lumit_gpu::place_matrix(
+            ((ow - sw) * 0.5, (oh - sh) * 0.5),
+            (0.0, 0.0),
+            (100.0, 100.0),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        )
+    });
+    compositor.composite_with_camera(
+        ctx,
+        w,
+        h,
+        place.ground,
+        &[lumit_gpu::CompositeLayer {
+            texture: linear,
+            size: (sw, sh),
+            position: (0.0, 0.0),
+            anchor: (0.0, 0.0),
+            scale: (100.0, 100.0),
+            rotation_deg: 0.0,
+            // Full opacity: a map is read as numbers, never dimmed.
+            opacity: 100.0,
+            matte: None,
+            blend: lumit_gpu::Blend::Normal,
+            z: 0.0,
+            rotation_x_deg: 0.0,
+            rotation_y_deg: 0.0,
+            three_d: false,
+            layer_mask: None,
+            pre: Some(lumit_gpu::concat_place(raster, onto)),
+        }],
+        None,
+    )
+}
+
 /// The pictures a **background analysis** baked, carried into the op walk
 /// beside the numbers in the bag.
 ///

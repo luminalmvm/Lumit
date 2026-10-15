@@ -30,6 +30,7 @@ layer's stack can read them.
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
 | **Source layer** | Layer | Any layer in the composition | None | - |
+| **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Threshold** | Slider | 0 to 100 | 50 | Per cent |
 | **Density** | Slider | 0 to 100; higher | 20 | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
@@ -45,7 +46,7 @@ layer's stack can read them.
 
 In the Effect Controls panel:
 
-- **Source** groups **Source layer**, **Threshold**, **Density**, **Seed**.
+- **Source** groups **Source layer**, **Map placement**, **Threshold**, **Density**, **Seed**.
 - **Point** groups **Size**, **Feather**, **Colour**, **Max points**.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
@@ -55,6 +56,9 @@ In the Effect Controls panel:
 
 - **Source layer**: the layer whose brightness decides where the points go. Nothing is
   emitted until you set it.
+- **Map placement**: where the Source layer's picture sits on this layer. **As placed in
+  comp** reads it where that layer sits in the composition. **Stretch to fit** stretches
+  it over this layer. **Centre** centres it at its own size.
 - **Threshold**: where "bright" starts. Below it nothing is kept. At white everything is.
 - **Density**: how many points are thrown per hundred-pixel square of the composition, so
   the same number means the same spacing whatever size the composition is.
