@@ -1159,15 +1159,15 @@ Future<List<int>> _fetchSmallFile(Uri url, int maxBytes) async {
 Future<void> _launchInstaller(File file, String platform) async {
   switch (platform) {
     case 'windows':
-      // Inno Setup's own switches (packaging/windows/lumit.iss). `/SILENT`
-      // shows progress and no questions — the questions were all answered when
-      // Lumit was first installed, and asking them again to apply an update the
-      // user has already agreed to would be ceremony. `/CLOSEAPPLICATIONS`
+      // Inno Setup's own switches (packaging/windows/lumit.iss). `/VERYSILENT`
+      // shows no window at all, so Lumit closes and comes back on its own. An
+      // error still gets its message box, since `/SUPPRESSMSGBOXES` would
+      // answer it with Abort and leave nothing running. `/CLOSEAPPLICATIONS`
       // lets it deal with anything of ours still holding a file, and
       // `/NORESTART` means it never reboots the machine on its own.
       await Process.start(
         file.path,
-        const ['/SILENT', '/CLOSEAPPLICATIONS', '/NORESTART'],
+        const ['/VERYSILENT', '/CLOSEAPPLICATIONS', '/NORESTART'],
         mode: ProcessStartMode.detached,
       );
     case 'macos':

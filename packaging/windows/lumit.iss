@@ -115,7 +115,7 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Theme\DefaultIcon"; ValueType: string
   ValueData: "{app}\icons\lumit-theme.ico"
 
 [Run]
-; No `skipifsilent`. `/SILENT` is how Lumit runs this installer on
+; No `skipifsilent`. `/VERYSILENT` is how Lumit runs this installer on
 ; itself to apply an update: it quits, the installer replaces it, and
 ; without this line nothing starts again — a "Restart now" button that does
 ; not restart, which is exactly the complaint. Interactive installs are
