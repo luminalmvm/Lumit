@@ -46,6 +46,28 @@ if ($null -eq $ffbin) {
 Copy-Item "$ffbin\*.dll" "$release\lib" -Force
 Write-Host "Bundled FFmpeg DLLs from $ffbin"
 
+# Lumit, its brokers and the bridge need Microsoft's C++ runtime, which a clean
+# Windows doesn't have. Microsoft's vc_redist installer needs an administrator,
+# and this installer is per user and updates itself silently, so the runtime
+# goes beside lumit.exe instead, taken from the Visual Studio that built it.
+# Windows Update doesn't service copies kept this way. Each Lumit release takes
+# them again from the build machine, so they are as fresh as Lumit is.
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+$vs = & $vswhere -latest -products '*' `
+    -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+if (-not $vs) {
+    Write-Error "Visual Studio's C++ tools not found, so there is no C++ runtime to bundle"
+    exit 1
+}
+$redist = (Get-Content -Raw "$vs\VC\Auxiliary\Build\Microsoft.VCRedistVersion.default.txt").Trim()
+$crt = Get-Item "$vs\VC\Redist\MSVC\$redist\x64\Microsoft.VC*.CRT" | Select-Object -First 1
+if ($null -eq $crt) {
+    Write-Error "No C++ runtime in $vs\VC\Redist\MSVC\$redist"
+    exit 1
+}
+Copy-Item "$crt\*.dll" $release -Exclude 'vccorlib140.dll' -Force
+Write-Host "Bundled the C++ runtime from $crt"
+
 # The vendored ACES bakes are read at runtime from data\colour beside the exe
 # (crates/lumit-colour/src/builtin.rs) rather than compiled into the binary,
 # so they must travel with the app the same way the FFmpeg DLLs do. The .iss
