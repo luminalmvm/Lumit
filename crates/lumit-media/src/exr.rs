@@ -11,8 +11,9 @@
 //!
 //! So this module does two things ffmpeg cannot: it reads the channel list off
 //! a file's header, and it reads four channels the caller names into an
-//! ordinary RGBA frame. Everything else about EXR still goes through ffmpeg,
-//! which is where the ordinary decode path already is.
+//! ordinary RGBA frame. It also reads a render's passes, one at a time. A
+//! plain RGBA EXR still goes through ffmpeg, which is where the ordinary
+//! decode path already is.
 
 use std::path::Path;
 
@@ -253,6 +254,241 @@ pub fn read_channels(
     })
 }
 
+// ---------------------------------------------------------------------------
+// Render passes
+// ---------------------------------------------------------------------------
+//
+// A render keeps each pass under a name: `ViewLayer.Depth.Z` in one part, or a
+// part called `Depth` holding `Z`. A pass is everything before the last dot,
+// in whichever part it sits. ffmpeg can't open most of these files at all, and
+// shows a lone channel as black, so they are read here.
+
+/// What the plain R, G, B and A of a file are called as a pass.
+const PLAIN: &str = "RGBA";
+
+/// One pass: the part it is in, and its channels by their place in that
+/// part's list, each with the last piece of its name.
+struct Pass {
+    name: String,
+    part: usize,
+    channels: Vec<(usize, String)>,
+}
+
+fn header_of(path: &Path) -> Result<exr::meta::MetaData, MediaError> {
+    exr::meta::MetaData::read_from_file(path, false)
+        .map_err(|e| MediaError::Ffmpeg(format!("could not read the EXR header: {e}")))
+}
+
+fn passes_in(meta: &exr::meta::MetaData) -> Vec<Pass> {
+    let mut out: Vec<Pass> = Vec::new();
+    for (part, header) in meta.headers.iter().enumerate() {
+        let layer = header
+            .own_attributes
+            .layer_name
+            .as_ref()
+            .map(|t| t.to_string());
+        for (place, channel) in header.channels.list.iter().enumerate() {
+            let own = channel.name.to_string();
+            let full = match &layer {
+                Some(layer) if !own.starts_with(&format!("{layer}.")) => format!("{layer}.{own}"),
+                _ => own,
+            };
+            let (name, last) = match full.rsplit_once('.') {
+                Some((name, last)) => (name.to_string(), last.to_string()),
+                None if matches!(full.as_str(), "R" | "G" | "B" | "A") => (PLAIN.to_string(), full),
+                None => (full.clone(), full),
+            };
+            // Cryptomatte ids are numbers, not a picture.
+            let last_piece = name.rsplit('.').next().unwrap_or_default();
+            if last_piece.to_ascii_lowercase().starts_with("crypto") {
+                continue;
+            }
+            match out.iter_mut().find(|p| p.name == name && p.part == part) {
+                Some(pass) => pass.channels.push((place, last)),
+                None => out.push(Pass {
+                    name,
+                    part,
+                    channels: vec![(place, last)],
+                }),
+            }
+        }
+    }
+    out
+}
+
+/// The pass called `wanted`, or the beauty pass when it is `None` or the file
+/// has no such pass any more: the plain RGBA, else one called Combined,
+/// beauty or RGBA, else the first.
+fn pick<'a>(passes: &'a [Pass], wanted: Option<&str>) -> Option<&'a Pass> {
+    let named = |n: &str| passes.iter().find(|p| p.name == n);
+    let beauty = || {
+        passes.iter().find(|p| {
+            let last = p.name.rsplit('.').next().unwrap_or_default();
+            ["combined", "beauty", "rgba"].contains(&last.to_ascii_lowercase().as_str())
+        })
+    };
+    wanted
+        .and_then(named)
+        .or_else(|| named(PLAIN))
+        .or_else(beauty)
+        .or(passes.first())
+}
+
+/// Whether this source's picture is read here rather than by ffmpeg: an EXR
+/// whose picture isn't just a plain RGBA, so one with several passes, a
+/// lone channel or layer names ffmpeg can't place.
+#[must_use]
+pub fn reads_pass(src: &crate::MediaSource) -> bool {
+    let path = src.on_disk();
+    if !is_exr(path) {
+        return false;
+    }
+    let Ok(meta) = header_of(path) else {
+        return false;
+    };
+    let passes = passes_in(&meta);
+    !passes.is_empty() && !(passes.len() == 1 && passes[0].name == PLAIN)
+}
+
+/// The size of the pass a source reads, for the probe: ffmpeg says nought for
+/// the files it can't open.
+#[must_use]
+pub fn pass_size(src: &crate::MediaSource) -> Option<(u32, u32)> {
+    let meta = header_of(src.on_disk()).ok()?;
+    let passes = passes_in(&meta);
+    let size = meta.headers.get(pick(&passes, None)?.part)?.layer_size;
+    Some((
+        u32::try_from(size.width()).ok()?,
+        u32::try_from(size.height()).ok()?,
+    ))
+}
+
+/// Read one pass into an RGBA frame, scene-linear float, values as the file
+/// holds them.
+///
+/// A pass of one channel, whatever it is called, is shown in grey: the channel
+/// in red, green and blue. Otherwise channels land by their last letter (R, X
+/// or U in red and so on), and alpha is opaque where the pass has none.
+///
+/// Only the pass's own part is decompressed, and only the frame is kept, so a
+/// render with forty passes costs one part and one frame.
+pub fn read_pass(path: &Path, wanted: Option<&str>) -> Result<DecodedFrame, MediaError> {
+    use exr::block::reader::ChunksReader;
+    let fail = |e: exr::error::Error| MediaError::Ffmpeg(format!("could not read the EXR: {e}"));
+
+    let reader = exr::block::read(std::io::BufReader::new(std::fs::File::open(path)?), false)
+        .map_err(fail)?;
+    let passes = passes_in(reader.meta_data());
+    let pass = pick(&passes, wanted)
+        .ok_or_else(|| MediaError::Ffmpeg("the EXR holds no picture".into()))?;
+    let header = reader
+        .headers()
+        .get(pass.part)
+        .ok_or_else(|| MediaError::Ffmpeg("the EXR holds no layers".into()))?;
+    let (w, h) = (header.layer_size.width(), header.layer_size.height());
+    let ceiling = Ceilings::DEFAULT.dimension;
+    if w as u64 > ceiling || h as u64 > ceiling {
+        return Err(MediaError::TooLarge(IngressError::Dimension {
+            needed: (w as u64).max(h as u64),
+            limit: ceiling,
+        }));
+    }
+
+    // Which channel each of red, green, blue and alpha takes.
+    let mut slots: [Option<usize>; 4] = [None; 4];
+    if let [(only, _)] = pass.channels.as_slice() {
+        slots = [Some(*only), Some(*only), Some(*only), None];
+    } else {
+        for (place, last) in &pass.channels {
+            let slot = match last.to_ascii_lowercase().as_str() {
+                "r" | "x" | "u" => 0,
+                "g" | "y" | "v" => 1,
+                "b" | "z" | "w" => 2,
+                "a" => 3,
+                _ => continue,
+            };
+            slots[slot].get_or_insert(*place);
+        }
+        // Names that say nothing: the first three, in order.
+        if slots[..3].iter().all(Option::is_none) {
+            for (slot, (place, _)) in slots.iter_mut().zip(&pass.channels).take(3) {
+                *slot = Some(*place);
+            }
+        }
+    }
+
+    let mut budget = Budget::new(Limits::IMAGE);
+    let bytes = checked_usize(checked_raster_bytes(w as u64, h as u64, 4, 4)?)?;
+    let mut rgba = budget.vec_with_capacity::<u8>(bytes)?;
+    rgba.resize(bytes, 0);
+    if slots[3].is_none() {
+        for px in rgba.chunks_exact_mut(16) {
+            px[12..].copy_from_slice(&1.0f32.to_le_bytes());
+        }
+    }
+
+    use exr::meta::attribute::SampleType;
+    let part = pass.part;
+    let channels = header.channels.clone();
+    // One line of samples at a time, as floats, reused line to line.
+    let (mut half, mut float, mut uint) = (Vec::new(), Vec::new(), Vec::new());
+    reader
+        .filter_chunks(false, |_, tile, block| {
+            block.layer == part && tile.level_index == exr::math::Vec2(0, 0)
+        })
+        .map_err(fail)?
+        .decompress_parallel(false, |_, block| {
+            for line in block.lines(&channels) {
+                let at = line.location;
+                if !slots.contains(&Some(at.channel)) {
+                    continue;
+                }
+                let n = at.sample_count;
+                match channels.list.get(at.channel).map(|c| c.sample_type) {
+                    Some(SampleType::F16) => {
+                        half.resize(n, exr::prelude::f16::ZERO);
+                        line.read_samples_into_slice(&mut half)?;
+                        float.clear();
+                        float.extend(half.iter().map(|v| v.to_f32()));
+                    }
+                    Some(SampleType::F32) => {
+                        float.resize(n, 0.0);
+                        line.read_samples_into_slice(&mut float)?;
+                    }
+                    Some(SampleType::U32) => {
+                        uint.resize(n, 0u32);
+                        line.read_samples_into_slice(&mut uint)?;
+                        float.clear();
+                        float.extend(uint.iter().map(|v| *v as f32));
+                    }
+                    None => continue,
+                }
+                let from = (at.position.1 * w + at.position.0) * 16;
+                let Some(row) = rgba.get_mut(from..from + n * 16) else {
+                    continue;
+                };
+                for (slot, _) in slots
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| **c == Some(at.channel))
+                {
+                    for (px, v) in row.chunks_exact_mut(16).zip(&float) {
+                        px[slot * 4..slot * 4 + 4].copy_from_slice(&v.to_le_bytes());
+                    }
+                }
+            }
+            Ok(())
+        })
+        .map_err(fail)?;
+
+    Ok(DecodedFrame {
+        width: u32::try_from(w).unwrap_or(0),
+        height: u32::try_from(h).unwrap_or(0),
+        rgba,
+        format: PixelFormat::LinearF32,
+    })
+}
+
 /// The file frame `n` of this source is, when that file is an OpenEXR — a run
 /// of stills resolves to its own numbered file, a plain source to itself.
 ///
@@ -367,6 +603,39 @@ mod tests {
             let got =
                 f32::from_le_bytes(<[u8; 4]>::try_from(&frame.rgba[i * 16..i * 16 + 4]).unwrap());
             assert_eq!(got, want, "pixel {i} read as {got}, wanted {want}");
+        }
+    }
+
+    /// A lone depth channel opens as a picture of its values in grey, not as
+    /// black or a file that won't open: the same value in red, green and blue,
+    /// kept as it is past one, and opaque.
+    #[test]
+    fn a_lone_depth_channel_opens_as_grey() {
+        use exr::prelude::*;
+
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("depth.exr");
+        let z: Vec<f32> = (0..16).map(|i| i as f32 * 0.5).collect();
+        let channel = AnyChannel::new("Z", FlatSamples::F32(z.clone()));
+        let layer = Layer::new(
+            (4, 4),
+            LayerAttributes::default(),
+            Encoding::FAST_LOSSLESS,
+            AnyChannels::sort(vec![channel].into_iter().collect()),
+        );
+        Image::from_layer(layer).write().to_file(&out).unwrap();
+
+        let src = crate::MediaSource::file(&out);
+        let video = crate::probe::probe(&src).unwrap().video.unwrap();
+        assert_eq!((video.width, video.height), (4, 4));
+        let frame = crate::read_own(&src, 0, None).unwrap().unwrap();
+        assert_eq!(frame.format, PixelFormat::LinearF32);
+        for (i, want) in z.iter().enumerate() {
+            let px: Vec<f32> = frame.rgba[i * 16..i * 16 + 16]
+                .chunks(4)
+                .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+                .collect();
+            assert_eq!(px, [*want, *want, *want, 1.0], "pixel {i}");
         }
     }
 

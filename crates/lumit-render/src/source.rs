@@ -259,7 +259,7 @@ pub fn analysed(
 pub fn guess_alpha(src: &lumit_media::MediaSource) -> Option<lumit_media::Alpha> {
     use lumit_media::interpret::guess_alpha;
     let raw = src.raw();
-    if let Some(frame) = lumit_media::read_own(&raw, None) {
+    if let Some(frame) = lumit_media::read_own(&raw, 0, None) {
         return guess_alpha(&frame.ok()?);
     }
     let index = crate::media_index::load_or_build_index(&raw).ok()?;

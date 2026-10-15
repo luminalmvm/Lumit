@@ -107,7 +107,7 @@ pub(crate) fn decode_frame(
     if !src.on_disk().is_file() {
         return None;
     }
-    if let Some(frame) = lumit_media::read_own(src, target_width) {
+    if let Some(frame) = lumit_media::read_own(src, frame as usize, target_width) {
         return frame.ok();
     }
     let index = lumit_render::media_index::load_or_build_index(src).ok()?;
