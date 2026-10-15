@@ -959,10 +959,21 @@ fn feed_effect_stack(
         // not by Particulate, as the builder finds it. A layer read through a
         // Layer points tap has its stack folded by the Layer arm below, so its
         // track comes through here too.
-        if let Some(lumit_core::model::EffectValue::Float(rate)) = e.param("emit_rate") {
-            if !matches!(rate.animation, lumit_core::anim::Animation::Static(_)) {
-                h.update(b"emit-track/");
-                let _ = serde_json::to_writer(&mut *h, rate);
+        // The burst rows are read over the frames a particle can still be
+        // seen from, so they are fed whole beside it.
+        if e.param("emit_rate").is_some() {
+            for (id, tag) in [
+                ("emit_rate", &b"emit-track/"[..]),
+                ("burst_count", b"burst-count-track/"),
+                ("burst_interval", b"burst-interval-track/"),
+                ("trigger", b"trigger-track/"),
+            ] {
+                if let Some(lumit_core::model::EffectValue::Float(track)) = e.param(id) {
+                    if !matches!(track.animation, lumit_core::anim::Animation::Static(_)) {
+                        h.update(tag);
+                        let _ = serde_json::to_writer(&mut *h, track);
+                    }
+                }
             }
         }
         // **Beat trigger counts from the start.** Its events up to this frame

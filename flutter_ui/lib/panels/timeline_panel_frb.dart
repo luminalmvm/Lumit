@@ -3526,26 +3526,36 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
 
   /// The graph's framing buttons, beside the zoom they belong with: Auto fit,
   /// which keeps the values framed, and Fit selection, which frames once.
-  List<Widget> _graphViewButtons(LumitTheme t) {
-    Widget button(String key, String glyph, String label,
+  List<FoldItem> _graphViewButtons(LumitTheme t) {
+    FoldItem button(String key, String glyph, String label,
             {required String tip,
             String? action,
             required bool on,
             required VoidCallback onPressed}) =>
-        LumitTooltip(
-          message: tip,
-          action: action,
-          child: HouseButton(
-            key: ValueKey<String>(key),
-            small: true,
-            // On reads as the magnet beside it does: framed and bright.
-            frameless: !on,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            onPressed: onPressed,
-            child: glyph_set.LumitIcon(glyph,
-                size: iconSize,
-                colour: on ? t.textPrimary : t.textMuted,
-                semanticLabel: label),
+        FoldItem(
+          label: label,
+          icon: glyph_set.LumitIcon(glyph,
+              size: iconSize, colour: on ? t.textPrimary : t.textSecondary),
+          selected: on,
+          onPressed: onPressed,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: LumitTooltip(
+              message: tip,
+              action: action,
+              child: HouseButton(
+                key: ValueKey<String>(key),
+                small: true,
+                // On reads as the magnet beside it does: framed and bright.
+                frameless: !on,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: onPressed,
+                child: glyph_set.LumitIcon(glyph,
+                    size: iconSize,
+                    colour: on ? t.textPrimary : t.textMuted,
+                    semanticLabel: label),
+              ),
+            ),
           ),
         );
     final scopeTip = switch (_graphScope) {
@@ -3554,7 +3564,6 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       GraphScope.comp => l10n.tipGraphScopeComp,
     };
     return [
-      const SizedBox(width: 2),
       // One button through the three, its glyph saying which is up.
       button(
           'graph-scope',
@@ -3568,12 +3577,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           on: _graphScope != GraphScope.selected,
           onPressed: () => setState(() => _graphScope = GraphScope
               .values[(_graphScope.index + 1) % GraphScope.values.length])),
-      const SizedBox(width: 2),
       button('graph-autofit', LumitIcons.fit, l10n.graphAutoFit,
           tip: _graphAutoFit ? l10n.tipAutoFitOn : l10n.tipAutoFitOff,
           on: _graphAutoFit,
           onPressed: () => setState(() => _graphAutoFit = !_graphAutoFit)),
-      const SizedBox(width: 2),
       button('graph-fit-selection', LumitIcons.frameAll, l10n.graphFitSelection,
           tip: l10n.tipFitSelection,
           action: 'graph.fit',
@@ -4775,8 +4782,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           //
           // One row, two runs. The strip is loose, so at any ordinary outline
           // width it takes exactly the room its buttons need and the toggles
-          // keep the rest; squeezed, neither run overflows — each scrolls
-          // inside its own share.
+          // keep the rest; squeezed, neither run overflows — the strip folds
+          // into its overflow mark and the toggles scroll, each inside its
+          // own share.
           //
           // In Layers the strip is four glyphs and never needs squeezing, so
           // it is laid out at its own width and the toggles really do keep

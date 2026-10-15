@@ -626,7 +626,11 @@ class ItemOpacityRow extends StatefulWidget {
   /// no such choice.
   final Widget? extra;
 
-  const ItemOpacityRow({super.key, 
+  /// Rows of the item's own for its right-click menu, between Rename and
+  /// Delete — a shape item's Add and Remove. Handed the menu's close.
+  final List<Widget> Function(VoidCallback close)? menuRows;
+
+  const ItemOpacityRow({super.key,
     required this.icon,
     required this.name,
     required this.keyPrefix,
@@ -639,6 +643,7 @@ class ItemOpacityRow extends StatefulWidget {
     required this.onDelete,
     required this.deleteLabel,
     this.extra,
+    this.menuRows,
   });
 
   @override
@@ -756,6 +761,7 @@ class _ItemOpacityRowState extends State<ItemOpacityRow>
             },
             child: Text(l10n.rename),
           ),
+        ...?widget.menuRows?.call(() => close(null)),
         MenuRow(
           key: ValueKey<String>('${widget.keyPrefix}-delete-${widget.id}'),
           onPressed: () {

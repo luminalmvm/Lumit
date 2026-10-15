@@ -342,6 +342,43 @@ pub fn driven_volume_db(
     }
 }
 
+/// What the wire into `effect`'s row `param` carries at layer time `lt`, or
+/// `None` when the row is unwired. Particulate's Trigger is read through
+/// this at each frame its bursts look back over, since a beat comes in on a
+/// wire and the frame being drawn is not the only one that matters.
+#[must_use]
+pub fn driven_param(
+    graph: &LayerGraph,
+    effect: Uuid,
+    param: &str,
+    lt: f64,
+    context: Arc<ExpressionContext>,
+    audio: Option<&dyn AudioTap>,
+) -> Option<f64> {
+    let from = graph.wire_into(&InputRef::Param {
+        node: NodeRef::Effect(effect),
+        port: param.to_owned(),
+    })?;
+    let ev = Eval {
+        graph,
+        context,
+        audio,
+        projection: points::Projection::FLAT,
+        budget: Cell::new(EVAL_BUDGET),
+        streams: RefCell::new(Vec::new()),
+        arenas: RefCell::new(ArenaPool::default()),
+        cross: true,
+        stack: None,
+        clone: NO_CLONE,
+    };
+    let v = match from {
+        OutputRef::Driver { node, port } => ev.output(*node, port, lt, 0),
+        OutputRef::EffectData { effect, port } => ev.effect_number(*effect, port, lt),
+        OutputRef::SourceMatte => None,
+    }?;
+    Some(f64::from(v.as_f32()))
+}
+
 /// **One stack effect's points stream**, at layer time `t` and in px@comp
 /// (points-stream.md §3.3).
 ///
@@ -1118,6 +1155,14 @@ impl Eval<'_> {
                 ))),
                 "particulate" => {
                     let particulate = super::effects::particulate::Particulate::read(params);
+                    // Births that follow a Density layer depend on a
+                    // picture, so they fall out with Scatter's below.
+                    if matches!(
+                        inst.param("density_layer"),
+                        Some(crate::model::EffectValue::Layer(Some(_)))
+                    ) {
+                        return None;
+                    }
                     Some(Producer::Particulate {
                         points: Box::new(particulate.points()),
                         window_frames: particulate.window_frames(dt),
@@ -1176,10 +1221,27 @@ impl Eval<'_> {
             inst.float_at_with_context("emit_rate", lt, self.context.clone())
                 .unwrap_or(0.0)
         };
-        let sched =
+        let mut sched =
             super::points::Schedule::scan(dt, (t / dt).floor() as i64, window_frames, &rate_at);
+        // Bursts read their rows the same way, except Trigger, which follows
+        // its wire: a burst only looks back over the frames it can be seen
+        // from, so that costs the window rather than the history.
+        let row_at = |id: &str, lt: f64| -> f64 {
+            let wired = (id == "trigger")
+                .then(|| driven_param(self.graph, effect, id, lt, self.context.clone(), self.audio))
+                .flatten();
+            wired.unwrap_or_else(|| {
+                inst.float_at_with_context(id, lt, self.context.clone())
+                    .unwrap_or(0.0)
+            })
+        };
+        super::effects::particulate::Particulate::add_bursts(inst, &mut sched, &row_at);
+        // The edge is the composition's frame here: the layer's own picture
+        // is the renderer's to know.
         let stream = Rc::new(super::points::evaluate(
-            &points.projected(self.projection),
+            &points
+                .projected(self.projection)
+                .framed(comp.width as f32, comp.height as f32),
             &sched,
             t,
             &path,

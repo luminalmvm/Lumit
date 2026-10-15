@@ -481,6 +481,8 @@ pub fn held_on_view(inst: &EffectInstance, port: &str) -> Option<EffectInstance>
     }
     let mut held = inst.clone();
     set_param(&mut held, param, EffectValue::Choice(option));
+    // A view socket hands on a map for other boxes, so no focus stripes.
+    crate::fx::effects::dof::clear_zebra(&mut held);
     Some(held)
 }
 
@@ -819,12 +821,30 @@ impl CompGraph {
     /// left out.
     #[must_use]
     pub fn cone_of(&self, node: Uuid) -> Vec<Uuid> {
+        self.cone_picked(node, &[])
+    }
+
+    /// [`Self::cone_of`] with each Switch in `picks`, as `(box, index)`,
+    /// followed down only the socket it shows. What sits behind the other
+    /// sockets is left out, unless something else in the cone reads it too.
+    #[must_use]
+    pub fn cone_picked(&self, node: Uuid, picks: &[(Uuid, i64)]) -> Vec<Uuid> {
+        let shown = |e: &GraphEdge| match picks.iter().find(|(id, _)| *id == e.to) {
+            // The Index wire and anything else that is not a picture socket
+            // is always followed.
+            Some((_, index)) => e
+                .to_port
+                .strip_prefix("in")
+                .and_then(|n| n.parse::<i64>().ok())
+                .is_none_or(|n| n == *index),
+            None => true,
+        };
         let mut wanted: Vec<Uuid> = vec![node];
         let mut seen = 0usize;
         while seen < wanted.len() {
             let at = wanted[seen];
             seen += 1;
-            for e in self.edges.iter().filter(|e| e.to == at) {
+            for e in self.edges.iter().filter(|e| e.to == at && shown(e)) {
                 if !wanted.contains(&e.from) {
                     wanted.push(e.from);
                 }
@@ -848,6 +868,40 @@ impl CompGraph {
             }
             order.extend(ready);
         }
+    }
+
+    /// The index the Switch box `inst` shows at `t`, when the box alone says:
+    /// bypassed, which shows its first socket, or an Index that is still or
+    /// keyed with nothing wired into it. `None` when a wire or an expression
+    /// decides, which only the full resolve with its drivers can answer.
+    #[must_use]
+    pub fn plain_switch_index(&self, inst: &EffectInstance, t: f64) -> Option<i64> {
+        if !inst.enabled {
+            return Some(0);
+        }
+        if self.wire_into(inst.id, "index").is_some() {
+            return None;
+        }
+        if let Some(EffectValue::Float(p)) = inst.param("index") {
+            if matches!(p.animation, crate::anim::Animation::Expression(_)) {
+                return None;
+            }
+        }
+        // Resolved by the code the builder resolves it with, so the two
+        // cannot round it differently.
+        let rows = crate::fx::resolve_instance(
+            inst,
+            &crate::fx::drivers::ResolvedDrivers::default(),
+            t,
+            1.0,
+            1.0,
+            &crate::fx::MarkerContext::NONE,
+            std::sync::Arc::new(crate::expression::ExpressionContext::detached()),
+        );
+        let index = rows.iter().next().map_or(0, |op| {
+            i64::from(op.params.int(crate::fx::ParamId::new("index"), 0))
+        });
+        Some(index)
     }
 
     /// Every `(box, time)` the picture at `root` and time `t` is made from
@@ -1464,6 +1518,33 @@ mod tests {
             "sources first, and the idle branch is not in it"
         );
         assert_eq!(graph.cone_of(blur_id), vec![read_id, blur_id]);
+
+        // A Switch on its second socket leaves the first socket's branch out,
+        // unless something else in the cone reads that branch too.
+        let (a, b) = (self::read(Uuid::now_v7()), self::read(Uuid::now_v7()));
+        let heavy = fx("blur");
+        let switch = fx(SWITCH);
+        let merge = fx(MERGE);
+        let out = GraphNode::Output { id: Uuid::now_v7() };
+        let (a_id, b_id, heavy_id, switch_id) = (a.id(), b.id(), heavy.id(), switch.id());
+        let mut edges = vec![
+            wire(&a, OUTPUT_PORT.id, &heavy, INPUT_PORT.id),
+            wire(&heavy, OUTPUT_PORT.id, &switch, "in0"),
+            wire(&b, OUTPUT_PORT.id, &switch, "in1"),
+            wire(&switch, OUTPUT_PORT.id, &merge, INPUT_PORT.id),
+            wire(&merge, OUTPUT_PORT.id, &out, INPUT_PORT.id),
+        ];
+        let shared = wire(&heavy, OUTPUT_PORT.id, &merge, BACKGROUND_PORT.id);
+        let nodes = vec![a, heavy, b, switch, merge, out];
+        let out_id = nodes[5].id();
+        let alone = built(nodes.clone(), edges.clone());
+        let cone = alone.cone_picked(out_id, &[(switch_id, 1)]);
+        assert!(cone.contains(&b_id) && !cone.contains(&heavy_id) && !cone.contains(&a_id));
+        let cone = alone.cone_picked(out_id, &[(switch_id, 0)]);
+        assert!(cone.contains(&heavy_id) && !cone.contains(&b_id));
+        edges.push(shared);
+        let cone = built(nodes, edges).cone_picked(out_id, &[(switch_id, 1)]);
+        assert!(cone.contains(&heavy_id) && cone.contains(&b_id), "{cone:?}");
     }
 
     /// A Time offset before a temporal box shifts every neighbour that box asks

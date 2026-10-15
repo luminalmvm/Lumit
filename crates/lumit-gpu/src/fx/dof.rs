@@ -75,10 +75,13 @@ pub struct DofOp {
     pub display: u32,
     /// 0..1, blended against the unprocessed input.
     pub mix: f32,
+    /// Stripes over what is in focus. A Viewer aid with no CPU twin: the
+    /// oracle compares pictures, and these are not part of one.
+    pub zebra: bool,
 }
 
 /// The `dof` kernel's uniform. Layout mirrors `fx_dof.wgsl`'s `Params` field for
-/// field: seventeen floats, ten `u32`s and one pad word — 28 words, seven whole
+/// field: seventeen floats and eleven `u32`s — 28 words, seven whole
 /// 16-byte rows — then the normals as an `array<vec4<f32>, 8>`. 240 bytes.
 ///
 /// **That word count is load-bearing.** An `array<vec4<f32>, N>` is 16-byte
@@ -127,9 +130,9 @@ struct DofParams {
     weighted: u32,
     tonal: u32,
     circle: u32,
-    /// Padding to a whole 16-byte row — see the type docs; the array below is
-    /// 16-byte aligned in WGSL and only 4-byte aligned under `repr(C)`.
-    _pad0: u32,
+    /// 1 = stripes over what is in focus. It took the pad word that kept the
+    /// array below on a whole 16-byte row, so the count still holds.
+    zebra: u32,
     /// Only `.xy` of each element is read.
     blade_normals: [[f32; 4]; MAX_BLADES],
 }
@@ -291,7 +294,7 @@ impl FxEngine {
                     weighted: u32::from(weighted),
                     tonal: u32::from(tonal),
                     circle: u32::from(circle),
-                    _pad0: 0,
+                    zebra: u32::from(op.zebra),
                     blade_normals,
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,

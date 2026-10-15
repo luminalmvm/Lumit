@@ -34,12 +34,11 @@ void main() {
     }) async {
       final p = freshProject();
       p.uiState.workspace.interface.toolBarPosition = position;
-      // Wide enough that the strip is not scrolled off: the buttons are
-      // pressed by key, and a widget scrolled out of view cannot be tapped.
-      // The **view** has to be told, not only the MediaQuery: the tools sit in
-      // a horizontal scroll view, and what they are laid out against is the
-      // real surface, which otherwise stays at the 800x600 default and hides
-      // the last few tools behind the workspace strip.
+      // Wide enough that no tool folds: the buttons are pressed by key, and
+      // a folded one cannot be tapped. The **view** has to be told, not only
+      // the MediaQuery: the tools fold against the real surface, which
+      // otherwise stays at the 800x600 default and folds the last few tools
+      // into the overflow mark.
       const size = Size(1400, 300);
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;

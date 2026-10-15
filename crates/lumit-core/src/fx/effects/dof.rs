@@ -457,6 +457,12 @@ pub struct Dof {
     #[choice(options = ["Rendered", "Depth map", "Focus map"], default = 0)]
     pub display: u32,
 
+    /// Stripes over what is in focus, on top of whichever view is showing. For
+    /// the Viewer only: an export switches it off ([`clear_zebra`]), and so does
+    /// a layer row or matte reading this layer ([`without_zebra`]).
+    #[toggle(default = false)]
+    pub zebra: bool,
+
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(
         min = 0.0,
@@ -568,6 +574,32 @@ impl Dof {
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
     }
+}
+
+/// Whether this instance has its focus Zebra ticked. Depth of field and Depth
+/// of field pro both carry the row.
+pub fn zebra_on(e: &crate::model::EffectInstance) -> bool {
+    e.bool_of("zebra") == Some(true)
+}
+
+/// Untick the focus Zebra, the way an export's copy of the project is made.
+pub fn clear_zebra(e: &mut crate::model::EffectInstance) {
+    for p in e.params.iter_mut().filter(|p| p.id == "zebra") {
+        p.value = crate::model::EffectValue::Bool(false);
+    }
+}
+
+/// `effects` with every focus Zebra off, for a layer another effect reads as a
+/// picture: the stripes are for the person looking, not part of the picture.
+pub fn without_zebra(
+    effects: &[crate::model::EffectInstance],
+) -> std::borrow::Cow<'_, [crate::model::EffectInstance]> {
+    if !effects.iter().any(zebra_on) {
+        return std::borrow::Cow::Borrowed(effects);
+    }
+    let mut owned = effects.to_vec();
+    owned.iter_mut().for_each(clear_zebra);
+    std::borrow::Cow::Owned(owned)
 }
 
 /// Depth of field's behaviour: no CPU reference through the single-image

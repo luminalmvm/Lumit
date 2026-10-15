@@ -3407,6 +3407,74 @@
   "@fxEmitRate": {
     "description": "Effect controls — a control on Particulate: how many particles are born each second."
   },
+  "fxBurst": "Burst",
+  "@fxBurst": {
+    "description": "Effect controls — a control on Particulate: when extra particles burst out beside the steady flow."
+  },
+  "fxBurstCount": "Burst count",
+  "@fxBurstCount": {
+    "description": "Effect controls — a control on Particulate: how many particles one burst throws out."
+  },
+  "fxBurstInterval": "Burst interval",
+  "@fxBurstInterval": {
+    "description": "Effect controls — a control on Particulate: how many frames apart the bursts are."
+  },
+  "fxEveryNFrames": "Every N frames",
+  "@fxEveryNFrames": {
+    "description": "Effect controls — a Burst setting on Particulate: a burst every few frames, as many as Burst interval says."
+  },
+  "fxOnTrigger": "On trigger",
+  "@fxOnTrigger": {
+    "description": "Effect controls — a Burst setting on Particulate: a burst each time the Trigger control goes up, for example on a beat."
+  },
+  "fxOnceAtStart": "Once at start",
+  "@fxOnceAtStart": {
+    "description": "Effect controls — a Burst setting on Particulate: one burst on the layer's first frame."
+  },
+  "fxBursts": "Bursts",
+  "@fxBursts": {
+    "description": "Effect controls — a group heading on Particulate, over the controls for extra particles that burst out beside the steady flow."
+  },
+  "fxEdgeMargin": "Edge margin",
+  "@fxEdgeMargin": {
+    "description": "Effect controls — a control on Particulate: how far past the edge of the frame a particle goes before it is killed or wrapped, in pixels."
+  },
+  "fxKill": "Kill",
+  "@fxKill": {
+    "description": "Effect controls — an Edge setting on Particulate: a particle dies the first time it leaves the frame."
+  },
+  "fxVariation": "Variation",
+  "@fxVariation": {
+    "description": "Effect controls — a group heading on Particulate, over the controls choosing what changes a particle's size, opacity and colour."
+  },
+  "fxSizeBy": "Size by",
+  "@fxSizeBy": {
+    "description": "Effect controls — a control on Particulate: whether Size over life follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxOpacityBy": "Opacity by",
+  "@fxOpacityBy": {
+    "description": "Effect controls — a control on Particulate: whether Opacity over life follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxColourBy": "Colour by",
+  "@fxColourBy": {
+    "description": "Effect controls — a control on Particulate: whether the blend from Colour to End colour follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxSpeedMin": "Speed min",
+  "@fxSpeedMin": {
+    "description": "Effect controls — a control on Particulate: the speed, in pixels per second, that counts as the start of the change when a control is set to follow speed."
+  },
+  "fxSpeedMax": "Speed max",
+  "@fxSpeedMax": {
+    "description": "Effect controls — a control on Particulate: the speed, in pixels per second, that counts as the end of the change when a control is set to follow speed."
+  },
+  "fxDensityLayer": "Density layer",
+  "@fxDensityLayer": {
+    "description": "Effect controls — a control on Particulate: a layer whose bright parts are where particles are born."
+  },
+  "fxParticleBlend": "Particle blend",
+  "@fxParticleBlend": {
+    "description": "Effect controls — a control on Particulate: the blend mode particles use with each other where they overlap, from the same list as a layer's blend mode."
+  },
   "fxEmitter": "Emitter",
   "@fxEmitter": {
     "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."
@@ -4778,6 +4846,10 @@
   "fxZFrequency": "Z frequency",
   "@fxZFrequency": {
     "description": "Effect controls — a control on Shake."
+  },
+  "fxZebra": "Zebra",
+  "@fxZebra": {
+    "description": "Effect controls — a control on Depth of field and Depth of field pro: stripes in the Viewer over what is in focus."
   },
   "fxZoom": "Zoom",
   "@fxZoom": {
@@ -9095,6 +9167,106 @@
   "shapeTrimOffset": "Trim offset",
   "@shapeTrimOffset": {
     "description": "Timeline row under a shape layer's art: how far the trimmed piece is slid along the path, in degrees."
+  },
+  "shapeOpAdd": "Add",
+  "@shapeOpAdd": {
+    "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it can be given, such as Twist."
+  },
+  "shapeOpRemove": "Remove",
+  "@shapeOpRemove": {
+    "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it has, to take one off."
+  },
+  "shapeTwist": "Twist",
+  "@shapeTwist": {
+    "description": "Shape operation, in the Add and Remove menus of a shape layer's art: spins the shape about an axis and flattens it, so a circle becomes a figure eight."
+  },
+  "shapeTwistAngle": "Twist angle",
+  "@shapeTwistAngle": {
+    "description": "Timeline row under a shape layer's art: how far the twist is spun, in degrees. A full turn comes back to the start."
+  },
+  "shapeTwistAxis": "Twist axis",
+  "@shapeTwistAxis": {
+    "description": "Timeline row under a shape layer's art: which way the line the shape twists about points, in degrees."
+  },
+  "shapeTwistCentreX": "Twist centre x",
+  "@shapeTwistCentreX": {
+    "description": "Timeline row under a shape layer's art: the x of the point the twist's axis passes through, in pixels."
+  },
+  "shapeTwistCentreY": "Twist centre y",
+  "@shapeTwistCentreY": {
+    "description": "Timeline row under a shape layer's art: the y of the point the twist's axis passes through, in pixels."
+  },
+  "shapeTaper": "Stroke taper",
+  "@shapeTaper": {
+    "description": "Shape operation, in the Add and Remove menus of a shape layer's art: the outline narrows towards its ends like a brush stroke."
+  },
+  "shapeTaperScope": "Taper scope",
+  "@shapeTaperScope": {
+    "description": "Timeline row under a shape layer's art: whether the stroke taper runs along each path on its own or along the whole shape as one."
+  },
+  "shapeTaperScopeEach": "Each path",
+  "@shapeTaperScopeEach": {
+    "description": "Choice on a shape's Taper scope row: every path of the shape tapers on its own."
+  },
+  "shapeTaperScopeWhole": "Whole shape",
+  "@shapeTaperScopeWhole": {
+    "description": "Choice on a shape's Taper scope row: one taper runs along all the shape's paths in order."
+  },
+  "shapeTaperStart": "Start taper",
+  "@shapeTaperStart": {
+    "description": "Timeline row under a shape layer's art: how much of the outline's width is gone at its start, as a percentage. 100 comes to a point."
+  },
+  "shapeTaperEnd": "End taper",
+  "@shapeTaperEnd": {
+    "description": "Timeline row under a shape layer's art: how much of the outline's width is gone at its end, as a percentage. 100 comes to a point."
+  },
+  "shapeTaperStartLength": "Start length",
+  "@shapeTaperStartLength": {
+    "description": "Timeline row under a shape layer's art: how far along the path the start taper runs, as a percentage of its length."
+  },
+  "shapeTaperEndLength": "End length",
+  "@shapeTaperEndLength": {
+    "description": "Timeline row under a shape layer's art: how far back along the path the end taper runs, as a percentage of its length."
+  },
+  "shapeTaperEase": "Taper ease",
+  "@shapeTaperEase": {
+    "description": "Timeline row under a shape layer's art: how rounded the stroke taper's narrowing is, as a percentage. 0 is a straight ramp."
+  },
+  "shapeSmooth": "Smooth",
+  "@shapeSmooth": {
+    "description": "Shape operation, in the Add and Remove menus of a shape layer's art, and its Timeline row: how far along the path, in pixels, each point is averaged with its neighbours, which rounds off jags and corners."
+  },
+  "shapeDeform": "Deform",
+  "@shapeDeform": {
+    "description": "Shape operation, in the Add and Remove menus of a shape layer's art, and its Timeline row choosing Displace or Scale: moves the outline with a smooth noise field."
+  },
+  "shapeDeformModeDisplace": "Displace",
+  "@shapeDeformModeDisplace": {
+    "description": "Choice on a shape's Deform row: the noise pushes the outline in and out along it."
+  },
+  "shapeDeformModeScale": "Scale",
+  "@shapeDeformModeScale": {
+    "description": "Choice on a shape's Deform row: the noise scales each point's distance from the middle of the shape, for tapers, pinches and bulges."
+  },
+  "shapeDeformAmount": "Deform amount",
+  "@shapeDeformAmount": {
+    "description": "Timeline row under a shape layer's art: how far the deform moves the outline, in pixels for Displace and as a percentage for Scale."
+  },
+  "shapeDeformScale": "Deform scale",
+  "@shapeDeformScale": {
+    "description": "Timeline row under a shape layer's art: how big the bumps of the deform's noise are, in pixels."
+  },
+  "shapeDeformEvolution": "Deform evolution",
+  "@shapeDeformEvolution": {
+    "description": "Timeline row under a shape layer's art: moves the deform's noise on, in degrees. Key it to make the outline move."
+  },
+  "shapeDeformSeed": "Deform seed",
+  "@shapeDeformSeed": {
+    "description": "Timeline row under a shape layer's art: picks a different noise for the deform."
+  },
+  "shapeDeformDetail": "Deform detail",
+  "@shapeDeformDetail": {
+    "description": "Timeline row under a shape layer's art: how many times for each bump the noise is read along the path. Fewer bends the outline more broadly."
   },
   "stretchTitle": "Stretch",
   "@stretchTitle": {

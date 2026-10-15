@@ -453,7 +453,13 @@ impl FxEngine {
         let matte_mix_mod = module(include_str!("../fx_matte_mix.wgsl"), "fx-matte-mix");
         let matte_prepare_mod =
             module(include_str!("../fx_matte_prepare.wgsl"), "fx-matte-prepare");
-        let blend_mix_mod = module(include_str!("../fx_blend_mix.wgsl"), "fx-blend-mix");
+        // The layer modes' maths is shared with Particulate's Particle blend,
+        // so it is prepended the way the noise core is.
+        let blend_core = include_str!("../fx_blend_core.wgsl");
+        let blend_mix_mod = module(
+            &format!("{blend_core}{}", include_str!("../fx_blend_mix.wgsl")),
+            "fx-blend-mix",
+        );
         let lut_mod = module(include_str!("../fx_lut.wgsl"), "fx-lut");
         // The sampler first, then the kernel - the same prepend the colour
         // pipeline does, so the two compile one sampler.
@@ -608,7 +614,10 @@ impl FxEngine {
         let particulate = super::ParticulatePipelines::new(
             ctx,
             &module(
-                &format!("{noise_core}{}", include_str!("../fx_particulate.wgsl")),
+                &format!(
+                    "{noise_core}{blend_core}{}",
+                    include_str!("../fx_particulate.wgsl")
+                ),
                 "fx-particulate",
             ),
         );
@@ -626,6 +635,7 @@ impl FxEngine {
             particulate_blocks: particulate.blocks,
             particulate_scatter: particulate.scatter,
             particulate_draw: particulate.draw,
+            particulate_blend: particulate.blend,
             lens_flare,
             blur: blur.wait(),
             dir_blur: dir_blur.wait(),

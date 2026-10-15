@@ -110,13 +110,12 @@ pub struct ParticulateOp<'a> {
     pub eps: f32,
     /// The comp frame's length in seconds of layer time.
     pub dt: f32,
-    /// The birth index of candidate zero.
-    pub first_birth: u64,
     /// One entry per recorded frame plus a closing one: `[birth offset,
-    /// bit pattern of (t − that frame's start) in seconds]`. The subtraction is
-    /// the host's, in `f64`, so the small age never has to be recovered from
-    /// inside a large clock.
-    pub frames: &'a [[u32; 2]],
+    /// bit pattern of (t − that frame's start) in seconds, the frame's first
+    /// birth index low and high]`. The steady flow's frames come first and
+    /// then the bursts'. The subtraction is the host's, in `f64`, so the small
+    /// age never has to be recovered from inside a large clock.
+    pub frames: &'a [[u32; 4]],
     /// How many births the window records — the candidate count.
     pub candidates: u32,
     /// The two baked over-life curves, size then opacity, 257 entries each.
@@ -142,7 +141,26 @@ pub struct ParticulateOp<'a> {
     /// different branch and touches the position's bits not at all, which is
     /// what makes the flat picture bit-identical rather than nearly so.
     pub projection: Option<[[f32; 4]; 3]>,
+    /// The `Edge` code: 0 None, 1 Kill, 2 Wrap. The frame is the target.
+    pub edge: u32,
+    /// How far past the frame a particle goes before the edge acts, px.
+    pub margin: f32,
+    /// The `Drive` codes for size, opacity and colour: 0 Age, 1 Speed,
+    /// 2 Random.
+    pub drives: [u32; 3],
+    /// The speeds, px per second, a Speed drive reads as its two ends.
+    pub speed_range: [f32; 2],
+    /// The Density layer's picture births follow, in this raster, or `None`
+    /// for births spread evenly over the emitter.
+    pub density: Option<&'a wgpu::Texture>,
+    /// How particles combine where they overlap: an index into
+    /// `lumit_core::model::BlendMode::ALL`, 0 being Normal.
+    pub blend: u32,
 }
+
+/// [`ParticulateOp::blend`]'s Add, the one mode besides Normal the card's own
+/// blending draws exactly.
+const BLEND_ADD: u32 = 6;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -182,8 +200,7 @@ pub(super) struct ParticulateParams {
     pub(super) eps: f32,
 
     pub(super) dt: f32,
-    pub(super) first_birth_lo: u32,
-    pub(super) first_birth_hi: u32,
+    pub(super) _spare: [u32; 2],
     pub(super) frames: u32,
 
     pub(super) candidates: u32,
@@ -227,7 +244,84 @@ pub(super) struct ParticulateParams {
     pub(super) stamp_uv: [f32; 2],
 
     pub(super) stamp_corner: f32,
-    pub(super) _pad: [u32; 3],
+    pub(super) edge: u32,
+    pub(super) margin: f32,
+    /// Always nought; see the kernel's `turb_cycle`.
+    pub(super) turb_cycle: i32,
+
+    pub(super) size_by: u32,
+    pub(super) opacity_by: u32,
+    pub(super) colour_by: u32,
+    pub(super) speed_min: f32,
+
+    pub(super) speed_max: f32,
+    pub(super) density: u32,
+    pub(super) blend: u32,
+    pub(super) pair_max: u32,
+
+    pub(super) scan_len: u32,
+    pub(super) tile_scale: u32,
+    pub(super) _pad: [u32; 2],
+}
+
+/// One render pass drawing into `view`, the picture kept or cleared.
+fn draw_pass<'e>(
+    enc: &'e mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    load: wgpu::LoadOp<wgpu::Color>,
+) -> wgpu::RenderPass<'e> {
+    enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("fx-particulate-draw"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load,
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        ..Default::default()
+    })
+}
+
+/// Bytes a particle takes in the tiles' copy of it: five rows of four.
+const PREP_BYTES: u64 = 5 * 16;
+
+/// The tiles' side, px, the same 16 the kernel declares, before
+/// [`tile_scale`].
+const TILE: u32 = 16;
+
+/// The most (tile, particle) pairs the tiles sort for a cap of `cap`: room
+/// for every particle to reach sixteen tiles, and never less than a million,
+/// so a thousand sprites each across a thousand tiles still fit. Two million
+/// at the most, which is sixteen megabytes each way and a dispatch of 8 192
+/// blocks. Past it the oldest particles are left off the layer, the cap rule
+/// again.
+fn pair_max(cap: u32) -> u32 {
+    cap.saturating_mul(16)
+        .clamp(1 << 20, 1 << 21)
+        .next_multiple_of(SCAN_BLOCK)
+}
+
+/// The words at the head of the tiles' `scan` buffer, before its numbers.
+const SCAN_HEAD: u32 = 16;
+
+/// How many 16 px steps a tile's side is, so a frame has fewer tiles than
+/// the sort's sixteen bits can name.
+fn tile_scale(w: u32, h: u32) -> u32 {
+    let mut m = 1;
+    while m < 64 && w.div_ceil(TILE * m) * h.div_ceil(TILE * m) >= 0xffff {
+        m *= 2;
+    }
+    m
+}
+
+/// How many numbers the tiles' `scan` holds: a particle's count each, the
+/// sort's digit counts, or two words a tile, whichever is most.
+fn scan_len(cap: u32, w: u32, h: u32) -> u32 {
+    let side = TILE * tile_scale(w, h);
+    let tiles = w.div_ceil(side) * h.div_ceil(side);
+    cap.max(pair_max(cap)).max(tiles * 2)
 }
 
 /// The scan's block width — the same 256 the kernel declares.
@@ -284,27 +378,184 @@ impl FxEngine {
         // effect kernel today — the export's flag is checked once a frame
         // (`export::run`) — so the seam is named rather than faked, and a
         // cancel lands on the frame this pass belongs to.
-        {
-            let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("fx-particulate-draw"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        // The picture is already there, copied in above.
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
+        if op.blend == 0 {
+            let mut rp = draw_pass(&mut enc, &view, wgpu::LoadOp::Load);
             rp.set_pipeline(&self.particulate_draw);
             rp.set_bind_group(0, &pass.empty, &[]);
             rp.set_bind_group(1, &pass.draw_bind, &[]);
             rp.draw_indirect(&pass.args, 0);
+            drop(rp);
+            drop(enc);
+            return out;
         }
+        // Any other mode: the particles meet each other on a clear layer of
+        // their own, which then goes over the picture as one.
+        let blend = &self.particulate_blend;
+        let add = op.blend == BLEND_ADD;
+        let layer = if add {
+            let layer = work_texture(ctx, w, h, "fx-particulate-layer");
+            let layer_view = layer.create_view(&Default::default());
+            let mut rp = draw_pass(
+                &mut enc,
+                &layer_view,
+                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+            );
+            rp.set_pipeline(&blend.draw_add);
+            rp.set_bind_group(0, &pass.empty, &[]);
+            rp.set_bind_group(1, &pass.draw_bind, &[]);
+            rp.draw_indirect(&pass.args, 0);
+            drop(rp);
+            layer
+        } else {
+            self.particulate_tiles(ctx, &mut enc, &pass, w, h, op.cap)
+        };
+        let finish_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("fx-particulate-finish-bind"),
+            layout: &blend.finish_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::TextureView(
+                    &layer.create_view(&Default::default()),
+                ),
+            }],
+        });
+        let mut rp = draw_pass(&mut enc, &view, wgpu::LoadOp::Load);
+        rp.set_pipeline(&blend.finish);
+        rp.set_bind_group(0, &pass.empty, &[]);
+        rp.set_bind_group(1, &pass.empty, &[]);
+        rp.set_bind_group(2, &finish_bind, &[]);
+        rp.draw(0..3, 0..1);
+        drop(rp);
         drop(enc);
+        if add {
+            ctx.recycle(layer);
+        }
         out
+    }
+
+    /// Every mode but Normal and Add reads the colour already there, which
+    /// the card's blending cannot, so the tiles work it out (the kernel's
+    /// Particle blend section), into a layer of the particles' own.
+    fn particulate_tiles(
+        &self,
+        ctx: &GpuContext,
+        enc: &mut wgpu::CommandEncoder,
+        pass: &ParticulatePass,
+        w: u32,
+        h: u32,
+        cap: u32,
+    ) -> wgpu::Texture {
+        let blend = &self.particulate_blend;
+        // ponytail: the layer and the sort's scratch are made fresh each
+        // frame, and a new buffer reads as nought, which the counts at the
+        // head of `scan` rely on. Pool them, cleared, if a profile shows the
+        // allocation.
+        let tiles = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("fx-particulate-tiles"),
+            size: wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let storage = |label: &str, bytes: u64| {
+            ctx.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: bytes.max(4),
+                usage: wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            })
+        };
+        let side = TILE * tile_scale(w, h);
+        let (tx, ty) = (w.div_ceil(side), h.div_ceil(side));
+        let most = pair_max(cap);
+        let len = scan_len(cap, w, h);
+        let prep = storage("fx-particulate-prep", u64::from(cap) * PREP_BYTES);
+        let pairs_a = storage("fx-particulate-pairs-a", u64::from(most) * 8);
+        let pairs_b = storage("fx-particulate-pairs-b", u64::from(most) * 8);
+        let scan = storage(
+            "fx-particulate-scan",
+            (u64::from(SCAN_HEAD) + u64::from(len) + u64::from(len.div_ceil(SCAN_BLOCK))) * 4,
+        );
+        let tiles_view = tiles.create_view(&Default::default());
+        let bind = |src: &wgpu::Buffer, dst: &wgpu::Buffer| {
+            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("fx-particulate-tiles-bind"),
+                layout: &blend.tiles_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: pass.args.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: prep.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&tiles_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: src.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: dst.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: scan.as_entire_binding(),
+                    },
+                ],
+            })
+        };
+        // The sort's first pass reads `pairs_a` into `pairs_b` and the second
+        // reads it back, so the tiles read `pairs_a` too.
+        let (f, b) = (&bind(&pairs_a, &pairs_b), &bind(&pairs_b, &pairs_a));
+        let particles = cap.div_ceil(EVAL_WORKGROUP);
+        let numbers = len.div_ceil(SCAN_BLOCK);
+        let pairs = most.div_ceil(SCAN_BLOCK);
+        let t = &blend.tiles;
+        let steps = [
+            (f, &t.prep, particles, 1),
+            (f, &t.scan_block, numbers, 1),
+            (f, &t.scan_sums, 1, 1),
+            (f, &t.scan_add, numbers, 1),
+            (f, &t.emit, particles, 1),
+            (f, &t.hist_lo, pairs, 1),
+            (f, &t.scan_block, numbers, 1),
+            (f, &t.scan_sums, 1, 1),
+            (f, &t.scan_add, numbers, 1),
+            (f, &t.place_lo, pairs, 1),
+            (b, &t.hist_hi, pairs, 1),
+            (b, &t.scan_block, numbers, 1),
+            (b, &t.scan_sums, 1, 1),
+            (b, &t.scan_add, numbers, 1),
+            (b, &t.place_hi, pairs, 1),
+            (f, &t.ranges_clear, (tx * ty).div_ceil(SCAN_BLOCK), 1),
+            (f, &t.ranges, pairs, 1),
+            (f, &t.tile, tx, ty),
+        ];
+        let mut cp = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("fx-particulate-tiles"),
+            timestamp_writes: None,
+        });
+        cp.set_bind_group(0, &pass.empty, &[]);
+        cp.set_bind_group(1, &pass.draw_bind, &[]);
+        for (group, pipeline, x, y) in steps {
+            cp.set_bind_group(2, group, &[]);
+            cp.set_pipeline(pipeline);
+            cp.dispatch_workgroups(x, y, 1);
+        }
+        drop(cp);
+        tiles
     }
 
     /// The compacted stream itself, read back to the host — the **oracle hook**
@@ -415,8 +666,7 @@ impl FxEngine {
             turb_speed: op.turbulence_speed,
             eps: op.eps,
             dt: op.dt,
-            first_birth_lo: op.first_birth as u32,
-            first_birth_hi: (op.first_birth >> 32) as u32,
+            _spare: [0; 2],
             frames: op.frames.len() as u32 - 1,
             candidates,
             path_len: op.path.len() as u32,
@@ -450,7 +700,20 @@ impl FxEngine {
             stamp_anchor: [0.0; 2],
             stamp_uv: [0.0; 2],
             stamp_corner: 0.0,
-            _pad: [0; 3],
+            edge: op.edge,
+            margin: op.margin,
+            turb_cycle: 0,
+            size_by: op.drives[0],
+            opacity_by: op.drives[1],
+            colour_by: op.drives[2],
+            speed_min: op.speed_range[0],
+            speed_max: op.speed_range[1],
+            density: u32::from(op.density.is_some()),
+            blend: op.blend,
+            pair_max: pair_max(cap),
+            scan_len: scan_len(cap, w, h),
+            tile_scale: tile_scale(w, h),
+            _pad: [0; 2],
         };
         let ubuf = ctx
             .device
@@ -553,6 +816,12 @@ impl FxEngine {
                     binding: 7,
                     resource: args.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: wgpu::BindingResource::TextureView(
+                        &op.density.unwrap_or(src).create_view(&Default::default()),
+                    ),
+                },
             ],
         });
         let draw_bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -643,6 +912,7 @@ pub(super) struct ParticulatePipelines {
     pub blocks: wgpu::ComputePipeline,
     pub scatter: wgpu::ComputePipeline,
     pub draw: wgpu::RenderPipeline,
+    pub blend: ParticulateBlendPipelines,
 }
 
 impl ParticulatePipelines {
@@ -679,6 +949,16 @@ impl ParticulatePipelines {
                     storage(5, false),
                     storage(6, false),
                     storage(7, false),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 8,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
                 ],
             });
         // The draw's own group. The stream is bound **read-only** here: a
@@ -688,9 +968,12 @@ impl ParticulatePipelines {
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("fx-particulate-draw-layout"),
                 entries: &[
+                    // The tiles' two compute passes read the first three as
+                    // the draw does.
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
+                            .union(wgpu::ShaderStages::COMPUTE),
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -700,7 +983,7 @@ impl ParticulatePipelines {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX.union(wgpu::ShaderStages::COMPUTE),
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
@@ -710,7 +993,7 @@ impl ParticulatePipelines {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        visibility: wgpu::ShaderStages::FRAGMENT.union(wgpu::ShaderStages::COMPUTE),
                         ty: wgpu::BindingType::Texture {
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
                             view_dimension: wgpu::TextureViewDimension::D2,
@@ -808,6 +1091,7 @@ impl ParticulatePipelines {
                 multiview: None,
                 cache: None,
             });
+        let blend = ParticulateBlendPipelines::new(ctx, module, &empty_layout, &draw_layout);
         Self {
             layout,
             draw_layout,
@@ -817,6 +1101,221 @@ impl ParticulatePipelines {
             blocks: blocks.wait(),
             scatter: scatter.wait(),
             draw,
+            blend,
+        }
+    }
+}
+
+/// Particle blend's own passes: Add's draw, the tiles', and the one that
+/// lays either layer over the picture.
+pub(super) struct ParticulateBlendPipelines {
+    pub tiles_layout: wgpu::BindGroupLayout,
+    pub finish_layout: wgpu::BindGroupLayout,
+    pub draw_add: wgpu::RenderPipeline,
+    pub tiles: TilePipelines,
+    pub finish: wgpu::RenderPipeline,
+}
+
+/// The tiles' compute passes, in the order a frame runs them.
+pub(super) struct TilePipelines {
+    pub prep: wgpu::ComputePipeline,
+    pub scan_block: wgpu::ComputePipeline,
+    pub scan_sums: wgpu::ComputePipeline,
+    pub scan_add: wgpu::ComputePipeline,
+    pub emit: wgpu::ComputePipeline,
+    pub hist_lo: wgpu::ComputePipeline,
+    pub hist_hi: wgpu::ComputePipeline,
+    pub place_lo: wgpu::ComputePipeline,
+    pub place_hi: wgpu::ComputePipeline,
+    pub ranges_clear: wgpu::ComputePipeline,
+    pub ranges: wgpu::ComputePipeline,
+    pub tile: wgpu::ComputePipeline,
+}
+
+impl ParticulateBlendPipelines {
+    fn new(
+        ctx: &GpuContext,
+        module: &wgpu::ShaderModule,
+        empty_layout: &wgpu::BindGroupLayout,
+        draw_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
+        let buffer = |binding: u32, read_only: bool| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
+        let tiles_layout = ctx
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("fx-particulate-tiles-layout"),
+                entries: &[
+                    buffer(0, true),
+                    buffer(1, false),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::StorageTexture {
+                            access: wgpu::StorageTextureAccess::WriteOnly,
+                            format: wgpu::TextureFormat::Rgba16Float,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                        },
+                        count: None,
+                    },
+                    buffer(3, false),
+                    buffer(4, false),
+                    buffer(5, false),
+                ],
+            });
+        let finish_layout = ctx
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("fx-particulate-finish-layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 6,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                }],
+            });
+        let tiles_pl = ctx
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("fx-particulate-tiles-pl"),
+                bind_group_layouts: &[empty_layout, draw_layout, &tiles_layout],
+                push_constant_ranges: &[],
+            });
+        let compute = |entry: &'static str| {
+            let (device, layout, module) = (ctx.device.clone(), tiles_pl.clone(), module.clone());
+            crate::Compiling::start(move || {
+                device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some(entry),
+                    layout: Some(&layout),
+                    module: &module,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    cache: None,
+                })
+            })
+        };
+        let started = [
+            "pt_prep",
+            "pt_scan_block",
+            "pt_scan_sums",
+            "pt_scan_add",
+            "pt_emit",
+            "pt_hist_lo",
+            "pt_hist_hi",
+            "pt_place_lo",
+            "pt_place_hi",
+            "pt_ranges_clear",
+            "pt_ranges",
+            "pt_tile",
+        ]
+        .map(compute);
+        let render = |label: &'static str,
+                      layout: &wgpu::PipelineLayout,
+                      vs: &'static str,
+                      fs: &'static str,
+                      blend: wgpu::BlendState| {
+            ctx.device
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some(label),
+                    layout: Some(layout),
+                    vertex: wgpu::VertexState {
+                        module,
+                        entry_point: Some(vs),
+                        buffers: &[],
+                        compilation_options: Default::default(),
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module,
+                        entry_point: Some(fs),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: ctx.working(),
+                            blend: Some(blend),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                        compilation_options: Default::default(),
+                    }),
+                    primitive: Default::default(),
+                    depth_stencil: None,
+                    // Never multisampled, for the draw's own reason.
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview: None,
+                    cache: None,
+                })
+        };
+        let draw_pl = ctx
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("fx-particulate-add-pl"),
+                bind_group_layouts: &[empty_layout, draw_layout],
+                push_constant_ranges: &[],
+            });
+        // Add: the colours sum, and the coverage is the union, as the W3C
+        // formula gives for it, so no particle reads what is already there.
+        let draw_add = render(
+            "fx-particulate-add",
+            &draw_pl,
+            "pt_vs",
+            "pt_fs",
+            wgpu::BlendState {
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                    operation: wgpu::BlendOperation::Add,
+                },
+            },
+        );
+        let finish_pl = ctx
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("fx-particulate-finish-pl"),
+                bind_group_layouts: &[empty_layout, empty_layout, &finish_layout],
+                push_constant_ranges: &[],
+            });
+        let finish = render(
+            "fx-particulate-finish",
+            &finish_pl,
+            "pt_full_vs",
+            "pt_finish",
+            wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING,
+        );
+        let [prep, scan_block, scan_sums, scan_add, emit, hist_lo, hist_hi, place_lo, place_hi, ranges_clear, ranges, tile] =
+            started.map(|c| c.wait());
+        Self {
+            tiles_layout,
+            finish_layout,
+            draw_add,
+            tiles: TilePipelines {
+                prep,
+                scan_block,
+                scan_sums,
+                scan_add,
+                emit,
+                hist_lo,
+                hist_hi,
+                place_lo,
+                place_hi,
+                ranges_clear,
+                ranges,
+                tile,
+            },
+            finish,
         }
     }
 }
