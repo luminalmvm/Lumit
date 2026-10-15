@@ -26264,11 +26264,13 @@ impl SseDecode for crate::api::layer::BridgeShapeTwist {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_angle = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_rotation = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_axis = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_centreX = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         let mut var_centreY = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
         return crate::api::layer::BridgeShapeTwist {
             angle: var_angle,
+            rotation: var_rotation,
             axis: var_axis,
             centre_x: var_centreX,
             centre_y: var_centreY,
@@ -36819,6 +36821,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeTwist {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.angle.into_into_dart().into_dart(),
+            self.rotation.into_into_dart().into_dart(),
             self.axis.into_into_dart().into_dart(),
             self.centre_x.into_into_dart().into_dart(),
             self.centre_y.into_into_dart().into_dart(),
@@ -42073,6 +42076,7 @@ impl SseEncode for crate::api::layer::BridgeShapeTwist {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <crate::api::effect::BridgeScalar>::sse_encode(self.angle, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.rotation, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.axis, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.centre_x, serializer);
         <crate::api::effect::BridgeScalar>::sse_encode(self.centre_y, serializer);

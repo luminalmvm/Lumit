@@ -9114,7 +9114,11 @@
   },
   "shapeTwistAngle": "Twist angle",
   "@shapeTwistAngle": {
-    "description": "Timeline row under a shape layer's art: how far the twist is spun, in degrees. A full turn comes back to the start."
+    "description": "Timeline row under a shape layer's art: how far the far end of the shape turns, in degrees. 0 leaves the shape alone."
+  },
+  "shapeTwistRotation": "Twist rotation",
+  "@shapeTwistRotation": {
+    "description": "Timeline row under a shape layer's art: how far the twisted shape is spun about its axis, in degrees. A full turn comes back to the start."
   },
   "shapeTwistAxis": "Twist axis",
   "@shapeTwistAxis": {

@@ -73,7 +73,8 @@ class ShapeItemRow extends StatelessWidget {
   }
 
   /// [i] with [op] taken off, or added where it was missing. A twist starts
-  /// in the middle of the path's own points, so it turns the shape in place.
+  /// at 10 degrees in the middle of the path's own points, so it turns the
+  /// shape in place and shows it has done something.
   static BridgeShapeItem _toggled(BridgeShapeItem i, ShapeOp op) {
     if (hasShapeOp(i, op)) return shapeItemWith(i, remove: op);
     final xs = i.vertices.map((v) => v.x);
@@ -85,7 +86,8 @@ class ShapeItemRow extends StatelessWidget {
     return switch (op) {
       ShapeOp.twist => shapeItemWith(i,
           twist: BridgeShapeTwist(
-            angle: const BridgeScalar.static_(0),
+            angle: const BridgeScalar.static_(10),
+            rotation: const BridgeScalar.static_(0),
             axis: const BridgeScalar.static_(0),
             centreX: BridgeScalar.static_(centre.dx),
             centreY: BridgeScalar.static_(centre.dy),
@@ -675,7 +677,10 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientStopOpacity =>
           (0, 100, '%'),
         ShapeValue.smoothAmount => (0, 1000, ' px'),
-        ShapeValue.twistAngle || ShapeValue.twistAxis => (-3600, 3600, '°'),
+        ShapeValue.twistAngle ||
+        ShapeValue.twistRotation ||
+        ShapeValue.twistAxis =>
+          (-3600, 3600, '°'),
         ShapeValue.twistCentreX ||
         ShapeValue.twistCentreY =>
           (-10000, 10000, ' px'),

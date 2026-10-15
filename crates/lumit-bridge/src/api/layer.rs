@@ -304,12 +304,13 @@ pub struct BridgeShapeTaper {
     pub scope: u32,
 }
 
-/// A shape's twist: `angle` and `axis` in degrees, the centre in layer
-/// pixels. Every one animates.
+/// A shape's twist: `angle`, `rotation` and `axis` in degrees, the centre in
+/// layer pixels. Every one animates.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeShapeTwist {
     pub angle: BridgeScalar,
+    pub rotation: BridgeScalar,
     pub axis: BridgeScalar,
     pub centre_x: BridgeScalar,
     pub centre_y: BridgeScalar,
@@ -399,6 +400,7 @@ impl BridgeShapeItem {
             repeat_end_opacity: BridgeScalar::read_at(&item.repeat_end_opacity, offset),
             twist: item.twist.as_ref().map(|w| BridgeShapeTwist {
                 angle: BridgeScalar::read_at(&w.angle, offset),
+                rotation: BridgeScalar::read_at(&w.rotation, offset),
                 axis: BridgeScalar::read_at(&w.axis, offset),
                 centre_x: BridgeScalar::read_at(&w.centre_x, offset),
                 centre_y: BridgeScalar::read_at(&w.centre_y, offset),
@@ -567,6 +569,7 @@ impl BridgeShapeItem {
             twist: match &self.twist {
                 Some(w) => Some(lumit_core::shape::Twist {
                     angle: clamped_property(&w.angle, offset, -360_000.0, 360_000.0)?,
+                    rotation: clamped_property(&w.rotation, offset, -360_000.0, 360_000.0)?,
                     axis: clamped_property(&w.axis, offset, -360_000.0, 360_000.0)?,
                     centre_x: clamped_property(&w.centre_x, offset, -100_000.0, 100_000.0)?,
                     centre_y: clamped_property(&w.centre_y, offset, -100_000.0, 100_000.0)?,

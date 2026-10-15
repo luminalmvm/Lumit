@@ -323,14 +323,17 @@ fn full_opacity() -> f64 {
 /// `axis` degrees round from the x axis, and flattened back onto the
 /// layer as if seen side-on.
 ///
-/// The turn is not the same everywhere: it runs half a turn from one end of
-/// the shape to the other along the axis, the way a ribbon twists. `angle`
-/// spins the whole twist, so a circle is a lens at 0 and a figure eight at
-/// 90, and a full turn of it comes back to where it started.
+/// The turn is not the same everywhere: one end of the shape along the axis
+/// stays put and the other turns by `angle`, the way a ribbon twists. So 0
+/// leaves the shape alone, a circle pinches to a figure eight at 180, and
+/// each further half turn adds another crossing. `rotation` then spins the
+/// whole twisted shape about the axis, so a full turn of it loops.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Twist {
     #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
     pub angle: Property,
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub rotation: Property,
     #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
     pub axis: Property,
     /// In layer pixels, the art's own coordinates.
@@ -1589,22 +1592,22 @@ impl Twist {
 
     /// Twist `points` in place. Each point keeps its place along the axis;
     /// its distance across it is what you see of that distance once its
-    /// slice of the shape has turned, which is half a turn from one end of
-    /// `path` to the other, plus the angle.
+    /// slice of the shape has turned, which is none at the back end of
+    /// `path` and the whole angle at the front, plus the rotation.
     fn apply(&self, points: &mut [(f64, f64)], path: &BezierPath, t: f64) {
         let (a, n, c) = self.frame(t);
         let (back, forward, _) = self.reach(path, t);
-        let half = back.abs().max(forward);
-        let per = if half > 1e-9 {
-            std::f64::consts::FRAC_PI_2 / half
+        let span = forward - back;
+        let per = if span > 1e-9 {
+            self.angle.value_at(t).to_radians() / span
         } else {
             0.0
         };
-        let angle = self.angle.value_at(t).to_radians();
+        let rotation = self.rotation.value_at(t).to_radians();
         for p in points {
             let d = (p.0 - c.0, p.1 - c.1);
             let along = d.0 * a.0 + d.1 * a.1;
-            let across = (d.0 * n.0 + d.1 * n.1) * (angle + along * per).cos();
+            let across = (d.0 * n.0 + d.1 * n.1) * ((along - back) * per + rotation).cos();
             *p = (
                 c.0 + along * a.0 + across * n.0,
                 c.1 + along * a.1 + across * n.1,
@@ -2805,6 +2808,7 @@ mod tests {
         let mut it = item(circle());
         it.twist = Some(Twist {
             angle: Property::fixed(angle),
+            rotation: Property::zero(),
             axis: Property::fixed(axis),
             centre_x: Property::fixed(centre.0),
             centre_y: Property::fixed(centre.1),
@@ -2834,32 +2838,35 @@ mod tests {
     }
 
     #[test]
-    fn a_twist_turns_a_circle_into_a_figure_eight_and_a_full_turn_comes_back() {
-        // At 0 the middle is full height; at 90 it is pinched to nothing.
-        let lens = drawn(&twisted(0.0, 0.0, (50.0, 50.0)));
-        let eight = drawn(&twisted(90.0, 0.0, (50.0, 50.0)));
-        assert_eq!(alpha_at(&lens, 100, 50, 25), 255, "the lens is full height");
+    fn a_twist_of_0_does_nothing_and_a_half_turn_makes_a_circle_a_figure_eight() {
+        let same = |x: &[(f64, f64)], y: &[(f64, f64)]| {
+            assert_eq!(x.len(), y.len());
+            for (a, b) in x.iter().zip(y) {
+                assert!(dist(*a, *b) < 1e-9, "{a:?} against {b:?}");
+            }
+        };
+        let turned = |angle: f64, rotation: f64| {
+            let mut it = twisted(angle, 30.0, (20.0, 70.0));
+            if let Some(w) = &mut it.twist {
+                w.rotation = Property::fixed(rotation);
+            }
+            it.trimmed_at(0.0).unwrap()
+        };
+        // At 0 and 0 every point is where it was, wherever the axis is.
+        same(&flatten_fine(&circle()), &turned(0.0, 0.0));
+        // A full turn of the rotation comes back to where it started.
+        same(&turned(180.0, 0.0), &turned(180.0, 360.0));
+
+        // At 180 the middle is pinched to nothing, with a lobe either side.
+        let eight = drawn(&twisted(180.0, 0.0, (50.0, 50.0)));
         assert_eq!(alpha_at(&eight, 100, 50, 25), 0, "the eight crosses here");
         assert_eq!(alpha_at(&eight, 100, 30, 50), 255, "a lobe either side");
         assert_eq!(alpha_at(&eight, 100, 70, 50), 255);
 
-        // A full turn is where it started.
-        let start = twisted(0.0, 0.0, (50.0, 50.0)).trimmed_at(0.0).unwrap();
-        let round = twisted(360.0, 0.0, (50.0, 50.0)).trimmed_at(0.0).unwrap();
-        assert_eq!(start.len(), round.len());
-        for (a, b) in start.iter().zip(&round) {
-            assert!(dist(*a, *b) < 1e-9, "{a:?} against {b:?}");
-        }
-
         // An upright axis pinches across the other way.
-        let upright = drawn(&twisted(90.0, 90.0, (50.0, 50.0)));
+        let upright = drawn(&twisted(180.0, 90.0, (50.0, 50.0)));
         assert_eq!(alpha_at(&upright, 100, 25, 50), 0);
         assert_eq!(alpha_at(&upright, 100, 50, 30), 255);
-
-        // The pinch sits on the centre: moved to the left edge, the middle is
-        // full again.
-        let moved = drawn(&twisted(90.0, 0.0, (10.0, 50.0)));
-        assert_eq!(alpha_at(&moved, 100, 50, 25), 255);
     }
 
     fn deformed(mode: u32, amount: f64, seed: f64, evolution: f64, detail: f64) -> ShapeItem {

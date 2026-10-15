@@ -1930,16 +1930,18 @@ class BridgeShapeTaper {
           scope == other.scope;
 }
 
-/// A shape's twist: `angle` and `axis` in degrees, the centre in layer
-/// pixels. Every one animates.
+/// A shape's twist: `angle`, `rotation` and `axis` in degrees, the centre in
+/// layer pixels. Every one animates.
 class BridgeShapeTwist {
   final BridgeScalar angle;
+  final BridgeScalar rotation;
   final BridgeScalar axis;
   final BridgeScalar centreX;
   final BridgeScalar centreY;
 
   const BridgeShapeTwist({
     required this.angle,
+    required this.rotation,
     required this.axis,
     required this.centreX,
     required this.centreY,
@@ -1947,7 +1949,11 @@ class BridgeShapeTwist {
 
   @override
   int get hashCode =>
-      angle.hashCode ^ axis.hashCode ^ centreX.hashCode ^ centreY.hashCode;
+      angle.hashCode ^
+      rotation.hashCode ^
+      axis.hashCode ^
+      centreX.hashCode ^
+      centreY.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1955,6 +1961,7 @@ class BridgeShapeTwist {
       other is BridgeShapeTwist &&
           runtimeType == other.runtimeType &&
           angle == other.angle &&
+          rotation == other.rotation &&
           axis == other.axis &&
           centreX == other.centreX &&
           centreY == other.centreY;

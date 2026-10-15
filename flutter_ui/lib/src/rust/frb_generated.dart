@@ -23895,13 +23895,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeTwist dco_decode_bridge_shape_twist(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return BridgeShapeTwist(
       angle: dco_decode_bridge_scalar(arr[0]),
-      axis: dco_decode_bridge_scalar(arr[1]),
-      centreX: dco_decode_bridge_scalar(arr[2]),
-      centreY: dco_decode_bridge_scalar(arr[3]),
+      rotation: dco_decode_bridge_scalar(arr[1]),
+      axis: dco_decode_bridge_scalar(arr[2]),
+      centreX: dco_decode_bridge_scalar(arr[3]),
+      centreY: dco_decode_bridge_scalar(arr[4]),
     );
   }
 
@@ -30496,11 +30497,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeTwist sse_decode_bridge_shape_twist(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_angle = sse_decode_bridge_scalar(deserializer);
+    var var_rotation = sse_decode_bridge_scalar(deserializer);
     var var_axis = sse_decode_bridge_scalar(deserializer);
     var var_centreX = sse_decode_bridge_scalar(deserializer);
     var var_centreY = sse_decode_bridge_scalar(deserializer);
     return BridgeShapeTwist(
         angle: var_angle,
+        rotation: var_rotation,
         axis: var_axis,
         centreX: var_centreX,
         centreY: var_centreY);
@@ -37379,6 +37382,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeShapeTwist self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_scalar(self.angle, serializer);
+    sse_encode_bridge_scalar(self.rotation, serializer);
     sse_encode_bridge_scalar(self.axis, serializer);
     sse_encode_bridge_scalar(self.centreX, serializer);
     sse_encode_bridge_scalar(self.centreY, serializer);
