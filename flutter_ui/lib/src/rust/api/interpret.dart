@@ -110,6 +110,13 @@ class BridgeFootageFacts {
   /// The file's own start timecode, as it writes it.
   final String? timecode;
 
+  /// Every render pass in an EXR, in the file's order. One or none for any
+  /// other file.
+  final List<String> renderPasses;
+
+  /// The pass Auto reads.
+  final String? autoPass;
+
   const BridgeFootageFacts({
     required this.hasPicture,
     required this.isStill,
@@ -126,6 +133,8 @@ class BridgeFootageFacts {
     required this.pixelAspectNum,
     required this.pixelAspectDen,
     this.timecode,
+    required this.renderPasses,
+    this.autoPass,
   });
 
   @override
@@ -144,7 +153,9 @@ class BridgeFootageFacts {
       fields.hashCode ^
       pixelAspectNum.hashCode ^
       pixelAspectDen.hashCode ^
-      timecode.hashCode;
+      timecode.hashCode ^
+      renderPasses.hashCode ^
+      autoPass.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -165,7 +176,9 @@ class BridgeFootageFacts {
           fields == other.fields &&
           pixelAspectNum == other.pixelAspectNum &&
           pixelAspectDen == other.pixelAspectDen &&
-          timecode == other.timecode;
+          timecode == other.timecode &&
+          renderPasses == other.renderPasses &&
+          autoPass == other.autoPass;
 }
 
 /// One item as the window opens on it.
@@ -227,6 +240,9 @@ class BridgeInterpretation {
   final BridgeLinearLight linearLight;
   final bool preserveRgb;
 
+  /// The render pass of an EXR to read. `None` is Auto.
+  final String? renderPass;
+
   const BridgeInterpretation({
     required this.alpha,
     required this.matteR,
@@ -246,6 +262,7 @@ class BridgeInterpretation {
     this.colourSpace,
     required this.linearLight,
     required this.preserveRgb,
+    this.renderPass,
   });
 
   @override
@@ -267,7 +284,8 @@ class BridgeInterpretation {
       loops.hashCode ^
       colourSpace.hashCode ^
       linearLight.hashCode ^
-      preserveRgb.hashCode;
+      preserveRgb.hashCode ^
+      renderPass.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -291,7 +309,8 @@ class BridgeInterpretation {
           loops == other.loops &&
           colourSpace == other.colourSpace &&
           linearLight == other.linearLight &&
-          preserveRgb == other.preserveRgb;
+          preserveRgb == other.preserveRgb &&
+          renderPass == other.renderPass;
 }
 
 /// What an interpretation makes of a file: the numbers the rest of Lumit will

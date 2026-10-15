@@ -4887,6 +4887,19 @@
   "@interpretPixelShape": {
     "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the row that says how much wider than tall one pixel is."
   },
+  "interpretRenderPass": "Render pass",
+  "@interpretRenderPass": {
+    "description": "The Interpret footage window: the row that picks which render pass of a multi-pass EXR the footage shows, such as the beauty, depth or ambient occlusion pass."
+  },
+  "interpretRenderPassAuto": "Auto ({pass})",
+  "@interpretRenderPassAuto": {
+    "description": "The Interpret footage window, Render pass list: the entry that picks the beauty pass by itself. {pass} is the name of the pass it picked, such as Combined.",
+    "placeholders": {
+      "pass": {
+        "type": "String"
+      }
+    }
+  },
   "interpretSquarePixels": "Square pixels",
   "@interpretSquarePixels": {
     "description": "The Interpret footage window, opened from a footage item's menu in the Project panel, Pixel aspect ratio list: the pixels are as wide as they are tall."

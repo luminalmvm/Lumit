@@ -137,6 +137,7 @@ pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
     if crate::reads_own(src) {
         return Ok(FileFacts {
             has_alpha: true,
+            float: crate::exr::is_exr(src.on_disk()),
             pixel_aspect: (1, 1),
             ..FileFacts::default()
         });
@@ -299,6 +300,13 @@ fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
 
     if video.is_none() && audio.is_none() {
         return Err(MediaError::NoStreams);
+    }
+    // An EXR read a pass at a time is the size of its pass. ffmpeg says
+    // nought for the ones it can't open.
+    if let Some(video) = video.as_mut().filter(|_| crate::exr::reads_pass(src)) {
+        if let Some((width, height)) = crate::exr::pass_size(src) {
+            (video.width, video.height) = (width, height);
+        }
     }
     Ok(MediaProbe {
         duration_seconds,
