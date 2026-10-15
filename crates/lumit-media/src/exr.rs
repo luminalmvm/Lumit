@@ -347,7 +347,23 @@ pub fn reads_pass(src: &crate::MediaSource) -> bool {
         return false;
     };
     let passes = passes_in(&meta);
-    !passes.is_empty() && !(passes.len() == 1 && passes[0].name == PLAIN)
+    !passes.is_empty()
+        && (src.render_pass.is_some() || !(passes.len() == 1 && passes[0].name == PLAIN))
+}
+
+/// Every render pass in an EXR, in the file's order, and the one Auto reads.
+/// Cryptomatte ids are left out.
+pub fn passes(path: &Path) -> Result<(Vec<String>, Option<String>), MediaError> {
+    let meta = header_of(path)?;
+    let passes = passes_in(&meta);
+    let auto = pick(&passes, None).map(|p| p.name.clone());
+    let mut names: Vec<String> = Vec::new();
+    for pass in passes {
+        if !names.contains(&pass.name) {
+            names.push(pass.name);
+        }
+    }
+    Ok((names, auto))
 }
 
 /// The size of the pass a source reads, for the probe: ffmpeg says nought for
@@ -356,7 +372,8 @@ pub fn reads_pass(src: &crate::MediaSource) -> bool {
 pub fn pass_size(src: &crate::MediaSource) -> Option<(u32, u32)> {
     let meta = header_of(src.on_disk()).ok()?;
     let passes = passes_in(&meta);
-    let size = meta.headers.get(pick(&passes, None)?.part)?.layer_size;
+    let pass = pick(&passes, src.render_pass.as_deref())?;
+    let size = meta.headers.get(pass.part)?.layer_size;
     Some((
         u32::try_from(size.width()).ok()?,
         u32::try_from(size.height()).ok()?,

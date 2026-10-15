@@ -90,7 +90,8 @@ pub fn read_own(
             }
             None => path.to_path_buf(),
         };
-        exr::read_pass(&file, None).map(|frame| exr::downsample(frame, target_width))
+        exr::read_pass(&file, src.render_pass.as_deref())
+            .map(|frame| exr::downsample(frame, target_width))
     } else if ai::is_ai(path) {
         ai::read_layer(path, src.source_layer, target_width)
     } else {

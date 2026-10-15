@@ -23494,6 +23494,8 @@ impl SseDecode for crate::api::interpret::BridgeFootageFacts {
         let mut var_pixelAspectNum = <u32>::sse_decode(deserializer);
         let mut var_pixelAspectDen = <u32>::sse_decode(deserializer);
         let mut var_timecode = <Option<String>>::sse_decode(deserializer);
+        let mut var_renderPasses = <Vec<String>>::sse_decode(deserializer);
+        let mut var_autoPass = <Option<String>>::sse_decode(deserializer);
         return crate::api::interpret::BridgeFootageFacts {
             has_picture: var_hasPicture,
             is_still: var_isStill,
@@ -23510,6 +23512,8 @@ impl SseDecode for crate::api::interpret::BridgeFootageFacts {
             pixel_aspect_num: var_pixelAspectNum,
             pixel_aspect_den: var_pixelAspectDen,
             timecode: var_timecode,
+            render_passes: var_renderPasses,
+            auto_pass: var_autoPass,
         };
     }
 }
@@ -23965,6 +23969,7 @@ impl SseDecode for crate::api::interpret::BridgeInterpretation {
         let mut var_linearLight =
             <crate::api::interpret::BridgeLinearLight>::sse_decode(deserializer);
         let mut var_preserveRgb = <bool>::sse_decode(deserializer);
+        let mut var_renderPass = <Option<String>>::sse_decode(deserializer);
         return crate::api::interpret::BridgeInterpretation {
             alpha: var_alpha,
             matte_r: var_matteR,
@@ -23984,6 +23989,7 @@ impl SseDecode for crate::api::interpret::BridgeInterpretation {
             colour_space: var_colourSpace,
             linear_light: var_linearLight,
             preserve_rgb: var_preserveRgb,
+            render_pass: var_renderPass,
         };
     }
 }
@@ -33112,6 +33118,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::interpret::BridgeFootageFacts
             self.pixel_aspect_num.into_into_dart().into_dart(),
             self.pixel_aspect_den.into_into_dart().into_dart(),
             self.timecode.into_into_dart().into_dart(),
+            self.render_passes.into_into_dart().into_dart(),
+            self.auto_pass.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -33775,6 +33783,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::interpret::BridgeInterpretati
             self.colour_space.into_into_dart().into_dart(),
             self.linear_light.into_into_dart().into_dart(),
             self.preserve_rgb.into_into_dart().into_dart(),
+            self.render_pass.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -39792,6 +39801,8 @@ impl SseEncode for crate::api::interpret::BridgeFootageFacts {
         <u32>::sse_encode(self.pixel_aspect_num, serializer);
         <u32>::sse_encode(self.pixel_aspect_den, serializer);
         <Option<String>>::sse_encode(self.timecode, serializer);
+        <Vec<String>>::sse_encode(self.render_passes, serializer);
+        <Option<String>>::sse_encode(self.auto_pass, serializer);
     }
 }
 
@@ -40134,6 +40145,7 @@ impl SseEncode for crate::api::interpret::BridgeInterpretation {
         <Option<String>>::sse_encode(self.colour_space, serializer);
         <crate::api::interpret::BridgeLinearLight>::sse_encode(self.linear_light, serializer);
         <bool>::sse_encode(self.preserve_rgb, serializer);
+        <Option<String>>::sse_encode(self.render_pass, serializer);
     }
 }
 

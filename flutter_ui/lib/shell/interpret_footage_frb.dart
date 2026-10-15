@@ -148,6 +148,7 @@ class _InterpretBodyState extends State<_InterpretBody> {
   late String? _colourSpace;
   late BridgeLinearLight _linear;
   late bool _preserveRgb;
+  late String? _pass;
 
   /// What the draft would make of the file, from the engine.
   late BridgeInterpreted _made;
@@ -181,6 +182,7 @@ class _InterpretBodyState extends State<_InterpretBody> {
     _colourSpace = now.colourSpace;
     _linear = now.linearLight;
     _preserveRgb = now.preserveRgb;
+    _pass = now.renderPass;
     _made = interpreted(file: _file, to: _draft());
     _fps.addListener(_edited);
     _timecode.addListener(_edited);
@@ -215,6 +217,7 @@ class _InterpretBodyState extends State<_InterpretBody> {
       colourSpace: _colourSpace,
       linearLight: _linear,
       preserveRgb: _preserveRgb,
+      renderPass: _pass,
     );
   }
 
@@ -297,6 +300,11 @@ class _InterpretBodyState extends State<_InterpretBody> {
           keyPrefix: 'interpret',
         ),
         if (_page == _Page.main) ...[
+          // Only a file with passes to choose between: a multi-pass EXR.
+          if (_file.renderPasses.length > 1)
+            _section(t, '', enabled: true, [
+              _row(t, l10n.interpretRenderPass, _passRow(t)),
+            ]),
           _section(t, l10n.interpretAlpha, enabled: _file.hasPicture, [
             _row(t, l10n.interpretReadAs, _alphaRow(t)),
             _tick(t, 'interpret-invert', l10n.interpretInvertAlpha, _invert,
@@ -640,6 +648,24 @@ class _InterpretBodyState extends State<_InterpretBody> {
           Text(l10n.interpretLoopTimes, style: dialogMono(t)),
         ],
       );
+
+  Widget _passRow(LumitTheme t) {
+    final passes = _file.renderPasses;
+    return dialogDropdown<String?>(
+      t,
+      id: 'interpret-render-pass',
+      value: _pass,
+      options: [
+        null,
+        ...passes,
+        // A pass the file no longer has is kept, and reads as Auto.
+        if (_pass != null && !passes.contains(_pass)) _pass,
+      ],
+      label: (pass) =>
+          pass ?? l10n.interpretRenderPassAuto(_file.autoPass ?? ''),
+      onChanged: (pass) => _set(() => _pass = pass),
+    );
+  }
 
   Widget _spaceRow(LumitTheme t) {
     final colour = widget.colour;

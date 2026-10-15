@@ -21816,8 +21816,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeFootageFacts dco_decode_bridge_footage_facts(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 15)
-      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    if (arr.length != 17)
+      throw Exception('unexpected arr length: expect 17 but see ${arr.length}');
     return BridgeFootageFacts(
       hasPicture: dco_decode_bool(arr[0]),
       isStill: dco_decode_bool(arr[1]),
@@ -21834,6 +21834,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       pixelAspectNum: dco_decode_u_32(arr[12]),
       pixelAspectDen: dco_decode_u_32(arr[13]),
       timecode: dco_decode_opt_String(arr[14]),
+      renderPasses: dco_decode_list_String(arr[15]),
+      autoPass: dco_decode_opt_String(arr[16]),
     );
   }
 
@@ -22184,8 +22186,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeInterpretation dco_decode_bridge_interpretation(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 18)
-      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
+    if (arr.length != 19)
+      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
     return BridgeInterpretation(
       alpha: dco_decode_bridge_alpha_mode(arr[0]),
       matteR: dco_decode_u_8(arr[1]),
@@ -22205,6 +22207,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       colourSpace: dco_decode_opt_String(arr[15]),
       linearLight: dco_decode_bridge_linear_light(arr[16]),
       preserveRgb: dco_decode_bool(arr[17]),
+      renderPass: dco_decode_opt_String(arr[18]),
     );
   }
 
@@ -28222,6 +28225,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_pixelAspectNum = sse_decode_u_32(deserializer);
     var var_pixelAspectDen = sse_decode_u_32(deserializer);
     var var_timecode = sse_decode_opt_String(deserializer);
+    var var_renderPasses = sse_decode_list_String(deserializer);
+    var var_autoPass = sse_decode_opt_String(deserializer);
     return BridgeFootageFacts(
         hasPicture: var_hasPicture,
         isStill: var_isStill,
@@ -28237,7 +28242,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         fields: var_fields,
         pixelAspectNum: var_pixelAspectNum,
         pixelAspectDen: var_pixelAspectDen,
-        timecode: var_timecode);
+        timecode: var_timecode,
+        renderPasses: var_renderPasses,
+        autoPass: var_autoPass);
   }
 
   @protected
@@ -28605,6 +28612,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_colourSpace = sse_decode_opt_String(deserializer);
     var var_linearLight = sse_decode_bridge_linear_light(deserializer);
     var var_preserveRgb = sse_decode_bool(deserializer);
+    var var_renderPass = sse_decode_opt_String(deserializer);
     return BridgeInterpretation(
         alpha: var_alpha,
         matteR: var_matteR,
@@ -28623,7 +28631,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         loops: var_loops,
         colourSpace: var_colourSpace,
         linearLight: var_linearLight,
-        preserveRgb: var_preserveRgb);
+        preserveRgb: var_preserveRgb,
+        renderPass: var_renderPass);
   }
 
   @protected
@@ -35499,6 +35508,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_u_32(self.pixelAspectNum, serializer);
     sse_encode_u_32(self.pixelAspectDen, serializer);
     sse_encode_opt_String(self.timecode, serializer);
+    sse_encode_list_String(self.renderPasses, serializer);
+    sse_encode_opt_String(self.autoPass, serializer);
   }
 
   @protected
@@ -35783,6 +35794,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_String(self.colourSpace, serializer);
     sse_encode_bridge_linear_light(self.linearLight, serializer);
     sse_encode_bool(self.preserveRgb, serializer);
+    sse_encode_opt_String(self.renderPass, serializer);
   }
 
   @protected
