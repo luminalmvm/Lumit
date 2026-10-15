@@ -184,6 +184,10 @@ pub struct Interpretation {
     /// pictures that aren't colour, such as a normal map.
     #[serde(skip_serializing_if = "is_default")]
     pub preserve_rgb: bool,
+    /// Which render pass of an EXR to read, by name. `None` is Auto, the
+    /// beauty pass.
+    #[serde(skip_serializing_if = "is_default")]
+    pub render_pass: Option<String>,
     /// Unknown fields from newer Lumit versions, preserved on load/save.
     #[serde(flatten, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -238,6 +242,7 @@ mod tests {
             loops: 4,
             linear_light: LinearLight::On,
             preserve_rgb: true,
+            render_pass: Some("Depth".into()),
             extra: serde_json::Map::new(),
         };
         let text = serde_json::to_string(&set).unwrap();

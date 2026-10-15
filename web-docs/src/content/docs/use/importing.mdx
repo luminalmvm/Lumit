@@ -103,6 +103,7 @@ every selected footage item at once.
 
 | Setting | Does |
 | --- | --- |
+| **Render pass** | Which pass of a multi-pass EXR is shown. **Auto** picks the beauty pass. Cryptomatte passes are not listed. |
 | **Alpha** | Straight, premultiplied against a matte colour, or ignored. **Guess** reads it from the file's frames. |
 | **Invert alpha** | Swaps opaque and clear. |
 | **Frame rate** | Plays the file's frames at another rate. The picture gets longer or shorter and its sound does not. |
@@ -115,6 +116,8 @@ every selected footage item at once.
 | **Colour space** | What the file arrived in, see [Colour management](/use/colour-management/). |
 | **Linear light** | Whether the file's numbers are already linear. Read only with no colour space chosen. |
 | **Preserve RGB** | Takes the file's numbers as they are, with no colour conversion. |
+
+An EXR pass of one channel, such as depth, shows in grey at the values the file holds.
 
 **Remember interpretation** on the same menu keeps one item's settings, and **Apply
 interpretation** gives them to every selected item.

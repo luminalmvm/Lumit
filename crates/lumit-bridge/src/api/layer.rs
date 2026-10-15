@@ -3427,6 +3427,69 @@ impl LayerReference {
         Ok(true)
     }
 
+    /// Put copies of shape keys from `from`'s mask `from_mask` onto this
+    /// layer's mask `id`: how a pasted mask path lands. The shapes stay on
+    /// this side, so only times cross. `times` names the copied keys and `to`
+    /// where each lands, both composition time.
+    ///
+    /// A key already on a landing time is replaced. A copied time the source
+    /// no longer has is passed over, and `false` means nothing was left.
+    #[frb(sync)]
+    pub fn paste_mask_path_keys(
+        &self,
+        id: Uuid,
+        from: &LayerReference,
+        from_mask: Uuid,
+        times: Vec<BridgeRational>,
+        to: Vec<BridgeRational>,
+    ) -> Result<bool, BridgeError> {
+        let source = from.item()?;
+        let copied = source
+            .masks
+            .iter()
+            .find(|m| m.id == from_mask)
+            .ok_or(BridgeError::NoSuchMask)?;
+        let layer = self.item()?;
+        let mut masks = layer.masks;
+        let mask = masks
+            .iter_mut()
+            .find(|m| m.id == id)
+            .ok_or(BridgeError::NoSuchMask)?;
+        let local = |t: &BridgeRational, offset: Rational| -> Result<Rational, BridgeError> {
+            Rational::new(t.num, t.den)
+                .map_err(|_| BridgeError::InvalidKeyframes)?
+                .checked_sub(offset)
+                .map_err(|_| BridgeError::InvalidKeyframes)
+        };
+        let mut pasted = false;
+        for (time, at) in times.iter().zip(&to) {
+            let time = local(time, source.start_offset.0)?;
+            let Some(key) = copied.path_keys.iter().find(|k| k.time == time) else {
+                continue;
+            };
+            let at = local(at, layer.start_offset.0)?;
+            mask.path_keys.retain(|k| k.time != at);
+            let slot = mask
+                .path_keys
+                .iter()
+                .position(|k| k.time > at)
+                .unwrap_or(mask.path_keys.len());
+            mask.path_keys.insert(
+                slot,
+                lumit_core::mask::PathKeyframe {
+                    time: at,
+                    ..key.clone()
+                },
+            );
+            pasted = true;
+        }
+        if !pasted {
+            return Ok(false);
+        }
+        self.commit_masks(masks)?;
+        Ok(true)
+    }
+
     /// Stop the shape animating, keeping the shape it shows at `time`.
     ///
     /// The stopwatch turning off, and it matches what the stopwatch does

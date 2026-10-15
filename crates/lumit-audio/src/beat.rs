@@ -45,11 +45,81 @@ pub fn downmix_stereo(interleaved: &[f32]) -> Vec<f32> {
         .collect()
 }
 
+/// Where the low band stops and the top band starts, in hertz: the bands the
+/// Audio level driver reads.
+pub const LOW_BAND_HZ: f32 = 200.0;
+/// See [`LOW_BAND_HZ`].
+pub const HIGH_BAND_HZ: f32 = 4000.0;
+
+/// A whole sound read step by step, once, for the Beat trigger driver: its
+/// onset envelope and its level, for the whole band and for the low and top
+/// bands, in that order.
+#[derive(Debug, Clone, Default)]
+pub struct BandAnalysis {
+    rate: u32,
+    window: usize,
+    hop: usize,
+    /// Positive spectral flux per step.
+    pub flux: [Vec<f32>; 3],
+    /// RMS level per step.
+    pub level: [Vec<f32>; 3],
+}
+
+impl BandAnalysis {
+    /// The moment step `i` stands for, in seconds from the sound's start: the
+    /// middle of its window.
+    #[must_use]
+    pub fn step_time(&self, i: usize) -> f64 {
+        (i * self.hop + self.window / 2) as f64 / f64::from(self.rate.max(1))
+    }
+
+    /// The onsets of `band` up to `until` seconds, each picked at the δ
+    /// `delta` gives at its own time (see [`delta_from_sensitivity`]).
+    #[must_use]
+    pub fn onsets(&self, band: usize, until: f64, delta: &dyn Fn(f64) -> f32) -> Vec<Onset> {
+        let Some(env) = self.flux.get(band) else {
+            return Vec::new();
+        };
+        let env_fps = f64::from(self.rate) / self.hop as f64;
+        pick_onsets_by(env, env_fps, self.window, self.hop, until, delta)
+    }
+}
+
+/// [`BandAnalysis`] of a mono buffer at `rate` Hz.
+#[must_use]
+pub fn analyse_bands(mono: &[f32], rate: u32) -> BandAnalysis {
+    let (window, hop) = window_hop(rate);
+    let (flux, level) = spectral_pass(mono, window, hop, rate);
+    BandAnalysis {
+        rate,
+        window,
+        hop,
+        flux,
+        level,
+    }
+}
+
 /// The onset envelope: positive spectral flux per STFT frame, on a
 /// log-compressed magnitude spectrum (`L = ln(1 + 100·|X|)`), Hann-windowed.
 fn onset_envelope(mono: &[f32], window: usize, hop: usize) -> Vec<f32> {
+    let [all, ..] = spectral_pass(mono, window, hop, 0).0;
+    all
+}
+
+/// The onset envelope and the level per STFT frame, whole, low and top band.
+/// The whole band's flux is summed bin by bin in the order it always was, so
+/// [`analyse_mono`] finds the beats it always found. A `rate` of nought leaves
+/// the two bands empty.
+fn spectral_pass(
+    mono: &[f32],
+    window: usize,
+    hop: usize,
+    rate: u32,
+) -> ([Vec<f32>; 3], [Vec<f32>; 3]) {
+    let mut flux: [Vec<f32>; 3] = Default::default();
+    let mut level: [Vec<f32>; 3] = Default::default();
     if mono.len() < window {
-        return Vec::new();
+        return (flux, level);
     }
     let hann: Vec<f32> = (0..window)
         .map(|i| {
@@ -69,8 +139,22 @@ fn onset_envelope(mono: &[f32], window: usize, hop: usize) -> Vec<f32> {
         }
     };
 
+    // Which bins each band holds: bin k sits at k · rate / window hertz.
+    let hz = |k: usize| k as f32 * rate as f32 / window as f32;
+    let band = |k: usize| -> Option<usize> {
+        match rate {
+            0 => None,
+            _ if hz(k) < LOW_BAND_HZ => Some(1),
+            _ if hz(k) >= HIGH_BAND_HZ => Some(2),
+            _ => None,
+        }
+    };
+    // Parseval: a one-sided bin's energy counts twice, bar the two ends, and
+    // the Hann window's own energy is divided back out to give an RMS.
+    let norm = window as f32 * hann.iter().map(|w| w * w).sum::<f32>();
+    let weight = |k: usize| if k == 0 || k == bins - 1 { 1.0 } else { 2.0 };
+
     let n_frames = (mono.len() - window) / hop + 1;
-    let mut env = Vec::with_capacity(n_frames);
     for f in 0..n_frames {
         let start = f * hop;
         for (i, w) in hann.iter().enumerate() {
@@ -81,24 +165,48 @@ fn onset_envelope(mono: &[f32], window: usize, hop: usize) -> Vec<f32> {
         }
         let mut cur = vec![0f32; bins];
         log_mag(&spectrum, &mut cur);
+        if rate > 0 {
+            let mut energy = [0f32; 3];
+            for (k, c) in spectrum.iter().enumerate() {
+                let e = weight(k) * c.norm_sqr();
+                energy[0] += e;
+                if let Some(b) = band(k) {
+                    energy[b] += e;
+                }
+            }
+            for (out, e) in level.iter_mut().zip(energy) {
+                out.push((e / norm.max(1e-12)).sqrt());
+            }
+        }
         if f == 0 {
             // Prime the reference; the first frame has no predecessor to
             // difference against (else it reads as one giant false onset).
             prev_log = cur;
-            env.push(0.0);
+            for out in &mut flux {
+                out.push(0.0);
+            }
             continue;
         }
-        let mut flux = 0f32;
+        let mut sums = [0f32; 3];
         for k in 0..bins {
             let d = cur[k] - prev_log[k];
             if d > 0.0 {
-                flux += d;
+                sums[0] += d;
+                if let Some(b) = band(k) {
+                    sums[b] += d;
+                }
             }
         }
         prev_log = cur;
-        env.push(flux);
+        for (out, s) in flux.iter_mut().zip(sums) {
+            out.push(s);
+        }
     }
-    env
+    if rate == 0 {
+        flux[1].clear();
+        flux[2].clear();
+    }
+    (flux, level)
 }
 
 /// The value at `frac` (0..1) through a sorted slice — a cheap percentile.
@@ -120,6 +228,19 @@ fn pick_onsets(
     hop: usize,
     sensitivity: f32,
 ) -> Vec<Onset> {
+    pick_onsets_by(env, env_fps, window, hop, f64::INFINITY, &|_| sensitivity)
+}
+
+/// [`pick_onsets`] with δ read at each candidate's own time, stopping past
+/// `until` seconds.
+fn pick_onsets_by(
+    env: &[f32],
+    env_fps: f64,
+    window: usize,
+    hop: usize,
+    until: f64,
+    sensitivity: &dyn Fn(f64) -> f32,
+) -> Vec<Onset> {
     let n = env.len();
     if n < 8 {
         return Vec::new();
@@ -135,7 +256,6 @@ fn pick_onsets(
     // this far below that rejects silence and nothing else.
     let lambda = (0.05 * percentile(&sorted, 0.9)).max(1e-3);
     let max_env = sorted[n - 1].max(1e-9);
-    let delta = sensitivity.max(0.1);
 
     let local = 3usize; // ±32 ms local-max window
     let win = ((0.46 * env_fps).round() as usize).max(1); // ±460 ms adaptive window
@@ -153,6 +273,12 @@ fn pick_onsets(
         let lo = i.saturating_sub(win);
         let hi = (i + win + 1).min(n);
         let mean = env[lo..hi].iter().sum::<f32>() / (hi - lo) as f32;
+        let at = (i as f64 * hop as f64 + centre) / (env_fps * hop as f64);
+        // A step past `until` can still refine back to before it.
+        if at > until + 1.0 / env_fps {
+            break;
+        }
+        let delta = sensitivity(at).max(0.1);
         if env[i] < mean * delta + lambda {
             continue;
         }
@@ -169,6 +295,9 @@ fn pick_onsets(
             0.0
         };
         let time = ((i as f64 + offset) * hop as f64 + centre) / (env_fps * hop as f64);
+        if time > until {
+            break;
+        }
         onsets.push(Onset {
             time,
             confidence: (env[i] / max_env).clamp(0.0, 1.0),

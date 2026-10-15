@@ -147,6 +147,12 @@ class GraphEditorFrb extends StatefulWidget {
   /// is drawn with a ring in that colour, one outside the other when it is
   /// several people. Empty outside a shared project.
   final Map<String, List<int>> otherKeys;
+
+  /// The picked property paths, when the graph also shows curves that are
+  /// not picked. Those draw dashed, and a click on one calls [onPick] with
+  /// its path. Null draws every curve solid.
+  final Set<String>? picked;
+  final ValueChanged<String>? onPick;
   final VoidCallback onSelectionChanged;
   final VoidCallback onChanged;
 
@@ -174,6 +180,8 @@ class GraphEditorFrb extends StatefulWidget {
     this.breakHandles = false,
     required this.selectedKeys,
     this.otherKeys = const {},
+    this.picked,
+    this.onPick,
     required this.onSelectionChanged,
     required this.onChanged,
     required this.onWheelTime,
@@ -504,7 +512,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
     super.setState(fn);
     final rows = _keyDrag == null && _boxDrag == null && _handleDrag == null
         ? const <String>[]
-        : {for (final channel in widget.channels) channel.path}.toList();
+        : {
+            for (final channel in widget.channels)
+              if (!_dashed(channel)) channel.path
+          }.toList();
     if (rows.isNotEmpty &&
         !rows.every(valuesInHand.value.contains) &&
         heldByOthers(rows)) {
@@ -722,6 +733,10 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       widget.vegas && channel.retime && widget.lens == GraphLens.speed;
 
   bool get _anyEnvelope => widget.channels.any(isEnvelope);
+
+  /// Whether [channel] is shown without being picked, and so draws dashed.
+  bool _dashed(GraphChannel channel) =>
+      !(widget.picked?.contains(channel.path) ?? true);
 
   /// The values to frame: what is on screen, or [window] when a fit names
   /// its own stretch of time.
@@ -943,29 +958,26 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
       _addKeyAt(local, range, height);
       return;
     }
+    // A click on a dashed curve picks its property.
+    final hit = _curveAt(local, range, height, within: 6);
+    if (hit != null && _dashed(hit)) {
+      widget.onPick?.call(hit.path);
+      return;
+    }
     if (widget.selectedKeys.isEmpty) return;
     widget.selectedKeys.clear();
     widget.onSelectionChanged();
   }
 
-  /// Plant a key on the curve under the pointer, without changing its shape.
-  ///
-  /// Works in **either lens**: the key's value is the curve's own value at
-  /// that moment, so the picture does not move — adding a point is a place to
-  /// grab, not an edit. In the Vegas envelope the new point also takes the
-  /// speed the envelope already reads there, so the straight line it sits on
-  /// stays straight.
-  void _addKeyAt(Offset local, (double, double) range, double height) {
-    final frame = widget.magnet
-        ? widget.axis.frameAt(local.dx).toDouble()
-        : widget.axis.frameAtExact(local.dx);
-    final seconds = frame / (widget.fps <= 0 ? 1 : widget.fps);
-
-    // The curve nearest the pointer vertically takes the key — measured in
-    // whichever reading is on screen, so the speed view picks by the speed
-    // curve the user is actually looking at.
+  /// The curve nearest the pointer vertically, within [within] pixels —
+  /// measured in whichever reading is on screen, so the speed view picks by
+  /// the speed curve the user is actually looking at.
+  GraphChannel? _curveAt(Offset local, (double, double) range, double height,
+      {double within = 12}) {
+    final seconds =
+        widget.axis.frameAtExact(local.dx) / (widget.fps <= 0 ? 1 : widget.fps);
     GraphChannel? nearest;
-    var best = 12.0;
+    var best = within;
     for (final channel in widget.channels) {
       final keys = channel.keys;
       final double drawn;
@@ -985,7 +997,23 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
         nearest = channel;
       }
     }
-    final channel = nearest;
+    return nearest;
+  }
+
+  /// Plant a key on the curve under the pointer, without changing its shape.
+  ///
+  /// Works in **either lens**: the key's value is the curve's own value at
+  /// that moment, so the picture does not move — adding a point is a place to
+  /// grab, not an edit. In the Vegas envelope the new point also takes the
+  /// speed the envelope already reads there, so the straight line it sits on
+  /// stays straight.
+  void _addKeyAt(Offset local, (double, double) range, double height) {
+    final frame = widget.magnet
+        ? widget.axis.frameAt(local.dx).toDouble()
+        : widget.axis.frameAtExact(local.dx);
+    final seconds = frame / (widget.fps <= 0 ? 1 : widget.fps);
+
+    final channel = _curveAt(local, range, height);
     if (channel == null) return;
 
     final keys = channel.keys;
@@ -2412,6 +2440,7 @@ class GraphEditorFrbState extends State<GraphEditorFrb> {
                     child: CustomPaint(
                       painter: _GraphPainter(
                         channels: widget.channels,
+                        dashed: [for (final c in widget.channels) _dashed(c)],
                         shownKeys: [
                           for (final c in widget.channels)
                             _shownKeys(c, painting: true)
@@ -3093,6 +3122,9 @@ const double graphGutterWidth = 34;
 /// The grid, the value-axis labels, and every channel's curve.
 class _GraphPainter extends CustomPainter {
   final List<GraphChannel> channels;
+
+  /// Per channel, whether it is shown without being picked.
+  final List<bool> dashed;
   final List<List<BridgeKeyframe>> shownKeys;
   final GraphLens lens;
   final TimelineAxis axis;
@@ -3140,6 +3172,7 @@ class _GraphPainter extends CustomPainter {
 
   const _GraphPainter({
     required this.channels,
+    required this.dashed,
     required this.shownKeys,
     required this.lens,
     required this.axis,
@@ -3191,13 +3224,13 @@ class _GraphPainter extends CustomPainter {
           // A static property is a flat line of its value (a flat 0 as speed).
           final y = _yOf(
               chLens == GraphLens.value ? channel.staticValue : 0, range, size);
-          canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+          _flat(canvas, y, size, paint, dashed[c]);
           continue;
         }
         if (keys.length == 1) {
           final y = _yOf(
               chLens == GraphLens.value ? keys.first.value : 0, range, size);
-          canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+          _flat(canvas, y, size, paint, dashed[c]);
           continue;
         }
       }
@@ -3227,7 +3260,7 @@ class _GraphPainter extends CustomPainter {
         for (var i = 0; i < result.length; i++) {
           final x = size.width * (i.toDouble() / samples.toDouble());
           final point = Offset(x, _yOf(result[i], range, size));
-          if (first) {
+          if (first || (dashed[c] && (point.dx / 6).floor().isOdd)) {
             path.moveTo(point.dx, point.dy);
             first = false;
           } else {
@@ -3244,7 +3277,7 @@ class _GraphPainter extends CustomPainter {
               ? channel.drawnValueAt(keys, seconds)
               : evaluateKeysSpeed(keys, seconds) * speedScale;
           final point = Offset(x, _yOf(v, range, size));
-          if (first) {
+          if (first || (dashed[c] && (point.dx / 6).floor().isOdd)) {
             path.moveTo(point.dx, point.dy);
             first = false;
           } else {
@@ -3271,6 +3304,19 @@ class _GraphPainter extends CustomPainter {
       }
     }
     _paintGutter(canvas, size);
+  }
+
+  /// A flat line at [y], dashed over the view alone when [dash] is set, since
+  /// the canvas is as wide as the comp.
+  void _flat(Canvas canvas, double y, Size size, Paint paint, bool dash) {
+    if (!dash) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      return;
+    }
+    final right = viewportLeft + viewportWidth;
+    for (var x = (viewportLeft / 12).floor() * 12.0; x < right; x += 12) {
+      canvas.drawLine(Offset(x, y), Offset(x + 6, y), paint);
+    }
   }
 
   /// The values the grid rules at ([gridValues]).

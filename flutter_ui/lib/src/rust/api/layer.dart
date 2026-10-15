@@ -3429,6 +3429,27 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferencePasteEffects(
           that: this, text: text, atFrame: atFrame);
 
+  /// Put copies of shape keys from `from`'s mask `from_mask` onto this
+  /// layer's mask `id`: how a pasted mask path lands. The shapes stay on
+  /// this side, so only times cross. `times` names the copied keys and `to`
+  /// where each lands, both composition time.
+  ///
+  /// A key already on a landing time is replaced. A copied time the source
+  /// no longer has is passed over, and `false` means nothing was left.
+  bool pasteMaskPathKeys(
+          {required UuidValue id,
+          required LayerReference from,
+          required UuidValue fromMask,
+          required List<BridgeRational> times,
+          required List<BridgeRational> to}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferencePasteMaskPathKeys(
+          that: this,
+          id: id,
+          from: from,
+          fromMask: fromMask,
+          times: times,
+          to: to);
+
   /// Cut and ramp this Sequence layer to the shape in `text`, keeping its
   /// own media.
   ///

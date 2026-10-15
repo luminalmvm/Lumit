@@ -52,7 +52,7 @@ const VALUES: [&str; 28] = [
 ];
 
 /// The functions an expression can call with no dot in front.
-const FUNCTIONS: [&str; 43] = [
+const FUNCTIONS: [&str; 44] = [
     "wiggle",
     "seedRandom",
     "random",
@@ -87,6 +87,7 @@ const FUNCTIONS: [&str; 43] = [
     "nearestKey",
     "comp",
     "effect",
+    "sourceRectAtTime",
     "rgbToHsl",
     "hslToRgb",
     "parseFloat",
@@ -765,6 +766,9 @@ impl<'a> Interp<'a> {
                 }
             }
             Host::Layer(comp, layer) => {
+                if name == "sourceRectAtTime" {
+                    return self.source_rect(*comp, *layer, &args);
+                }
                 if name != "effect" {
                     return fail(format!("'{name}' is not available on a layer yet"));
                 }
@@ -826,6 +830,32 @@ impl<'a> Interp<'a> {
                 self.prop_method(&prop, name, &args)
             }
         }
+    }
+
+    /// `sourceRectAtTime(t, includeExtents)`: the box round what the layer
+    /// shows at comp time `t` (now, when left out), in its own pixels, the
+    /// way the Measure driver measures it. Extents are not drawn apart from
+    /// the content here, so the second argument changes nothing.
+    fn source_rect(&mut self, comp: Uuid, layer: Uuid, args: &[Value]) -> Res<Value> {
+        let t = match self.arg(args, 0)? {
+            t if t.is_finite() => t,
+            _ => self.ae.time,
+        };
+        let context = self.ae.context;
+        let [left, top, right, bottom] = context
+            .document
+            .comp(comp)
+            .zip(self.ae.layer(comp, layer))
+            .and_then(|(c, l)| {
+                crate::fx::drivers::measure::layer_rect(&context.document, c, l, t, context)
+            })
+            .unwrap_or([0.0; 4]);
+        Ok(self.object(vec![
+            (Rc::from("top"), Value::Num(top)),
+            (Rc::from("left"), Value::Num(left)),
+            (Rc::from("width"), Value::Num(right - left)),
+            (Rc::from("height"), Value::Num(bottom - top)),
+        ]))
     }
 
     fn prop_method(&mut self, prop: &PropRef, name: &str, args: &[Value]) -> Res<Value> {
@@ -1210,9 +1240,9 @@ impl<'a> Interp<'a> {
                     None => return fail(format!("no composition called '{wanted}'")),
                 }
             }
-            "effect" => {
+            "effect" | "sourceRectAtTime" => {
                 let (comp, layer) = self.this_layer()?;
-                return self.host_method(Host::Layer(comp, layer), "effect", args.to_vec());
+                return self.host_method(Host::Layer(comp, layer), name, args.to_vec());
             }
             "rgbToHsl" => {
                 let c = self.vector(&first)?;

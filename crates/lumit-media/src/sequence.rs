@@ -268,6 +268,9 @@ pub struct MediaSource {
     /// `Some(n)` reads layer `n` of a layered image file on its own
     /// (`crate::psd`) rather than the picture the file opens as.
     pub source_layer: Option<u32>,
+    /// The render pass of an EXR to read (`crate::exr::passes`). `None` is
+    /// Auto, the beauty pass.
+    pub render_pass: Option<String>,
     /// How the file's frames are read (`crate::interpret`). The probe, the
     /// index and the decoder all answer in interpreted frames, so a source
     /// with fields separated has twice the frames at twice the rate.
