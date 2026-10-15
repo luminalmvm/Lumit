@@ -12,10 +12,12 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data' show BytesBuilder;
 
 import 'package:crypto/crypto.dart';
+import 'package:ffi/ffi.dart' show calloc;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
@@ -48,6 +50,9 @@ const int _fetchLimit = 8 << 20;
 /// How often the export and a watched folder are looked at.
 const Duration _exportBeat = Duration(milliseconds: 500);
 const Duration _watchBeat = Duration(seconds: 2);
+
+/// How often Windows is asked which window is in front.
+const Duration _focusBeat = Duration(milliseconds: 500);
 
 /// How long after an edit the page is told, so a drag is one event.
 const Duration _editSettle = Duration(milliseconds: 400);
@@ -104,6 +109,8 @@ class ExtensionHost with WidgetsBindingObserver {
   Timer? _editTimer;
   Timer? _exportTimer;
   Timer? _watchTimer;
+  Timer? _focusTimer;
+  bool _focusWas = false;
   String _projectWas = '';
   String _shareWas = '';
   BridgeExportState _exportWas = const BridgeExportState.idle();
@@ -131,6 +138,13 @@ class ExtensionHost with WidgetsBindingObserver {
         if (!change.local) return;
         _editTimer ??= Timer(_editSettle, _tellEdit);
       });
+      _focusWas = _focused();
+      // Flutter on Windows takes a press in the page for Lumit going
+      // inactive, and says nothing when Lumit is left from there. So there
+      // the system is asked instead.
+      if (Platform.isWindows) {
+        _focusTimer = Timer.periodic(_focusBeat, (_) => _tellFocus());
+      }
     }
     if (_allowed(BridgeExtensionPermission.export_)) {
       _exportWas = exportPoll();
@@ -146,6 +160,7 @@ class ExtensionHost with WidgetsBindingObserver {
     _editTimer?.cancel();
     _exportTimer?.cancel();
     _watchTimer?.cancel();
+    _focusTimer?.cancel();
     post = null;
   }
 
@@ -155,9 +170,19 @@ class ExtensionHost with WidgetsBindingObserver {
   // --- What the page is told --------------------------------------------
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(AppLifecycleState state) => _tellFocus();
+
+  /// Whether Lumit is the app in front.
+  bool _focused() => Platform.isWindows
+      ? _lumitInFront()
+      : WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  void _tellFocus() {
     if (!_allowed(BridgeExtensionPermission.activity)) return;
-    _emit('activity.focus', {'focused': state == AppLifecycleState.resumed});
+    final focused = _focused();
+    if (focused == _focusWas) return;
+    _focusWas = focused;
+    _emit('activity.focus', {'focused': focused});
   }
 
   Map<String, Object?> _projectInfo() {
@@ -548,6 +573,31 @@ class ExtensionHost with WidgetsBindingObserver {
     }
     _watch(folder);
     return {'folder': folder};
+  }
+}
+
+typedef _ForegroundC = IntPtr Function();
+typedef _ForegroundD = int Function();
+typedef _OwnerC = Uint32 Function(IntPtr window, Pointer<Uint32> process);
+typedef _OwnerD = int Function(int window, Pointer<Uint32> process);
+
+final DynamicLibrary _user32 = DynamicLibrary.open('user32.dll');
+final _foreground =
+    _user32.lookupFunction<_ForegroundC, _ForegroundD>('GetForegroundWindow');
+final _owner =
+    _user32.lookupFunction<_OwnerC, _OwnerD>('GetWindowThreadProcessId');
+
+/// Whether the window in front is one of Lumit's, on Windows. A page is
+/// inside Lumit's window, so a press in one leaves it in front.
+bool _lumitInFront() {
+  final window = _foreground();
+  if (window == 0) return false;
+  final process = calloc<Uint32>();
+  try {
+    _owner(window, process);
+    return process.value == pid;
+  } finally {
+    calloc.free(process);
   }
 }
 
