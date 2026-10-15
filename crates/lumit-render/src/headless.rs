@@ -1688,6 +1688,15 @@ impl HeadlessRenderer {
         self.pool.refuse_substitution();
     }
 
+    /// Keep the multisample attachment from frame to frame
+    /// ([`lumit_gpu::Compositor::keep_attachment`]). Set on the renderer an
+    /// export writes through, which draws every frame at one size.
+    pub fn keep_attachments(&mut self) {
+        if let Some(parts) = &self.parts {
+            parts.compositor.keep_attachment();
+        }
+    }
+
     /// How many comp frames the interactive path has actually decoded. A live
     /// value drag must not move this — that is the whole promise of
     /// [`Self::render_preview`], and the preview tests assert it here.

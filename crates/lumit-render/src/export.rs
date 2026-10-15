@@ -3042,6 +3042,7 @@ fn run(
     // model's name. The pre-flight turns away everything the document alone can
     // show; this is the rest of it (docs/08 §3.1, docs/impl/addons.md §6.3).
     renderer.refuse_substitution();
+    renderer.keep_attachments();
     // The project's colour config, before anything is written: the refusal has
     // to happen with the config in hand, and it has to happen before a file
     // exists rather than halfway through one.
