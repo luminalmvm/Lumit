@@ -1152,6 +1152,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                   return ScrollConfiguration(
                     behavior: ScrollConfiguration.of(context).copyWith(
                         dragDevices: const {PointerDeviceKind.trackpad},
+                        // macOS bounces past the ends by default, and the
+                        // other half stops there, so the rows come apart.
+                        physics: const ClampingScrollPhysics(),
                         scrollbars: false),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
