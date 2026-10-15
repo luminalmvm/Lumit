@@ -1865,6 +1865,13 @@ impl HeadlessRenderer {
         wants
     }
 
+    /// Whether `item`'s `frame` at this width is already in the
+    /// decoded-source cache.
+    #[must_use]
+    pub fn holds_decoded(&self, item: Uuid, frame: usize, target_width: Option<u32>) -> bool {
+        self.pool.holds(item, frame, target_width)
+    }
+
     /// File one prefetched decode into the decoded-source cache, under exactly
     /// the key the render's own decode would use — so the render finds it and
     /// decodes nothing. The key is (item, source frame, decode width), and a

@@ -3246,15 +3246,95 @@ fn run(
                 }
             })
         };
+        // The comp frame under an output frame: exact when the rates match
+        // (the rounding is then of an integer), nearest otherwise.
+        let src_of = |n: usize| {
+            let src = first + ((n as f64) * fps / out_fps).round() as usize;
+            src.min(end.saturating_sub(1))
+        };
+        // The footage is decoded a couple of frames ahead, on the threads
+        // playback reads with, so one frame decodes while another renders.
+        // Only while that is safe: a few files a frame, frames small enough
+        // that the ones in flight fit in half the decode cache, and footage
+        // that turns up in time. Past any of those it stops for good, and
+        // each frame decodes its own footage as it always did.
+        const DECODE_AHEAD: usize = 2;
+        const MOST_WANTS: usize = 8;
+        const LONGEST_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+        let quality = spec.render.quality;
+        let mut ahead = Some(crate::prefetch::Prefetcher::default());
+        // What was asked for each frame from this one on, in order.
+        let mut asked = std::collections::VecDeque::new();
+        let mut asked_to = 0usize;
         let mut rendered = Ok(());
         for frame_n in 0..total {
             if cancel.load(Ordering::Relaxed) {
                 break;
             }
-            // The comp frame under this output frame: exact when the rates match
-            // (the rounding is then of an integer), nearest otherwise.
-            let src = first + ((frame_n as f64) * fps / out_fps).round() as usize;
-            let src = src.min(end.saturating_sub(1));
+            let src = src_of(frame_n);
+            let mut stop = false;
+            if let Some(prefetch) = ahead.as_mut() {
+                // Only this frame's own at first, until its size is known.
+                let reach = if frame_n == 0 { 0 } else { DECODE_AHEAD };
+                while asked_to <= frame_n + reach && asked_to < total {
+                    // A layer of a layered file is left to the render: the
+                    // decode thread reads each one once and then skips it.
+                    let wants: Vec<_> = renderer
+                        .prefetch_wants(doc, comp_id, src_of(asked_to) as u64, quality)
+                        .into_iter()
+                        .filter(|w| !lumit_media::reads_own(&w.source))
+                        .collect();
+                    if wants.len() > MOST_WANTS {
+                        stop = true;
+                        break;
+                    }
+                    asked.push_back(
+                        wants
+                            .iter()
+                            .map(|w| (w.item, w.frame, w.target_width))
+                            .collect::<Vec<_>>(),
+                    );
+                    prefetch.request(wants);
+                    asked_to += 1;
+                }
+            }
+            let owed: Vec<_> = if frame_n < asked_to {
+                asked.pop_front().unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            if let Some(prefetch) = ahead.as_ref() {
+                let since = std::time::Instant::now();
+                let mut bytes = 0usize;
+                let mut landed = prefetch.drain();
+                loop {
+                    for done in landed.drain(..) {
+                        bytes = bytes.saturating_add(done.decoded.rgba.len());
+                        renderer.preload_decoded(done);
+                    }
+                    if owed
+                        .iter()
+                        .all(|&(item, frame, width)| renderer.holds_decoded(item, frame, width))
+                        || cancel.load(Ordering::Relaxed)
+                    {
+                        break;
+                    }
+                    // A decode that failed or was dropped sends nothing, so
+                    // the wait is short, and a wait that runs out stops
+                    // decoding ahead. The render below decodes what is missing.
+                    if since.elapsed() > LONGEST_WAIT {
+                        stop = true;
+                        break;
+                    }
+                    landed.extend(prefetch.wait(std::time::Duration::from_millis(50)));
+                }
+                let in_flight = bytes.saturating_mul(DECODE_AHEAD + 1);
+                stop |= in_flight > crate::decode::DEFAULT_DECODE_CACHE_BYTES / 2;
+            }
+            if stop {
+                // Its threads end with it.
+                ahead = None;
+            }
             let rgba = match render(&mut renderer, src) {
                 Ok(rgba) => rgba,
                 Err(e) => {

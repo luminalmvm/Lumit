@@ -656,6 +656,14 @@ impl DecodePool {
         (self.frame_cache.used_bytes(), self.decoders.len())
     }
 
+    /// Whether a plain decode of `item`'s `frame` at this width is held, so
+    /// rendering it would decode nothing.
+    #[must_use]
+    pub fn holds(&self, item: Uuid, frame: usize, target_width: Option<u32>) -> bool {
+        self.frame_cache
+            .contains_key(&(item, frame, target_width, None))
+    }
+
     /// Resize the decoded-frame cache (its slice of the one RAM budget).
     pub fn set_budget(&mut self, bytes: usize) {
         self.frame_cache.set_budget(bytes);

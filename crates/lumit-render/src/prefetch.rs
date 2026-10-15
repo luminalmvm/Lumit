@@ -121,6 +121,11 @@ impl Prefetcher {
         out
     }
 
+    /// The next finished decode, waiting up to `limit` for it.
+    pub fn wait(&self, limit: std::time::Duration) -> Option<Prefetched> {
+        self.done_rx.recv_timeout(limit).ok()
+    }
+
     /// How many files are open for reading ahead.
     #[must_use]
     pub fn open(&self) -> usize {
