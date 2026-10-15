@@ -163,9 +163,11 @@ class ExtensionHost with WidgetsBindingObserver {
   Map<String, Object?> _projectInfo() {
     final project = app.project;
     String? path;
+    String? id;
     var dirty = false;
     try {
       path = project?.path();
+      id = project?.shareId();
       dirty = project?.isDirty() ?? false;
     } catch (_) {
       // The project closed between the question and the answer.
@@ -175,6 +177,8 @@ class ExtensionHost with WidgetsBindingObserver {
       'open': project != null,
       // The file's name and never where it is.
       'name': file,
+      // The project's own, which a rename or a move keeps.
+      'id': id,
       'saved': path != null,
       'dirty': dirty,
     };

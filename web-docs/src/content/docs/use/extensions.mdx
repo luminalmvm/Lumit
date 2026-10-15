@@ -95,7 +95,7 @@ Element** on the page's own menu.
 | none | `app.notice {text}` | A line on the bottom strip, after the extension's name. |
 | none | `app.openExternal {url}` | Opens an `https` address on one of `hosts` in the browser. |
 | none | `net.fetch {url, method, headers, body}` | Fetches an `https` address on one of `hosts`. Answers `{status, headers, body}`. A redirect is returned, not followed. The answer is at most 8 MB of text. |
-| `project` | `project.info` | `{open, name, saved, dirty}`. `name` is the file's name without its folder. |
+| `project` | `project.info` | `{open, name, id, saved, dirty}`. `name` is the file's name without its folder. `id` is the project's own and stays when the file is renamed or moved. A copy of the file has the same `id`. A guest's copy of a shared project, or of a project kept online, has an `id` of its own. |
 | `export` | `export.state` | `{state}` as `idle`, `running` with `frame` and `total`, `done` with `path`, or `failed` with `error`. |
 | `export` | `export.fingerprint` | `{path, bytes, sha256}` of the file the last export made. |
 | `import` | `import.files {paths}` | Imports the files into the open project. |
