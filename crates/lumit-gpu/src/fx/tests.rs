@@ -3905,6 +3905,8 @@ fn dof_op(p: &lumit_core::fx::cpu::DofParams) -> crate::fx::DofOp {
         detect_edge_threshold: p.detect_edge_threshold,
         display: p.display,
         mix: p.mix,
+        // The stripes are a Viewer aid the oracle has no twin of.
+        zebra: false,
     }
 }
 

@@ -3394,6 +3394,13 @@
           "dividers_after": []
         },
         {
+          "id": "zebra",
+          "label": "Zebra",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",
@@ -3773,6 +3780,13 @@
             "Depth"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "zebra",
+          "label": "Zebra",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
         },
         {
           "id": "mix",

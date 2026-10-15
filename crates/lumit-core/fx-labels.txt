@@ -1152,5 +1152,6 @@ Yellow
 Yellows
 Z amount
 Z frequency
+Zebra
 Zoom
 sRGB

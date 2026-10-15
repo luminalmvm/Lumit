@@ -107,6 +107,36 @@ const List<ToolGroup> toolBarOrder = [
 String _actionFor(ToolGroup group) =>
     toolActions.entries.firstWhere((e) => e.value == group).key;
 
+/// One group's button on the strip, and its row in the overflow menu once
+/// folded. Selection and the armed group never fold.
+FoldItem _foldedTool(LumitTheme t, ToolGroup group, ToolsState tools,
+    {required bool seam}) {
+  final member = tools.memberOf(group);
+  final armed = tools.tool.group == group;
+  final enabled =
+      ToolMode.builtMembersOf(group).isNotEmpty && tools.arms(group);
+  return FoldItem(
+    keep: armed || group == ToolGroup.select,
+    label: member.label,
+    icon: lumitIcon(member.icon,
+        size: iconSize,
+        color: !enabled
+            ? t.textDisabled
+            : armed
+                ? t.accent
+                : t.textSecondary),
+    selected: armed,
+    onPressed: enabled ? () => tools.select(member) : null,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ToolButton(group: group, tools: tools),
+        if (seam && group == _seamAfter) const _ToolBarDivider(),
+      ],
+    ),
+  );
+}
+
 class LumitToolBarFrb extends StatelessWidget {
   const LumitToolBarFrb({super.key});
 
@@ -137,22 +167,19 @@ class LumitToolBarFrb extends StatelessWidget {
             key: const ValueKey('tool-bar-tools'),
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Scrolls rather than overflowing: a narrow window has less
-              // width than thirteen tools want, and an overflow stripe is
-              // not a design. Flexible so the options beside it get their
-              // share of the room instead of being squeezed to nothing.
+              // Folds from the end into the overflow mark on a narrow
+              // window, keeping Selection and the tool in your hand.
+              // Flexible so the options beside it get their share of the
+              // room instead of being squeezed to nothing.
               Flexible(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final group in toolBarOrder) ...[
-                        _ToolButton(group: group, tools: ui.tools),
-                        if (pills && group == _seamAfter)
-                          const _ToolBarDivider(),
-                      ],
-                    ],
-                  ),
+                child: FoldingRow(
+                  markKey: const ValueKey('tool-bar-overflow'),
+                  markWidth: _toolButtonWidth,
+                  markHeight: _toolButtonHeight,
+                  items: [
+                    for (final group in toolBarOrder)
+                      _foldedTool(t, group, ui.tools, seam: pills),
+                  ],
                 ),
               ),
               if (pills) ...[

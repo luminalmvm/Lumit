@@ -52,6 +52,7 @@ either, the whole frame sits at **Farthest (m)**.
 | **Nearest (m)** | Slider | 0.1 to 20; down to 0.01 and higher | 0.5 | - |
 | **Farthest (m)** | Slider | 1 to 1000; down to 0.02 and higher | 30 | - |
 | **Display** | Dropdown | Final · Depth | Final | - |
+| **Zebra** | Checkbox | On or off | Off | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 
@@ -110,6 +111,8 @@ The **Depth map** group:
 Additional properties:
 
 - **Display**: **Final** is the blur, **Depth** the distance in metres it used.
+- **Zebra**: stripes over what blurs less than a pixel, in the Viewer only. Exports and
+  other layers reading this one never show them.
 - **Mix**: how much of the result replaces the original.
 
 In a [node graph](/use/node-graphs/), **Depth** is a socket, the **Depth** view hands on

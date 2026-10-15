@@ -570,25 +570,12 @@ class _LookingOverflow extends StatelessWidget {
   const _LookingOverflow({required this.marks});
 
   @override
-  Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
-    return LumitTooltip(
-      message: l10n.tipViewerMoreControls,
-      child: Builder(
-        builder: (menuContext) => HouseButton(
-          key: const ValueKey('viewer-overflow'),
-          frameless: true,
-          padding: EdgeInsets.zero,
-          onPressed: () => _open(menuContext),
-          child: SizedBox(
-            width: viewerBarIconSize,
-            height: viewerStripHeight - 2 * viewerMarkEdge,
-            child: Center(child: Text('⋯', style: t.small)),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => OverflowMark(
+        buttonKey: const ValueKey('viewer-overflow'),
+        width: viewerBarIconSize,
+        height: viewerStripHeight - 2 * viewerMarkEdge,
+        onOpen: _open,
+      );
 
   void _open(BuildContext context) {
     final box = context.findRenderObject();

@@ -2520,7 +2520,8 @@ impl GpuEffect for Dof {
         // (`build.rs`'s `mattes_for` predicate), so a depth pass being *here* is
         // precisely what "a depth layer is bound" meant in the old resolve arm —
         // the fact the bag cannot carry, since a Layer row never reaches it.
-        let d = effects::dof::Dof::read(p).packed(true, effects::dof::Dof::blades_of(p));
+        let e = effects::dof::Dof::read(p);
+        let d = e.packed(true, effects::dof::Dof::blades_of(p));
         fx.dof(
             ctx,
             tex,
@@ -2551,6 +2552,7 @@ impl GpuEffect for Dof {
                 detect_edge_threshold: d.detect_edge_threshold,
                 display: d.display,
                 mix: d.mix,
+                zebra: e.zebra,
             },
         )
     }
@@ -2614,6 +2616,7 @@ impl GpuEffect for DofPro {
                 boost: e.boost.max(0.0),
                 mix: (e.mix / 100.0).clamp(0.0, 1.0),
                 max_span_px: lens_blur::MAX_SPAN_PX,
+                zebra: e.zebra,
             },
             &move || {
                 let b = lens_blur::bake(&optics, text.as_deref())?;

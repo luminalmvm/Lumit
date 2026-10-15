@@ -44,7 +44,7 @@ struct P {
     boost: f32,
     mix_amt: f32,
     max_span: f32,
-    _p2: f32,
+    zebra: f32,
 }
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -496,14 +496,30 @@ fn lb_finish(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let xy = vec2<i32>(gid.xy);
+    let me = textureLoad(info, xy, 0);
     if (p.display == 1u) {
-        let m = textureLoad(info, xy, 0).y;
-        textureStore(dst, xy, vec4<f32>(m, m, m, 1.0));
+        textureStore(dst, xy, zebra(xy, vec4<f32>(me.y, me.y, me.y, 1.0), me.x));
         return;
     }
     // The highlights add their coverage on top of the gather's, so an opaque
     // picture comes back above 1 where they land. Coverage stops at whole.
     var blurred = textureLoad(acc, xy, 0);
     blurred.a = min(blurred.a, 1.0);
-    textureStore(dst, xy, mix(textureLoad(src, xy, 0), blurred, p.mix_amt));
+    textureStore(dst, xy, zebra(xy, mix(textureLoad(src, xy, 0), blurred, p.mix_amt), me.x));
+}
+
+// The focus zebra, as Depth of field draws it: diagonal bands of white and
+// mid-grey over pixels whose blur is under a pixel across, premultiplied.
+fn zebra(xy: vec2<i32>, c: vec4<f32>, span: f32) -> vec4<f32> {
+    if (p.zebra == 0.0 || span >= 0.5) {
+        return c;
+    }
+    let band = ((xy.x + xy.y) / 6) % 4;
+    if (band == 0) {
+        return vec4<f32>(c.a, c.a, c.a, c.a);
+    }
+    if (band == 2) {
+        return vec4<f32>(0.18 * c.a, 0.18 * c.a, 0.18 * c.a, c.a);
+    }
+    return c;
 }
