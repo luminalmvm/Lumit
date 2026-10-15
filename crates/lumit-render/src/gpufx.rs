@@ -7353,11 +7353,12 @@ mod tests {
             // older `depth_invert`, which is the same switch under its earlier
             // stored id.
             let matte_row = def.schema().matte.param();
-            let has_file = def
-                .schema()
-                .params
-                .iter()
-                .any(|p| matches!(p.kind, ParamKind::File { .. }));
+            // A row with no file types is a folder the effect writes to, not
+            // an input, so it has nothing to hand the pass.
+            let has_file =
+                def.schema().params.iter().any(
+                    |p| matches!(p.kind, ParamKind::File { filter, .. } if !filter.is_empty()),
+                );
             // A Layer row that is not the matte is the **auxiliary-layer**
             // carriage, and the schema is its own predicate: both
             // `build.rs` and `run_ops` walk `EffectSchema::layer_input`, so
