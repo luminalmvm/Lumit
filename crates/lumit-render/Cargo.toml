@@ -54,6 +54,9 @@ bincode = "1"
 # The `roto/` tier's mattes, compressed the way the frame cache compresses its
 # pixels and with the same crate (docs/10 §3).
 lz4_flex = "0.11"
+# The planes tier's Save to folder sequences, with the version the vector
+# renderer already brings in.
+png = "0.18"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

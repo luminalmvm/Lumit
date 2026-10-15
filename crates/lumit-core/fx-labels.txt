@@ -882,6 +882,7 @@ Samples
 Satin
 Satin colour
 Saturation
+Save to folder
 Sawtooth
 Scale
 Scale height

@@ -126,6 +126,11 @@ pub struct RemoveBackground {
     /// span it was read in.
     #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
     pub frames: u32,
+    /// A folder the planes are also written to as a numbered PNG sequence.
+    /// Frames already there are read back rather than analysed again, so a
+    /// longer span or a second Analyse only adds what is missing.
+    #[file(filter = [], filter_name = "folder", label = "Save to folder")]
+    pub folder: Option<u32>,
 }
 
 /// The Remove background effect's behaviour: draw the matte the analysis filed

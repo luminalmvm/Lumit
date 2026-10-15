@@ -877,8 +877,10 @@ class EffectParamRowFrb extends StatelessWidget {
                     child: HouseButton(
                       key: ValueKey<String>('fx-file-$id-${param.id}'),
                       onPressed: () async {
-                        final path =
-                            await pickEffectInputFile(filter, filterName);
+                        // A row with no file types asks for a folder.
+                        final path = filter.isEmpty
+                            ? await pickFolder()
+                            : await pickEffectInputFile(filter, filterName);
                         if (path == null) return;
                         _set(BridgeEffectValue.file(BridgeFileParam(
                           paths: [path],

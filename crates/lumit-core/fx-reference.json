@@ -17855,6 +17855,14 @@
             "Work area"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "folder",
+          "label": "Save to folder",
+          "kind": "file",
+          "unit": "raw",
+          "file_filter": [],
+          "file_filter_name": "folder"
         }
       ],
       "groups": [],
@@ -17935,6 +17943,14 @@
             "Work area"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "folder",
+          "label": "Save to folder",
+          "kind": "file",
+          "unit": "raw",
+          "file_filter": [],
+          "file_filter_name": "folder"
         }
       ],
       "groups": [],

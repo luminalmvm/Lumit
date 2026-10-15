@@ -37,6 +37,7 @@ The planes are kept at the model's own size, a few hundred pixels on the long si
 | **View** | Dropdown | Depth · Source | Depth | - |
 | **Invert** | Checkbox | On or off | Off | - |
 | **Frames** | Dropdown | All frames · Layer in to out · Work area | All frames | - |
+| **Save to folder** | File |  | None | - |
 
 {/* END GENERATED */}
 
@@ -51,6 +52,9 @@ The planes are kept at the model's own size, a few hundred pixels on the long si
 - **Frames**: which frames Analyse reads. **All frames** is the whole footage however the
   layer is trimmed, **Layer in to out** is the frames between the layer's in and out
   points, and **Work area** is the frames inside the composition's work area.
+- **Save to folder**: a folder each plane is also saved to as a 16-bit greyscale PNG at the
+  model's own size, named by source frame (`depth_000123.png`). Frames already in the
+  folder are read back rather than analysed again.
 
 ## Notes
 

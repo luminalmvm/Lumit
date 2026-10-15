@@ -278,6 +278,9 @@ pub struct PlaneJob {
     /// The source frames to read, first and last, or `None` for all of them:
     /// the effect's Frames row, mapped onto the source by whoever pressed.
     pub range: Option<(i64, i64)>,
+    /// The effect's **Save to folder** row: where each plane is also written
+    /// as a PNG, and read back from before a model is asked for it.
+    pub folder: Option<PathBuf>,
 }
 
 /// How far an analysis has got. Read, never subscribed to - the interface
@@ -775,6 +778,100 @@ fn write_sidecar(dir: &Path, key: PlaneKey, run: &PlaneRun) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The folder
+// ---------------------------------------------------------------------------
+
+/// The effect's **Save to folder** row, or `None` while it is unset.
+fn folder_of(fx: &EffectInstance) -> Option<PathBuf> {
+    match fx.param("folder") {
+        Some(lumit_core::model::EffectValue::File(file)) => file.path_at(0.0).map(PathBuf::from),
+        _ => None,
+    }
+}
+
+/// Where frame `frame` of a plane of `kind` is written in `dir`. Numbered by
+/// the source frame, so a span moved along the shot lands beside what an
+/// earlier one wrote rather than over it.
+fn png_path(dir: &Path, kind: PlaneKind, frame: i64) -> PathBuf {
+    let name = match kind {
+        PlaneKind::Depth => "depth",
+        PlaneKind::Matte => "matte",
+    };
+    dir.join(format!("{name}_{frame:06}.png"))
+}
+
+/// One record's plane, out of the cache and whole again.
+fn plane_out(record: &FrameRecord) -> PlaneOut {
+    PlaneOut {
+        width: record.width,
+        height: record.height,
+        kind: record.kind,
+        data: expand(record),
+    }
+}
+
+/// Write one plane as a greyscale PNG: sixteen bits for depth, eight for a
+/// matte, at the model's own raster. A folder that cannot be written is
+/// skipped quietly, since the cache still holds every plane.
+fn write_png(dir: &Path, out: &PlaneOut, frame: i64) {
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, out.width, out.height);
+    encoder.set_color(png::ColorType::Grayscale);
+    let data = match out.kind {
+        // PNG keeps sixteen-bit samples big-endian and a plane keeps them
+        // little-endian.
+        PlaneKind::Depth => {
+            encoder.set_depth(png::BitDepth::Sixteen);
+            out.data
+                .chunks_exact(2)
+                .flat_map(|p| [p[1], p[0]])
+                .collect()
+        }
+        PlaneKind::Matte => {
+            encoder.set_depth(png::BitDepth::Eight);
+            out.data.clone()
+        }
+    };
+    let written = encoder.write_header().and_then(|mut writer| {
+        writer
+            .write_image_data(&data)
+            .and_then(|()| writer.finish())
+    });
+    if written.is_ok() && std::fs::create_dir_all(dir).is_ok() {
+        let _ = std::fs::write(png_path(dir, out.kind, frame), bytes);
+    }
+}
+
+/// Frame `frame`'s plane out of `dir`, or `None` when it is not there or is
+/// not a PNG this tier wrote: the wrong depth or colour type is analysed again
+/// and written over.
+fn read_png(dir: &Path, task: PlaneTask, frame: i64) -> Option<PlaneOut> {
+    let (kind, depth) = match task {
+        PlaneTask::Depth => (PlaneKind::Depth, png::BitDepth::Sixteen),
+        PlaneTask::Matte => (PlaneKind::Matte, png::BitDepth::Eight),
+    };
+    let file = std::fs::File::open(png_path(dir, kind, frame)).ok()?;
+    let mut reader = png::Decoder::new(std::io::BufReader::new(file))
+        .read_info()
+        .ok()?;
+    let mut data = vec![0u8; reader.output_buffer_size()?];
+    let info = reader.next_frame(&mut data).ok()?;
+    if info.color_type != png::ColorType::Grayscale || info.bit_depth != depth {
+        return None;
+    }
+    data.truncate(info.buffer_size());
+    if kind == PlaneKind::Depth {
+        data.chunks_exact_mut(2).for_each(|p| p.swap(0, 1));
+    }
+    Some(PlaneOut {
+        width: info.width,
+        height: info.height,
+        kind,
+        data,
+    })
+}
+
 /// Where the sidecar lives. Overridable in tests, which must never write into
 /// the user's own cache folder - the shape [`crate::track`] and [`crate::roto`]
 /// both use, and process-wide rather than per thread because the analysis runs
@@ -1128,7 +1225,9 @@ fn run(job: PlaneJob, cancel: &AtomicBool) {
         // A comp answers a warm pass and nobody else: it may have been edited
         // since the file was written, and Analyse is how it is read again.
         let rendered = key.is_some_and(|k| k.rendered);
-        if !job.analyse || (satisfied && !rendered) {
+        // A folder is filled by Analyse, so a press with one set always goes
+        // on to the frames, where the kept ones cost a file check each.
+        if !job.analyse || (satisfied && !rendered && job.folder.is_none()) {
             publish(instance, hit);
             finish(instance, Some(Progress::Done), owns_slot);
             return;
@@ -1252,6 +1351,10 @@ pub fn analyse(
     let todo: Vec<i64> = (first..=last)
         .filter(|f| records.binary_search_by_key(f, |r| r.frame).is_err())
         .collect();
+    // A model that carries its state between frames must see every frame in
+    // order, so a frame from the folder would break the chain after it.
+    let folder = job.folder.as_deref();
+    let reads_folder = folder.filter(|_| resumes(job.settings));
     records.reserve(todo.len());
     let mut cancelled = false;
     for (n, &at) in todo.iter().enumerate() {
@@ -1259,12 +1362,21 @@ pub fn analyse(
             cancelled = true;
             break;
         }
-        let Some(rgba) = frames.rgba(usize::try_from(at).unwrap_or(usize::MAX)) else {
-            // A clip that stops decoding part-way is analysed as far as it
-            // went, exactly as a partial track is.
-            break;
+        let out = match reads_folder.and_then(|dir| read_png(dir, job.settings.task, at)) {
+            Some(out) => out,
+            None => {
+                let Some(rgba) = frames.rgba(usize::try_from(at).unwrap_or(usize::MAX)) else {
+                    // A clip that stops decoding part-way is analysed as far
+                    // as it went, exactly as a partial track is.
+                    break;
+                };
+                let out = model.run(&rgba, width, height)?;
+                if let Some(dir) = folder {
+                    write_png(dir, &out, at);
+                }
+                out
+            }
         };
-        let out = model.run(&rgba, width, height)?;
         records.push(record_of(at, &out));
         report(Progress::Solving {
             done: n + 1,
@@ -1275,6 +1387,15 @@ pub fn analyse(
         }
     }
     records.sort_by_key(|r| r.frame);
+    // Frames kept from the cache that the folder has not got yet, so the
+    // sequence covers the whole span whichever way each frame was found.
+    if let Some(dir) = folder {
+        for record in records.iter().filter(|r| (first..=last).contains(&r.frame)) {
+            if !png_path(dir, record.kind, record.frame).exists() {
+                write_png(dir, &plane_out(record), record.frame);
+            }
+        }
+    }
     if records.is_empty() {
         return Err(if cancelled {
             PlaneFailure::Cancelled
@@ -1328,6 +1449,7 @@ pub fn job_for(
         owns_slot: false,
         stop_after: None,
         range: None,
+        folder: folder_of(fx),
     })
 }
 
@@ -1366,6 +1488,7 @@ fn warm_job_for_comp(fx: &EffectInstance, comp: Uuid) -> Option<PlaneJob> {
         owns_slot: false,
         stop_after: None,
         range: None,
+        folder: folder_of(fx),
     })
 }
 

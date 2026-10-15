@@ -160,6 +160,7 @@ fn job(frames: usize) -> PlaneJob {
         owns_slot: false,
         stop_after: None,
         range: None,
+        folder: None,
     }
 }
 
@@ -241,6 +242,39 @@ fn a_cancel_keeps_the_prefix_it_finished() {
         assert!(run.plane(frame).is_some(), "frame {frame} was thrown away");
     }
     assert!(run.plane(3).is_none());
+}
+
+/// **A span reads only its own frames, and a second Analyse adds to the
+/// folder rather than reading it again.** The PNGs come back as the planes
+/// that were written, so a wider span asks the model for the new frames only.
+#[test]
+fn a_span_fills_its_folder_and_a_wider_one_only_adds_to_it() {
+    let _guard = serially();
+    set_test_cache_dir(None);
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let span = |first, last| PlaneJob {
+        range: Some((first, last)),
+        folder: Some(dir.path().to_path_buf()),
+        ..job(6)
+    };
+
+    let mut model = Written { reads: 0 };
+    let (narrow, _) = analyse(span(2, 3), None, &mut model, &never(), &|_| {}).expect("a run");
+    assert_eq!(model.reads, 2, "only the span was read");
+    assert_eq!((narrow.first_frame, narrow.last_frame), (2, 3));
+
+    let mut model = Written { reads: 0 };
+    let (wide, _) = analyse(span(1, 4), None, &mut model, &never(), &|_| {}).expect("a run");
+    assert_eq!(model.reads, 2, "frames 2 and 3 came out of the folder");
+    assert_eq!(
+        wide.plane(2).map(|p| p.3),
+        narrow.plane(2).map(|p| p.3),
+        "a plane read back is the plane that was written"
+    );
+    for frame in 1..=4 {
+        assert!(png_path(dir.path(), PlaneKind::Depth, frame).exists());
+    }
+    assert!(!png_path(dir.path(), PlaneKind::Depth, 0).exists());
 }
 
 /// The same job, asking for a matte instead: `arch` is the Model row, 0 for

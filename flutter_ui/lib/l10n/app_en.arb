@@ -4003,6 +4003,10 @@
   "@fxWorkArea": {
     "description": "Effect controls - a Frames option on Depth, Remove background and Roto brush: read only the frames inside the composition's work area."
   },
+  "fxSaveToFolder": "Save to folder",
+  "@fxSaveToFolder": {
+    "description": "Effect controls - a control on Depth and Remove background: a folder the analysed frames are also saved to as a numbered PNG sequence."
+  },
   "fxMotionBlur": "Motion blur",
   "@fxMotionBlur": {
     "description": "Effect name in the Add effect menu and the Effect controls panel — the optical-flow motion blur that smears each pixel along the motion in footage. Also the Motion blur group and checkbox on Shake."

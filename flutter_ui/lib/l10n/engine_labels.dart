@@ -438,6 +438,7 @@ Map<String, String> get _built => {
       "Rows": l10n.fxRows,
       "Satin": l10n.fxSatin,
       "Satin colour": l10n.fxSatinColour,
+      "Save to folder": l10n.fxSaveToFolder,
       "Scratches": l10n.fxScratches,
       "Scribble": l10n.fxScribble,
       "Second tint": l10n.fxSecondTint,
