@@ -746,7 +746,7 @@ mod tests {
         assert_eq!(index.frame_count(), 1);
 
         assert_eq!(open(&path).unwrap().layers.len(), 3);
-        let frame = crate::read_own(&crate::MediaSource::file(&path), None).unwrap();
+        let frame = crate::read_own(&crate::MediaSource::file(&path), 0, None).unwrap();
         assert_eq!(frame.unwrap().rgba.len(), 8 * 6 * 4);
     }
 }

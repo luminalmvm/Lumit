@@ -199,8 +199,9 @@ fn run(jobs: &Receiver<Vec<PrefetchWant>>, done: &SyncSender<Prefetched>) {
     // Never more than the one decoder: every want here is for one file.
     let mut decoders = OpenDecoders::default();
     // The widths already read by the file's own reader. Such a file is a
-    // still, and every coming frame asks for it again.
-    let mut read: HashSet<Option<u32>> = HashSet::new();
+    // still, and every coming frame asks for it again, unless it is a run of
+    // EXRs, whose frames are each their own.
+    let mut read: HashSet<(Option<usize>, Option<u32>)> = HashSet::new();
     // The file this stream is reading. An item whose file has changed, as
     // one relinked or one whose stand-in gave way to the original has, is
     // opened again rather than read on from the old file.
@@ -219,10 +220,11 @@ fn run(jobs: &Receiver<Vec<PrefetchWant>>, done: &SyncSender<Prefetched>) {
             // would hand back the flattened picture of the one and can't open
             // the other.
             let decoded = if lumit_media::reads_own(&want.source) {
-                if !read.insert(want.target_width) {
+                let frame = want.source.sequence_fps.map(|_| want.frame);
+                if !read.insert((frame, want.target_width)) {
                     continue;
                 }
-                match lumit_media::read_own(&want.source, want.target_width) {
+                match lumit_media::read_own(&want.source, want.frame, want.target_width) {
                     Some(Ok(out)) => out,
                     _ => continue,
                 }

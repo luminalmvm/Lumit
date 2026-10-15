@@ -976,6 +976,22 @@ fn feed_effect_stack(
                 }
             }
         }
+        // **Beat trigger counts from the start.** Its events up to this frame
+        // come from every moment before it: the keys of its rows there, and
+        // every beat marker passed. So both are fed whole, as an Emit rate
+        // track is. A marker or a key after this frame renames it too, which
+        // costs a render and never serves a stale one.
+        if e.effect.match_name == lumit_core::fx::drivers::beat_trigger::MATCH_NAME {
+            h.update(b"beat-trigger/");
+            let _ = serde_json::to_writer(&mut *h, &e.params);
+            let markers = match marker_layer {
+                Some(l) => lumit_core::fx::MarkerContext::for_layer(comp, l),
+                None => lumit_core::fx::MarkerContext::for_comp(comp),
+            };
+            for beat in &markers.beats {
+                feed_f64(h, *beat);
+            }
+        }
         // **A points history.** An effect that declares Trail's two rows reads
         // the stream wired into it again at earlier times, one for each
         // sample, and every row above is fed at this frame's time only. A
@@ -1223,9 +1239,10 @@ fn feed_effect_stack(
                     // follows, and folding the named layer's own file says
                     // nothing about it. The mix's fingerprint is the term that
                     // does. It is asked for this one row alone, so no other
-                    // reference pays for a job list.
+                    // reference pays for a job list. Beat trigger's Audio row
+                    // reads the same mix.
                     let mix = (e.effect.namespace == lumit_core::model::EffectNamespace::Builtin
-                        && e.effect.match_name == "audio_level"
+                        && matches!(e.effect.match_name.as_str(), "audio_level" | "beat_trigger")
                         && p.id == "audio")
                         .then(|| stamper.mix_fingerprint(doc, comp))
                         .flatten();

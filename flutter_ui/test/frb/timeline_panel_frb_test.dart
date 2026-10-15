@@ -2908,6 +2908,73 @@ void main() {
               'the paste added rather than moved');
     });
 
+    /// Keys pasted with layers picked and no rows land on the same property
+    /// of each layer. One without the effect gets a copy of it, settings and
+    /// all, and one undo takes the whole paste back.
+    testWidgets('keys paste onto a picked layer and bring their effect',
+        (tester) async {
+      final p = withComp();
+      final source = blockLayer(p, [600, 900]);
+      source.addEffect(name: 'blur');
+      final blur = source.getEffects().single;
+      final blurId = blur.id();
+      BridgeKeyframe key(int frame, double value) => BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: frame),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      blur.setValue(
+          id: 'radius',
+          value: BridgeEffectValue.float(
+              BridgeScalar.keyframed([key(600, 10), key(900, 40)])));
+      blur.setValue(
+          id: 'mix',
+          value: const BridgeEffectValue.float(BridgeScalar.static_(40)));
+      blur.setValue(
+          id: 'repeat_edge_pixels', value: const BridgeEffectValue.bool(false));
+      source.setEffects(effects: [blur]);
+      final bare = p.comp.addSolidLayer();
+      p.uiState.model.refresh();
+      await mount(tester, p);
+
+      final from = source.internallayerId.toString();
+      expect(
+          copyChannels(
+            comp: p.comp,
+            channels: graphChannels(layers: p.uiState.model.layers, selected: [
+              '$from/transform/opacity',
+              '$from/effects/$blurId/radius',
+            ]),
+            fps: p.uiState.model.fps,
+          ),
+          isTrue);
+      p.uiState.setSelection([bare]);
+      await tester.pumpAndSettle();
+      p.uiState.playheadFrame.value = 1800;
+      expect(await pasteSelectionFrb(p.state, p.uiState, p.comp, bare), isTrue);
+      await tester.pumpAndSettle();
+
+      expect(framesOf(p, bare), [1800, 2100]);
+      final copy = bare.getEffects().single;
+      expect(copy.name(), 'blur');
+      expect(copy.id(), isNot(blurId), reason: 'a copy has its own id');
+      expect(copy.getValue(id: 'mix'),
+          const BridgeEffectValue.float(BridgeScalar.static_(40)));
+      expect(copy.getValue(id: 'repeat_edge_pixels'),
+          const BridgeEffectValue.bool(false));
+      final radius = (copy.getValue(id: 'radius') as BridgeEffectValue_Float)
+          .field0 as BridgeScalar_Keyframed;
+      expect(
+          [for (final k in radius.field0) p.comp.frameAtTime(time: k.time)],
+          [1800, 2100],
+          reason: 'the copied keys replace the copy\'s own curve');
+
+      p.state.project!.undo();
+      expect(bare.getEffects(), isEmpty);
+      expect(bare.getTransform().opacity, isA<BridgeScalar_Static>());
+    });
+
     // ---------------------------------------------------------------------
     // An action on a multi-selection applies to every selected layer.
     //

@@ -103,6 +103,10 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
       (LayerReference, List<BridgeTransformProp>, List<BridgeScalar>)>{};
   final effects =
       <String, (LayerReference, Map<String, Map<String, BridgeScalar>>)>{};
+  // A shape layer's contents are written whole, so every item's numbers on
+  // one layer go in the one write.
+  final shapes = <String,
+      (LayerReference, List<(String, ShapeValue, int, BridgeScalar)>)>{};
   withLinkedPartners(edits).forEach((channel, next) {
     final layerId = channel.entry.layer.internallayerId.toString();
     if (channel.prop != null) {
@@ -128,6 +132,9 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
         value: value,
         to: next,
       );
+    } else if (channel.shapeValue case final value?) {
+      (shapes[layerId] ??= (channel.entry.layer, [])).$2.add(
+          (channel.shape!.id.toString(), value, channel.shapeStop, next));
     } else if (channel.isMaskPath && channel.mask != null) {
       // A shape key holds a path, not a number, so only its time and its eases
       // can be written — which is exactly what a graph edit changes.
@@ -159,6 +166,19 @@ void commitChannelEdits(Map<GraphChannel, BridgeScalar> edits) {
       });
     }
     layer.setEffects(effects: staged);
+  }
+  for (final (layer, writes) in shapes.values) {
+    layer.setShapeContents(
+      contents: [
+        for (final item in layer.getShapeContents())
+          writes.fold(
+              item,
+              (it, w) => w.$1 == it.id.toString()
+                  ? shapeWithScalar(it, w.$2, w.$4, stop: w.$3)
+                  : it),
+      ],
+      at: null,
+    );
   }
 }
 

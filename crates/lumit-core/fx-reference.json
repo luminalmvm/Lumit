@@ -25972,6 +25972,220 @@
       ],
       "groups": [],
       "matte_role": "none"
+    },
+    {
+      "slug": "measure",
+      "match_name": "measure",
+      "label": "Measure",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "layer",
+          "label": "Layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "padding_x",
+          "label": "Padding x",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0
+        },
+        {
+          "id": "padding_y",
+          "label": "Padding y",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0
+        },
+        {
+          "id": "space",
+          "label": "Space",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Layer",
+            "Comp"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
+    },
+    {
+      "slug": "beat-trigger",
+      "match_name": "beat_trigger",
+      "label": "Beat trigger",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "events",
+          "label": "Events",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Beat markers",
+            "Detected beats",
+            "Level crossing"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "source",
+          "label": "Source",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "This comp",
+            "Layer",
+            "Clip"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "audio",
+          "label": "Audio",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "clip",
+          "label": "Clip",
+          "kind": "clip",
+          "unit": "raw"
+        },
+        {
+          "id": "band",
+          "label": "Band",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All",
+            "Low",
+            "High"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "sensitivity",
+          "label": "Sensitivity",
+          "kind": "float",
+          "unit": "percent",
+          "default": 50.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "min_gap",
+          "label": "Minimum gap",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "threshold",
+          "label": "Threshold",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.2,
+          "slider_min": 0.0,
+          "slider_max": 1.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "hold_off",
+          "label": "Hold off",
+          "kind": "float",
+          "unit": "frames",
+          "default": 4.0,
+          "slider_min": 0.0,
+          "slider_max": 30.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "decay",
+          "label": "Decay",
+          "kind": "float",
+          "unit": "seconds",
+          "default": 0.25,
+          "slider_min": 0.01,
+          "slider_max": 2.0,
+          "hard_min": 0.0
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "source",
+          "on": "events",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "audio",
+          "on": "source",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "clip",
+          "on": "source",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "band",
+          "on": "events",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "sensitivity",
+          "on": "events",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "min_gap",
+          "on": "events",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "threshold",
+          "on": "events",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "hold_off",
+          "on": "events",
+          "cond": "choice_is",
+          "value": 2
+        }
+      ],
+      "matte_role": "none"
     }
   ]
 }

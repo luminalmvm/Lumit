@@ -2763,6 +2763,74 @@
   "@fxNormalised": {
     "description": "Node graph — an output of the Clone index driver: the copy's number as a fraction, 0 at the first copy and 1 at the last."
   },
+  "fxMeasure": "Measure",
+  "@fxMeasure": {
+    "description": "Driver name in the Graph panel — gives the size and edges of a layer's content as numbers."
+  },
+  "fxPaddingX": "Padding x",
+  "@fxPaddingX": {
+    "description": "Effect controls — a control on the Measure driver: room added to the left and right of the measured box, in pixels."
+  },
+  "fxPaddingY": "Padding y",
+  "@fxPaddingY": {
+    "description": "Effect controls — a control on the Measure driver: room added above and below the measured box, in pixels."
+  },
+  "fxSpace": "Space",
+  "@fxSpace": {
+    "description": "Effect controls — a dropdown on the Measure driver: whether the box is measured in the layer's own pixels or in the composition's."
+  },
+  "fxComp": "Comp",
+  "@fxComp": {
+    "description": "Effect controls — an option of the Measure driver's Space dropdown: measure in the composition's pixels, after the layer's transform. Short for composition."
+  },
+  "fxBeatTrigger": "Beat trigger",
+  "@fxBeatTrigger": {
+    "description": "Driver name in the Graph panel — turns beats or loud moments in the audio into events other effects react to."
+  },
+  "fxEvents": "Events",
+  "@fxEvents": {
+    "description": "Effect controls — a dropdown on the Beat trigger driver: what counts as an event."
+  },
+  "fxBeatMarkers": "Beat markers",
+  "@fxBeatMarkers": {
+    "description": "Effect controls — an option of the Beat trigger driver's Events dropdown: the composition's beat markers."
+  },
+  "fxDetectedBeats": "Detected beats",
+  "@fxDetectedBeats": {
+    "description": "Effect controls — an option of the Beat trigger driver's Events dropdown: beats found in the sound itself."
+  },
+  "fxLevelCrossing": "Level crossing",
+  "@fxLevelCrossing": {
+    "description": "Effect controls — an option of the Beat trigger driver's Events dropdown: an event each time the sound gets louder than a threshold."
+  },
+  "fxBand": "Band",
+  "@fxBand": {
+    "description": "Effect controls — a dropdown on the Beat trigger driver: which part of the sound is listened to, all of it, the low end or the top end."
+  },
+  "fxAll": "All",
+  "@fxAll": {
+    "description": "Effect controls — an option of the Beat trigger driver's Band dropdown: the whole sound, every frequency."
+  },
+  "fxMinimumGap": "Minimum gap",
+  "@fxMinimumGap": {
+    "description": "Effect controls — a control on the Beat trigger driver: of two beats closer together than this, in seconds, only the stronger counts."
+  },
+  "fxHoldOff": "Hold off",
+  "@fxHoldOff": {
+    "description": "Effect controls — a control on the Beat trigger driver: how many frames after an event before the next can fire."
+  },
+  "fxPulse": "Pulse",
+  "@fxPulse": {
+    "description": "Node graph — an output of the Beat trigger driver: 1 on the frame of each event and 0 otherwise."
+  },
+  "fxEnvelope": "Envelope",
+  "@fxEnvelope": {
+    "description": "Node graph — an output of the Beat trigger driver: 1 at each event, falling away over the Decay time."
+  },
+  "fxTimeSinceLast": "Time since last",
+  "@fxTimeSinceLast": {
+    "description": "Node graph — an output of the Beat trigger driver: seconds since the last event."
+  },
   "fxOff": "Off",
   "@fxOff": {
     "description": "Effect controls — a dropdown option on Clone to points: no time offset, or no render per clone."
@@ -4886,6 +4954,19 @@
   "interpretPixelShape": "Pixel aspect ratio",
   "@interpretPixelShape": {
     "description": "The Interpret footage window, opened from a footage item's menu in the Project panel: the row that says how much wider than tall one pixel is."
+  },
+  "interpretRenderPass": "Render pass",
+  "@interpretRenderPass": {
+    "description": "The Interpret footage window: the row that picks which render pass of a multi-pass EXR the footage shows, such as the beauty, depth or ambient occlusion pass."
+  },
+  "interpretRenderPassAuto": "Auto ({pass})",
+  "@interpretRenderPassAuto": {
+    "description": "The Interpret footage window, Render pass list: the entry that picks the beauty pass by itself. {pass} is the name of the pass it picked, such as Combined.",
+    "placeholders": {
+      "pass": {
+        "type": "String"
+      }
+    }
   },
   "interpretSquarePixels": "Square pixels",
   "@interpretSquarePixels": {
@@ -8096,6 +8177,18 @@
   "tipFitSelection": "Fit selection",
   "@tipFitSelection": {
     "description": "Tooltip on the graph editor's Fit selection button. One or two words."
+  },
+  "tipGraphScopeSelected": "Selected curves",
+  "@tipGraphScopeSelected": {
+    "description": "Tooltip on the graph editor's scope button, when it shows only the selected properties' curves. A click moves it on to the layer's. One or two words."
+  },
+  "tipGraphScopeLayer": "Layer curves",
+  "@tipGraphScopeLayer": {
+    "description": "Tooltip on the graph editor's scope button, when it shows every animated property of the selected layers. A click moves it on to the whole composition's. One or two words."
+  },
+  "tipGraphScopeComp": "Composition curves",
+  "@tipGraphScopeComp": {
+    "description": "Tooltip on the graph editor's scope button, when it shows every animated property in the composition. A click moves it back to the selected properties'. One or two words."
   },
   "tipBreakHandlesOn": "Handles broken",
   "@tipBreakHandlesOn": {

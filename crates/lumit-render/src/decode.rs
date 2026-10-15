@@ -897,7 +897,7 @@ fn decode(
     // One layer of a layered image file, or an Illustrator document: the
     // file's own reader again, since ffmpeg only ever opens the flattened
     // picture of the one and can't open the other.
-    if let Some(out) = lumit_media::read_own(&req.source, req.target_width) {
+    if let Some(out) = lumit_media::read_own(&req.source, req.frame, req.target_width) {
         let out = out.map_err(|e| e.to_string())?;
         cache.insert(
             cache_key,

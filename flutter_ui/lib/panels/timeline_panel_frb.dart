@@ -1301,6 +1301,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   /// Break handles: a handle drag in the graph moves its own side only.
   bool _graphBreakHandles = false;
 
+  /// Whose curves the graph draws.
+  GraphScope _graphScope = GraphScope.selected;
+
   final GlobalKey<GraphEditorFrbState> _graphPane = GlobalKey();
 
   /// The property rows currently on screen, in display order — what a
@@ -2975,19 +2978,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (comp == null) return false;
     final channels = _commandChannels(ui);
     final selection = _actionKeySelection(channels);
-    if (selection.isEmpty) {
-      return copyChannels(comp: comp, channels: channels, fps: ui.model.fps);
-    }
     // The answer, not an assumption: a copy that took nothing must not claim
     // the chord, or `Ctrl+C` is swallowed and the clipboard still holds
     // whatever was copied before — which is the shape "Copy does nothing" took
     // on the owner's desktop.
-    return copySelectedKeys(
-      comp: comp,
-      channels: channels,
-      selectedKeys: selection,
-      fps: ui.model.fps,
-    );
+    final copied = selection.isEmpty
+        ? copyChannels(comp: comp, channels: channels, fps: ui.model.fps)
+        : copySelectedKeys(
+            comp: comp,
+            channels: channels,
+            selectedKeys: selection,
+            fps: ui.model.fps,
+          );
+    // Keys are now the last thing copied, so a paste onto picked layers puts
+    // keys down rather than a layer copied earlier.
+    if (copied) ui.clipboard.clear();
+    return copied;
   }
 
   /// Paste claims it when there are channels to paste *into* and keyframes to
@@ -2999,9 +3005,32 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // The same channels Copy took them from, resolved the same way — so a
     // copy and the paste that follows it are looking at one list.
     final channels = _commandChannels(ui);
-    if (channels.isEmpty) return false;
-    if (graphKeyClipboard.isEmpty && !ui.clipboard.isEmpty) return false;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
+    if (channels.isEmpty) {
+      // No rows picked, but layers are: each takes the keys on its own
+      // matching properties.
+      final picked = ui.selectedLayerIds;
+      if (graphKeyClipboard.isEmpty ||
+          !ui.clipboard.isEmpty ||
+          picked.isEmpty) {
+        return false;
+      }
+      final pasted = pasteKeysOntoLayers(
+        targets: [
+          for (final entry in ui.model.layers)
+            if (picked.contains(entry.layer.internallayerId)) entry,
+        ],
+        playheadFrame: ui.playheadFrame.value,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        project: _project,
+        onPasted: _selectPasted,
+      );
+      if (pasted) ui.model.refresh();
+      return pasted;
+    }
+    if (graphKeyClipboard.isEmpty && !ui.clipboard.isEmpty) return false;
     pasteKeysAtPlayhead(
       channels: channels,
       playheadFrame: ui.playheadFrame.value,
@@ -3010,10 +3039,29 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       fpsDen: fpsDen,
       // One press, one step, however many layers the clipboard reaches.
       project: _project,
+      onPasted: _selectPasted,
     ).then((pasted) {
       if (pasted && mounted) ui.model.refresh();
     });
     return true;
+  }
+
+  /// Pick the keys a paste put down, in whichever view is showing.
+  void _selectPasted(List<PastedKey> pasted) {
+    if (!mounted || pasted.isEmpty) return;
+    if (!_graph) {
+      _onLaneKeysSelected({for (final k in pasted) '${k.path}#${k.index}'});
+      _publishLaneKeys();
+      return;
+    }
+    setState(() {
+      _graphKeySelection
+        ..clear()
+        ..addAll({for (final k in pasted) '${k.id}#${k.index}'});
+      _selectedProperties
+        ..clear()
+        ..addAll({for (final k in pasted) k.path});
+    });
   }
 
   bool _deleteSelectedMasks() {
@@ -3500,7 +3548,26 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 semanticLabel: label),
           ),
         );
+    final scopeTip = switch (_graphScope) {
+      GraphScope.selected => l10n.tipGraphScopeSelected,
+      GraphScope.layer => l10n.tipGraphScopeLayer,
+      GraphScope.comp => l10n.tipGraphScopeComp,
+    };
     return [
+      const SizedBox(width: 2),
+      // One button through the three, its glyph saying which is up.
+      button(
+          'graph-scope',
+          switch (_graphScope) {
+            GraphScope.selected => LumitIcons.selectedKey,
+            GraphScope.layer => LumitIcons.layers,
+            GraphScope.comp => LumitIcons.composition,
+          },
+          scopeTip,
+          tip: scopeTip,
+          on: _graphScope != GraphScope.selected,
+          onPressed: () => setState(() => _graphScope = GraphScope
+              .values[(_graphScope.index + 1) % GraphScope.values.length])),
       const SizedBox(width: 2),
       button('graph-autofit', LumitIcons.fit, l10n.graphAutoFit,
           tip: _graphAutoFit ? l10n.tipAutoFitOn : l10n.tipAutoFitOff,
@@ -3513,6 +3580,58 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           on: false,
           onPressed: _fitGraph),
     ];
+  }
+
+  /// The curves the graph draws: the picked properties first, keeping their
+  /// colours, then in Layer and Comp the other animated ones.
+  List<GraphChannel> _shownChannels(
+      LumitUiState ui, List<GraphChannel> picked) {
+    if (_graphScope == GraphScope.selected) return picked;
+    final layers = {
+      ...ui.selectedLayerIds.map((id) => '$id'),
+      for (final path in _selectedProperties)
+        if (layerIdOfPath(path) case final id?) id,
+    };
+    final paths = {..._selectedProperties};
+    for (final entry in ui.model.layers) {
+      final id = entry.layer.internallayerId.toString();
+      if (_graphScope == GraphScope.layer && !layers.contains(id)) continue;
+      for (final row in layerFoldRows(
+        entry: entry,
+        open: everyFoldPath,
+        hasAudio: true,
+        volumeDb: entry.info.volumeDb,
+      )) {
+        if (laneKeysOf(row).isNotEmpty ||
+            foldRowScalar(row) is BridgeScalar_Expression) {
+          paths.add(foldRowPath(id, row));
+        }
+      }
+    }
+    return graphChannels(layers: ui.model.layers, selected: paths.toList());
+  }
+
+  /// A click on a dashed curve: its property becomes the pick, or joins it
+  /// with `Shift` or `Ctrl` held.
+  void _pickGraphProperty(String path) {
+    setState(() {
+      if (!isModifiedClick) _selectedProperties.clear();
+      if (!_selectedProperties.contains(path)) _selectedProperties.add(path);
+    });
+  }
+
+  /// Keys picked on dashed curves pick those curves' properties too.
+  void _pickKeyRows(List<GraphChannel> shown) {
+    for (final id in _graphKeySelection) {
+      final hash = id.lastIndexOf('#');
+      if (hash <= 0) continue;
+      for (final channel in shown) {
+        if (channel.id == id.substring(0, hash) &&
+            !_selectedProperties.contains(channel.path)) {
+          _selectedProperties.add(channel.path);
+        }
+      }
+    }
   }
 
   /// Frame the selected keys in the graph, in time and in value, or every
@@ -4135,6 +4254,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   return ScrollConfiguration(
                     behavior: ScrollConfiguration.of(context).copyWith(
                         dragDevices: const {PointerDeviceKind.trackpad},
+                        // macOS bounces past the ends by default, and the
+                        // other half stops there, so the rows come apart.
+                        physics: const ClampingScrollPhysics(),
                         scrollbars: false),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4726,6 +4848,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     required int fpsDen,
   }) {
     final t = ThemeScope.of(context).theme;
+    final shown = _shownChannels(ui, channels);
     // The one shared target list (docs/07 §4.5), for the ruler's edges and
     // markers and for the pane's own key drags. Built from the read model, so
     // it costs no bridge calls.
@@ -4838,7 +4961,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                     key: _graphPane,
                                     comp: comp,
                                     hScroll: _hLane,
-                                    channels: channels,
+                                    channels: shown,
+                                    picked: _graphScope == GraphScope.selected
+                                        ? null
+                                        : Set.of(_selectedProperties),
+                                    onPick: _pickGraphProperty,
                                     axis: axis,
                                     frames: frames,
                                     fps: ui.model.fps,
@@ -4855,8 +4982,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                         ui.tools.tool.group == ToolGroup.pen,
                                     breakHandles: _graphBreakHandles,
                                     selectedKeys: _graphKeySelection,
-                                    otherKeys: _otherGraphKeys(channels),
+                                    otherKeys: _otherGraphKeys(shown),
                                     onSelectionChanged: () {
+                                      _pickKeyRows(shown);
                                       _shareKeys();
                                       setState(() {});
                                     },

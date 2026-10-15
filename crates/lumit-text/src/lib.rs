@@ -137,6 +137,33 @@ pub fn rasterise(block: &TextBlock<'_>, xforms: &[GlyphXform]) -> RasterText {
     }
 }
 
+/// Where a Text layer's words sit in its own pixels: left, top, right, bottom.
+/// The letters as they are set, from the first line's ascent to the last
+/// line's descent and from the leftmost caret to the rightmost, not the
+/// paragraph box they wrap in. What `lumit_core::text::install_words_box`
+/// is handed.
+#[must_use]
+pub fn words_box(document: &TextDocument, text: &str) -> Option<[f64; 4]> {
+    let laid = layout(&TextBlock::of(document, text), false);
+    let (first, last) = (laid.lines.first()?, laid.lines.last()?);
+    let (mut left, mut right) = (f32::INFINITY, f32::NEG_INFINITY);
+    for line in &laid.lines {
+        if let (Some(a), Some(b)) = (line.carets.first(), line.carets.last()) {
+            left = left.min(*a);
+            right = right.max(*b);
+        }
+    }
+    if left > right {
+        return None;
+    }
+    Some([
+        f64::from(left),
+        f64::from(first.baseline - laid.ascent),
+        f64::from(right),
+        f64::from(last.baseline + laid.descent),
+    ])
+}
+
 /// Draw a block along `path` into a `width` × `height` buffer, the box
 /// [`path_box`] hands out.
 #[must_use]

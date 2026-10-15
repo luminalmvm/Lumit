@@ -22,6 +22,7 @@ Add to picked
 Age
 Align to motion
 Align to path
+All
 All edges
 All points
 Alpha
@@ -64,6 +65,7 @@ Backwards
 Bake
 Bake points
 Balance
+Band
 Band 1 Q
 Band 1 frequency
 Band 1 gain
@@ -91,6 +93,8 @@ Band 5 on
 Band 5 type
 Basic
 Beam
+Beat markers
+Beat trigger
 Behind
 Bend
 Between
@@ -203,6 +207,7 @@ Combine
 Combine channels
 Combine with existing alpha
 Combined
+Comp
 Completion
 Complexity
 Composite
@@ -266,6 +271,7 @@ Despot black
 Despot white
 Detail
 Detect edge threshold
+Detected beats
 Detector
 Diagonal
 Difference
@@ -343,7 +349,9 @@ End colour
 End thickness
 End x
 End y
+Envelope
 Even
+Events
 Every N frames
 Every Nth beat
 Every layer
@@ -465,6 +473,7 @@ Highlight threshold
 Highlight tonal width
 Highlights
 Hold
+Hold off
 Horizontal
 Horizontal amount
 Horizontal axis
@@ -548,6 +557,7 @@ Lens file
 Lens flare
 Lens options
 Level
+Level crossing
 Levels
 Life
 Life jitter
@@ -615,6 +625,7 @@ Max trails
 Maximum
 Maximum signal
 Maximum span length
+Measure
 Median
 Merge
 Merge points
@@ -625,6 +636,7 @@ Midtones
 Min
 Min area
 Minimum
+Minimum gap
 Mirror
 Mirror edges
 Mix
@@ -711,6 +723,8 @@ Outside colour
 Outside mask
 Overlay
 PAL
+Padding x
+Padding y
 Paint style
 Parametric EQ
 Particle
@@ -782,6 +796,7 @@ Producer x
 Producer y
 Propagate
 Pull
+Pulse
 Quality
 Quarter
 RGB split
@@ -945,6 +960,7 @@ Source layer
 Source luminance
 Source red
 Source width
+Space
 Spacing
 Spacing x
 Spacing y
@@ -1033,6 +1049,7 @@ Tile width
 Time
 Time offset
 Time samples
+Time since last
 Time step
 Tint
 Tint colour

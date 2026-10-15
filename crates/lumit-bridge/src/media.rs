@@ -39,9 +39,9 @@ pub(crate) struct MediaCache {
 }
 
 /// What a cached thumbnail is of: the item, the size asked for, which frame
-/// of it, and how the file was being read.
+/// of it, and how the file was being read, render pass included.
 #[cfg(feature = "media")]
-type ThumbKey = (Uuid, u32, i64, lumit_media::Interpretation);
+type ThumbKey = (Uuid, u32, i64, lumit_media::Interpretation, Option<String>);
 
 /// A decoded thumbnail: width, height, and tightly packed RGBA8.
 #[cfg(feature = "media")]
@@ -84,7 +84,7 @@ impl MediaCache {
         self.thumbs.insert(key, (w, h, rgba));
         let bytes: usize = self.thumbs.values().map(|(_, _, rgba)| rgba.len()).sum();
         if bytes > THUMB_BUDGET_BYTES {
-            self.thumbs.retain(|(_, _, frame, _), _| *frame == 0);
+            self.thumbs.retain(|(_, _, frame, _, _), _| *frame == 0);
         }
     }
 }
@@ -107,7 +107,7 @@ pub(crate) fn decode_frame(
     if !src.on_disk().is_file() {
         return None;
     }
-    if let Some(frame) = lumit_media::read_own(src, target_width) {
+    if let Some(frame) = lumit_media::read_own(src, frame as usize, target_width) {
         return frame.ok();
     }
     let index = lumit_render::media_index::load_or_build_index(src).ok()?;
@@ -130,7 +130,7 @@ pub(crate) fn thumb_cached(
     max_edge: u32,
     frame: i64,
 ) -> Option<Thumb> {
-    cache.thumb_get((id, max_edge.clamp(1, 4096), frame.max(0), src.interpret))
+    cache.thumb_get(thumb_key(id, src, max_edge, frame))
 }
 
 /// Decode and downscale one frame, touching no cache and holding no lock.
@@ -183,8 +183,19 @@ pub(crate) fn thumb_store(
     thumb: &Thumb,
 ) {
     let (w, h, rgba) = thumb;
-    let key = (id, max_edge.clamp(1, 4096), frame.max(0), src.interpret);
-    cache.thumb_put(key, *w, *h, rgba.clone());
+    cache.thumb_put(thumb_key(id, src, max_edge, frame), *w, *h, rgba.clone());
+}
+
+#[cfg(feature = "media")]
+fn thumb_key(id: Uuid, src: &lumit_media::MediaSource, max_edge: u32, frame: i64) -> ThumbKey {
+    let pass = src.render_pass.clone();
+    (
+        id,
+        max_edge.clamp(1, 4096),
+        frame.max(0),
+        src.interpret,
+        pass,
+    )
 }
 
 /// Downscale tightly-packed RGBA8 `src` (`sw`×`sh`) so its longer edge is at
