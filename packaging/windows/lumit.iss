@@ -41,7 +41,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 ChangesAssociations=yes
 Compression=lzma2
-SolidCompression=yes
+; Each file compressed on its own, so a file that didn't change between two
+; releases is the same bytes in both installers and an update only fetches
+; the rest (flutter_ui/lib/state/blockmap.dart). Costs about 0.5% in size.
+SolidCompression=no
 
 [Files]
 ; The whole runner directory, recursively, which is how `lumit-ofx-broker.exe`,
