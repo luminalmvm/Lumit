@@ -2796,4 +2796,261 @@ mod tests {
         assert_eq!(back.path_keys.len(), 1);
         assert_eq!(back, keyed);
     }
+
+    fn circle() -> BezierPath {
+        Mask::ellipse(50.0, 50.0, 40.0, 40.0).path
+    }
+
+    fn twisted(angle: f64, axis: f64, centre: (f64, f64)) -> ShapeItem {
+        let mut it = item(circle());
+        it.twist = Some(Twist {
+            angle: Property::fixed(angle),
+            axis: Property::fixed(axis),
+            centre_x: Property::fixed(centre.0),
+            centre_y: Property::fixed(centre.1),
+        });
+        it
+    }
+
+    fn drawn(it: &ShapeItem) -> Vec<u8> {
+        rasterise_contents(
+            std::slice::from_ref(it),
+            100,
+            100,
+            0.0,
+            0.0,
+            100.0,
+            100.0,
+            0.0,
+        )
+    }
+
+    /// The farthest and nearest any point is from the circle's centre.
+    fn radii(points: &[(f64, f64)]) -> (f64, f64) {
+        points
+            .iter()
+            .map(|&p| dist(p, (50.0, 50.0)))
+            .fold((f64::MAX, 0.0f64), |(lo, hi), r| (lo.min(r), hi.max(r)))
+    }
+
+    #[test]
+    fn a_twist_turns_a_circle_into_a_figure_eight_and_a_full_turn_comes_back() {
+        // At 0 the middle is full height; at 90 it is pinched to nothing.
+        let lens = drawn(&twisted(0.0, 0.0, (50.0, 50.0)));
+        let eight = drawn(&twisted(90.0, 0.0, (50.0, 50.0)));
+        assert_eq!(alpha_at(&lens, 100, 50, 25), 255, "the lens is full height");
+        assert_eq!(alpha_at(&eight, 100, 50, 25), 0, "the eight crosses here");
+        assert_eq!(alpha_at(&eight, 100, 30, 50), 255, "a lobe either side");
+        assert_eq!(alpha_at(&eight, 100, 70, 50), 255);
+
+        // A full turn is where it started.
+        let start = twisted(0.0, 0.0, (50.0, 50.0)).trimmed_at(0.0).unwrap();
+        let round = twisted(360.0, 0.0, (50.0, 50.0)).trimmed_at(0.0).unwrap();
+        assert_eq!(start.len(), round.len());
+        for (a, b) in start.iter().zip(&round) {
+            assert!(dist(*a, *b) < 1e-9, "{a:?} against {b:?}");
+        }
+
+        // An upright axis pinches across the other way.
+        let upright = drawn(&twisted(90.0, 90.0, (50.0, 50.0)));
+        assert_eq!(alpha_at(&upright, 100, 25, 50), 0);
+        assert_eq!(alpha_at(&upright, 100, 50, 30), 255);
+
+        // The pinch sits on the centre: moved to the left edge, the middle is
+        // full again.
+        let moved = drawn(&twisted(90.0, 0.0, (10.0, 50.0)));
+        assert_eq!(alpha_at(&moved, 100, 50, 25), 255);
+    }
+
+    fn deformed(mode: u32, amount: f64, seed: f64, evolution: f64, detail: f64) -> ShapeItem {
+        let mut it = item(circle());
+        it.deform = Some(Deform {
+            mode,
+            amount: Property::fixed(amount),
+            scale: Property::fixed(10.0),
+            evolution: Property::fixed(evolution),
+            seed: Property::fixed(seed),
+            detail: Property::fixed(detail),
+        });
+        it
+    }
+
+    /// How many times the distance from the centre turns round along `points`.
+    fn bends(points: &[(f64, f64)]) -> usize {
+        let r: Vec<f64> = points.iter().map(|&p| dist(p, (50.0, 50.0))).collect();
+        r.windows(3)
+            .filter(|w| (w[1] - w[0]) * (w[2] - w[1]) < 0.0)
+            .count()
+    }
+
+    #[test]
+    fn a_deform_moves_the_outline_no_further_than_its_amount_and_repeats_itself() {
+        let plain = drawn(&item(circle()));
+        let none = deformed(0, 0.0, 1.0, 0.0, 4.0);
+        assert!(none.trimmed_at(0.0).is_none(), "nothing to bend");
+        assert_eq!(drawn(&none), plain);
+
+        // Displace pushes along the normal by up to the amount in pixels.
+        let pushed = deformed(0, 8.0, 1.0, 0.0, 4.0).trimmed_at(0.0).unwrap();
+        let (lo, hi) = radii(&pushed);
+        assert!(lo < 39.0 && hi > 41.0, "moved both ways: {lo}..{hi}");
+        assert!(lo > 31.9 && hi < 48.1, "and within the amount: {lo}..{hi}");
+
+        // Scale moves each point from the middle by up to the amount per cent.
+        let scaled = deformed(1, 50.0, 1.0, 0.0, 4.0).trimmed_at(0.0).unwrap();
+        let (lo, hi) = radii(&scaled);
+        assert!(lo < 39.0 && hi > 41.0, "moved both ways: {lo}..{hi}");
+        assert!(lo > 19.9 && hi < 60.1, "and within the amount: {lo}..{hi}");
+
+        // The same seed and evolution are the same outline every time.
+        let again = deformed(0, 8.0, 1.0, 0.0, 4.0).trimmed_at(0.0).unwrap();
+        assert_eq!(pushed, again);
+        assert_ne!(
+            pushed,
+            deformed(0, 8.0, 2.0, 0.0, 4.0).trimmed_at(0.0).unwrap()
+        );
+        assert_ne!(
+            pushed,
+            deformed(0, 8.0, 1.0, 90.0, 4.0).trimmed_at(0.0).unwrap()
+        );
+
+        // Little detail bends the outline broadly; more bends it often.
+        let broad = deformed(0, 8.0, 1.0, 0.0, 0.1).trimmed_at(0.0).unwrap();
+        assert!(
+            bends(&broad) * 4 < bends(&pushed),
+            "{} against {}",
+            bends(&broad),
+            bends(&pushed)
+        );
+    }
+
+    #[test]
+    fn a_smooth_rounds_the_path_inside_its_points_and_an_open_one_keeps_its_ends() {
+        let mut it = item(square(0.0, 0.0, 40.0));
+        it.smooth = Some(Smooth {
+            amount: Property::zero(),
+        });
+        assert!(it.trimmed_at(0.0).is_none(), "nothing to round");
+
+        it.smooth = Some(Smooth {
+            amount: Property::fixed(10.0),
+        });
+        let round = it.trimmed_at(0.0).unwrap();
+        assert!(
+            round
+                .iter()
+                .all(|p| (0.0..=40.0).contains(&p.0) && (0.0..=40.0).contains(&p.1)),
+            "never past the square"
+        );
+        let corner = round
+            .iter()
+            .map(|&p| dist(p, (0.0, 0.0)))
+            .fold(f64::MAX, f64::min);
+        assert!(corner > 2.0, "the corner is rounded off: {corner}");
+
+        // An open zigzag smooths towards a line and keeps both its ends.
+        let zigzag: Vec<(f64, f64)> = (0..=10)
+            .map(|i| (i as f64 * 10.0, if i % 2 == 0 { 0.0 } else { 10.0 }))
+            .collect();
+        let flat = smoothed(&zigzag, false, 15.0);
+        assert_eq!(flat.first(), zigzag.first());
+        assert!(dist(*flat.last().unwrap(), (100.0, 0.0)) < 1e-9);
+        assert!(flat.iter().all(|p| (0.0..=10.0).contains(&p.1)));
+        let middle = flat.iter().find(|p| p.0 >= 50.0).unwrap();
+        assert!((middle.1 - 5.0).abs() < 2.5, "half flattened: {middle:?}");
+        assert_eq!(smoothed(&zigzag, false, 0.0), zigzag);
+    }
+
+    fn taper(start_length: f64, end_length: f64, scope: u32) -> Taper {
+        Taper {
+            start: Property::fixed(100.0),
+            end: Property::fixed(100.0),
+            start_length: Property::fixed(start_length),
+            end_length: Property::fixed(end_length),
+            ease: Property::fixed(50.0),
+            scope,
+        }
+    }
+
+    #[test]
+    fn a_taper_never_crosses_its_ends_and_runs_per_path_or_along_the_whole_shape() {
+        let line = vec![(0.0, 0.0), (100.0, 0.0)];
+        let width = |taper: Taper| taper.applied(vec![line.clone()], 0.0).remove(0).1;
+
+        // Start only: a point at the start, full width at the end.
+        let mut start_only = taper(50.0, 50.0, 0);
+        start_only.end = Property::zero();
+        let w = width(start_only);
+        assert!(w[0] <= TAPER_TIP && (w[w.len() - 1] - 1.0).abs() < 1e-9);
+
+        // Two lengths of 80 are 160 per cent of the line, shrunk to half each,
+        // so the line still reaches full width in the middle and nowhere else.
+        let w = width(taper(80.0, 80.0, 0));
+        let widest = w.iter().copied().fold(0.0, f64::max);
+        assert!((widest - 1.0).abs() < 1e-6, "full width once: {widest}");
+        assert!(w[0] <= TAPER_TIP && w[w.len() - 1] <= TAPER_TIP);
+        let peak = w.iter().position(|&x| x == widest).unwrap() as f64 / w.len() as f64;
+        assert!((peak - 0.5).abs() < 0.05, "in the middle: {peak}");
+
+        // Two squares joined into one shape: each path tapers on its own, or
+        // one taper runs along both.
+        let lines = |scope: u32| {
+            let mut a = item(square(0.0, 0.0, 20.0));
+            a.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+            a.stroke_width = 4.0;
+            a.taper = Some(taper(50.0, 50.0, scope));
+            let mut b = item(square(40.0, 0.0, 20.0));
+            b.combine = 1;
+            let contents = vec![a, b];
+            let art = Art::at(&contents, 0..2, 0.0).unwrap();
+            art.stroked(&art.placed(&Affine::IDENTITY), 1.0, 0.0)
+        };
+        let ends = |l: &Pressed| (l.1[0], l.1[l.1.len() - 1]);
+        let each = lines(0);
+        assert_eq!(each.len(), 2);
+        for l in &each {
+            let (a, b) = ends(l);
+            assert!(a <= TAPER_TIP && b <= TAPER_TIP, "each path to a point");
+        }
+        let whole = lines(1);
+        let (a, b) = ends(&whole[0]);
+        assert!(a <= TAPER_TIP && (b - 1.0).abs() < 1e-6, "{a}..{b}");
+        let (a, b) = ends(&whole[1]);
+        assert!((a - 1.0).abs() < 1e-6 && b <= TAPER_TIP, "{a}..{b}");
+    }
+
+    /// The layer's box has to hold everything a twist or a deform draws.
+    #[test]
+    fn the_box_holds_a_twisted_or_deformed_shape() {
+        let inside = |it: &ShapeItem| {
+            let (x0, y0, x1, y1) = it.bounds(0.0).unwrap();
+            let points = it.trimmed_at(0.0).unwrap();
+            assert!(
+                points
+                    .iter()
+                    .all(|p| p.0 >= x0 && p.0 <= x1 && p.1 >= y0 && p.1 <= y1),
+                "{:?} outside {:?}",
+                points
+                    .iter()
+                    .find(|p| p.0 < x0 || p.0 > x1 || p.1 < y0 || p.1 > y1),
+                (x0, y0, x1, y1)
+            );
+            (x0, y0, x1, y1)
+        };
+        // A square twisted on a slant reaches past its own corners.
+        let mut slant = item(square(0.0, 0.0, 20.0));
+        slant.twist = twisted(30.0, 45.0, (10.0, 10.0)).twist;
+        let (x0, y0, x1, y1) = inside(&slant);
+        assert!(x0 < 0.0 && y0 < 0.0 && x1 > 20.0 && y1 > 20.0);
+
+        let (x0, _, x1, _) = inside(&deformed(0, 8.0, 1.0, 0.0, 4.0));
+        assert!(x0 <= 2.0 && x1 >= 98.0, "grown by the amount");
+        let (x0, _, x1, _) = inside(&deformed(1, 50.0, 1.0, 0.0, 4.0));
+        assert!(x0 <= -10.0 && x1 >= 110.0, "grown by the scale");
+
+        // Twisted and then deformed, the deform grows the twist's box.
+        let mut both = twisted(90.0, 30.0, (50.0, 50.0));
+        both.deform = deformed(0, 8.0, 1.0, 0.0, 4.0).deform;
+        inside(&both);
+    }
 }
