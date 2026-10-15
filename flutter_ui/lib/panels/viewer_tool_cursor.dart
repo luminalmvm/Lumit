@@ -480,12 +480,17 @@ class ViewerHandLayer extends StatefulWidget {
   final Color mark;
   final Color outline;
 
+  /// How much of the top it leaves uncovered, for a ruler that keeps
+  /// scrubbing under it.
+  final double top;
+
   const ViewerHandLayer({
     super.key,
     required this.active,
     required this.onPan,
     required this.mark,
     required this.outline,
+    this.top = 0,
   });
 
   @override
@@ -500,6 +505,7 @@ class _ViewerHandLayerState extends State<ViewerHandLayer> {
   Widget build(BuildContext context) {
     if (!widget.active) return const SizedBox.shrink();
     return Positioned.fill(
+      top: widget.top,
       // The system pointer is hidden, because the hand below replaces it: an
       // arrow sitting inside the drawn hand would read as two pointers.
       child: DrawnPointerRegion(
@@ -537,8 +543,9 @@ class _ViewerHandLayerState extends State<ViewerHandLayer> {
 Widget handPanLayer(
   ToolsState tools,
   LumitTheme t,
-  ValueChanged<Offset> onPan,
-) =>
+  ValueChanged<Offset> onPan, {
+  double top = 0,
+}) =>
     ListenableBuilder(
       listenable: tools,
       builder: (context, _) => ViewerHandLayer(
@@ -546,6 +553,7 @@ Widget handPanLayer(
         onPan: onPan,
         mark: t.textPrimary,
         outline: t.surface0,
+        top: top,
       ),
     );
 

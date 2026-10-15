@@ -5024,9 +5024,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                 ),
                 ),
                 // The Hand tool pans the curves, in the same place as the
-                // lanes' so the scroll view below stays the one it was.
+                // lanes' so the scroll view below stays the one it was. The
+                // ruler stays out from under it, so it still scrubs.
                 handPanLayer(ui.tools, t,
-                    (d) => _graphPane.currentState?.panBy(d)),
+                    (d) => _graphPane.currentState?.panBy(d),
+                    top: t.density.ruler),
                 ],
                 ),
               ),
@@ -5187,8 +5189,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                   ),
                 ),
                 ),
-                // The Hand tool pans the lanes, over everything in them.
-                handPanLayer(ui.tools, t, _panLanes),
+                // The Hand tool pans the lanes, over everything in them but
+                // the ruler, which still scrubs.
+                handPanLayer(ui.tools, t, _panLanes, top: t.density.ruler),
                 ],
                 ),
               ),
