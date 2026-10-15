@@ -36,6 +36,7 @@ The planes are kept at the model's own size, a few hundred pixels on the long si
 | **Model** | Dropdown | Depth Anything V2 Small | Depth Anything V2 Small | - |
 | **View** | Dropdown | Depth · Source | Depth | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Frames** | Dropdown | All frames · Layer in to out · Work area | All frames | - |
 
 {/* END GENERATED */}
 
@@ -47,6 +48,9 @@ The planes are kept at the model's own size, a few hundred pixels on the long si
 - **Model**: which trained model reads the frames.
 - **View**: the depth as a grey picture, or the layer's own picture untouched.
 - **Invert**: draws the plane the other way up, so far is bright.
+- **Frames**: which frames Analyse reads. **All frames** is the whole footage however the
+  layer is trimmed, **Layer in to out** is the frames between the layer's in and out
+  points, and **Work area** is the frames inside the composition's work area.
 
 ## Notes
 

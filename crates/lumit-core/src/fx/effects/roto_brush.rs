@@ -153,6 +153,11 @@ pub struct RotoBrush {
         unit = Raw
     )]
     pub flow_smoothness: f32,
+    /// Which frames Propagate walks - see [`crate::planes::FRAMES_OPTIONS`].
+    /// The base frame is always one of them. Not part of the matte's name: a
+    /// frame's matte is the same however far the walk was let go.
+    #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
+    pub frames: u32,
 }
 
 /// The Roto brush's behaviour: it multiplies the layer's alpha by the matte the

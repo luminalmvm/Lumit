@@ -275,6 +275,9 @@ pub struct PlaneJob {
     /// here because the shape is the Roto brush's and a single frame's
     /// feedback is the obvious next ask.
     pub stop_after: Option<i64>,
+    /// The source frames to read, first and last, or `None` for all of them:
+    /// the effect's Frames row, mapped onto the source by whoever pressed.
+    pub range: Option<(i64, i64)>,
 }
 
 /// How far an analysis has got. Read, never subscribed to - the interface
@@ -601,6 +604,14 @@ impl PlaneRun {
     pub fn is_partial(&self) -> bool {
         let clip = i64::try_from(self.clip_frames).unwrap_or(i64::MAX);
         self.first_frame > 0 || self.last_frame + 1 < clip
+    }
+
+    /// Whether every frame from `first` to `last` has a plane, the end
+    /// clamped to the clip. Asked rather than [`Self::is_partial`] once a
+    /// span is chosen, since a run kept from another span can have holes.
+    fn covers(&self, (first, last): (i64, i64)) -> bool {
+        let clip = i64::try_from(self.clip_frames).unwrap_or(i64::MAX);
+        (first.max(0)..=last.min(clip - 1)).all(|f| self.index(f).is_some())
     }
 
     /// Which provider made these planes: the first field of [`Self::made_with`].
@@ -1112,7 +1123,7 @@ fn run(job: PlaneJob, cancel: &AtomicBool) {
         // resume a cancelled run is owed.
         let satisfied = match job.stop_after {
             Some(s) => hit.plane(s).is_some(),
-            None => !hit.is_partial(),
+            None => hit.covers(job.range.unwrap_or((0, i64::MAX))),
         };
         // A comp answers a warm pass and nobody else: it may have been edited
         // since the file was written, and Analyse is how it is read again.
@@ -1221,6 +1232,9 @@ pub fn analyse(
     }
     let last_index = i64::try_from(count.saturating_sub(1)).unwrap_or(i64::MAX);
     let stop = job.stop_after.map(|f| f.clamp(0, last_index));
+    let (first, last) = job.range.map_or((0, last_index), |(a, b)| {
+        (a.clamp(0, last_index), b.clamp(0, last_index))
+    });
 
     let made_with = model.made_with();
     let mut records: Vec<FrameRecord> = resume
@@ -1228,40 +1242,39 @@ pub fn analyse(
         // the middle of a shot: the record does not keep that state, so a
         // resume there is a fresh run that copies nothing (§13).
         .filter(|_| resumes(job.settings))
-        // A prefix that does not start at the first frame is nothing to carry
-        // on from either: the run would come back with a hole in it.
-        .filter(|run| run.first_frame == 0)
         // And a prefix something else made is not this run's to carry on from:
         // the provenance names one run, and half a run made by a runtime that
         // has been updated since would be filed under the new one's name (§7).
         .filter(|run| run.made_with == made_with)
         .map_or_else(Vec::new, |run| run.records);
-    let from = records
-        .last()
-        .map_or(0, |r| usize::try_from(r.frame + 1).unwrap_or(usize::MAX));
-    records.reserve(count.saturating_sub(from));
+    // Every frame of the span the kept records do not already answer. Kept
+    // records are sorted, so each check is a binary search.
+    let todo: Vec<i64> = (first..=last)
+        .filter(|f| records.binary_search_by_key(f, |r| r.frame).is_err())
+        .collect();
+    records.reserve(todo.len());
     let mut cancelled = false;
-    for n in from..count {
+    for (n, &at) in todo.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
             cancelled = true;
             break;
         }
-        let Some(rgba) = frames.rgba(n) else {
+        let Some(rgba) = frames.rgba(usize::try_from(at).unwrap_or(usize::MAX)) else {
             // A clip that stops decoding part-way is analysed as far as it
             // went, exactly as a partial track is.
             break;
         };
         let out = model.run(&rgba, width, height)?;
-        let at = i64::try_from(n).unwrap_or(i64::MAX);
         records.push(record_of(at, &out));
         report(Progress::Solving {
             done: n + 1,
-            total: count,
+            total: todo.len(),
         });
         if stop == Some(at) {
             break;
         }
     }
+    records.sort_by_key(|r| r.frame);
     if records.is_empty() {
         return Err(if cancelled {
             PlaneFailure::Cancelled
@@ -1314,6 +1327,7 @@ pub fn job_for(
         // out holding nothing.
         owns_slot: false,
         stop_after: None,
+        range: None,
     })
 }
 
@@ -1351,6 +1365,7 @@ fn warm_job_for_comp(fx: &EffectInstance, comp: Uuid) -> Option<PlaneJob> {
         analyse: false,
         owns_slot: false,
         stop_after: None,
+        range: None,
     })
 }
 

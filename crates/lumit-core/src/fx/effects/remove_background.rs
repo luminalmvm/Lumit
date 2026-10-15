@@ -121,6 +121,11 @@ pub struct RemoveBackground {
     /// the analysis's name.
     #[choice(options = *DETAIL_OPTIONS, default = 0, label = "Detail")]
     pub detail: u32,
+    /// Which frames Analyse reads - see [`crate::planes::FRAMES_OPTIONS`].
+    /// Not part of the analysis's name: a frame's plane is the same whichever
+    /// span it was read in.
+    #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
+    pub frames: u32,
 }
 
 /// The Remove background effect's behaviour: draw the matte the analysis filed

@@ -169,6 +169,10 @@ pub struct RotoJob {
     /// feedback never turns into a propagation nobody pressed for. `None` — a
     /// press of Propagate — walks to both ends as ever.
     pub stop_after: Option<i64>,
+    /// The source frames the walk may reach, first and last, or `None` for
+    /// the whole shot: the brush's Frames row, mapped onto the source by
+    /// whoever pressed. Widened to take in the base frame.
+    pub range: Option<(i64, i64)>,
 }
 
 impl RotoJob {
@@ -1101,9 +1105,13 @@ fn run(job: RotoJob, cancel: &AtomicBool) {
         // partial run falls through instead: the resume §6 promises, with the
         // file's own frames lent back by chain hash — a cancelled or
         // stopped-early run used to answer `Done` here and never carry on.
-        let satisfied = match job.stop_after {
-            Some(s) => hit.chain(s).is_some(),
-            None => !hit.is_partial(),
+        let satisfied = match (job.stop_after, job.range) {
+            (Some(s), _) => hit.chain(s).is_some(),
+            (None, Some((first, last))) => {
+                let end = i64::try_from(hit.clip_frames).unwrap_or(i64::MAX) - 1;
+                hit.first_frame <= first.max(0) && hit.last_frame >= last.min(end)
+            }
+            (None, None) => !hit.is_partial(),
         };
         if !job.propagate || satisfied {
             publish(instance, hit);
@@ -1233,6 +1241,10 @@ fn propagate(
     let last_index = i64::try_from(count.saturating_sub(1)).unwrap_or(i64::MAX);
     let base = base.clamp(0, last_index);
     let stop = job.stop_after.map(|f| f.clamp(0, last_index));
+    let (first, last) = job.range.map_or((0, last_index), |(a, b)| {
+        (a.min(base).max(0), b.max(base).min(last_index))
+    });
+    let total = usize::try_from(last - first + 1).unwrap_or(count);
 
     // The flow engine, and the one refusal only it can answer. `new_auto` opens
     // a headless device of its own; a build with no GPU flow degrades to the CPU
@@ -1240,7 +1252,7 @@ fn propagate(
     // when no step could need a warp — a stop-after run ending at the base, or a
     // one-frame clip — which is why the release-time solve of the scribbled base
     // frame works on a machine with no GPU flow.
-    let needs_flow = count > 1 && stop != Some(base);
+    let needs_flow = first < last && stop != Some(base);
     let mut flow = needs_flow.then(lumit_flow::FlowEngine::new_auto);
     if let Some(engine) = &flow {
         if !engine.backend().starts_with("dis-gpu") {
@@ -1314,7 +1326,7 @@ fn propagate(
     records.push(record_of(base, base_chain, &base_plane, width, height));
     report(Progress::Solving {
         done: 1,
-        total: count,
+        total,
         reused,
     });
 
@@ -1343,7 +1355,7 @@ fn propagate(
                 break;
             }
             let next = cursor + direction;
-            if next < 0 || next > last_index {
+            if next < first || next > last {
                 break;
             }
             let Some(chain) = chain_hash(&job.block, job.settings, next) else {
@@ -1436,7 +1448,7 @@ fn propagate(
             done += 1;
             report(Progress::Solving {
                 done,
-                total: count,
+                total,
                 reused,
             });
             if stop == Some(cursor) {
@@ -1562,6 +1574,7 @@ pub fn job_for(
         model: Box::new(open_segment),
         propagate,
         stop_after: None,
+        range: None,
     })
 }
 
@@ -1605,6 +1618,7 @@ fn warm_job_for_comp(fx: &EffectInstance, comp: Uuid) -> RotoJob {
         model: Box::new(open_segment),
         propagate: false,
         stop_after: None,
+        range: None,
     }
 }
 

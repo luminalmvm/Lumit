@@ -98,6 +98,11 @@ pub struct Depth {
     /// plane rather than a different plane, so it renames nothing either.
     #[toggle(default = false, label = "Invert")]
     pub invert: bool,
+    /// Which frames Analyse reads - see [`crate::planes::FRAMES_OPTIONS`].
+    /// Not part of the analysis's name: a frame's plane is the same whichever
+    /// span it was read in.
+    #[choice(options = *crate::planes::FRAMES_OPTIONS, default = 0, label = "Frames")]
+    pub frames: u32,
 }
 
 /// The Depth effect's behaviour: draw the plane the analysis filed for this

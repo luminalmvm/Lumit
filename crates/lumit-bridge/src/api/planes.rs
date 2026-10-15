@@ -203,11 +203,13 @@ fn job_of(
 ///
 /// `source` is the file the effect reads, or why it has none. It is asked for
 /// only by Analyse: Cancel stops whatever is running whether or not the file
-/// can still be found.
+/// can still be found. `range` is the source frames the Frames row allows, or
+/// `None` for all of them.
 pub(crate) fn press(
     source: Result<crate::api::roto::Source, BridgeError>,
     fx: &lumit_core::model::EffectInstance,
     param: &str,
+    range: Option<(i64, i64)>,
 ) -> Result<(), BridgeError> {
     match param {
         CANCEL => {
@@ -222,7 +224,10 @@ pub(crate) fn press(
                 lumit_render::planes::note_refusal(fx.id, why);
                 return Err(BridgeError::AddonMissing);
             }
-            match lumit_render::planes::request(job_of(source?, fx)?) {
+            match lumit_render::planes::request(lumit_render::planes::PlaneJob {
+                range,
+                ..job_of(source?, fx)?
+            }) {
                 lumit_render::planes::Requested::Started => Ok(()),
                 // Every refusal has a name and the status row reads it back;
                 // what the *press* owes the caller is only that it did not

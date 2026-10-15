@@ -559,10 +559,10 @@ impl CompositionReference {
     pub fn fire_graph_action(&self, effect: Uuid, param: String) -> Result<(), BridgeError> {
         let fx = self.graph_fx(effect)?;
         if fx.effect.match_name == lumit_core::roto::ROTO_BRUSH {
-            return crate::api::roto::press(self.box_source(effect), &fx, &param);
+            return crate::api::roto::press(self.box_source(effect), &fx, &param, None);
         }
         if lumit_core::planes::task_of(&fx).is_some() {
-            return crate::api::planes::press(self.box_source(effect), &fx, &param);
+            return crate::api::planes::press(self.box_source(effect), &fx, &param, None);
         }
         Err(BridgeError::InvalidParam)
     }

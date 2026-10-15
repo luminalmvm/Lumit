@@ -159,6 +159,7 @@ fn job(frames: usize) -> PlaneJob {
         analyse: true,
         owns_slot: false,
         stop_after: None,
+        range: None,
     }
 }
 
