@@ -3043,6 +3043,7 @@ fn run(
     // show; this is the rest of it (docs/08 §3.1, docs/impl/addons.md §6.3).
     renderer.refuse_substitution();
     renderer.keep_attachments();
+    renderer.hand_over_prefetched();
     // The project's colour config, before anything is written: the refusal has
     // to happen with the config in hand, and it has to happen before a file
     // exists rather than halfway through one.
@@ -3336,6 +3337,17 @@ fn run(
             if stop {
                 // Its threads end with it.
                 ahead = None;
+            }
+            // Footage a frame still to come asked for too is copied for this
+            // one, not handed over, or that frame would wait for it in vain.
+            for &(item, frame, width) in &owed {
+                if asked
+                    .iter()
+                    .flatten()
+                    .any(|&later| later == (item, frame, width))
+                {
+                    renderer.keep_decoded(item, frame, width);
+                }
             }
             let frame = match render(&mut renderer, src) {
                 Ok(frame) => frame,

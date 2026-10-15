@@ -1736,6 +1736,19 @@ impl HeadlessRenderer {
         self.pool.refuse_substitution();
     }
 
+    /// Hand frames decoded ahead to the render rather than copy them
+    /// ([`crate::decode::DecodePool::hand_over_prefetched`]). Set on the
+    /// renderer an export writes through.
+    pub fn hand_over_prefetched(&mut self) {
+        self.pool.hand_over_prefetched();
+    }
+
+    /// Keep `item`'s `frame` at this width in the cache through the next
+    /// render, as a later frame reads it too.
+    pub fn keep_decoded(&mut self, item: Uuid, frame: usize, target_width: Option<u32>) {
+        self.pool.keep(item, frame, target_width);
+    }
+
     /// Keep the multisample attachment from frame to frame
     /// ([`lumit_gpu::Compositor::keep_attachment`]). Set on the renderer an
     /// export writes through, which draws every frame at one size.

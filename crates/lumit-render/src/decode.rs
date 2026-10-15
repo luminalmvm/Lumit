@@ -292,6 +292,9 @@ struct CachedFrame {
     height: u32,
     rgba: Vec<u8>,
     format: lumit_media::PixelFormat,
+    /// Decoded ahead for one render, which takes it out rather than copying
+    /// it ([`DecodePool::hand_over_prefetched`]).
+    once: bool,
 }
 
 impl lumit_cache::ByteSized for CachedFrame {
@@ -458,6 +461,9 @@ pub struct DecodePool {
     /// stands the built-in engine in and says so on the row while an export
     /// abandons the run (docs/08 §3.1, docs/impl/addons.md §6.3).
     refuse_substitution: bool,
+    /// Whether frames decoded ahead are handed to the render that wants them
+    /// rather than copied out of the cache ([`Self::hand_over_prefetched`]).
+    hand_over: bool,
     /// The renderer's GPU, when the owner shared it.
     gpu: Option<lumit_gpu::GpuContext>,
     /// Measured flow pairs, so a scrub does not remeasure and the two
@@ -545,6 +551,7 @@ impl DecodePool {
             flow_engine: None,
             synthesis: None,
             refuse_substitution: false,
+            hand_over: false,
             gpu: None,
             flow_cache: lumit_cache::ByteLru::new(DEFAULT_FLOW_CACHE_BYTES),
             comp_decodes: 0,
@@ -639,6 +646,25 @@ impl DecodePool {
         self.refuse_substitution = true;
     }
 
+    /// Hand a frame decoded ahead to the last layer of its comp frame that
+    /// reads it, out of the cache, rather than copying it. Set on the pool an
+    /// export renders through, which asks for each frame once: at 4K the copy
+    /// was a fifth of the time a frame took.
+    pub fn hand_over_prefetched(&mut self) {
+        self.hand_over = true;
+    }
+
+    /// Copy `item`'s `frame` at this width out of the cache rather than hand
+    /// it over, as a later frame reads it too.
+    pub fn keep(&mut self, item: Uuid, frame: usize, target_width: Option<u32>) {
+        if let Some(held) = self
+            .frame_cache
+            .peek_mut(&(item, frame, target_width, None))
+        {
+            held.once = false;
+        }
+    }
+
     /// How many comp frames this pool has decoded since it was made.
     #[must_use]
     pub fn comp_decodes(&self) -> u64 {
@@ -714,7 +740,7 @@ impl DecodePool {
     pub fn decode_footage(&mut self, req: &Request) -> Result<FramePixels, String> {
         self.decoders.next_frame();
         self.settle(req.item, &req.source, req.slate.is_some());
-        decode(&mut self.decoders, &mut self.frame_cache, req)
+        decode(&mut self.decoders, &mut self.frame_cache, req, false)
     }
 
     /// File a frame decoded elsewhere (the decode-ahead thread) into the
@@ -746,6 +772,7 @@ impl DecodePool {
                 height: decoded.height,
                 rgba: decoded.rgba,
                 format: decoded.format,
+                once: self.hand_over,
             },
         );
     }
@@ -796,6 +823,7 @@ fn decode(
     decoders: &mut OpenDecoders,
     cache: &mut lumit_cache::ByteLru<FrameCacheKey, CachedFrame>,
     req: &Request,
+    take: bool,
 ) -> Result<FramePixels, String> {
     if let Some((w, h)) = req.slate {
         let (w, h) = (w.max(1), h.max(1));
@@ -814,6 +842,18 @@ fn decode(
     // does — the same file read as `Z` is not the picture it opens as — so they
     // are part of the key rather than something the cache could get wrong.
     let cache_key = (req.item, req.frame, req.target_width, req.channels.clone());
+    if take && cache.peek(&cache_key).is_some_and(|hit| hit.once) {
+        if let Some(hit) = cache.remove(&cache_key) {
+            return Ok(FramePixels {
+                width: hit.width,
+                height: hit.height,
+                rgba: hit.rgba,
+                format: hit.format,
+                frame: req.frame,
+                item: req.item,
+            });
+        }
+    }
     if let Some(hit) = cache.get(&cache_key) {
         return Ok(FramePixels {
             width: hit.width,
@@ -841,6 +881,7 @@ fn decode(
                     height: out.height,
                     rgba: out.rgba.clone(),
                     format: out.format,
+                    once: false,
                 },
             );
             return Ok(FramePixels {
@@ -865,6 +906,7 @@ fn decode(
                 height: out.height,
                 rgba: out.rgba.clone(),
                 format: out.format,
+                once: false,
             },
         );
         return Ok(FramePixels {
@@ -890,6 +932,7 @@ fn decode(
             height: out.height,
             rgba: out.rgba.clone(),
             format: out.format,
+            once: false,
         },
     );
     Ok(FramePixels {
@@ -1265,7 +1308,7 @@ fn combine_pair(
         // crossfade would be between two different pictures.
         channels: job.channels.clone(),
     };
-    let b = decode(decoders, cache, &req2)?;
+    let b = decode(decoders, cache, &req2, false)?;
     // Both policies keep the plate's own width: a retimed OpenEXR is still an
     // OpenEXR (docs/impl/media-io.md §5a).
     let float = a.format == lumit_media::PixelFormat::LinearF32;
@@ -1386,7 +1429,7 @@ fn decode_comp(
 ) -> Result<CompFrame, String> {
     let decode_started = std::time::Instant::now();
     let mut layers = Vec::with_capacity(jobs.len());
-    for job in jobs {
+    for (i, job) in jobs.iter().enumerate() {
         let req = Request {
             generation: 0,
             item: job.item,
@@ -1409,7 +1452,16 @@ fn decode_comp(
                 item: job.item,
             }
         } else {
-            decode(decoders, cache, &req)?
+            // The last layer this frame that reads these pixels may take
+            // them, and any before it copies.
+            let last = !jobs.get(i + 1..).unwrap_or_default().iter().any(|j| {
+                !j.slate
+                    && j.item == job.item
+                    && j.source_frame == job.source_frame
+                    && j.target_width == job.target_width
+                    && j.channels == job.channels
+            });
+            decode(decoders, cache, &req, last)?
         };
         // Neighbour frames for a temporal effect (job.temporal is empty
         // for a plain layer, so this loop does nothing then). A neighbour
@@ -1431,7 +1483,7 @@ fn decode_comp(
                     // extracted depth pass is an echo of the depth pass.
                     channels: job.channels.clone(),
                 };
-                decode(decoders, cache, &nreq)
+                decode(decoders, cache, &nreq, false)
                     .ok()
                     .map(|p| (offset, p.rgba))
             })
@@ -1541,7 +1593,7 @@ fn decode_comp(
                     // so it is read through the same channels.
                     channels: job.channels.clone(),
                 };
-                let spx = decode(decoders, cache, &sreq).ok()?;
+                let spx = decode(decoders, cache, &sreq, false).ok()?;
                 let (width, height) = (spx.width, spx.height);
                 let rgba = combine_pair(
                     decoders,

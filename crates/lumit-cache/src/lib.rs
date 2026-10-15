@@ -311,6 +311,15 @@ impl<K: Eq + Hash + Clone, V: ByteSized> ByteLru<K, V> {
         true
     }
 
+    /// Take an entry out and hand its value over.
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let entry = self.map.remove(key)?;
+        self.used -= entry.bytes;
+        self.pins.remove(key);
+        self.resync();
+        Some(entry.value)
+    }
+
     /// Membership test that does not touch recency (cache-bar drawing polls
     /// every visible frame each paint; that must not distort eviction).
     pub fn contains_key(&self, key: &K) -> bool {
