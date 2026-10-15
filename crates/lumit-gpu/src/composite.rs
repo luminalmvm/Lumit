@@ -444,6 +444,11 @@ pub struct Compositor {
     white: wgpu::Texture,
     /// Bound at binding 4 when a layer needs no dst snapshot.
     black: wgpu::Texture,
+    /// The last multisample attachment and the ledger's charge for it, kept
+    /// for the next composite of the same shape once
+    /// [`Self::keep_attachment`] has been asked for.
+    kept: std::sync::Mutex<Option<(wgpu::Texture, lumit_budget::Reservation)>>,
+    keep: std::sync::atomic::AtomicBool,
 }
 
 impl Compositor {
@@ -736,6 +741,51 @@ impl Compositor {
             sampler,
             white,
             black,
+            kept: std::sync::Mutex::new(None),
+            keep: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    /// Keep the multisample attachment from one composite to the next
+    /// instead of making a new one each time. An export asks for this: at 4K
+    /// and 8x the attachment is half a gigabyte, and making it took longer
+    /// than drawing into it. The Viewer doesn't, so an idle project holds
+    /// none.
+    pub fn keep_attachment(&self) {
+        self.keep.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The kept attachment when it has this shape, or a new one. Every
+    /// composite clears it before drawing, so what it held last time never
+    /// shows.
+    fn attachment(&self, ctx: &GpuContext, desc: &wgpu::TextureDescriptor<'_>) -> wgpu::Texture {
+        let kept = self.kept.lock().ok().and_then(|mut k| k.take());
+        match kept {
+            Some((t, _))
+                if t.size() == desc.size
+                    && t.sample_count() == desc.sample_count
+                    && t.format() == desc.format =>
+            {
+                t
+            }
+            _ => ctx.device.create_texture(desc),
+        }
+    }
+
+    /// Hold `texture` for the next composite, if keeping was asked for and
+    /// the ledger has room for it. Otherwise it goes, as it always did.
+    fn give_back(&self, ctx: &GpuContext, texture: wgpu::Texture) {
+        if !self.keep.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        let size = texture.size();
+        let bytes = crate::texture_bytes(texture.format(), size.width, size.height)
+            .saturating_mul(u64::from(texture.sample_count()));
+        let Ok(held) = ctx.ledger().reserve(lumit_budget::Tier::Vram, bytes) else {
+            return;
+        };
+        if let Ok(mut k) = self.kept.lock() {
+            *k = Some((texture, held));
         }
     }
 
@@ -1106,20 +1156,23 @@ impl Compositor {
         // it in tiled memory on the hardware that can.
         let samples = samples.max(1);
         let msaa = (samples > 1).then(|| {
-            ctx.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("comp-frame-msaa"),
-                size: wgpu::Extent3d {
-                    width: tw,
-                    height: th,
-                    depth_or_array_layers: 1,
+            self.attachment(
+                ctx,
+                &wgpu::TextureDescriptor {
+                    label: Some("comp-frame-msaa"),
+                    size: wgpu::Extent3d {
+                        width: tw,
+                        height: th,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: samples,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: ctx.working(),
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[],
                 },
-                mip_level_count: 1,
-                sample_count: samples,
-                dimension: wgpu::TextureDimension::D2,
-                format: ctx.working(),
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            })
+            )
         });
         let msaa_view = msaa.as_ref().map(|t| t.create_view(&Default::default()));
         let pipelines = self.pipelines(ctx, samples);
@@ -1420,6 +1473,9 @@ impl Compositor {
         // the deferred submission still has them.
         drop(encoder);
         drop(seed_keep);
+        if let Some(msaa) = msaa {
+            self.give_back(ctx, msaa);
+        }
         target
     }
 

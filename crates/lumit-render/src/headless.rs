@@ -244,6 +244,9 @@ pub struct HeadlessRenderer {
     /// and the export renderer — which nobody calls this on — always draws
     /// the backdrop.
     transparent_background: bool,
+    /// The read-back buffer an export's last frame gave back, for its next
+    /// ([`Self::finish_preview`]). Never set on the Viewer's renderer.
+    spare_readback: Option<lumit_gpu::SpareReadback>,
     /// The Viewer's region of interest as comp fractions, or `None`
     /// for the whole frame. Preview-only: the export renderer is never given
     /// one, the same construction that keeps the preview scale out of files.
@@ -808,6 +811,7 @@ impl HeadlessRenderer {
             colour_view: None,
             colour_output: None,
             transparent_background: false,
+            spare_readback: None,
             region: None,
             #[cfg(all(windows, feature = "shared-texture"))]
             shared: Vec::new(),
@@ -1630,6 +1634,50 @@ impl HeadlessRenderer {
             .map_err(|e| format!("headless preview: {e}"))
     }
 
+    /// [`Self::render_preview`] at the comp's own size without waiting for
+    /// the bytes: the frame is composited and its read-back started, and
+    /// [`Self::finish_preview`] collects it. An export renders the next frame
+    /// in between, so the copy off the card runs alongside it.
+    pub fn start_preview(
+        &mut self,
+        doc: &Arc<Document>,
+        comp_id: Uuid,
+        frame: u64,
+        quality: Quality,
+    ) -> Result<lumit_gpu::PendingReadback, String> {
+        let (shown, cw, ch) = self.preview_display_texture(doc, comp_id, frame, quality)?;
+        let Some(parts) = self.parts.as_ref() else {
+            return Err("headless preview: renderer is unavailable after an earlier fault".into());
+        };
+        let spare = self.spare_readback.take();
+        if (cw, ch) == (shown.width(), shown.height()) {
+            return Ok(parts.colour.start_readback8_into(&self.gpu, &shown, spare));
+        }
+        // A coarse tier composited smaller: brought back up on the card, as
+        // `render_preview` does at a scale of one.
+        let full = parts.colour.display_scaled(
+            &self.gpu,
+            &shown,
+            cw,
+            ch,
+            lumit_gpu::DisplayParams::NEUTRAL,
+        );
+        Ok(parts.colour.start_readback8_into(&self.gpu, &full, spare))
+    }
+
+    /// The bytes of a read-back [`Self::start_preview`] started, waiting for
+    /// them. Its buffer is kept for the next one.
+    pub fn finish_preview(
+        &mut self,
+        mut pending: lumit_gpu::PendingReadback,
+    ) -> Result<Vec<u8>, String> {
+        let bytes = pending
+            .wait(&self.gpu)
+            .map_err(|e| format!("headless preview: {e}"));
+        self.spare_readback = pending.into_spare(&self.gpu);
+        bytes
+    }
+
     /// [`Self::render_preview`] at sixteen bits a channel: the same walk, the
     /// same colour, read back as `0..=65535` codes instead of bytes — what a
     /// sixteen-bit export packs (docs/06 §7.4).
@@ -1686,6 +1734,28 @@ impl HeadlessRenderer {
     /// carries the substitution (docs/08 §3.1, docs/impl/addons.md §6.3).
     pub fn refuse_substitution(&mut self) {
         self.pool.refuse_substitution();
+    }
+
+    /// Hand frames decoded ahead to the render rather than copy them
+    /// ([`crate::decode::DecodePool::hand_over_prefetched`]). Set on the
+    /// renderer an export writes through.
+    pub fn hand_over_prefetched(&mut self) {
+        self.pool.hand_over_prefetched();
+    }
+
+    /// Keep `item`'s `frame` at this width in the cache through the next
+    /// render, as a later frame reads it too.
+    pub fn keep_decoded(&mut self, item: Uuid, frame: usize, target_width: Option<u32>) {
+        self.pool.keep(item, frame, target_width);
+    }
+
+    /// Keep the multisample attachment from frame to frame
+    /// ([`lumit_gpu::Compositor::keep_attachment`]). Set on the renderer an
+    /// export writes through, which draws every frame at one size.
+    pub fn keep_attachments(&mut self) {
+        if let Some(parts) = &self.parts {
+            parts.compositor.keep_attachment();
+        }
     }
 
     /// How many comp frames the interactive path has actually decoded. A live
@@ -1854,6 +1924,13 @@ impl HeadlessRenderer {
             }
         }
         wants
+    }
+
+    /// Whether `item`'s `frame` at this width is already in the
+    /// decoded-source cache.
+    #[must_use]
+    pub fn holds_decoded(&self, item: Uuid, frame: usize, target_width: Option<u32>) -> bool {
+        self.pool.holds(item, frame, target_width)
     }
 
     /// File one prefetched decode into the decoded-source cache, under exactly

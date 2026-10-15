@@ -663,11 +663,15 @@ impl GpuContext {
     /// Hand one command buffer to the driver, counting it (see
     /// [`Self::submits_so_far`]). Every submission in the engine comes through
     /// here.
-    pub fn submit(&self, buffers: impl IntoIterator<Item = wgpu::CommandBuffer>) {
+    pub fn submit(
+        &self,
+        buffers: impl IntoIterator<Item = wgpu::CommandBuffer>,
+    ) -> wgpu::SubmissionIndex {
         let mut n = 0u64;
-        self.queue.submit(buffers.into_iter().inspect(|_| n += 1));
+        let index = self.queue.submit(buffers.into_iter().inspect(|_| n += 1));
         self.submits
             .fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+        index
     }
 
     /// How many command buffers this context has submitted so far. Take it
@@ -1658,6 +1662,18 @@ pub struct PendingReadback {
     padded: u32,
     done: std::sync::mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>,
     taken: bool,
+    /// The submission the copy went in, so a wait need not wait for the
+    /// work queued after it.
+    submitted: wgpu::SubmissionIndex,
+    /// The ledger's charge for a buffer kept between read-backs.
+    charge: Option<lumit_budget::Reservation>,
+}
+
+/// A read-back buffer kept for the next read-back of the same size, with
+/// the ledger's charge for it ([`PendingReadback::into_spare`]).
+pub struct SpareReadback {
+    buffer: wgpu::Buffer,
+    charge: lumit_budget::Reservation,
 }
 
 impl PendingReadback {
@@ -1714,6 +1730,40 @@ impl PendingReadback {
         drop(data);
         self.buffer.unmap();
         Some(Ok(out))
+    }
+
+    /// The bytes, waiting for the copy but not for anything queued after it.
+    pub fn wait(&mut self, ctx: &GpuContext) -> Result<Vec<u8>, GpuError> {
+        ctx.device.poll(wgpu::Maintain::WaitForSubmissionIndex(
+            self.submitted.clone(),
+        ));
+        if let Some(bytes) = self.poll(ctx) {
+            return bytes;
+        }
+        // The mapping is answered on a poll after the copy, so one more that
+        // waits for everything settles it.
+        ctx.device.poll(wgpu::Maintain::Wait);
+        self.poll(ctx)
+            .unwrap_or_else(|| Err(GpuError::Readback("read-back never finished".into())))
+    }
+
+    /// The buffer back for the next read-back, once the bytes are out and
+    /// while the ledger has room for it. `None` otherwise, and it goes.
+    pub fn into_spare(self, ctx: &GpuContext) -> Option<SpareReadback> {
+        if !self.taken {
+            return None;
+        }
+        let charge = match self.charge {
+            Some(charge) => charge,
+            None => ctx
+                .ledger()
+                .reserve(lumit_budget::Tier::Vram, self.buffer.size())
+                .ok()?,
+        };
+        Some(SpareReadback {
+            buffer: self.buffer,
+            charge,
+        })
     }
 }
 
@@ -2878,16 +2928,35 @@ impl ColourEngine {
     /// the next composite and the caller collects the bytes a loop turn or two
     /// later ([`PendingReadback::poll`]).
     pub fn start_readback8(&self, ctx: &GpuContext, tex: &wgpu::Texture) -> PendingReadback {
+        self.start_readback8_into(ctx, tex, None)
+    }
+
+    /// [`Self::start_readback8`] into a buffer an earlier one gave back, when
+    /// it is the right size. An export reads back every frame at one size, and
+    /// a new 33 MB buffer each time was part of what a 4K frame cost.
+    pub fn start_readback8_into(
+        &self,
+        ctx: &GpuContext,
+        tex: &wgpu::Texture,
+        spare: Option<SpareReadback>,
+    ) -> PendingReadback {
         let size = tex.size();
         let row = size.width * 4;
         let padded =
             row.div_ceil(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT) * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("readback-async"),
-            size: u64::from(padded) * u64::from(size.height),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let bytes = u64::from(padded) * u64::from(size.height);
+        let (buffer, charge) = match spare {
+            Some(s) if s.buffer.size() == bytes => (s.buffer, Some(s.charge)),
+            _ => (
+                ctx.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("readback-async"),
+                    size: bytes,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                }),
+                None,
+            ),
+        };
         // Hand over anything the frame batch is still holding: what is
         // read below may have been recorded into it, and a command that has
         // not been submitted has not run. A no-op outside a batch.
@@ -2905,7 +2974,7 @@ impl ColourEngine {
             },
             size,
         );
-        ctx.submit([encoder.finish()]);
+        let submitted = ctx.submit([encoder.finish()]);
         let (tx, rx) = std::sync::mpsc::channel();
         buffer
             .slice(..)
@@ -2917,6 +2986,8 @@ impl ColourEngine {
             padded,
             done: rx,
             taken: false,
+            submitted,
+            charge,
         }
     }
 

@@ -826,10 +826,14 @@ impl Encoder {
         dst.set_format(track.encode_pix_fmt);
         dst.alloc_buffer()
             .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-        track
-            .sws
-            .scale_frame(&src, 0, track.height, &mut dst)
-            .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
+        // SAFETY: both frames were allocated above at the size and formats
+        // the context was built for, and nothing else is using any of them.
+        #[allow(unsafe_code)]
+        let scaled =
+            unsafe { ffi::sws_scale_frame(track.sws.as_mut_ptr(), dst.as_mut_ptr(), src.as_ptr()) };
+        if scaled < 0 {
+            return Err(MediaError::Ffmpeg(format!("swscale failed ({scaled})")));
+        }
         dst.set_pts(track.next_pts);
         track.next_pts += 1;
 
@@ -916,14 +920,20 @@ fn open_video(
     // context; a rung that proves but won't re-open also falls through.
     let mut opened: Option<AVCodecContext> = None;
     let picked = pick_first_working(&encoder_candidates(video.codec), |name| {
-        test_encode(name, video).is_ok()
-            && match build_video_ctx(name, video, global_header) {
-                Ok(ctx) => {
-                    opened = Some(ctx);
-                    true
-                }
-                Err(_) => false,
+        match test_encode(name, video).and_then(|()| build_video_ctx(name, video, global_header)) {
+            Ok(ctx) => {
+                opened = Some(ctx);
+                true
             }
+            Err(e) => {
+                // So a support log says why a faster rung was passed over,
+                // such as NVENC on a driver too old for it. Not eprintln,
+                // which panics once the console has gone.
+                use std::io::Write as _;
+                let _ = writeln!(std::io::stderr(), "encoder {name} skipped: {e}");
+                false
+            }
+        }
     });
     let (ctx, encoder) = match (opened, picked) {
         (Some(ctx), Some(name)) => (ctx, name),
@@ -949,19 +959,7 @@ fn open_video(
     let height = i32::try_from(video.height)
         .map_err(|_| MediaError::Ffmpeg("frame height overflows".into()))?;
     let encode_pix_fmt = pix_fmt_for(encoder);
-    let sws = SwsContext::get_context(
-        width,
-        height,
-        ffi::AV_PIX_FMT_RGBA,
-        width,
-        height,
-        encode_pix_fmt,
-        ffi::SWS_BILINEAR,
-        None,
-        None,
-        None,
-    )
-    .ok_or_else(|| MediaError::Ffmpeg("swscale for encode".into()))?;
+    let sws = sliced_scaler(width, height, encode_pix_fmt)?;
 
     Ok(VideoTrack {
         ctx,
@@ -972,6 +970,36 @@ fn open_video(
         height,
         next_pts: 0,
     })
+}
+
+/// The RGBA to encoder format scaler, run in slices across the machine's
+/// cores. On one core it took longer at 4K than the encoder did. Each slice
+/// works its rows out of the whole picture, so the bytes are the same.
+fn sliced_scaler(width: i32, height: i32, to: i32) -> Result<SwsContext, MediaError> {
+    let failed = || MediaError::Ffmpeg("swscale for encode".into());
+    // SAFETY: the context is owned by the wrapper as soon as it exists, so it
+    // is freed on every path. Its public fields are written before
+    // `sws_init_context` reads them, which is what `sws_getContext` does for
+    // a single-threaded one.
+    #[allow(unsafe_code)]
+    unsafe {
+        let raw = std::ptr::NonNull::new(ffi::sws_alloc_context()).ok_or_else(failed)?;
+        let mut sws = SwsContext::from_raw(raw);
+        let c = sws.as_mut_ptr();
+        (*c).src_w = width;
+        (*c).src_h = height;
+        (*c).src_format = ffi::AV_PIX_FMT_RGBA;
+        (*c).dst_w = width;
+        (*c).dst_h = height;
+        (*c).dst_format = to;
+        (*c).flags = ffi::SWS_BILINEAR as _;
+        // As many as the machine has.
+        (*c).threads = 0;
+        if ffi::sws_init_context(c, std::ptr::null_mut(), std::ptr::null_mut()) < 0 {
+            return Err(failed());
+        }
+        Ok(sws)
+    }
 }
 
 /// Write the container's metadata dictionary (docs/06 §7.6), in the order the

@@ -1647,7 +1647,7 @@ impl Crop {
     /// `per_px` counts *elements* of `T` in a pixel — four bytes for an
     /// eight-bit frame, four codes for a sixteen-bit one — so one row copy
     /// serves both depths.
-    pub fn apply<T: Copy>(self, frame: &[T], w: u32, h: u32, per_px: usize) -> Vec<T> {
+    pub fn apply<T: Copy>(self, frame: Vec<T>, w: u32, h: u32, per_px: usize) -> Vec<T> {
         let (x, y, out_w, out_h) = self.window(w, h);
         let src_row = (w as usize).saturating_mul(per_px);
         // Nothing to crop, an empty frame, or a buffer smaller than the frame
@@ -1655,7 +1655,7 @@ impl Crop {
         // (docs/14 §4), and a caller bug must show as a full-size frame rather
         // than a crash halfway through an export.
         if self.is_none() || w == 0 || h == 0 || frame.len() < src_row.saturating_mul(h as usize) {
-            return frame.to_vec();
+            return frame;
         }
         let dst_row = (out_w as usize) * per_px;
         let skip = (x as usize) * per_px;
@@ -2161,6 +2161,24 @@ pub fn pack_frame<C: lumit_core::pixels::Channel>(
     let straight = channels == Channels::RgbAlpha && alpha == AlphaMode::Straight;
     let opaque = channels == Channels::Rgb;
     let mut out = Vec::with_capacity(px.len() * C::BYTES);
+    // No transform and no division, which is nearly every export: nothing
+    // to work out a pixel at a time. The frame goes out in one copy and an
+    // opaque file has its alpha written over afterwards. The loop below
+    // took most of a 4K frame's time to give the same bytes.
+    if colour.is_none() && !straight {
+        let whole = px.len() - px.len() % 4;
+        C::write_all_le(&px[..whole], &mut out);
+        if opaque {
+            let mut full = Vec::with_capacity(C::BYTES);
+            C::FULL.write_le(&mut full);
+            for pixel in out.chunks_exact_mut(4 * C::BYTES) {
+                if let Some(a) = pixel.get_mut(3 * C::BYTES..) {
+                    a.copy_from_slice(&full);
+                }
+            }
+        }
+        return out;
+    }
     for chunk in px.chunks_exact(4) {
         let a = chunk[3].to_f64();
         let mut rgba = [chunk[0], chunk[1], chunk[2], chunk[3]];
@@ -3024,6 +3042,8 @@ fn run(
     // model's name. The pre-flight turns away everything the document alone can
     // show; this is the rest of it (docs/08 §3.1, docs/impl/addons.md §6.3).
     renderer.refuse_substitution();
+    renderer.keep_attachments();
+    renderer.hand_over_prefetched();
     // The project's colour config, before anything is written: the refusal has
     // to happen with the config in hand, and it has to happen before a file
     // exists rather than halfway through one.
@@ -3120,91 +3140,277 @@ fn run(
     // answer two million times over.
     let colour = spec.colour_space.transform();
 
-    let mut audio_fed = 0usize;
-    for frame_n in 0..total {
-        if cancel.load(Ordering::Relaxed) {
-            sink.remove_written(out_path);
-            return Ok(());
-        }
-        // The comp frame under this output frame: exact when the rates match
-        // (the rounding is then of an integer), nearest otherwise.
-        let src = first + ((frame_n as f64) * fps / out_fps).round() as usize;
-        let src = src.min(end.saturating_sub(1));
+    let (tw, th) = sink.size();
+    let audio_mix = audio_mix.as_deref();
+    // The file is written on a thread of its own, so one frame is encoded
+    // while the next is rendered. Only one finished frame waits between the
+    // two, so this holds a frame or two more than a loop that took turns.
+    let (rendered, written) = std::thread::scope(|s| {
+        let (frames, queued) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
+        let sink = &mut sink;
+        let writer = std::thread::Builder::new()
+            .name("lumit-export-writer".into())
+            .spawn_scoped(s, move || -> Result<usize, String> {
+                let mut audio_fed = 0usize;
+                for (frame_n, rgba) in queued.iter().enumerate() {
+                    sink.write_rgba(&rgba)?;
+                    // Interleave: after each picture frame, the samples that cover it,
+                    // so the muxer keeps sound and picture together in the file.
+                    if let (Some(mix), Sink::Video { encoder, .. }) = (audio_mix, &mut *sink) {
+                        let upto = audio_samples_through(frame_n + 1, out_fps, rate)
+                            .min(mix.len() / chans);
+                        if upto > audio_fed {
+                            encoder
+                                .write_audio(&mix[audio_fed * chans..upto * chans])
+                                .map_err(|e| e.to_string())?;
+                            audio_fed = upto;
+                        }
+                    }
+                    let _ = tx.send(ExportEvent::Progress {
+                        frame: frame_n + 1,
+                        total,
+                    });
+                }
+                Ok(audio_fed)
+            })
+            .map_err(|e| format!("export writer: {e}"))?;
         // Crop in composition pixels first, then letterbox into the delivery
         // frame when the size was changed, then pack to what the file carries.
         // The two arms differ only in how wide a channel is: a sixteen-bit
         // export reads the composite back at sixteen bits and stays there, so
         // the extra width is the pipeline's own rather than a stretched byte.
-        let (tw, th) = sink.size();
-        let rgba = match spec.depth {
-            BitDepth::Eight => {
-                let (px, _, _) =
-                    renderer.render_preview(doc, comp_id, src as u64, spec.render.quality, 1.0)?;
-                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
-                let px = if resize {
-                    lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
-                } else {
-                    px
-                };
-                pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
-            }
-            BitDepth::Sixteen => {
-                let (px, _, _) =
-                    renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
-                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
-                let px = if resize {
-                    lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
-                } else {
-                    px
-                };
-                pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
-            }
-            // The float depths read the composite back as it stands: no
-            // display transform, no curve, no clamp (docs/06 §7.4a). The
-            // channel and alpha choices still apply — they are about what the
-            // file carries, not about how bright it is — and the resize runs
-            // on the floats so a delivered EXR is filtered rather than
-            // point-sampled.
-            BitDepth::Half | BitDepth::Float => {
-                let (px, _, _) = renderer.render_preview_linear(
+        let render = |renderer: &mut crate::headless::HeadlessRenderer,
+                      src: usize|
+         -> Result<Rendered, String> {
+            Ok(match spec.depth {
+                // Only started here: the bytes are collected by `finish`
+                // below once the next frame is on its way.
+                BitDepth::Eight => Rendered::Coming(renderer.start_preview(
                     doc,
                     comp_id,
                     src as u64,
                     spec.render.quality,
-                )?;
-                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
-                let px = if resize {
-                    letterbox_resize_f32(&px, crop_w, crop_h, tw, th)
-                } else {
-                    px
-                };
-                pack_frame_f32(&px, spec.channels, spec.alpha)
-            }
+                )?),
+                BitDepth::Sixteen => Rendered::Bytes({
+                    let (px, _, _) =
+                        renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
+                    let px = spec.crop.apply(px, comp.width, comp.height, 4);
+                    let px = if resize {
+                        lumit_core::pixels::letterbox_resize(
+                            &px,
+                            crop_w,
+                            crop_h,
+                            tw,
+                            th,
+                            spec.resample,
+                        )
+                    } else {
+                        px
+                    };
+                    pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
+                }),
+                // The float depths read the composite back as it stands: no
+                // display transform, no curve, no clamp (docs/06 §7.4a). The
+                // channel and alpha choices still apply — they are about what the
+                // file carries, not about how bright it is — and the resize runs
+                // on the floats so a delivered EXR is filtered rather than
+                // point-sampled.
+                BitDepth::Half | BitDepth::Float => Rendered::Bytes({
+                    let (px, _, _) = renderer.render_preview_linear(
+                        doc,
+                        comp_id,
+                        src as u64,
+                        spec.render.quality,
+                    )?;
+                    let px = spec.crop.apply(px, comp.width, comp.height, 4);
+                    let px = if resize {
+                        letterbox_resize_f32(&px, crop_w, crop_h, tw, th)
+                    } else {
+                        px
+                    };
+                    pack_frame_f32(&px, spec.channels, spec.alpha)
+                }),
+            })
         };
-        if let Err(e) = sink.write_rgba(&rgba) {
+        let finish = |renderer: &mut crate::headless::HeadlessRenderer,
+                      frame: Rendered|
+         -> Result<Vec<u8>, String> {
+            let pending = match frame {
+                Rendered::Bytes(rgba) => return Ok(rgba),
+                Rendered::Coming(pending) => pending,
+            };
+            let px = renderer.finish_preview(pending)?;
+            let px = spec.crop.apply(px, comp.width, comp.height, 4);
+            let px = if resize {
+                lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
+            } else {
+                px
+            };
+            Ok(pack_frame(&px, spec.channels, spec.alpha, colour.as_ref()))
+        };
+        // The comp frame under an output frame: exact when the rates match
+        // (the rounding is then of an integer), nearest otherwise.
+        let src_of = |n: usize| {
+            let src = first + ((n as f64) * fps / out_fps).round() as usize;
+            src.min(end.saturating_sub(1))
+        };
+        // The footage is decoded a couple of frames ahead, on the threads
+        // playback reads with, so one frame decodes while another renders.
+        // Only while that is safe: a few files a frame, frames small enough
+        // that the ones in flight fit in half the decode cache, and footage
+        // that turns up in time. Past any of those it stops for good, and
+        // each frame decodes its own footage as it always did.
+        const DECODE_AHEAD: usize = 2;
+        const MOST_WANTS: usize = 8;
+        const LONGEST_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+        let quality = spec.render.quality;
+        let mut ahead = Some(crate::prefetch::Prefetcher::default());
+        // What was asked for each frame from this one on, in order.
+        let mut asked = std::collections::VecDeque::new();
+        let mut asked_to = 0usize;
+        let mut rendered = Ok(());
+        let mut waiting = None;
+        for frame_n in 0..total {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            let src = src_of(frame_n);
+            let mut stop = false;
+            if let Some(prefetch) = ahead.as_mut() {
+                // Only this frame's own at first, until its size is known.
+                let reach = if frame_n == 0 { 0 } else { DECODE_AHEAD };
+                while asked_to <= frame_n + reach && asked_to < total {
+                    // A layer of a layered file is left to the render: the
+                    // decode thread reads each one once and then skips it.
+                    let wants: Vec<_> = renderer
+                        .prefetch_wants(doc, comp_id, src_of(asked_to) as u64, quality)
+                        .into_iter()
+                        .filter(|w| !lumit_media::reads_own(&w.source))
+                        .collect();
+                    if wants.len() > MOST_WANTS {
+                        stop = true;
+                        break;
+                    }
+                    asked.push_back(
+                        wants
+                            .iter()
+                            .map(|w| (w.item, w.frame, w.target_width))
+                            .collect::<Vec<_>>(),
+                    );
+                    prefetch.request(wants);
+                    asked_to += 1;
+                }
+            }
+            let owed: Vec<_> = if frame_n < asked_to {
+                asked.pop_front().unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            if let Some(prefetch) = ahead.as_ref() {
+                let since = std::time::Instant::now();
+                let mut bytes = 0usize;
+                let mut landed = prefetch.drain();
+                loop {
+                    for done in landed.drain(..) {
+                        bytes = bytes.saturating_add(done.decoded.rgba.len());
+                        renderer.preload_decoded(done);
+                    }
+                    if owed
+                        .iter()
+                        .all(|&(item, frame, width)| renderer.holds_decoded(item, frame, width))
+                        || cancel.load(Ordering::Relaxed)
+                    {
+                        break;
+                    }
+                    // A decode that failed or was dropped sends nothing, so
+                    // the wait is short, and a wait that runs out stops
+                    // decoding ahead. The render below decodes what is missing.
+                    if since.elapsed() > LONGEST_WAIT {
+                        stop = true;
+                        break;
+                    }
+                    landed.extend(prefetch.wait(std::time::Duration::from_millis(50)));
+                }
+                let in_flight = bytes.saturating_mul(DECODE_AHEAD + 1);
+                stop |= in_flight > crate::decode::DEFAULT_DECODE_CACHE_BYTES / 2;
+            }
+            if stop {
+                // Its threads end with it.
+                ahead = None;
+            }
+            // Footage a frame still to come asked for too is copied for this
+            // one, not handed over, or that frame would wait for it in vain.
+            for &(item, frame, width) in &owed {
+                if asked
+                    .iter()
+                    .flatten()
+                    .any(|&later| later == (item, frame, width))
+                {
+                    renderer.keep_decoded(item, frame, width);
+                }
+            }
+            let frame = match render(&mut renderer, src) {
+                Ok(frame) => frame,
+                Err(e) => {
+                    rendered = Err(e);
+                    break;
+                }
+            };
+            // An eight-bit frame waits a turn, so its read-back runs while
+            // the next one renders. Any other goes at once.
+            let ready = match frame {
+                Rendered::Coming(_) => waiting.replace(frame),
+                Rendered::Bytes(_) => Some(frame),
+            };
+            let Some(before) = ready else {
+                continue;
+            };
+            let rgba = match finish(&mut renderer, before) {
+                Ok(rgba) => rgba,
+                Err(e) => {
+                    rendered = Err(e);
+                    break;
+                }
+            };
+            // Refused only when the writer has stopped, and it says why below.
+            if frames.send(rgba).is_err() {
+                break;
+            }
+        }
+        // And the last, when nothing stopped the loop.
+        if let Some(last) = waiting.filter(|_| rendered.is_ok() && !cancel.load(Ordering::Relaxed))
+        {
+            match finish(&mut renderer, last) {
+                Ok(rgba) => {
+                    let _ = frames.send(rgba);
+                }
+                Err(e) => rendered = Err(e),
+            }
+        }
+        // Joined here rather than by the scope, so a writer that panicked
+        // is an error like any other.
+        drop(frames);
+        let written = writer
+            .join()
+            .unwrap_or_else(|_| Err("the export's writer stopped".into()));
+        Ok::<_, String>((rendered, written))
+    })?;
+    rendered?;
+    if cancel.load(Ordering::Relaxed) {
+        sink.remove_written(out_path);
+        return Ok(());
+    }
+    let audio_fed = match written {
+        Ok(fed) => fed,
+        Err(e) => {
             // A folder of stills that failed half-way is tidied rather than
             // left as a trap that looks like a finished export.
             sink.remove_written(out_path);
             return Err(e);
         }
-        // Interleave: after each picture frame, the samples that cover it,
-        // so the muxer keeps sound and picture together in the file.
-        if let (Some(mix), Sink::Video { encoder, .. }) = (&audio_mix, &mut sink) {
-            let upto = audio_samples_through(frame_n + 1, out_fps, rate).min(mix.len() / chans);
-            if upto > audio_fed {
-                encoder
-                    .write_audio(&mix[audio_fed * chans..upto * chans])
-                    .map_err(|e| e.to_string())?;
-                audio_fed = upto;
-            }
-        }
-        let _ = tx.send(ExportEvent::Progress {
-            frame: frame_n + 1,
-            total,
-        });
-    }
+    };
     // Any samples the per-frame rounding left behind.
-    if let (Some(mix), Sink::Video { encoder, .. }) = (&audio_mix, &mut sink) {
+    if let (Some(mix), Sink::Video { encoder, .. }) = (audio_mix, &mut sink) {
         if mix.len() / chans > audio_fed {
             encoder
                 .write_audio(&mix[audio_fed * chans..])
@@ -3279,6 +3485,13 @@ fn run_audio_only(
 
 /// Where the rendered frames go: the mp4 muxer, or the numbered stills. One
 /// type so the frame loop stays single.
+/// A frame on its way to the file: its bytes, or at eight bits its
+/// read-back still coming off the graphics card.
+enum Rendered {
+    Bytes(Vec<u8>),
+    Coming(lumit_gpu::PendingReadback),
+}
+
 enum Sink {
     Video {
         encoder: lumit_media::Encoder,
@@ -4108,7 +4321,7 @@ mod tests {
             bottom: 1,
             right: 1,
         };
-        assert_eq!(one_off_each_side.apply(&frame, 4, 3, 1), vec![5, 6]);
+        assert_eq!(one_off_each_side.apply(frame.clone(), 4, 3, 1), vec![5, 6]);
         // Four bytes a pixel, the real shape.
         let rgba: Vec<u8> = (0..(4 * 2 * 2)).collect();
         let right_half = Crop {
@@ -4118,16 +4331,23 @@ mod tests {
             right: 0,
         };
         assert_eq!(
-            right_half.apply(&rgba, 2, 2, 4),
+            right_half.apply(rgba, 2, 2, 4),
             vec![4, 5, 6, 7, 12, 13, 14, 15]
         );
         // No crop is the frame itself, and a buffer too small comes back
         // whole rather than panicking mid-export.
-        assert_eq!(Crop::NONE.apply(&frame, 4, 3, 1), frame);
-        assert_eq!(one_off_each_side.apply(&[1, 2, 3], 4, 3, 1), vec![1, 2, 3]);
+        assert_eq!(Crop::NONE.apply(frame.clone(), 4, 3, 1), frame);
+        assert_eq!(
+            one_off_each_side.apply(vec![1, 2, 3], 4, 3, 1),
+            vec![1, 2, 3]
+        );
         // Regression: a zero-sized frame used to index past an empty buffer.
-        assert!(one_off_each_side.apply::<u8>(&[], 0, 0, 4).is_empty());
-        assert!(one_off_each_side.apply::<u8>(&[], 4, 0, 4).is_empty());
+        assert!(one_off_each_side
+            .apply::<u8>(Vec::new(), 0, 0, 4)
+            .is_empty());
+        assert!(one_off_each_side
+            .apply::<u8>(Vec::new(), 4, 0, 4)
+            .is_empty());
     }
 
     /// The pack stage: what each channel/alpha choice does to the finished

@@ -87,6 +87,12 @@ pub trait Channel: Copy {
     /// Append this channel to a file buffer, little-endian (the byte order the
     /// encoder seam expects; each format's own order is its business).
     fn write_le(self, out: &mut Vec<u8>);
+    /// Append a run of channels, as [`Self::write_le`] would one at a time.
+    fn write_all_le(run: &[Self], out: &mut Vec<u8>) {
+        for c in run {
+            c.write_le(out);
+        }
+    }
 }
 
 impl Channel for u8 {
@@ -101,6 +107,10 @@ impl Channel for u8 {
     }
     fn write_le(self, out: &mut Vec<u8>) {
         out.push(self);
+    }
+    /// Bytes are already in file order, so a run goes in as one copy.
+    fn write_all_le(run: &[Self], out: &mut Vec<u8>) {
+        out.extend_from_slice(run);
     }
 }
 
