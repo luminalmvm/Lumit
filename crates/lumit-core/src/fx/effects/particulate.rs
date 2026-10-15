@@ -32,6 +32,7 @@ use crate::fx::points::{self, Emitter, EmitterShape, Forces, ParticleLook, Point
 use crate::fx::{
     cpu, CurvePoints, EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen,
     ParamGroup, ParamId, Params, Port, PortType, ResolveCx, Signature, Value,
+    MAP_PLACEMENT_OPTIONS,
 };
 use lumit_fx_macros::Effect;
 
@@ -68,6 +69,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "path_from",
             "mask_path",
             "density_layer",
+            "density_layer_placement",
             "emit_rate",
             "direction",
             "direction_z",
@@ -268,6 +270,11 @@ pub struct Particulate {
     /// the emitter's shape. Unset, births fill the shape evenly as before.
     #[layer(label = "Density layer")]
     pub density_layer: bool,
+
+    /// Where the Density layer's picture sits on this one: as it sits in the
+    /// comp, stretched over the frame, or centred at its own size.
+    #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
+    pub density_layer_placement: u32,
 
     /// Births per second of layer time. Its integral **is** the birth schedule
     /// (points.rs), which is what makes a keyframed or driven rate an ordinary

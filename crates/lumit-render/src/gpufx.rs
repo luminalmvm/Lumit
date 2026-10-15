@@ -5955,6 +5955,7 @@ mod tests {
             feather: 60.0,
             sprite_layer: false,
             density_layer: false,
+            density_layer_placement: 0,
             streak_length: 0.05,
             particle_blend: 0,
             max_particles: cap,

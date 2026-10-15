@@ -453,7 +453,8 @@ fn a_multiply_blend_darkens_where_normal_lifts() {
 /// white square off to one side of the comp puts its points on that square,
 /// not over the whole frame as a stretched read did. The layer the effect is
 /// on is moved as well, so the points only land right if the read follows
-/// both layers into the comp.
+/// both layers into the comp. Particulate's Density layer is read the same
+/// way, so its births land on the square too.
 #[test]
 fn emit_from_image_reads_its_source_where_the_source_sits() {
     use lumit_core::anim::Property;
@@ -487,29 +488,55 @@ fn emit_from_image_reads_its_source_where_the_source_sits() {
             _ => {}
         }
     }
-    base.effects = vec![emit];
-
-    let comp = comp_of("Comp", vec![logo, base]);
-    let comp_id = comp.id;
-    doc.items.push(ProjectItem::Composition(comp));
-    let (rgba, w, _) = r
-        .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
-        .expect("the render");
-
-    // A point is a disc two pixels wide, so it may reach a pixel past the
-    // square's edge.
-    let (mut inside, mut outside) = (0, 0);
-    for (i, px) in rgba.chunks_exact(4).enumerate() {
-        let (x, y) = (i as u32 % w, i as u32 / w);
-        if px[0] < 64 {
-            continue;
-        }
-        if (39..57).contains(&x) && (7..25).contains(&y) {
-            inside += 1;
-        } else {
-            outside += 1;
+    // Still particles born over the whole of the base layer, a second in.
+    let mut dense = lumit_core::fx::instantiate("particulate").expect("a built-in");
+    for p in &mut dense.params {
+        let f = |v: f64| EffectValue::Float(Property::fixed(v));
+        match p.id.as_str() {
+            "density_layer" => p.value = EffectValue::Layer(Some(logo.id)),
+            "shape" => p.value = EffectValue::Choice(3),
+            "position_x" | "position_y" => p.value = f(32.0),
+            "width" | "height" => p.value = f(64.0),
+            "emit_rate" => p.value = f(1000.0),
+            "initial_speed" | "turbulence_amount" => p.value = f(0.0),
+            "size" => p.value = f(2.0),
+            _ => {}
         }
     }
-    assert!(inside > 20, "only {inside} lit pixels on the square");
-    assert_eq!(outside, 0, "{outside} lit pixels away from the square");
+
+    for (effect, frame) in [(emit, 0), (dense, 60)] {
+        let mut base = base.clone();
+        let name = effect.effect.match_name.clone();
+        base.effects = vec![effect];
+        let mut doc = doc.clone();
+        let comp = comp_of("Comp", vec![logo.clone(), base]);
+        let comp_id = comp.id;
+        doc.items.push(ProjectItem::Composition(comp));
+        let (rgba, w, _) = r
+            .render_rgba(&Arc::new(doc), comp_id, frame, 1.0)
+            .expect("the render");
+
+        // A point is a disc two pixels wide, so it may reach a pixel past the
+        // square's edge.
+        let (mut inside, mut outside) = (0, 0);
+        for (i, px) in rgba.chunks_exact(4).enumerate() {
+            let (x, y) = (i as u32 % w, i as u32 / w);
+            if px[0] < 64 {
+                continue;
+            }
+            if (39..57).contains(&x) && (7..25).contains(&y) {
+                inside += 1;
+            } else {
+                outside += 1;
+            }
+        }
+        assert!(
+            inside > 20,
+            "{name}: only {inside} lit pixels on the square"
+        );
+        assert_eq!(
+            outside, 0,
+            "{name}: {outside} lit pixels away from the square"
+        );
+    }
 }

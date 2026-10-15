@@ -34,6 +34,7 @@ A particle system.
 | **Follow** | Dropdown | Mask · Shape | Mask | - |
 | **Mask path** | Masks | This layer's masks | First mask | - |
 | **Density layer** | Layer | Any layer in the composition | None | - |
+| **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Emit rate** | Slider | 0 to 1000; higher | 150 | - |
 | **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | -90° | Degrees |
 | **Direction z** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
@@ -87,7 +88,7 @@ A particle system.
 
 In the Effect Controls panel:
 
-- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Density layer**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Density layer**, **Map placement**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
@@ -125,6 +126,9 @@ The **Emitter** group, where particles come from and travel:
   points effects below Particulate on the same layer can read its particles, and
   [Points sample](/effects/drivers/points-sample/) and
   [Layer points](/effects/drivers/layer-points/) cannot.
+- **Map placement**: where the Density layer's picture sits on this layer. **As placed in
+  comp** reads it where that layer sits in the composition. **Stretch to fit** stretches
+  it over this layer. **Centre** centres it at its own size.
 - **Emit rate**: new particles per second.
 - **Direction**: which way particles travel.
 - **Direction z**: how far they lean out of that plane.

@@ -9886,6 +9886,19 @@
           "self_default": false
         },
         {
+          "id": "density_layer_placement",
+          "label": "Map placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
           "id": "emit_rate",
           "label": "Emit rate",
           "kind": "float",
@@ -10479,6 +10492,7 @@
             "path_from",
             "mask_path",
             "density_layer",
+            "density_layer_placement",
             "emit_rate",
             "direction",
             "direction_z",
