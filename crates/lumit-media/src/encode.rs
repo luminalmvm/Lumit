@@ -992,7 +992,7 @@ fn sliced_scaler(width: i32, height: i32, to: i32) -> Result<SwsContext, MediaEr
         (*c).dst_w = width;
         (*c).dst_h = height;
         (*c).dst_format = to;
-        (*c).flags = ffi::SWS_BILINEAR as u32;
+        (*c).flags = ffi::SWS_BILINEAR as _;
         // As many as the machine has.
         (*c).threads = 0;
         if ffi::sws_init_context(c, std::ptr::null_mut(), std::ptr::null_mut()) < 0 {
