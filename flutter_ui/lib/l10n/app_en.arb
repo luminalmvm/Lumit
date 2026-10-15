@@ -3403,6 +3403,10 @@
   "@fxDensityLayer": {
     "description": "Effect controls — a control on Particulate: a layer whose bright parts are where particles are born."
   },
+  "fxParticleBlend": "Particle blend",
+  "@fxParticleBlend": {
+    "description": "Effect controls — a control on Particulate: the blend mode particles use with each other where they overlap, from the same list as a layer's blend mode."
+  },
   "fxEmitter": "Emitter",
   "@fxEmitter": {
     "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."

@@ -714,6 +714,7 @@ PAL
 Paint style
 Parametric EQ
 Particle
+Particle blend
 Particulate
 Path
 Path overlap

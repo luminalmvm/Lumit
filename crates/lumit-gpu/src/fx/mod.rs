@@ -374,6 +374,8 @@ pub struct FxEngine {
     particulate_blocks: wgpu::ComputePipeline,
     particulate_scatter: wgpu::ComputePipeline,
     particulate_draw: wgpu::RenderPipeline,
+    /// Particle blend's passes, beside the draw they stand in for.
+    particulate_blend: particulate::ParticulateBlendPipelines,
     /// Points field: the nearest point to every pixel, found by jump
     /// flooding. Its three passes share one layout of their own.
     points_field: points_field::PointsFieldPipelines,

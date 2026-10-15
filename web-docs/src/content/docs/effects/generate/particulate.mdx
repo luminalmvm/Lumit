@@ -76,6 +76,7 @@ A particle system.
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Sprite layer** | Layer | Any layer in the composition | None | - |
 | **Streak length** | Slider | 0 to 0.1; higher | 0.02 | Seconds |
+| **Particle blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Max particles** | Slider, whole numbers | 1 to 200000; up to 1000000 | 20000 | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
@@ -92,7 +93,7 @@ In the Effect Controls panel:
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Edges** groups **Edge**, **Edge margin**.
-- **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Max particles**, **Seed**.
+- **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**, **Seed**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
 - **Streak length** is editable while **Mode** is set to Streak.
@@ -188,6 +189,8 @@ The **Render** group, how they are drawn:
 - **Sprite layer**: the layer stamped at each particle. Sprite mode only, and discs are
   drawn until you set it.
 - **Streak length**: how long the tail is, in seconds.
+- **Particle blend**: how particles combine with each other where they overlap, by the layer
+  blend modes. They then go over the picture together, as Normal particles do.
 - **Max particles**: the most particles that may be alive at once.
 - **Seed**: Changes randomness.
 

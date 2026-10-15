@@ -152,6 +152,15 @@ struct Params {
     speed_max: f32,
     // Whether births follow `density_tex`.
     density: u32,
+    // How particles combine where they overlap: an index into
+    // lumit_core::model::BlendMode::ALL, 0 being Normal.
+    blend: u32,
+    // The tiles' sizes: how many (tile, particle) pairs they have room for,
+    // how many numbers `scan` holds before its block sums, and how many
+    // 16 px steps a tile's side is.
+    pair_max: u32,
+    scan_len: u32,
+    tile_scale: u32,
 };
 
 const DRIVE_SPEED: u32 = 1u;
@@ -819,12 +828,27 @@ struct VsOut {
     @location(4) @interpolate(flat) stretch: vec2<f32>,
 };
 
-// One instanced quad per live particle: a capsule's bounding box for a disc or
-// a streak, the sprite's own turned square for a sprite. Six vertices, two
-// triangles, no vertex buffer — everything is read out of the stream by index,
-// which is what makes the draw one call whatever the particle count.
-@vertex
-fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut {
+// One particle as it is drawn: where, how big, which colour, and the quad that
+// holds it, `centre` ± `ax` × `half.x` ± its perpendicular × `half.y`.
+struct Geo {
+    head: vec2<f32>,
+    tail: vec2<f32>,
+    colour: vec4<f32>,
+    geom: vec4<f32>, // radius, edge, size, rotation
+    stretch: vec2<f32>,
+    centre: vec2<f32>,
+    ax: vec2<f32>,
+    half: vec2<f32>,
+};
+
+// Particle `ii`'s head and tail through the composition's camera, each with
+// how much it foreshortens.
+struct Seen {
+    head: vec3<f32>,
+    tail: vec3<f32>,
+};
+
+fn pt_seen(ii: u32) -> Seen {
     let cap = dp.cap;
     let head3 = vec3<f32>(
         bitcast<f32>(dstream[r_pos(cap) + ii * 3u]),
@@ -840,56 +864,20 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     // it foreshortens. The tail takes the same camera, so a streak that runs
     // towards the lens really does run towards the lens. Flat on a 2D layer, in
     // which case these are the same bits the stream holds.
-    let ph = pt_project(dp.proj0, dp.proj1, dp.proj2, dp.project, head3);
-    let pt = pt_project(dp.proj0, dp.proj1, dp.proj2, dp.project, tail3);
-    let head = ph.xy;
-    let tail = pt.xy;
-    var size = bitcast<f32>(dstream[r_size(cap) + ii]) * ph.z;
-    if (dp.field_mode != FIELD_NONE) {
-        // **Rejection over the raster**: the point stands where
-        // the field under it outvotes its own die. A refused point is given no
-        // size, which draws nothing at all — a disc of no radius covers no
-        // pixel — rather than being compacted away, because the picture is the
-        // only thing this pass makes.
-        let id = dstream[r_id(cap) + ii * 2u];
-        let px = vec2<i32>(
-            clamp(i32(floor(head.x)), 0, i32(dp.target_w) - 1),
-            clamp(i32(floor(head.y)), 0, i32(dp.target_h) - 1),
-        );
-        let texel = textureLoad(field_src, px, 0);
-        var a = texel.a;
-        if (dp.field_mode == FIELD_LUMA) {
-            // **Brightness, unpremultiplied and then thresholded**.
-            // The picture is premultiplied, so a half-covered white pixel
-            // carries half the light of a covered one and would read as grey —
-            // the honest reading of "how bright is what is *there*" divides the
-            // coverage back out. Threshold is then the floor and full white the
-            // ceiling, so the field is a proper 0..1 chance again.
-            let rgb = select(texel.rgb / texel.a, vec3<f32>(0.0), texel.a <= 0.0);
-            a = clamp(
-                (dot(rgb, LUMA) - dp.field_threshold) / max(1.0 - dp.field_threshold, 1e-3),
-                0.0,
-                1.0,
-            );
-        } else if (dp.field_invert != 0u) {
-            a = 1.0 - a;
-        }
-        if (a <= nc_hash01(dp.seed, A_ACCEPT, bitcast<i32>(id), 0, 0)) {
-            size = 0.0;
-        }
-    }
+    var out: Seen;
+    out.head = pt_project(dp.proj0, dp.proj1, dp.proj2, dp.project, head3);
+    out.tail = pt_project(dp.proj0, dp.proj1, dp.proj2, dp.project, tail3);
+    return out;
+}
+
+// The rest of particle `ii` as drawn, given where it is seen and its size.
+fn pt_geo(ii: u32, head: vec2<f32>, tail: vec2<f32>, size: f32) -> Geo {
+    let cap = dp.cap;
     let rot = bitcast<f32>(dstream[r_rot(cap) + ii]);
     let rg = unpack2x16float(dstream[r_colour(cap) + ii * 2u]);
     let ba = unpack2x16float(dstream[r_colour(cap) + ii * 2u + 1u]);
     let radius = size * 0.5;
     let edge = max(dp.feather * radius, 0.5);
-
-    // The two triangles' corners in the quad's own frame, −1..1 each way.
-    var corner = vec2<f32>(-1.0, -1.0);
-    if (vi == 1u || vi == 4u) { corner = vec2<f32>(1.0, -1.0); }
-    if (vi == 2u || vi == 3u) { corner = vec2<f32>(-1.0, 1.0); }
-    if (vi == 5u) { corner = vec2<f32>(1.0, 1.0); }
-
     let stretch = vec2<f32>(
         1.0 + bitcast<f32>(dstream[r_stretch(cap) + ii * 2u]),
         1.0 + bitcast<f32>(dstream[r_stretch(cap) + ii * 2u + 1u]),
@@ -925,10 +913,76 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
         centre = (head + tail) * 0.5;
         half_long = len * 0.5 + half_long;
     }
-    let ay = vec2<f32>(-ax.y, ax.x);
+    var g: Geo;
+    g.head = head;
+    g.tail = tail;
+    // The host Mix, folded into the source's coverage. For a premultiplied
+    // `over` that is the dissolve exactly, so no second pass runs.
+    g.colour = vec4<f32>(rg.x, rg.y, ba.x, ba.y) * dp.mix;
+    g.geom = vec4<f32>(radius, edge, size, rot);
+    g.stretch = stretch;
+    g.centre = centre;
+    g.ax = ax;
+    g.half = vec2<f32>(half_long, half_wide);
+    return g;
+}
+
+// One instanced quad per live particle: a capsule's bounding box for a disc or
+// a streak, the sprite's own turned square for a sprite. Six vertices, two
+// triangles, no vertex buffer — everything is read out of the stream by index,
+// which is what makes the draw one call whatever the particle count.
+@vertex
+fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut {
+    let cap = dp.cap;
+    let seen = pt_seen(ii);
+    let head = seen.head.xy;
+    let tail = seen.tail.xy;
+    var size = bitcast<f32>(dstream[r_size(cap) + ii]) * seen.head.z;
+    if (dp.field_mode != FIELD_NONE) {
+        // **Rejection over the raster**: the point stands where
+        // the field under it outvotes its own die. A refused point is given no
+        // size, which draws nothing at all — a disc of no radius covers no
+        // pixel — rather than being compacted away, because the picture is the
+        // only thing this pass makes.
+        let id = dstream[r_id(cap) + ii * 2u];
+        let px = vec2<i32>(
+            clamp(i32(floor(head.x)), 0, i32(dp.target_w) - 1),
+            clamp(i32(floor(head.y)), 0, i32(dp.target_h) - 1),
+        );
+        let texel = textureLoad(field_src, px, 0);
+        var a = texel.a;
+        if (dp.field_mode == FIELD_LUMA) {
+            // **Brightness, unpremultiplied and then thresholded**.
+            // The picture is premultiplied, so a half-covered white pixel
+            // carries half the light of a covered one and would read as grey —
+            // the honest reading of "how bright is what is *there*" divides the
+            // coverage back out. Threshold is then the floor and full white the
+            // ceiling, so the field is a proper 0..1 chance again.
+            let rgb = select(texel.rgb / texel.a, vec3<f32>(0.0), texel.a <= 0.0);
+            a = clamp(
+                (dot(rgb, LUMA) - dp.field_threshold) / max(1.0 - dp.field_threshold, 1e-3),
+                0.0,
+                1.0,
+            );
+        } else if (dp.field_invert != 0u) {
+            a = 1.0 - a;
+        }
+        if (a <= nc_hash01(dp.seed, A_ACCEPT, bitcast<i32>(id), 0, 0)) {
+            size = 0.0;
+        }
+    }
+    let g = pt_geo(ii, head, tail, size);
+
+    // The two triangles' corners in the quad's own frame, −1..1 each way.
+    var corner = vec2<f32>(-1.0, -1.0);
+    if (vi == 1u || vi == 4u) { corner = vec2<f32>(1.0, -1.0); }
+    if (vi == 2u || vi == 3u) { corner = vec2<f32>(-1.0, 1.0); }
+    if (vi == 5u) { corner = vec2<f32>(1.0, 1.0); }
+
+    let ay = vec2<f32>(-g.ax.y, g.ax.x);
     // A pixel of slack all round: coverage is measured at pixel centres, and a
     // quad that stops exactly on the edge would clip the ramp that softens it.
-    let px = centre + ax * (corner.x * (half_long + 1.0)) + ay * (corner.y * (half_wide + 1.0));
+    let px = g.centre + g.ax * (corner.x * (g.half.x + 1.0)) + ay * (corner.y * (g.half.y + 1.0));
 
     var out: VsOut;
     out.clip = vec4<f32>(
@@ -939,11 +993,9 @@ fn pt_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> Vs
     );
     out.head = head;
     out.tail = tail;
-    // The host Mix, folded into the source's coverage. For a premultiplied
-    // `over` that is the dissolve exactly, so no second pass runs.
-    out.colour = vec4<f32>(rg.x, rg.y, ba.x, ba.y) * dp.mix;
-    out.geom = vec4<f32>(radius, edge, size, rot);
-    out.stretch = stretch;
+    out.colour = g.colour;
+    out.geom = g.geom;
+    out.stretch = g.stretch;
     if (dp.probe_w != 0u) {
         // One whole pixel per point, by index, white if the point stood.
         let cell = vec2<f32>(f32(ii % dp.probe_w), f32(ii / dp.probe_w));
@@ -1006,7 +1058,12 @@ fn pt_sprite_tap(u: f32, v: f32) -> vec4<f32> {
 fn pt_fs(v: VsOut) -> @location(0) vec4<f32> {
     // `@builtin(position)` with no multisampling is the pixel's own centre,
     // which is exactly where the CPU reference measures coverage.
-    let q = v.clip.xy;
+    return pt_cover(v.clip.xy, v);
+}
+
+// What one particle, as the vertex stage hands it on, lays on the pixel whose
+// centre is `q`, premultiplied. `v.clip` is not read.
+fn pt_cover(q: vec2<f32>, v: VsOut) -> vec4<f32> {
     let radius = v.geom.x;
     if (dp.mode == MODE_SPRITE) {
         let size = v.geom.z;
@@ -1068,4 +1125,377 @@ fn pt_fs(v: VsOut) -> @location(0) vec4<f32> {
         cov = boxed + (cov - boxed) * blend;
     }
     return v.colour * cov;
+}
+
+// ---------------------------------------------------------- Particle blend
+//
+// Particles that combine by any mode but Normal meet each other on a layer of
+// their own, which then goes over the picture as one. Add is the card's own
+// blending, into a clear texture. Every other mode needs the colour already
+// there, which the card's blending cannot read, so it is worked out here
+// instead, a tile of the frame at a time:
+//
+//  1. `pt_prep`: each drawn particle as the vertex stage would hand it on,
+//     and how many tiles its quad reaches.
+//  2. a prefix sum over those counts, so each particle knows where its own
+//     run of (tile, particle) pairs goes.
+//  3. `pt_emit`: the pairs, in birth order.
+//  4. two passes of a stable radix sort on the tile, eight bits each, so each
+//     tile's particles end up side by side and still in birth order.
+//  5. `pt_ranges`: where each tile's run starts and ends.
+//  6. `pt_tile`: a workgroup a tile, laying its particles on each pixel one
+//     after another by the W3C formula.
+//
+// No atomics anywhere: every slot is a function of the birth order, so the
+// picture is the same however the card schedules it. Past `pair_max` pairs
+// the oldest particles are left off this layer, the cap rule again.
+
+// The indirect draw's arguments; word 1 is how many particles are drawn.
+@group(2) @binding(0) var<storage, read> targs: array<u32>;
+// Five rows a particle: head and tail, colour, geom, stretch, and the quad's
+// box as `(left, top, right, bottom)`.
+@group(2) @binding(1) var<storage, read_write> prep: array<vec4<f32>>;
+// The particles' own layer.
+@group(2) @binding(2) var tile_out: texture_storage_2d<rgba16float, write>;
+// (tile, particle) pairs, sorted from one into the other and back.
+@group(2) @binding(3) var<storage, read_write> pairs_src: array<vec2<u32>>;
+@group(2) @binding(4) var<storage, read_write> pairs_dst: array<vec2<u32>>;
+// A few words of counts, then the numbers being summed, then their block
+// sums. Once the sort is done the numbers' place holds each tile's run.
+@group(2) @binding(5) var<storage, read_write> scan: array<u32>;
+// Either layer, read by the pass that lays it over the picture.
+@group(2) @binding(6) var layer_tex: texture_2d<f32>;
+
+const PREP: u32 = 5u;
+const TILE: u32 = 16u;
+const LANES: u32 = 256u;
+// The words at the head of `scan`.
+const CTL_DRAWN: u32 = 0u;
+const CTL_PAIRS: u32 = 1u;
+const CTL_BLOCKS: u32 = 2u;
+const CTL_LEN: u32 = 3u;
+const CTL_TOTAL: u32 = 4u;
+const DATA: u32 = 16u;
+// A pair left off: sorted to the end, and no tile's.
+const NO_TILE: u32 = 0xffffu;
+
+// == lumit_core::fx::points::blend_over: `s` laid on `b`, both
+// premultiplied, by layer blend mode `mode`.
+fn pt_blend_over(mode: u32, b: vec4<f32>, s: vec4<f32>) -> vec4<f32> {
+    let cb = select(vec3<f32>(0.0), b.rgb / b.a, b.a > 0.0);
+    let cs = select(vec3<f32>(0.0), s.rgb / s.a, s.a > 0.0);
+    let mixed = blend_pixel(mode, vec4<f32>(cb, 1.0), vec4<f32>(cs, 1.0)).rgb;
+    return vec4<f32>(
+        s.rgb * (1.0 - b.a) + b.rgb * (1.0 - s.a) + s.a * b.a * mixed,
+        s.a + b.a - s.a * b.a,
+    );
+}
+
+fn pt_tile_px() -> u32 {
+    return TILE * dp.tile_scale;
+}
+
+fn pt_tiles() -> vec2<u32> {
+    let size = vec2<u32>(u32(dp.target_w), u32(dp.target_h));
+    return (size + vec2<u32>(pt_tile_px() - 1u)) / pt_tile_px();
+}
+
+// The tiles a box reaches, `(x0, y0, x1, y1)` inclusive, or `x1 < x0` for
+// none.
+fn pt_rect(b: vec4<f32>) -> vec4<i32> {
+    let n = vec2<i32>(pt_tiles());
+    let tp = f32(pt_tile_px());
+    if (b.z < b.x || b.z < 0.0 || b.w < 0.0 || b.x >= dp.target_w || b.y >= dp.target_h) {
+        return vec4<i32>(0, 0, -1, -1);
+    }
+    let lo = clamp(vec2<i32>(floor(b.xy / tp)), vec2<i32>(0), n - 1);
+    let hi = clamp(vec2<i32>(floor(b.zw / tp)), vec2<i32>(0), n - 1);
+    return vec4<i32>(lo, hi);
+}
+
+fn pt_sums_at() -> u32 {
+    return DATA + dp.scan_len;
+}
+
+@compute @workgroup_size(64)
+fn pt_prep(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    let drawn = min(targs[1], dp.cap);
+    if (i >= drawn) {
+        return;
+    }
+    if (i == 0u) {
+        scan[CTL_DRAWN] = drawn;
+        scan[CTL_LEN] = drawn;
+    }
+    let seen = pt_seen(i);
+    let size = bitcast<f32>(dstream[r_size(dp.cap) + i]) * seen.head.z;
+    let g = pt_geo(i, seen.head.xy, seen.tail.xy, size);
+    let ay = vec2<f32>(-g.ax.y, g.ax.x);
+    let reach = abs(g.ax) * (g.half.x + 1.0) + abs(ay) * (g.half.y + 1.0);
+    var bbox = vec4<f32>(g.centre - reach, g.centre + reach);
+    // == the CPU's skip: no size or no colour lays nothing anywhere.
+    if (g.geom.x <= 0.0 || g.colour.a <= 0.0) {
+        bbox = vec4<f32>(1.0, 1.0, 0.0, 0.0);
+    }
+    let at = i * PREP;
+    prep[at] = vec4<f32>(g.head, g.tail);
+    prep[at + 1u] = g.colour;
+    prep[at + 2u] = g.geom;
+    prep[at + 3u] = vec4<f32>(g.stretch, 0.0, 0.0);
+    prep[at + 4u] = bbox;
+    let r = pt_rect(bbox);
+    var n = 0u;
+    if (r.z >= r.x) {
+        n = u32((r.z - r.x + 1) * (r.w - r.y + 1));
+    }
+    scan[DATA + i] = n;
+}
+
+var<workgroup> lanes: array<u32, LANES>;
+var<workgroup> lanes_uniform: u32;
+
+// The prefix sum, in three steps: each block of 256 on its own, the blocks'
+// totals one after another, then each block's offset added back.
+@compute @workgroup_size(256)
+fn pt_scan_block(
+    @builtin(global_invocation_id) gid: vec3<u32>,
+    @builtin(local_invocation_index) li: u32,
+    @builtin(workgroup_id) wid: vec3<u32>,
+) {
+    let len = scan[CTL_LEN];
+    let i = gid.x;
+    var v = 0u;
+    if (i < len) {
+        v = scan[DATA + i];
+    }
+    lanes[li] = v;
+    workgroupBarrier();
+    for (var off = 1u; off < LANES; off = off * 2u) {
+        var add = 0u;
+        if (li >= off) {
+            add = lanes[li - off];
+        }
+        workgroupBarrier();
+        lanes[li] = lanes[li] + add;
+        workgroupBarrier();
+    }
+    if (i < len) {
+        scan[DATA + i] = lanes[li] - v;
+    }
+    if (li == LANES - 1u) {
+        scan[pt_sums_at() + wid.x] = lanes[li];
+    }
+}
+
+@compute @workgroup_size(1)
+fn pt_scan_sums() {
+    let blocks = (scan[CTL_LEN] + LANES - 1u) / LANES;
+    var total = 0u;
+    // ponytail: one lane walks the block totals, as `pt_blocks` does. There
+    // are at most `scan_len / 256` of them, eight thousand at the most.
+    for (var b = 0u; b < blocks; b = b + 1u) {
+        let n = scan[pt_sums_at() + b];
+        scan[pt_sums_at() + b] = total;
+        total = total + n;
+    }
+    scan[CTL_TOTAL] = total;
+}
+
+@compute @workgroup_size(256)
+fn pt_scan_add(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if (i < scan[CTL_LEN]) {
+        scan[DATA + i] = scan[DATA + i] + scan[pt_sums_at() + i / LANES];
+    }
+}
+
+// Each particle's pairs, in birth order and then row by row across its tiles.
+// Past `pair_max` the oldest whole particles are left off, their places
+// marked as no tile's.
+@compute @workgroup_size(64)
+fn pt_emit(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if (i >= scan[CTL_DRAWN]) {
+        return;
+    }
+    let total = scan[CTL_TOTAL];
+    let kept = min(total, dp.pair_max);
+    let skip = total - kept;
+    if (i == 0u) {
+        let blocks = (kept + LANES - 1u) / LANES;
+        scan[CTL_PAIRS] = kept;
+        scan[CTL_BLOCKS] = blocks;
+        scan[CTL_LEN] = blocks * LANES;
+    }
+    let first = scan[DATA + i];
+    let r = pt_rect(prep[i * PREP + 4u]);
+    if (r.z < r.x) {
+        return;
+    }
+    let whole = first >= skip;
+    var k = first;
+    for (var y = r.y; y <= r.w; y = y + 1) {
+        for (var x = r.x; x <= r.z; x = x + 1) {
+            if (k >= skip) {
+                var pair = vec2<u32>(NO_TILE, i);
+                if (whole) {
+                    pair.x = u32(y) * pt_tiles().x + u32(x);
+                }
+                pairs_src[k - skip] = pair;
+            }
+            k = k + 1u;
+        }
+    }
+}
+
+// One radix pass, eight bits of the tile at `shift`: how many of each digit
+// every block of 256 pairs holds, then where each pair goes, stable within its
+// block because a lane counts only the lanes before it.
+fn pt_digit(i: u32, shift: u32) -> u32 {
+    if (i >= scan[CTL_PAIRS]) {
+        return LANES;
+    }
+    return (pairs_src[i].x >> shift) & 0xffu;
+}
+
+fn pt_hist(li: u32, block: u32, shift: u32) {
+    if (li == 0u) {
+        lanes_uniform = scan[CTL_BLOCKS];
+    }
+    let blocks = workgroupUniformLoad(&lanes_uniform);
+    if (block >= blocks) {
+        return;
+    }
+    lanes[li] = pt_digit(block * LANES + li, shift);
+    workgroupBarrier();
+    var n = 0u;
+    for (var j = 0u; j < LANES; j = j + 1u) {
+        if (lanes[j] == li) {
+            n = n + 1u;
+        }
+    }
+    scan[DATA + li * blocks + block] = n;
+}
+
+fn pt_place(li: u32, block: u32, shift: u32) {
+    if (li == 0u) {
+        lanes_uniform = scan[CTL_BLOCKS];
+    }
+    let blocks = workgroupUniformLoad(&lanes_uniform);
+    if (block >= blocks) {
+        return;
+    }
+    let i = block * LANES + li;
+    let digit = pt_digit(i, shift);
+    lanes[li] = digit;
+    workgroupBarrier();
+    if (digit == LANES) {
+        return;
+    }
+    var rank = 0u;
+    for (var j = 0u; j < li; j = j + 1u) {
+        if (lanes[j] == digit) {
+            rank = rank + 1u;
+        }
+    }
+    pairs_dst[scan[DATA + digit * blocks + block] + rank] = pairs_src[i];
+}
+
+@compute @workgroup_size(256)
+fn pt_hist_lo(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wid: vec3<u32>) {
+    pt_hist(li, wid.x, 0u);
+}
+
+@compute @workgroup_size(256)
+fn pt_hist_hi(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wid: vec3<u32>) {
+    pt_hist(li, wid.x, 8u);
+}
+
+@compute @workgroup_size(256)
+fn pt_place_lo(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wid: vec3<u32>) {
+    pt_place(li, wid.x, 0u);
+}
+
+@compute @workgroup_size(256)
+fn pt_place_hi(@builtin(local_invocation_index) li: u32, @builtin(workgroup_id) wid: vec3<u32>) {
+    pt_place(li, wid.x, 8u);
+}
+
+// Each tile's run of the sorted pairs, `[start, end)`, nought for none.
+@compute @workgroup_size(256)
+fn pt_ranges_clear(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let n = pt_tiles();
+    if (gid.x < n.x * n.y) {
+        scan[DATA + gid.x * 2u] = 0u;
+        scan[DATA + gid.x * 2u + 1u] = 0u;
+    }
+}
+
+@compute @workgroup_size(256)
+fn pt_ranges(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    let pairs = scan[CTL_PAIRS];
+    if (i >= pairs) {
+        return;
+    }
+    let t = pairs_src[i].x;
+    if (t == NO_TILE) {
+        return;
+    }
+    if (i == 0u || pairs_src[i - 1u].x != t) {
+        scan[DATA + t * 2u] = i;
+    }
+    if (i + 1u == pairs || pairs_src[i + 1u].x != t) {
+        scan[DATA + t * 2u + 1u] = i + 1u;
+    }
+}
+
+// A workgroup a tile, and each lane its share of the tile's pixels: the
+// tile's particles laid on one after another, in birth order.
+@compute @workgroup_size(16, 16)
+fn pt_tile(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+    let n = pt_tiles();
+    let t = wid.y * n.x + wid.x;
+    let start = scan[DATA + t * 2u];
+    let end = scan[DATA + t * 2u + 1u];
+    let m = dp.tile_scale;
+    for (var sy = 0u; sy < m; sy = sy + 1u) {
+        for (var sx = 0u; sx < m; sx = sx + 1u) {
+            let px = wid.xy * pt_tile_px() + (lid.xy * m + vec2<u32>(sx, sy));
+            if (px.x >= u32(dp.target_w) || px.y >= u32(dp.target_h)) {
+                continue;
+            }
+            let q = vec2<f32>(px) + vec2<f32>(0.5, 0.5);
+            var acc = vec4<f32>(0.0);
+            for (var k = start; k < end; k = k + 1u) {
+                let at = pairs_src[k].y * PREP;
+                var v: VsOut;
+                let ends = prep[at];
+                v.head = ends.xy;
+                v.tail = ends.zw;
+                v.colour = prep[at + 1u];
+                v.geom = prep[at + 2u];
+                v.stretch = prep[at + 3u].xy;
+                let s = pt_cover(q, v);
+                if (s.a > 0.0 || s.r > 0.0 || s.g > 0.0 || s.b > 0.0) {
+                    acc = pt_blend_over(dp.blend, acc, s);
+                }
+            }
+            textureStore(tile_out, vec2<i32>(px), acc);
+        }
+    }
+}
+
+// One triangle over the whole target.
+@vertex
+fn pt_full_vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
+    let uv = vec2<f32>(f32((vi << 1u) & 2u), f32(vi & 2u));
+    return vec4<f32>(uv * 2.0 - 1.0, 0.0, 1.0);
+}
+
+// The particles' layer, premultiplied, for the card to lay over the picture.
+@fragment
+fn pt_finish(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    return textureLoad(layer_tex, vec2<i32>(pos.xy), 0);
 }

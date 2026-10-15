@@ -369,6 +369,7 @@ Map<String, String> get _built => {
       "Paint style": l10n.fxPaintStyle,
       "Parametric EQ": l10n.fxParametricEq,
       "Particle": l10n.fxParticle,
+      "Particle blend": l10n.fxParticleBlend,
       "Particulate": l10n.fxParticulate,
       "Path overlap": l10n.fxPathOverlap,
       "Phaser": l10n.fxPhaser,

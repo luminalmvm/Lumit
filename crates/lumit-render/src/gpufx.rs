@@ -4517,6 +4517,7 @@ fn particulate_op<'a>(
     mode: u32,
     projection: Option<[[f32; 4]; 3]>,
     density: Option<&'a Tex>,
+    blend: u32,
 ) -> lumit_gpu::fx::ParticulateOp<'a> {
     let e = &packed.emitter;
     let look = &packed.particle;
@@ -4575,6 +4576,7 @@ fn particulate_op<'a>(
         ],
         speed_range: look.speed_range,
         density,
+        blend,
     }
 }
 
@@ -4687,6 +4689,7 @@ impl Particulate {
             mode,
             projection,
             density,
+            inst.particle_blend,
         );
         f(&op, sprite.filter(|_| mode == 1))
     }
@@ -5950,6 +5953,7 @@ mod tests {
             sprite_layer: false,
             density_layer: false,
             streak_length: 0.05,
+            particle_blend: 0,
             max_particles: cap,
             seed: 7,
             mix: 100.0,
@@ -6096,6 +6100,7 @@ mod tests {
             0,
             carriage.projection.map(|proj| proj.m),
             Some(&density_tex),
+            0,
         );
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let (count, words) = fx
@@ -6255,6 +6260,7 @@ mod tests {
                 mode,
                 carriage.projection.map(|proj| proj.m),
                 None,
+                0,
             );
             let tex =
                 lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
@@ -6276,6 +6282,54 @@ mod tests {
             let again = fx.particulate(&ctx, &tex, w, h, (mode == 1).then_some(&sprite_tex), &op);
             let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
             assert_eq!(gpu, twice, "mode {mode} is not bit-stable");
+        }
+
+        // Particle blend, over a picture: Add as the card blends it, and a
+        // spread of the modes the tiles work out, against the CPU's formula.
+        let (mut inst, sched, carriage) = particulate_fixture_3d(0, 4_000, projection);
+        let ground: Vec<f32> = (0..w * h).flat_map(|_| [0.2, 0.1, 0.05, 1.0]).collect();
+        let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &ground, w, h);
+        // Add, Multiply, Screen, Overlay, Darken and Luminosity.
+        for blend in [6u32, 2, 8, 11, 1, 25] {
+            inst.particle_blend = blend;
+            let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
+            let (stream, tails) = lumit_core::fx::points::evaluate_with_tail(
+                &packed,
+                &sched,
+                carriage.t,
+                &lumit_core::mask::MaskPolyline::default(),
+                style.streak_seconds,
+            );
+            let mut cpu = ground.clone();
+            lumit_core::fx::points::draw_stream_blended(
+                &mut cpu, w, h, &stream, &tails, &style, None, blend,
+            );
+            let op = particulate_op(
+                &packed,
+                style,
+                &carriage,
+                &frames,
+                &curves,
+                &[],
+                0.0,
+                0,
+                carriage.projection.map(|proj| proj.m),
+                None,
+                blend,
+            );
+            let out = fx.particulate(&ctx, &tex, w, h, None, &op);
+            let gpu = lumit_gpu::fx::readback_linear_f32(&ctx, &out, w, h).expect("readback");
+            let worst = cpu
+                .iter()
+                .zip(&gpu)
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f32, f32::max);
+            eprintln!("particulate blend {blend}: worst |Δ| {worst:.3e}");
+            assert!(worst < 2e-2, "blend {blend}: worst |Δ| {worst}");
+            assert_ne!(gpu, ground, "blend {blend} drew nothing");
+            let again = fx.particulate(&ctx, &tex, w, h, None, &op);
+            let twice = lumit_gpu::fx::readback_linear_f32(&ctx, &again, w, h).expect("readback");
+            assert_eq!(gpu, twice, "blend {blend} is not bit-stable");
         }
     }
 

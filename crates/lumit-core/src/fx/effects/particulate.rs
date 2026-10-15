@@ -129,6 +129,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "feather",
             "sprite_layer",
             "streak_length",
+            "particle_blend",
             "max_particles",
             "seed",
         ],
@@ -594,6 +595,18 @@ pub struct Particulate {
         unit = Seconds
     )]
     pub streak_length: f32,
+
+    /// How particles combine with each other where they overlap, by the
+    /// layer blend modes verbatim. They then go over the picture together,
+    /// as Normal ones always did. An index into
+    /// [`BlendMode::ALL`](crate::model::BlendMode::ALL).
+    #[choice(
+        label = "Particle blend",
+        options = *crate::model::BlendMode::NAMES,
+        default = 0,
+        dividers_after = crate::fx::CHOICE_UNGROUPED
+    )]
+    pub particle_blend: u32,
 
     /// **The budget dial**: the most particles that may be live at
     /// once, and the peak scratch the governor grants against. Over budget the

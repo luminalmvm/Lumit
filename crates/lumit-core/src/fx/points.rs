@@ -2514,6 +2514,98 @@ pub fn draw_stream_fit(
     sprite: Option<Sprite<'_>>,
     fit: &SpriteFit,
 ) {
+    stamp(rgba, w, h, s, tails, style, sprite, fit, &|dst, src| {
+        // Premultiplied `over`: the particle's own colour, and what was
+        // there kept by however much of the pixel it did not cover.
+        let keep = 1.0 - src[3];
+        for c in 0..4 {
+            dst[c] = src[c] + dst[c] * keep;
+        }
+    });
+}
+
+/// [`draw_stream`], with the particles combining with each other by layer
+/// blend mode `blend`, an index into
+/// [`BlendMode::ALL`](crate::model::BlendMode::ALL), before they go over the
+/// picture together. Normal is [`draw_stream`] exactly.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_stream_blended(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 3]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+    blend: u32,
+) {
+    if blend == 0 {
+        draw_stream(rgba, w, h, s, tails, style, sprite);
+        return;
+    }
+    // ponytail: a frame-sized layer from the heap. This is the CPU oracle,
+    // which only the tests draw with; the card's pass takes its own.
+    let mut layer = vec![0.0f32; rgba.len()];
+    let fit = SpriteFit::default();
+    stamp(
+        &mut layer,
+        w,
+        h,
+        s,
+        tails,
+        style,
+        sprite,
+        &fit,
+        &|dst, src| {
+            let b = [dst[0], dst[1], dst[2], dst[3]];
+            dst.copy_from_slice(&blend_over(blend, b, src));
+        },
+    );
+    for (d, l) in rgba.chunks_exact_mut(4).zip(layer.chunks_exact(4)) {
+        let keep = 1.0 - l[3];
+        for c in 0..4 {
+            d[c] = l[c] + d[c] * keep;
+        }
+    }
+}
+
+/// `s` laid on `b`, both premultiplied, by layer blend mode `mode`: the W3C
+/// compositing formula around the layer menu's own colour blend. Where
+/// either is clear the other shows as it is, so a particle on its own looks
+/// like itself whatever the mode.
+#[must_use]
+pub fn blend_over(mode: u32, b: [f32; 4], s: [f32; 4]) -> [f32; 4] {
+    let straight = |c: [f32; 4]| {
+        if c[3] > 0.0 {
+            [c[0] / c[3], c[1] / c[3], c[2] / c[3], 1.0]
+        } else {
+            [0.0, 0.0, 0.0, 1.0]
+        }
+    };
+    let (sa, ba) = (s[3], b[3]);
+    let mixed = crate::fx::cpu::blend_pixel(mode, straight(b), straight(s));
+    let mut o = [0.0f32; 4];
+    for c in 0..3 {
+        o[c] = s[c] * (1.0 - ba) + b[c] * (1.0 - sa) + sa * ba * mixed[c];
+    }
+    o[3] = sa + ba - sa * ba;
+    o
+}
+
+/// The stamping behind both draws: each particle's coverage, oldest first,
+/// handed to `combine` pixel by pixel with what is there.
+#[allow(clippy::too_many_arguments)]
+fn stamp(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 3]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+    fit: &SpriteFit,
+    combine: &dyn Fn(&mut [f32], [f32; 4]),
+) {
     let feather = style.feather.clamp(0.0, 1.0);
     let mix = style.mix.clamp(0.0, 1.0);
     // Sprite with nothing to stamp falls back to the disc, here and in the
@@ -2655,12 +2747,7 @@ pub fn draw_stream_fit(
                 let Some(dst) = rgba.get_mut(d..d + 4) else {
                     continue;
                 };
-                // Premultiplied `over`: the particle's own colour, and what was
-                // there kept by however much of the pixel it did not cover.
-                let keep = 1.0 - contrib[3];
-                for c in 0..4 {
-                    dst[c] = contrib[c] + dst[c] * keep;
-                }
+                combine(dst, contrib);
             }
         }
     }
