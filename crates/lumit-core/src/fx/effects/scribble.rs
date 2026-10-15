@@ -128,11 +128,6 @@ pub struct Scribble {
     )]
     pub wiggles_per_second: f32,
 
-    /// Which waver. Two Scribbles on one shape with different seeds are two
-    /// different hands.
-    #[seed]
-    pub seed: u32,
-
     /// How strong the pencil is, per cent.
     #[slider(
         min = 0.0,
@@ -148,6 +143,11 @@ pub struct Scribble {
     /// all there is — which is how a fill becomes its own element.
     #[toggle(label = "Composite on original", default = true)]
     pub composite_on_original: bool,
+
+    /// Which waver. Two Scribbles on one shape with different seeds are two
+    /// different hands.
+    #[seed]
+    pub seed: u32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(

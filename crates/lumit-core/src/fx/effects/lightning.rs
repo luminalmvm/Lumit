@@ -83,10 +83,6 @@ pub struct Lightning {
     #[slider(label = "Conductivity state", min = 0.0, max = 100.0, default = 0.0, unit = Raw)]
     pub conductivity: f32,
 
-    /// Which bolt (§2.4).
-    #[seed]
-    pub seed: u32,
-
     /// How far the bolt wanders off the straight line, as a per cent of its own
     /// length.
     #[slider(
@@ -168,6 +164,10 @@ pub struct Lightning {
     /// there is.
     #[toggle(label = "Composite on original", default = true)]
     pub composite_on_original: bool,
+
+    /// Which bolt (§2.4).
+    #[seed]
+    pub seed: u32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(

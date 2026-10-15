@@ -52,7 +52,7 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
 pub const EMIT_FROM_IMAGE_GROUPS: &[ParamGroup] = &[
     group(
         "Source",
-        &["source", "source_placement", "threshold", "density", "seed"],
+        &["source", "source_placement", "threshold", "density"],
     ),
     group("Point", &["size", "feather", "colour", "max_points"]),
 ];
@@ -119,11 +119,6 @@ pub struct EmitFromImage {
     #[slider(min = 0.0, max = 100.0, default = 20.0, hard_min = 0.0, unit = Raw)]
     pub density: f32,
 
-    /// Which points (§2.4). The reseed button rolls it — and rolls both dice,
-    /// so a reseed moves the crowd *and* changes which of it survives.
-    #[seed]
-    pub seed: u32,
-
     /// The diameter of the disc a point is drawn as, px@comp.
     #[slider(min = 0.0, max = 200.0, default = 6.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
@@ -158,6 +153,11 @@ pub struct EmitFromImage {
         unit = Raw
     )]
     pub max_points: i32,
+
+    /// Which points (§2.4). The reseed button rolls it — and rolls both dice,
+    /// so a reseed moves the crowd *and* changes which of it survives.
+    #[seed]
+    pub seed: u32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     /// **At nought the stream is still emitted and nothing is drawn**, the

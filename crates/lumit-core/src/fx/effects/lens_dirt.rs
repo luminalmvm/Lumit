@@ -131,9 +131,6 @@ pub struct LensDirt {
     )]
     pub curvature: f32,
 
-    #[seed]
-    pub seed: u32,
-
     // ---- Dirt ----
     /// Specks on the lens's surfaces, out of focus into rimmed discs of many
     /// sizes.
@@ -220,6 +217,9 @@ pub struct LensDirt {
     /// over black, to lay over something else.
     #[choice(options = ["Final", "Dirt alone"], default = 0)]
     pub display: u32,
+
+    #[seed]
+    pub seed: u32,
 
     #[slider(
         min = 0.0,

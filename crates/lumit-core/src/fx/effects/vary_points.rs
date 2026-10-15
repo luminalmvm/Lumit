@@ -268,7 +268,6 @@ const fn group(
 /// The pattern, the rows only some patterns read, and what it changes.
 pub const VARY_GROUPS: &[ParamGroup] = &[
     group("Pattern", &["pattern", "curve"], None),
-    group("", &["seed"], Some(("pattern", &[1, 2]))),
     group("", &["noise_scale"], Some(("pattern", &[2]))),
     group("", &["noise_speed"], Some(("pattern", &[2, 13]))),
     group(
@@ -326,6 +325,7 @@ pub const VARY_GROUPS: &[ParamGroup] = &[
         None,
     ),
     group("Point", &["feather"], None),
+    group("", &["seed"], Some(("pattern", &[1, 2]))),
 ];
 
 const fn while_ramp(param: &'static str, on: bool) -> EnabledWhen {
@@ -421,10 +421,6 @@ pub struct VaryPoints {
     /// changes nothing.
     #[curve(label = "Curve", default = [[0.0, 0.0], [1.0, 1.0]])]
     pub curve: CurvePoints,
-
-    /// Which dice, and which noise.
-    #[seed]
-    pub seed: u32,
 
     /// How far apart two points have to be before the noise gives them
     /// different numbers, px@comp.
@@ -704,6 +700,10 @@ pub struct VaryPoints {
         unit = Percent
     )]
     pub feather: f32,
+
+    /// Which dice, and which noise.
+    #[seed]
+    pub seed: u32,
 
     /// The Mix every effect ends with, per cent. At 0 the stream is still
     /// handed on and nothing is drawn.

@@ -34,7 +34,6 @@ const fn group(
 /// The pattern and its range, the rows only some patterns read, and the count.
 pub const PICK_GROUPS: &[ParamGroup] = &[
     group("Pattern", &["pattern", "from", "to", "invert"], None),
-    group("", &["seed"], Some(("pattern", &[1, 2]))),
     group("", &["noise_scale"], Some(("pattern", &[2]))),
     group("", &["noise_speed"], Some(("pattern", &[2, 13]))),
     group(
@@ -58,6 +57,7 @@ pub const PICK_GROUPS: &[ParamGroup] = &[
     ),
     group("Count", &["every_nth", "nth_offset"], None),
     group("Point", &["feather"], None),
+    group("", &["seed"], Some(("pattern", &[1, 2]))),
 ];
 
 /// Group name is only read while Result marks points.
@@ -138,10 +138,6 @@ pub struct PickPoints {
     /// Keep what would have been dropped, and drop what would have been kept.
     #[toggle(label = "Invert", default = false)]
     pub invert: bool,
-
-    /// Which dice, and which noise.
-    #[seed]
-    pub seed: u32,
 
     /// How far apart two points have to be before the noise gives them
     /// different numbers, px@comp.
@@ -291,6 +287,10 @@ pub struct PickPoints {
         unit = Percent
     )]
     pub feather: f32,
+
+    /// Which dice, and which noise.
+    #[seed]
+    pub seed: u32,
 
     /// The Mix every effect ends with, per cent. At 0 the stream is still
     /// handed on and nothing is drawn.

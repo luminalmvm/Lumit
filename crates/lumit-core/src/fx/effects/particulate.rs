@@ -133,7 +133,6 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "streak_length",
             "particle_blend",
             "max_particles",
-            "seed",
         ],
     ),
 ];
