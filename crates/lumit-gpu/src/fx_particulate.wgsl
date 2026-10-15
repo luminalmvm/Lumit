@@ -134,7 +134,20 @@ struct Params {
     stamp_uv: vec2<f32>,
     // Corner radius, px on the stamp of a point whose size is 100.
     stamp_corner: f32,
+    // == lumit_core::fx::points::Edge's code, and how far past the frame a
+    // particle goes before it acts. The frame is `target_w` × `target_h`.
+    edge: u32,
+    margin: f32,
+    // Always nought: the turbulence lattice never loops. Read from here rather
+    // than written as a literal, because FXC folds a literal nought into the
+    // lattice's modulus inside the edge walk's loop and refuses to compile it.
+    turb_cycle: i32,
 };
+
+const EDGE_KILL: u32 = 1u;
+const EDGE_WRAP: u32 = 2u;
+// == lumit_core::fx::points::EDGE_SAMPLES.
+const EDGE_SAMPLES: f32 = 64.0;
 
 // The field-rejection modes, matching `lumit_gpu::fx::FieldTest`.
 const FIELD_NONE: u32 = 0u;
@@ -303,9 +316,9 @@ fn pt_turbulence(p0: vec3<f32>, phase: f32, age: f32) -> vec3<f32> {
     let q = p0.xy / scale + vec2<f32>(phase, phase);
     let z = age * p.turb_speed;
     return vec3<f32>(
-        p.turb * nc_value3(p.seed, TURB_X, q.x, q.y, z, 0),
-        p.turb * nc_value3(p.seed, TURB_Y, q.x, q.y, z, 0),
-        p.turb * nc_value3(p.seed, TURB_Z, q.x, q.y, z, 0),
+        p.turb * nc_value3(p.seed, TURB_X, q.x, q.y, z, p.turb_cycle),
+        p.turb * nc_value3(p.seed, TURB_Y, q.x, q.y, z, p.turb_cycle),
+        p.turb * nc_value3(p.seed, TURB_Z, q.x, q.y, z, p.turb_cycle),
     );
 }
 
@@ -448,6 +461,69 @@ fn pt_is_alive(c: Candidate) -> bool {
     return c.age >= 0.0 && c.life > 0.0 && c.age < c.life;
 }
 
+// Where a particle is born, how it leaves, and its turbulence phase. `ok` is
+// false when the emitter has nothing to emit from.
+struct Launch {
+    p0: vec3<f32>,
+    v0: vec3<f32>,
+    phase: f32,
+    ok: bool,
+};
+
+fn pt_launch(lo: u32, hi: u32) -> Launch {
+    var l: Launch;
+    let b0 = pt_birth_point(
+        pt_die(lo, hi, A_EMIT_U),
+        pt_die(lo, hi, A_EMIT_V),
+        pt_die(lo, hi, A_EMIT_W),
+    );
+    l.ok = b0.w != 0.0;
+    l.p0 = b0.xyz;
+    let dir = radians(p.dir) + (pt_die(lo, hi, A_DIRECTION) - 0.5) * radians(p.spread);
+    let dir_z = radians(p.dir_z) + (pt_die(lo, hi, A_DIRECTION_Z) - 0.5) * radians(p.spread_z);
+    let speed = pt_jitter(p.speed, p.speed_jitter, pt_die(lo, hi, A_SPEED));
+    // The elevation tilts the launch out of the plane; at nought its cosine is
+    // exactly one and the two in-plane components are the bits they always were.
+    let cz = cos(dir_z);
+    l.v0 = vec3<f32>(speed * cos(dir) * cz, speed * sin(dir) * cz, speed * sin(dir_z));
+    l.phase = pt_die(lo, hi, A_TURB_PHASE) * 1000.0;
+    return l;
+}
+
+// The frame and its margin, `[left, top, right, bottom]`.
+fn pt_bounds() -> vec4<f32> {
+    return vec4<f32>(-p.margin, -p.margin, p.target_w + p.margin, p.target_h + p.margin);
+}
+
+// == lumit_core::fx::points::has_left.
+fn pt_has_left(b: vec4<f32>, l: Launch, life: f32, age: f32) -> bool {
+    let g = vec2<f32>(0.0, abs(p.gravity));
+    let reach = (abs(p.wind) + abs(l.v0.xy - p.wind)) * age + 0.5 * g * age * age
+        + vec2<f32>(p.turb, p.turb);
+    if (l.p0.x - reach.x > b.x && l.p0.x + reach.x < b.z
+        && l.p0.y - reach.y > b.y && l.p0.y + reach.y < b.w) {
+        return false;
+    }
+    let step = max(p.dt, life / EDGE_SAMPLES);
+    var k = 1.0;
+    loop {
+        if (k * step > age) { break; }
+        let a = k * step;
+        let q = pt_integrate(l.p0, l.v0, a).pos + pt_turbulence(l.p0, l.phase, a);
+        if (q.x < b.x || q.x > b.z || q.y < b.y || q.y > b.w) {
+            return true;
+        }
+        k = k + 1.0;
+    }
+    return false;
+}
+
+// == lumit_core::fx::points::wrapped.
+fn pt_wrapped(b: vec4<f32>, q: vec3<f32>) -> vec3<f32> {
+    let span = b.zw - b.xy;
+    return vec3<f32>(q.xy - span * floor((q.xy - b.xy) / span), q.z);
+}
+
 // ---------------------------------------------------------------- pass 1
 
 @compute @workgroup_size(64)
@@ -462,6 +538,13 @@ fn pt_alive(@builtin(global_invocation_id) gid: vec3<u32>) {
         // A Mask path emitter with nothing to walk emits nothing at all.
         if (p.shape != 4u || p.path_len >= 2u) {
             live = 1u;
+            // Killed the first time it left the frame.
+            if (p.edge == EDGE_KILL) {
+                let l = pt_launch(cand.birth_lo, cand.birth_hi);
+                if (pt_has_left(pt_bounds(), l, cand.life, cand.age)) {
+                    live = 0u;
+                }
+            }
         }
     }
     ranks[c] = live;
@@ -564,24 +647,17 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     let hi = cand.birth_hi;
     let age = cand.age;
     let life = cand.life;
-    let b0 = pt_birth_point(
-        pt_die(lo, hi, A_EMIT_U),
-        pt_die(lo, hi, A_EMIT_V),
-        pt_die(lo, hi, A_EMIT_W),
-    );
-    if (b0.w == 0.0) {
+    let l = pt_launch(lo, hi);
+    if (!l.ok) {
         return;
     }
-    let p0 = b0.xyz;
-    let dir = radians(p.dir) + (pt_die(lo, hi, A_DIRECTION) - 0.5) * radians(p.spread);
-    let dir_z = radians(p.dir_z) + (pt_die(lo, hi, A_DIRECTION_Z) - 0.5) * radians(p.spread_z);
-    let speed = pt_jitter(p.speed, p.speed_jitter, pt_die(lo, hi, A_SPEED));
-    // The elevation tilts the launch out of the plane; at nought its cosine is
-    // exactly one and the two in-plane components are the bits they always were.
-    let cz = cos(dir_z);
-    let v0 = vec3<f32>(speed * cos(dir) * cz, speed * sin(dir) * cz, speed * sin(dir_z));
+    if (p.edge == EDGE_KILL && pt_has_left(pt_bounds(), l, life, age)) {
+        return;
+    }
+    let p0 = l.p0;
+    let v0 = l.v0;
     let m = pt_integrate(p0, v0, age);
-    let phase = pt_die(lo, hi, A_TURB_PHASE) * 1000.0;
+    let phase = l.phase;
     let d = pt_turbulence(p0, phase, age);
     let d_next = pt_turbulence(p0, phase, age + p.eps);
     let d_prev = pt_turbulence(p0, phase, age - p.eps);
@@ -604,7 +680,7 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     rot = rot + (pt_die(lo, hi, A_ROTATION) - 0.5) * radians(p.rotation_jitter)
         + radians(p.spin) * age;
 
-    let head = m.pos + d;
+    var head = m.pos + d;
     var tail = head;
     if (p.tail > 0.0) {
         // Where it was a Streak length ago — the same closed form at an earlier
@@ -612,6 +688,17 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
         let back = max(age - p.tail, 0.0);
         let mb = pt_integrate(p0, v0, back);
         tail = mb.pos + pt_turbulence(p0, phase, back);
+    }
+    if (p.edge == EDGE_WRAP) {
+        // Back into the frame, the tail moved with the head so a streak
+        // crossing the edge is not drawn across the whole picture.
+        let w = pt_wrapped(pt_bounds(), head);
+        if (p.tail > 0.0) {
+            tail = vec3<f32>(tail.xy + (w.xy - head.xy), tail.z);
+        } else {
+            tail = w;
+        }
+        head = w;
     }
 
     let cap = p.cap;

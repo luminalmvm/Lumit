@@ -6544,6 +6544,7 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "wind_z"),
             ("particulate", "turbulence_amount"),
             ("particulate", "turbulence_scale"),
+            ("particulate", "edge_margin"),
             // Grid: every length in a lattice — the gaps between
             // cells, where its centre sits, how far a cell may wander, and the
             // disc a point is drawn as. The three counts and the per cents are

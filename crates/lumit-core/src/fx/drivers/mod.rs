@@ -1226,8 +1226,12 @@ impl Eval<'_> {
             })
         };
         super::effects::particulate::Particulate::add_bursts(inst, &mut sched, &row_at);
+        // The edge is the composition's frame here: the layer's own picture
+        // is the renderer's to know.
         let stream = Rc::new(super::points::evaluate(
-            &points.projected(self.projection),
+            &points
+                .projected(self.projection)
+                .framed(comp.width as f32, comp.height as f32),
             &sched,
             t,
             &path,

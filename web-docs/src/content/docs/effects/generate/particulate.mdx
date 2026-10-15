@@ -64,6 +64,8 @@ A particle system.
 | **Turbulence amount** | Slider | 0 to 500; higher | 40 | Pixels at composition size |
 | **Turbulence scale** | Slider | 10 to 1000; higher | 200 | Pixels at composition size |
 | **Turbulence speed** | Slider | 0 to 5; higher | 0.3 | - |
+| **Edge** | Dropdown | None · Kill · Wrap | None | - |
+| **Edge margin** | Slider | 0 to 500; higher | 20 | Pixels at composition size |
 | **Mode** | Dropdown | Disc · Sprite · Streak | Disc | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Sprite layer** | Layer | Any layer in the composition | None | - |
@@ -82,6 +84,7 @@ In the Effect Controls panel:
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
+- **Edges** groups **Edge**, **Edge margin**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Max particles**, **Seed**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
@@ -89,6 +92,7 @@ In the Effect Controls panel:
 - **Burst count** is editable while **Burst** is anything but Off.
 - **Burst interval** is editable while **Burst** is set to Every N frames.
 - **Trigger** is editable while **Burst** is set to On trigger.
+- **Edge margin** is editable while **Edge** is anything but None.
 - **Mask path** is editable while **Follow** is anything but Shape.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
@@ -148,6 +152,13 @@ The **Forces** group, what moves them:
 - **Turbulence scale**: how far apart two particles have to be before the noise pushes them
   different ways.
 - **Turbulence speed**: how fast that noise evolves as a particle ages.
+
+The **Edges** group, what happens at the edge of the layer's frame:
+
+- **Edge**: **None** lets particles carry on out of sight. **Kill** ends a particle the first
+  time it leaves the frame, and it does not come back. **Wrap** brings it back in on the
+  opposite side.
+- **Edge margin**: how far past the frame a particle goes before Edge acts.
 
 The **Render** group, how they are drawn:
 

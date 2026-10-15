@@ -110,6 +110,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "turbulence_speed",
         ],
     ),
+    group("Edges", &["edge", "edge_margin"]),
     group(
         "Render",
         &[
@@ -162,6 +163,11 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         param: "trigger",
         on: "burst",
         cond: EnabledCond::ChoiceIs(3),
+    },
+    EnabledWhen {
+        param: "edge_margin",
+        on: "edge",
+        cond: EnabledCond::ChoiceIsNot(0),
     },
     // Following the shape leaves no mask to choose.
     EnabledWhen {
@@ -482,6 +488,22 @@ pub struct Particulate {
     )]
     pub turbulence_speed: f32,
 
+    /// What a particle does at the edge of the layer's frame. None, the
+    /// default, lets it carry on out of sight as before.
+    #[choice(label = "Edge", options = *points::Edge::OPTIONS, default = 0)]
+    pub edge: u32,
+
+    /// How far past the frame a particle goes before Edge acts, px@comp.
+    #[slider(
+        label = "Edge margin",
+        min = 0.0,
+        max = 500.0,
+        default = 20.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub edge_margin: f32,
+
     /// What a particle is drawn as. All three are the same instanced quad with
     /// a different coverage inside it ([`points::RenderMode`]).
     ///
@@ -618,6 +640,10 @@ impl Particulate {
             // the caller that does — the renderer, or the driver walk — pins it
             // with `PointsParams::projected`.
             projection: points::Projection::FLAT,
+            edge: points::Edge::from_code(self.edge),
+            margin: self.edge_margin.max(0.0),
+            // The picture's size is the caller's to say, as the camera is.
+            frame: [0.0; 2],
         }
     }
 

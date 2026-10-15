@@ -233,6 +233,39 @@ impl Burst {
     }
 }
 
+/// What a particle does at the edge of the frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Edge {
+    /// Nothing: it carries on out of sight.
+    #[default]
+    None,
+    /// It dies the first time it leaves the frame and its margin, and stays
+    /// dead even if it would come back.
+    Kill,
+    /// It comes back in on the opposite side.
+    Wrap,
+}
+
+impl Edge {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] = &["None", "Kill", "Wrap"];
+
+    /// The rule for a stored Choice index; anything unknown is None.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Edge::Kill,
+            2 => Edge::Wrap,
+            _ => Edge::None,
+        }
+    }
+}
+
+/// The most steps of its own life a particle is looked at to see whether it
+/// has left the frame. A step is a frame, or a 64th of the particle's life if
+/// that is longer, so the cost stays the same whatever the frame rate.
+const EDGE_SAMPLES: f32 = 64.0;
+
 /// The top bit a burst particle's birth index carries. Bursts count apart from
 /// the steady flow, so turning one on leaves every steady particle as it was,
 /// and a burst needs only the frames a particle can still be seen from rather
@@ -509,6 +542,16 @@ pub struct PointsParams {
     /// with. The renderer and the driver walk fill it in with
     /// [`projected`](Self::projected).
     pub projection: Projection,
+    /// What a particle does at the edge of the frame.
+    pub edge: Edge,
+    /// How far past the frame's edge a particle may go before [`Edge`]
+    /// acts, px.
+    pub margin: f32,
+    /// The frame's width and height, px, in the layer's own plane. Nought,
+    /// which a bag of parameters hands back, is no frame and no edge; the
+    /// caller that knows the picture fills it in with
+    /// [`framed`](Self::framed).
+    pub frame: [f32; 2],
 }
 
 impl PointsParams {
@@ -517,6 +560,23 @@ impl PointsParams {
     pub fn projected(mut self, projection: Projection) -> Self {
         self.projection = projection;
         self
+    }
+
+    /// The same parameters, with a frame of `w` × `h` px for the edge.
+    #[must_use]
+    pub fn framed(mut self, w: f32, h: f32) -> Self {
+        self.frame = [w, h];
+        self
+    }
+
+    /// The edge's rectangle, `[left, top, right, bottom]` px, or `None` when
+    /// there is no edge to act at.
+    fn edge_box(&self) -> Option<[f32; 4]> {
+        let [w, h] = self.frame;
+        (self.edge != Edge::None && w > 0.0 && h > 0.0).then(|| {
+            let m = self.margin;
+            [-m, -m, w + m, h + m]
+        })
     }
 }
 
@@ -1755,6 +1815,65 @@ fn turbulence(p0: [f32; 3], phase: f32, f: &Forces, seed: u32, age: f32) -> [f32
     ]
 }
 
+/// Whether a particle born at `p0` with speed `v0` has left `bounds`,
+/// `[left, top, right, bottom]`, at any step of its own life up to `age`.
+///
+/// The steps are whole multiples of one fixed at birth, so a later frame
+/// looks at every step an earlier one did, and a particle that has left stays
+/// gone however it moves after.
+#[allow(clippy::too_many_arguments)]
+fn has_left(
+    bounds: [f32; 4],
+    f: &Forces,
+    seed: u32,
+    p0: [f32; 3],
+    v0: [f32; 3],
+    phase: f32,
+    life: f32,
+    age: f32,
+    dt: f32,
+) -> bool {
+    // How far it can possibly have gone: drag only ever pulls the speed
+    // towards the wind's, and turbulence is at most its amount either way.
+    // Born well inside that, it cannot have left, and nothing is walked.
+    let reach = |i: usize| {
+        let g = if i == 1 { f.gravity.abs() } else { 0.0 };
+        (f.wind[i].abs() + (v0[i] - f.wind[i]).abs()) * age + 0.5 * g * age * age + f.turbulence
+    };
+    let (rx, ry) = (reach(0), reach(1));
+    if p0[0] - rx > bounds[0]
+        && p0[0] + rx < bounds[2]
+        && p0[1] - ry > bounds[1]
+        && p0[1] + ry < bounds[3]
+    {
+        return false;
+    }
+    let step = dt.max(life / EDGE_SAMPLES);
+    let mut k = 1.0f32;
+    while k * step <= age {
+        let a = k * step;
+        let x = integrate(p0, v0, f, a).0;
+        let d = turbulence(p0, phase, f, seed, a);
+        let (px, py) = (x[0] + d[0], x[1] + d[1]);
+        if px < bounds[0] || px > bounds[2] || py < bounds[1] || py > bounds[3] {
+            return true;
+        }
+        k += 1.0;
+    }
+    false
+}
+
+/// `p` brought back inside `bounds` across and down, by whole widths and
+/// heights of it.
+fn wrapped(bounds: [f32; 4], p: [f32; 3]) -> [f32; 3] {
+    let mut q = p;
+    for i in 0..2 {
+        let span = bounds[i + 2] - bounds[i];
+        q[i] = p[i] - span * ((p[i] - bounds[i]) / span).floor();
+    }
+    q
+}
+
 /// Where in the emitter this particle starts.
 ///
 /// `w` is the draw through the emitter's [`depth`](Emitter::depth),
@@ -1874,6 +1993,8 @@ pub fn evaluate_with_tail(
     let base_dir = e.direction_deg.to_radians();
     let spread_z = e.spread_z_deg.to_radians();
     let base_dir_z = e.direction_z_deg.to_radians();
+    let bounds = p.edge_box();
+    let dt = sched.dt() as f32;
 
     for (b, t_b) in sched.newest_first() {
         let age = (t - t_b) as f32;
@@ -1908,8 +2029,13 @@ pub fn evaluate_with_tail(
         // were.
         let (sz, cz) = dir_z.sin_cos();
         let v0 = [speed * cd * cz, speed * sd * cz, speed * sz];
-        let (pos, vel) = integrate(p0, v0, &p.forces, age);
         let phase = draw(p.seed, b, attr::TURB_PHASE) * 1000.0;
+        if let Some(bx) = bounds.filter(|_| p.edge == Edge::Kill) {
+            if has_left(bx, &p.forces, p.seed, p0, v0, phase, life, age, dt) {
+                continue;
+            }
+        }
+        let (pos, vel) = integrate(p0, v0, &p.forces, age);
         let d = turbulence(p0, phase, &p.forces, p.seed, age);
         let d_next = turbulence(p0, phase, &p.forces, p.seed, age + eps);
         let d_prev = turbulence(p0, phase, &p.forces, p.seed, age - eps);
@@ -1947,6 +2073,15 @@ pub fn evaluate_with_tail(
         } + spread_rot
             + look.spin_deg.to_radians() * age;
 
+        let mut head = [pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]];
+        // Wrapped back into the frame. The tail moves with the head, so a
+        // streak crossing the edge is not drawn across the whole picture.
+        let mut shift = None;
+        if let Some(bx) = bounds.filter(|_| p.edge == Edge::Wrap) {
+            let w = wrapped(bx, head);
+            shift = Some([w[0] - head[0], w[1] - head[1]]);
+            head = w;
+        }
         // Where it was a Streak length ago — the same closed form at an earlier
         // age, never a remembered position. Clamped at birth: a particle
         // younger than the tail streaks from where it was born.
@@ -1954,10 +2089,14 @@ pub fn evaluate_with_tail(
             let back = (age - tail).max(0.0);
             let (bp, _) = integrate(p0, v0, &p.forces, back);
             let bd = turbulence(p0, phase, &p.forces, p.seed, back);
-            tails.push([bp[0] + bd[0], bp[1] + bd[1], bp[2] + bd[2]]);
+            let mut was = [bp[0] + bd[0], bp[1] + bd[1], bp[2] + bd[2]];
+            if let Some([sx, sy]) = shift {
+                was[0] += sx;
+                was[1] += sy;
+            }
+            tails.push(was);
         }
-        out.position
-            .push([pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]]);
+        out.position.push(head);
         out.speed.push(speed_out);
         out.age.push(age);
         out.life.push(life);

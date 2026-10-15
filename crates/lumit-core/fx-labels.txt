@@ -302,6 +302,7 @@ Echo
 Echoes
 Edge
 Edge colour
+Edge margin
 Edge sharpness
 Edge type
 Edges
@@ -517,6 +518,7 @@ Keep in picked
 Keep inside
 Key out safe
 Key out unsafe
+Kill
 Knee
 LUT
 Label points

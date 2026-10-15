@@ -141,6 +141,10 @@ pub struct ParticulateOp<'a> {
     /// different branch and touches the position's bits not at all, which is
     /// what makes the flat picture bit-identical rather than nearly so.
     pub projection: Option<[[f32; 4]; 3]>,
+    /// The `Edge` code: 0 None, 1 Kill, 2 Wrap. The frame is the target.
+    pub edge: u32,
+    /// How far past the frame a particle goes before the edge acts, px.
+    pub margin: f32,
 }
 
 #[repr(C)]
@@ -225,7 +229,10 @@ pub(super) struct ParticulateParams {
     pub(super) stamp_uv: [f32; 2],
 
     pub(super) stamp_corner: f32,
-    pub(super) _pad: [u32; 3],
+    pub(super) edge: u32,
+    pub(super) margin: f32,
+    /// Always nought; see the kernel's `turb_cycle`.
+    pub(super) turb_cycle: i32,
 }
 
 /// The scan's block width — the same 256 the kernel declares.
@@ -447,7 +454,9 @@ impl FxEngine {
             stamp_anchor: [0.0; 2],
             stamp_uv: [0.0; 2],
             stamp_corner: 0.0,
-            _pad: [0; 3],
+            edge: op.edge,
+            margin: op.margin,
+            turb_cycle: 0,
         };
         let ubuf = ctx
             .device

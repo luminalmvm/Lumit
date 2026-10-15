@@ -3367,6 +3367,14 @@
   "@fxBursts": {
     "description": "Effect controls — a group heading on Particulate, over the controls for extra particles that burst out beside the steady flow."
   },
+  "fxEdgeMargin": "Edge margin",
+  "@fxEdgeMargin": {
+    "description": "Effect controls — a control on Particulate: how far past the edge of the frame a particle goes before it is killed or wrapped, in pixels."
+  },
+  "fxKill": "Kill",
+  "@fxKill": {
+    "description": "Effect controls — an Edge setting on Particulate: a particle dies the first time it leaves the frame."
+  },
   "fxEmitter": "Emitter",
   "@fxEmitter": {
     "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."

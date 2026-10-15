@@ -10178,6 +10178,29 @@
           "hard_min": 0.0
         },
         {
+          "id": "edge",
+          "label": "Edge",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "None",
+            "Kill",
+            "Wrap"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "edge_margin",
+          "label": "Edge margin",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "mode",
           "label": "Mode",
           "kind": "choice",
@@ -10379,6 +10402,14 @@
           "collapsed": false
         },
         {
+          "label": "Edges",
+          "params": [
+            "edge",
+            "edge_margin"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Render",
           "params": [
             "mode",
@@ -10427,6 +10458,12 @@
           "on": "burst",
           "cond": "choice_is",
           "value": 3
+        },
+        {
+          "param": "edge_margin",
+          "on": "edge",
+          "cond": "choice_is_not",
+          "value": 0
         },
         {
           "param": "mask_path",

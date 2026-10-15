@@ -4565,6 +4565,8 @@ fn particulate_op<'a>(
         mix: style.mix,
         mode,
         projection,
+        edge: packed.edge as u32,
+        margin: packed.margin,
     }
 }
 
@@ -5820,6 +5822,8 @@ mod tests {
             burst_count: 100.0,
             burst_interval: 24.0,
             trigger: 0.0,
+            edge: 0,
+            edge_margin: 20.0,
             direction: -90.0,
             spread: 200.0,
             initial_speed: 70.0,
@@ -5923,6 +5927,10 @@ mod tests {
             &|_| 0.0,
         );
         carriage.schedule = sched.clone();
+        // Killed at the frame's edge, so the two have to agree about which
+        // particles left as well as where the rest are.
+        inst.edge = 1;
+        inst.edge_margin = 0.0;
         inst.shape = shape;
         if lumit_core::fx::points::EmitterShape::from_code(shape).is_outline() {
             // **Turbulence off for the outline twin, on purpose.** What this
@@ -5937,6 +5945,7 @@ mod tests {
             inst.turbulence_amount = 0.0;
         }
         let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
+        let packed = packed.framed(w as f32, h as f32);
         // The outline the emitter walks, flattened by the one function both
         // paths call — the shipping pass does exactly this.
         let outline = lumit_core::fx::points::outline_polyline(&packed.emitter);
@@ -6055,8 +6064,13 @@ mod tests {
         let sprite_px: Vec<f32> = vec![0.5; (8 * 8 * 4) as usize];
         let sprite_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &sprite_px, 8, 8);
         for mode in [0u32, 1, 2] {
-            let (inst, sched, carriage) = particulate_fixture_3d(mode, 4_000, projection);
+            let (mut inst, sched, carriage) = particulate_fixture_3d(mode, 4_000, projection);
+            // Wrapped at the frame's edge, which moves a streak's tail with
+            // its head.
+            inst.edge = 2;
+            inst.edge_margin = 0.0;
             let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
+            let packed = packed.framed(w as f32, h as f32);
             let (cpu_stream, tails) = lumit_core::fx::points::evaluate_with_tail(
                 &packed,
                 &sched,
