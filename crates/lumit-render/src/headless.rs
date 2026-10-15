@@ -244,6 +244,9 @@ pub struct HeadlessRenderer {
     /// and the export renderer — which nobody calls this on — always draws
     /// the backdrop.
     transparent_background: bool,
+    /// The read-back buffer an export's last frame gave back, for its next
+    /// ([`Self::finish_preview`]). Never set on the Viewer's renderer.
+    spare_readback: Option<lumit_gpu::SpareReadback>,
     /// The Viewer's region of interest as comp fractions, or `None`
     /// for the whole frame. Preview-only: the export renderer is never given
     /// one, the same construction that keeps the preview scale out of files.
@@ -808,6 +811,7 @@ impl HeadlessRenderer {
             colour_view: None,
             colour_output: None,
             transparent_background: false,
+            spare_readback: None,
             region: None,
             #[cfg(all(windows, feature = "shared-texture"))]
             shared: Vec::new(),
@@ -1628,6 +1632,50 @@ impl HeadlessRenderer {
             .readback8(&self.gpu, &reduced)
             .map(|rgba| (rgba, sw, sh))
             .map_err(|e| format!("headless preview: {e}"))
+    }
+
+    /// [`Self::render_preview`] at the comp's own size without waiting for
+    /// the bytes: the frame is composited and its read-back started, and
+    /// [`Self::finish_preview`] collects it. An export renders the next frame
+    /// in between, so the copy off the card runs alongside it.
+    pub fn start_preview(
+        &mut self,
+        doc: &Arc<Document>,
+        comp_id: Uuid,
+        frame: u64,
+        quality: Quality,
+    ) -> Result<lumit_gpu::PendingReadback, String> {
+        let (shown, cw, ch) = self.preview_display_texture(doc, comp_id, frame, quality)?;
+        let Some(parts) = self.parts.as_ref() else {
+            return Err("headless preview: renderer is unavailable after an earlier fault".into());
+        };
+        let spare = self.spare_readback.take();
+        if (cw, ch) == (shown.width(), shown.height()) {
+            return Ok(parts.colour.start_readback8_into(&self.gpu, &shown, spare));
+        }
+        // A coarse tier composited smaller: brought back up on the card, as
+        // `render_preview` does at a scale of one.
+        let full = parts.colour.display_scaled(
+            &self.gpu,
+            &shown,
+            cw,
+            ch,
+            lumit_gpu::DisplayParams::NEUTRAL,
+        );
+        Ok(parts.colour.start_readback8_into(&self.gpu, &full, spare))
+    }
+
+    /// The bytes of a read-back [`Self::start_preview`] started, waiting for
+    /// them. Its buffer is kept for the next one.
+    pub fn finish_preview(
+        &mut self,
+        mut pending: lumit_gpu::PendingReadback,
+    ) -> Result<Vec<u8>, String> {
+        let bytes = pending
+            .wait(&self.gpu)
+            .map_err(|e| format!("headless preview: {e}"));
+        self.spare_readback = pending.into_spare(&self.gpu);
+        bytes
     }
 
     /// [`Self::render_preview`] at sixteen bits a channel: the same walk, the

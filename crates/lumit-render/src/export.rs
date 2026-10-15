@@ -3180,32 +3180,17 @@ fn run(
         // the extra width is the pipeline's own rather than a stretched byte.
         let render = |renderer: &mut crate::headless::HeadlessRenderer,
                       src: usize|
-         -> Result<Vec<u8>, String> {
+         -> Result<Rendered, String> {
             Ok(match spec.depth {
-                BitDepth::Eight => {
-                    let (px, _, _) = renderer.render_preview(
-                        doc,
-                        comp_id,
-                        src as u64,
-                        spec.render.quality,
-                        1.0,
-                    )?;
-                    let px = spec.crop.apply(px, comp.width, comp.height, 4);
-                    let px = if resize {
-                        lumit_core::pixels::letterbox_resize(
-                            &px,
-                            crop_w,
-                            crop_h,
-                            tw,
-                            th,
-                            spec.resample,
-                        )
-                    } else {
-                        px
-                    };
-                    pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
-                }
-                BitDepth::Sixteen => {
+                // Only started here: the bytes are collected by `finish`
+                // below once the next frame is on its way.
+                BitDepth::Eight => Rendered::Coming(renderer.start_preview(
+                    doc,
+                    comp_id,
+                    src as u64,
+                    spec.render.quality,
+                )?),
+                BitDepth::Sixteen => Rendered::Bytes({
                     let (px, _, _) =
                         renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
                     let px = spec.crop.apply(px, comp.width, comp.height, 4);
@@ -3222,14 +3207,14 @@ fn run(
                         px
                     };
                     pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
-                }
+                }),
                 // The float depths read the composite back as it stands: no
                 // display transform, no curve, no clamp (docs/06 §7.4a). The
                 // channel and alpha choices still apply — they are about what the
                 // file carries, not about how bright it is — and the resize runs
                 // on the floats so a delivered EXR is filtered rather than
                 // point-sampled.
-                BitDepth::Half | BitDepth::Float => {
+                BitDepth::Half | BitDepth::Float => Rendered::Bytes({
                     let (px, _, _) = renderer.render_preview_linear(
                         doc,
                         comp_id,
@@ -3243,8 +3228,24 @@ fn run(
                         px
                     };
                     pack_frame_f32(&px, spec.channels, spec.alpha)
-                }
+                }),
             })
+        };
+        let finish = |renderer: &mut crate::headless::HeadlessRenderer,
+                      frame: Rendered|
+         -> Result<Vec<u8>, String> {
+            let pending = match frame {
+                Rendered::Bytes(rgba) => return Ok(rgba),
+                Rendered::Coming(pending) => pending,
+            };
+            let px = renderer.finish_preview(pending)?;
+            let px = spec.crop.apply(px, comp.width, comp.height, 4);
+            let px = if resize {
+                lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
+            } else {
+                px
+            };
+            Ok(pack_frame(&px, spec.channels, spec.alpha, colour.as_ref()))
         };
         // The comp frame under an output frame: exact when the rates match
         // (the rounding is then of an integer), nearest otherwise.
@@ -3267,6 +3268,7 @@ fn run(
         let mut asked = std::collections::VecDeque::new();
         let mut asked_to = 0usize;
         let mut rendered = Ok(());
+        let mut waiting = None;
         for frame_n in 0..total {
             if cancel.load(Ordering::Relaxed) {
                 break;
@@ -3335,7 +3337,23 @@ fn run(
                 // Its threads end with it.
                 ahead = None;
             }
-            let rgba = match render(&mut renderer, src) {
+            let frame = match render(&mut renderer, src) {
+                Ok(frame) => frame,
+                Err(e) => {
+                    rendered = Err(e);
+                    break;
+                }
+            };
+            // An eight-bit frame waits a turn, so its read-back runs while
+            // the next one renders. Any other goes at once.
+            let ready = match frame {
+                Rendered::Coming(_) => waiting.replace(frame),
+                Rendered::Bytes(_) => Some(frame),
+            };
+            let Some(before) = ready else {
+                continue;
+            };
+            let rgba = match finish(&mut renderer, before) {
                 Ok(rgba) => rgba,
                 Err(e) => {
                     rendered = Err(e);
@@ -3345,6 +3363,16 @@ fn run(
             // Refused only when the writer has stopped, and it says why below.
             if frames.send(rgba).is_err() {
                 break;
+            }
+        }
+        // And the last, when nothing stopped the loop.
+        if let Some(last) = waiting.filter(|_| rendered.is_ok() && !cancel.load(Ordering::Relaxed))
+        {
+            match finish(&mut renderer, last) {
+                Ok(rgba) => {
+                    let _ = frames.send(rgba);
+                }
+                Err(e) => rendered = Err(e),
             }
         }
         // Joined here rather than by the scope, so a writer that panicked
@@ -3445,6 +3473,13 @@ fn run_audio_only(
 
 /// Where the rendered frames go: the mp4 muxer, or the numbered stills. One
 /// type so the frame loop stays single.
+/// A frame on its way to the file: its bytes, or at eight bits its
+/// read-back still coming off the graphics card.
+enum Rendered {
+    Bytes(Vec<u8>),
+    Coming(lumit_gpu::PendingReadback),
+}
+
 enum Sink {
     Video {
         encoder: lumit_media::Encoder,
