@@ -101,6 +101,15 @@ class ShapeItemRow extends StatelessWidget {
           )),
       ShapeOp.smooth =>
         shapeItemWith(i, smooth: const BridgeScalar.static_(10)),
+      ShapeOp.taper => shapeItemWith(i,
+          taper: const BridgeShapeTaper(
+            start: BridgeScalar.static_(100),
+            end: BridgeScalar.static_(100),
+            startLength: BridgeScalar.static_(50),
+            endLength: BridgeScalar.static_(50),
+            ease: BridgeScalar.static_(0),
+            scope: 0,
+          )),
     };
   }
 
@@ -109,7 +118,11 @@ class ShapeItemRow extends StatelessWidget {
   /// above lends its path and nothing else, so it has neither.
   List<Widget> _opRows(VoidCallback close) {
     if (item.combine != 0) return const [];
-    const open = ShapeOp.values;
+    // A taper narrows an outline, so an item with none is not offered one.
+    final open = [
+      for (final op in ShapeOp.values)
+        if (op != ShapeOp.taper || item.stroke != null) op,
+    ];
     final has = [for (final op in open) if (hasShapeOp(item, op)) op];
     final lacks = [for (final op in open) if (!hasShapeOp(item, op)) op];
     Widget submenu(String key, String label, List<ShapeOp> ops) => SubmenuRow(
@@ -677,6 +690,12 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
         ShapeValue.dashOffset => (-1000, 1000, ' px'),
+        ShapeValue.taperStart ||
+        ShapeValue.taperEnd ||
+        ShapeValue.taperStartLength ||
+        ShapeValue.taperEndLength ||
+        ShapeValue.taperEase =>
+          (0, 100, '%'),
         // The repeater: the count and which copy the original is are whole
         // things, and the step is read in the units the layer's own transform
         // is — pixels, degrees, per cent.
@@ -1158,6 +1177,20 @@ class ShapePaintRow extends StatelessWidget {
                         : l10n.shapeDeformModeDisplace,
                     onChanged: (k) =>
                         _write((i) => shapeItemWith(i, deformMode: k)),
+                  ),
+                ),
+              // Each path, or the whole shape as one.
+              ShapePaint.taperScope => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: item.taper?.scope == 1 ? 1 : 0,
+                    options: const [0, 1],
+                    label: (k) => k == 1
+                        ? l10n.shapeTaperScopeWhole
+                        : l10n.shapeTaperScopeEach,
+                    onChanged: (k) =>
+                        _write((i) => shapeItemWith(i, taperScope: k)),
                   ),
                 ),
             },

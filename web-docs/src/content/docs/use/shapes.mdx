@@ -93,7 +93,8 @@ Right-click a shape group in the Timeline for **Add** and **Remove**, which list
 operations it can be given and the ones it has. An operation's rows appear under the group
 once it is added. Every row is animatable.
 
-They apply in a fixed order: smooth, twist, deform, then offset, trim and the repeater.
+They apply in a fixed order: smooth, twist, deform, then offset, trim and the repeater. The
+stroke taper narrows the outline last.
 
 ### Smooth
 
@@ -127,6 +128,22 @@ each point's distance from the middle of the shape.
 - **Deform seed**: picks a different noise.
 - **Deform detail**: how often the noise is read along the path, per feature. Lower values
   bend the outline more broadly.
+
+### Stroke taper
+
+**Stroke taper** narrows a shape's outline towards its ends, like a brush stroke. It is
+offered only for a shape with a stroke.
+
+- **Taper scope**: **Each path** tapers every path of the shape on its own; **Whole shape**
+  runs one taper along all of them in order.
+- **Start taper** and **End taper**: how much of the width is gone at each end, as a
+  percentage. 100 comes to a point.
+- **Start length** and **End length**: how far along the path each narrowing runs, as a
+  percentage of its length. When the two add up to more than 100 they are shrunk together.
+- **Taper ease**: how rounded the narrowing is. 0 is a straight ramp.
+
+The taper follows the trimmed path, and each dash takes the width the outline has where it
+falls.
 
 ## Trim paths
 

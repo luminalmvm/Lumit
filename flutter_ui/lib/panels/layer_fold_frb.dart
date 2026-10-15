@@ -231,6 +231,11 @@ enum ShapeValue {
   dash,
   gap,
   dashOffset,
+  taperStart,
+  taperEnd,
+  taperStartLength,
+  taperEndLength,
+  taperEase,
   repeatCopies,
   repeatOffset,
   repeatAnchorX,
@@ -245,13 +250,14 @@ enum ShapeValue {
 
 /// The operations a shape item can be given from its menu. Each is absent
 /// until it is added, and its rows with it.
-enum ShapeOp { twist, deform, smooth }
+enum ShapeOp { twist, deform, smooth, taper }
 
 /// Whether [item] has [op].
 bool hasShapeOp(BridgeShapeItem item, ShapeOp op) => switch (op) {
       ShapeOp.twist => item.twist != null,
       ShapeOp.deform => item.deform != null,
       ShapeOp.smooth => item.smooth != null,
+      ShapeOp.taper => item.taper != null,
     };
 
 /// What [op] is called in the item's menu.
@@ -259,6 +265,7 @@ String shapeOpLabel(ShapeOp op) => switch (op) {
       ShapeOp.twist => l10n.shapeTwist,
       ShapeOp.deform => l10n.shapeDeform,
       ShapeOp.smooth => l10n.shapeSmooth,
+      ShapeOp.taper => l10n.shapeTaper,
     };
 
 /// The operation [value] belongs to, or null for a number every item has.
@@ -275,6 +282,12 @@ ShapeOp? shapeOpOf(ShapeValue value) => switch (value) {
       ShapeValue.deformSeed ||
       ShapeValue.deformDetail =>
         ShapeOp.deform,
+      ShapeValue.taperStart ||
+      ShapeValue.taperEnd ||
+      ShapeValue.taperStartLength ||
+      ShapeValue.taperEndLength ||
+      ShapeValue.taperEase =>
+        ShapeOp.taper,
       _ => null,
     };
 
@@ -372,6 +385,9 @@ enum ShapePaint {
 
   /// Whether a deform pushes the outline out or scales it.
   deformMode,
+
+  /// Whether a stroke taper runs along each path or the whole shape.
+  taperScope,
 }
 
 /// A shape item's fill colour, its gradient choice, or its gradient's second
@@ -391,6 +407,7 @@ String shapePaintLabel(ShapePaint which) => switch (which) {
       ShapePaint.gradientColour => l10n.shapeGradientColour,
       ShapePaint.gradientStops => l10n.shapeGradientStops,
       ShapePaint.deformMode => l10n.shapeDeform,
+      ShapePaint.taperScope => l10n.shapeTaperScope,
     };
 
 /// One of a shape item's numbers on a row of its own under it. A row
@@ -1169,6 +1186,11 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.dash => l10n.shapeDash,
       ShapeValue.gap => l10n.shapeGap,
       ShapeValue.dashOffset => l10n.shapeDashOffset,
+      ShapeValue.taperStart => l10n.shapeTaperStart,
+      ShapeValue.taperEnd => l10n.shapeTaperEnd,
+      ShapeValue.taperStartLength => l10n.shapeTaperStartLength,
+      ShapeValue.taperEndLength => l10n.shapeTaperEndLength,
+      ShapeValue.taperEase => l10n.shapeTaperEase,
       ShapeValue.repeatCopies => l10n.shapeRepeatCopies,
       ShapeValue.repeatOffset => l10n.shapeRepeatOffset,
       ShapeValue.repeatAnchorX => l10n.shapeRepeatAnchorX,
@@ -1229,6 +1251,11 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.dash => _dashAt(item, 0),
       ShapeValue.gap => _dashAt(item, 1),
       ShapeValue.dashOffset => item.dashOffset,
+      ShapeValue.taperStart => item.taper?.start ?? _none,
+      ShapeValue.taperEnd => item.taper?.end ?? _none,
+      ShapeValue.taperStartLength => item.taper?.startLength ?? _none,
+      ShapeValue.taperEndLength => item.taper?.endLength ?? _none,
+      ShapeValue.taperEase => item.taper?.ease ?? _none,
       ShapeValue.repeatCopies => item.repeatCopies,
       ShapeValue.repeatOffset => item.repeatOffset,
       ShapeValue.repeatAnchorX => item.repeatAnchorX,
@@ -1270,12 +1297,15 @@ BridgeShapeItem shapeItemWith(
   BridgeShapeDeform? deform,
   int? deformMode,
   BridgeScalar? smooth,
+  BridgeShapeTaper? taper,
+  int? taperScope,
   ShapeOp? remove,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
   final twisted = item.twist;
   final deformed = item.deform;
+  final tapered = item.taper;
   return BridgeShapeItem(
     id: item.id,
     name: name ?? item.name,
@@ -1354,6 +1384,20 @@ BridgeShapeItem shapeItemWith(
                     axis: at(ShapeValue.twistAxis, twisted.axis),
                     centreX: at(ShapeValue.twistCentreX, twisted.centreX),
                     centreY: at(ShapeValue.twistCentreY, twisted.centreY),
+                  )),
+    taper: remove == ShapeOp.taper
+        ? null
+        : taper ??
+            (tapered == null
+                ? null
+                : BridgeShapeTaper(
+                    start: at(ShapeValue.taperStart, tapered.start),
+                    end: at(ShapeValue.taperEnd, tapered.end),
+                    startLength:
+                        at(ShapeValue.taperStartLength, tapered.startLength),
+                    endLength: at(ShapeValue.taperEndLength, tapered.endLength),
+                    ease: at(ShapeValue.taperEase, tapered.ease),
+                    scope: taperScope ?? tapered.scope,
                   )),
     smooth: remove == ShapeOp.smooth
         ? null
@@ -2064,6 +2108,12 @@ List<LayerFoldRow> layerFoldRows({
           // An operation's rows come with it, from the item's menu.
           final op = shapeOpOf(value);
           if (op != null && !hasShapeOp(item, op)) continue;
+          // A taper narrows the outline, so it shows only where there is one,
+          // as the dashes do.
+          if (op == ShapeOp.taper && item.stroke == null) continue;
+          if (value == ShapeValue.taperStart) {
+            rows.add(FoldShapePaintRow(item, ShapePaint.taperScope, depth: 3));
+          }
           // Displace or Scale heads the deform's numbers, which it decides
           // the meaning of.
           if (value == ShapeValue.deformAmount) {

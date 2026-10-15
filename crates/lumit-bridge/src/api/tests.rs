@@ -3131,6 +3131,7 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         twist: None,
         deform: None,
         smooth: None,
+        taper: None,
     }
 }
 

@@ -9031,6 +9031,42 @@
   "@shapeTwistCentreY": {
     "description": "Timeline row under a shape layer's art: the y of the point the twist's axis passes through, in pixels."
   },
+  "shapeTaper": "Stroke taper",
+  "@shapeTaper": {
+    "description": "Shape operation, in the Add and Remove menus of a shape layer's art: the outline narrows towards its ends like a brush stroke."
+  },
+  "shapeTaperScope": "Taper scope",
+  "@shapeTaperScope": {
+    "description": "Timeline row under a shape layer's art: whether the stroke taper runs along each path on its own or along the whole shape as one."
+  },
+  "shapeTaperScopeEach": "Each path",
+  "@shapeTaperScopeEach": {
+    "description": "Choice on a shape's Taper scope row: every path of the shape tapers on its own."
+  },
+  "shapeTaperScopeWhole": "Whole shape",
+  "@shapeTaperScopeWhole": {
+    "description": "Choice on a shape's Taper scope row: one taper runs along all the shape's paths in order."
+  },
+  "shapeTaperStart": "Start taper",
+  "@shapeTaperStart": {
+    "description": "Timeline row under a shape layer's art: how much of the outline's width is gone at its start, as a percentage. 100 comes to a point."
+  },
+  "shapeTaperEnd": "End taper",
+  "@shapeTaperEnd": {
+    "description": "Timeline row under a shape layer's art: how much of the outline's width is gone at its end, as a percentage. 100 comes to a point."
+  },
+  "shapeTaperStartLength": "Start length",
+  "@shapeTaperStartLength": {
+    "description": "Timeline row under a shape layer's art: how far along the path the start taper runs, as a percentage of its length."
+  },
+  "shapeTaperEndLength": "End length",
+  "@shapeTaperEndLength": {
+    "description": "Timeline row under a shape layer's art: how far back along the path the end taper runs, as a percentage of its length."
+  },
+  "shapeTaperEase": "Taper ease",
+  "@shapeTaperEase": {
+    "description": "Timeline row under a shape layer's art: how rounded the stroke taper's narrowing is, as a percentage. 0 is a straight ramp."
+  },
   "shapeSmooth": "Smooth",
   "@shapeSmooth": {
     "description": "Shape operation, in the Add and Remove menus of a shape layer's art, and its Timeline row: how far along the path, in pixels, each point is averaged with its neighbours, which rounds off jags and corners."

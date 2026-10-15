@@ -308,7 +308,7 @@ pub(crate) fn trimmed(points: &[(f64, f64)], start: f64, end: f64) -> Vec<(f64, 
 /// for a dash and a trim to disagree about where "ten along" is. An empty
 /// `pressures` stays empty on the way out, which is how "the constant 1.0"
 /// survives a trim.
-fn trimmed_with(
+pub(crate) fn trimmed_with(
     points: &[(f64, f64)],
     pressures: &[f64],
     start: f64,

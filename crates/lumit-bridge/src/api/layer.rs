@@ -286,6 +286,22 @@ pub struct BridgeShapeItem {
     /// **Smooth**: how far along the path each point is averaged with its
     /// neighbours, in pixels, or `None` for no smooth.
     pub smooth: Option<BridgeScalar>,
+    /// **Stroke taper**, or `None` for the full width all the way.
+    pub taper: Option<BridgeShapeTaper>,
+}
+
+/// A shape's stroke taper: how much of the width is gone at each end, how
+/// far along the line each narrowing runs and how rounded it is, all per
+/// cent. `scope` 0 tapers each path on its own, 1 the whole shape as one.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeShapeTaper {
+    pub start: BridgeScalar,
+    pub end: BridgeScalar,
+    pub start_length: BridgeScalar,
+    pub end_length: BridgeScalar,
+    pub ease: BridgeScalar,
+    pub scope: u32,
 }
 
 /// A shape's twist: `angle` and `axis` in degrees, the centre in layer
@@ -399,6 +415,14 @@ impl BridgeShapeItem {
                 .smooth
                 .as_ref()
                 .map(|s| BridgeScalar::read_at(&s.amount, offset)),
+            taper: item.taper.as_ref().map(|w| BridgeShapeTaper {
+                start: BridgeScalar::read_at(&w.start, offset),
+                end: BridgeScalar::read_at(&w.end, offset),
+                start_length: BridgeScalar::read_at(&w.start_length, offset),
+                end_length: BridgeScalar::read_at(&w.end_length, offset),
+                ease: BridgeScalar::read_at(&w.ease, offset),
+                scope: w.scope,
+            }),
         }
     }
 
@@ -565,6 +589,18 @@ impl BridgeShapeItem {
             smooth: match &self.smooth {
                 Some(amount) => Some(lumit_core::shape::Smooth {
                     amount: clamped_property(amount, offset, 0.0, 10_000.0)?,
+                }),
+                None => None,
+            },
+            // All per cent, held to 0..100.
+            taper: match &self.taper {
+                Some(w) => Some(lumit_core::shape::Taper {
+                    start: clamped_property(&w.start, offset, 0.0, 100.0)?,
+                    end: clamped_property(&w.end, offset, 0.0, 100.0)?,
+                    start_length: clamped_property(&w.start_length, offset, 0.0, 100.0)?,
+                    end_length: clamped_property(&w.end_length, offset, 0.0, 100.0)?,
+                    ease: clamped_property(&w.ease, offset, 0.0, 100.0)?,
+                    scope: if w.scope <= 1 { w.scope } else { 0 },
                 }),
                 None => None,
             },

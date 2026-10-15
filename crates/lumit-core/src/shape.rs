@@ -305,6 +305,10 @@ pub struct ShapeItem {
     /// **Smooth**: the whole path rounded off. `None` is none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub smooth: Option<Smooth>,
+    /// **Stroke taper**: the outline thinning towards its ends. `None` is
+    /// the full width all the way along.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taper: Option<Taper>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -369,6 +373,110 @@ pub struct Deform {
 pub struct Smooth {
     #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
     pub amount: Property,
+}
+
+/// A stroke taper: the outline narrowing towards its two ends like a brush
+/// stroke.
+///
+/// `start` and `end` are how much of the width is gone at each end, per
+/// cent, and `start_length` and `end_length` how far along the line, per cent
+/// of it, the narrowing runs. The two lengths are shrunk together when they
+/// add up to more than the line, so the ends never cross. `ease` rounds the
+/// narrowing from a straight ramp, per cent. `scope` 0 tapers each line on
+/// its own; 1 runs one taper along all of them in order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Taper {
+    #[serde(default = "crate::paint::full", with = "crate::mask::still_or_keyed")]
+    pub start: Property,
+    #[serde(default = "crate::paint::full", with = "crate::mask::still_or_keyed")]
+    pub end: Property,
+    #[serde(default = "half", with = "crate::mask::still_or_keyed")]
+    pub start_length: Property,
+    #[serde(default = "half", with = "crate::mask::still_or_keyed")]
+    pub end_length: Property,
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub ease: Property,
+    #[serde(default, skip_serializing_if = "is_flat")]
+    pub scope: u32,
+}
+
+fn half() -> Property {
+    Property::fixed(50.0)
+}
+
+/// A line the outline's brush runs along, and how wide the brush is at each
+/// of its points, 0..1 of the full width. No widths is full width.
+type Pressed = (Vec<(f64, f64)>, Vec<f64>);
+
+/// The narrowest a taper draws, as a share of the width: a taper to nothing
+/// ends in a fine point rather than stopping short of where the line does.
+const TAPER_TIP: f64 = 1e-3;
+
+impl Taper {
+    /// `lines` with the brush's width at each point. Each line is cut finely
+    /// enough first that the narrowing reads as a curve.
+    fn applied(&self, lines: Vec<Vec<(f64, f64)>>, t: f64) -> Vec<Pressed> {
+        let share = |p: &Property| p.value_at(t).clamp(0.0, 100.0) / 100.0;
+        let (start, end, ease) = (share(&self.start), share(&self.end), share(&self.ease));
+        let (mut from, mut to) = (share(&self.start_length), share(&self.end_length));
+        if from + to > 1.0 {
+            let over = from + to;
+            from /= over;
+            to /= over;
+        }
+        // How far down a ramp `x` of the way along it is: straight, or
+        // rounded by the ease.
+        let ramp = |x: f64| {
+            let x = x.clamp(0.0, 1.0);
+            x + (x * x * (3.0 - 2.0 * x) - x) * ease
+        };
+        let width = |u: f64| {
+            let mut w: f64 = 1.0;
+            if from > 0.0 && u < from {
+                w = w.min(1.0 - start * (1.0 - ramp(u / from)));
+            }
+            if to > 0.0 && u > 1.0 - to {
+                w = w.min(1.0 - end * (1.0 - ramp((1.0 - u) / to)));
+            }
+            w.max(TAPER_TIP)
+        };
+        let lengths: Vec<f64> = lines
+            .iter()
+            .map(|l| l.windows(2).map(|p| dist(p[0], p[1])).sum())
+            .collect();
+        let whole: f64 = lengths.iter().sum();
+        let mut before = 0.0;
+        lines
+            .into_iter()
+            .zip(lengths)
+            .map(|(line, length)| {
+                let (mut along, span) = if self.scope == 1 {
+                    (before, whole)
+                } else {
+                    (0.0, length)
+                };
+                before += length;
+                if span <= 0.0 || line.is_empty() {
+                    return (line, Vec::new());
+                }
+                let shortest = [from, to]
+                    .into_iter()
+                    .filter(|&r| r > 0.0)
+                    .fold(1.0f64, f64::min);
+                let line = densified(&line, (shortest * span / 32.0).max(0.25));
+                let mut last = line[0];
+                let pressures = line
+                    .iter()
+                    .map(|&p| {
+                        along += dist(last, p);
+                        last = p;
+                        width(along / span)
+                    })
+                    .collect();
+                (line, pressures)
+            })
+            .collect()
+    }
 }
 
 fn four() -> Property {
@@ -463,6 +571,7 @@ impl ShapeItem {
             twist: None,
             deform: None,
             smooth: None,
+            taper: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -867,7 +976,7 @@ pub fn outline_at(contents: &[ShapeItem], t: f64) -> crate::mask::MaskPolyline {
         for (copy, _) in art.item.copies_at(t) {
             let place = copy.then(&to_box);
             let own = art.own(&place, t);
-            for line in art.stroked(&art.placed(&place), copy.scale(), t) {
+            for (line, _) in art.stroked(&art.placed(&place), copy.scale(), t) {
                 if out.points.len() >= crate::fx::points::CAP_HARD as usize {
                     return out;
                 }
@@ -1038,22 +1147,25 @@ impl<'a> Art<'a> {
     }
 
     /// The lines the outline's brush runs along for one copy's `placed`
-    /// paths, cut into their dashes. `scale` is how much bigger the copy
-    /// draws, which its dashes grow with.
-    fn stroked(&self, placed: &[BezierPath], scale: f64, t: f64) -> Vec<Vec<(f64, f64)>> {
+    /// paths, cut into their dashes, each with how wide the brush is along
+    /// it — empty for the full width all the way, which is every outline
+    /// nobody has tapered. `scale` is how much bigger the copy draws, which
+    /// its dashes grow with.
+    fn stroked(&self, placed: &[BezierPath], scale: f64, t: f64) -> Vec<Pressed> {
         let item = self.item;
+        let outlined = item.stroke.is_some() && item.stroke_width > 0.0;
         // Dashes cut the outline into pieces, each of which is a brush run
         // of its own. A solid outline is one piece, which is the
         // same single run it always was. An item with no outline has no
         // dashes to cut it.
-        let pattern: Vec<f64> = if item.stroke.is_some() && item.stroke_width > 0.0 {
+        let pattern: Vec<f64> = if outlined {
             item.dash_pattern_at(t).iter().map(|d| d * scale).collect()
         } else {
             Vec::new()
         };
-        placed
+        let lines: Vec<Vec<(f64, f64)>> = placed
             .iter()
-            .flat_map(|path| {
+            .map(|path| {
                 let mut points: Vec<(f64, f64)> = match &self.lines {
                     Some(_) => path.vertices.iter().map(|v| v.pos).collect(),
                     None => flatten_path(path),
@@ -1061,10 +1173,27 @@ impl<'a> Art<'a> {
                 if let (true, Some(&first)) = (self.ring, points.first()) {
                     points.push(first);
                 }
+                points
+            })
+            .collect();
+        // The taper is laid along the whole line before the dashes cut it,
+        // so each dash is as wide as the outline is where it falls.
+        let lines: Vec<Pressed> = match (&item.taper, outlined) {
+            (Some(taper), true) => taper.applied(lines, t),
+            _ => lines.into_iter().map(|l| (l, Vec::new())).collect(),
+        };
+        lines
+            .into_iter()
+            .flat_map(|(points, pressures)| {
                 if pattern.is_empty() {
-                    vec![points]
+                    vec![(points, pressures)]
                 } else {
-                    dashed(&points, &pattern, item.dash_offset.value_at(t) * scale)
+                    dashed(
+                        &points,
+                        &pressures,
+                        &pattern,
+                        item.dash_offset.value_at(t) * scale,
+                    )
                 }
             })
             .collect()
@@ -1260,14 +1389,15 @@ pub fn rasterise_contents(
                 let pieces = art.stroked(&placed, copy.scale(), t);
                 let brushes: Vec<crate::paint::PaintStroke> = pieces
                     .into_iter()
-                    .filter(|p| p.len() >= 2)
-                    .map(|points| crate::paint::PaintStroke {
+                    .filter(|(p, _)| p.len() >= 2)
+                    .map(|(points, pressures)| crate::paint::PaintStroke {
                         id: item.id,
                         name: item.name.clone(),
                         points,
                         // A vector outline is not a gesture: there is no stylus
-                        // behind it and its width is the item's own.
-                        pressures: Vec::new(),
+                        // behind it, and its width is the item's own, narrowed
+                        // along the line by a taper where it has one.
+                        pressures,
                         colour: stroke,
                         width: item.stroke_width * copy.scale(),
                         // A vector outline has a hard edge; the rasteriser keeps
@@ -2066,9 +2196,10 @@ const MAX_DASHES: usize = 4096;
 /// gap, in the polyline's own units), started `offset` along the path.
 ///
 /// The cutting is the same length-measured cut a trim makes, so a dash and a
-/// trim agree about where "ten units along" is.
-fn dashed(points: &[(f64, f64)], pattern: &[f64], offset: f64) -> Vec<Vec<(f64, f64)>> {
-    let whole = || vec![points.to_vec()];
+/// trim agree about where "ten units along" is. `pressures` is cut with the
+/// points, so a dash keeps the width the line had where it falls.
+fn dashed(points: &[(f64, f64)], pressures: &[f64], pattern: &[f64], offset: f64) -> Vec<Pressed> {
+    let whole = || vec![(points.to_vec(), pressures.to_vec())];
     let cycle: f64 = pattern.iter().sum();
     if pattern.is_empty() || cycle <= 0.0 || points.len() < 2 {
         return whole();
@@ -2091,12 +2222,13 @@ fn dashed(points: &[(f64, f64)], pattern: &[f64], offset: f64) -> Vec<Vec<(f64, 
         let end = at + length;
         // Even entries are dashes, odd ones gaps — the SVG and AE convention.
         if i.is_multiple_of(2) && length > 0.0 && end > 0.0 && at < total {
-            let piece = crate::paint::trimmed(
+            let piece = crate::paint::trimmed_with(
                 points,
+                pressures,
                 at.max(0.0) / total * 100.0,
                 end.min(total) / total * 100.0,
             );
-            if piece.len() >= 2 {
+            if piece.0.len() >= 2 {
                 out.push(piece);
             }
         }
@@ -2289,27 +2421,78 @@ mod tests {
     fn the_dashes_are_cut_by_length_and_the_offset_slides_them() {
         // A straight line 100 long: 10 on, 10 off gives five dashes of ten.
         let line: Vec<(f64, f64)> = vec![(0.0, 0.0), (100.0, 0.0)];
-        let pieces = dashed(&line, &[10.0, 10.0], 0.0);
+        let cut = |offset: f64| -> Vec<Vec<(f64, f64)>> {
+            dashed(&line, &[], &[10.0, 10.0], offset)
+                .into_iter()
+                .map(|d| d.0)
+                .collect()
+        };
+        let pieces = cut(0.0);
         assert_eq!(pieces.len(), 5);
         assert_eq!(pieces[0], vec![(0.0, 0.0), (10.0, 0.0)]);
         assert_eq!(pieces[1], vec![(20.0, 0.0), (30.0, 0.0)]);
 
         // An offset of five slides the pattern back along the path, so the
         // first dash is the tail of one that began before the line did.
-        let slid = dashed(&line, &[10.0, 10.0], 5.0);
+        let slid = cut(5.0);
         assert_eq!(slid[0], vec![(0.0, 0.0), (5.0, 0.0)]);
         assert_eq!(slid[1], vec![(15.0, 0.0), (25.0, 0.0)]);
 
         // A whole cycle of offset is no offset at all.
-        assert_eq!(dashed(&line, &[10.0, 10.0], 20.0), pieces);
+        assert_eq!(cut(20.0), pieces);
     }
 
     #[test]
     fn a_pattern_too_fine_to_see_is_drawn_solid_rather_than_cut_to_pieces() {
         let line: Vec<(f64, f64)> = vec![(0.0, 0.0), (1_000_000.0, 0.0)];
-        let pieces = dashed(&line, &[1.0, 1.0], 0.0);
+        let pieces = dashed(&line, &[], &[1.0, 1.0], 0.0);
         assert_eq!(pieces.len(), 1, "one solid piece, not half a million");
-        assert_eq!(pieces[0], line);
+        assert_eq!(pieces[0].0, line);
+    }
+
+    /// A tapered outline is full width in the middle and narrows to a point
+    /// at each end, a point and not nothing. Dashed, each dash keeps the
+    /// width the outline has where it falls.
+    #[test]
+    fn a_tapered_stroke_narrows_to_a_point_and_its_dashes_follow() {
+        let end = |x: f64| Vertex {
+            pos: (x, 20.5),
+            tan_in: (0.0, 0.0),
+            tan_out: (0.0, 0.0),
+        };
+        let mut it = item(BezierPath {
+            vertices: vec![end(10.0), end(90.0)],
+            closed: false,
+        });
+        it.fill = None;
+        it.stroke = Some(LinearColour([0.0, 1.0, 0.0, 1.0]));
+        it.stroke_width = 12.0;
+        it.taper = Some(Taper {
+            start: Property::fixed(100.0),
+            end: Property::fixed(100.0),
+            start_length: Property::fixed(50.0),
+            end_length: Property::fixed(50.0),
+            ease: Property::zero(),
+            scope: 0,
+        });
+        let wide =
+            |rgba: &[u8], x: u32| (0..40).filter(|&y| alpha_at(rgba, 100, x, y) > 128).count();
+        let rgba = rasterise_contents(&[it.clone()], 100, 40, 0.0, 0.0, 100.0, 40.0, 0.0);
+        assert!(wide(&rgba, 50) >= 11, "full width in the middle");
+        assert!(
+            wide(&rgba, 20) < wide(&rgba, 35) && wide(&rgba, 35) < wide(&rgba, 50),
+            "narrower towards the start"
+        );
+        assert!(alpha_at(&rgba, 100, 11, 20) > 0, "a point at the very end");
+        assert_eq!(wide(&rgba, 5), 0, "and nothing past it");
+
+        it.dashes = vec![Property::fixed(10.0), Property::fixed(10.0)];
+        let rgba = rasterise_contents(&[it], 100, 40, 0.0, 0.0, 100.0, 40.0, 0.0);
+        assert_eq!(wide(&rgba, 25), 0, "a gap");
+        assert!(
+            wide(&rgba, 15) > 0 && wide(&rgba, 15) < wide(&rgba, 45),
+            "a dash near the end is thinner than one near the middle"
+        );
     }
 
     /// A linear ramp runs from the fill at one point to the gradient colour at
