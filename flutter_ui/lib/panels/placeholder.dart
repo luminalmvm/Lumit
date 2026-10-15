@@ -11,11 +11,15 @@ class PlaceholderPanel extends StatelessWidget {
   final String title;
   final String hint;
 
+  /// A button under the hint, when there is something to do about it.
+  final Widget? action;
+
   const PlaceholderPanel({
     super.key,
     required this.icon,
     required this.title,
     required this.hint,
+    this.action,
   });
 
   @override
@@ -33,6 +37,10 @@ class PlaceholderPanel extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 220),
             child: Text(hint, style: t.small, textAlign: TextAlign.center),
           ),
+          if (action case final action?) ...[
+            const SizedBox(height: 8),
+            action,
+          ],
         ],
       ),
     );
