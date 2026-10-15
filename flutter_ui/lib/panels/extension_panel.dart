@@ -16,6 +16,7 @@ import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../shell/share_dialog_frb.dart';
 import '../state/extension_host.dart';
+import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../widgets/controls.dart';
 import 'extension_page.dart';
@@ -101,6 +102,7 @@ class _ExtensionViewState extends State<ExtensionView>
       },
       onUrl: (url) {
         final strayed = !url.startsWith('$_origin/');
+        if (strayed) _host.clearStatus();
         if (strayed != _strayed && mounted) setState(() => _strayed = strayed);
       },
       onReady: () {
@@ -140,6 +142,14 @@ class _ExtensionViewState extends State<ExtensionView>
         icon: LumitIcon.link,
         title: l10n.extensionFailedTitle,
         hint: why,
+        action: why == l10n.extensionNoRuntime
+            ? HouseButton(
+                key: const ValueKey('extension-get-runtime'),
+                small: true,
+                onPressed: () => unawaited(openExternalLink(webView2Url)),
+                child: Text(l10n.extensionGetRuntime, style: t.small),
+              )
+            : null,
       );
     }
     return Column(

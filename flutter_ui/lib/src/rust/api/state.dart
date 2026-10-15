@@ -850,16 +850,25 @@ class ScopedChange {
   /// footage file on disk.
   final bool items;
 
+  /// An edit made on this machine. False for one from someone else in a
+  /// shared project, and for anything that is not an edit at all.
+  final bool local;
+
   const ScopedChange({
     required this.project,
     this.item,
     this.layer,
     required this.items,
+    required this.local,
   });
 
   @override
   int get hashCode =>
-      project.hashCode ^ item.hashCode ^ layer.hashCode ^ items.hashCode;
+      project.hashCode ^
+      item.hashCode ^
+      layer.hashCode ^
+      items.hashCode ^
+      local.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -869,7 +878,8 @@ class ScopedChange {
           project == other.project &&
           item == other.item &&
           layer == other.layer &&
-          items == other.items;
+          items == other.items &&
+          local == other.local;
 }
 
 @freezed

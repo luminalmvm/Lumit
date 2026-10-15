@@ -145,6 +145,9 @@ pub struct ScopedChange {
     /// everything else, so tweaking a layer value no longer re-probes every
     /// footage file on disk.
     pub items: bool,
+    /// An edit made on this machine. False for one from someone else in a
+    /// shared project, and for anything that is not an edit at all.
+    pub local: bool,
 }
 
 /// One Linux graphics device node, as the kernel numbers it: what `stat()`
@@ -896,6 +899,7 @@ impl LumitBridgeState {
                 .zip(layer)
                 .map(|(c, l)| LayerReference::new(project_id, c, l)),
             items,
+            local: document_change.local,
         };
 
         let Ok(streams) = STREAMS.read() else {

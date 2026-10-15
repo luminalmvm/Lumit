@@ -16771,6 +16771,10 @@
   "@extensionNoRuntime": {
     "description": "Hint in an extension's dock panel on a Windows machine without the WebView2 runtime. WebView2 is a product name."
   },
+  "extensionGetRuntime": "Get WebView2",
+  "@extensionGetRuntime": {
+    "description": "Button under the hint in an extension's dock panel on a Windows machine without the WebView2 runtime. Opens Microsoft's WebView2 download page in the browser. WebView2 is a product name."
+  },
   "extensionStrayed": "This panel has left the extension's pages, so it can't use Lumit.",
   "@extensionStrayed": {
     "description": "Warning strip at the top of an extension's dock panel when the page inside has gone to some other website."

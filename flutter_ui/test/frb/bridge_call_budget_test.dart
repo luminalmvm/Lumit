@@ -1596,6 +1596,7 @@ void main() {
         item: ItemReference.composition(comp),
         layer: layers.first,
         items: false,
+        local: true,
       ));
       await tester.pump();
       await settleFrb(tester, minRounds: 4, maxRounds: 8);

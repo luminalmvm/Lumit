@@ -83,9 +83,12 @@ The page cannot open a window.
 
 On Linux the page is a still picture while a menu, a tooltip or a dialogue is open.
 
-On macOS and Linux a page can be inspected when Lumit is started with the environment
-variable `LUMIT_EXTENSION_DEVTOOLS=1`: from Safari's **Develop** menu, and from **Inspect
-Element** on the page's own menu.
+A page can be inspected when Lumit is started with the environment variable
+`LUMIT_EXTENSION_DEVTOOLS=1`: from Safari's **Develop** menu on macOS, from **Inspect
+Element** on the page's own menu on Linux, and on Windows from `edge://inspect` in Microsoft
+Edge, which finds it at `localhost:9222`. A port number in place of `1` is used instead of
+9222. The port takes connections from this computer only, and any program on it can use
+the page through it.
 
 ## Permissions and calls
 
@@ -93,9 +96,10 @@ Element** on the page's own menu.
 | --- | --- | --- |
 | none | `app.info` | The API version, Lumit's version, and the extension's id, version, permissions and hosts. |
 | none | `app.notice {text}` | A line on the bottom strip, after the extension's name. |
+| none | `app.status {text}` | A line that stays on the bottom strip, after the extension's name, until `text` is `null`. One line of at most 80 characters, shown while Lumit has no notice there. It goes when the page loads again or leaves, or the panel closes. |
 | none | `app.openExternal {url}` | Opens an `https` address on one of `hosts` in the browser. |
 | none | `net.fetch {url, method, headers, body}` | Fetches an `https` address on one of `hosts`. Answers `{status, headers, body}`. A redirect is returned, not followed. The answer is at most 8 MB of text. |
-| `project` | `project.info` | `{open, name, saved, dirty}`. `name` is the file's name without its folder. |
+| `project` | `project.info` | `{open, name, id, saved, dirty}`. `name` is the file's name without its folder. `id` is the project's own and stays when the file is renamed or moved. A copy of the file has the same `id`. A guest's copy of a shared project, or of a project kept online, has an `id` of its own. |
 | `export` | `export.state` | `{state}` as `idle`, `running` with `frame` and `total`, `done` with `path`, or `failed` with `error`. |
 | `export` | `export.fingerprint` | `{path, bytes, sha256}` of the file the last export made. |
 | `import` | `import.files {paths}` | Imports the files into the open project. |
@@ -114,8 +118,8 @@ An extension never shares or joins by itself: the person presses the button in t
 | Permission | Event | When |
 | --- | --- | --- |
 | `project` | `project.changed` | A project opens, saves or closes. Carries `project.info`. |
-| `activity` | `activity.edit` | An edit is made. `{step, at}`: the step's name in the History list and the time in milliseconds. Edits within 0.4 s arrive as one. |
-| `activity` | `activity.focus` | Lumit becomes the front window or stops being it. `{focused}`. |
+| `activity` | `activity.edit` | An edit, undo or redo is made on this computer. Edits from others in a shared project do not count. `{step, at}`: the step's name in the History list and the time in milliseconds. Edits within 0.4 s arrive as one. |
+| `activity` | `activity.focus` | Lumit becomes the front window or stops being it. A press in the page leaves Lumit in front. `{focused}`. |
 | `export` | `export.started`, `export.progress`, `export.finished`, `export.failed` | Carry `export.state`. |
 | `import` | `import.added` | A watched file was imported. `{path}`. |
 | `share` | `share.changed` | Sharing starts or stops, someone joins or leaves, or the host is lost or found. Carries `share.state`. |

@@ -31,6 +31,11 @@ const String lumitReleasesUrl = 'https://lumitlab.com/releases/';
 const String lumitPrivacyUrl = 'https://lumitlab.com/privacy/';
 const String lumitTermsUrl = 'https://lumitlab.com/terms/';
 
+/// Microsoft's download page for WebView2, which extensions need on
+/// Windows.
+const String webView2Url =
+    'https://developer.microsoft.com/microsoft-edge/webview2/#download';
+
 /// How Lumit opens a web page, and the seam a test replaces.
 ///
 /// A top-level function rather than a parameter threaded through every caller:

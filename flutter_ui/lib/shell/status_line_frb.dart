@@ -698,13 +698,32 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// them becomes a count.
   static const int _peopleMarks = 5;
 
+  /// The lines extensions keep, while Lumit has no notice of its own here.
+  Widget _extensionStatus(LumitTheme t, LumitState state) =>
+      ValueListenableBuilder<Map<String, String>>(
+        valueListenable: state.extensionStatus,
+        builder: (context, lines, _) => lines.isEmpty
+            ? const SizedBox.shrink()
+            : _bubble(
+                t,
+                Text(
+                  lines.values.join('  ·  '),
+                  key: const ValueKey('status-extension'),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.small.copyWith(color: t.textMuted),
+                ),
+              ),
+      );
+
   /// The latest notice, with the close button every notice carries. A click
   /// on its words lists the ones before it.
   Widget _notice(LumitTheme t, LumitState state) {
     return ValueListenableBuilder<LumitNotice?>(
       valueListenable: state.notice,
       builder: (context, notice, _) {
-        if (notice == null) return const SizedBox.shrink();
+        if (notice == null) return _extensionStatus(t, state);
         final motion = ThemeScope.of(context).motion;
         // Each notice arrives: keyed by the notice itself, so a new one
         // taking the line over plays in again rather than swapping its words.

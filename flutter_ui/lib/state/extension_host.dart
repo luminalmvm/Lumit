@@ -12,10 +12,12 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data' show BytesBuilder;
 
 import 'package:crypto/crypto.dart';
+import 'package:ffi/ffi.dart' show calloc;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
@@ -48,6 +50,12 @@ const int _fetchLimit = 8 << 20;
 /// How often the export and a watched folder are looked at.
 const Duration _exportBeat = Duration(milliseconds: 500);
 const Duration _watchBeat = Duration(seconds: 2);
+
+/// The most often a page's line on the bottom strip changes.
+const Duration _statusBeat = Duration(milliseconds: 250);
+
+/// How often Windows is asked which window is in front.
+const Duration _focusBeat = Duration(milliseconds: 500);
 
 /// How long after an edit the page is told, so a drag is one event.
 const Duration _editSettle = Duration(milliseconds: 400);
@@ -104,6 +112,10 @@ class ExtensionHost with WidgetsBindingObserver {
   Timer? _editTimer;
   Timer? _exportTimer;
   Timer? _watchTimer;
+  Timer? _focusTimer;
+  bool _focusWas = false;
+  Timer? _statusTimer;
+  String? _statusWanted;
   String _projectWas = '';
   String _shareWas = '';
   BridgeExportState _exportWas = const BridgeExportState.idle();
@@ -126,9 +138,18 @@ class ExtensionHost with WidgetsBindingObserver {
     _projectWas = _projectKey();
     _shareWas = _shareKey();
     if (_allowed(BridgeExtensionPermission.activity)) {
-      _edits = app.onChange.listen((_) {
+      // Only edits made here. A partner's in a shared project is their work.
+      _edits = app.onChange.listen((change) {
+        if (!change.local) return;
         _editTimer ??= Timer(_editSettle, _tellEdit);
       });
+      _focusWas = _focused();
+      // Flutter on Windows takes a press in the page for Lumit going
+      // inactive, and says nothing when Lumit is left from there. So there
+      // the system is asked instead.
+      if (Platform.isWindows) {
+        _focusTimer = Timer.periodic(_focusBeat, (_) => _tellFocus());
+      }
     }
     if (_allowed(BridgeExtensionPermission.export_)) {
       _exportWas = exportPoll();
@@ -144,7 +165,26 @@ class ExtensionHost with WidgetsBindingObserver {
     _editTimer?.cancel();
     _exportTimer?.cancel();
     _watchTimer?.cancel();
+    _focusTimer?.cancel();
+    clearStatus();
     post = null;
+  }
+
+  /// Take this extension's line off the bottom strip now.
+  void clearStatus() {
+    _statusTimer?.cancel();
+    _statusTimer = null;
+    app.setExtensionStatus(extension.id, null);
+  }
+
+  /// Put [line] on the bottom strip, or take it off for null, a few times
+  /// a second at most.
+  void _status(String? line) {
+    _statusWanted = line == null ? null : '${_oneLine(extension.name)}: $line';
+    _statusTimer ??= Timer(_statusBeat, () {
+      _statusTimer = null;
+      app.setExtensionStatus(extension.id, _statusWanted);
+    });
   }
 
   void _emit(String event, [Map<String, Object?> data = const {}]) =>
@@ -153,17 +193,29 @@ class ExtensionHost with WidgetsBindingObserver {
   // --- What the page is told --------------------------------------------
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  void didChangeAppLifecycleState(AppLifecycleState state) => _tellFocus();
+
+  /// Whether Lumit is the app in front.
+  bool _focused() => Platform.isWindows
+      ? _lumitInFront()
+      : WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+
+  void _tellFocus() {
     if (!_allowed(BridgeExtensionPermission.activity)) return;
-    _emit('activity.focus', {'focused': state == AppLifecycleState.resumed});
+    final focused = _focused();
+    if (focused == _focusWas) return;
+    _focusWas = focused;
+    _emit('activity.focus', {'focused': focused});
   }
 
   Map<String, Object?> _projectInfo() {
     final project = app.project;
     String? path;
+    String? id;
     var dirty = false;
     try {
       path = project?.path();
+      id = project?.shareId();
       dirty = project?.isDirty() ?? false;
     } catch (_) {
       // The project closed between the question and the answer.
@@ -173,6 +225,8 @@ class ExtensionHost with WidgetsBindingObserver {
       'open': project != null,
       // The file's name and never where it is.
       'name': file,
+      // The project's own, which a rename or a move keeps.
+      'id': id,
       'saved': path != null,
       'dirty': dirty,
     };
@@ -376,6 +430,14 @@ class ExtensionHost with WidgetsBindingObserver {
       case 'app.notice':
         app.postNotice('${extension.name}: ${_text(params, 'text')}');
         return null;
+      case 'app.status':
+        final text = params['text'];
+        if (text != null && text is! String) {
+          throw const ExtensionRefusal('bad-params', 'text is not a string');
+        }
+        final line = text is String ? _oneLine(text) : '';
+        _status(line.isEmpty ? null : line);
+        return null;
       case 'app.openExternal':
         final url = _allowedUrl(_text(params, 'url'));
         return launchInDefaultBrowser(url.toString());
@@ -545,6 +607,48 @@ class ExtensionHost with WidgetsBindingObserver {
   }
 }
 
+/// [text] as one plain line of 80 characters at most. Control and direction
+/// characters go, so it cannot break the line or turn round the name in
+/// front of it.
+String _oneLine(String text) {
+  final plain = text
+      .replaceAll(
+          RegExp('[\\x00-\\x1f\\x7f-\\x9f\\u200b-\\u200f\\u2028-\\u202e'
+              '\\u2066-\\u2069\\ufeff]'),
+          ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  final runes = plain.runes;
+  return runes.length <= 80
+      ? plain
+      : String.fromCharCodes(runes.take(80)).trimRight();
+}
+
+typedef _ForegroundC = IntPtr Function();
+typedef _ForegroundD = int Function();
+typedef _OwnerC = Uint32 Function(IntPtr window, Pointer<Uint32> process);
+typedef _OwnerD = int Function(int window, Pointer<Uint32> process);
+
+final DynamicLibrary _user32 = DynamicLibrary.open('user32.dll');
+final _foreground =
+    _user32.lookupFunction<_ForegroundC, _ForegroundD>('GetForegroundWindow');
+final _owner =
+    _user32.lookupFunction<_OwnerC, _OwnerD>('GetWindowThreadProcessId');
+
+/// Whether the window in front is one of Lumit's, on Windows. A page is
+/// inside Lumit's window, so a press in one leaves it in front.
+bool _lumitInFront() {
+  final window = _foreground();
+  if (window == 0) return false;
+  final process = calloc<Uint32>();
+  try {
+    _owner(window, process);
+    return process.value == pid;
+  } finally {
+    calloc.free(process);
+  }
+}
+
 /// What a page is given before any of its own script runs: `window.lumit`,
 /// with `call` to ask and `on` to listen. [origin] is the page's own, and a
 /// page anywhere else is given nothing.
@@ -626,6 +730,8 @@ const String _bootstrap = r'''
       return () => listeners.get(event).delete(listener);
     },
   });
+  // A new page starts with no line on the bottom strip.
+  send({ id: 0, method: 'app.status', params: { text: null } });
   window.dispatchEvent(new Event('lumitready'));
 })();
 ''';

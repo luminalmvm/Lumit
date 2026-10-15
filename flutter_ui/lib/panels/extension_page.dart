@@ -74,9 +74,18 @@ class ExtensionPage extends StatelessWidget {
 }
 
 /// Set to 1 to let the page be inspected: Safari's Develop menu on macOS,
-/// Inspect Element on the page's own menu on Linux.
-bool get _inspectable =>
-    Platform.environment['LUMIT_EXTENSION_DEVTOOLS'] == '1';
+/// Inspect Element on the page's own menu on Linux, and on Windows a
+/// debugging port on this machine only, 9222 or the port the variable
+/// names in place of 1. Any program here can drive the page through that
+/// port, so it is never open without the variable.
+int? get _devtoolsPort {
+  final value = Platform.environment['LUMIT_EXTENSION_DEVTOOLS'];
+  if (value == '1') return 9222;
+  final port = int.tryParse(value ?? '');
+  return port != null && port > 1023 && port < 65536 ? port : null;
+}
+
+bool get _inspectable => _devtoolsPort != null;
 
 /// A key for one WebKit page, which nothing could guess.
 String _newKey() {
@@ -95,9 +104,13 @@ String _newKey() {
 Future<void>? _environment;
 
 Future<void> _ensureEnvironment() => _environment ??= () async {
+      final port = _devtoolsPort;
       try {
         await WebviewController.initializeEnvironment(
-            userDataPath: extensionDataDir(id: 'webview'));
+            userDataPath: extensionDataDir(id: 'webview'),
+            // WebView2 listens on 127.0.0.1 alone.
+            additionalArguments:
+                port == null ? null : '--remote-debugging-port=$port');
       } on PlatformException {
         // Made already, by a panel before a hot restart.
       }
