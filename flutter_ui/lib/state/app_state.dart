@@ -144,6 +144,18 @@ class LumitState extends ChangeNotifier {
   /// feed, which is what the egui shell's `app.notice` was too.
   final ValueNotifier<LumitNotice?> notice = ValueNotifier(null);
 
+  /// The line each extension keeps on the bottom strip, by its id, with its
+  /// name in front. Shown while there is no notice. Never saved.
+  final ValueNotifier<Map<String, String>> extensionStatus =
+      ValueNotifier(const {});
+
+  void setExtensionStatus(String id, String? line) {
+    if (extensionStatus.value[id] == line) return;
+    final now = {...extensionStatus.value}..remove(id);
+    if (line != null) now[id] = line;
+    extensionStatus.value = now;
+  }
+
   /// The last twenty notices, newest first: what a click on the status bar's
   /// notice lists. Held while Lumit is open and never written anywhere.
   final List<LumitNotice> recentNotices = [];

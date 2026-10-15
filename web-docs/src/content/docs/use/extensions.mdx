@@ -96,6 +96,7 @@ the page through it.
 | --- | --- | --- |
 | none | `app.info` | The API version, Lumit's version, and the extension's id, version, permissions and hosts. |
 | none | `app.notice {text}` | A line on the bottom strip, after the extension's name. |
+| none | `app.status {text}` | A line that stays on the bottom strip, after the extension's name, until `text` is `null`. One line of at most 80 characters, shown while Lumit has no notice there. It goes when the page loads again or leaves, or the panel closes. |
 | none | `app.openExternal {url}` | Opens an `https` address on one of `hosts` in the browser. |
 | none | `net.fetch {url, method, headers, body}` | Fetches an `https` address on one of `hosts`. Answers `{status, headers, body}`. A redirect is returned, not followed. The answer is at most 8 MB of text. |
 | `project` | `project.info` | `{open, name, id, saved, dirty}`. `name` is the file's name without its folder. `id` is the project's own and stays when the file is renamed or moved. A copy of the file has the same `id`. A guest's copy of a shared project, or of a project kept online, has an `id` of its own. |

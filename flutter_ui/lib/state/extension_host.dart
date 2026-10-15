@@ -51,6 +51,9 @@ const int _fetchLimit = 8 << 20;
 const Duration _exportBeat = Duration(milliseconds: 500);
 const Duration _watchBeat = Duration(seconds: 2);
 
+/// The most often a page's line on the bottom strip changes.
+const Duration _statusBeat = Duration(milliseconds: 250);
+
 /// How often Windows is asked which window is in front.
 const Duration _focusBeat = Duration(milliseconds: 500);
 
@@ -111,6 +114,8 @@ class ExtensionHost with WidgetsBindingObserver {
   Timer? _watchTimer;
   Timer? _focusTimer;
   bool _focusWas = false;
+  Timer? _statusTimer;
+  String? _statusWanted;
   String _projectWas = '';
   String _shareWas = '';
   BridgeExportState _exportWas = const BridgeExportState.idle();
@@ -161,7 +166,25 @@ class ExtensionHost with WidgetsBindingObserver {
     _exportTimer?.cancel();
     _watchTimer?.cancel();
     _focusTimer?.cancel();
+    clearStatus();
     post = null;
+  }
+
+  /// Take this extension's line off the bottom strip now.
+  void clearStatus() {
+    _statusTimer?.cancel();
+    _statusTimer = null;
+    app.setExtensionStatus(extension.id, null);
+  }
+
+  /// Put [line] on the bottom strip, or take it off for null, a few times
+  /// a second at most.
+  void _status(String? line) {
+    _statusWanted = line == null ? null : '${_oneLine(extension.name)}: $line';
+    _statusTimer ??= Timer(_statusBeat, () {
+      _statusTimer = null;
+      app.setExtensionStatus(extension.id, _statusWanted);
+    });
   }
 
   void _emit(String event, [Map<String, Object?> data = const {}]) =>
@@ -407,6 +430,14 @@ class ExtensionHost with WidgetsBindingObserver {
       case 'app.notice':
         app.postNotice('${extension.name}: ${_text(params, 'text')}');
         return null;
+      case 'app.status':
+        final text = params['text'];
+        if (text != null && text is! String) {
+          throw const ExtensionRefusal('bad-params', 'text is not a string');
+        }
+        final line = text is String ? _oneLine(text) : '';
+        _status(line.isEmpty ? null : line);
+        return null;
       case 'app.openExternal':
         final url = _allowedUrl(_text(params, 'url'));
         return launchInDefaultBrowser(url.toString());
@@ -576,6 +607,23 @@ class ExtensionHost with WidgetsBindingObserver {
   }
 }
 
+/// [text] as one plain line of 80 characters at most. Control and direction
+/// characters go, so it cannot break the line or turn round the name in
+/// front of it.
+String _oneLine(String text) {
+  final plain = text
+      .replaceAll(
+          RegExp('[\\x00-\\x1f\\x7f-\\x9f\\u200b-\\u200f\\u2028-\\u202e'
+              '\\u2066-\\u2069\\ufeff]'),
+          ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  final runes = plain.runes;
+  return runes.length <= 80
+      ? plain
+      : String.fromCharCodes(runes.take(80)).trimRight();
+}
+
 typedef _ForegroundC = IntPtr Function();
 typedef _ForegroundD = int Function();
 typedef _OwnerC = Uint32 Function(IntPtr window, Pointer<Uint32> process);
@@ -682,6 +730,8 @@ const String _bootstrap = r'''
       return () => listeners.get(event).delete(listener);
     },
   });
+  // A new page starts with no line on the bottom strip.
+  send({ id: 0, method: 'app.status', params: { text: null } });
   window.dispatchEvent(new Event('lumitready'));
 })();
 ''';
