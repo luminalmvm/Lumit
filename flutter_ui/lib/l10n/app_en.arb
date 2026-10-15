@@ -3407,6 +3407,74 @@
   "@fxEmitRate": {
     "description": "Effect controls — a control on Particulate: how many particles are born each second."
   },
+  "fxBurst": "Burst",
+  "@fxBurst": {
+    "description": "Effect controls — a control on Particulate: when extra particles burst out beside the steady flow."
+  },
+  "fxBurstCount": "Burst count",
+  "@fxBurstCount": {
+    "description": "Effect controls — a control on Particulate: how many particles one burst throws out."
+  },
+  "fxBurstInterval": "Burst interval",
+  "@fxBurstInterval": {
+    "description": "Effect controls — a control on Particulate: how many frames apart the bursts are."
+  },
+  "fxEveryNFrames": "Every N frames",
+  "@fxEveryNFrames": {
+    "description": "Effect controls — a Burst setting on Particulate: a burst every few frames, as many as Burst interval says."
+  },
+  "fxOnTrigger": "On trigger",
+  "@fxOnTrigger": {
+    "description": "Effect controls — a Burst setting on Particulate: a burst each time the Trigger control goes up, for example on a beat."
+  },
+  "fxOnceAtStart": "Once at start",
+  "@fxOnceAtStart": {
+    "description": "Effect controls — a Burst setting on Particulate: one burst on the layer's first frame."
+  },
+  "fxBursts": "Bursts",
+  "@fxBursts": {
+    "description": "Effect controls — a group heading on Particulate, over the controls for extra particles that burst out beside the steady flow."
+  },
+  "fxEdgeMargin": "Edge margin",
+  "@fxEdgeMargin": {
+    "description": "Effect controls — a control on Particulate: how far past the edge of the frame a particle goes before it is killed or wrapped, in pixels."
+  },
+  "fxKill": "Kill",
+  "@fxKill": {
+    "description": "Effect controls — an Edge setting on Particulate: a particle dies the first time it leaves the frame."
+  },
+  "fxVariation": "Variation",
+  "@fxVariation": {
+    "description": "Effect controls — a group heading on Particulate, over the controls choosing what changes a particle's size, opacity and colour."
+  },
+  "fxSizeBy": "Size by",
+  "@fxSizeBy": {
+    "description": "Effect controls — a control on Particulate: whether Size over life follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxOpacityBy": "Opacity by",
+  "@fxOpacityBy": {
+    "description": "Effect controls — a control on Particulate: whether Opacity over life follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxColourBy": "Colour by",
+  "@fxColourBy": {
+    "description": "Effect controls — a control on Particulate: whether the blend from Colour to End colour follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxSpeedMin": "Speed min",
+  "@fxSpeedMin": {
+    "description": "Effect controls — a control on Particulate: the speed, in pixels per second, that counts as the start of the change when a control is set to follow speed."
+  },
+  "fxSpeedMax": "Speed max",
+  "@fxSpeedMax": {
+    "description": "Effect controls — a control on Particulate: the speed, in pixels per second, that counts as the end of the change when a control is set to follow speed."
+  },
+  "fxDensityLayer": "Density layer",
+  "@fxDensityLayer": {
+    "description": "Effect controls — a control on Particulate: a layer whose bright parts are where particles are born."
+  },
+  "fxParticleBlend": "Particle blend",
+  "@fxParticleBlend": {
+    "description": "Effect controls — a control on Particulate: the blend mode particles use with each other where they overlap, from the same list as a layer's blend mode."
+  },
   "fxEmitter": "Emitter",
   "@fxEmitter": {
     "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."

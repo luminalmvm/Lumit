@@ -137,6 +137,10 @@ Broadcast safe
 Brush hardness
 Brush size
 Bulge
+Burst
+Burst count
+Burst interval
+Bursts
 Bypass
 Camera track
 Cancel
@@ -185,6 +189,7 @@ Colour A
 Colour B
 Colour balance
 Colour burn
+Colour by
 Colour control
 Colour correction
 Colour cycle
@@ -252,6 +257,7 @@ Deep red
 Deep yellow
 Delay
 Density
+Density layer
 Depth
 Depth Anything V2 Small
 Depth channel
@@ -304,6 +310,7 @@ Echo
 Echoes
 Edge
 Edge colour
+Edge margin
 Edge sharpness
 Edge type
 Edges
@@ -345,6 +352,7 @@ End y
 Envelope
 Even
 Events
+Every N frames
 Every Nth beat
 Every layer
 Every nth
@@ -521,6 +529,7 @@ Keep in picked
 Keep inside
 Key out safe
 Key out unsafe
+Kill
 Knee
 LUT
 Label points
@@ -681,9 +690,12 @@ Offset z
 Omni
 On original
 On transparent
+On trigger
+Once at start
 One point
 Opacity
 Opacity %
+Opacity by
 Opacity over life
 Open graph
 Operate on alpha
@@ -716,6 +728,7 @@ Padding y
 Paint style
 Parametric EQ
 Particle
+Particle blend
 Particulate
 Path
 Path overlap
@@ -922,6 +935,7 @@ Sine
 Single
 Single layer, straw
 Size
+Size by
 Size from width
 Size jitter
 Size over life
@@ -954,6 +968,8 @@ Spacing z
 Span mode
 Speed
 Speed jitter
+Speed max
+Speed min
 Spherize
 Spiky
 Spin
@@ -1096,6 +1112,7 @@ Use point size
 Use source colour
 Utility
 Value
+Variation
 Vary points
 Vector scale
 Vegas

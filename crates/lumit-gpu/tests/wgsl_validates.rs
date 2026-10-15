@@ -19,6 +19,8 @@ use std::path::Path;
 const NOISE_CORE: &str = include_str!("../src/fx_noise_core.wgsl");
 /// The shared OCIO sampler, exactly as both its consumers prepend it.
 const OCIO_SAMPLE: &str = include_str!("../src/ocio_sample.wgsl");
+/// The layer blend modes' maths, exactly as its consumers prepend it.
+const BLEND_CORE: &str = include_str!("../src/fx_blend_core.wgsl");
 
 #[test]
 fn every_wgsl_kernel_parses_and_validates() {
@@ -48,7 +50,10 @@ fn every_wgsl_kernel_parses_and_validates() {
         // module (docs/08 §3.37, §3.38). So it is validated exactly as the engine
         // compiles it — as part of each consumer — rather than on its own, where
         // it has no entry point and its consumers have no `nc_fractal`.
-        if name == "fx_noise_core.wgsl" || name == "ocio_sample.wgsl" {
+        if name == "fx_noise_core.wgsl"
+            || name == "ocio_sample.wgsl"
+            || name == "fx_blend_core.wgsl"
+        {
             continue;
         }
         // Any `nc_` name means this kernel is one of the core's consumers —
@@ -57,6 +62,12 @@ fn every_wgsl_kernel_parses_and_validates() {
         // it alone and failed on an unknown identifier.
         let source = if source.contains("nc_") {
             format!("{NOISE_CORE}{source}")
+        } else {
+            source
+        };
+        // The blend modes' maths, prepended to the two kernels that call it.
+        let source = if source.contains("blend_pixel(") {
+            format!("{BLEND_CORE}{source}")
         } else {
             source
         };

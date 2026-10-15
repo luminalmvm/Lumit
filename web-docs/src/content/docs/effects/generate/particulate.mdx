@@ -33,6 +33,7 @@ A particle system.
 | **Emitter angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Follow** | Dropdown | Mask · Shape | Mask | - |
 | **Mask path** | Masks | This layer's masks | First mask | - |
+| **Density layer** | Layer | Any layer in the composition | None | - |
 | **Emit rate** | Slider | 0 to 1000; higher | 150 | - |
 | **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | -90° | Degrees |
 | **Direction z** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
@@ -40,6 +41,10 @@ A particle system.
 | **Spread z** | Slider | 0 to 180; up to 360 | 0 | Degrees |
 | **Initial speed** | Slider | 0 to 2000; higher | 90 | Pixels at composition size |
 | **Speed jitter** | Slider | 0 to 100 | 50 | Per cent |
+| **Burst** | Dropdown | Off · Once at start · Every N frames · On trigger | Off | - |
+| **Burst count** | Slider | 0 to 1000; up to 1000000 | 100 | - |
+| **Burst interval** | Slider | 1 to 120; higher | 24 | Frames |
+| **Trigger** | Slider | 0 to 1; any value by typing | 0 | - |
 | **Life** | Slider | 0.1 to 10; down to 0 and higher | 2 | Seconds |
 | **Life jitter** | Slider | 0 to 100 | 30 | Per cent |
 | **Size** | Slider | 0 to 200; higher | 4 | Pixels at composition size |
@@ -52,6 +57,11 @@ A particle system.
 | **Rotation jitter** | Slider | 0 to 360 | 360 | Degrees |
 | **Spin** | Slider | -720 to 720; any value by typing | 0 | Degrees |
 | **Align to motion** | Checkbox | On or off | Off | - |
+| **Size by** | Dropdown | Age · Speed · Random | Age | - |
+| **Opacity by** | Dropdown | Age · Speed · Random | Age | - |
+| **Colour by** | Dropdown | Age · Speed · Random | Age | - |
+| **Speed min** | Slider | 0 to 2000; higher | 0 | Pixels at composition size |
+| **Speed max** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
 | **Gravity** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **Wind x** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **Wind y** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
@@ -60,10 +70,13 @@ A particle system.
 | **Turbulence amount** | Slider | 0 to 500; higher | 40 | Pixels at composition size |
 | **Turbulence scale** | Slider | 10 to 1000; higher | 200 | Pixels at composition size |
 | **Turbulence speed** | Slider | 0 to 5; higher | 0.3 | - |
+| **Edge** | Dropdown | None · Kill · Wrap | None | - |
+| **Edge margin** | Slider | 0 to 500; higher | 20 | Pixels at composition size |
 | **Mode** | Dropdown | Disc · Sprite · Streak | Disc | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Sprite layer** | Layer | Any layer in the composition | None | - |
 | **Streak length** | Slider | 0 to 0.1; higher | 0.02 | Seconds |
+| **Particle blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 | **Max particles** | Slider, whole numbers | 1 to 200000; up to 1000000 | 20000 | - |
 | **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
@@ -74,13 +87,20 @@ A particle system.
 
 In the Effect Controls panel:
 
-- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Density layer**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
+- **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
-- **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Max particles**, **Seed**.
+- **Edges** groups **Edge**, **Edge margin**.
+- **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**, **Seed**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
 - **Streak length** is editable while **Mode** is set to Streak.
+- **Burst count** is editable while **Burst** is anything but Off.
+- **Burst interval** is editable while **Burst** is set to Every N frames.
+- **Trigger** is editable while **Burst** is set to On trigger.
+- **Edge margin** is editable while **Edge** is anything but None.
 - **Mask path** is editable while **Follow** is anything but Shape.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
@@ -100,6 +120,11 @@ The **Emitter** group, where particles come from and travel:
   and dashes as drawn, one line after another, repeater copies included. On any other layer
   Shape emits nothing.
 - **Mask path**: which of the layer's masks particles are emitted from.
+- **Density layer**: a layer whose brightness weights where particles are born inside the
+  emitter. A birth with nowhere bright enough to go is skipped. While it is set, the
+  points effects below Particulate on the same layer can read its particles, and
+  [Points sample](/effects/drivers/points-sample/) and
+  [Layer points](/effects/drivers/layer-points/) cannot.
 - **Emit rate**: new particles per second.
 - **Direction**: which way particles travel.
 - **Direction z**: how far they lean out of that plane.
@@ -107,6 +132,14 @@ The **Emitter** group, where particles come from and travel:
 - **Spread z**: the lean's own cone.
 - **Initial speed**: how fast a particle leaves.
 - **Speed jitter**: how much particles differ from each other in that speed.
+
+The **Bursts** group, particles thrown out all at once beside the steady flow:
+
+- **Burst**: **Off**, **Once at start** on the layer's first frame, **Every N frames**, or
+  **On trigger**, once each time **Trigger** rises past 0.5.
+- **Burst count**: how many particles one burst throws out.
+- **Burst interval**: how many frames apart the bursts are.
+- **Trigger**: the number On trigger watches. Wire a beat driver to it, or keyframe it.
 
 The **Particle** group, how a particle looks:
 
@@ -123,6 +156,15 @@ The **Particle** group, how a particle looks:
 - **Align to motion**: turns each particle to face the way it is travelling, with Spin added
   on top.
 
+The **Variation** group, what runs those changes:
+
+- **Size by**, **Opacity by** and **Colour by**: what runs Size over life, Opacity over life
+  and the blend to End colour. **Age** runs from birth to death. **Speed** runs from Speed
+  min to Speed max. **Random** is a number of the particle's own that stays the same all
+  its life.
+- **Speed min** and **Speed max**: the speeds, in pixels per second, at the left and right
+  ends of the curve or blend.
+
 The **Forces** group, what moves them:
 
 - **Gravity**: a constant pull.
@@ -133,6 +175,13 @@ The **Forces** group, what moves them:
   different ways.
 - **Turbulence speed**: how fast that noise evolves as a particle ages.
 
+The **Edges** group, what happens at the edge of the layer's frame:
+
+- **Edge**: **None** lets particles carry on out of sight. **Kill** ends a particle the first
+  time it leaves the frame, and it does not come back. **Wrap** brings it back in on the
+  opposite side.
+- **Edge margin**: how far past the frame a particle goes before Edge acts.
+
 The **Render** group, how they are drawn:
 
 - **Mode**: Disc, Sprite or Streak.
@@ -140,6 +189,8 @@ The **Render** group, how they are drawn:
 - **Sprite layer**: the layer stamped at each particle. Sprite mode only, and discs are
   drawn until you set it.
 - **Streak length**: how long the tail is, in seconds.
+- **Particle blend**: how particles combine with each other where they overlap, by the layer
+  blend modes. They then go over the picture together, as Normal particles do.
 - **Max particles**: the most particles that may be alive at once.
 - **Seed**: Changes randomness.
 

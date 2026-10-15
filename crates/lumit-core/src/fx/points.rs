@@ -202,6 +202,89 @@ impl RenderMode {
     }
 }
 
+/// When particles burst out beside the steady Emit rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Burst {
+    /// The steady flow only.
+    #[default]
+    Off,
+    /// One burst on the layer's first frame.
+    Once,
+    /// One burst every Burst interval frames, counted from the first frame.
+    Every,
+    /// One burst each time Trigger rises past a half.
+    Trigger,
+}
+
+impl Burst {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] =
+        &["Off", "Once at start", "Every N frames", "On trigger"];
+
+    /// The mode for a stored Choice index; anything unknown is Off.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Burst::Once,
+            2 => Burst::Every,
+            3 => Burst::Trigger,
+            _ => Burst::Off,
+        }
+    }
+}
+
+/// What a particle does at the edge of the frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Edge {
+    /// Nothing: it carries on out of sight.
+    #[default]
+    None,
+    /// It dies the first time it leaves the frame and its margin, and stays
+    /// dead even if it would come back.
+    Kill,
+    /// It comes back in on the opposite side.
+    Wrap,
+}
+
+impl Edge {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] = &["None", "Kill", "Wrap"];
+
+    /// The rule for a stored Choice index; anything unknown is None.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Edge::Kill,
+            2 => Edge::Wrap,
+            _ => Edge::None,
+        }
+    }
+}
+
+/// The most steps of its own life a particle is looked at to see whether it
+/// has left the frame. A step is a frame, or a 64th of the particle's life if
+/// that is longer, so the cost stays the same whatever the frame rate.
+const EDGE_SAMPLES: f32 = 64.0;
+
+/// The top bit a burst particle's birth index carries. Bursts count apart from
+/// the steady flow, so turning one on leaves every steady particle as it was,
+/// and a burst needs only the frames a particle can still be seen from rather
+/// than the whole history before it. Below the bit sit the frame the burst
+/// went off on, from the layer's first frame, and the particle's place in it.
+pub const BURST_ID: u64 = 1 << 62;
+
+/// How many bits of a burst particle's index count its place in the burst.
+const BURST_SHIFT: u32 = 24;
+
+/// The most particles one burst may hold, so its places fit below the frame.
+pub const BURST_MAX: u32 = (1 << BURST_SHIFT) - 1;
+
+/// The birth index of the first particle of the burst on frame `f`.
+#[must_use]
+pub fn burst_base(f: i64) -> u64 {
+    BURST_ID | ((f.max(0) as u64) << BURST_SHIFT)
+}
+
 /// How the stream is drawn: the Render group, reduced (particulate.md §2).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawStyle {
@@ -384,6 +467,34 @@ pub struct Emitter {
     pub speed_jitter: f32,
 }
 
+/// What moves a particle along its Size, Opacity or Colour change: its age,
+/// its speed, or a number of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Drive {
+    /// Normalised age, birth to death.
+    #[default]
+    Age,
+    /// Speed, from the speed range's low end to its high end.
+    Speed,
+    /// A number of its own from the seed, the same all its life.
+    Random,
+}
+
+impl Drive {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] = &["Age", "Speed", "Random"];
+
+    /// The drive for a stored Choice index; anything unknown is Age.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Drive::Speed,
+            2 => Drive::Random,
+            _ => Drive::Age,
+        }
+    }
+}
+
 /// What a particle looks like and how long it lasts.
 ///
 /// Not `Copy`: it carries the two baked over-life curves, which are the same
@@ -417,6 +528,13 @@ pub struct ParticleLook {
     pub spin_deg: f32,
     /// Rotation follows the direction of travel; `rotation_deg` adds on top.
     pub align_to_motion: bool,
+    /// What runs `size_curve`, `opacity_curve` and the blend to `end_colour`.
+    pub size_by: Drive,
+    pub opacity_by: Drive,
+    pub colour_by: Drive,
+    /// The speeds, px per second, a Speed drive reads as the curve's left
+    /// and right ends.
+    pub speed_range: [f32; 2],
 }
 
 /// The four v1 forces — exactly the set with closed-form integrals.
@@ -459,6 +577,16 @@ pub struct PointsParams {
     /// with. The renderer and the driver walk fill it in with
     /// [`projected`](Self::projected).
     pub projection: Projection,
+    /// What a particle does at the edge of the frame.
+    pub edge: Edge,
+    /// How far past the frame's edge a particle may go before [`Edge`]
+    /// acts, px.
+    pub margin: f32,
+    /// The frame's width and height, px, in the layer's own plane. Nought,
+    /// which a bag of parameters hands back, is no frame and no edge; the
+    /// caller that knows the picture fills it in with
+    /// [`framed`](Self::framed).
+    pub frame: [f32; 2],
 }
 
 impl PointsParams {
@@ -467,6 +595,23 @@ impl PointsParams {
     pub fn projected(mut self, projection: Projection) -> Self {
         self.projection = projection;
         self
+    }
+
+    /// The same parameters, with a frame of `w` × `h` px for the edge.
+    #[must_use]
+    pub fn framed(mut self, w: f32, h: f32) -> Self {
+        self.frame = [w, h];
+        self
+    }
+
+    /// The edge's rectangle, `[left, top, right, bottom]` px, or `None` when
+    /// there is no edge to act at.
+    fn edge_box(&self) -> Option<[f32; 4]> {
+        let [w, h] = self.frame;
+        (self.edge != Edge::None && w > 0.0 && h > 0.0).then(|| {
+            let m = self.margin;
+            [-m, -m, w + m, h + m]
+        })
     }
 }
 
@@ -1150,6 +1295,9 @@ pub struct Schedule {
     /// Whether the walk reached the layer's in point, or started late because
     /// the layer's time was carried past [`MAX_SCAN_FRAMES`].
     exact: bool,
+    /// The bursts inside the recorded frames, oldest first: the frame each
+    /// went off on and how many it threw. Empty with Burst off.
+    bursts: Vec<(i64, u32)>,
 }
 
 impl Schedule {
@@ -1180,6 +1328,7 @@ impl Schedule {
             counts: Vec::new(),
             total: 0,
             exact: true,
+            bursts: Vec::new(),
         };
         if upto_frame < 0 {
             return sched;
@@ -1283,6 +1432,17 @@ impl Schedule {
             dropped_births = dropped_births.saturating_add(u64::from(*n));
             drop_frames = drop_frames.saturating_add(1);
         }
+        // Burst particles count after the steady flow, so they go last and
+        // oldest first, as the cap rule would drop them.
+        let mut drop_bursts = 0usize;
+        for (_, n) in &self.bursts {
+            if live <= max {
+                break;
+            }
+            live = live.saturating_sub(u64::from(*n));
+            drop_bursts += 1;
+        }
+        self.bursts.drain(..drop_bursts);
         if drop_frames == 0 {
             return;
         }
@@ -1292,6 +1452,73 @@ impl Schedule {
             .first_frame
             .saturating_add(i64::try_from(drop_frames).unwrap_or(i64::MAX));
         self.first_birth = self.first_birth.saturating_add(dropped_births);
+    }
+
+    /// Add the bursts that went off inside the recorded frames.
+    ///
+    /// `count_at`, `interval_at` and `trigger_at` answer Burst count, Burst
+    /// interval and Trigger at a frame's start in layer-time seconds, wires
+    /// included. Only the recorded frames are asked, and the one before them
+    /// for Trigger's edge, so a burst costs the window and never the history.
+    pub fn add_bursts(
+        &mut self,
+        burst: Burst,
+        count_at: &dyn Fn(f64) -> f64,
+        interval_at: &dyn Fn(f64) -> f64,
+        trigger_at: &dyn Fn(f64) -> f64,
+    ) {
+        self.bursts.clear();
+        if burst == Burst::Off || self.counts.is_empty() {
+            return;
+        }
+        let dt = self.dt;
+        let first = self.first_frame;
+        let last = first.saturating_add(self.counts.len() as i64 - 1);
+        let high = |lt: f64| trigger_at(lt) > 0.5;
+        // Up on the frame before the window counts, so a level held across
+        // the window's first frame is not a rise.
+        let mut was = burst == Burst::Trigger && first > 0 && high((first - 1) as f64 * dt);
+        for f in first..=last {
+            let lt = f as f64 * dt;
+            let fires = match burst {
+                Burst::Off => false,
+                Burst::Once => f == 0,
+                Burst::Every => {
+                    let n = interval_at(lt);
+                    let n = if n.is_finite() {
+                        n.round().max(1.0) as i64
+                    } else {
+                        1
+                    };
+                    f % n == 0
+                }
+                Burst::Trigger => {
+                    let up = high(lt);
+                    let rose = up && !was;
+                    was = up;
+                    rose
+                }
+            };
+            if !fires {
+                continue;
+            }
+            let n = count_at(lt);
+            let n = if n.is_finite() {
+                n.round().clamp(0.0, f64::from(BURST_MAX)) as u32
+            } else {
+                0
+            };
+            if n > 0 {
+                self.bursts.push((f, n));
+            }
+        }
+    }
+
+    /// The bursts inside the recorded frames, oldest first: the frame each
+    /// went off on, from the layer's first frame, and how many it threw.
+    #[must_use]
+    pub fn bursts(&self) -> &[(i64, u32)] {
+        &self.bursts
     }
 
     /// The first frame [`counts`](Self::counts) describes, from the in point.
@@ -1323,7 +1550,11 @@ impl Schedule {
     /// How many births this window records: the candidate set's size.
     #[must_use]
     pub fn candidates(&self) -> u64 {
-        self.counts.iter().map(|n| u64::from(*n)).sum()
+        self.counts
+            .iter()
+            .chain(self.bursts.iter().map(|(_, n)| n))
+            .map(|n| u64::from(*n))
+            .sum()
     }
 
     /// Every birth the schedule recorded, **newest first**: its birth index and
@@ -1331,8 +1562,22 @@ impl Schedule {
     ///
     /// Births are spread evenly inside the frame that owed them —
     /// `t_b = frame start + (j + ½)·Δt/n` — so a rate of one per frame does not
-    /// stack every particle on the frame boundary.
+    /// stack every particle on the frame boundary. A burst is all born at its
+    /// frame's start, and its indices sit above the steady flow's, so it comes
+    /// first here.
     fn newest_first(&self) -> impl Iterator<Item = (u64, f64)> + '_ {
+        let dt = self.dt;
+        let bursts = self.bursts.iter().rev().flat_map(move |&(f, n)| {
+            let base = burst_base(f);
+            (0..n)
+                .rev()
+                .map(move |j| (base + u64::from(j), f as f64 * dt))
+        });
+        bursts.chain(self.steady_newest_first())
+    }
+
+    /// The steady flow's births, newest first.
+    fn steady_newest_first(&self) -> impl Iterator<Item = (u64, f64)> + '_ {
         // The running birth index of each recorded frame, so the reverse walk
         // does not have to sum the prefix per frame.
         let mut starts: Vec<u64> = Vec::with_capacity(self.counts.len());
@@ -1494,6 +1739,47 @@ mod attr {
     pub const EMIT_W: u32 = 8;
     /// The elevation draw, out of the layer's plane.
     pub const DIRECTION_Z: u32 = 9;
+    /// The stable draws a Random [`Drive`](super::Drive) reads, one each for
+    /// size, opacity and colour so the three do not move together.
+    pub const RANDOM_SIZE: u32 = 10;
+    pub const RANDOM_OPACITY: u32 = 11;
+    pub const RANDOM_COLOUR: u32 = 12;
+    /// The die a birth point's brightness has to beat to be kept, on the
+    /// first try. Later tries draw from [`DENSITY_TRIES_BASE`] up.
+    pub const DENSITY: u32 = 13;
+    /// Where the later tries' dice start: four a try, where to and whether.
+    pub const DENSITY_TRIES_BASE: u32 = 128;
+}
+
+/// How many places a particle is offered in the emitter before a dark
+/// Density layer leaves it unborn.
+pub const DENSITY_TRIES: u32 = 16;
+
+/// A picture births are weighted by: the brightness under a birth point is
+/// the chance a particle is born there. Linear premultiplied RGBA, `w × h`,
+/// in the raster the particles are evaluated in.
+#[derive(Debug, Clone, Copy)]
+pub struct Density<'a> {
+    pub rgba: &'a [f32],
+    pub w: u32,
+    pub h: u32,
+}
+
+impl Density<'_> {
+    /// The brightness of the pixel under `(x, y)`, 0 to 1. Off the picture is
+    /// dark.
+    #[must_use]
+    pub fn at(&self, x: f32, y: f32) -> f32 {
+        let (fx, fy) = (x.floor(), y.floor());
+        if fx < 0.0 || fy < 0.0 || fx >= self.w as f32 || fy >= self.h as f32 {
+            return 0.0;
+        }
+        let i = ((fy as usize) * self.w as usize + fx as usize) * 4;
+        self.rgba.get(i..i + 3).map_or(0.0, |c| {
+            let l = crate::fx::cpu::LUMA;
+            (c[0] * l[0] + c[1] * l[1] + c[2] * l[2]).clamp(0.0, 1.0)
+        })
+    }
 }
 
 /// The noise lattices turbulence displaces along, one per axis. Channels of the
@@ -1605,6 +1891,78 @@ fn turbulence(p0: [f32; 3], phase: f32, f: &Forces, seed: u32, age: f32) -> [f32
     ]
 }
 
+/// Whether a particle born at `p0` with speed `v0` has left `bounds`,
+/// `[left, top, right, bottom]`, at any step of its own life up to `age`.
+///
+/// The steps are whole multiples of one fixed at birth, so a later frame
+/// looks at every step an earlier one did, and a particle that has left stays
+/// gone however it moves after.
+#[allow(clippy::too_many_arguments)]
+fn has_left(
+    bounds: [f32; 4],
+    f: &Forces,
+    seed: u32,
+    p0: [f32; 3],
+    v0: [f32; 3],
+    phase: f32,
+    life: f32,
+    age: f32,
+    dt: f32,
+) -> bool {
+    // How far it can possibly have gone: drag only ever pulls the speed
+    // towards the wind's, and turbulence is at most its amount either way.
+    // Born well inside that, it cannot have left, and nothing is walked.
+    let reach = |i: usize| {
+        let g = if i == 1 { f.gravity.abs() } else { 0.0 };
+        (f.wind[i].abs() + (v0[i] - f.wind[i]).abs()) * age + 0.5 * g * age * age + f.turbulence
+    };
+    let (rx, ry) = (reach(0), reach(1));
+    if p0[0] - rx > bounds[0]
+        && p0[0] + rx < bounds[2]
+        && p0[1] - ry > bounds[1]
+        && p0[1] + ry < bounds[3]
+    {
+        return false;
+    }
+    let step = dt.max(life / EDGE_SAMPLES);
+    let mut k = 1.0f32;
+    while k * step <= age {
+        let a = k * step;
+        let x = integrate(p0, v0, f, a).0;
+        let d = turbulence(p0, phase, f, seed, a);
+        let (px, py) = (x[0] + d[0], x[1] + d[1]);
+        if px < bounds[0] || px > bounds[2] || py < bounds[1] || py > bounds[3] {
+            return true;
+        }
+        k += 1.0;
+    }
+    false
+}
+
+/// `p` brought back inside `bounds` across and down, by whole widths and
+/// heights of it.
+fn wrapped(bounds: [f32; 4], p: [f32; 3]) -> [f32; 3] {
+    let mut q = p;
+    for i in 0..2 {
+        let span = bounds[i + 2] - bounds[i];
+        q[i] = p[i] - span * ((p[i] - bounds[i]) / span).floor();
+    }
+    q
+}
+
+/// Where `speed` sits in `range`, 0 at its low end and 1 at its high end. A
+/// range with no width is a step at its low end.
+fn drive_speed(speed: f32, range: [f32; 2]) -> f32 {
+    let span = range[1] - range[0];
+    if span > 0.0 {
+        ((speed - range[0]) / span).clamp(0.0, 1.0)
+    } else if speed >= range[0] {
+        1.0
+    } else {
+        0.0
+    }
+}
+
 /// Where in the emitter this particle starts.
 ///
 /// `w` is the draw through the emitter's [`depth`](Emitter::depth),
@@ -1699,6 +2057,22 @@ pub fn evaluate_with_tail(
     path: &MaskPolyline,
     tail: f32,
 ) -> (PointsStream, Vec<[f32; 3]>) {
+    evaluate_dense(p, sched, t, path, tail, None)
+}
+
+/// [`evaluate_with_tail`], with births weighted by a Density layer's
+/// picture. Each particle is offered up to [`DENSITY_TRIES`] places in the
+/// emitter, each kept with the brightness under it as its chance, and one
+/// none of them kept is not born at all.
+#[must_use]
+pub fn evaluate_dense(
+    p: &PointsParams,
+    sched: &Schedule,
+    t: f64,
+    path: &MaskPolyline,
+    tail: f32,
+    density: Option<Density<'_>>,
+) -> (PointsStream, Vec<[f32; 3]>) {
     let mut out = PointsStream {
         projection: p.projection,
         ..PointsStream::default()
@@ -1724,6 +2098,8 @@ pub fn evaluate_with_tail(
     let base_dir = e.direction_deg.to_radians();
     let spread_z = e.spread_z_deg.to_radians();
     let base_dir_z = e.direction_z_deg.to_radians();
+    let bounds = p.edge_box();
+    let dt = sched.dt() as f32;
 
     for (b, t_b) in sched.newest_first() {
         let age = (t - t_b) as f32;
@@ -1748,6 +2124,31 @@ pub fn evaluate_with_tail(
             // and no later birth will find a path either.
             break;
         };
+        let p0 = match &density {
+            None => p0,
+            Some(d) => {
+                // The first try is the place it would have had anyway.
+                let mut kept = (draw(p.seed, b, attr::DENSITY) < d.at(p0[0], p0[1])).then_some(p0);
+                for k in 1..DENSITY_TRIES {
+                    if kept.is_some() {
+                        break;
+                    }
+                    let die = attr::DENSITY_TRIES_BASE + 4 * k;
+                    let q = birth_point(
+                        e,
+                        walk,
+                        draw(p.seed, b, die),
+                        draw(p.seed, b, die + 1),
+                        draw(p.seed, b, die + 2),
+                    );
+                    kept = q.filter(|q| draw(p.seed, b, die + 3) < d.at(q[0], q[1]));
+                }
+                match kept {
+                    Some(q) => q,
+                    None => continue,
+                }
+            }
+        };
         let dir = base_dir + (draw(p.seed, b, attr::DIRECTION) - 0.5) * spread;
         let dir_z = base_dir_z + (draw(p.seed, b, attr::DIRECTION_Z) - 0.5) * spread_z;
         let speed = jitter(e.speed, e.speed_jitter, draw(p.seed, b, attr::SPEED));
@@ -1758,8 +2159,13 @@ pub fn evaluate_with_tail(
         // were.
         let (sz, cz) = dir_z.sin_cos();
         let v0 = [speed * cd * cz, speed * sd * cz, speed * sz];
-        let (pos, vel) = integrate(p0, v0, &p.forces, age);
         let phase = draw(p.seed, b, attr::TURB_PHASE) * 1000.0;
+        if let Some(bx) = bounds.filter(|_| p.edge == Edge::Kill) {
+            if has_left(bx, &p.forces, p.seed, p0, v0, phase, life, age, dt) {
+                continue;
+            }
+        }
+        let (pos, vel) = integrate(p0, v0, &p.forces, age);
         let d = turbulence(p0, phase, &p.forces, p.seed, age);
         let d_next = turbulence(p0, phase, &p.forces, p.seed, age + eps);
         let d_prev = turbulence(p0, phase, &p.forces, p.seed, age - eps);
@@ -1769,9 +2175,20 @@ pub fn evaluate_with_tail(
             vel[1] + (d_next[1] - d_prev[1]) / (2.0 * eps),
             vel[2] + (d_next[2] - d_prev[2]) / (2.0 * eps),
         ];
+        let fast = speed_out[0].hypot(speed_out[1]).hypot(speed_out[2]);
+        let drive = |by: Drive, die: u32| match by {
+            Drive::Age => u,
+            Drive::Speed => drive_speed(fast, look.speed_range),
+            Drive::Random => draw(p.seed, b, die),
+        };
         let size = jitter(look.size, look.size_jitter, draw(p.seed, b, attr::SIZE))
-            * curve_at(u, &look.size_curve);
-        let alpha = look.colour[3] * curve_at(u, &look.opacity_curve);
+            * curve_at(drive(look.size_by, attr::RANDOM_SIZE), &look.size_curve);
+        let alpha = look.colour[3]
+            * curve_at(
+                drive(look.opacity_by, attr::RANDOM_OPACITY),
+                &look.opacity_curve,
+            );
+        let toward = drive(look.colour_by, attr::RANDOM_COLOUR);
         // Premultiplied, and the blend to End colour is in working space —
         // which is what "in working space" costs: one lerp, no encode.
         let mut colour = [alpha; 4];
@@ -1780,7 +2197,7 @@ pub fn evaluate_with_tail(
             .zip(look.colour.iter().zip(look.end_colour.iter()))
             .take(3)
         {
-            *c = (from + (to - from) * u) * alpha;
+            *c = (from + (to - from) * toward) * alpha;
         }
         // The per-particle rotation spread: a uniform draw of ±half the
         // dial about Rotation, from the seed hash like every other die, so two
@@ -1797,6 +2214,15 @@ pub fn evaluate_with_tail(
         } + spread_rot
             + look.spin_deg.to_radians() * age;
 
+        let mut head = [pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]];
+        // Wrapped back into the frame. The tail moves with the head, so a
+        // streak crossing the edge is not drawn across the whole picture.
+        let mut shift = None;
+        if let Some(bx) = bounds.filter(|_| p.edge == Edge::Wrap) {
+            let w = wrapped(bx, head);
+            shift = Some([w[0] - head[0], w[1] - head[1]]);
+            head = w;
+        }
         // Where it was a Streak length ago — the same closed form at an earlier
         // age, never a remembered position. Clamped at birth: a particle
         // younger than the tail streaks from where it was born.
@@ -1804,10 +2230,14 @@ pub fn evaluate_with_tail(
             let back = (age - tail).max(0.0);
             let (bp, _) = integrate(p0, v0, &p.forces, back);
             let bd = turbulence(p0, phase, &p.forces, p.seed, back);
-            tails.push([bp[0] + bd[0], bp[1] + bd[1], bp[2] + bd[2]]);
+            let mut was = [bp[0] + bd[0], bp[1] + bd[1], bp[2] + bd[2]];
+            if let Some([sx, sy]) = shift {
+                was[0] += sx;
+                was[1] += sy;
+            }
+            tails.push(was);
         }
-        out.position
-            .push([pos[0] + d[0], pos[1] + d[1], pos[2] + d[2]]);
+        out.position.push(head);
         out.speed.push(speed_out);
         out.age.push(age);
         out.life.push(life);
@@ -2084,6 +2514,98 @@ pub fn draw_stream_fit(
     sprite: Option<Sprite<'_>>,
     fit: &SpriteFit,
 ) {
+    stamp(rgba, w, h, s, tails, style, sprite, fit, &|dst, src| {
+        // Premultiplied `over`: the particle's own colour, and what was
+        // there kept by however much of the pixel it did not cover.
+        let keep = 1.0 - src[3];
+        for c in 0..4 {
+            dst[c] = src[c] + dst[c] * keep;
+        }
+    });
+}
+
+/// [`draw_stream`], with the particles combining with each other by layer
+/// blend mode `blend`, an index into
+/// [`BlendMode::ALL`](crate::model::BlendMode::ALL), before they go over the
+/// picture together. Normal is [`draw_stream`] exactly.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_stream_blended(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 3]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+    blend: u32,
+) {
+    if blend == 0 {
+        draw_stream(rgba, w, h, s, tails, style, sprite);
+        return;
+    }
+    // ponytail: a frame-sized layer from the heap. This is the CPU oracle,
+    // which only the tests draw with; the card's pass takes its own.
+    let mut layer = vec![0.0f32; rgba.len()];
+    let fit = SpriteFit::default();
+    stamp(
+        &mut layer,
+        w,
+        h,
+        s,
+        tails,
+        style,
+        sprite,
+        &fit,
+        &|dst, src| {
+            let b = [dst[0], dst[1], dst[2], dst[3]];
+            dst.copy_from_slice(&blend_over(blend, b, src));
+        },
+    );
+    for (d, l) in rgba.chunks_exact_mut(4).zip(layer.chunks_exact(4)) {
+        let keep = 1.0 - l[3];
+        for c in 0..4 {
+            d[c] = l[c] + d[c] * keep;
+        }
+    }
+}
+
+/// `s` laid on `b`, both premultiplied, by layer blend mode `mode`: the W3C
+/// compositing formula around the layer menu's own colour blend. Where
+/// either is clear the other shows as it is, so a particle on its own looks
+/// like itself whatever the mode.
+#[must_use]
+pub fn blend_over(mode: u32, b: [f32; 4], s: [f32; 4]) -> [f32; 4] {
+    let straight = |c: [f32; 4]| {
+        if c[3] > 0.0 {
+            [c[0] / c[3], c[1] / c[3], c[2] / c[3], 1.0]
+        } else {
+            [0.0, 0.0, 0.0, 1.0]
+        }
+    };
+    let (sa, ba) = (s[3], b[3]);
+    let mixed = crate::fx::cpu::blend_pixel(mode, straight(b), straight(s));
+    let mut o = [0.0f32; 4];
+    for c in 0..3 {
+        o[c] = s[c] * (1.0 - ba) + b[c] * (1.0 - sa) + sa * ba * mixed[c];
+    }
+    o[3] = sa + ba - sa * ba;
+    o
+}
+
+/// The stamping behind both draws: each particle's coverage, oldest first,
+/// handed to `combine` pixel by pixel with what is there.
+#[allow(clippy::too_many_arguments)]
+fn stamp(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &PointsStream,
+    tails: &[[f32; 3]],
+    style: &DrawStyle,
+    sprite: Option<Sprite<'_>>,
+    fit: &SpriteFit,
+    combine: &dyn Fn(&mut [f32], [f32; 4]),
+) {
     let feather = style.feather.clamp(0.0, 1.0);
     let mix = style.mix.clamp(0.0, 1.0);
     // Sprite with nothing to stamp falls back to the disc, here and in the
@@ -2225,12 +2747,7 @@ pub fn draw_stream_fit(
                 let Some(dst) = rgba.get_mut(d..d + 4) else {
                     continue;
                 };
-                // Premultiplied `over`: the particle's own colour, and what was
-                // there kept by however much of the pixel it did not cover.
-                let keep = 1.0 - contrib[3];
-                for c in 0..4 {
-                    dst[c] = contrib[c] + dst[c] * keep;
-                }
+                combine(dst, contrib);
             }
         }
     }
