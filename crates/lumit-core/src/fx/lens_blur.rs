@@ -782,3 +782,30 @@ pub fn ray_fan(text: &str, fstop: f32, field_deg: f32, count: usize) -> Option<R
         native_fstop: native,
     })
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::fx::lens_library::LENS_LIBRARY;
+
+    /// Every bundled lens traces to the f-number it is sold at, which is what
+    /// halving the files' diameter column rests on, and stopping it down
+    /// stops rays at the iris.
+    #[test]
+    fn bundled_lenses_trace_to_their_stated_f_number() {
+        for entry in &LENS_LIBRARY {
+            let open = ray_fan(entry.text, 0.1, 0.0, 21).unwrap();
+            let shut = ray_fan(entry.text, 16.0, 0.0, 21).unwrap();
+            let ratio = open.native_fstop / entry.native_fstop;
+            assert!(
+                (0.9..1.1).contains(&ratio),
+                "{}: traces to f/{}",
+                entry.name,
+                open.native_fstop
+            );
+            let through = |f: &RayFan| f.rays.iter().filter(|r| !r.clipped).count();
+            assert!(through(&shut) < through(&open), "{}", entry.name);
+        }
+    }
+}
