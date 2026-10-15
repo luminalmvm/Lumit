@@ -89,7 +89,7 @@ on arrays adds and scales them as it does in After Effects.
 | --- | --- |
 | **Values** | `time`, `value`, `index`, `inPoint`, `outPoint`, `startTime`, `width`, `height`, `name`, `hasParent`, `parent`, `numKeys` |
 | **The composition** | `thisComp`, `comp("Name")` — `.width`, `.height`, `.duration`, `.frameDuration`, `.name`, `.numLayers`, `.layer("Name")`, `.layer(1)` |
-| **A layer** | `thisLayer`, or one from `thisComp.layer(…)` — `.name`, `.index`, `.inPoint`, `.outPoint`, `.startTime`, `.hasParent`, `.parent`, `.transform`, `.position`, `.anchorPoint`, `.scale`, `.rotation`, `.opacity`, `.effect("Name")` |
+| **A layer** | `thisLayer`, or one from `thisComp.layer(…)` — `.name`, `.index`, `.inPoint`, `.outPoint`, `.startTime`, `.hasParent`, `.parent`, `.transform`, `.position`, `.anchorPoint`, `.scale`, `.rotation`, `.opacity`, `.effect("Name")`, `.sourceRectAtTime(t)` |
 | **An effect's row** | `effect("Name")("Row")` — `.value`, `.valueAtTime(t)`, `.numKeys`, `.key(n)`, `.nearestKey(t)`, `.velocity`, `.speed`, `.wiggle(…)`, `.loopIn(…)`, `.loopOut(…)` |
 | **Motion** | `wiggle(freq, amp, octaves, amp_mult, t)`, `valueAtTime(t)`, `posterizeTime(fps)` |
 | **Random** | `seedRandom(seed, timeless)`, `random()`, `gaussRandom()`, `noise()` |
@@ -113,9 +113,11 @@ seedRandom(index, true); random(0, 360)    // one fixed angle for each layer
   property it is written on.
 - **`wiggle` and `random` are not After Effects' own numbers.** The same settings give the
   same amount of movement along a different path, and the same path on every machine.
+- **`sourceRectAtTime`** measures as [Measure](/effects/drivers/measure/) does, in the
+  layer's own pixels.
 
 :::note[Not yet built]
-`toComp`, `fromComp`, `toWorld`, `sourceRectAtTime`, `smooth`, markers, text properties,
+`toComp`, `fromComp`, `toWorld`, `smooth`, markers, text properties,
 `footage`, `new`, classes and regular expressions.
 :::
 
