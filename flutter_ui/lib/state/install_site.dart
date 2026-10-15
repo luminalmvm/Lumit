@@ -227,6 +227,10 @@ void swapInStagedUpdate(InstallSite site) {
   if (!stagedUpdateReady(site)) {
     throw StateError('no complete update is staged');
   }
+  // The marker has done its job. Left in, it sits at the root of a macOS
+  // bundle, which breaks the signature and macOS calls the app damaged.
+  File('${site.staging.path}${Platform.pathSeparator}$stagedUpdateMarker')
+      .deleteSync();
   // A leftover from a previous update would make the first rename fail. It is
   // only ever the version before last, and nothing is holding it now.
   _removeQuietly(site.previous);

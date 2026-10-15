@@ -80,6 +80,9 @@ void main() {
           reason: 'shortcuts and file associations point at this path');
       expect(versionAt(site), '0.2.0');
       expect(site.staging.existsSync(), isFalse);
+      expect(File('${site.root.path}/$stagedUpdateMarker').existsSync(),
+          isFalse,
+          reason: 'a stray file in a macOS bundle breaks its signature');
     });
 
     test('the swap works from inside the folder being replaced', () {
