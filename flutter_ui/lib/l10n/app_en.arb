@@ -3339,6 +3339,34 @@
   "@fxEmitRate": {
     "description": "Effect controls — a control on Particulate: how many particles are born each second."
   },
+  "fxBurst": "Burst",
+  "@fxBurst": {
+    "description": "Effect controls — a control on Particulate: when extra particles burst out beside the steady flow."
+  },
+  "fxBurstCount": "Burst count",
+  "@fxBurstCount": {
+    "description": "Effect controls — a control on Particulate: how many particles one burst throws out."
+  },
+  "fxBurstInterval": "Burst interval",
+  "@fxBurstInterval": {
+    "description": "Effect controls — a control on Particulate: how many frames apart the bursts are."
+  },
+  "fxEveryNFrames": "Every N frames",
+  "@fxEveryNFrames": {
+    "description": "Effect controls — a Burst setting on Particulate: a burst every few frames, as many as Burst interval says."
+  },
+  "fxOnTrigger": "On trigger",
+  "@fxOnTrigger": {
+    "description": "Effect controls — a Burst setting on Particulate: a burst each time the Trigger control goes up, for example on a beat."
+  },
+  "fxOnceAtStart": "Once at start",
+  "@fxOnceAtStart": {
+    "description": "Effect controls — a Burst setting on Particulate: one burst on the layer's first frame."
+  },
+  "fxBursts": "Bursts",
+  "@fxBursts": {
+    "description": "Effect controls — a group heading on Particulate, over the controls for extra particles that burst out beside the steady flow."
+  },
   "fxEmitter": "Emitter",
   "@fxEmitter": {
     "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."

@@ -4510,7 +4510,7 @@ fn particulate_op<'a>(
     packed: &'a lumit_core::fx::points::PointsParams,
     style: lumit_core::fx::points::DrawStyle,
     sched: &lumit_core::fx::points::PointsSchedule,
-    frames: &'a [[u32; 2]],
+    frames: &'a [[u32; 4]],
     curves: &'a [f32],
     path: &'a [[f32; 4]],
     path_total: f32,
@@ -4555,7 +4555,6 @@ fn particulate_op<'a>(
         // frame key names one picture whatever raster is previewing.
         eps: ((dt * 0.5) as f32).max(1e-6),
         dt: dt as f32,
-        first_birth: sched.schedule.first_birth(),
         frames,
         candidates: frames.last().map_or(0, |f| f[0]),
         curves,
@@ -4570,19 +4569,28 @@ fn particulate_op<'a>(
 }
 
 /// The per-frame table the kernel searches: `[birth offset, bits of
-/// (t − that frame's start)]`, oldest first, with a closing offset that is the
-/// candidate count.
-fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u32; 2]> {
+/// (t − that frame's start), the frame's first birth index low and high]`,
+/// the steady flow's frames oldest first and then the bursts', with a closing
+/// offset that is the candidate count.
+fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u32; 4]> {
     let s = &sched.schedule;
     let (dt, first) = (s.dt(), s.first_frame());
-    let mut out: Vec<[u32; 2]> = Vec::with_capacity(s.counts().len() + 1);
+    let mut out: Vec<[u32; 4]> = Vec::with_capacity(s.counts().len() + s.bursts().len() + 1);
     let mut offset = 0u32;
+    let mut row = |f: i64, base: u64, n: u32| {
+        let rel = (sched.t - f as f64 * dt) as f32;
+        out.push([offset, rel.to_bits(), base as u32, (base >> 32) as u32]);
+        offset = offset.saturating_add(n);
+    };
+    let mut birth = s.first_birth();
     for (i, n) in s.counts().iter().enumerate() {
-        let rel = (sched.t - (first + i as i64) as f64 * dt) as f32;
-        out.push([offset, rel.to_bits()]);
-        offset = offset.saturating_add(*n);
+        row(first + i as i64, birth, *n);
+        birth = birth.saturating_add(u64::from(*n));
     }
-    out.push([offset, 0]);
+    for &(f, n) in s.bursts() {
+        row(f, lumit_core::fx::points::burst_base(f), n);
+    }
+    out.push([offset, 0, 0, 0]);
     out
 }
 
@@ -5808,6 +5816,10 @@ mod tests {
             path_from: 0,
             mask_path: false,
             emit_rate: 220.0,
+            burst: 0,
+            burst_count: 100.0,
+            burst_interval: 24.0,
+            trigger: 0.0,
             direction: -90.0,
             spread: 200.0,
             initial_speed: 70.0,
@@ -5867,7 +5879,7 @@ mod tests {
     ) -> (
         lumit_core::fx::points::PointsParams,
         lumit_core::fx::points::DrawStyle,
-        Vec<[u32; 2]>,
+        Vec<[u32; 4]>,
         Vec<f32>,
     ) {
         let packed = inst
@@ -5901,7 +5913,16 @@ mod tests {
         };
         let fx = ctx.fx();
         let (w, h) = (128u32, 96u32);
-        let (mut inst, sched, carriage) = particulate_fixture_3d(0, 20_000, projection);
+        let (mut inst, mut sched, mut carriage) = particulate_fixture_3d(0, 20_000, projection);
+        // Bursts beside the steady flow, so their indices and ages are held
+        // to the CPU's as well.
+        sched.add_bursts(
+            lumit_core::fx::points::Burst::Every,
+            &|_| 40.0,
+            &|_| 5.0,
+            &|_| 0.0,
+        );
+        carriage.schedule = sched.clone();
         inst.shape = shape;
         if lumit_core::fx::points::EmitterShape::from_code(shape).is_outline() {
             // **Turbulence off for the outline twin, on purpose.** What this

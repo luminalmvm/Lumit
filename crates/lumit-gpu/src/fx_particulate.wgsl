@@ -72,8 +72,8 @@ struct Params {
 
     // Schedule and the frame.
     dt: f32,
-    first_birth_lo: u32,
-    first_birth_hi: u32,
+    _spare0: u32,
+    _spare1: u32,
     frames: u32,
 
     candidates: u32,
@@ -181,8 +181,10 @@ const SCAN_BLOCK: u32 = 256u;
 // One entry per recorded frame, plus a closing one: `.x` is the birth offset
 // the frame starts at, `.y` is `t − that frame's start` in seconds, computed in
 // f64 host-side so the ages this kernel works out never lose their small
-// difference inside a large clock.
-@group(0) @binding(1) var<storage, read> frames_buf: array<vec2<u32>>;
+// difference inside a large clock, and `.zw` is the birth index of the frame's
+// first particle, low word then high. The steady flow's frames come first,
+// then the bursts'.
+@group(0) @binding(1) var<storage, read> frames_buf: array<vec4<u32>>;
 // The two baked over-life curves, size then opacity, 257 entries each.
 @group(0) @binding(2) var<storage, read> curves: array<f32>;
 // The mask path: `(x, y, arc length, unused)` per vertex.
@@ -388,20 +390,20 @@ struct Candidate {
     life: f32,
 };
 
+// == lumit_core::fx::points::BURST_ID's bit, in a birth index's high word.
+const BURST_HI: u32 = 0x40000000u;
+
 // Which birth this candidate is, and how old it is now.
 //
-// Candidate `c` is birth `first_birth + c`; which frame owed it — and so when
-// it was born inside that frame — is a search over the running birth counts.
-// Handing the counts over rather than a birth time per candidate is what keeps
-// the per-frame upload the size of the window instead of the size of the
-// particle set.
+// Which frame owed candidate `c` — and so its birth index and when it was born
+// inside that frame — is a search over the running birth counts. Handing the
+// counts over rather than a birth time per candidate is what keeps the
+// per-frame upload the size of the window instead of the size of the particle
+// set.
 fn pt_candidate(c: u32) -> Candidate {
     var out: Candidate;
-    out.birth_lo = p.first_birth_lo + c;
-    out.birth_hi = p.first_birth_hi;
-    if (out.birth_lo < p.first_birth_lo) {
-        out.birth_hi = out.birth_hi + 1u;
-    }
+    out.birth_lo = 0u;
+    out.birth_hi = 0u;
     out.age = -1.0;
     out.life = 0.0;
     // The last frame whose start is <= c.
@@ -422,11 +424,22 @@ fn pt_candidate(c: u32) -> Candidate {
         return out;
     }
     let j = c - start;
+    let base = frames_buf[i].zw;
+    out.birth_lo = base.x + j;
+    out.birth_hi = base.y;
+    if (out.birth_lo < base.x) {
+        out.birth_hi = out.birth_hi + 1u;
+    }
     // `t − frame start`, from the host's own f64 arithmetic, minus where in the
     // frame this birth fell: births are spread evenly inside the frame that
     // owed them, so a rate of one a frame does not stack them on the boundary.
+    // A burst is all born on the frame's start.
     let frame_rel = bitcast<f32>(frames_buf[i].y);
-    out.age = frame_rel - (f32(j) + 0.5) * p.dt / f32(n);
+    if ((base.y & BURST_HI) != 0u) {
+        out.age = frame_rel;
+    } else {
+        out.age = frame_rel - (f32(j) + 0.5) * p.dt / f32(n);
+    }
     out.life = pt_jitter(p.life, p.life_jitter, pt_die(out.birth_lo, out.birth_hi, A_LIFE));
     return out;
 }

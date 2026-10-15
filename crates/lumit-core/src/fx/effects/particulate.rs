@@ -50,9 +50,9 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// The four kickers particulate.md §2 lists its controls under. None starts
-/// closed: every one of them holds a control someone reaches for on the first
-/// day.
+/// The kickers particulate.md §2 lists its controls under, and the ones added
+/// since. None starts closed: every one of them holds a control someone
+/// reaches for on the first day.
 pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
     group(
         "Emitter",
@@ -75,6 +75,10 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "initial_speed",
             "speed_jitter",
         ],
+    ),
+    group(
+        "Bursts",
+        &["burst", "burst_count", "burst_interval", "trigger"],
     ),
     group(
         "Particle",
@@ -142,6 +146,22 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         param: "streak_length",
         on: "mode",
         cond: EnabledCond::ChoiceIs(2),
+    },
+    // Each burst row means something only in the bursts that read it.
+    EnabledWhen {
+        param: "burst_count",
+        on: "burst",
+        cond: EnabledCond::ChoiceIsNot(0),
+    },
+    EnabledWhen {
+        param: "burst_interval",
+        on: "burst",
+        cond: EnabledCond::ChoiceIs(2),
+    },
+    EnabledWhen {
+        param: "trigger",
+        on: "burst",
+        cond: EnabledCond::ChoiceIs(3),
     },
     // Following the shape leaves no mask to choose.
     EnabledWhen {
@@ -291,6 +311,39 @@ pub struct Particulate {
         unit = Percent
     )]
     pub speed_jitter: f32,
+
+    /// Bursts beside the steady flow. Off is the steady flow alone, as
+    /// every project made before bursts existed reads.
+    #[choice(label = "Burst", options = *points::Burst::OPTIONS, default = 0)]
+    pub burst: u32,
+
+    /// How many particles one burst throws. Read at the frame it goes off.
+    #[slider(
+        label = "Burst count",
+        min = 0.0,
+        max = 1000.0,
+        default = 100.0,
+        hard_min = 0.0,
+        hard_max = 1_000_000.0,
+        unit = Raw
+    )]
+    pub burst_count: f32,
+
+    /// Every N frames' N, counted from the layer's first frame.
+    #[slider(
+        label = "Burst interval",
+        min = 1.0,
+        max = 120.0,
+        default = 24.0,
+        hard_min = 1.0,
+        unit = Frames
+    )]
+    pub burst_interval: f32,
+
+    /// On trigger bursts once each time this rises past a half. A beat
+    /// driver wired here puts out 1 on each beat and 0 between.
+    #[slider(min = 0.0, max = 1.0, default = 0.0, unit = Raw)]
+    pub trigger: f32,
 
     /// How long a particle lasts, seconds.
     #[slider(min = 0.1, max = 10.0, default = 2.0, hard_min = 0.0, unit = Seconds)]
@@ -588,6 +641,28 @@ impl Particulate {
             },
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
+    }
+
+    /// Add `inst`'s bursts to `sched`, after the scan and before any trim.
+    ///
+    /// `at` answers one of the instance's rows at a layer time, the way the
+    /// scan reads Emit rate. Trigger is the one a wire usually drives, so the
+    /// caller that holds the layer's graph answers it with the wire's value.
+    pub fn add_bursts(
+        inst: &crate::model::EffectInstance,
+        sched: &mut points::Schedule,
+        at: &dyn Fn(&str, f64) -> f64,
+    ) {
+        let burst = match inst.param("burst") {
+            Some(crate::model::EffectValue::Choice(c)) => points::Burst::from_code(*c),
+            _ => points::Burst::Off,
+        };
+        sched.add_bursts(
+            burst,
+            &|lt| at("burst_count", lt),
+            &|lt| at("burst_interval", lt),
+            &|lt| at("trigger", lt),
+        );
     }
 
     /// How many frames back a particle born then could still be alive now —

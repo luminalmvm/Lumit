@@ -9921,6 +9921,50 @@
           "hard_max": 100.0
         },
         {
+          "id": "burst",
+          "label": "Burst",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Off",
+            "Once at start",
+            "Every N frames",
+            "On trigger"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "burst_count",
+          "label": "Burst count",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0,
+          "hard_max": 1000000.0
+        },
+        {
+          "id": "burst_interval",
+          "label": "Burst interval",
+          "kind": "float",
+          "unit": "frames",
+          "default": 24.0,
+          "slider_min": 1.0,
+          "slider_max": 120.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "trigger",
+          "label": "Trigger",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
+        },
+        {
           "id": "life",
           "label": "Life",
           "kind": "float",
@@ -10293,6 +10337,16 @@
           "collapsed": false
         },
         {
+          "label": "Bursts",
+          "params": [
+            "burst",
+            "burst_count",
+            "burst_interval",
+            "trigger"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Particle",
           "params": [
             "life",
@@ -10355,6 +10409,24 @@
           "on": "mode",
           "cond": "choice_is",
           "value": 2
+        },
+        {
+          "param": "burst_count",
+          "on": "burst",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "burst_interval",
+          "on": "burst",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "trigger",
+          "on": "burst",
+          "cond": "choice_is",
+          "value": 3
         },
         {
           "param": "mask_path",

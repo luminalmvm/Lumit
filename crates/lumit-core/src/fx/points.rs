@@ -202,6 +202,56 @@ impl RenderMode {
     }
 }
 
+/// When particles burst out beside the steady Emit rate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Burst {
+    /// The steady flow only.
+    #[default]
+    Off,
+    /// One burst on the layer's first frame.
+    Once,
+    /// One burst every Burst interval frames, counted from the first frame.
+    Every,
+    /// One burst each time Trigger rises past a half.
+    Trigger,
+}
+
+impl Burst {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] =
+        &["Off", "Once at start", "Every N frames", "On trigger"];
+
+    /// The mode for a stored Choice index; anything unknown is Off.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Burst::Once,
+            2 => Burst::Every,
+            3 => Burst::Trigger,
+            _ => Burst::Off,
+        }
+    }
+}
+
+/// The top bit a burst particle's birth index carries. Bursts count apart from
+/// the steady flow, so turning one on leaves every steady particle as it was,
+/// and a burst needs only the frames a particle can still be seen from rather
+/// than the whole history before it. Below the bit sit the frame the burst
+/// went off on, from the layer's first frame, and the particle's place in it.
+pub const BURST_ID: u64 = 1 << 62;
+
+/// How many bits of a burst particle's index count its place in the burst.
+const BURST_SHIFT: u32 = 24;
+
+/// The most particles one burst may hold, so its places fit below the frame.
+pub const BURST_MAX: u32 = (1 << BURST_SHIFT) - 1;
+
+/// The birth index of the first particle of the burst on frame `f`.
+#[must_use]
+pub fn burst_base(f: i64) -> u64 {
+    BURST_ID | ((f.max(0) as u64) << BURST_SHIFT)
+}
+
 /// How the stream is drawn: the Render group, reduced (particulate.md §2).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DrawStyle {
@@ -1150,6 +1200,9 @@ pub struct Schedule {
     /// Whether the walk reached the layer's in point, or started late because
     /// the layer's time was carried past [`MAX_SCAN_FRAMES`].
     exact: bool,
+    /// The bursts inside the recorded frames, oldest first: the frame each
+    /// went off on and how many it threw. Empty with Burst off.
+    bursts: Vec<(i64, u32)>,
 }
 
 impl Schedule {
@@ -1180,6 +1233,7 @@ impl Schedule {
             counts: Vec::new(),
             total: 0,
             exact: true,
+            bursts: Vec::new(),
         };
         if upto_frame < 0 {
             return sched;
@@ -1283,6 +1337,17 @@ impl Schedule {
             dropped_births = dropped_births.saturating_add(u64::from(*n));
             drop_frames = drop_frames.saturating_add(1);
         }
+        // Burst particles count after the steady flow, so they go last and
+        // oldest first, as the cap rule would drop them.
+        let mut drop_bursts = 0usize;
+        for (_, n) in &self.bursts {
+            if live <= max {
+                break;
+            }
+            live = live.saturating_sub(u64::from(*n));
+            drop_bursts += 1;
+        }
+        self.bursts.drain(..drop_bursts);
         if drop_frames == 0 {
             return;
         }
@@ -1292,6 +1357,73 @@ impl Schedule {
             .first_frame
             .saturating_add(i64::try_from(drop_frames).unwrap_or(i64::MAX));
         self.first_birth = self.first_birth.saturating_add(dropped_births);
+    }
+
+    /// Add the bursts that went off inside the recorded frames.
+    ///
+    /// `count_at`, `interval_at` and `trigger_at` answer Burst count, Burst
+    /// interval and Trigger at a frame's start in layer-time seconds, wires
+    /// included. Only the recorded frames are asked, and the one before them
+    /// for Trigger's edge, so a burst costs the window and never the history.
+    pub fn add_bursts(
+        &mut self,
+        burst: Burst,
+        count_at: &dyn Fn(f64) -> f64,
+        interval_at: &dyn Fn(f64) -> f64,
+        trigger_at: &dyn Fn(f64) -> f64,
+    ) {
+        self.bursts.clear();
+        if burst == Burst::Off || self.counts.is_empty() {
+            return;
+        }
+        let dt = self.dt;
+        let first = self.first_frame;
+        let last = first.saturating_add(self.counts.len() as i64 - 1);
+        let high = |lt: f64| trigger_at(lt) > 0.5;
+        // Up on the frame before the window counts, so a level held across
+        // the window's first frame is not a rise.
+        let mut was = burst == Burst::Trigger && first > 0 && high((first - 1) as f64 * dt);
+        for f in first..=last {
+            let lt = f as f64 * dt;
+            let fires = match burst {
+                Burst::Off => false,
+                Burst::Once => f == 0,
+                Burst::Every => {
+                    let n = interval_at(lt);
+                    let n = if n.is_finite() {
+                        n.round().max(1.0) as i64
+                    } else {
+                        1
+                    };
+                    f % n == 0
+                }
+                Burst::Trigger => {
+                    let up = high(lt);
+                    let rose = up && !was;
+                    was = up;
+                    rose
+                }
+            };
+            if !fires {
+                continue;
+            }
+            let n = count_at(lt);
+            let n = if n.is_finite() {
+                n.round().clamp(0.0, f64::from(BURST_MAX)) as u32
+            } else {
+                0
+            };
+            if n > 0 {
+                self.bursts.push((f, n));
+            }
+        }
+    }
+
+    /// The bursts inside the recorded frames, oldest first: the frame each
+    /// went off on, from the layer's first frame, and how many it threw.
+    #[must_use]
+    pub fn bursts(&self) -> &[(i64, u32)] {
+        &self.bursts
     }
 
     /// The first frame [`counts`](Self::counts) describes, from the in point.
@@ -1323,7 +1455,11 @@ impl Schedule {
     /// How many births this window records: the candidate set's size.
     #[must_use]
     pub fn candidates(&self) -> u64 {
-        self.counts.iter().map(|n| u64::from(*n)).sum()
+        self.counts
+            .iter()
+            .chain(self.bursts.iter().map(|(_, n)| n))
+            .map(|n| u64::from(*n))
+            .sum()
     }
 
     /// Every birth the schedule recorded, **newest first**: its birth index and
@@ -1331,8 +1467,22 @@ impl Schedule {
     ///
     /// Births are spread evenly inside the frame that owed them —
     /// `t_b = frame start + (j + ½)·Δt/n` — so a rate of one per frame does not
-    /// stack every particle on the frame boundary.
+    /// stack every particle on the frame boundary. A burst is all born at its
+    /// frame's start, and its indices sit above the steady flow's, so it comes
+    /// first here.
     fn newest_first(&self) -> impl Iterator<Item = (u64, f64)> + '_ {
+        let dt = self.dt;
+        let bursts = self.bursts.iter().rev().flat_map(move |&(f, n)| {
+            let base = burst_base(f);
+            (0..n)
+                .rev()
+                .map(move |j| (base + u64::from(j), f as f64 * dt))
+        });
+        bursts.chain(self.steady_newest_first())
+    }
+
+    /// The steady flow's births, newest first.
+    fn steady_newest_first(&self) -> impl Iterator<Item = (u64, f64)> + '_ {
         // The running birth index of each recorded frame, so the reverse walk
         // does not have to sum the prefix per frame.
         let mut starts: Vec<u64> = Vec::with_capacity(self.counts.len());

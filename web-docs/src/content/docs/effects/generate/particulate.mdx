@@ -40,6 +40,10 @@ A particle system.
 | **Spread z** | Slider | 0 to 180; up to 360 | 0 | Degrees |
 | **Initial speed** | Slider | 0 to 2000; higher | 90 | Pixels at composition size |
 | **Speed jitter** | Slider | 0 to 100 | 50 | Per cent |
+| **Burst** | Dropdown | Off · Once at start · Every N frames · On trigger | Off | - |
+| **Burst count** | Slider | 0 to 1000; up to 1000000 | 100 | - |
+| **Burst interval** | Slider | 1 to 120; higher | 24 | Frames |
+| **Trigger** | Slider | 0 to 1; any value by typing | 0 | - |
 | **Life** | Slider | 0.1 to 10; down to 0 and higher | 2 | Seconds |
 | **Life jitter** | Slider | 0 to 100 | 30 | Per cent |
 | **Size** | Slider | 0 to 200; higher | 4 | Pixels at composition size |
@@ -75,12 +79,16 @@ A particle system.
 In the Effect Controls panel:
 
 - **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Max particles**, **Seed**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
 - **Streak length** is editable while **Mode** is set to Streak.
+- **Burst count** is editable while **Burst** is anything but Off.
+- **Burst interval** is editable while **Burst** is set to Every N frames.
+- **Trigger** is editable while **Burst** is set to On trigger.
 - **Mask path** is editable while **Follow** is anything but Shape.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
@@ -107,6 +115,14 @@ The **Emitter** group, where particles come from and travel:
 - **Spread z**: the lean's own cone.
 - **Initial speed**: how fast a particle leaves.
 - **Speed jitter**: how much particles differ from each other in that speed.
+
+The **Bursts** group, particles thrown out all at once beside the steady flow:
+
+- **Burst**: **Off**, **Once at start** on the layer's first frame, **Every N frames**, or
+  **On trigger**, once each time **Trigger** rises past 0.5.
+- **Burst count**: how many particles one burst throws out.
+- **Burst interval**: how many frames apart the bursts are.
+- **Trigger**: the number On trigger watches. Wire a beat driver to it, or keyframe it.
 
 The **Particle** group, how a particle looks:
 

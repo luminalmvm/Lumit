@@ -133,6 +133,10 @@ Broadcast safe
 Brush hardness
 Brush size
 Bulge
+Burst
+Burst count
+Burst interval
+Bursts
 Bypass
 Camera track
 Cancel
@@ -337,6 +341,7 @@ End thickness
 End x
 End y
 Even
+Every N frames
 Every Nth beat
 Every layer
 Every nth
@@ -669,6 +674,8 @@ Offset z
 Omni
 On original
 On transparent
+On trigger
+Once at start
 One point
 Opacity
 Opacity %

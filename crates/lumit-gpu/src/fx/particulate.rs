@@ -110,13 +110,12 @@ pub struct ParticulateOp<'a> {
     pub eps: f32,
     /// The comp frame's length in seconds of layer time.
     pub dt: f32,
-    /// The birth index of candidate zero.
-    pub first_birth: u64,
     /// One entry per recorded frame plus a closing one: `[birth offset,
-    /// bit pattern of (t − that frame's start) in seconds]`. The subtraction is
-    /// the host's, in `f64`, so the small age never has to be recovered from
-    /// inside a large clock.
-    pub frames: &'a [[u32; 2]],
+    /// bit pattern of (t − that frame's start) in seconds, the frame's first
+    /// birth index low and high]`. The steady flow's frames come first and
+    /// then the bursts'. The subtraction is the host's, in `f64`, so the small
+    /// age never has to be recovered from inside a large clock.
+    pub frames: &'a [[u32; 4]],
     /// How many births the window records — the candidate count.
     pub candidates: u32,
     /// The two baked over-life curves, size then opacity, 257 entries each.
@@ -182,8 +181,7 @@ pub(super) struct ParticulateParams {
     pub(super) eps: f32,
 
     pub(super) dt: f32,
-    pub(super) first_birth_lo: u32,
-    pub(super) first_birth_hi: u32,
+    pub(super) _spare: [u32; 2],
     pub(super) frames: u32,
 
     pub(super) candidates: u32,
@@ -415,8 +413,7 @@ impl FxEngine {
             turb_speed: op.turbulence_speed,
             eps: op.eps,
             dt: op.dt,
-            first_birth_lo: op.first_birth as u32,
-            first_birth_hi: (op.first_birth >> 32) as u32,
+            _spare: [0; 2],
             frames: op.frames.len() as u32 - 1,
             candidates,
             path_len: op.path.len() as u32,
