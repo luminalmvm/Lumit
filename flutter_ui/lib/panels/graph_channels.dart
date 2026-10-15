@@ -128,6 +128,12 @@ class GraphChannel {
   final int animator;
   final TextAnimatorValue? animatorValue;
 
+  /// Set for one of a shape item's numbers: the item, which number, and
+  /// which gradient stop when it is a stop's.
+  final BridgeShapeItem? shape;
+  final ShapeValue? shapeValue;
+  final int shapeStop;
+
   /// True for a mask's **shape**. A path has no value to plot, so what
   /// this channel carries is the interpolation parameter — counted up, one per
   /// key — and both lenses draw its *slope*: the rate the shape is changing
@@ -154,6 +160,9 @@ class GraphChannel {
     this.maskVertex = -1,
     this.animator = -1,
     this.animatorValue,
+    this.shape,
+    this.shapeValue,
+    this.shapeStop = 0,
   });
 
   /// The hard bounds the engine will clamp a written value to, where this
@@ -383,6 +392,36 @@ List<GraphChannel> graphChannels({
         animator: index,
         animatorValue: value,
       ));
+      continue;
+    }
+
+    // A shape item's numbers, off the read model as a mask's are. Its outline
+    // keys as whole paths, so like a mask's it has no curve here. A stop's
+    // rows carry the stop after the name: `.../gradientStopPosition2`.
+    if (path.startsWith('${contentsPath(layerId)}/')) {
+      final rest = path.substring(contentsPath(layerId).length + 1);
+      final slash = rest.indexOf('/');
+      if (slash <= 0) continue;
+      final raw = rest.substring(slash + 1);
+      final name = raw.replaceFirst(RegExp(r'\d+$'), '');
+      final stop = int.tryParse(raw.substring(name.length)) ?? 0;
+      final value = ShapeValue.values.where((v) => v.name == name).firstOrNull;
+      if (value == null || value == ShapeValue.path) continue;
+      for (final item in entry.info.shapeContents) {
+        if (item.id.toString() != rest.substring(0, slash)) continue;
+        out.add(GraphChannel(
+          path: path,
+          id: path,
+          label: '${entry.info.name} · ${item.name} · '
+              '${shapeValueLabel(value, stop: stop)}',
+          colourIndex: out.length,
+          scalar: shapeScalarOf(item, value, stop: stop),
+          entry: entry,
+          shape: item,
+          shapeValue: value,
+          shapeStop: stop,
+        ));
+      }
       continue;
     }
 

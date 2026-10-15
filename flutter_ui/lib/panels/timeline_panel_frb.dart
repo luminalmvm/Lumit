@@ -2975,19 +2975,22 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     if (comp == null) return false;
     final channels = _commandChannels(ui);
     final selection = _actionKeySelection(channels);
-    if (selection.isEmpty) {
-      return copyChannels(comp: comp, channels: channels, fps: ui.model.fps);
-    }
     // The answer, not an assumption: a copy that took nothing must not claim
     // the chord, or `Ctrl+C` is swallowed and the clipboard still holds
     // whatever was copied before — which is the shape "Copy does nothing" took
     // on the owner's desktop.
-    return copySelectedKeys(
-      comp: comp,
-      channels: channels,
-      selectedKeys: selection,
-      fps: ui.model.fps,
-    );
+    final copied = selection.isEmpty
+        ? copyChannels(comp: comp, channels: channels, fps: ui.model.fps)
+        : copySelectedKeys(
+            comp: comp,
+            channels: channels,
+            selectedKeys: selection,
+            fps: ui.model.fps,
+          );
+    // Keys are now the last thing copied, so a paste onto picked layers puts
+    // keys down rather than a layer copied earlier.
+    if (copied) ui.clipboard.clear();
+    return copied;
   }
 
   /// Paste claims it when there are channels to paste *into* and keyframes to
@@ -2999,9 +3002,32 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     // The same channels Copy took them from, resolved the same way — so a
     // copy and the paste that follows it are looking at one list.
     final channels = _commandChannels(ui);
-    if (channels.isEmpty) return false;
-    if (graphKeyClipboard.isEmpty && !ui.clipboard.isEmpty) return false;
     final (fpsNum, fpsDen) = ui.model.fpsExact;
+    if (channels.isEmpty) {
+      // No rows picked, but layers are: each takes the keys on its own
+      // matching properties.
+      final picked = ui.selectedLayerIds;
+      if (graphKeyClipboard.isEmpty ||
+          !ui.clipboard.isEmpty ||
+          picked.isEmpty) {
+        return false;
+      }
+      final pasted = pasteKeysOntoLayers(
+        targets: [
+          for (final entry in ui.model.layers)
+            if (picked.contains(entry.layer.internallayerId)) entry,
+        ],
+        playheadFrame: ui.playheadFrame.value,
+        fps: ui.model.fps,
+        fpsNum: fpsNum,
+        fpsDen: fpsDen,
+        project: _project,
+        onPasted: _selectPasted,
+      );
+      if (pasted) ui.model.refresh();
+      return pasted;
+    }
+    if (graphKeyClipboard.isEmpty && !ui.clipboard.isEmpty) return false;
     pasteKeysAtPlayhead(
       channels: channels,
       playheadFrame: ui.playheadFrame.value,
@@ -3010,10 +3036,29 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       fpsDen: fpsDen,
       // One press, one step, however many layers the clipboard reaches.
       project: _project,
+      onPasted: _selectPasted,
     ).then((pasted) {
       if (pasted && mounted) ui.model.refresh();
     });
     return true;
+  }
+
+  /// Pick the keys a paste put down, in whichever view is showing.
+  void _selectPasted(List<PastedKey> pasted) {
+    if (!mounted || pasted.isEmpty) return;
+    if (!_graph) {
+      _onLaneKeysSelected({for (final k in pasted) '${k.path}#${k.index}'});
+      _publishLaneKeys();
+      return;
+    }
+    setState(() {
+      _graphKeySelection
+        ..clear()
+        ..addAll({for (final k in pasted) '${k.id}#${k.index}'});
+      _selectedProperties
+        ..clear()
+        ..addAll({for (final k in pasted) k.path});
+    });
   }
 
   bool _deleteSelectedMasks() {
