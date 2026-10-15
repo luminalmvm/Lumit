@@ -283,6 +283,9 @@ pub struct BridgeShapeItem {
     pub twist: Option<BridgeShapeTwist>,
     /// **Deform**, or `None` for none.
     pub deform: Option<BridgeShapeDeform>,
+    /// **Smooth**: how far along the path each point is averaged with its
+    /// neighbours, in pixels, or `None` for no smooth.
+    pub smooth: Option<BridgeScalar>,
 }
 
 /// A shape's twist: `angle` and `axis` in degrees, the centre in layer
@@ -392,6 +395,10 @@ impl BridgeShapeItem {
                 seed: BridgeScalar::read_at(&d.seed, offset),
                 detail: BridgeScalar::read_at(&d.detail, offset),
             }),
+            smooth: item
+                .smooth
+                .as_ref()
+                .map(|s| BridgeScalar::read_at(&s.amount, offset)),
         }
     }
 
@@ -552,6 +559,12 @@ impl BridgeShapeItem {
                     evolution: clamped_property(&d.evolution, offset, -360_000.0, 360_000.0)?,
                     seed: clamped_property(&d.seed, offset, 0.0, 1_000_000.0)?,
                     detail: clamped_property(&d.detail, offset, 0.1, 100.0)?,
+                }),
+                None => None,
+            },
+            smooth: match &self.smooth {
+                Some(amount) => Some(lumit_core::shape::Smooth {
+                    amount: clamped_property(amount, offset, 0.0, 10_000.0)?,
                 }),
                 None => None,
             },

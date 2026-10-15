@@ -99,6 +99,8 @@ class ShapeItemRow extends StatelessWidget {
             seed: BridgeScalar.static_(0),
             detail: BridgeScalar.static_(4),
           )),
+      ShapeOp.smooth =>
+        shapeItemWith(i, smooth: const BridgeScalar.static_(10)),
     };
   }
 
@@ -659,6 +661,7 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientStopPosition ||
         ShapeValue.gradientStopOpacity =>
           (0, 100, '%'),
+        ShapeValue.smoothAmount => (0, 1000, ' px'),
         ShapeValue.twistAngle || ShapeValue.twistAxis => (-3600, 3600, '°'),
         ShapeValue.twistCentreX ||
         ShapeValue.twistCentreY =>

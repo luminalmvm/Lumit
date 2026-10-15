@@ -26145,6 +26145,7 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
         let mut var_twist = <Option<crate::api::layer::BridgeShapeTwist>>::sse_decode(deserializer);
         let mut var_deform =
             <Option<crate::api::layer::BridgeShapeDeform>>::sse_decode(deserializer);
+        let mut var_smooth = <Option<crate::api::effect::BridgeScalar>>::sse_decode(deserializer);
         return crate::api::layer::BridgeShapeItem {
             id: var_id,
             name: var_name,
@@ -26183,6 +26184,7 @@ impl SseDecode for crate::api::layer::BridgeShapeItem {
             repeat_end_opacity: var_repeatEndOpacity,
             twist: var_twist,
             deform: var_deform,
+            smooth: var_smooth,
         };
     }
 }
@@ -36682,6 +36684,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeShapeItem {
             self.repeat_end_opacity.into_into_dart().into_dart(),
             self.twist.into_into_dart().into_dart(),
             self.deform.into_into_dart().into_dart(),
+            self.smooth.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -41932,6 +41935,7 @@ impl SseEncode for crate::api::layer::BridgeShapeItem {
         <crate::api::effect::BridgeScalar>::sse_encode(self.repeat_end_opacity, serializer);
         <Option<crate::api::layer::BridgeShapeTwist>>::sse_encode(self.twist, serializer);
         <Option<crate::api::layer::BridgeShapeDeform>>::sse_encode(self.deform, serializer);
+        <Option<crate::api::effect::BridgeScalar>>::sse_encode(self.smooth, serializer);
     }
 }
 

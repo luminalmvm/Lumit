@@ -23777,8 +23777,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 37)
-      throw Exception('unexpected arr length: expect 37 but see ${arr.length}');
+    if (arr.length != 38)
+      throw Exception('unexpected arr length: expect 38 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -23817,6 +23817,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       repeatEndOpacity: dco_decode_bridge_scalar(arr[34]),
       twist: dco_decode_opt_box_autoadd_bridge_shape_twist(arr[35]),
       deform: dco_decode_opt_box_autoadd_bridge_shape_deform(arr[36]),
+      smooth: dco_decode_opt_box_autoadd_bridge_scalar(arr[37]),
     );
   }
 
@@ -30340,6 +30341,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_twist = sse_decode_opt_box_autoadd_bridge_shape_twist(deserializer);
     var var_deform =
         sse_decode_opt_box_autoadd_bridge_shape_deform(deserializer);
+    var var_smooth = sse_decode_opt_box_autoadd_bridge_scalar(deserializer);
     return BridgeShapeItem(
         id: var_id,
         name: var_name,
@@ -30377,7 +30379,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         repeatStartOpacity: var_repeatStartOpacity,
         repeatEndOpacity: var_repeatEndOpacity,
         twist: var_twist,
-        deform: var_deform);
+        deform: var_deform,
+        smooth: var_smooth);
   }
 
   @protected
@@ -37224,6 +37227,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.repeatEndOpacity, serializer);
     sse_encode_opt_box_autoadd_bridge_shape_twist(self.twist, serializer);
     sse_encode_opt_box_autoadd_bridge_shape_deform(self.deform, serializer);
+    sse_encode_opt_box_autoadd_bridge_scalar(self.smooth, serializer);
   }
 
   @protected

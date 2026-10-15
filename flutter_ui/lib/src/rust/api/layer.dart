@@ -1751,6 +1751,10 @@ class BridgeShapeItem {
   /// **Deform**, or `None` for none.
   final BridgeShapeDeform? deform;
 
+  /// **Smooth**: how far along the path each point is averaged with its
+  /// neighbours, in pixels, or `None` for no smooth.
+  final BridgeScalar? smooth;
+
   const BridgeShapeItem({
     required this.id,
     required this.name,
@@ -1789,6 +1793,7 @@ class BridgeShapeItem {
     required this.repeatEndOpacity,
     this.twist,
     this.deform,
+    this.smooth,
   });
 
   @override
@@ -1829,7 +1834,8 @@ class BridgeShapeItem {
       repeatStartOpacity.hashCode ^
       repeatEndOpacity.hashCode ^
       twist.hashCode ^
-      deform.hashCode;
+      deform.hashCode ^
+      smooth.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1872,7 +1878,8 @@ class BridgeShapeItem {
           repeatStartOpacity == other.repeatStartOpacity &&
           repeatEndOpacity == other.repeatEndOpacity &&
           twist == other.twist &&
-          deform == other.deform;
+          deform == other.deform &&
+          smooth == other.smooth;
 }
 
 /// A shape's twist: `angle` and `axis` in degrees, the centre in layer

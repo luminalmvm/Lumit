@@ -9031,6 +9031,10 @@
   "@shapeTwistCentreY": {
     "description": "Timeline row under a shape layer's art: the y of the point the twist's axis passes through, in pixels."
   },
+  "shapeSmooth": "Smooth",
+  "@shapeSmooth": {
+    "description": "Shape operation, in the Add and Remove menus of a shape layer's art, and its Timeline row: how far along the path, in pixels, each point is averaged with its neighbours, which rounds off jags and corners."
+  },
   "shapeDeform": "Deform",
   "@shapeDeform": {
     "description": "Shape operation, in the Add and Remove menus of a shape layer's art, and its Timeline row choosing Displace or Scale: moves the outline with a smooth noise field."

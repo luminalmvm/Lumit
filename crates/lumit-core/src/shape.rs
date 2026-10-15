@@ -24,9 +24,9 @@
 //! carries Trim Paths, the Repeater and the rest as entries in a nested group,
 //! where their position decides what they act on. Lumit's list is flat, so each
 //! modifier is a property of the item it modifies and the order they apply in is
-//! fixed and written down here rather than dragged: **combine, then twist,
-//! then deform, then offset, then trim, then repeat**. A **combine** is the
-//! one field that reaches past its own item: it says how this item's path joins the item before it, and the
+//! fixed and written down here rather than dragged: **combine, then smooth,
+//! then twist, then deform, then offset, then trim, then repeat**. A
+//! **combine** is the one field that reaches past its own item: it says how this item's path joins the item before it, and the
 //! run that makes is drawn once with the first item's paint. The
 //! nested tree is still the long-term shape (docs/03 §9.2); nothing stored here
 //! stands in its way, because every modifier is absent from the file until it is
@@ -302,6 +302,9 @@ pub struct ShapeItem {
     /// **Deform**: the outline moved by a smooth noise field. `None` is none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deform: Option<Deform>,
+    /// **Smooth**: the whole path rounded off. `None` is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smooth: Option<Smooth>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -356,6 +359,16 @@ pub struct Deform {
     pub seed: Property,
     #[serde(default = "four", with = "crate::mask::still_or_keyed")]
     pub detail: Property,
+}
+
+/// A smooth: every point of the path averaged with its neighbours either
+/// side, `amount` pixels of path each way, so jags and corners round off
+/// along the whole of it. An average never leaves the points it was taken
+/// over, so the path never bulges past itself; it shrinks a little instead.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Smooth {
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub amount: Property,
 }
 
 fn four() -> Property {
@@ -449,6 +462,7 @@ impl ShapeItem {
             repeat_end_opacity: crate::paint::full(),
             twist: None,
             deform: None,
+            smooth: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -506,21 +520,30 @@ impl ShapeItem {
         Some(self.shaped(points, path.closed, t))
     }
 
-    /// True when the twist or the deform moves the path at `t`.
+    /// True when the smooth, the twist or the deform moves the path at `t`.
     fn reshapes_at(&self, t: f64) -> bool {
         self.twist.is_some()
+            || self
+                .smooth
+                .as_ref()
+                .is_some_and(|s| s.amount.value_at(t) > 0.0)
             || self
                 .deform
                 .as_ref()
                 .is_some_and(|d| d.amount.value_at(t) != 0.0)
     }
 
-    /// `points` once the twist and the deform have had them. The control
+    /// `points` once the smooth, the twist and the deform have had them, in
+    /// that order. The control
     /// points of the item's own path are what both measure the shape by, so
     /// every contour of a combined run is moved the same way.
     fn reshaped(&self, points: Vec<(f64, f64)>, closed: bool, t: f64) -> Vec<(f64, f64)> {
+        let mut points = match &self.smooth {
+            Some(smooth) => smoothed(&points, closed, smooth.amount.value_at(t)),
+            None => points,
+        };
         // Straight edges have to be cut up before they can bend.
-        let mut points = densified(&points, FINE_STEP);
+        points = densified(&points, FINE_STEP);
         let path = self.path_at(t);
         if let Some(twist) = &self.twist {
             twist.apply(&mut points, &path, t);
@@ -1667,6 +1690,77 @@ impl Deform {
         let rx = (x0 - mx).abs().max((x1 - mx).abs()) * grow;
         let ry = (y0 - my).abs().max((y1 - my).abs()) * grow;
         (mx - rx, my - ry, mx + rx, my + ry)
+    }
+}
+
+/// `points` with every point averaged with the path either side of it,
+/// `amount` pixels each way: the path walked into evenly spaced points, then
+/// three running averages, which together weigh the neighbours like a bell
+/// curve. An open path's ends stay put, the window closing in towards them.
+fn smoothed(points: &[(f64, f64)], closed: bool, amount: f64) -> Vec<(f64, f64)> {
+    let (ring, repeat) = ring_of(points, closed);
+    let (arc, total) = arc_of(ring, closed);
+    if amount <= 0.0 || ring.len() < 3 || total <= 0.0 {
+        return points.to_vec();
+    }
+    let step = (amount / 8.0)
+        .clamp(0.25, FINE_STEP)
+        .max(total / MAX_FINE_POINTS);
+    let pieces = (total / step).ceil().max(3.0) as usize;
+    let n = if closed { pieces } else { pieces + 1 };
+    let gap = total / pieces as f64;
+    let mut xs = Vec::with_capacity(n);
+    let mut ys = Vec::with_capacity(n);
+    for k in 0..n {
+        let p = point_at(ring, &arc, k as f64 * gap);
+        xs.push(p.0);
+        ys.push(p.1);
+    }
+    let reach = ((amount / (3.0 * gap)).round() as usize).max(1);
+    for _ in 0..3 {
+        xs = averaged(&xs, reach, closed);
+        ys = averaged(&ys, reach, closed);
+    }
+    let mut out: Vec<(f64, f64)> = xs.into_iter().zip(ys).collect();
+    if repeat {
+        out.push(out[0]);
+    }
+    out
+}
+
+/// Each of `values` replaced by the mean of itself and `reach` either side,
+/// wrapping round when `closed`. Open, the window narrows towards each end so
+/// the ends themselves never move.
+fn averaged(values: &[f64], reach: usize, closed: bool) -> Vec<f64> {
+    let n = values.len();
+    // Running totals, so the cost does not grow with the reach.
+    let mut sums = Vec::with_capacity(n + 1);
+    sums.push(0.0);
+    for v in values {
+        sums.push(sums[sums.len() - 1] + v);
+    }
+    let all = sums[n];
+    if closed {
+        let reach = reach.min((n - 1) / 2);
+        let width = (2 * reach + 1) as f64;
+        (0..n)
+            .map(|i| {
+                let (from, to) = ((i + n - reach) % n, (i + reach) % n);
+                let sum = if from <= to {
+                    sums[to + 1] - sums[from]
+                } else {
+                    all - sums[from] + sums[to + 1]
+                };
+                sum / width
+            })
+            .collect()
+    } else {
+        (0..n)
+            .map(|i| {
+                let r = reach.min(i).min(n - 1 - i);
+                (sums[i + r + 1] - sums[i - r]) / (2 * r + 1) as f64
+            })
+            .collect()
     }
 }
 

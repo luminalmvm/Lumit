@@ -93,7 +93,16 @@ Right-click a shape group in the Timeline for **Add** and **Remove**, which list
 operations it can be given and the ones it has. An operation's rows appear under the group
 once it is added. Every row is animatable.
 
-They apply in a fixed order: twist, deform, then offset, trim and the repeater.
+They apply in a fixed order: smooth, twist, deform, then offset, trim and the repeater.
+
+### Smooth
+
+**Smooth** rounds off the whole path, jags and corners alike. Its one row, also **Smooth**,
+is how far along the path each point is averaged with its neighbours, in pixels. 0 leaves
+the path alone.
+
+The path never bulges past its own points; a large smooth shrinks it a little instead. An
+open path's ends stay where they are.
 
 ### Twist
 

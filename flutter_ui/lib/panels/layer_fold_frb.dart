@@ -214,6 +214,7 @@ enum ShapeValue {
   gradientStartY,
   gradientEndX,
   gradientEndY,
+  smoothAmount,
   twistAngle,
   twistAxis,
   twistCentreX,
@@ -244,22 +245,25 @@ enum ShapeValue {
 
 /// The operations a shape item can be given from its menu. Each is absent
 /// until it is added, and its rows with it.
-enum ShapeOp { twist, deform }
+enum ShapeOp { twist, deform, smooth }
 
 /// Whether [item] has [op].
 bool hasShapeOp(BridgeShapeItem item, ShapeOp op) => switch (op) {
       ShapeOp.twist => item.twist != null,
       ShapeOp.deform => item.deform != null,
+      ShapeOp.smooth => item.smooth != null,
     };
 
 /// What [op] is called in the item's menu.
 String shapeOpLabel(ShapeOp op) => switch (op) {
       ShapeOp.twist => l10n.shapeTwist,
       ShapeOp.deform => l10n.shapeDeform,
+      ShapeOp.smooth => l10n.shapeSmooth,
     };
 
 /// The operation [value] belongs to, or null for a number every item has.
 ShapeOp? shapeOpOf(ShapeValue value) => switch (value) {
+      ShapeValue.smoothAmount => ShapeOp.smooth,
       ShapeValue.twistAngle ||
       ShapeValue.twistAxis ||
       ShapeValue.twistCentreX ||
@@ -1148,6 +1152,7 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.gradientStartY => l10n.shapeGradientStartY,
       ShapeValue.gradientEndX => l10n.shapeGradientEndX,
       ShapeValue.gradientEndY => l10n.shapeGradientEndY,
+      ShapeValue.smoothAmount => l10n.shapeSmooth,
       ShapeValue.twistAngle => l10n.shapeTwistAngle,
       ShapeValue.twistAxis => l10n.shapeTwistAxis,
       ShapeValue.twistCentreX => l10n.shapeTwistCentreX,
@@ -1207,6 +1212,7 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.gradientEndY => item.gradientEndY,
       // An operation the item does not have reads as the still zero nobody
       // draws, as a gone stop does.
+      ShapeValue.smoothAmount => item.smooth ?? _none,
       ShapeValue.twistAngle => item.twist?.angle ?? _none,
       ShapeValue.twistAxis => item.twist?.axis ?? _none,
       ShapeValue.twistCentreX => item.twist?.centreX ?? _none,
@@ -1263,6 +1269,7 @@ BridgeShapeItem shapeItemWith(
   BridgeShapeTwist? twist,
   BridgeShapeDeform? deform,
   int? deformMode,
+  BridgeScalar? smooth,
   ShapeOp? remove,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
@@ -1348,6 +1355,13 @@ BridgeShapeItem shapeItemWith(
                     centreX: at(ShapeValue.twistCentreX, twisted.centreX),
                     centreY: at(ShapeValue.twistCentreY, twisted.centreY),
                   )),
+    smooth: remove == ShapeOp.smooth
+        ? null
+        : smooth ??
+            switch (item.smooth) {
+              final was? => at(ShapeValue.smoothAmount, was),
+              null => null,
+            },
     deform: remove == ShapeOp.deform
         ? null
         : deform ??
