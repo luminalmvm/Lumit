@@ -73,6 +73,10 @@ class RowValueDrag {
 /// Which reading of the curve is on screen (docs/07 §5.1).
 enum GraphLens { value, speed }
 
+/// Whose curves the graph draws: the picked properties, every animated one
+/// of the picked layers, or every animated one in the composition.
+enum GraphScope { selected, layer, comp }
+
 /// One animatable channel on the graph: a single scalar curve, where it came
 /// from, and how to write it back.
 class GraphChannel {
