@@ -72,7 +72,7 @@ class LaneBottomBar extends StatelessWidget {
 
   /// What the view under this bar adds after the magnet: the graph's own
   /// framing buttons. Empty for the lanes.
-  final List<Widget> viewButtons;
+  final List<FoldItem> viewButtons;
 
   const LaneBottomBar({
     super.key,
@@ -179,85 +179,105 @@ class LaneBottomBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
         children: [
-          // The run scrolls sideways rather than overflowing when the panel is
-          // squeezed — the same answer the toolbar gives; an overflow stripe is
-          // a layout fault. Loose, so at any ordinary width it takes exactly
-          // what it needs and the scrollbar keeps the rest.
+          // The zoom never folds; the magnet and the view's own buttons fold
+          // into the overflow mark when the panel is squeezed, where they used
+          // to scroll out of sight. Loose, so at any ordinary width it takes
+          // exactly what it needs and the scrollbar keeps the rest.
           Flexible(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  // Desk turns the zoom on a dial; the other shapes slide it.
-                  if (t.shape == ThemeShape.desk)
-                    ..._dial(t)
-                  else ...[
-                    _zoomEnd(t, inward: false),
-                    const SizedBox(width: 4),
-                    LumitTooltip(
-                      message: l10n.tipZoomPercent('${(zoom * 100).round()}'),
-                      child: HouseSlider(
-                        key: const ValueKey('tl-zoom-slider'),
-                        // The slider runs on the *logarithm* of the zoom, so
-                        // equal travel buys equal ratio, the same reason the
-                        // flight interpolates that way. A linear one would spend
-                        // nine tenths of its length in the last few frames of a
-                        // long comp.
-                        value: zoomSliderPosition(zoom, maxZoom),
-                        min: 0,
-                        max: 1,
-                        width: 96,
-                        showValue: false,
-                        // Dragged, the zoom follows the finger with no flight;
-                        // tapped, it flies to where the track was clicked. The
-                        // drag's ends bracket the gesture so the panel anchors
-                        // once.
-                        onChangeStart: onZoomDragStart,
-                        onChangeEnd: onZoomDragEnd,
-                        onChangeLive: (v) =>
-                            onZoomLive(zoomForSliderPosition(v, maxZoom)),
-                        onChanged: (v) =>
-                            onZoom(zoomForSliderPosition(v, maxZoom)),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    _zoomEnd(t, inward: true),
-                  ],
-                  const SizedBox(width: 6),
-                  if (magnet case final on?)
-                    LumitTooltip(
-                      message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
-                      // Lantern's magnet is a circle: the stadium radius on a
-                      // square button.
-                      child: SizedBox(
-                        width: t.shape == ThemeShape.lantern ? 18 : null,
-                        height: t.shape == ThemeShape.lantern ? 18 : null,
-                        child: HouseButton(
-                          key: const ValueKey('tl-magnet'),
-                          small: true,
-                          // **No accent**: §3.1's list is closed: the one filled
-                          // button, the playhead, the workspace tick, and a snap
-                          // toggle is not on it. On reads the way every other
-                          // toggle in this chrome reads: the glyph at foreground
-                          // strength on the button's own face, off is frameless
-                          // and muted.
-                          frameless: !on,
-                          padding: t.shape == ThemeShape.lantern
-                              ? EdgeInsets.zero
-                              : const EdgeInsets.symmetric(horizontal: 4),
-                          onPressed: onToggleMagnet,
-                          child: lumitIcon(LumitIcon.magnet,
-                              size: iconSize,
-                              color: on ? t.textPrimary : t.textMuted),
+            child: FoldingRow(
+              markKey: const ValueKey('tl-lane-bar-overflow'),
+              markWidth: iconSize + 8,
+              markHeight: t.density.secondaryRow - 2,
+              items: [
+                FoldItem(
+                  keep: true,
+                  label: l10n.tipZoomPercent('${(zoom * 100).round()}'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Desk turns the zoom on a dial; the other shapes slide it.
+                      if (t.shape == ThemeShape.desk)
+                        ..._dial(t)
+                      else ...[
+                        _zoomEnd(t, inward: false),
+                        const SizedBox(width: 4),
+                        LumitTooltip(
+                          message:
+                              l10n.tipZoomPercent('${(zoom * 100).round()}'),
+                          child: HouseSlider(
+                            key: const ValueKey('tl-zoom-slider'),
+                            // The slider runs on the *logarithm* of the zoom,
+                            // so equal travel buys equal ratio, the same reason
+                            // the flight interpolates that way. A linear one
+                            // would spend nine tenths of its length in the last
+                            // few frames of a long comp.
+                            value: zoomSliderPosition(zoom, maxZoom),
+                            min: 0,
+                            max: 1,
+                            width: 96,
+                            showValue: false,
+                            // Dragged, the zoom follows the finger with no
+                            // flight; tapped, it flies to where the track was
+                            // clicked. The drag's ends bracket the gesture so
+                            // the panel anchors once.
+                            onChangeStart: onZoomDragStart,
+                            onChangeEnd: onZoomDragEnd,
+                            onChangeLive: (v) =>
+                                onZoomLive(zoomForSliderPosition(v, maxZoom)),
+                            onChanged: (v) =>
+                                onZoom(zoomForSliderPosition(v, maxZoom)),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        _zoomEnd(t, inward: true),
+                      ],
+                    ],
+                  ),
+                ),
+                if (magnet case final on?)
+                  FoldItem(
+                    label: on ? l10n.tipSnapOn : l10n.tipSnapOff,
+                    icon: lumitIcon(LumitIcon.magnet,
+                        size: iconSize,
+                        color: on ? t.textPrimary : t.textSecondary),
+                    selected: on,
+                    onPressed: onToggleMagnet,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: LumitTooltip(
+                        message: on ? l10n.tipSnapOn : l10n.tipSnapOff,
+                        // Lantern's magnet is a circle: the stadium radius on a
+                        // square button.
+                        child: SizedBox(
+                          width: t.shape == ThemeShape.lantern ? 18 : null,
+                          height: t.shape == ThemeShape.lantern ? 18 : null,
+                          child: HouseButton(
+                            key: const ValueKey('tl-magnet'),
+                            small: true,
+                            // **No accent**: §3.1's list is closed: the one
+                            // filled button, the playhead, the workspace tick,
+                            // and a snap toggle is not on it. On reads the way
+                            // every other toggle in this chrome reads: the
+                            // glyph at foreground strength on the button's own
+                            // face, off is frameless and muted.
+                            frameless: !on,
+                            padding: t.shape == ThemeShape.lantern
+                                ? EdgeInsets.zero
+                                : const EdgeInsets.symmetric(horizontal: 4),
+                            onPressed: onToggleMagnet,
+                            child: lumitIcon(LumitIcon.magnet,
+                                size: iconSize,
+                                color: on ? t.textPrimary : t.textMuted),
+                          ),
                         ),
                       ),
                     ),
-                  ...viewButtons,
-                  const SizedBox(width: 12),
-                ],
-              ),
+                  ),
+                ...viewButtons,
+              ],
             ),
           ),
+          const SizedBox(width: 12),
           Expanded(
             child: GutterScrollbar(
               controller: hScroll,

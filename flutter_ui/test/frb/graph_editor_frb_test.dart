@@ -8,6 +8,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/panels/graph_editor_frb.dart';
 import 'package:lumit_flutter/panels/graph_maths.dart';
@@ -20,6 +21,19 @@ import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
 
 import 'frb_test_support.dart';
+
+/// Presses one of the graph's bottom-bar commands: on the strip where it
+/// stands, or through the overflow mark when the narrow outline has folded it.
+Future<void> pressStrip(WidgetTester tester, String key, String label) async {
+  final button = find.byKey(ValueKey<String>(key));
+  if (button.hitTestable().evaluate().isNotEmpty) {
+    await tester.tap(button);
+    return;
+  }
+  await tester.tap(find.byKey(const ValueKey('tl-key-commands-overflow')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
+}
 
 void main() {
   setUpAll(initEngineForTests);
@@ -228,21 +242,15 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>(opacityKey(p.layer, 0))));
       await tester.pump();
 
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('graph-interp-hold')));
-      await tester.tap(find.byKey(const ValueKey('graph-interp-hold')));
+      await pressStrip(tester, 'graph-interp-hold', l10n.easeHold);
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Hold>());
 
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('graph-interp-bezier')));
-      await tester.tap(find.byKey(const ValueKey('graph-interp-bezier')));
+      await pressStrip(tester, 'graph-interp-bezier', l10n.easeEasy);
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Bezier>());
 
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('graph-interp-linear')));
-      await tester.tap(find.byKey(const ValueKey('graph-interp-linear')));
+      await pressStrip(tester, 'graph-interp-linear', l10n.easeLinear);
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, isA<BridgeSideInterp_Linear>());
 
@@ -265,32 +273,24 @@ void main() {
       await tester.pump();
 
       // Shape the side by hand first: an ease the automatic modes must not eat.
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('graph-interp-bezier')));
-      await tester.tap(find.byKey(const ValueKey('graph-interp-bezier')));
+      await pressStrip(tester, 'graph-interp-bezier', l10n.easeEasy);
       await tester.pumpAndSettle();
       final custom = opacityKeys(p.layer)[0].interpOut;
       expect(custom, isA<BridgeSideInterp_Bezier>());
 
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('graph-tangent-auto')));
-      await tester.tap(find.byKey(const ValueKey('graph-tangent-auto')));
+      await pressStrip(tester, 'graph-tangent-auto', l10n.graphTangentAuto);
       await tester.pumpAndSettle();
       final automatic = opacityKeys(p.layer)[0].interpOut;
       expect(automatic, isA<BridgeSideInterp_Auto>());
       expect((automatic as BridgeSideInterp_Auto).field0.clamped, isFalse);
 
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('graph-tangent-clamp')));
-      await tester.tap(find.byKey(const ValueKey('graph-tangent-clamp')));
+      await pressStrip(tester, 'graph-tangent-clamp', l10n.graphTangentClamp);
       await tester.pumpAndSettle();
       final clamped = opacityKeys(p.layer)[0].interpOut;
       expect(clamped, isA<BridgeSideInterp_Auto>());
       expect((clamped as BridgeSideInterp_Auto).field0.clamped, isTrue);
 
-      await tester
-          .ensureVisible(find.byKey(const ValueKey('graph-tangent-free')));
-      await tester.tap(find.byKey(const ValueKey('graph-tangent-free')));
+      await pressStrip(tester, 'graph-tangent-free', l10n.graphTangentFree);
       await tester.pumpAndSettle();
       expect(opacityKeys(p.layer)[0].interpOut, custom,
           reason: 'Free → Auto → Free gives the shaped ease back');
@@ -317,9 +317,7 @@ void main() {
       // The editor is a popup: a click outside it takes it back, so the
       // selection is made first and the box opened over it.
       Future<void> openEditor() async {
-        await tester
-            .ensureVisible(find.byKey(const ValueKey('graph-interp-easing')));
-        await tester.tap(find.byKey(const ValueKey('graph-interp-easing')));
+        await pressStrip(tester, 'graph-interp-easing', l10n.easeCustom);
         await tester.pumpAndSettle();
       }
 
@@ -496,10 +494,8 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.f9);
       await tester.pumpAndSettle();
 
-      final toggle = find.byKey(const ValueKey('graph-break-handles'));
-      await tester.ensureVisible(toggle);
-      await tester.pump();
-      await tester.tap(toggle);
+      await pressStrip(
+          tester, 'graph-break-handles', l10n.graphBreakHandles);
       await tester.pump();
 
       final base =

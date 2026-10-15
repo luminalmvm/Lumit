@@ -14,6 +14,7 @@ export 'controls/indicators.dart';
 export 'controls/menus.dart';
 export 'controls/modal_window.dart';
 export 'controls/motion.dart';
+export 'controls/overflow.dart';
 export 'controls/popups.dart';
 export 'controls/scrollbar.dart';
 export 'controls/slider.dart';

@@ -606,6 +606,63 @@ class KeyCommandStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    // One button and the gap before it, folded together, and its row in the
+    // overflow menu. Two gaps run through this strip: 2 between the chips of
+    // one segmented run, 12 between one run and the next, so the runs read
+    // as groups rather than as one long strip of buttons.
+    FoldItem item(Widget button,
+            {required String label,
+            required VoidCallback onPressed,
+            String? mark,
+            double gap = 0,
+            bool on = false,
+            bool keep = false}) =>
+        FoldItem(
+          keep: keep,
+          label: label,
+          selected: on,
+          icon: mark == null
+              ? null
+              : glyph.LumitIcon(mark, size: iconSize, colour: t.textSecondary),
+          onPressed: onPressed,
+          child: Padding(padding: EdgeInsets.only(left: gap), child: button),
+        );
+    FoldItem glyphItem(String keyName, String mark, String word,
+        {required VoidCallback onPressed, String? action, double gap = 2}) {
+      return item(
+          _glyphButton(t,
+              keyName: keyName,
+              mark: mark,
+              word: word,
+              action: action,
+              onPressed: onPressed),
+          label: word,
+          mark: mark,
+          gap: gap,
+          onPressed: onPressed);
+    }
+
+    FoldItem wordItem(String keyName, String label, String tip,
+        {required VoidCallback onPressed,
+        String? action,
+        bool on = false,
+        double gap = 2,
+        bool keep = false}) {
+      return item(
+          _button(t,
+              keyName: keyName,
+              label: label,
+              tip: tip,
+              action: action,
+              on: on,
+              onPressed: onPressed),
+          label: label,
+          on: on,
+          gap: gap,
+          keep: keep,
+          onPressed: onPressed);
+    }
+
     return Container(
       key: const ValueKey('tl-key-commands'),
       height: t.density.secondaryRow,
@@ -614,98 +671,81 @@ class KeyCommandStrip extends StatelessWidget {
       // can be told to do.
       color: t.surface2,
       padding: const EdgeInsets.only(left: 10),
-      // Scrolls sideways when the outline is narrow — the same answer the
-      // toolbar and the lane bar give; an overflow stripe is a layout fault.
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            // Two gaps run through this strip: 2 between the chips of one
-            // segmented run, 12 between one run and the next, so the runs read
-            // as groups rather than as one long strip of buttons.
+      // Folds from the end into the overflow mark when the outline is narrow;
+      // an overflow stripe is a layout fault.
+      child: Align(
+        alignment: Alignment.centerLeft,
+        widthFactor: 1,
+        child: FoldingRow(
+          markKey: const ValueKey('tl-key-commands-overflow'),
+          markWidth: iconSize + 8,
+          markHeight: t.density.secondaryRow - 2,
+          items: [
             if (strip) ...[
               // Glyphs, not words (the owner's ask): the set's own
               // marks for the four interpolations, each named by its tooltip.
-              _glyphButton(t,
-                  keyName: 'keys-interp-linear',
-                  mark: LumitIcons.linear,
-                  word: l10n.easeLinear,
+              glyphItem('keys-interp-linear', LumitIcons.linear, l10n.easeLinear,
+                  gap: 0,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.linear())),
-              const SizedBox(width: 2),
               // Easy ease, under the name the keyframe menus give it, and in
               // the place the graph's strip gives it: second of the four.
               // The bare eased curve: nothing here has a handle to drag.
-              _glyphButton(t,
-                  keyName: 'keys-interp-bezier',
-                  mark: LumitIcons.easeInOut,
-                  word: l10n.easeEasy,
+              glyphItem('keys-interp-bezier', LumitIcons.easeInOut,
+                  l10n.easeEasy,
                   action: 'graph.ease',
                   onPressed: () => onInterp?.call(easyEase)),
-              const SizedBox(width: 2),
-              _glyphButton(t,
-                  keyName: 'keys-interp-hold',
-                  mark: LumitIcons.hold,
-                  word: l10n.easeHold,
+              glyphItem('keys-interp-hold', LumitIcons.hold, l10n.easeHold,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.hold())),
-              const SizedBox(width: 2),
               // The shaped ease, one step along from the flat three: the same
               // selection, a curve chosen by name instead of a constant. Its
               // own Builder so the popover can be anchored to the glyph that
-              // opened it.
-              Builder(
-                builder: (buttonContext) => _glyphButton(t,
-                    keyName: 'keys-interp-ease',
-                    mark: LumitIcons.ease,
-                    word: l10n.keysEase,
-                    onPressed: () => onEaseBlock?.call(buttonContext)),
-              ),
+              // opened it; from the overflow menu it is anchored to the strip.
+              item(
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2),
+                    child: Builder(
+                      builder: (buttonContext) => _glyphButton(t,
+                          keyName: 'keys-interp-ease',
+                          mark: LumitIcons.ease,
+                          word: l10n.keysEase,
+                          onPressed: () => onEaseBlock?.call(buttonContext)),
+                    ),
+                  ),
+                  label: l10n.keysEase,
+                  mark: LumitIcons.ease,
+                  onPressed: () => onEaseBlock?.call(context)),
               // No second run: Reverse, Copy and Paste at playhead left the
               // strip on the owner's ruling (2026-08-31, desktop testing).
               // Copy and Paste keep their Ctrl+C / Ctrl+V roads; the four
               // interpolations are the whole of the bar.
             ],
             if (lens != null) ...[
-              // Which graph is drawn comes first, so it is in reach however
-              // narrow the outline is. The rest scrolls.
-              _button(t,
-                  keyName: 'graph-lens-value',
-                  label: l10n.clipboardValueColumn,
-                  tip: l10n.tipValueGraph,
+              // Which graph is drawn comes first and never folds, so it is in
+              // reach however narrow the outline is.
+              wordItem('graph-lens-value', l10n.clipboardValueColumn,
+                  l10n.tipValueGraph,
+                  gap: 0,
+                  keep: true,
                   on: lens == GraphLens.value,
                   onPressed: () => onLens?.call(GraphLens.value)),
-              const SizedBox(width: 2),
-              _button(t,
-                  keyName: 'graph-lens-speed',
-                  label: l10n.graphSpeed,
-                  tip: l10n.tipSpeedGraph,
+              wordItem('graph-lens-speed', l10n.graphSpeed, l10n.tipSpeedGraph,
+                  keep: true,
                   on: lens == GraphLens.speed,
                   onPressed: () => onLens?.call(GraphLens.speed)),
-              const SizedBox(width: 12),
               // The selected keys' easing, one click each — the F9 family's
               // buttons (docs/07 §5.3).
-              _button(t,
-                  keyName: 'graph-interp-linear',
-                  label: l10n.easeLinear,
-                  tip: l10n.tipLinearKeyframes,
-                  on: false,
+              wordItem('graph-interp-linear', l10n.easeLinear,
+                  l10n.tipLinearKeyframes,
+                  gap: 12,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.linear())),
-              const SizedBox(width: 2),
-              _button(t,
-                  keyName: 'graph-interp-bezier',
-                  label: l10n.easeEasy,
-                  tip: l10n.tipEasyEase,
+              wordItem('graph-interp-bezier', l10n.easeEasy, l10n.tipEasyEase,
                   action: 'graph.ease',
-                  on: false,
                   onPressed: () => onInterp?.call(easyEase)),
-              const SizedBox(width: 2),
-              _button(t,
-                  keyName: 'graph-interp-hold',
-                  label: l10n.easeHold,
-                  tip: l10n.tipHoldKeyframes,
-                  on: false,
+              wordItem('graph-interp-hold', l10n.easeHold,
+                  l10n.tipHoldKeyframes,
                   onPressed: () =>
                       onInterp?.call(const BridgeSideInterp.hold())),
               // The shaped ease, one step along from the one-click three: same
@@ -718,18 +758,21 @@ class KeyCommandStrip extends StatelessWidget {
               // land on the value graph — a change the user cannot see in the
               // view they drew it in. The one-click three above stay in both
               // lenses: a side's interp means the same thing either way.
-              if (lens == GraphLens.value) ...[
-                const SizedBox(width: 2),
-                Builder(
-                  builder: (buttonContext) => _button(t,
-                      keyName: 'graph-interp-easing',
-                      label: l10n.easeCustom,
-                      tip: l10n.tipEasingEditor,
-                      on: false,
-                      onPressed: () => onOpenEasing?.call(buttonContext)),
-                ),
-              ],
-              const SizedBox(width: 12),
+              if (lens == GraphLens.value)
+                item(
+                    Padding(
+                      padding: const EdgeInsets.only(left: 2),
+                      child: Builder(
+                        builder: (buttonContext) => _button(t,
+                            keyName: 'graph-interp-easing',
+                            label: l10n.easeCustom,
+                            tip: l10n.tipEasingEditor,
+                            on: false,
+                            onPressed: () => onOpenEasing?.call(buttonContext)),
+                      ),
+                    ),
+                    label: l10n.easeCustom,
+                    onPressed: () => onOpenEasing?.call(context)),
               // Tangents — Auto / Clamp / Free (§6.3), after the ease
               // presets. A run of three like the eases
               // beside them, and unlit for the same reason: these are things
@@ -737,33 +780,23 @@ class KeyCommandStrip extends StatelessWidget {
               // has no one answer to light. Which mode a side is in is legible
               // where it matters — in the handle, which stops following its
               // neighbours the moment it is dragged.
-              _button(t,
-                  keyName: 'graph-tangent-auto',
-                  label: l10n.graphTangentAuto,
-                  tip: l10n.tipTangentAuto,
-                  on: false,
+              wordItem('graph-tangent-auto', l10n.graphTangentAuto,
+                  l10n.tipTangentAuto,
+                  gap: 12,
                   onPressed: () => onTangentMode?.call(TangentMode.auto)),
-              const SizedBox(width: 2),
-              _button(t,
-                  keyName: 'graph-tangent-clamp',
-                  label: l10n.graphTangentClamp,
-                  tip: l10n.tipTangentClamp,
-                  on: false,
+              wordItem('graph-tangent-clamp', l10n.graphTangentClamp,
+                  l10n.tipTangentClamp,
                   onPressed: () => onTangentMode?.call(TangentMode.clamp)),
-              const SizedBox(width: 2),
-              _button(t,
-                  keyName: 'graph-tangent-free',
-                  label: l10n.graphTangentFree,
-                  tip: l10n.tipTangentFree,
-                  on: false,
+              wordItem('graph-tangent-free', l10n.graphTangentFree,
+                  l10n.tipTangentFree,
                   onPressed: () => onTangentMode?.call(TangentMode.free)),
-              const SizedBox(width: 12),
-              _button(t,
-                  keyName: 'graph-break-handles',
-                  label: l10n.graphBreakHandles,
-                  tip: breakHandles
+              wordItem(
+                  'graph-break-handles',
+                  l10n.graphBreakHandles,
+                  breakHandles
                       ? l10n.tipBreakHandlesOn
                       : l10n.tipBreakHandlesOff,
+                  gap: 12,
                   on: breakHandles,
                   onPressed: () => onToggleBreakHandles?.call()),
             ],
@@ -840,8 +873,8 @@ class ColumnToggles extends StatelessWidget {
       height: t.density.secondaryRow,
       color: t.surface2,
       padding: const EdgeInsets.only(right: 10),
-      // Scrolls sideways when the outline is narrow — the same answer the
-      // toolbar and the lane bar give; an overflow stripe is a layout fault.
+      // Scrolls sideways when the outline is narrow; an overflow stripe is a
+      // layout fault.
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
