@@ -764,6 +764,54 @@ void main() {
           reason: 'one undo puts back the whole drag, both axes at once');
     });
 
+    /// An effect's point dragged on the picture lands where the mark was let
+    /// go, and both halves undo together.
+    testWidgets('a dragged effect point is one undo step', (tester) async {
+      final p = withLayer();
+      p.layer.addEffect(name: 'radial_blur');
+      final fx = p.layer.getEffects().single.id();
+      p.uiState
+        ..setEffectSelection(p.layer, [fx])
+        ..model.refresh();
+      await mount(tester, p);
+
+      double half(String id) =>
+          ((p.layer.getEffects().single.getValue(id: id)
+                      as BridgeEffectValue_Float)
+                  .field0 as BridgeScalar_Static)
+              .field0;
+      final beforeX = half('centre_x'), beforeY = half('centre_y');
+      final layerX =
+          (p.layer.getTransform().positionX as BridgeScalar_Static).field0;
+
+      final mark = find.byKey(ValueKey<String>(
+          'viewer-fx-point-${p.layer.internallayerId}/$fx/centre_x'));
+      final from = tester.getCenter(mark);
+      final gesture = await tester.startGesture(from);
+      await tester.pump();
+      for (var i = 0; i < 8; i++) {
+        await gesture.moveBy(const Offset(6, 5));
+        await tester.pump();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(half('centre_x'), isNot(closeTo(beforeX, 1e-6)));
+      expect(half('centre_y'), isNot(closeTo(beforeY, 1e-6)));
+      final to = tester.getCenter(mark);
+      expect(to.dx, closeTo(from.dx + 48, 0.5),
+          reason: 'the mark sits where it was let go');
+      expect(to.dy, closeTo(from.dy + 40, 0.5));
+      expect((p.layer.getTransform().positionX as BridgeScalar_Static).field0,
+          closeTo(layerX, 1e-9),
+          reason: 'the press did not fall through to the layer');
+
+      p.state.project!.undo();
+      expect(half('centre_x'), closeTo(beforeX, 1e-6));
+      expect(half('centre_y'), closeTo(beforeY, 1e-6),
+          reason: 'one undo puts the whole point back');
+    });
+
     testWidgets(
         'a drag from empty space marquees, and takes what is wholly'
         ' inside it', (tester) async {

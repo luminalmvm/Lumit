@@ -808,6 +808,8 @@ class ViewerStage extends StatelessWidget {
                   compSize.height.toDouble(),
                 ),
                 colour: t.accent,
+                tool: uiState.tools.tool,
+                onChanged: onChanged,
               ),
             // The region of interest: the outline whenever one is set,
             // and — only while armed — the drag that sweeps a new one. Above
