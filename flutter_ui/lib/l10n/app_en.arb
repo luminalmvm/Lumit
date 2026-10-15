@@ -8097,6 +8097,18 @@
   "@tipFitSelection": {
     "description": "Tooltip on the graph editor's Fit selection button. One or two words."
   },
+  "tipGraphScopeSelected": "Selected curves",
+  "@tipGraphScopeSelected": {
+    "description": "Tooltip on the graph editor's scope button, when it shows only the selected properties' curves. A click moves it on to the layer's. One or two words."
+  },
+  "tipGraphScopeLayer": "Layer curves",
+  "@tipGraphScopeLayer": {
+    "description": "Tooltip on the graph editor's scope button, when it shows every animated property of the selected layers. A click moves it on to the whole composition's. One or two words."
+  },
+  "tipGraphScopeComp": "Composition curves",
+  "@tipGraphScopeComp": {
+    "description": "Tooltip on the graph editor's scope button, when it shows every animated property in the composition. A click moves it back to the selected properties'. One or two words."
+  },
   "tipBreakHandlesOn": "Handles broken",
   "@tipBreakHandlesOn": {
     "description": "Tooltip on the graph editor's Break handles button, when it is on. One or two words."

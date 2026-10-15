@@ -8,6 +8,7 @@ import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart';
+import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
 import 'effect_param_row_frb.dart';
@@ -289,6 +290,8 @@ LumitClipGroup _transformClipGroup(
 /// came off three properties on two layers writes one op per layer per kind,
 /// and one press of Ctrl+V is one press. Optional, so a caller with no project
 /// to hand — a widget test — pastes exactly as it always did.
+///
+/// [onPasted] hears where the pasted keys ended up, so they can be selected.
 Future<bool> pasteKeysAtPlayhead({
   required List<GraphChannel> channels,
   required int playheadFrame,
@@ -296,6 +299,7 @@ Future<bool> pasteKeysAtPlayhead({
   required int fpsNum,
   required int fpsDen,
   ProjectReference? project,
+  void Function(List<PastedKey> pasted)? onPasted,
 }) async {
   if (channels.isEmpty) return false;
 
@@ -346,41 +350,253 @@ Future<bool> pasteKeysAtPlayhead({
   }
   if (sources.isEmpty) return false;
 
-  var earliest = double.infinity;
-  for (final source in sources) {
-    for (final (frame, _) in source) {
-      if (frame < earliest) earliest = frame;
+  final paste = _Paste(
+    clips: graphKeyClipboard.isEmpty ? null : graphKeyClipboard,
+    sources: sources,
+    statics: statics,
+    playheadFrame: playheadFrame,
+    fps: fps,
+    fpsNum: fpsNum,
+    fpsDen: fpsDen,
+  );
+  if (!paste.any) return false;
+  for (var i = 0; i < channels.length && i < sources.length; i++) {
+    paste.put(channels[i], i);
+  }
+  return paste.commit(project, onPasted);
+}
+
+/// Where one pasted key ended up: its row's path, its curve's id, and its
+/// place among that curve's keys.
+typedef PastedKey = ({String path, String id, int index});
+
+/// Paste the in-app clipboard onto whole layers, for when layers are picked
+/// and no property rows are. Each copied property lands on the same property
+/// of every one of [targets], keeping its timing, the earliest key on the
+/// playhead.
+///
+/// Masks and shape items are matched by name, then by place. An effect is
+/// matched by kind: the one at the same place among the target's effects of
+/// that kind, or else the first. A target with none gets a copy of the effect
+/// the keys came off, settings and all, and the keys go on that. Anything a
+/// target does not have is passed over. One undo step.
+bool pasteKeysOntoLayers({
+  required List<BridgeLayerEntry> targets,
+  required int playheadFrame,
+  required double fps,
+  required int fpsNum,
+  required int fpsDen,
+  ProjectReference? project,
+  void Function(List<PastedKey> pasted)? onPasted,
+}) {
+  final clips = graphKeyClipboard;
+  if (clips.isEmpty || targets.isEmpty) return false;
+  final paste = _Paste(
+    clips: clips,
+    sources: [
+      for (final clip in clips) [for (final k in clip.keys) (keyFrame(k, fps), k)],
+    ],
+    statics: [for (final clip in clips) clip.staticValue],
+    playheadFrame: playheadFrame,
+    fps: fps,
+    fpsNum: fpsNum,
+    fpsDen: fpsDen,
+  );
+  if (!paste.any) return false;
+  return paste.commit(project, onPasted, before: () {
+    for (final target in targets) {
+      _matchOnLayer(paste, clips, target);
+    }
+  });
+}
+
+/// Aim each of [clips] at the same property on [target], adding the effects
+/// it lacks first.
+void _matchOnLayer(
+    _Paste paste, List<GraphClipChannel> clips, BridgeLayerEntry target) {
+  var entry = target;
+  final to = target.layer.internallayerId.toString();
+  // A copied effect's, mask's or shape item's id, to the target's own.
+  final swaps = <String, String?>{};
+  final fresh = <String>{};
+  final seen = <String>{};
+  // The effects to add, by the layer they came off.
+  final missing = <String, (BridgeLayerEntry, List<UuidValue>)>{};
+  for (final clip in clips) {
+    final source = clip.source;
+    final info = source.entry.info;
+    final from = source.entry.layer.internallayerId.toString();
+    if (source.effect case final fx? when seen.add('${fx.id}')) {
+      final style = isUnderPath(stylesPath(from), source.path);
+      List<String> ofKind(List<BridgeEffectInstanceInfo> list) => [
+            for (final e in list)
+              if (e.name == fx.name) '${e.id}'
+          ];
+      final theirs = ofKind(style ? info.styles : info.effects);
+      final ours = ofKind(style ? entry.info.styles : entry.info.effects);
+      final nth = theirs.indexOf('${fx.id}');
+      if (ours.isNotEmpty) {
+        swaps['${fx.id}'] = nth >= 0 && nth < ours.length ? ours[nth] : ours[0];
+      } else if (!style) {
+        (missing[from] ??= (source.entry, [])).$2.add(fx.id);
+      }
+    } else if (source.mask case final mask?) {
+      swaps['${mask.id}'] ??= _sameItem(
+          [for (final m in info.masks) (m.name, '${m.id}')],
+          [for (final m in entry.info.masks) (m.name, '${m.id}')],
+          '${mask.id}');
+    } else if (source.shape case final item?) {
+      swaps['${item.id}'] ??= _sameItem(
+          [for (final s in info.shapeContents) (s.name, '${s.id}')],
+          [for (final s in entry.info.shapeContents) (s.name, '${s.id}')],
+          '${item.id}');
     }
   }
-  // Values only: nothing has a time, so there is no shift to work out and the
-  // paste is not about the playhead at all.
-  if (!earliest.isFinite && statics.every((v) => v == null)) return false;
-  final shift = earliest.isFinite ? playheadFrame - earliest : 0.0;
 
-  final edits = <GraphChannel, BridgeScalar>{};
-  for (var i = 0; i < channels.length && i < sources.length; i++) {
-    final channel = channels[i];
+  // The copies, settings and all, each with an id of its own. The copy comes
+  // out in stack order, so the new effects are the last ones, in that order.
+  for (final (source, ids) in missing.values) {
+    final order = [for (final e in source.info.effects) '${e.id}'];
+    ids.sort((a, b) => order.indexOf('$a').compareTo(order.indexOf('$b')));
+    final had = entry.info.effects.length;
+    try {
+      target.layer.loadPreset(
+          text: source.layer.copyEffects(effects: ids), clip: null);
+      entry = BridgeLayerEntry(layer: target.layer, info: target.layer.getInfo());
+    } catch (_) {
+      // The effect has gone since the copy, so its keys have nowhere to go.
+      continue;
+    }
+    paste.added = true;
+    final added = entry.info.effects.skip(had).toList();
+    if (added.length != ids.length) continue;
+    for (var i = 0; i < ids.length; i++) {
+      swaps['${ids[i]}'] = '${added[i].id}';
+      fresh.add('${added[i].id}');
+    }
+  }
+
+  for (var i = 0; i < clips.length; i++) {
+    final source = clips[i].source;
+    final from = source.entry.layer.internallayerId.toString();
+    String swap(String s) {
+      var out = '$to${s.substring(from.length)}';
+      swaps.forEach((a, b) {
+        if (b != null) out = out.replaceFirst('/$a/', '/$b/');
+      });
+      return out;
+    }
+
+    // A still mask has no path curve to find, so its shape is aimed at
+    // directly.
+    if (source.isMaskPath) {
+      final id = swaps['${source.mask!.id}'];
+      final mask = entry.info.masks.where((m) => '${m.id}' == id).firstOrNull;
+      if (mask != null) {
+        paste.putPath(target.layer, swap(source.path), mask.id, mask.pathKeys, i);
+      }
+      continue;
+    }
+    final id = swap(source.id);
+    final channel = graphChannels(layers: [entry], selected: [swap(source.path)])
+        .where((c) => c.id == id)
+        .firstOrNull;
+    if (channel == null) continue;
+    paste.put(channel, i, fresh: fresh.contains('${channel.effect?.id}'));
+  }
+}
+
+/// The id in [ours] of the item [id] names in [theirs]: the one with the same
+/// name, or else the one in the same place. Each item is a (name, id) pair.
+String? _sameItem(
+    List<(String, String)> theirs, List<(String, String)> ours, String id) {
+  final at = theirs.indexWhere((t) => t.$2 == id);
+  if (at < 0) return null;
+  for (final (name, ourId) in ours) {
+    if (name == theirs[at].$1) return ourId;
+  }
+  return at < ours.length ? ours[at].$2 : null;
+}
+
+/// One paste in the making: the copied keys as comp frames, how far they
+/// shift, and the writes gathered target by target until [commit].
+class _Paste {
+  /// The in-app clips the sources came from, or null for keyframe text.
+  final List<GraphClipChannel>? clips;
+  final List<List<(double, BridgeKeyframe)>> sources;
+  final List<double?> statics;
+  final int playheadFrame;
+  final double fps;
+  final int fpsNum;
+  final int fpsDen;
+
+  /// Whether there is anything to paste at all.
+  late final bool any;
+  late final double shift;
+
+  final _edits = <GraphChannel, BridgeScalar>{};
+
+  /// Mask shapes to copy across: the layer, the row, the mask, its keys
+  /// before the paste, and the clip.
+  final _paths =
+      <(LayerReference, String, UuidValue, List<BridgeKeyframe>, int)>[];
+
+  /// The frames put down on each row, to select afterwards.
+  final _landed = <PastedKey>[];
+
+  /// Whether an effect was added on the way.
+  bool added = false;
+
+  _Paste({
+    required this.clips,
+    required this.sources,
+    required this.statics,
+    required this.playheadFrame,
+    required this.fps,
+    required this.fpsNum,
+    required this.fpsDen,
+  }) {
+    var earliest = double.infinity;
+    for (final source in sources) {
+      for (final (frame, _) in source) {
+        if (frame < earliest) earliest = frame;
+      }
+    }
+    // Values only: nothing has a time, so there is no shift to work out and
+    // the paste is not about the playhead at all.
+    any = earliest.isFinite || statics.any((v) => v != null);
+    shift = earliest.isFinite ? playheadFrame - earliest : 0.0;
+  }
+
+  /// Clip [i] onto [channel]. A [fresh] channel is on an effect this paste
+  /// added, whose copied curve the pasted keys replace rather than join.
+  void put(GraphChannel channel, int i, {bool fresh = false}) {
+    // A shape is not a number, so it only goes onto another shape.
+    final clip = clips?[i];
+    if (channel.isMaskPath || (clip?.source.isMaskPath ?? false)) {
+      if (channel.isMaskPath && clip != null && clip.source.isMaskPath) {
+        putPath(channel.entry.layer, channel.path, channel.mask!.id,
+            channel.keys, i);
+      }
+      return;
+    }
     final value = i < statics.length ? statics[i] : null;
     if (value != null) {
-      edits[channel] = channel.isStatic
+      final next = channel.isStatic
           ? BridgeScalar.static_(value)
-          : BridgeScalar.keyframed([
-              for (final k in withKeyAt(
-                channel.keys,
-                playheadFrame.toDouble(),
-                value,
-                fps,
-                fpsNum,
-                fpsDen,
-              ))
-                k,
-            ]);
-      continue;
+          : BridgeScalar.keyframed(withKeyAt(channel.keys,
+              playheadFrame.toDouble(), value, fps, fpsNum, fpsDen));
+      _edits[channel] = next;
+      if (!channel.isStatic) {
+        _land(channel.path, channel.id, keysOf(next), {playheadFrame * 1.0});
+      }
+      return;
     }
     // Merge on frames: a pasted key replaces one already at its frame — two
     // keys at one time is not a curve the engine will take.
     final merged = <double, BridgeKeyframe>{
-      for (final k in channel.keys) keyFrame(k, fps): k,
+      if (!fresh)
+        for (final k in channel.keys) keyFrame(k, fps): k,
     };
     for (final (frame, key) in sources[i]) {
       final at = frame + shift;
@@ -392,12 +608,73 @@ Future<bool> pasteKeysAtPlayhead({
       );
     }
     final frames = merged.keys.toList()..sort();
-    edits[channel] =
-        BridgeScalar.keyframed([for (final f in frames) merged[f]!]);
+    final keys = [for (final f in frames) merged[f]!];
+    _edits[channel] = BridgeScalar.keyframed(keys);
+    _land(channel.path, channel.id, keys,
+        {for (final (frame, _) in sources[i]) frame + shift});
   }
-  if (edits.isEmpty) return false;
-  asOneUndoStep(project, () => commitChannelEdits(edits));
-  return true;
+
+  /// Clip [i]'s mask shapes onto [mask] of [layer], whose row is [path].
+  void putPath(LayerReference layer, String path, UuidValue mask,
+          List<BridgeKeyframe> keys, int i) =>
+      _paths.add((layer, path, mask, keys, i));
+
+  void _land(
+      String path, String id, List<BridgeKeyframe> keys, Set<double> frames) {
+    for (var k = 0; k < keys.length; k++) {
+      final f = keyFrame(keys[k], fps);
+      if (frames.any((p) => (p - f).abs() < 1e-3)) {
+        _landed.add((path: path, id: id, index: k));
+      }
+    }
+  }
+
+  /// Write everything, after [before], as one undo step. Says whether
+  /// anything was pasted, and tells [onPasted] where.
+  bool commit(ProjectReference? project,
+      void Function(List<PastedKey> pasted)? onPasted,
+      {void Function()? before}) {
+    var pathed = false;
+    asOneUndoStep(project, () {
+      before?.call();
+      if (_edits.isNotEmpty) commitChannelEdits(_edits);
+      for (final (layer, path, mask, had, i) in _paths) {
+        final clip = clips![i];
+        final at = [for (final (f, _) in sources[i]) f + shift];
+        try {
+          if (!layer.pasteMaskPathKeys(
+            id: mask,
+            from: clip.source.entry.layer,
+            fromMask: clip.source.mask!.id,
+            times: [for (final k in clip.keys) k.time],
+            to: [for (final f in at) timeOfSubframe(f, fpsNum, fpsDen)],
+          )) {
+            continue;
+          }
+        } catch (_) {
+          // The mask has gone since the copy.
+          continue;
+        }
+        pathed = true;
+        // The keys it now has: the ones it had, less any a pasted one
+        // replaced, and the pasted ones.
+        bool pasted(double f) => at.any((p) => (p - f).abs() < 1e-3);
+        final frames = [
+          for (final k in had)
+            if (!pasted(keyFrame(k, fps))) keyFrame(k, fps),
+          ...at,
+        ]..sort();
+        for (var k = 0; k < frames.length; k++) {
+          if (pasted(frames[k])) {
+            _landed.add((path: path, id: path, index: k));
+          }
+        }
+      }
+    });
+    if (_edits.isEmpty && !pathed && !added) return false;
+    onPasted?.call(_landed);
+    return true;
+  }
 }
 
 // ---------------------------------------------------------------------------
