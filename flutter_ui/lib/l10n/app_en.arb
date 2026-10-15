@@ -2763,6 +2763,26 @@
   "@fxNormalised": {
     "description": "Node graph — an output of the Clone index driver: the copy's number as a fraction, 0 at the first copy and 1 at the last."
   },
+  "fxMeasure": "Measure",
+  "@fxMeasure": {
+    "description": "Driver name in the Graph panel — gives the size and edges of a layer's content as numbers."
+  },
+  "fxPaddingX": "Padding x",
+  "@fxPaddingX": {
+    "description": "Effect controls — a control on the Measure driver: room added to the left and right of the measured box, in pixels."
+  },
+  "fxPaddingY": "Padding y",
+  "@fxPaddingY": {
+    "description": "Effect controls — a control on the Measure driver: room added above and below the measured box, in pixels."
+  },
+  "fxSpace": "Space",
+  "@fxSpace": {
+    "description": "Effect controls — a dropdown on the Measure driver: whether the box is measured in the layer's own pixels or in the composition's."
+  },
+  "fxComp": "Comp",
+  "@fxComp": {
+    "description": "Effect controls — an option of the Measure driver's Space dropdown: measure in the composition's pixels, after the layer's transform. Short for composition."
+  },
   "fxOff": "Off",
   "@fxOff": {
     "description": "Effect controls — a dropdown option on Clone to points: no time offset, or no render per clone."

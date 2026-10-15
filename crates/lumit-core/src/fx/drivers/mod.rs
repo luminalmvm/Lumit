@@ -5,10 +5,10 @@
 //!
 //! A driver makes a *value* rather than a picture, and a wire from a driver
 //! into an effect's socket makes that parameter follow the value instead of its
-//! keyframes. This module holds the twelve of them — Wiggle, Audio level,
+//! keyframes. This module holds the thirteen of them — Wiggle, Audio level,
 //! Colour cycle, Math, Remap, Smooth, Split, Combine, Points sample, Layer
-//! points, Expression, Clone index — and the small walk that works out, at
-//! one frame, what every wire is carrying.
+//! points, Expression, Clone index, Measure — and the small walk that works
+//! out, at one frame, what every wire is carrying.
 //!
 //! **One of them carries no value at all.** Layer points is a *source*:
 //! it names another layer and hands out that layer's points stream, so what
@@ -61,6 +61,7 @@ pub mod combine;
 pub mod expression;
 pub mod layer_points;
 pub mod math;
+pub mod measure;
 pub mod points_sample;
 pub mod remap;
 pub mod smooth;
@@ -2948,5 +2949,83 @@ mod tests {
             e.extra.get("expression").and_then(|b| b.get("origin")),
             Some(&serde_json::Value::String("typed".into()))
         );
+    }
+
+    /// What `node` puts out of `port` at `lt`, asked of the walk directly so
+    /// no target's hard range stands between the test and the number.
+    fn driver_out(
+        node: &EffectInstance,
+        port: &str,
+        lt: f64,
+        context: Arc<ExpressionContext>,
+        audio: Option<&dyn AudioTap>,
+    ) -> f32 {
+        let graph = LayerGraph {
+            nodes: vec![node.clone()],
+            ..LayerGraph::default()
+        };
+        let ev = Eval {
+            graph: &graph,
+            context,
+            audio,
+            projection: points::Projection::FLAT,
+            budget: Cell::new(EVAL_BUDGET),
+            streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
+            cross: true,
+            stack: None,
+            clone: NO_CLONE,
+        };
+        ev.output(node.id, port, lt, 0)
+            .expect("the port carries a number")
+            .as_f32()
+    }
+
+    /// Measure reads a precomp's frame in its own pixels, and through its
+    /// transform in the comp's, with the padding round both.
+    #[test]
+    fn measure_reads_the_frame_where_it_is_drawn() {
+        use crate::anim::Property;
+        use crate::model::{LayerKind, ProjectItem};
+
+        let context = staged(Vec::new(), LayerGraph::default());
+        let mut doc = (*context.document).clone();
+        let mut inner = doc
+            .comp(context.comp.expect("a comp"))
+            .expect("the comp")
+            .clone();
+        inner.id = Uuid::now_v7();
+        (inner.width, inner.height) = (400, 200);
+        inner.layers.clear();
+        let inner_id = inner.id;
+        doc.items.push(ProjectItem::Composition(inner));
+        for item in &mut doc.items {
+            let ProjectItem::Composition(c) = item else {
+                continue;
+            };
+            for l in c.layers.iter_mut().filter(|l| Some(l.id) == context.layer) {
+                l.kind = LayerKind::Precomp { comp: inner_id };
+                let tr = &mut l.transform;
+                (tr.anchor_x, tr.anchor_y) = (Property::fixed(200.0), Property::fixed(100.0));
+                (tr.position_x, tr.position_y) = (Property::fixed(960.0), Property::fixed(540.0));
+                (tr.scale_x, tr.scale_y) = (Property::fixed(50.0), Property::fixed(50.0));
+                tr.rotation = Property::fixed(0.0);
+            }
+        }
+        let context = Arc::new(ExpressionContext {
+            document: Arc::new(doc),
+            ..(*context).clone()
+        });
+
+        let mut node = inst("measure");
+        set(&mut node, "padding_x", 10.0);
+        set(&mut node, "padding_y", 5.0);
+        let read = |node: &EffectInstance, port| driver_out(node, port, 0.0, context.clone(), None);
+        assert_eq!(read(&node, "width"), 420.0);
+        assert_eq!(read(&node, "top"), -5.0);
+        set_choice(&mut node, "space", measure::SPACE_COMP);
+        assert_eq!(read(&node, "left"), 850.0);
+        assert_eq!(read(&node, "bottom"), 595.0);
+        assert_eq!(read(&node, "centre_x"), 960.0);
     }
 }

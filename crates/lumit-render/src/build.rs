@@ -1366,6 +1366,9 @@ fn comp_walk(
     probe: Option<&mut Probe<'_>>,
 ) -> Vec<CompLayerDraw> {
     use lumit_core::model::LayerKind;
+    // Measure and `sourceRectAtTime` read a Text layer's words through this,
+    // and every render comes through here before a driver is asked.
+    lumit_core::text::install_words_box(lumit_text::words_box);
     // The frame's own pixels, kept for a probe at another moment to find its
     // clip in.
     let frame_pixels = pixels_by_layer;

@@ -419,6 +419,9 @@ typedef GraphCard = ({
   bool tinted,
   List<BridgePort> inputs,
   List<BridgePort> outputs,
+
+  /// A box that reads a points stream with none wired in wears a warning.
+  bool noStream,
 });
 
 /// One row of a box: the input socket on its left edge, the output socket on
@@ -681,6 +684,7 @@ GraphLayout _layoutOf(
         tinted: node.matchName == 'custom_shader',
         inputs: node.inputs,
         outputs: node.outputs,
+        noStream: graphNoStream(node),
       ),
       placed,
       open: exposed.contains(key) || isDriver,
@@ -725,11 +729,14 @@ bool _alwaysDrawn(BridgePortType type) =>
 /// nought and Nearest distance "nothing is anywhere near" (points-stream.md
 /// §2.2). So the panel can say so without asking for a value, which keeps
 /// this off the rebuild path.
-bool graphNoStream(BridgeGraphNode node) => graphNoStreamPorts(node.inputs);
+bool graphNoStream(BridgeGraphNode node) =>
+    graphNoStreamPorts(node.inputs, node.matchName);
 
-/// The same question asked of a card's sockets, which is what the canvas holds.
+/// The same question asked of a box's sockets.
 /// One wire is enough: Merge points has four sockets and reads any of them.
-bool graphNoStreamPorts(List<BridgePort> inputs) {
+/// Measure measures its layer when no stream is wired, so it never asks.
+bool graphNoStreamPorts(List<BridgePort> inputs, String matchName) {
+  if (matchName == 'measure') return false;
   final points = inputs.where((p) => p.portType == BridgePortType.points);
   return points.isNotEmpty && !points.any((p) => p.wired);
 }
@@ -3119,7 +3126,7 @@ class GraphNodeCard extends StatelessWidget {
             // has none answers its documented no-op — a distance so large it
             // pins whatever it drives at the far end of the range — and the
             // box is the one place that can say so before the wire is drawn.
-            if (graphNoStreamPorts(_card.inputs)) ...[
+            if (_card.noStream) ...[
               const SizedBox(width: 4),
               LumitTooltip(
                 message: l10n.graphNoStream,

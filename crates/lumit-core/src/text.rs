@@ -648,6 +648,25 @@ impl ParagraphStyle {
     }
 }
 
+/// Where a Text layer's words sit in the layer's own pixels, as left, top,
+/// right and bottom, for these resolved words.
+pub type WordsBox = fn(&crate::model::TextDocument, &str) -> Option<[f64; 4]>;
+
+static WORDS_BOX: std::sync::OnceLock<WordsBox> = std::sync::OnceLock::new();
+
+/// Hand this crate the text engine's measuring. The fonts live in
+/// `lumit-text`, which sits above this crate, so whoever links both installs
+/// it once before anything is measured. A second call changes nothing.
+pub fn install_words_box(measure: WordsBox) {
+    let _ = WORDS_BOX.set(measure);
+}
+
+/// The box [`install_words_box`] measures, or `None` before it is installed.
+#[must_use]
+pub fn words_box(document: &crate::model::TextDocument, text: &str) -> Option<[f64; 4]> {
+    WORDS_BOX.get()?(document, text)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

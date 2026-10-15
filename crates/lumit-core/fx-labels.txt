@@ -198,6 +198,7 @@ Combine
 Combine channels
 Combine with existing alpha
 Combined
+Comp
 Completion
 Complexity
 Composite
@@ -606,6 +607,7 @@ Max trails
 Maximum
 Maximum signal
 Maximum span length
+Measure
 Median
 Merge
 Merge points
@@ -699,6 +701,8 @@ Outside colour
 Outside mask
 Overlay
 PAL
+Padding x
+Padding y
 Paint style
 Parametric EQ
 Particle
@@ -931,6 +935,7 @@ Source layer
 Source luminance
 Source red
 Source width
+Space
 Spacing
 Spacing x
 Spacing y

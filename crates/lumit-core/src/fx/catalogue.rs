@@ -27,6 +27,7 @@ use super::drivers::{
     expression::{Expression, ExpressionDef},
     layer_points::{LayerPoints, LayerPointsDef},
     math::{Math, MathDef},
+    measure::{Measure, MeasureDef},
     points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
     smooth::{Smooth, SmoothDef},
@@ -470,4 +471,6 @@ crate::catalogue![
     // Which copy a layer is being stamped as by Clone to points. It reads a
     // number the render hands it, which no other driver does.
     CloneIndexDef => CloneIndex,
+    // How big another layer's content is, which no other driver reads.
+    MeasureDef => Measure,
 ];

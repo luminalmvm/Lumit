@@ -25748,6 +25748,55 @@
       ],
       "groups": [],
       "matte_role": "none"
+    },
+    {
+      "slug": "measure",
+      "match_name": "measure",
+      "label": "Measure",
+      "version": 1,
+      "category": "Drivers",
+      "category_slug": "drivers",
+      "params": [
+        {
+          "id": "layer",
+          "label": "Layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": true
+        },
+        {
+          "id": "padding_x",
+          "label": "Padding x",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0
+        },
+        {
+          "id": "padding_y",
+          "label": "Padding y",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 200.0
+        },
+        {
+          "id": "space",
+          "label": "Space",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Layer",
+            "Comp"
+          ],
+          "dividers_after": []
+        }
+      ],
+      "groups": [],
+      "matte_role": "none"
     }
   ]
 }
