@@ -920,14 +920,20 @@ fn open_video(
     // context; a rung that proves but won't re-open also falls through.
     let mut opened: Option<AVCodecContext> = None;
     let picked = pick_first_working(&encoder_candidates(video.codec), |name| {
-        test_encode(name, video).is_ok()
-            && match build_video_ctx(name, video, global_header) {
-                Ok(ctx) => {
-                    opened = Some(ctx);
-                    true
-                }
-                Err(_) => false,
+        match test_encode(name, video).and_then(|()| build_video_ctx(name, video, global_header)) {
+            Ok(ctx) => {
+                opened = Some(ctx);
+                true
             }
+            Err(e) => {
+                // So a support log says why a faster rung was passed over,
+                // such as NVENC on a driver too old for it. Not eprintln,
+                // which panics once the console has gone.
+                use std::io::Write as _;
+                let _ = writeln!(std::io::stderr(), "encoder {name} skipped: {e}");
+                false
+            }
+        }
     });
     let (ctx, encoder) = match (opened, picked) {
         (Some(ctx), Some(name)) => (ctx, name),
