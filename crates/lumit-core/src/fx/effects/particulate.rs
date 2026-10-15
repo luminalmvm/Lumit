@@ -67,6 +67,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "emitter_angle",
             "path_from",
             "mask_path",
+            "density_layer",
             "emit_rate",
             "direction",
             "direction_z",
@@ -261,6 +262,11 @@ pub struct Particulate {
     /// path. An empty polyline emits nothing — the documented no-op.
     #[mask_path(label = "Mask path")]
     pub mask_path: bool,
+
+    /// A picture births follow: a particle is born where it is bright, inside
+    /// the emitter's shape. Unset, births fill the shape evenly as before.
+    #[layer(label = "Density layer")]
+    pub density_layer: bool,
 
     /// Births per second of layer time. Its integral **is** the birth schedule
     /// (points.rs), which is what makes a keyframed or driven rate an ordinary

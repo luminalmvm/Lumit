@@ -9852,6 +9852,13 @@
           "self_default": true
         },
         {
+          "id": "density_layer",
+          "label": "Density layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
           "id": "emit_rate",
           "label": "Emit rate",
           "kind": "float",
@@ -10408,6 +10415,7 @@
             "emitter_angle",
             "path_from",
             "mask_path",
+            "density_layer",
             "emit_rate",
             "direction",
             "direction_z",

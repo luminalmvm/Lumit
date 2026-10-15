@@ -4516,6 +4516,7 @@ fn particulate_op<'a>(
     path_total: f32,
     mode: u32,
     projection: Option<[[f32; 4]; 3]>,
+    density: Option<&'a Tex>,
 ) -> lumit_gpu::fx::ParticulateOp<'a> {
     let e = &packed.emitter;
     let look = &packed.particle;
@@ -4573,6 +4574,7 @@ fn particulate_op<'a>(
             look.colour_by as u32,
         ],
         speed_range: look.speed_range,
+        density,
     }
 }
 
@@ -4615,26 +4617,28 @@ fn particulate_frames(sched: &lumit_core::fx::points::PointsSchedule) -> Vec<[u3
 /// rung is never on the export path — there is nothing on this path that could
 /// turn it on.
 struct Particulate;
-impl GpuEffect for Particulate {
-    fn match_name(&self) -> &'static str {
-        "particulate"
-    }
-    fn run(
-        &self,
-        fx: &FxEngine,
-        ctx: &GpuContext,
-        tex: &Tex,
-        w: u32,
-        h: u32,
+impl Particulate {
+    /// The GPU op this frame's Particulate draws, handed to `f` with the
+    /// sprite it stamps, if any.
+    fn with_op<R>(
         p: Params<'_>,
         aux: AuxSlot<'_>,
-    ) -> Tex {
+        f: impl FnOnce(&lumit_gpu::fx::ParticulateOp<'_>, Option<&Tex>) -> R,
+    ) -> R {
         use lumit_core::fx::effects::particulate::Particulate as P;
         use lumit_core::fx::points::RenderMode;
         let inst = P::read(p);
         let packed = inst.points();
         let style = inst.draw_style();
-        let sprite = aux.layer_input();
+        // The pictures arrive in row order, Density layer's before Sprite
+        // layer's.
+        let picture = |id: &str| {
+            let at = <P as EffectMetadata>::SCHEMA
+                .layer_inputs()
+                .position(|row| row == id)?;
+            aux.layer_inputs().get(at)?.as_ref().map(|l| &l.tex)
+        };
+        let sprite = picture("sprite_layer");
         let mode = match style.mode {
             RenderMode::Disc => 0,
             // Unset draws discs — the documented deviation from
@@ -4671,6 +4675,7 @@ impl GpuEffect for Particulate {
             .zip(poly.arc.iter())
             .map(|(pt, a)| [pt[0], pt[1], *a, 0.0])
             .collect();
+        let density = picture("density_layer");
         let op = particulate_op(
             &packed,
             style,
@@ -4681,8 +4686,90 @@ impl GpuEffect for Particulate {
             poly.length(),
             mode,
             projection,
+            density,
         );
-        fx.particulate(ctx, tex, w, h, sprite.filter(|_| mode == 1), &op)
+        f(&op, sprite.filter(|_| mode == 1))
+    }
+}
+
+impl GpuEffect for Particulate {
+    fn match_name(&self) -> &'static str {
+        "particulate"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        Particulate::with_op(p, aux, |op, sprite| {
+            fx.particulate(ctx, tex, w, h, sprite, op)
+        })
+    }
+
+    /// Births that follow a Density layer depend on its picture, so the
+    /// stream a wire reads is the one the card made, read back. Without one
+    /// the driver walk made it already.
+    fn points_out(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Option<lumit_core::fx::points::PointsStream> {
+        use lumit_core::fx::effects::particulate::Particulate as P;
+        let px_scale = P::px_scale_of(p);
+        let (count, words, projection) = Particulate::with_op(p, aux, |op, _| {
+            op.density?;
+            let (count, words) = fx.particulate_stream(ctx, tex, w, h, op)?;
+            Some((count, words, op.projection))
+        })?;
+        let cap = P::read(p).points().cap as usize;
+        let word = |i: usize| words.get(i).copied().unwrap_or(0);
+        let f = |i: usize| f32::from_bits(word(i));
+        // Half precision, two to a word, as the colour region is written.
+        let half = |i: usize, hi: bool| {
+            lumit_gpu::fx::f16_to_f32(if hi {
+                (word(i) >> 16) as u16
+            } else {
+                word(i) as u16
+            })
+        };
+        let mut s = lumit_core::fx::points::PointsStream {
+            projection: projection.map_or(lumit_core::fx::points::Projection::FLAT, |m| {
+                lumit_core::fx::points::Projection { m }
+            }),
+            ..Default::default()
+        };
+        for i in 0..(count as usize).min(cap) {
+            s.position.push([f(i * 3), f(i * 3 + 1), f(i * 3 + 2)]);
+            s.speed.push([
+                f(3 * cap + i * 3),
+                f(3 * cap + i * 3 + 1),
+                f(3 * cap + i * 3 + 2),
+            ]);
+            s.age.push(f(6 * cap + i));
+            s.life.push(f(7 * cap + i));
+            s.size.push(f(8 * cap + i));
+            s.rotation.push(f(9 * cap + i));
+            let c = 10 * cap + i * 2;
+            s.colour.push([
+                half(c, false),
+                half(c, true),
+                half(c + 1, false),
+                half(c + 1, true),
+            ]);
+            let id = 12 * cap + i * 2;
+            s.id.push(u64::from(word(id)) | (u64::from(word(id + 1)) << 32));
+        }
+        Some(s.rescaled(1.0 / px_scale.max(1e-6)))
     }
 }
 
@@ -5861,6 +5948,7 @@ mod tests {
             mode,
             feather: 60.0,
             sprite_layer: false,
+            density_layer: false,
             streak_length: 0.05,
             max_particles: cap,
             seed: 7,
@@ -5968,12 +6056,29 @@ mod tests {
             .zip(outline.arc.iter())
             .map(|(pt, a)| [pt[0], pt[1], *a, 0.0])
             .collect();
-        let cpu = lumit_core::fx::points::evaluate(
+        // Births following a Density layer that is dark on the left and
+        // bright on the right, in steps a half float holds exactly, so the
+        // card reads the brightness the CPU does.
+        let density: Vec<f32> = (0..w * h)
+            .flat_map(|i| {
+                let v = (i % w) as f32 / w as f32;
+                [v, v, v, 1.0]
+            })
+            .collect();
+        let density_tex = lumit_gpu::fx::upload_linear_f32(&ctx, &density, w, h);
+        let cpu = lumit_core::fx::points::evaluate_dense(
             &packed,
             &sched,
             carriage.t,
             &lumit_core::mask::MaskPolyline::default(),
-        );
+            0.0,
+            Some(lumit_core::fx::points::Density {
+                rgba: &density,
+                w,
+                h,
+            }),
+        )
+        .0;
         assert!(
             cpu.len() > 50,
             "the fixture made only {} particles",
@@ -5990,6 +6095,7 @@ mod tests {
             outline.length(),
             0,
             carriage.projection.map(|proj| proj.m),
+            Some(&density_tex),
         );
         let tex = lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);
         let (count, words) = fx
@@ -6042,6 +6148,13 @@ mod tests {
                 worst_gap[k] = worst_gap[k].max((a - b).abs());
                 range[k] = range[k].max(b.abs());
             }
+        }
+        // A pixel is a pixel on any axis, so the three of a position, and of
+        // a speed, are measured against the widest of them. The depth axis of
+        // a flat layer holds only turbulence and would make any gap look big.
+        for k in [0, 3] {
+            let widest = range[k].max(range[k + 1]).max(range[k + 2]);
+            range[k..k + 3].fill(widest);
         }
         let mut worst = 0.0f32;
         for k in 0..8 {
@@ -6141,6 +6254,7 @@ mod tests {
                 0.0,
                 mode,
                 carriage.projection.map(|proj| proj.m),
+                None,
             );
             let tex =
                 lumit_gpu::fx::upload_linear_f32(&ctx, &vec![0.0; (w * h * 4) as usize], w, h);

@@ -3399,6 +3399,10 @@
   "@fxSpeedMax": {
     "description": "Effect controls — a control on Particulate: the speed, in pixels per second, that counts as the end of the change when a control is set to follow speed."
   },
+  "fxDensityLayer": "Density layer",
+  "@fxDensityLayer": {
+    "description": "Effect controls — a control on Particulate: a layer whose bright parts are where particles are born."
+  },
   "fxEmitter": "Emitter",
   "@fxEmitter": {
     "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."

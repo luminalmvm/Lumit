@@ -252,6 +252,7 @@ Deep red
 Deep yellow
 Delay
 Density
+Density layer
 Depth
 Depth Anything V2 Small
 Depth channel

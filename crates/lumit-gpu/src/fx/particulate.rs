@@ -150,6 +150,9 @@ pub struct ParticulateOp<'a> {
     pub drives: [u32; 3],
     /// The speeds, px per second, a Speed drive reads as its two ends.
     pub speed_range: [f32; 2],
+    /// The Density layer's picture births follow, in this raster, or `None`
+    /// for births spread evenly over the emitter.
+    pub density: Option<&'a wgpu::Texture>,
 }
 
 #[repr(C)]
@@ -245,7 +248,8 @@ pub(super) struct ParticulateParams {
     pub(super) speed_min: f32,
 
     pub(super) speed_max: f32,
-    pub(super) _pad: [u32; 3],
+    pub(super) density: u32,
+    pub(super) _pad: [u32; 2],
 }
 
 /// The scan's block width — the same 256 the kernel declares.
@@ -475,7 +479,8 @@ impl FxEngine {
             colour_by: op.drives[2],
             speed_min: op.speed_range[0],
             speed_max: op.speed_range[1],
-            _pad: [0; 3],
+            density: u32::from(op.density.is_some()),
+            _pad: [0; 2],
         };
         let ubuf = ctx
             .device
@@ -577,6 +582,12 @@ impl FxEngine {
                 wgpu::BindGroupEntry {
                     binding: 7,
                     resource: args.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: wgpu::BindingResource::TextureView(
+                        &op.density.unwrap_or(src).create_view(&Default::default()),
+                    ),
                 },
             ],
         });
@@ -704,6 +715,16 @@ impl ParticulatePipelines {
                     storage(5, false),
                     storage(6, false),
                     storage(7, false),
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 8,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
                 ],
             });
         // The draw's own group. The stream is bound **read-only** here: a

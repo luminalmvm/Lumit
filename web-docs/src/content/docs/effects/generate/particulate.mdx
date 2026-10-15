@@ -33,6 +33,7 @@ A particle system.
 | **Emitter angle** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
 | **Follow** | Dropdown | Mask · Shape | Mask | - |
 | **Mask path** | Masks | This layer's masks | First mask | - |
+| **Density layer** | Layer | Any layer in the composition | None | - |
 | **Emit rate** | Slider | 0 to 1000; higher | 150 | - |
 | **Direction** | Dial | Any angle; snaps every 15° while a modifier is held | -90° | Degrees |
 | **Direction z** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
@@ -85,7 +86,7 @@ A particle system.
 
 In the Effect Controls panel:
 
-- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
+- **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Density layer**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
@@ -118,6 +119,11 @@ The **Emitter** group, where particles come from and travel:
   and dashes as drawn, one line after another, repeater copies included. On any other layer
   Shape emits nothing.
 - **Mask path**: which of the layer's masks particles are emitted from.
+- **Density layer**: a layer whose brightness weights where particles are born inside the
+  emitter. A birth with nowhere bright enough to go is skipped. While it is set, the
+  points effects below Particulate on the same layer can read its particles, and
+  [Points sample](/effects/drivers/points-sample/) and
+  [Layer points](/effects/drivers/layer-points/) cannot.
 - **Emit rate**: new particles per second.
 - **Direction**: which way particles travel.
 - **Direction z**: how far they lean out of that plane.

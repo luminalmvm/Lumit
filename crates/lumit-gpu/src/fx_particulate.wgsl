@@ -150,6 +150,8 @@ struct Params {
     colour_by: u32,
     speed_min: f32,
     speed_max: f32,
+    // Whether births follow `density_tex`.
+    density: u32,
 };
 
 const DRIVE_SPEED: u32 = 1u;
@@ -191,6 +193,10 @@ const A_DIRECTION_Z: u32 = 9u;
 const A_RANDOM_SIZE: u32 = 10u;
 const A_RANDOM_OPACITY: u32 = 11u;
 const A_RANDOM_COLOUR: u32 = 12u;
+// == points::attr::DENSITY and DENSITY_TRIES_BASE, and points::DENSITY_TRIES.
+const A_DENSITY: u32 = 13u;
+const A_DENSITY_TRIES: u32 = 128u;
+const DENSITY_TRIES: u32 = 16u;
 
 // Scatter's acceptance die, well clear of the per-particle draws above
 // and of the turbulence lattices below.
@@ -226,6 +232,9 @@ const SCAN_BLOCK: u32 = 256u;
 @group(0) @binding(6) var<storage, read_write> stream: array<u32>;
 // `draw_indirect`'s four words, so the draw never waits on a read-back.
 @group(0) @binding(7) var<storage, read_write> args: array<u32>;
+// The Density layer's picture births follow, or the input in its place when
+// there is none, unread.
+@group(0) @binding(8) var density_tex: texture_2d<f32>;
 
 // The stream's regions, in words, for a capacity of `c` particles. Position,
 // speed and the draw's tail are three components each.
@@ -484,13 +493,47 @@ struct Launch {
     ok: bool,
 };
 
+// == lumit_core::fx::points::Density::at.
+fn pt_density_at(q: vec2<f32>) -> f32 {
+    let f = floor(q);
+    let size = vec2<f32>(textureDimensions(density_tex));
+    if (f.x < 0.0 || f.y < 0.0 || f.x >= size.x || f.y >= size.y) {
+        return 0.0;
+    }
+    let c = textureLoad(density_tex, vec2<i32>(f), 0);
+    return clamp(dot(c.rgb, LUMA), 0.0, 1.0);
+}
+
 fn pt_launch(lo: u32, hi: u32) -> Launch {
     var l: Launch;
-    let b0 = pt_birth_point(
+    var b0 = pt_birth_point(
         pt_die(lo, hi, A_EMIT_U),
         pt_die(lo, hi, A_EMIT_V),
         pt_die(lo, hi, A_EMIT_W),
     );
+    if (p.density != 0u && b0.w != 0.0) {
+        // == the CPU's tries: kept where the picture outvotes a die, the
+        // first try at the place it would have had anyway.
+        var kept = pt_die(lo, hi, A_DENSITY) < pt_density_at(b0.xy);
+        for (var k = 1u; k < DENSITY_TRIES; k = k + 1u) {
+            if (kept) {
+                break;
+            }
+            let die = A_DENSITY_TRIES + 4u * k;
+            let q = pt_birth_point(
+                pt_die(lo, hi, die),
+                pt_die(lo, hi, die + 1u),
+                pt_die(lo, hi, die + 2u),
+            );
+            if (q.w != 0.0 && pt_die(lo, hi, die + 3u) < pt_density_at(q.xy)) {
+                kept = true;
+                b0 = q;
+            }
+        }
+        if (!kept) {
+            b0.w = 0.0;
+        }
+    }
     l.ok = b0.w != 0.0;
     l.p0 = b0.xyz;
     let dir = radians(p.dir) + (pt_die(lo, hi, A_DIRECTION) - 0.5) * radians(p.spread);
@@ -568,10 +611,12 @@ fn pt_alive(@builtin(global_invocation_id) gid: vec3<u32>) {
         // A Mask path emitter with nothing to walk emits nothing at all.
         if (p.shape != 4u || p.path_len >= 2u) {
             live = 1u;
-            // Killed the first time it left the frame.
-            if (p.edge == EDGE_KILL) {
+            // Unborn where a Density layer is dark, and killed the first
+            // time it left the frame.
+            if (p.edge == EDGE_KILL || p.density != 0u) {
                 let l = pt_launch(cand.birth_lo, cand.birth_hi);
-                if (pt_has_left(pt_bounds(), l, cand.life, cand.age)) {
+                if (!l.ok
+                    || (p.edge == EDGE_KILL && pt_has_left(pt_bounds(), l, cand.life, cand.age))) {
                     live = 0u;
                 }
             }

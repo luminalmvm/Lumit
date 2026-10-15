@@ -1744,6 +1744,42 @@ mod attr {
     pub const RANDOM_SIZE: u32 = 10;
     pub const RANDOM_OPACITY: u32 = 11;
     pub const RANDOM_COLOUR: u32 = 12;
+    /// The die a birth point's brightness has to beat to be kept, on the
+    /// first try. Later tries draw from [`DENSITY_TRIES_BASE`] up.
+    pub const DENSITY: u32 = 13;
+    /// Where the later tries' dice start: four a try, where to and whether.
+    pub const DENSITY_TRIES_BASE: u32 = 128;
+}
+
+/// How many places a particle is offered in the emitter before a dark
+/// Density layer leaves it unborn.
+pub const DENSITY_TRIES: u32 = 16;
+
+/// A picture births are weighted by: the brightness under a birth point is
+/// the chance a particle is born there. Linear premultiplied RGBA, `w × h`,
+/// in the raster the particles are evaluated in.
+#[derive(Debug, Clone, Copy)]
+pub struct Density<'a> {
+    pub rgba: &'a [f32],
+    pub w: u32,
+    pub h: u32,
+}
+
+impl Density<'_> {
+    /// The brightness of the pixel under `(x, y)`, 0 to 1. Off the picture is
+    /// dark.
+    #[must_use]
+    pub fn at(&self, x: f32, y: f32) -> f32 {
+        let (fx, fy) = (x.floor(), y.floor());
+        if fx < 0.0 || fy < 0.0 || fx >= self.w as f32 || fy >= self.h as f32 {
+            return 0.0;
+        }
+        let i = ((fy as usize) * self.w as usize + fx as usize) * 4;
+        self.rgba.get(i..i + 3).map_or(0.0, |c| {
+            let l = crate::fx::cpu::LUMA;
+            (c[0] * l[0] + c[1] * l[1] + c[2] * l[2]).clamp(0.0, 1.0)
+        })
+    }
 }
 
 /// The noise lattices turbulence displaces along, one per axis. Channels of the
@@ -2021,6 +2057,22 @@ pub fn evaluate_with_tail(
     path: &MaskPolyline,
     tail: f32,
 ) -> (PointsStream, Vec<[f32; 3]>) {
+    evaluate_dense(p, sched, t, path, tail, None)
+}
+
+/// [`evaluate_with_tail`], with births weighted by a Density layer's
+/// picture. Each particle is offered up to [`DENSITY_TRIES`] places in the
+/// emitter, each kept with the brightness under it as its chance, and one
+/// none of them kept is not born at all.
+#[must_use]
+pub fn evaluate_dense(
+    p: &PointsParams,
+    sched: &Schedule,
+    t: f64,
+    path: &MaskPolyline,
+    tail: f32,
+    density: Option<Density<'_>>,
+) -> (PointsStream, Vec<[f32; 3]>) {
     let mut out = PointsStream {
         projection: p.projection,
         ..PointsStream::default()
@@ -2071,6 +2123,31 @@ pub fn evaluate_with_tail(
             // A Mask path emitter with nothing to walk emits nothing at all,
             // and no later birth will find a path either.
             break;
+        };
+        let p0 = match &density {
+            None => p0,
+            Some(d) => {
+                // The first try is the place it would have had anyway.
+                let mut kept = (draw(p.seed, b, attr::DENSITY) < d.at(p0[0], p0[1])).then_some(p0);
+                for k in 1..DENSITY_TRIES {
+                    if kept.is_some() {
+                        break;
+                    }
+                    let die = attr::DENSITY_TRIES_BASE + 4 * k;
+                    let q = birth_point(
+                        e,
+                        walk,
+                        draw(p.seed, b, die),
+                        draw(p.seed, b, die + 1),
+                        draw(p.seed, b, die + 2),
+                    );
+                    kept = q.filter(|q| draw(p.seed, b, die + 3) < d.at(q[0], q[1]));
+                }
+                match kept {
+                    Some(q) => q,
+                    None => continue,
+                }
+            }
         };
         let dir = base_dir + (draw(p.seed, b, attr::DIRECTION) - 0.5) * spread;
         let dir_z = base_dir_z + (draw(p.seed, b, attr::DIRECTION_Z) - 0.5) * spread_z;

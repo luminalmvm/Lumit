@@ -1153,6 +1153,14 @@ impl Eval<'_> {
                 ))),
                 "particulate" => {
                     let particulate = super::effects::particulate::Particulate::read(params);
+                    // Births that follow a Density layer depend on a
+                    // picture, so they fall out with Scatter's below.
+                    if matches!(
+                        inst.param("density_layer"),
+                        Some(crate::model::EffectValue::Layer(Some(_)))
+                    ) {
+                        return None;
+                    }
                     Some(Producer::Particulate {
                         points: Box::new(particulate.points()),
                         window_frames: particulate.window_frames(dt),
