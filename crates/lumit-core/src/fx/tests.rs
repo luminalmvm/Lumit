@@ -8797,6 +8797,256 @@ fn a_mask_path_emitter_with_no_path_emits_nothing() {
     }
 }
 
+/// Particulate's defaults with nothing moving a particle but its own launch,
+/// and no jitter, so where one is can be worked out by hand.
+fn plain_particles() -> points::PointsParams {
+    let mut p = particulate_params(&particulate(&[]));
+    p.emitter.shape = EmitterShape::Point;
+    p.emitter.position = [50.0, 50.0, 0.0];
+    p.emitter.spread_deg = 0.0;
+    p.emitter.spread_z_deg = 0.0;
+    p.emitter.speed_jitter = 0.0;
+    p.particle.life = 5.0;
+    p.particle.life_jitter = 0.0;
+    p.forces = points::Forces {
+        gravity: 0.0,
+        wind: [0.0; 3],
+        drag: 0.0,
+        turbulence: 0.0,
+        ..p.forces
+    };
+    p
+}
+
+/// One particle, thrown at layer time 0 by a burst, seen at `t`.
+fn lone_particle(p: &points::PointsParams, t: f64, tail: f32) -> (PointsStream, Vec<[f32; 3]>) {
+    let dt = 1.0 / 60.0;
+    let mut s = Schedule::scan(dt, (t / dt).floor() as i64, 600, &|_| 0.0);
+    s.add_bursts(points::Burst::Once, &|_| 1.0, &|_| 1.0, &|_| 0.0);
+    points::evaluate_with_tail(p, &s, t, &MaskPolyline::default(), tail)
+}
+
+/// Bursts go off once at the start, every N frames, and on each rise of
+/// Trigger, a frame-0 high included and a level held into the window not.
+/// A burst's particles are extra: the steady flow is drawn exactly as it was.
+#[test]
+fn bursts_go_off_when_asked_and_leave_the_steady_flow_alone() {
+    let dt = 1.0 / 60.0;
+    let steady = Schedule::scan(dt, 59, 60, &|_| 60.0);
+    let bursts = |burst, trigger: &dyn Fn(f64) -> f64| {
+        let mut s = steady.clone();
+        s.add_bursts(burst, &|_| 10.0, &|_| 20.0, trigger);
+        s.bursts().to_vec()
+    };
+    let none = |_: f64| 0.0;
+    assert_eq!(bursts(points::Burst::Off, &none), vec![]);
+    assert_eq!(bursts(points::Burst::Once, &none), vec![(0, 10)]);
+    assert_eq!(
+        bursts(points::Burst::Every, &none),
+        vec![(0, 10), (20, 10), (40, 10)]
+    );
+    // High on frame 0, low, then high again from frame 30.
+    let beat = |lt: f64| {
+        let f = (lt / dt).round() as i64;
+        f64::from(u8::from(f == 0 || (30..35).contains(&f)))
+    };
+    assert_eq!(
+        bursts(points::Burst::Trigger, &beat),
+        vec![(0, 10), (30, 10)]
+    );
+    // A window opening on frame 60 with Trigger already high is no rise.
+    let mut late = Schedule::scan(dt, 119, 60, &|_| 60.0);
+    late.add_bursts(points::Burst::Trigger, &|_| 10.0, &|_| 1.0, &|_| 1.0);
+    assert!(late.bursts().is_empty());
+
+    // The effect's own Burst row reaches the schedule.
+    let e = particulate(&[("burst", EffectValue::Choice(2))]);
+    let mut s = steady.clone();
+    Particulate::add_bursts(&e, &mut s, &|id, lt| {
+        e.float_at_with_context(id, lt, Arc::new(ExpressionContext::detached()))
+            .unwrap_or(0.0)
+    });
+    assert_eq!(s.bursts(), &[(0, 100), (24, 100), (48, 100)]);
+
+    let t = 59.5 * dt;
+    let p = plain_particles();
+    let plain = points::evaluate(&p, &steady, t, &MaskPolyline::default());
+    let both = points::evaluate(&p, &s, t, &MaskPolyline::default());
+    let thrown = both.id.iter().filter(|&&id| id >= points::BURST_ID).count();
+    assert_eq!(thrown, 300, "every burst particle is drawn");
+    for (i, id) in plain.id.iter().enumerate() {
+        let j = both.id.iter().position(|b| b == id).expect("steady kept");
+        assert_eq!(both.position[j], plain.position[i]);
+        assert_eq!(both.colour[j], plain.colour[i]);
+    }
+
+    // Over the cap, the oldest bursts go first.
+    s.trim_to_newest(150);
+    assert_eq!(s.bursts(), &[(48, 100)]);
+}
+
+/// Kill takes a particle the first time it leaves the frame and its margin,
+/// and never brings it back, even when gravity drops it in again. Wrap puts
+/// it on the opposite side, margin included, and its tail goes with it.
+#[test]
+fn edge_kill_stays_dead_and_wrap_comes_back_opposite() {
+    // Thrown up from the middle of a 100 px frame and falling back: it peaks
+    // at y = -25 half a second in, and is back inside at 0.9 s.
+    let mut up = plain_particles().framed(100.0, 100.0);
+    up.emitter.direction_deg = -90.0;
+    up.emitter.speed = 300.0;
+    up.forces.gravity = 600.0;
+    assert_eq!(lone_particle(&up, 0.9, 0.0).0.len(), 1, "no edge, no kill");
+    up.edge = points::Edge::Kill;
+    up.margin = 10.0;
+    assert_eq!(lone_particle(&up, 0.3, 0.0).0.len(), 1, "not out yet");
+    assert!(
+        lone_particle(&up, 0.9, 0.0).0.is_empty(),
+        "came back to life"
+    );
+    up.margin = 30.0;
+    assert_eq!(lone_particle(&up, 0.9, 0.0).0.len(), 1, "never passed it");
+
+    // Off the right at 200 px a second: at 0.5 s it is at x = 150.
+    let mut right = plain_particles().framed(100.0, 100.0);
+    right.emitter.direction_deg = 0.0;
+    right.emitter.speed = 200.0;
+    right.edge = points::Edge::Wrap;
+    for (margin, x) in [(0.0, 50.0), (10.0, 30.0)] {
+        right.margin = margin;
+        let (s, tails) = lone_particle(&right, 0.5, 0.1);
+        let at = s.position[0];
+        assert!((at[0] - x).abs() < 1e-3, "margin {margin}: x = {}", at[0]);
+        assert!((at[1] - 50.0).abs() < 1e-3);
+        assert!((tails[0][0] - (x - 20.0)).abs() < 1e-3, "tail left behind");
+    }
+}
+
+/// Size, Opacity and Colour by Speed run from Speed min to Speed max, and
+/// by Random hold a number of the particle's own for its whole life.
+#[test]
+fn speed_and_random_drives_map_as_they_say() {
+    let dt = 1.0 / 60.0;
+    let mut p = particulate_params(&particulate(&[]));
+    p.particle.colour = [1.0, 0.0, 0.0, 1.0];
+    p.particle.end_colour = [0.0, 0.0, 1.0, 1.0];
+    p.emitter.speed = 200.0;
+    p.emitter.speed_jitter = 1.0;
+    let stream = |p: &points::PointsParams, t: f64| {
+        let s = Schedule::scan(dt, (t / dt).floor() as i64, 600, &|_| 60.0);
+        points::evaluate(p, &s, t, &MaskPolyline::default())
+    };
+    // How far along to End colour each visible particle is.
+    let toward = |s: &PointsStream| -> Vec<(u64, f32, f32)> {
+        (0..s.len())
+            .filter(|&i| s.colour[i][3] > 1e-4)
+            .map(|i| {
+                let v = s.speed[i];
+                let fast = v[0].hypot(v[1]).hypot(v[2]);
+                (s.id[i], s.colour[i][2] / s.colour[i][3], fast)
+            })
+            .collect()
+    };
+
+    p.particle.colour_by = points::Drive::Speed;
+    p.particle.speed_range = [100.0, 300.0];
+    let seen = toward(&stream(&p, 1.0));
+    assert!(seen.len() > 20);
+    for (_, k, fast) in &seen {
+        let want = ((fast - 100.0) / 200.0).clamp(0.0, 1.0);
+        assert!((k - want).abs() < 1e-3, "speed {fast}: {k} not {want}");
+    }
+    // A range with no width is a step at its speed.
+    p.particle.speed_range = [200.0; 2];
+    for (_, k, fast) in toward(&stream(&p, 1.0)) {
+        assert!((k - f32::from(u8::from(fast >= 200.0))).abs() < 1e-3);
+    }
+
+    p.particle.colour_by = points::Drive::Random;
+    let early = toward(&stream(&p, 1.0));
+    let later = toward(&stream(&p, 1.5));
+    let mut shared = 0;
+    for (id, k, _) in &early {
+        if let Some((_, k2, _)) = later.iter().find(|(id2, ..)| id2 == id) {
+            assert!((k - k2).abs() < 1e-5, "particle {id} changed its number");
+            shared += 1;
+        }
+    }
+    assert!(shared > 10);
+    let lo = early.iter().map(|e| e.1).fold(1.0, f32::min);
+    let hi = early.iter().map(|e| e.1).fold(0.0, f32::max);
+    assert!(hi - lo > 0.5, "the numbers do not spread: {lo}..{hi}");
+}
+
+/// A Density layer keeps births to where its picture is bright, and a black
+/// picture gives none at all.
+#[test]
+fn density_births_land_only_on_light() {
+    let dt = 1.0 / 60.0;
+    let mut p = plain_particles();
+    p.emitter.shape = EmitterShape::Rectangle;
+    p.emitter.width = 100.0;
+    p.emitter.height = 100.0;
+    p.emitter.speed = 0.0;
+    let sched = Schedule::scan(dt, 59, 600, &|_| 600.0);
+    let (w, h) = (100u32, 100u32);
+    // White on the left half, black on the right.
+    let mut rgba = vec![0.0f32; (w * h * 4) as usize];
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        if (i as u32 % w) < 50 {
+            px.fill(1.0);
+        }
+    }
+    let dense = |rgba: &[f32]| {
+        let d = points::Density { rgba, w, h };
+        points::evaluate_dense(&p, &sched, 1.0, &MaskPolyline::default(), 0.0, Some(d)).0
+    };
+    let s = dense(&rgba);
+    assert!(s.len() > 100, "only {} born", s.len());
+    for at in &s.position {
+        assert!(at[0] < 50.0, "born in the dark at {at:?}");
+    }
+    assert!(dense(&vec![0.0; rgba.len()]).is_empty());
+}
+
+/// Particle blend combines the particles with each other by the layer
+/// modes. Normal is the plain draw, and a particle on its own looks the same
+/// whatever the mode; only where two meet does the mode show.
+#[test]
+fn particle_blend_mixes_only_where_particles_meet() {
+    let (w, h) = (48u32, 48u32);
+    let style = points::DrawStyle {
+        mode: points::RenderMode::Disc,
+        feather: 0.0,
+        streak_seconds: 0.0,
+        mix: 1.0,
+    };
+    let s = two_points();
+    let draw = |blend: Option<u32>| {
+        let mut rgba = vec![0.0f32; (w * h * 4) as usize];
+        match blend {
+            None => points::draw_stream(&mut rgba, w, h, &s, &[], &style, None),
+            Some(b) => points::draw_stream_blended(&mut rgba, w, h, &s, &[], &style, None, b),
+        }
+        rgba
+    };
+    let px = |rgba: &[f32], x: u32| {
+        let d = ((20 * w + x) * 4) as usize;
+        [rgba[d], rgba[d + 1], rgba[d + 2], rgba[d + 3]]
+    };
+    let plain = draw(None);
+    assert_eq!(draw(Some(0)), plain);
+    let add = crate::model::BlendMode::ALL
+        .iter()
+        .position(|m| *m == crate::model::BlendMode::Add)
+        .expect("Add is a layer mode") as u32;
+    let added = draw(Some(add));
+    // Only the red one reaches x = 16; both cover x = 21.
+    assert_eq!(px(&added, 16), px(&plain, 16));
+    assert_eq!(px(&plain, 21), [0.0, 1.0, 0.0, 1.0]);
+    assert_eq!(px(&added, 21), [1.0, 1.0, 0.0, 1.0]);
+}
+
 // --------------------------------------------------- Scatter
 
 /// A Scatter instance with its declared defaults, and `edits` applied.
