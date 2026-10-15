@@ -53,6 +53,7 @@ Arc
 Arc lower
 Arc upper
 Arch
+As placed in comp
 As the lens file
 Aspect ratio
 Asymmetric
@@ -604,6 +605,7 @@ Makeup
 Manual
 Manual light
 Map black to
+Map placement
 Map white to
 Mask
 Mask path
@@ -1011,6 +1013,7 @@ Streak intensity
 Streak length
 Strength
 Stretch
+Stretch to fit
 Stretch x
 Stretch y
 Strike

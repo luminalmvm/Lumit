@@ -27,6 +27,7 @@ Warping/displacement of one layer scaled with the contents of another.
 | **Horizontal amount** | Slider | -500 to 500; any value by typing | 60 | Pixels at composition size |
 | **Vertical channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Green | - |
 | **Vertical amount** | Slider | -500 to 500; any value by typing | 60 | Pixels at composition size |
+| **Map placement** | Dropdown | As placed in comp · Stretch to fit · Centre | As placed in comp | - |
 | **Edges** | Dropdown | Transparent · Repeat · Mirror | Repeat | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
@@ -44,6 +45,9 @@ In the Effect Controls panel:
 - **Matte** is the map, and is required for the effect to change anything.
 - **Horizontal channel** and **Vertical channel** choose the channel used to
   scale each direction.
+- **Map placement**: where the map sits on this layer. **As placed in comp** reads it
+  where the Matte layer sits in the composition. **Stretch to fit** stretches it over
+  this layer. **Centre** centres it at its own size. Outside the map nothing moves.
 - **Horizontal amount** and **Vertical amount** adjust the scaling multiplier.
 - **Edges** adjusts what resulting transparent pixels are filled with. **Repeat** 
   smears the border pixel and keeps the frame full. **Transparent** fills with 

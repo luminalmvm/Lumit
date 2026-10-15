@@ -545,9 +545,15 @@ impl Realiser<'_> {
     ///
     /// One op's whole list of pictures, each rendered as it would be alone and
     /// with its own size kept beside it.
-    fn several(&self, list: &[LayerInputDraw], w: u32, h: u32) -> crate::fxops::LayerInput {
+    fn several(
+        &self,
+        list: &[LayerInputDraw],
+        w: u32,
+        h: u32,
+        of: (f32, f32),
+    ) -> crate::fxops::LayerInput {
         crate::fxops::LayerInput::Several(
-            self.render_layer_inputs(list, w, h)
+            self.render_layer_inputs(list, w, h, of)
                 .into_iter()
                 .zip(list.iter().map(LayerInputDraw::size))
                 .collect(),
@@ -564,10 +570,11 @@ impl Realiser<'_> {
         points: usize,
         w: u32,
         h: u32,
+        of: (f32, f32),
     ) -> crate::fxops::LayerInput {
         match (slot, self.late_clones) {
             (Some(LayerInputDraw::Late(spec)), Some(make)) => {
-                self.several(&make(spec, points), w, h)
+                self.several(&make(spec, points), w, h, of)
             }
             _ => crate::fxops::LayerInput::Absent,
         }
@@ -576,11 +583,15 @@ impl Realiser<'_> {
     /// [`LayerInputDraw::ThisLayer`] renders nothing here: it names
     /// the texture `run_ops` is already carrying, which only `run_ops` can
     /// hand over, so it passes through as [`LayerInput::ThisLayer`].
+    ///
+    /// `of` is the consuming layer's own size, px at comp size, which a map
+    /// set down where its layer sits is measured against.
     fn render_layer_inputs(
         &self,
         inputs: &[LayerInputDraw],
         w: u32,
         h: u32,
+        of: (f32, f32),
     ) -> Vec<crate::fxops::LayerInput> {
         use crate::fxops::LayerInput;
         inputs
@@ -593,7 +604,7 @@ impl Realiser<'_> {
                     LayerInputDraw::Late(_) => return LayerInput::Late,
                     // An op's whole list: each layer rendered as it would be
                     // alone, with its own size kept beside it.
-                    LayerInputDraw::Several(list) => return self.several(list, w, h),
+                    LayerInputDraw::Several(list) => return self.several(list, w, h, of),
                     LayerInputDraw::Layer(d) => d,
                 };
                 // A Precomp input realises its nested comp exactly as a
@@ -709,15 +720,27 @@ impl Realiser<'_> {
                 // is placed by `d.tex_w × d.tex_h` just below, so its own stack
                 // is cropped back to that raster rather than growing it.
                 let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, d.tex_w, d.tex_h);
-                LayerInput::Texture(crate::fxops::render_layer_input(
-                    self.compositor,
-                    &self.ctx,
-                    w,
-                    h,
-                    &linear,
-                    d.tex_w as f32,
-                    d.tex_h as f32,
-                ))
+                LayerInput::Texture(match &d.place {
+                    Some(place) => crate::fxops::place_layer_input(
+                        self.compositor,
+                        &self.ctx,
+                        w,
+                        h,
+                        &linear,
+                        d.natural,
+                        place,
+                        of,
+                    ),
+                    None => crate::fxops::render_layer_input(
+                        self.compositor,
+                        &self.ctx,
+                        w,
+                        h,
+                        &linear,
+                        d.tex_w as f32,
+                        d.tex_h as f32,
+                    ),
+                })
             })
             .collect()
     }
@@ -875,7 +898,12 @@ impl Realiser<'_> {
                 // depth pass's own road.
                 GraphStep::Picture(input) => {
                     match self
-                        .render_layer_inputs(std::slice::from_ref(input), w, h)
+                        .render_layer_inputs(
+                            std::slice::from_ref(input),
+                            w,
+                            h,
+                            (w as f32, h as f32),
+                        )
                         .into_iter()
                         .next()
                     {
@@ -1377,8 +1405,8 @@ impl Realiser<'_> {
             // identical to export. The adjustment stack runs on the
             // comp-sized composite, so its depth inputs resample to comp size.
             let tables = self.load_tables(&l.colour_tables);
-            let layer_inputs = self.render_layer_inputs(&l.dof_inputs, tw, th);
-            let mattes = self.render_layer_inputs(&l.mattes, tw, th);
+            let layer_inputs = self.render_layer_inputs(&l.dof_inputs, tw, th, l.natural_size);
+            let mattes = self.render_layer_inputs(&l.mattes, tw, th, l.natural_size);
             let flare_lens = self.load_flare_lens(&l.flare_lens_files);
             // The stack was resolved against the comp raster; this render
             // target may be smaller (reduced-resolution preview), and every
@@ -1454,7 +1482,7 @@ impl Realiser<'_> {
                 // through. It can still stamp clones over a late stream.
                 &crate::fxops::Side {
                     late: Some(&|slot: usize, points: usize| {
-                        self.late_clones(l.dof_inputs.get(slot), points, tw, th)
+                        self.late_clones(l.dof_inputs.get(slot), points, tw, th, l.natural_size)
                     }),
                     ..crate::fxops::Side::NONE
                 },
@@ -1525,7 +1553,12 @@ impl Realiser<'_> {
         // own shutter is, and the average is taken over a shorter slice of the
         // same N moments, shrunk toward the frame's own instant.
         let matte = self
-            .render_layer_inputs(std::slice::from_ref(&ab.matte), tw, th)
+            .render_layer_inputs(
+                std::slice::from_ref(&ab.matte),
+                tw,
+                th,
+                (width as f32, height as f32),
+            )
             .into_iter()
             .next()
             .and_then(|slot| slot.texture(below).cloned());
@@ -2083,8 +2116,8 @@ impl Realiser<'_> {
                 // resampled to this layer's working raster (w, h), 1:1 with the
                 // stack's consuming ops (§3.22, §3.28); the same render export
                 // runs.
-                let layer_inputs = self.render_layer_inputs(&l.dof_inputs, w, h);
-                let mattes = self.render_layer_inputs(&l.mattes, w, h);
+                let layer_inputs = self.render_layer_inputs(&l.dof_inputs, w, h, l.natural_size);
+                let mattes = self.render_layer_inputs(&l.mattes, w, h, l.natural_size);
                 let flare_lens = self.load_flare_lens(&l.flare_lens_files);
                 // A stack resolved against a raster wider than the one it is
                 // about to run on (a Precomp layer's, under reduced-resolution
@@ -2127,7 +2160,7 @@ impl Realiser<'_> {
                     .map(|slot| slot.as_ref().map(|p| self.plane_texture(p, w, h)))
                     .collect();
                 let late = |slot: usize, points: usize| {
-                    self.late_clones(l.dof_inputs.get(slot), points, w, h)
+                    self.late_clones(l.dof_inputs.get(slot), points, w, h, l.natural_size)
                 };
                 let side = crate::fxops::Side {
                     roto: &roto_mattes,

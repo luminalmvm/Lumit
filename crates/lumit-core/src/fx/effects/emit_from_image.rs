@@ -29,7 +29,7 @@ use crate::fx::effects::scatter::DENSITY_CELL;
 use crate::fx::points::{self, DrawStyle, PointsStream, Projection, RenderMode};
 use crate::fx::{
     EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, Port, PortType,
-    ResolveCx, Signature, Value,
+    ResolveCx, Signature, Value, MAP_PLACEMENT_OPTIONS,
 };
 use lumit_fx_macros::Effect;
 
@@ -50,7 +50,10 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
 /// Two kickers, as the other generators have: where the points come from, and
 /// what one looks like.
 pub const EMIT_FROM_IMAGE_GROUPS: &[ParamGroup] = &[
-    group("Source", &["source", "threshold", "density"]),
+    group(
+        "Source",
+        &["source", "source_placement", "threshold", "density"],
+    ),
     group("Point", &["size", "feather", "colour", "max_points"]),
 ];
 
@@ -89,6 +92,11 @@ pub struct EmitFromImage {
     /// default and the same reading an unset Matte gives Scatter.
     #[layer(label = "Source layer")]
     pub source: bool,
+
+    /// Where the Source layer's picture sits on this one: as it sits in the
+    /// comp, stretched over the frame, or centred at its own size.
+    #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
+    pub source_placement: u32,
 
     /// How bright a pixel must be before a candidate on it stands any chance at
     /// all, per cent of full white. At 0 the field is the brightness itself, so

@@ -5955,6 +5955,7 @@ mod tests {
             feather: 60.0,
             sprite_layer: false,
             density_layer: false,
+            density_layer_placement: 0,
             streak_length: 0.05,
             particle_blend: 0,
             max_particles: cap,
@@ -6535,6 +6536,7 @@ mod tests {
         let (w, h) = (128u32, 96u32);
         let inst = lumit_core::fx::effects::emit_from_image::EmitFromImage {
             source: true,
+            source_placement: 0,
             threshold: 50.0,
             density: 40.0,
             seed: 11,

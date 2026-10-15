@@ -18,7 +18,10 @@
 //! [`crate::fx::cpu::displacement_map`], exercised directly from the lumit-gpu
 //! test, which can upload a map.
 
-use crate::fx::{cpu, EffectDef, EffectMetadata, EffectSchema, CHANNEL_OPTIONS, EDGE_OPTIONS};
+use crate::fx::{
+    cpu, EffectDef, EffectMetadata, EffectSchema, CHANNEL_OPTIONS, EDGE_OPTIONS,
+    MAP_PLACEMENT_OPTIONS,
+};
 use lumit_fx_macros::Effect;
 
 /// Displacement map's controls.
@@ -79,6 +82,11 @@ pub struct DisplacementMap {
         unit = Px
     )]
     pub vertical_amount: f32,
+
+    /// Where the Matte layer's picture sits on this one: as it sits in the
+    /// comp, stretched over the frame, or centred at its own size.
+    #[choice(label = "Map placement", options = *MAP_PLACEMENT_OPTIONS, default = 0)]
+    pub matte_placement: u32,
 
     /// What a sample pushed off the frame reads. **Repeat by default**, which is
     /// AE's behaviour with "Wrap Pixels Around" off and the one that keeps a

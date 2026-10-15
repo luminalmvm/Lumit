@@ -339,7 +339,8 @@ fn displacement_map(fx: &mut Fx<'_, '_>) {
     fx.channel(2, "horizontal_channel", Some("horizontal_amount"));
     fx.carry(5, "vertical_amount", Unit::Px);
     fx.channel(4, "vertical_channel", Some("vertical_amount"));
-    fx.drop_ae(6); // Displacement Map Behavior
+    // Center Map, Stretch Map to Fit, and Tile Map, which Lumit has no match for.
+    fx.choice(6, "matte_placement", &[2, 1, -1], "As placed in comp");
     fx.drop_ae(7); // Edge Behavior — Lumit's Edges default is Repeat, AE's wrap
     fx.drop_ae(8); // Expand Output
                    // AE's "Off" channel means "do not displace on this axis", which is an

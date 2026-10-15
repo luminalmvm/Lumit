@@ -39,6 +39,36 @@ pub const CHOICE_UNGROUPED: &[u32] = &[];
 /// to find out.
 pub const CHANNEL_OPTIONS: &[&str] = &["Luminance", "Alpha", "Red", "Green", "Blue"];
 
+/// Where a picture an effect reads from another layer sits on the effect's
+/// own layer. An effect offers the choice by declaring a Choice row with these
+/// options, named after its Layer row with `_placement` on the end
+/// (`source_placement` for `source`). A Layer row with no such row is
+/// stretched, as every read was before the choice existed.
+pub const MAP_PLACEMENT_OPTIONS: &[&str] = &["As placed in comp", "Stretch to fit", "Centre"];
+
+/// The three readings of a Map placement row, in [`MAP_PLACEMENT_OPTIONS`]
+/// order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapPlacement {
+    /// Where the layer sits in the composition, after its transform and its
+    /// parents.
+    AsPlaced,
+    /// Stretched over the effect's whole picture.
+    Stretch,
+    /// Centred on the effect's picture at the layer's own size.
+    Centre,
+}
+
+/// How `e` places the picture it reads through its Layer row `row`.
+#[must_use]
+pub fn map_placement(e: &EffectInstance, row: &str) -> MapPlacement {
+    match e.param(&format!("{row}_placement")) {
+        Some(EffectValue::Choice(0)) => MapPlacement::AsPlaced,
+        Some(EffectValue::Choice(2)) => MapPlacement::Centre,
+        _ => MapPlacement::Stretch,
+    }
+}
+
 /// Look a schema up by its match name. `None` for a name this build does not
 /// know — an unknown effect is preserved as an inert placeholder.
 ///
@@ -356,10 +386,26 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         };
         migrate_lens_flare_background(e);
         migrate_audio_level_source(e);
+        // A Map placement row missing beside a Layer row that was saved: that
+        // map was stretched, so it goes on being stretched.
+        let stretched: Vec<&str> = s
+            .params
+            .iter()
+            .filter(|p| {
+                p.id.strip_suffix("_placement").is_some_and(|row| {
+                    e.params.iter().any(|have| have.id == row)
+                        && !e.params.iter().any(|have| have.id == p.id)
+                })
+            })
+            .map(|p| p.id)
+            .collect();
         for p in s.params {
-            let Some(value) = default_param_value(&p.kind) else {
+            let Some(mut value) = default_param_value(&p.kind) else {
                 continue; // a button has nothing to backfill
             };
+            if stretched.contains(&p.id) {
+                value = EffectValue::Choice(MapPlacement::Stretch as u32);
+            }
             if !e.params.iter().any(|have| have.id == p.id) {
                 e.params.push(EffectParam {
                     id: p.id.to_owned(),

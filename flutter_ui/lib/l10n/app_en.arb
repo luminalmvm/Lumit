@@ -10647,7 +10647,7 @@
   },
   "fxCentre": "Centre",
   "@fxCentre": {
-    "description": "Effect controls — a Placement option on Texturize: one copy of the texture in the middle, the rest of the frame untextured. Also the middle of the sweep on Phaser."
+    "description": "Effect controls — a Placement option on Texturize: one copy of the texture in the middle, the rest of the frame untextured. Also the middle of the sweep on Phaser, and a Map placement option: the other layer's picture centred at its own size."
   },
   "fxEmboss": "Emboss",
   "@fxEmboss": {
@@ -10740,6 +10740,18 @@
   "fxStretch": "Stretch",
   "@fxStretch": {
     "description": "Effect controls — a Placement option on Texturize: hold the texture's edge outward past one copy."
+  },
+  "fxMapPlacement": "Map placement",
+  "@fxMapPlacement": {
+    "description": "Effect controls — a control on effects that read another layer's picture as a map, such as Emit from image and Displacement map: where that picture sits on this layer."
+  },
+  "fxAsPlacedInComp": "As placed in comp",
+  "@fxAsPlacedInComp": {
+    "description": "Effect controls — a Map placement option: the other layer's picture is read where that layer sits in the composition."
+  },
+  "fxStretchToFit": "Stretch to fit",
+  "@fxStretchToFit": {
+    "description": "Effect controls — a Map placement option: the other layer's picture is stretched over this whole layer."
   },
   "fxTexture": "Texture",
   "@fxTexture": {
