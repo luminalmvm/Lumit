@@ -3129,6 +3129,7 @@ fn shape_item(name: &str, x: f64, y: f64, side: f64) -> crate::api::layer::Bridg
         repeat_start_opacity: BridgeScalar::Static(100.0),
         repeat_end_opacity: BridgeScalar::Static(100.0),
         twist: None,
+        deform: None,
     }
 }
 

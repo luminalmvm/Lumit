@@ -119,11 +119,30 @@ Rect? shapeContentsRect(List<BridgeShapeItem> contents, {double t = 0}) {
     // it sits further out still. Pulled in it never needs more room.
     final half = (item.stroke != null ? item.strokeWidth / 2 : 0.0) +
         math.max(0.0, evaluateScalar(item.offsetAmount, t));
-    var box = _boxOf(_controlPoints(item));
-    if (box == null) continue;
+    final own = _boxOf(_controlPoints(item));
+    if (own == null) continue;
+    var box = own;
     // A twist keeps the art inside the box it was turned in, as the engine's
     // `Twist::bounds` says.
     if (item.twist case final twist?) box = _twistBox(item, twist, t);
+    // A deform moves the outline no further than its amount: `Deform::bounds`.
+    if (item.deform case final deform?) {
+      final amount = evaluateScalar(deform.amount, t).abs();
+      if (deform.mode != 1) {
+        box = (
+          box.$1 - amount,
+          box.$2 - amount,
+          box.$3 + amount,
+          box.$4 + amount
+        );
+      } else {
+        final (mx, my) = ((own.$1 + own.$3) / 2, (own.$2 + own.$4) / 2);
+        final grow = 1 + amount / 100;
+        final rx = math.max((box.$1 - mx).abs(), (box.$3 - mx).abs()) * grow;
+        final ry = math.max((box.$2 - my).abs(), (box.$4 - my).abs()) * grow;
+        box = (mx - rx, my - ry, mx + rx, my + ry);
+      }
+    }
     final (ix0, iy0, ix1, iy1) =
         (box.$1 - half, box.$2 - half, box.$3 + half, box.$4 + half);
     // Every copy's box, unioned. One copy and the identity — every shape

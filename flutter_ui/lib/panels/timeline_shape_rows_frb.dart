@@ -90,6 +90,15 @@ class ShapeItemRow extends StatelessWidget {
             centreX: BridgeScalar.static_(centre.dx),
             centreY: BridgeScalar.static_(centre.dy),
           )),
+      ShapeOp.deform => shapeItemWith(i,
+          deform: const BridgeShapeDeform(
+            mode: 0,
+            amount: BridgeScalar.static_(10),
+            scale: BridgeScalar.static_(100),
+            evolution: BridgeScalar.static_(0),
+            seed: BridgeScalar.static_(0),
+            detail: BridgeScalar.static_(4),
+          )),
     };
   }
 
@@ -654,6 +663,13 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.twistCentreX ||
         ShapeValue.twistCentreY =>
           (-10000, 10000, ' px'),
+        // Pixels pushed out, or a per cent of the distance from the middle.
+        ShapeValue.deformAmount =>
+          widget.item.deform?.mode == 1 ? (-1000, 1000, '%') : (-1000, 1000, ' px'),
+        ShapeValue.deformScale => (1, 10000, ' px'),
+        ShapeValue.deformEvolution => (-3600, 3600, '°'),
+        ShapeValue.deformSeed => (0, 100000, ''),
+        ShapeValue.deformDetail => (0.1, 100, ''),
         ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
@@ -1127,6 +1143,20 @@ class ShapePaintRow extends StatelessWidget {
                       gradientColour: _picked(p, i.gradientColour?.a ?? 1))),
                 ),
               ShapePaint.gradientStops => _rampChip(context, key),
+              // Displace or Scale.
+              ShapePaint.deformMode => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: item.deform?.mode == 1 ? 1 : 0,
+                    options: const [0, 1],
+                    label: (k) => k == 1
+                        ? l10n.shapeDeformModeScale
+                        : l10n.shapeDeformModeDisplace,
+                    onChanged: (k) =>
+                        _write((i) => shapeItemWith(i, deformMode: k)),
+                  ),
+                ),
             },
           ),
         ),

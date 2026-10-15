@@ -20388,6 +20388,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeShapeDeform dco_decode_box_autoadd_bridge_shape_deform(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_bridge_shape_deform(raw);
+  }
+
+  @protected
   BridgeShapeItem dco_decode_box_autoadd_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_shape_item(raw);
@@ -23752,11 +23758,27 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeShapeDeform dco_decode_bridge_shape_deform(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return BridgeShapeDeform(
+      mode: dco_decode_u_32(arr[0]),
+      amount: dco_decode_bridge_scalar(arr[1]),
+      scale: dco_decode_bridge_scalar(arr[2]),
+      evolution: dco_decode_bridge_scalar(arr[3]),
+      seed: dco_decode_bridge_scalar(arr[4]),
+      detail: dco_decode_bridge_scalar(arr[5]),
+    );
+  }
+
+  @protected
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 36)
-      throw Exception('unexpected arr length: expect 36 but see ${arr.length}');
+    if (arr.length != 37)
+      throw Exception('unexpected arr length: expect 37 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -23794,6 +23816,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       repeatStartOpacity: dco_decode_bridge_scalar(arr[33]),
       repeatEndOpacity: dco_decode_bridge_scalar(arr[34]),
       twist: dco_decode_opt_box_autoadd_bridge_shape_twist(arr[35]),
+      deform: dco_decode_opt_box_autoadd_bridge_shape_deform(arr[36]),
     );
   }
 
@@ -25880,6 +25903,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeShapeDeform? dco_decode_opt_box_autoadd_bridge_shape_deform(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_bridge_shape_deform(raw);
+  }
+
+  @protected
   BridgeShapeTwist? dco_decode_opt_box_autoadd_bridge_shape_twist(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_bridge_shape_twist(raw);
@@ -26723,6 +26753,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_sequence_rate(deserializer));
+  }
+
+  @protected
+  BridgeShapeDeform sse_decode_box_autoadd_bridge_shape_deform(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bridge_shape_deform(deserializer));
   }
 
   @protected
@@ -30242,6 +30279,25 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeShapeDeform sse_decode_bridge_shape_deform(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_mode = sse_decode_u_32(deserializer);
+    var var_amount = sse_decode_bridge_scalar(deserializer);
+    var var_scale = sse_decode_bridge_scalar(deserializer);
+    var var_evolution = sse_decode_bridge_scalar(deserializer);
+    var var_seed = sse_decode_bridge_scalar(deserializer);
+    var var_detail = sse_decode_bridge_scalar(deserializer);
+    return BridgeShapeDeform(
+        mode: var_mode,
+        amount: var_amount,
+        scale: var_scale,
+        evolution: var_evolution,
+        seed: var_seed,
+        detail: var_detail);
+  }
+
+  @protected
   BridgeShapeItem sse_decode_bridge_shape_item(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_Uuid(deserializer);
@@ -30282,6 +30338,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_repeatStartOpacity = sse_decode_bridge_scalar(deserializer);
     var var_repeatEndOpacity = sse_decode_bridge_scalar(deserializer);
     var var_twist = sse_decode_opt_box_autoadd_bridge_shape_twist(deserializer);
+    var var_deform =
+        sse_decode_opt_box_autoadd_bridge_shape_deform(deserializer);
     return BridgeShapeItem(
         id: var_id,
         name: var_name,
@@ -30318,7 +30376,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         repeatScale: var_repeatScale,
         repeatStartOpacity: var_repeatStartOpacity,
         repeatEndOpacity: var_repeatEndOpacity,
-        twist: var_twist);
+        twist: var_twist,
+        deform: var_deform);
   }
 
   @protected
@@ -33348,6 +33407,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeShapeDeform? sse_decode_opt_box_autoadd_bridge_shape_deform(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_bridge_shape_deform(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   BridgeShapeTwist? sse_decode_opt_box_autoadd_bridge_shape_twist(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -34350,6 +34421,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeSequenceRate self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_sequence_rate(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_bridge_shape_deform(
+      BridgeShapeDeform self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_shape_deform(self, serializer);
   }
 
   @protected
@@ -37093,6 +37171,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_bridge_shape_deform(
+      BridgeShapeDeform self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.mode, serializer);
+    sse_encode_bridge_scalar(self.amount, serializer);
+    sse_encode_bridge_scalar(self.scale, serializer);
+    sse_encode_bridge_scalar(self.evolution, serializer);
+    sse_encode_bridge_scalar(self.seed, serializer);
+    sse_encode_bridge_scalar(self.detail, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_shape_item(
       BridgeShapeItem self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -37133,6 +37223,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.repeatStartOpacity, serializer);
     sse_encode_bridge_scalar(self.repeatEndOpacity, serializer);
     sse_encode_opt_box_autoadd_bridge_shape_twist(self.twist, serializer);
+    sse_encode_opt_box_autoadd_bridge_shape_deform(self.deform, serializer);
   }
 
   @protected
@@ -39546,6 +39637,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_bridge_sequence_rate(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_shape_deform(
+      BridgeShapeDeform? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_bridge_shape_deform(self, serializer);
     }
   }
 

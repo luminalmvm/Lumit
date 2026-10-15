@@ -25,8 +25,8 @@
 //! where their position decides what they act on. Lumit's list is flat, so each
 //! modifier is a property of the item it modifies and the order they apply in is
 //! fixed and written down here rather than dragged: **combine, then twist,
-//! then offset, then trim, then repeat**. A **combine** is the one field that reaches past
-//! its own item: it says how this item's path joins the item before it, and the
+//! then deform, then offset, then trim, then repeat**. A **combine** is the
+//! one field that reaches past its own item: it says how this item's path joins the item before it, and the
 //! run that makes is drawn once with the first item's paint. The
 //! nested tree is still the long-term shape (docs/03 §9.2); nothing stored here
 //! stands in its way, because every modifier is absent from the file until it is
@@ -299,6 +299,9 @@ pub struct ShapeItem {
     /// twist, which is every shape until somebody adds one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub twist: Option<Twist>,
+    /// **Deform**: the outline moved by a smooth noise field. `None` is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deform: Option<Deform>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -328,6 +331,35 @@ pub struct Twist {
     pub centre_x: Property,
     #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
     pub centre_y: Property,
+}
+
+/// A deform: the outline moved by a smooth noise field laid over the layer.
+///
+/// The field is read at points along the path, `detail` of them to every
+/// `scale` pixels of it, and eased between them, so a curve stays a curve
+/// however quickly the field changes: fewer points bend the outline more
+/// broadly. `evolution` moves through the field in degrees, a turn a cell.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Deform {
+    /// 0 pushes each point along the outline's normal by `amount` pixels; 1
+    /// scales its distance from the middle of the path by `amount` per cent.
+    #[serde(default, skip_serializing_if = "is_flat")]
+    pub mode: u32,
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub amount: Property,
+    /// The size of the field's features, in layer pixels.
+    #[serde(default = "crate::paint::full", with = "crate::mask::still_or_keyed")]
+    pub scale: Property,
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub evolution: Property,
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub seed: Property,
+    #[serde(default = "four", with = "crate::mask::still_or_keyed")]
+    pub detail: Property,
+}
+
+fn four() -> Property {
+    Property::fixed(4.0)
 }
 
 /// A colour part way along a gradient, between the fill at its start and the
@@ -416,6 +448,7 @@ impl ShapeItem {
             repeat_start_opacity: crate::paint::full(),
             repeat_end_opacity: crate::paint::full(),
             twist: None,
+            deform: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -473,19 +506,27 @@ impl ShapeItem {
         Some(self.shaped(points, path.closed, t))
     }
 
-    /// True when the twist moves the path at `t`.
-    fn reshapes_at(&self, _t: f64) -> bool {
+    /// True when the twist or the deform moves the path at `t`.
+    fn reshapes_at(&self, t: f64) -> bool {
         self.twist.is_some()
+            || self
+                .deform
+                .as_ref()
+                .is_some_and(|d| d.amount.value_at(t) != 0.0)
     }
 
-    /// `points` once the twist has had them. The control points of the
-    /// item's own path are what the twist measures the shape by, so every
-    /// contour of a combined run is twisted the same way.
-    fn reshaped(&self, points: Vec<(f64, f64)>, t: f64) -> Vec<(f64, f64)> {
+    /// `points` once the twist and the deform have had them. The control
+    /// points of the item's own path are what both measure the shape by, so
+    /// every contour of a combined run is moved the same way.
+    fn reshaped(&self, points: Vec<(f64, f64)>, closed: bool, t: f64) -> Vec<(f64, f64)> {
         // Straight edges have to be cut up before they can bend.
         let mut points = densified(&points, FINE_STEP);
+        let path = self.path_at(t);
         if let Some(twist) = &self.twist {
-            twist.apply(&mut points, &self.path_at(t), t);
+            twist.apply(&mut points, &path, t);
+        }
+        if let Some(deform) = &self.deform {
+            points = deform.applied(&points, closed, &path, t);
         }
         points
     }
@@ -496,7 +537,7 @@ impl ShapeItem {
     /// path is.
     fn shaped(&self, mut points: Vec<(f64, f64)>, closed: bool, t: f64) -> Vec<(f64, f64)> {
         if self.reshapes_at(t) {
-            points = self.reshaped(points, t);
+            points = self.reshaped(points, closed, t);
         }
         let amount = self.offset_amount.value_at(t);
         if amount != 0.0 {
@@ -711,8 +752,14 @@ impl ShapeItem {
         let (x0, y0, x1, y1) = box_of(control_points(&path))?;
         // A twist keeps the art inside the box it was turned in, which can
         // reach past the path's own where the axis runs at a slant.
+        let own = (x0, y0, x1, y1);
         let (x0, y0, x1, y1) = match &self.twist {
-            Some(twist) => twist.bounds(&path, t).unwrap_or((x0, y0, x1, y1)),
+            Some(twist) => twist.bounds(&path, t).unwrap_or(own),
+            None => own,
+        };
+        // A deform moves the outline no further than its amount says.
+        let (x0, y0, x1, y1) = match &self.deform {
+            Some(deform) => deform.bounds((x0, y0, x1, y1), own, t),
             None => (x0, y0, x1, y1),
         };
         // Half the stroke sits outside the path, so the box has to hold it.
@@ -1433,6 +1480,205 @@ impl Twist {
             .into_iter(),
         )
     }
+}
+
+/// A closed polyline's points without the copy of the first one it ends on,
+/// and whether there was one, so it can be put back.
+fn ring_of(points: &[(f64, f64)], closed: bool) -> (&[(f64, f64)], bool) {
+    match (points.first(), points.last()) {
+        (Some(a), Some(b)) if closed && points.len() > 2 && a == b => {
+            (&points[..points.len() - 1], true)
+        }
+        _ => (points, false),
+    }
+}
+
+/// How far along `ring` each of its points is, and its whole length,
+/// counting the way back to the start when it is closed.
+fn arc_of(ring: &[(f64, f64)], closed: bool) -> (Vec<f64>, f64) {
+    let mut arc = Vec::with_capacity(ring.len());
+    let mut far = 0.0;
+    for (i, &p) in ring.iter().enumerate() {
+        if i > 0 {
+            far += dist(ring[i - 1], p);
+        }
+        arc.push(far);
+    }
+    let total = match (closed, ring.first(), ring.last()) {
+        (true, Some(&a), Some(&b)) => far + dist(b, a),
+        _ => far,
+    };
+    (arc, total)
+}
+
+/// The point `s` along `ring`, whose points sit at `arc`.
+fn point_at(ring: &[(f64, f64)], arc: &[f64], s: f64) -> (f64, f64) {
+    let i = arc.partition_point(|&a| a <= s).max(1) - 1;
+    let a = ring.get(i).copied().unwrap_or_default();
+    // Past the last point of a closed ring is on the way back to the first.
+    let (b, end) = match ring.get(i + 1) {
+        Some(&b) => (b, arc.get(i + 1).copied().unwrap_or(s)),
+        None => (ring[0], arc[i] + dist(a, ring[0])),
+    };
+    let span = end - arc[i];
+    if span <= 0.0 {
+        return a;
+    }
+    let f = ((s - arc[i]) / span).clamp(0.0, 1.0);
+    (a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f)
+}
+
+/// The most places one contour reads a deform's field at.
+const MAX_FIELD_SAMPLES: f64 = 4096.0;
+
+impl Deform {
+    /// The field's value at each of `count` samples, read where they fall
+    /// on the path, in −1..=1.
+    fn field(&self, ring: &[(f64, f64)], arc: &[f64], gap: f64, count: usize, t: f64) -> Vec<f64> {
+        let scale = self.scale.value_at(t).max(1.0);
+        let depth = (self.evolution.value_at(t) / 360.0) as f32;
+        let seed = self.seed.value_at(t).round() as i64 as u32;
+        (0..count)
+            .map(|k| {
+                let p = point_at(ring, arc, k as f64 * gap);
+                let v = crate::fx::noise::perlin3(
+                    seed,
+                    0,
+                    (p.0 / scale) as f32,
+                    (p.1 / scale) as f32,
+                    depth,
+                    0,
+                );
+                // Held to one, which is what keeps the layer's box honest.
+                f64::from(v).clamp(-1.0, 1.0)
+            })
+            .collect()
+    }
+
+    /// `points` moved by the field. `path` gives the middle a Scale deform
+    /// measures from.
+    fn applied(
+        &self,
+        points: &[(f64, f64)],
+        closed: bool,
+        path: &BezierPath,
+        t: f64,
+    ) -> Vec<(f64, f64)> {
+        let amount = self.amount.value_at(t);
+        let (ring, repeat) = ring_of(points, closed);
+        let n = ring.len();
+        let (arc, total) = arc_of(ring, closed);
+        if n < 2 || amount == 0.0 || total <= 0.0 {
+            return points.to_vec();
+        }
+        let scale = self.scale.value_at(t).max(1.0);
+        let detail = self.detail.value_at(t).clamp(0.1, 100.0);
+        let pieces = (total * detail / scale)
+            .ceil()
+            .clamp(if closed { 3.0 } else { 1.0 }, MAX_FIELD_SAMPLES) as usize;
+        let gap = total / pieces as f64;
+        // A closed ring's last sample leads back into its first; an open path
+        // has one at each end.
+        let count = if closed { pieces } else { pieces + 1 };
+        let field = self.field(ring, &arc, gap, count, t);
+        let sample = |k: isize| {
+            let k = if closed {
+                k.rem_euclid(count as isize)
+            } else {
+                k.clamp(0, count as isize - 1)
+            };
+            field.get(k as usize).copied().unwrap_or(0.0)
+        };
+        // Eased between the samples, so the outline has no corner where one
+        // sample hands over to the next.
+        let read = |s: f64| {
+            let u = s / gap;
+            let k = u.floor() as isize;
+            let f = u - u.floor();
+            let (p0, p1, p2, p3) = (sample(k - 1), sample(k), sample(k + 1), sample(k + 2));
+            let v = 0.5
+                * (2.0 * p1
+                    + (p2 - p0) * f
+                    + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * f * f
+                    + (3.0 * (p1 - p2) + p3 - p0) * f * f * f);
+            v.clamp(-1.0, 1.0)
+        };
+        let middle = box_of(control_points(path))
+            .map(|b| ((b.0 + b.2) / 2.0, (b.1 + b.3) / 2.0))
+            .unwrap_or_default();
+        // Out is decided by the ring's own winding, as the offset decides it.
+        let out = if closed && shoelace(ring) < 0.0 {
+            -1.0
+        } else {
+            1.0
+        };
+        let mut moved: Vec<(f64, f64)> = (0..n)
+            .map(|i| {
+                let p = ring[i];
+                let v = read(arc[i]);
+                if self.mode == 1 {
+                    let f = 1.0 + amount / 100.0 * v;
+                    return (
+                        middle.0 + (p.0 - middle.0) * f,
+                        middle.1 + (p.1 - middle.1) * f,
+                    );
+                }
+                let before = match i {
+                    0 if closed => ring[n - 1],
+                    0 => p,
+                    _ => ring[i - 1],
+                };
+                let after = match ring.get(i + 1) {
+                    Some(&q) => q,
+                    None if closed => ring[0],
+                    None => p,
+                };
+                let (dx, dy) = (after.0 - before.0, after.1 - before.1);
+                let len = dx.hypot(dy);
+                if len <= 1e-12 {
+                    return p;
+                }
+                let push = out * amount * v / len;
+                (p.0 + dy * push, p.1 - dx * push)
+            })
+            .collect();
+        if repeat {
+            moved.push(moved[0]);
+        }
+        moved
+    }
+
+    /// `twisted`, the box the art is in before the deform, grown to hold
+    /// what the deform can do to it. `own` is the path's own box, whose middle
+    /// a Scale deform measures from.
+    fn bounds(
+        &self,
+        twisted: (f64, f64, f64, f64),
+        own: (f64, f64, f64, f64),
+        t: f64,
+    ) -> (f64, f64, f64, f64) {
+        let amount = self.amount.value_at(t).abs();
+        let (x0, y0, x1, y1) = twisted;
+        if self.mode != 1 {
+            return (x0 - amount, y0 - amount, x1 + amount, y1 + amount);
+        }
+        let (mx, my) = ((own.0 + own.2) / 2.0, (own.1 + own.3) / 2.0);
+        let grow = 1.0 + amount / 100.0;
+        let rx = (x0 - mx).abs().max((x1 - mx).abs()) * grow;
+        let ry = (y0 - my).abs().max((y1 - my).abs()) * grow;
+        (mx - rx, my - ry, mx + rx, my + ry)
+    }
+}
+
+/// Twice the signed area of a ring: positive for the winding a shape tool
+/// draws.
+fn shoelace(ring: &[(f64, f64)]) -> f64 {
+    (0..ring.len())
+        .map(|i| {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            a.0 * b.1 - b.0 * a.1
+        })
+        .sum()
 }
 
 fn cubic_at(p0: (f64, f64), p1: (f64, f64), p2: (f64, f64), p3: (f64, f64), t: f64) -> (f64, f64) {

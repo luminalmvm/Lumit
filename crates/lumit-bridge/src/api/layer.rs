@@ -281,6 +281,8 @@ pub struct BridgeShapeItem {
     pub repeat_end_opacity: BridgeScalar,
     /// **Twist**, or `None` for none.
     pub twist: Option<BridgeShapeTwist>,
+    /// **Deform**, or `None` for none.
+    pub deform: Option<BridgeShapeDeform>,
 }
 
 /// A shape's twist: `angle` and `axis` in degrees, the centre in layer
@@ -292,6 +294,21 @@ pub struct BridgeShapeTwist {
     pub axis: BridgeScalar,
     pub centre_x: BridgeScalar,
     pub centre_y: BridgeScalar,
+}
+
+/// A shape's deform: `mode` 0 pushes the outline along its normals by
+/// `amount` pixels, 1 scales it from the middle by `amount` per cent. `scale`
+/// is the field's feature size in pixels, `evolution` degrees, and `detail`
+/// how many times a feature the field is read along the path.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeShapeDeform {
+    pub mode: u32,
+    pub amount: BridgeScalar,
+    pub scale: BridgeScalar,
+    pub evolution: BridgeScalar,
+    pub seed: BridgeScalar,
+    pub detail: BridgeScalar,
 }
 
 impl BridgeShapeItem {
@@ -366,6 +383,14 @@ impl BridgeShapeItem {
                 axis: BridgeScalar::read_at(&w.axis, offset),
                 centre_x: BridgeScalar::read_at(&w.centre_x, offset),
                 centre_y: BridgeScalar::read_at(&w.centre_y, offset),
+            }),
+            deform: item.deform.as_ref().map(|d| BridgeShapeDeform {
+                mode: d.mode,
+                amount: BridgeScalar::read_at(&d.amount, offset),
+                scale: BridgeScalar::read_at(&d.scale, offset),
+                evolution: BridgeScalar::read_at(&d.evolution, offset),
+                seed: BridgeScalar::read_at(&d.seed, offset),
+                detail: BridgeScalar::read_at(&d.detail, offset),
             }),
         }
     }
@@ -514,6 +539,19 @@ impl BridgeShapeItem {
                     axis: clamped_property(&w.axis, offset, -360_000.0, 360_000.0)?,
                     centre_x: clamped_property(&w.centre_x, offset, -100_000.0, 100_000.0)?,
                     centre_y: clamped_property(&w.centre_y, offset, -100_000.0, 100_000.0)?,
+                }),
+                None => None,
+            },
+            // Two readings and no third; the feature size and the detail stay
+            // above nothing, as a field read nowhere is no field.
+            deform: match &self.deform {
+                Some(d) => Some(lumit_core::shape::Deform {
+                    mode: if d.mode <= 1 { d.mode } else { 0 },
+                    amount: clamped_property(&d.amount, offset, -100_000.0, 100_000.0)?,
+                    scale: clamped_property(&d.scale, offset, 1.0, 100_000.0)?,
+                    evolution: clamped_property(&d.evolution, offset, -360_000.0, 360_000.0)?,
+                    seed: clamped_property(&d.seed, offset, 0.0, 1_000_000.0)?,
+                    detail: clamped_property(&d.detail, offset, 0.1, 100.0)?,
                 }),
                 None => None,
             },

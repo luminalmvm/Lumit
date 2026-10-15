@@ -218,6 +218,11 @@ enum ShapeValue {
   twistAxis,
   twistCentreX,
   twistCentreY,
+  deformAmount,
+  deformScale,
+  deformEvolution,
+  deformSeed,
+  deformDetail,
   offsetPath,
   trimStart,
   trimEnd,
@@ -239,16 +244,18 @@ enum ShapeValue {
 
 /// The operations a shape item can be given from its menu. Each is absent
 /// until it is added, and its rows with it.
-enum ShapeOp { twist }
+enum ShapeOp { twist, deform }
 
 /// Whether [item] has [op].
 bool hasShapeOp(BridgeShapeItem item, ShapeOp op) => switch (op) {
       ShapeOp.twist => item.twist != null,
+      ShapeOp.deform => item.deform != null,
     };
 
 /// What [op] is called in the item's menu.
 String shapeOpLabel(ShapeOp op) => switch (op) {
       ShapeOp.twist => l10n.shapeTwist,
+      ShapeOp.deform => l10n.shapeDeform,
     };
 
 /// The operation [value] belongs to, or null for a number every item has.
@@ -258,6 +265,12 @@ ShapeOp? shapeOpOf(ShapeValue value) => switch (value) {
       ShapeValue.twistCentreX ||
       ShapeValue.twistCentreY =>
         ShapeOp.twist,
+      ShapeValue.deformAmount ||
+      ShapeValue.deformScale ||
+      ShapeValue.deformEvolution ||
+      ShapeValue.deformSeed ||
+      ShapeValue.deformDetail =>
+        ShapeOp.deform,
       _ => null,
     };
 
@@ -352,6 +365,9 @@ enum ShapePaint {
 
   /// The ramp itself, which opens the editor for the stops along it.
   gradientStops,
+
+  /// Whether a deform pushes the outline out or scales it.
+  deformMode,
 }
 
 /// A shape item's fill colour, its gradient choice, or its gradient's second
@@ -370,6 +386,7 @@ String shapePaintLabel(ShapePaint which) => switch (which) {
       ShapePaint.gradient => l10n.shapeGradient,
       ShapePaint.gradientColour => l10n.shapeGradientColour,
       ShapePaint.gradientStops => l10n.shapeGradientStops,
+      ShapePaint.deformMode => l10n.shapeDeform,
     };
 
 /// One of a shape item's numbers on a row of its own under it. A row
@@ -1135,6 +1152,11 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.twistAxis => l10n.shapeTwistAxis,
       ShapeValue.twistCentreX => l10n.shapeTwistCentreX,
       ShapeValue.twistCentreY => l10n.shapeTwistCentreY,
+      ShapeValue.deformAmount => l10n.shapeDeformAmount,
+      ShapeValue.deformScale => l10n.shapeDeformScale,
+      ShapeValue.deformEvolution => l10n.shapeDeformEvolution,
+      ShapeValue.deformSeed => l10n.shapeDeformSeed,
+      ShapeValue.deformDetail => l10n.shapeDeformDetail,
       ShapeValue.offsetPath => l10n.shapeOffsetPath,
       ShapeValue.trimStart => l10n.shapeTrimStart,
       ShapeValue.trimEnd => l10n.shapeTrimEnd,
@@ -1189,6 +1211,11 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.twistAxis => item.twist?.axis ?? _none,
       ShapeValue.twistCentreX => item.twist?.centreX ?? _none,
       ShapeValue.twistCentreY => item.twist?.centreY ?? _none,
+      ShapeValue.deformAmount => item.deform?.amount ?? _none,
+      ShapeValue.deformScale => item.deform?.scale ?? _none,
+      ShapeValue.deformEvolution => item.deform?.evolution ?? _none,
+      ShapeValue.deformSeed => item.deform?.seed ?? _none,
+      ShapeValue.deformDetail => item.deform?.detail ?? _none,
       ShapeValue.offsetPath => item.offsetAmount,
       ShapeValue.trimStart => item.trimStart,
       ShapeValue.trimEnd => item.trimEnd,
@@ -1234,11 +1261,14 @@ BridgeShapeItem shapeItemWith(
   int? combine,
   int stop = 0,
   BridgeShapeTwist? twist,
+  BridgeShapeDeform? deform,
+  int? deformMode,
   ShapeOp? remove,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
   final twisted = item.twist;
+  final deformed = item.deform;
   return BridgeShapeItem(
     id: item.id,
     name: name ?? item.name,
@@ -1317,6 +1347,20 @@ BridgeShapeItem shapeItemWith(
                     axis: at(ShapeValue.twistAxis, twisted.axis),
                     centreX: at(ShapeValue.twistCentreX, twisted.centreX),
                     centreY: at(ShapeValue.twistCentreY, twisted.centreY),
+                  )),
+    deform: remove == ShapeOp.deform
+        ? null
+        : deform ??
+            (deformed == null
+                ? null
+                : BridgeShapeDeform(
+                    mode: deformMode ?? deformed.mode,
+                    amount: at(ShapeValue.deformAmount, deformed.amount),
+                    scale: at(ShapeValue.deformScale, deformed.scale),
+                    evolution:
+                        at(ShapeValue.deformEvolution, deformed.evolution),
+                    seed: at(ShapeValue.deformSeed, deformed.seed),
+                    detail: at(ShapeValue.deformDetail, deformed.detail),
                   )),
   );
 }
@@ -2006,6 +2050,11 @@ List<LayerFoldRow> layerFoldRows({
           // An operation's rows come with it, from the item's menu.
           final op = shapeOpOf(value);
           if (op != null && !hasShapeOp(item, op)) continue;
+          // Displace or Scale heads the deform's numbers, which it decides
+          // the meaning of.
+          if (value == ShapeValue.deformAmount) {
+            rows.add(FoldShapePaintRow(item, ShapePaint.deformMode, depth: 3));
+          }
           // A stop between the ends has two rows of its own, so these are
           // made once for each stop rather than once for the item.
           if (value == ShapeValue.gradientStopOpacity) continue;
