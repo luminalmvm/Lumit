@@ -31,6 +31,7 @@ For a tutorial, see [Cutting out a subject](/tutorials/roto-brush/).
 | **Refine radius** | Slider | 0 to 64; up to 256 | 8 | - |
 | **Flow resolution** | Dropdown | Native · Half · Quarter | Half | - |
 | **Flow smoothness** | Slider | 0 to 100 | 50 | - |
+| **Frames** | Dropdown | All frames · Layer in to out · Work area | All frames | - |
 
 {/* END GENERATED */}
 
@@ -53,6 +54,10 @@ For a tutorial, see [Cutting out a subject](/tutorials/roto-brush/).
 - **Flow resolution**: the resolution the propagation's motion is measured at. Native
   is slower and rarely better.
 - **Flow smoothness**: how strongly that motion is regularised.
+- **Frames**: which frames Propagate reaches. **All frames** is the whole footage however
+  the layer is trimmed, **Layer in to out** is the frames between the layer's in and out
+  points, and **Work area** is the frames inside the composition's work area. The base
+  frame is always included.
 
 ## Notes
 

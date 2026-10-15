@@ -17783,6 +17783,19 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
         }
       ],
       "groups": [],
@@ -17837,6 +17850,27 @@
           "kind": "bool",
           "unit": "raw",
           "default": false
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "folder",
+          "label": "Save to folder",
+          "kind": "file",
+          "unit": "raw",
+          "file_filter": [],
+          "file_filter_name": "folder"
         }
       ],
       "groups": [],
@@ -17904,6 +17938,27 @@
             "Full body"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "frames",
+          "label": "Frames",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "All frames",
+            "Layer in to out",
+            "Work area"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "folder",
+          "label": "Save to folder",
+          "kind": "file",
+          "unit": "raw",
+          "file_filter": [],
+          "file_filter_name": "folder"
         }
       ],
       "groups": [],

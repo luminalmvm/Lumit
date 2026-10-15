@@ -22,7 +22,7 @@
 //! `lumit_eval::SourceStamper::planes_identity`, the way the synthesis pack's
 //! does (§7).
 
-use crate::model::{EffectInstance, EffectValue};
+use crate::model::{Composition, EffectInstance, EffectValue, Layer};
 
 /// The `planes/` sidecar tier's version, fed into every hash here so a build
 /// that changes the meaning of a plane cannot read the old one back. Bumping it
@@ -35,6 +35,34 @@ pub const DEPTH: &str = "depth";
 
 /// The Remove background effect's, for the same reason.
 pub const REMOVE_BACKGROUND: &str = "remove_background";
+
+/// The **Frames** row's options, in index order, on every effect whose
+/// analysis reads a whole shot: Depth, Remove background and the Roto brush.
+/// **All frames** is the default, so a project made before the row existed
+/// reads exactly as it did.
+pub const FRAMES_OPTIONS: &[&str] = &["All frames", "Layer in to out", "Work area"];
+
+/// The comp frames, first and last, an analysis on `layer` is limited to by
+/// the effect's Frames row, or `None` for every frame of its source.
+///
+/// Comp frames rather than source frames: this crate knows when a layer is
+/// on screen and not how fast its media runs, so the caller maps the two
+/// ends through the layer's own clock. A comp with no work area set reads as
+/// All frames.
+#[must_use]
+pub fn frames_span(fx: &EffectInstance, layer: &Layer, comp: &Composition) -> Option<(i64, i64)> {
+    let (from, to) = match fx.param("frames") {
+        Some(EffectValue::Choice(1)) => (layer.in_point, layer.out_point),
+        Some(EffectValue::Choice(2)) => comp.work_area?,
+        _ => return None,
+    };
+    // The first frame starting at or after `from`, and the last one starting
+    // before `to`, which is when a layer is on screen.
+    let fps = comp.frame_rate.fps();
+    let first = (from.0.to_f64() * fps - 1e-9).ceil() as i64;
+    let last = (to.0.to_f64() * fps - 1e-9).ceil() as i64 - 1;
+    Some((first, last.max(first)))
+}
 
 /// What a planes-tier effect asks a model for.
 ///

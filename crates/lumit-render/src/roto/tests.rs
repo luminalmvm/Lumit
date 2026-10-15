@@ -192,6 +192,7 @@ fn job(block: RotoBlock, frames: usize) -> RotoJob {
         model: Box::new(|| Err(RotoFailure::ModelMissing)),
         propagate: true,
         stop_after: None,
+        range: None,
     }
 }
 

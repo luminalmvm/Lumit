@@ -583,6 +583,24 @@ pub fn roto_source_frame(layer: LayerReference, frame: i64) -> Result<i64, Bridg
     source_frame_at(source, item.source_time_at(lt))
 }
 
+/// The source frames, first and last, the Frames row on `fx` limits an
+/// analysis on `layer` to, or `None` for all of them. The two ends of the comp
+/// span go through [`roto_source_frame`], so a retimed layer is limited to
+/// the frames it shows.
+///
+/// ponytail: only the two ends are mapped, so a Retime that runs backwards
+/// and forwards again inside the span is limited to what its ends show.
+pub(crate) fn analysis_range(
+    layer: &LayerReference,
+    fx: &lumit_core::model::EffectInstance,
+) -> Option<(i64, i64)> {
+    let (first, last) =
+        lumit_core::planes::frames_span(fx, &layer.item().ok()?, &layer.composition().ok()?)?;
+    let a = roto_source_frame(*layer, first).ok()?;
+    let b = roto_source_frame(*layer, last).ok()?;
+    Some((a.min(b), a.max(b)))
+}
+
 /// The frame of the file at `source` that is showing at `source_time`: the
 /// last step of [`roto_source_frame`], which a brush in a node graph takes too.
 pub(crate) fn source_frame_at(source: Source, source_time: f64) -> Result<i64, BridgeError> {
@@ -789,17 +807,24 @@ fn job_of(
 /// `source` is the file the brush reads, or why it has none. It is asked for
 /// only by Propagate: Cancel stops whatever is running whether or not the file
 /// can still be found.
+///
+/// `range` is the source frames the Frames row allows, from
+/// [`analysis_range`], or `None` for the whole shot.
 pub(crate) fn press(
     source: Result<Source, BridgeError>,
     fx: &lumit_core::model::EffectInstance,
     param: &str,
+    range: Option<(i64, i64)>,
 ) -> Result<(), BridgeError> {
     match param {
         CANCEL => {
             lumit_render::roto::cancel(fx.id);
             Ok(())
         }
-        PROPAGATE => match lumit_render::roto::request(job_of(source?, fx)?) {
+        PROPAGATE => match lumit_render::roto::request(lumit_render::roto::RotoJob {
+            range,
+            ..job_of(source?, fx)?
+        }) {
             lumit_render::roto::Requested::Started => Ok(()),
             // Every refusal has a name and the status row reads it back;
             // what the *press* owes the caller is only that it did not
