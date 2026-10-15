@@ -45,6 +45,18 @@ enum LabelCase {
 /// How much UI-chrome motion to show.
 enum AnimationLevel { all, minimal, none }
 
+/// How node graph wires run between their sockets.
+enum WireStyle {
+  /// Out of each socket in an S-curve. The default.
+  curved,
+
+  /// Straight lines that turn only at 45 or 90 degrees, each turn rounded.
+  angled,
+
+  /// Slack cables that droop between the sockets.
+  hanging,
+}
+
 /// The duration owned widgets animate with under a level. All ≈ the egui
 /// 120 ms micro-motion budget; None is instant.
 Duration animationDuration(AnimationLevel level) => switch (level) {

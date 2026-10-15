@@ -70,7 +70,7 @@ void main() {
       rightClickOpensNodeSearch: false,
       tabOpensNodeSearch: false,
       shiftAOpensNodeSearch: false,
-      hangingWires: true,
+      wireStyle: WireStyle.angled,
       room: LanternRoom.night,
       labelCase: LabelCase.lower,
     );
@@ -103,7 +103,7 @@ void main() {
     expect(back.rightClickOpensNodeSearch, isFalse);
     expect(back.tabOpensNodeSearch, isFalse);
     expect(back.shiftAOpensNodeSearch, isFalse);
-    expect(back.hangingWires, isTrue);
+    expect(back.wireStyle, WireStyle.angled);
     expect(back.room, LanternRoom.night);
     expect(back.labelCase, LabelCase.lower);
     // Every field is one of the above: a new one added without a line here is

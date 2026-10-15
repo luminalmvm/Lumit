@@ -162,19 +162,22 @@ const double graphWireStub = 40;
 /// halfway. The stub is never longer than half the wire, so a short wire stays
 /// a short curve. Free of the painter so its geometry can be asserted directly.
 ///
-/// With [hanging] the wire is a slack cable instead, which sags a quarter of
-/// its own length below the straight line between the two sockets.
+/// [WireStyle.hanging] is a slack cable instead, which sags a quarter of its
+/// own length below the straight line between the two sockets.
+/// [WireStyle.angled] runs straight and turns only at 45 or 90 degrees, each
+/// turn rounded off.
 Path graphWirePath(Offset a, Offset b,
-    {double zoom = 1, bool hanging = false}) {
+    {double zoom = 1, WireStyle wires = WireStyle.curved}) {
   final dx = b.dx - a.dx;
   final stub = math.min(graphWireStub * zoom, (b - a).distance / 2);
   final path = Path()..moveTo(a.dx, a.dy);
-  if (hanging) {
+  if (wires == WireStyle.hanging) {
     final mid = (a + b) / 2;
     // The control point sits twice as low as the curve dips.
     return path
       ..quadraticBezierTo(mid.dx, mid.dy + (b - a).distance / 2, b.dx, b.dy);
   }
+  if (wires == WireStyle.angled) return _angledWire(path, a, b, stub);
   if (dx >= 0) {
     final reach = math.max(stub, dx / 2);
     return path..cubicTo(a.dx + reach, a.dy, b.dx - reach, b.dy, b.dx, b.dy);
@@ -185,6 +188,62 @@ Path graphWirePath(Offset a, Offset b,
   return path
     ..cubicTo(a.dx + stub, a.dy, a.dx + stub, a.dy + drop, mid.dx, mid.dy)
     ..cubicTo(b.dx - stub, b.dy - drop, b.dx - stub, b.dy, b.dx, b.dy);
+}
+
+/// [graphWirePath]'s angled wire. Going backwards it runs the same course
+/// turned on its side, between the ends of the two stubs, so it drops out of
+/// one and into the other. Every corner is rounded by up to a quarter stub,
+/// less where a leg is too short to give it.
+Path _angledWire(Path path, Offset a, Offset b, double stub) {
+  Offset flip(Offset p) => Offset(p.dy, p.dx);
+  final corners = b.dx >= a.dx
+      ? _angledRun(a, b, stub / 2)
+      : [
+          a,
+          ..._angledRun(flip(a + Offset(stub, 0)), flip(b - Offset(stub, 0)),
+                  stub / 2)
+              .map(flip),
+          b,
+        ];
+  final points = <Offset>[];
+  for (final c in corners) {
+    if (points.isEmpty || (c - points.last).distance > 0.01) points.add(c);
+  }
+  for (var i = 1; i < points.length - 1; i++) {
+    final before = points[i] - points[i - 1];
+    final after = points[i + 1] - points[i];
+    final r =
+        math.min(stub / 4, math.min(before.distance, after.distance) / 2);
+    final into = points[i] - before / before.distance * r;
+    final out = points[i] + after / after.distance * r;
+    path
+      ..lineTo(into.dx, into.dy)
+      ..quadraticBezierTo(points[i].dx, points[i].dy, out.dx, out.dy);
+  }
+  return path..lineTo(b.dx, b.dy);
+}
+
+/// The corners of a run from [p] to [q] that leaves and arrives level: level,
+/// 45 degrees, square across, 45 degrees, level again, with [level] of level
+/// travel at each end where there is room for it.
+List<Offset> _angledRun(Offset p, Offset q, double level) {
+  final m = (p + q) / 2;
+  final sx = (q.dx - p.dx).sign;
+  final sy = (q.dy - p.dy).sign;
+  final across = (q.dx - p.dx).abs() / 2;
+  final down = (q.dy - p.dy).abs() / 2;
+  var d = math.max(0.0, math.min(down, across - level));
+  // A square step shorter than the level ends reads as a notch between the
+  // two slopes, so they meet instead and the level ends give up the length.
+  if (down - d < level / 2) d = math.min(down, across);
+  return [
+    p,
+    Offset(m.dx - sx * d, p.dy),
+    Offset(m.dx, p.dy + sy * d),
+    Offset(m.dx, q.dy - sy * d),
+    Offset(m.dx + sx * d, q.dy),
+    q,
+  ];
 }
 
 /// The glyphs in the toolbar. A size down from the
@@ -789,13 +848,13 @@ const double graphWireGrab = 18;
 
 /// How far [at] is from a wire's curve, sampled along it.
 ///
-/// A wire is one cubic and twenty points describe it closely enough to say
-/// whether a box was dropped on it — this runs during a drag, over a handful of
+/// Twenty points along a wire describe it closely enough to say whether a box
+/// was dropped on it — this runs during a drag, over a handful of
 /// wires, and never in an idle rebuild.
 double graphWireDistance(Offset a, Offset b, Offset at,
-    {bool hanging = false}) {
+    {WireStyle wires = WireStyle.curved}) {
   var best = double.infinity;
-  for (final metric in graphWirePath(a, b, hanging: hanging).computeMetrics()) {
+  for (final metric in graphWirePath(a, b, wires: wires).computeMetrics()) {
     for (var i = 0; i <= 20; i++) {
       final point =
           metric.getTangentForOffset(metric.length * i / 20)?.position;
@@ -2208,7 +2267,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
       if (graphWireDistance(ends.$1, ends.$2, at,
-              hanging: _ui!.workspace.interface.hangingWires) >
+              wires: _ui!.workspace.interface.wireStyle) >
           graphWireGrab) {
         continue;
       }
@@ -2850,7 +2909,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                           theme: t,
                           dragged: t.textPrimary,
                           outUnwired: _graph!.wiring.outUnwired,
-                          hanging: ThemeScope.of(context).hangingWires,
+                          wires: ThemeScope.of(context).wireStyle,
                         ),
                       ),
                     ),
@@ -3546,7 +3605,7 @@ class _GraphPainter extends CustomPainter {
   /// Nothing is plugged into the Layer out, so the layer draws nothing
   /// and the last wire is not drawn either.
   final bool outUnwired;
-  final bool hanging;
+  final WireStyle wires;
 
   const _GraphPainter({
     required this.layout,
@@ -3558,7 +3617,7 @@ class _GraphPainter extends CustomPainter {
     required this.dragged,
     required this.theme,
     required this.outUnwired,
-    required this.hanging,
+    required this.wires,
   });
 
   Offset _screen(Offset canvas) => canvas * zoom + pan;
@@ -3629,7 +3688,7 @@ class _GraphPainter extends CustomPainter {
   void _wire(Canvas canvas, Offset from, Offset to, Color colour,
       {required bool dashes, double weight = 1}) {
     final path = graphWirePath(_screen(from), _screen(to),
-        zoom: zoom, hanging: hanging);
+        zoom: zoom, wires: wires);
     final paint = Paint()
       ..color = colour
       ..style = PaintingStyle.stroke

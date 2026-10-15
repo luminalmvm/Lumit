@@ -105,7 +105,7 @@ class LumitAppNew extends StatelessWidget {
                   ? AnimationLevel.none
                   : uiState.workspace.animationLevel,
               showTooltips: uiState.workspace.interface.showTooltips,
-              hangingWires: uiState.workspace.interface.hangingWires,
+              wireStyle: uiState.workspace.interface.wireStyle,
               child: Directionality(
                 textDirection: TextDirection.ltr,
                 child: ColoredBox(

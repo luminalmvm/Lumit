@@ -8,7 +8,8 @@
 
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/icons/icon_style.dart' show IconSet;
-import 'package:lumit_flutter/theme/theme.dart' show LabelCase, ThemeShape;
+import 'package:lumit_flutter/theme/theme.dart'
+    show LabelCase, ThemeShape, WireStyle;
 
 /// Which of the two playback behaviours the Viewer uses (docs/13 §B5).
 ///
@@ -495,9 +496,8 @@ class InterfaceSettings {
   /// Whether Shift+A over a focused node graph canvas opens node search.
   bool shiftAOpensNodeSearch;
 
-  /// Whether node graph wires hang like slack cables rather than running out
-  /// of each socket in an S-curve. Off by default.
-  bool hangingWires;
+  /// How node graph wires run: curved by default.
+  WireStyle wireStyle;
 
   /// Which weight the icon set draws at, or the style's own.
   IconSet iconSet;
@@ -559,7 +559,7 @@ class InterfaceSettings {
     this.rightClickOpensNodeSearch = true,
     this.tabOpensNodeSearch = true,
     this.shiftAOpensNodeSearch = true,
-    this.hangingWires = false,
+    this.wireStyle = WireStyle.curved,
     this.iconSet = IconSet.styleChoice,
     this.room = LanternRoom.auto,
     this.labelCase,
@@ -599,7 +599,7 @@ class InterfaceSettings {
         'right_click_opens_node_search': rightClickOpensNodeSearch,
         'tab_opens_node_search': tabOpensNodeSearch,
         'shift_a_opens_node_search': shiftAOpensNodeSearch,
-        'hanging_wires': hangingWires,
+        'wire_style': wireStyle.name,
         'icon_set': iconSet.name,
         'lantern_room': room.name,
         if (labelCase != null) 'label_case': labelCase!.name,
@@ -719,7 +719,13 @@ class InterfaceSettings {
             j['right_click_opens_node_search'] as bool? ?? true,
         tabOpensNodeSearch: j['tab_opens_node_search'] as bool? ?? true,
         shiftAOpensNodeSearch: j['shift_a_opens_node_search'] as bool? ?? true,
-        hangingWires: j['hanging_wires'] == true,
+        // A file from before the choice had a hanging switch.
+        wireStyle: WireStyle.values.firstWhere(
+          (s) => s.name == j['wire_style'],
+          orElse: () => j['hanging_wires'] == true
+              ? WireStyle.hanging
+              : WireStyle.curved,
+        ),
         iconSet: IconSet.values.firstWhere(
           (s) => s.name == j['icon_set'],
           orElse: () => IconSet.styleChoice,
