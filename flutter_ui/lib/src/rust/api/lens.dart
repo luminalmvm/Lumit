@@ -8,7 +8,7 @@ import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `parsed`, `rows_of`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
 
 /// The bundled lenses' names, in the Lens row's order.
 List<String> libraryLensNames() =>
@@ -44,6 +44,15 @@ Future<String> saveUserLens({required BridgeLens lens, String? path}) =>
 /// The cross-section's outlines, front to back.
 List<BridgeLensLine> lensDrawing({required BridgeLens lens}) =>
     BridgeLib.instance.api.crateApiLensLensDrawing(lens: lens);
+
+/// Parallel rays through the lens at `field_deg` off the axis, at `fstop`.
+/// `None` for a lens with no stop.
+BridgeLensRays? lensRays(
+        {required BridgeLens lens,
+        required double fstop,
+        required double fieldDeg}) =>
+    BridgeLib.instance.api
+        .crateApiLensLensRays(lens: lens, fstop: fstop, fieldDeg: fieldDeg);
 
 class BridgeLens {
   final String name;
@@ -116,6 +125,69 @@ class BridgeLensLine {
           points == other.points &&
           glassAfter == other.glassAfter &&
           stop == other.stop;
+}
+
+/// One ray of the drawing: (z, y) pairs in mm, as [`BridgeLensLine`] has them.
+class BridgeLensRay {
+  final Float32List points;
+
+  /// An element edge or the iris stopped it.
+  final bool clipped;
+
+  const BridgeLensRay({
+    required this.points,
+    required this.clipped,
+  });
+
+  @override
+  int get hashCode => points.hashCode ^ clipped.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeLensRay &&
+          runtimeType == other.runtimeType &&
+          points == other.points &&
+          clipped == other.clipped;
+}
+
+class BridgeLensRays {
+  final List<BridgeLensRay> rays;
+  final double sensorZMm;
+
+  /// The iris's radius at this f-stop, and wide open, mm.
+  final double stopRMm;
+  final double stopFullMm;
+
+  /// The widest the lens opens.
+  final double nativeFstop;
+
+  const BridgeLensRays({
+    required this.rays,
+    required this.sensorZMm,
+    required this.stopRMm,
+    required this.stopFullMm,
+    required this.nativeFstop,
+  });
+
+  @override
+  int get hashCode =>
+      rays.hashCode ^
+      sensorZMm.hashCode ^
+      stopRMm.hashCode ^
+      stopFullMm.hashCode ^
+      nativeFstop.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeLensRays &&
+          runtimeType == other.runtimeType &&
+          rays == other.rays &&
+          sensorZMm == other.sensorZMm &&
+          stopRMm == other.stopRMm &&
+          stopFullMm == other.stopFullMm &&
+          nativeFstop == other.nativeFstop;
 }
 
 /// One surface, as the file has it.

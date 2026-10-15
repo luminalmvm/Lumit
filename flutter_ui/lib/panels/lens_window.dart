@@ -4,6 +4,7 @@
 // to one is always a new lens.
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 import 'package:uuid/uuid.dart';
@@ -21,10 +22,15 @@ import '../widgets/controls.dart';
 import 'shader_editor.dart' show InstanceHome;
 
 const double lensWindowWidth = 900;
-const double _bodyHeight = 500;
+const double _bodyHeight = 650;
 const double _listWidth = 230;
 const double _rowHeight = 22;
-const double _drawingHeight = 150;
+const double _drawingHeight = 210;
+const int _maxSurfaces = 40;
+
+/// Half the diagonal of a full-frame sensor, mm: the drawing's sensor line and
+/// the widest field angle.
+const double _sensorHalfMm = 21.63;
 
 /// Press a lens effect's Edit lens… row. Answers whether [param] was it.
 bool pressLensButton({
@@ -44,12 +50,14 @@ bool pressLensButton({
   return true;
 }
 
-/// What the window hands back: a bundled lens untouched, or a lens to keep.
+/// What the window hands back: a bundled lens untouched, or a lens to keep,
+/// and the F-stop if it was moved.
 class _Chosen {
   final int? library;
   final BridgeLens? lens;
-  const _Chosen.library(int this.library) : lens = null;
-  const _Chosen.kept(BridgeLens this.lens) : library = null;
+  final double? fstop;
+  const _Chosen.library(int this.library, this.fstop) : lens = null;
+  const _Chosen.kept(BridgeLens this.lens, this.fstop) : library = null;
 }
 
 /// Open the window on one effect and commit what it returns. Answers whether
@@ -61,6 +69,7 @@ Future<bool> showLensWindow({
 }) async {
   BridgeLens? kept;
   var model = 0;
+  double? fstop;
   var found = false;
   for (final instance in home.read()) {
     if (instance.id() != effect) continue;
@@ -68,6 +77,13 @@ Future<bool> showLensWindow({
     if (instance.getValue(id: 'lens_model')
         case BridgeEffectValue_Choice(:final field0)) {
       model = field0;
+    }
+    // Only a still F-stop is the window's to change, a keyed one stays as it is.
+    if (instance.getValue(id: 'fstop')
+        case BridgeEffectValue_Float(
+          field0: BridgeScalar_Static(:final field0)
+        )) {
+      fstop = field0;
     }
     found = true;
   }
@@ -78,6 +94,7 @@ Future<bool> showLensWindow({
     builder: (close) => _LensWindow(
       kept: kept,
       model: model,
+      fstop: fstop,
       onUse: close,
       onCancel: () => close(null),
     ),
@@ -93,6 +110,10 @@ Future<bool> showLensWindow({
     } else {
       instance.setKeptLens(lens: chosen.lens);
     }
+    if (chosen.fstop case final f?) {
+      instance.setValue(
+          id: 'fstop', value: BridgeEffectValue.float(BridgeScalar.static_(f)));
+    }
     try {
       home.commit(stack);
     } catch (_) {
@@ -106,12 +127,16 @@ Future<bool> showLensWindow({
 class _LensWindow extends StatefulWidget {
   final BridgeLens? kept;
   final int model;
+
+  /// The effect's F-stop, or null when it is keyed.
+  final double? fstop;
   final ValueChanged<_Chosen> onUse;
   final VoidCallback onCancel;
 
   const _LensWindow({
     required this.kept,
     required this.model,
+    required this.fstop,
     required this.onUse,
     required this.onCancel,
   });
@@ -130,6 +155,10 @@ class _LensWindowState extends State<_LensWindow> {
   BridgeLens? _draft;
   bool _edited = false;
   List<BridgeLensLine> _lines = const [];
+  BridgeLensRays? _rays;
+  late double _fstop = widget.fstop ?? 0;
+  bool _fstopMoved = false;
+  double _field = 0;
   String? _said;
 
   @override
@@ -155,8 +184,22 @@ class _LensWindowState extends State<_LensWindow> {
       _edited = false;
       _said = null;
       _name.text = lens?.name ?? '';
-      _lines = lens == null ? const [] : lensDrawing(lens: lens);
+      _draw(lens);
     });
+  }
+
+  /// The widest field a full-frame sensor sees through [lens], degrees.
+  double _fieldMax(BridgeLens lens) =>
+      math.atan(_sensorHalfMm / lens.focalMm) * 180 / math.pi;
+
+  void _draw(BridgeLens? lens) {
+    _lines = lens == null ? const [] : lensDrawing(lens: lens);
+    _rays = lens == null
+        ? null
+        : lensRays(
+            lens: lens,
+            fstop: _fstop,
+            fieldDeg: _field.clamp(0, _fieldMax(lens)));
   }
 
   void _openLibrary(int index) =>
@@ -179,7 +222,7 @@ class _LensWindowState extends State<_LensWindow> {
   void _edit(BridgeLens lens) => setState(() {
         _draft = lens;
         _edited = true;
-        _lines = lensDrawing(lens: lens);
+        _draw(lens);
       });
 
   BridgeLens _named(BridgeLens l) =>
@@ -215,6 +258,7 @@ class _LensWindowState extends State<_LensWindow> {
 
   void _addRow() {
     final l = _draft!;
+    if (l.rows.length >= _maxSurfaces) return;
     final last = l.rows.last;
     _edit(BridgeLens(
       name: l.name,
@@ -245,10 +289,11 @@ class _LensWindowState extends State<_LensWindow> {
     final draft = _draft;
     if (draft == null) return;
     final name = _name.text.trim();
+    final fstop = _fstopMoved && widget.fstop != null ? _fstop : null;
     if (_source.startsWith('lib:') && !_edited && name == draft.name) {
-      widget.onUse(_Chosen.library(int.parse(_source.substring(4))));
+      widget.onUse(_Chosen.library(int.parse(_source.substring(4)), fstop));
     } else {
-      widget.onUse(_Chosen.kept(_named(draft)));
+      widget.onUse(_Chosen.kept(_named(draft), fstop));
     }
   }
 
@@ -386,38 +431,84 @@ class _LensWindowState extends State<_LensWindow> {
             ),
           ]),
           const SizedBox(height: 10),
-          SizedBox(
+          Container(
             height: _drawingHeight,
+            decoration: BoxDecoration(
+              color: t.surface0,
+              borderRadius: BorderRadius.circular(t.tokens.wellRadius),
+            ),
             child: CustomPaint(
               painter: _LensPainter(
                 lines: _lines,
+                rays: _rays,
                 glass: t.surface3,
                 edge: t.textMuted,
-                stop: t.accent,
+                stop: t.warning,
                 axis: t.hairline,
+                pass: t.success,
+                clipped: t.error,
+                sensor: t.textPrimary,
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
+          _slider(
+            t,
+            key: 'lens-fstop',
+            label: l10n.fxFStop,
+            value: _fstop,
+            min: _rays?.nativeFstop ?? 0.7,
+            max: 22,
+            onChanged: (v) => setState(() {
+              _fstop = v;
+              _fstopMoved = true;
+              _draw(lens);
+            }),
+          ),
+          _slider(
+            t,
+            key: 'lens-field',
+            label: l10n.lensFieldAngle,
+            value: _field,
+            min: 0,
+            max: _fieldMax(lens),
+            suffix: '\u00b0',
+            onChanged: (v) => setState(() {
+              _field = v;
+              _draw(lens);
+            }),
+          ),
+          const SizedBox(height: 8),
           _tableHead(t),
           Expanded(
             child: ListView(
               children: [
                 for (final (i, r) in lens.rows.indexed) _tableRow(t, i, r),
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Align(
+                if (lens.rows.length < _maxSurfaces)
+                  Align(
                     alignment: Alignment.centerLeft,
-                    child: SizedBox(
-                      height: dialogControlHeight,
-                      child: HouseButton(
-                        key: const ValueKey('lens-add-surface'),
-                        onPressed: _addRow,
-                        child: Text(l10n.lensAddSurface),
+                    child: LumitTooltip(
+                      message: l10n.lensAddSurface,
+                      child: HoverMark(
+                        builder: (context, lit) => GestureDetector(
+                          key: const ValueKey('lens-add-surface'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _addRow,
+                          child: SizedBox(
+                            width: 26,
+                            height: _rowHeight + 2,
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: glyph.LumitIcon(LumitIcons.addEffect,
+                                  size: 12,
+                                  colour: Color.lerp(
+                                      t.textMuted, t.textPrimary, lit)),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -425,6 +516,40 @@ class _LensWindowState extends State<_LensWindow> {
       ),
     );
   }
+
+  Widget _slider(
+    LumitTheme t, {
+    required String key,
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    String? suffix,
+    required ValueChanged<double> onChanged,
+  }) =>
+      SizedBox(
+        height: _rowHeight + 4,
+        child: Row(children: [
+          SizedBox(
+            width: 90,
+            child: Text(label,
+                style: t.body,
+                textAlign: TextAlign.right,
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 12),
+          HouseSlider(
+            key: ValueKey(key),
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            decimals: 1,
+            suffix: suffix,
+            width: 360,
+            onChanged: onChanged,
+          ),
+        ]),
+      );
 
   static const _widths = [90.0, 80.0, 72.0, 60.0, 80.0, 56.0, 40.0];
 
@@ -524,48 +649,68 @@ BridgeLensRow _with(
     );
 
 /// The cross-section, fitted to the box: glass filled between its two
-/// surfaces, the stop in the accent, the axis as a hairline.
+/// surfaces, the rays through it, the iris in amber, the sensor and the
+/// axis as a hairline.
 class _LensPainter extends CustomPainter {
   final List<BridgeLensLine> lines;
-  final Color glass, edge, stop, axis;
+  final BridgeLensRays? rays;
+  final Color glass, edge, stop, axis, pass, clipped, sensor;
 
   const _LensPainter({
     required this.lines,
+    required this.rays,
     required this.glass,
     required this.edge,
     required this.stop,
     required this.axis,
+    required this.pass,
+    required this.clipped,
+    required this.sensor,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (lines.isEmpty) return;
+    canvas.clipRect(Offset.zero & size);
     var (minZ, maxZ, maxY) = (double.infinity, -double.infinity, 0.0);
     for (final l in lines) {
       for (var i = 0; i + 1 < l.points.length; i += 2) {
-        minZ = minZ < l.points[i] ? minZ : l.points[i];
-        maxZ = maxZ > l.points[i] ? maxZ : l.points[i];
-        final y = l.points[i + 1].abs();
-        maxY = maxY > y ? maxY : y;
+        minZ = math.min(minZ, l.points[i]);
+        maxZ = math.max(maxZ, l.points[i]);
+        maxY = math.max(maxY, l.points[i + 1].abs());
       }
     }
+    // The rays widen the fit along the axis only, from where they start to
+    // a little past the sensor.
+    for (final r in rays?.rays ?? const <BridgeLensRay>[]) {
+      for (var i = 0; i + 1 < r.points.length; i += 2) {
+        minZ = math.min(minZ, r.points[i]);
+        maxZ = math.max(maxZ, r.points[i]);
+      }
+    }
+    maxY = math.max(maxY, _sensorHalfMm);
     final spanZ = (maxZ - minZ).clamp(1e-3, double.infinity);
-    final scale = [
-      (size.width - 8) / spanZ,
-      (size.height - 8) / (2 * maxY.clamp(1e-3, double.infinity)),
-    ].reduce((a, b) => a < b ? a : b);
+    final scale = math.min(
+      (size.width - 24) / spanZ,
+      (size.height - 24) / (2 * maxY.clamp(1e-3, double.infinity)),
+    );
     final ox = (size.width - spanZ * scale) / 2 - minZ * scale;
     final oy = size.height / 2;
     Offset at(List<double> p, int i) =>
         Offset(ox + p[i] * scale, oy - p[i + 1] * scale);
-    Path path(BridgeLensLine l) {
-      final p = Path()..moveTo(at(l.points, 0).dx, at(l.points, 0).dy);
-      for (var i = 2; i + 1 < l.points.length; i += 2) {
-        final o = at(l.points, i);
+    Path path(List<double> points) {
+      final p = Path()..moveTo(at(points, 0).dx, at(points, 0).dy);
+      for (var i = 2; i + 1 < points.length; i += 2) {
+        final o = at(points, i);
         p.lineTo(o.dx, o.dy);
       }
       return p;
     }
+
+    Paint line(Color c, double width) => Paint()
+      ..color = c
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width;
 
     canvas.drawLine(
         Offset(0, oy), Offset(size.width, oy), Paint()..color = axis);
@@ -584,22 +729,42 @@ class _LensPainter extends CustomPainter {
       fill.close();
       canvas.drawPath(fill, Paint()..color = glass);
     }
+    final r = rays;
+    if (r != null) {
+      for (final ray in r.rays) {
+        canvas.drawPath(path(ray.points),
+            line((ray.clipped ? clipped : pass).withValues(alpha: 0.8), 1));
+      }
+      final sz = ox + r.sensorZMm * scale;
+      final sh = _sensorHalfMm * scale;
+      canvas.drawLine(
+          Offset(sz, oy - sh), Offset(sz, oy + sh), line(sensor, 1.5));
+    }
     for (final l in lines) {
-      canvas.drawPath(
-        path(l),
-        Paint()
-          ..color = l.stop ? stop : edge
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = l.stop ? 2 : 1,
-      );
+      if (!l.stop) {
+        canvas.drawPath(path(l.points), line(edge, 1));
+        continue;
+      }
+      // The iris: blades from the bore in to the opening at this F-stop.
+      final z = ox + l.points[0] * scale;
+      final full = (r?.stopFullMm ?? l.points[1].abs()) * scale;
+      final open = (r?.stopRMm ?? l.points[1].abs()) * scale;
+      for (final side in [-1.0, 1.0]) {
+        canvas.drawLine(Offset(z, oy + side * full),
+            Offset(z, oy + side * open), line(stop, 2));
+      }
     }
   }
 
   @override
   bool shouldRepaint(_LensPainter old) =>
       old.lines != lines ||
+      old.rays != rays ||
       old.glass != glass ||
       old.edge != edge ||
       old.stop != stop ||
-      old.axis != axis;
+      old.axis != axis ||
+      old.pass != pass ||
+      old.clipped != clipped ||
+      old.sensor != sensor;
 }
