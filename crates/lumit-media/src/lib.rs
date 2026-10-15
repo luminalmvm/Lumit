@@ -63,23 +63,36 @@ pub enum MediaError {
 }
 
 /// Whether a reader of Lumit's own opens this source and ffmpeg does not: one
-/// layer of a layered image file, or an Illustrator document, which ffmpeg
-/// can't open at all.
+/// layer of a layered image file, an Illustrator document, which ffmpeg
+/// can't open at all, or an EXR's render pass.
 #[must_use]
 pub fn reads_own(src: &MediaSource) -> bool {
-    src.source_layer.is_some() || ai::is_ai(src.on_disk())
+    src.source_layer.is_some() || ai::is_ai(src.on_disk()) || exr::reads_pass(src)
 }
 
-/// The picture of a source that [`reads_own`]. `None` for everything else.
+/// The picture of a source that [`reads_own`], at `frame` when it is a run of
+/// EXRs. `None` for everything else.
 ///
 /// `target_width` asks for a narrower frame of the same shape, and never a
 /// wider one.
 pub fn read_own(
     src: &MediaSource,
+    frame: usize,
     target_width: Option<u32>,
 ) -> Option<Result<DecodedFrame, MediaError>> {
     let path = src.on_disk();
-    let frame = if ai::is_ai(path) {
+    let frame = if exr::reads_pass(src) {
+        // A looped run plays its files again.
+        let file = match src.run() {
+            Some((run, _)) => {
+                let raw = src.interpret.raw_frames(frame, run.count as usize).next();
+                run.file_at(raw.unwrap_or(0))
+            }
+            None => path.to_path_buf(),
+        };
+        exr::read_pass(&file, src.render_pass.as_deref())
+            .map(|frame| exr::downsample(frame, target_width))
+    } else if ai::is_ai(path) {
         ai::read_layer(path, src.source_layer, target_width)
     } else {
         let layer = src.source_layer?;

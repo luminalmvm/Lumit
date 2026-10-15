@@ -6375,7 +6375,8 @@ fn every_parameter_declares_a_unit() {
     // its query point and the stream it searches are in the same units by
     // construction, whatever raster the preview is drawn at. Declared px@comp
     // for the same reason as the Point control's — that is what the number
-    // means, and the distance it answers with lands in a picture.
+    // means, and the distance it answers with lands in a picture. Measure's
+    // Padding is the same: px@comp, added to a box measured in px@comp.
     assert_eq!(
         spatial,
         vec![
@@ -6691,6 +6692,8 @@ fn every_parameter_declares_a_unit() {
             ("point_control", "point_y"),
             ("points_sample", "position_x"),
             ("points_sample", "position_y"),
+            ("measure", "padding_x"),
+            ("measure", "padding_y"),
         ]
     );
     // Both are px@comp, multiplied by the preview factor: RGB split's

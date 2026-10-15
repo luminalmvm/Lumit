@@ -175,6 +175,7 @@ impl FootageReference {
                 .as_ref()
                 .map(|s| (s.frame_rate.num(), s.frame_rate.den())),
             source_layer: f.source_layer,
+            render_pass: f.interpretation.render_pass.clone(),
             interpret: lumit_render::source::interpretation(f),
         })
     }
@@ -346,6 +347,7 @@ impl FootageReference {
                     path: candidate,
                     sequence_fps: other.sequence_fps(),
                     source_layer: other.source_layer,
+                    render_pass: other.interpretation.render_pass.clone(),
                     interpret: lumit_render::source::interpretation(other),
                 });
                 ops.push(lumit_core::Op::SetMediaRef {
@@ -426,6 +428,7 @@ impl FootageReference {
                         path,
                         sequence_fps: Some((fps_num, fps_den)),
                         source_layer: None,
+                        render_pass: f.interpretation.render_pass.clone(),
                         interpret: lumit_render::source::interpretation(f),
                     }),
                 _ => None,

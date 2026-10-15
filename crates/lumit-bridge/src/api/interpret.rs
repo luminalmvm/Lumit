@@ -88,6 +88,8 @@ pub struct BridgeInterpretation {
     pub colour_space: Option<String>,
     pub linear_light: BridgeLinearLight,
     pub preserve_rgb: bool,
+    /// The render pass of an EXR to read. `None` is Auto.
+    pub render_pass: Option<String>,
 }
 
 /// What a file says of itself, before any interpretation: the window's "the
@@ -117,6 +119,11 @@ pub struct BridgeFootageFacts {
     pub pixel_aspect_den: u32,
     /// The file's own start timecode, as it writes it.
     pub timecode: Option<String>,
+    /// Every render pass in an EXR, in the file's order. One or none for any
+    /// other file.
+    pub render_passes: Vec<String>,
+    /// The pass Auto reads.
+    pub auto_pass: Option<String>,
 }
 
 /// One item as the window opens on it.
@@ -215,6 +222,7 @@ fn reading_of(f: &FootageItem, native: Option<FrameRate>) -> BridgeInterpretatio
             LinearLight::Off => BridgeLinearLight::Off,
         },
         preserve_rgb: it.preserve_rgb,
+        render_pass: it.render_pass.clone(),
     }
 }
 
@@ -296,6 +304,7 @@ fn to_engine(
             BridgeLinearLight::Off => LinearLight::Off,
         },
         preserve_rgb: to.preserve_rgb,
+        render_pass: to.render_pass.clone().filter(|p| !p.is_empty()),
         extra: f.interpretation.extra.clone(),
     })
 }
@@ -375,6 +384,8 @@ impl FootageReference {
             pixel_aspect_num: 1,
             pixel_aspect_den: 1,
             timecode: None,
+            render_passes: Vec::new(),
+            auto_pass: None,
         };
         #[cfg(feature = "media")]
         let native = src.as_ref().and_then(|src| {
@@ -406,6 +417,10 @@ impl FootageReference {
             };
             (file.pixel_aspect_num, file.pixel_aspect_den) = facts.pixel_aspect;
             file.timecode = probe.timecode.clone();
+            if lumit_media::exr::is_exr(raw.on_disk()) {
+                (file.render_passes, file.auto_pass) =
+                    lumit_media::exr::passes(raw.on_disk()).unwrap_or_default();
+            }
             FrameRate::new(file.fps_num, file.fps_den).ok()
         });
         #[cfg(not(feature = "media"))]
@@ -641,6 +656,7 @@ pub fn set_interpretation(
         if let Some(src) = src {
             reread.push(lumit_media::MediaSource {
                 sequence_fps: next.sequence_fps(),
+                render_pass: next.interpretation.render_pass.clone(),
                 interpret: lumit_render::source::interpretation(&next),
                 ..src
             });

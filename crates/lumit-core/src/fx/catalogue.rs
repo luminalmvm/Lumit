@@ -21,12 +21,14 @@
 
 use super::drivers::{
     audio_level::{AudioLevel, AudioLevelDef},
+    beat_trigger::{BeatTrigger, BeatTriggerDef},
     clone_index::{CloneIndex, CloneIndexDef},
     colour_cycle::{ColourCycle, ColourCycleDef},
     combine::{Combine, CombineDef},
     expression::{Expression, ExpressionDef},
     layer_points::{LayerPoints, LayerPointsDef},
     math::{Math, MathDef},
+    measure::{Measure, MeasureDef},
     points_sample::{PointsSample, PointsSampleDef},
     remap::{Remap, RemapDef},
     smooth::{Smooth, SmoothDef},
@@ -470,4 +472,9 @@ crate::catalogue![
     // Which copy a layer is being stamped as by Clone to points. It reads a
     // number the render hands it, which no other driver does.
     CloneIndexDef => CloneIndex,
+    // How big another layer's content is, which no other driver reads.
+    MeasureDef => Measure,
+    // The music as events rather than a level: markers, beats found in the
+    // sound, or a band rising past a threshold.
+    BeatTriggerDef => BeatTrigger,
 ];

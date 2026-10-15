@@ -192,8 +192,8 @@ pub struct PlanContext<'a> {
 ///
 /// The rate rides only when the file *is* the item's own media. A proxy is one
 /// file standing in for the whole run, so reading it as a sequence would be
-/// reading files that are not there. The same goes for a source layer: a
-/// proxy has no layers to pick from.
+/// reading files that are not there. The same goes for a source layer or a
+/// render pass: a proxy has no layers or passes to pick from.
 fn media_source(
     doc: &Document,
     item: Uuid,
@@ -203,14 +203,19 @@ fn media_source(
         Some(lumit_core::model::ProjectItem::Footage(f)) => Some(f),
         _ => None,
     };
-    let (sequence_fps, source_layer) = match footage {
-        Some(f) if std::ptr::eq(&f.media, media) => (f.sequence_fps(), f.source_layer),
-        _ => (None, None),
+    let (sequence_fps, source_layer, render_pass) = match footage {
+        Some(f) if std::ptr::eq(&f.media, media) => (
+            f.sequence_fps(),
+            f.source_layer,
+            f.interpretation.render_pass.clone(),
+        ),
+        _ => (None, None, None),
     };
     lumit_media::MediaSource {
         path: PathBuf::from(&media.absolute_path),
         sequence_fps,
         source_layer,
+        render_pass,
         // A proxy is the same frames, so it is read the way its original is.
         interpret: footage
             .map(crate::source::interpretation)
@@ -1358,6 +1363,10 @@ impl CompJob {
         // is, so every name from before interpretation existed still stands.
         if !self.source.interpret.is_plain() {
             h.update(format!("{:?}", self.source.interpret).as_bytes());
+        }
+        if let Some(pass) = &self.source.render_pass {
+            h.update(b"pass/");
+            h.update(pass.as_bytes());
         }
         h.update(&self.source_frame.to_le_bytes());
         h.update(&self.target_width.unwrap_or(u32::MAX).to_le_bytes());

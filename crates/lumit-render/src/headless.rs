@@ -3835,6 +3835,7 @@ fn footage_source(f: &FootageItem) -> lumit_media::MediaSource {
         path: footage_path(f),
         sequence_fps: f.sequence_fps(),
         source_layer: f.source_layer,
+        render_pass: f.interpretation.render_pass.clone(),
         interpret: crate::source::interpretation(f),
     }
 }

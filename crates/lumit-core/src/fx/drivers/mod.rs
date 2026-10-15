@@ -5,10 +5,10 @@
 //!
 //! A driver makes a *value* rather than a picture, and a wire from a driver
 //! into an effect's socket makes that parameter follow the value instead of its
-//! keyframes. This module holds the twelve of them — Wiggle, Audio level,
+//! keyframes. This module holds the fourteen of them — Wiggle, Audio level,
 //! Colour cycle, Math, Remap, Smooth, Split, Combine, Points sample, Layer
-//! points, Expression, Clone index — and the small walk that works out, at
-//! one frame, what every wire is carrying.
+//! points, Expression, Clone index, Measure, Beat trigger — and the small
+//! walk that works out, at one frame, what every wire is carrying.
 //!
 //! **One of them carries no value at all.** Layer points is a *source*:
 //! it names another layer and hands out that layer's points stream, so what
@@ -55,12 +55,14 @@ use crate::graph::{InputRef, LayerGraph, NodeRef, OutputRef};
 use crate::model::EffectInstance;
 
 pub mod audio_level;
+pub mod beat_trigger;
 pub mod clone_index;
 pub mod colour_cycle;
 pub mod combine;
 pub mod expression;
 pub mod layer_points;
 pub mod math;
+pub mod measure;
 pub mod points_sample;
 pub mod remap;
 pub mod smooth;
@@ -2948,5 +2950,149 @@ mod tests {
             e.extra.get("expression").and_then(|b| b.get("origin")),
             Some(&serde_json::Value::String("typed".into()))
         );
+    }
+
+    /// What `node` puts out of `port` at `lt`, asked of the walk directly so
+    /// no target's hard range stands between the test and the number.
+    fn driver_out(
+        node: &EffectInstance,
+        port: &str,
+        lt: f64,
+        context: Arc<ExpressionContext>,
+        audio: Option<&dyn AudioTap>,
+    ) -> f32 {
+        let graph = LayerGraph {
+            nodes: vec![node.clone()],
+            ..LayerGraph::default()
+        };
+        let ev = Eval {
+            graph: &graph,
+            context,
+            audio,
+            projection: points::Projection::FLAT,
+            budget: Cell::new(EVAL_BUDGET),
+            streams: RefCell::new(Vec::new()),
+            arenas: RefCell::new(ArenaPool::default()),
+            cross: true,
+            stack: None,
+            clone: NO_CLONE,
+        };
+        ev.output(node.id, port, lt, 0)
+            .expect("the port carries a number")
+            .as_f32()
+    }
+
+    /// Measure reads a precomp's frame in its own pixels, and through its
+    /// transform in the comp's, with the padding round both.
+    #[test]
+    fn measure_reads_the_frame_where_it_is_drawn() {
+        use crate::anim::Property;
+        use crate::model::{LayerKind, ProjectItem};
+
+        let context = staged(Vec::new(), LayerGraph::default());
+        let mut doc = (*context.document).clone();
+        let mut inner = doc
+            .comp(context.comp.expect("a comp"))
+            .expect("the comp")
+            .clone();
+        inner.id = Uuid::now_v7();
+        (inner.width, inner.height) = (400, 200);
+        inner.layers.clear();
+        let inner_id = inner.id;
+        doc.items.push(ProjectItem::Composition(inner));
+        for item in &mut doc.items {
+            let ProjectItem::Composition(c) = item else {
+                continue;
+            };
+            for l in c.layers.iter_mut().filter(|l| Some(l.id) == context.layer) {
+                l.kind = LayerKind::Precomp { comp: inner_id };
+                let tr = &mut l.transform;
+                (tr.anchor_x, tr.anchor_y) = (Property::fixed(200.0), Property::fixed(100.0));
+                (tr.position_x, tr.position_y) = (Property::fixed(960.0), Property::fixed(540.0));
+                (tr.scale_x, tr.scale_y) = (Property::fixed(50.0), Property::fixed(50.0));
+                tr.rotation = Property::fixed(0.0);
+            }
+        }
+        let context = Arc::new(ExpressionContext {
+            document: Arc::new(doc),
+            ..(*context).clone()
+        });
+
+        let mut node = inst("measure");
+        set(&mut node, "padding_x", 10.0);
+        set(&mut node, "padding_y", 5.0);
+        let read = |node: &EffectInstance, port| driver_out(node, port, 0.0, context.clone(), None);
+        assert_eq!(read(&node, "width"), 420.0);
+        assert_eq!(read(&node, "top"), -5.0);
+        set_choice(&mut node, "space", measure::SPACE_COMP);
+        assert_eq!(read(&node, "left"), 850.0);
+        assert_eq!(read(&node, "bottom"), 595.0);
+        assert_eq!(read(&node, "centre_x"), 960.0);
+    }
+
+    /// Beat trigger's four outputs from the comp's beat markers, and a level
+    /// crossing held off for long enough to swallow the one after it.
+    #[test]
+    fn beat_trigger_fires_on_markers_and_crossings() {
+        use crate::markers::Marker;
+        use crate::model::ProjectItem;
+        use crate::time::Rational;
+
+        let context = staged(Vec::new(), LayerGraph::default());
+        let mut doc = (*context.document).clone();
+        for item in &mut doc.items {
+            if let ProjectItem::Composition(c) = item {
+                for s in [1, 2] {
+                    let at = Rational::new(s, 1).expect("a whole second");
+                    c.markers.push(Marker::beat(Uuid::now_v7(), at, 1.0));
+                }
+            }
+        }
+        let context = Arc::new(ExpressionContext {
+            document: Arc::new(doc),
+            ..(*context).clone()
+        });
+        let mut node = inst("beat_trigger");
+        set(&mut node, "decay", 0.5);
+        let read = |port, lt| driver_out(&node, port, lt, context.clone(), None);
+        assert_eq!(
+            [
+                read("pulse", 2.0),
+                read("count", 2.0),
+                read("envelope", 2.0)
+            ],
+            [1.0, 2.0, 1.0]
+        );
+        assert_eq!([read("pulse", 2.5), read("since", 2.5)], [0.0, 0.5]);
+        assert!((read("envelope", 2.5) - (-1.0f32).exp()).abs() < 1e-6);
+        assert_eq!([read("count", 0.5), read("envelope", 0.5)], [0.0, 0.0]);
+
+        /// Loud, quiet and loud again, a step every tenth of a second.
+        struct Steps;
+        impl AudioTap for Steps {
+            fn samples(&self, _: Uuid, _: f64, _: f64, _: &mut Vec<f32>) -> Option<f64> {
+                None
+            }
+            fn levels(
+                &self,
+                _: Option<Uuid>,
+                _: Option<Uuid>,
+                _: u32,
+                until: f64,
+                out: &mut Vec<(f64, f32)>,
+            ) -> bool {
+                let steps = [0.0, 0.5, 0.5, 0.0, 0.5, 0.0, 0.0, 0.5];
+                let at = |i: usize| i as f64 / 10.0;
+                out.extend((0..steps.len()).map(|i| (at(i), steps[i])));
+                out.retain(|(t, _)| *t <= until);
+                true
+            }
+        }
+        let mut node = inst("beat_trigger");
+        set_choice(&mut node, "events", beat_trigger::EVENTS_LEVEL);
+        // Half a second at 60 frames a second: the crossing at 0.4 is held off.
+        set(&mut node, "hold_off", 30.0);
+        let count = |lt| driver_out(&node, "count", lt, context.clone(), Some(&Steps));
+        assert_eq!([count(0.1), count(0.5), count(0.7)], [1.0, 1.0, 2.0]);
     }
 }

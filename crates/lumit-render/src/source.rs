@@ -242,10 +242,15 @@ pub fn analysed(
     if !pictures.is_plain() {
         fingerprint.head_tail_hash = format!("{}#{pictures:?}", fingerprint.head_tail_hash);
     }
+    // Another render pass is another picture.
+    if let Some(pass) = &f.interpretation.render_pass {
+        fingerprint.head_tail_hash = format!("{}#p{pass}", fingerprint.head_tail_hash);
+    }
     let source = MediaSource {
         path,
         sequence_fps: f.sequence_fps(),
         source_layer: f.source_layer,
+        render_pass: f.interpretation.render_pass.clone(),
         interpret,
     };
     (source, fingerprint)
@@ -259,7 +264,7 @@ pub fn analysed(
 pub fn guess_alpha(src: &lumit_media::MediaSource) -> Option<lumit_media::Alpha> {
     use lumit_media::interpret::guess_alpha;
     let raw = src.raw();
-    if let Some(frame) = lumit_media::read_own(&raw, None) {
+    if let Some(frame) = lumit_media::read_own(&raw, 0, None) {
         return guess_alpha(&frame.ok()?);
     }
     let index = crate::media_index::load_or_build_index(&raw).ok()?;
