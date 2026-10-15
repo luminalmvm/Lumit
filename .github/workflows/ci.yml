@@ -98,6 +98,10 @@ jobs:
       # tag: latest rotated its n7.1 assets out on 2026-08-17 and every job 404'd.
       # A dated tag's assets are immutable, so re-pin deliberately rather than
       # tracking a moving URL.
+      # Before re-pinning, check hevc_nvenc still opens on a 580-branch NVIDIA
+      # driver (FFmpeg logs "Loaded Nvenc version 13.0"). Builds with the 13.1
+      # NVIDIA headers need driver 610 or later, which GTX 10-series cards
+      # never get.
       FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-win64-gpl-shared-8.1
       FFMPEG_SHA256: 0a41f31caff48e3035b48f09f5d840bd8d1863008240fc43e457f15e589cf5b3
     steps:

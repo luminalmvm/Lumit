@@ -64,7 +64,8 @@ Source: "..\..\assets\brand\lumit-theme.ico"; DestDir: "{app}\icons"
 Type: files; Name: "{app}\lumit_flutter.exe"
 ; The libraries sat beside the exe up to 0.5.0 and live in lib\ now. Windows
 ; looks beside the exe first, so an old copy left here would be loaded in
-; place of the new one.
+; place of the new one. The C++ runtime is the exception, and [Files] puts it
+; straight back (build-installer.ps1 says why).
 Type: files; Name: "{app}\*.dll"
 ; An OFX plugin's own log, which the plugin brokers used to let land here.
 Type: files; Name: "{app}\ofxTestLog.txt"
