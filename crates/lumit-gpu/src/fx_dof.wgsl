@@ -72,9 +72,9 @@ struct Params {
     weighted: u32,       // 1 = the tap-weighted path (host decides once)
     tonal: u32,          // 1 = the split-at-threshold power mean
     circle: u32,         // 1 = the plain r² <= coc² test (Roundness 1, no squeeze)
-    _pad0: u32,
-    // The seventeen floats and ten u32s above come to 27 words, which is not a
-    // whole number of 16-byte rows — so one pad word takes it to 28, and the
+    zebra: u32,          // 1 = stripes over what is in focus
+    // The seventeen floats and eleven u32s above come to 28 words, a whole
+    // number of 16-byte rows (Zebra took the old pad word), so the
     // array below lands 16-byte aligned
     // under both WGSL's rules and `repr(C)`'s. That is **load-bearing**: an
     // `array<vec4<f32>, N>` is 16-byte aligned in WGSL, so adding one scalar
@@ -213,6 +213,23 @@ fn tap_weight(r2: f32, coc2: f32) -> f32 {
     return max(coc2 + p.rim * (2.0 * r2 - coc2), 0.0);
 }
 
+// The focus zebra: diagonal bands of white and mid-grey over pixels that blur
+// less than a pixel, on top of whatever is drawn there. Premultiplied, so a band
+// keeps the pixel's own coverage and a transparent pixel gets none.
+fn zebra(xy: vec2<i32>, c: vec4<f32>, coc: f32) -> vec4<f32> {
+    if (p.zebra == 0u || coc >= 0.5) {
+        return c;
+    }
+    let band = ((xy.x + xy.y) / 6) % 4;
+    if (band == 0) {
+        return vec4<f32>(c.a, c.a, c.a, c.a);
+    }
+    if (band == 2) {
+        return vec4<f32>(0.18 * c.a, 0.18 * c.a, 0.18 * c.a, c.a);
+    }
+    return c;
+}
+
 @compute @workgroup_size(8, 8)
 fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = vec2<i32>(textureDimensions(src));
@@ -223,6 +240,9 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let d = select(0.0, depth_at(xy), p.depth_bound != 0u);
     let focus = focus_depth();
+    // With no depth bound the frame defocuses uniformly at the far-side radius,
+    // which is what makes the effect usable as a plain aperture blur.
+    let coc = select(p.far_aperture, coc_radius(d, focus), p.depth_bound != 0u);
 
     // Diagnostic views (both continuous, so the §1.6 oracle covers them; they
     // ignore the gather and Mix and write the view directly). The host forces
@@ -233,26 +253,23 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
         // channel pick and after Gamma, so it is what the effect is actually
         // reading. == cpu::dof_depth_view.
         let m = depth_view(d, focus);
-        textureStore(dst, xy, vec4<f32>(m, m, m, 1.0));
+        textureStore(dst, xy, zebra(xy, vec4<f32>(m, m, m, 1.0), coc));
         return;
     }
     if (p.display == 2u) {
         // Focus map: 1 - s, white where sharp, darkening out of focus.
         let m = 1.0 - coc_falloff(d, focus);
-        textureStore(dst, xy, vec4<f32>(m, m, m, 1.0));
+        textureStore(dst, xy, zebra(xy, vec4<f32>(m, m, m, 1.0), coc));
         return;
     }
 
-    // With no depth bound the frame defocuses uniformly at the far-side radius,
-    // which is what makes the effect usable as a plain aperture blur.
-    let coc = select(p.far_aperture, coc_radius(d, focus), p.depth_bound != 0u);
     let o = textureLoad(orig, xy, 0);
 
     // In focus: the aperture is a point, so the pixel keeps itself — no gather,
     // no composite, no Mix. Also the only way a sharp pixel stays bit-exact
     // under a weighted gather (a single weighted tap computes (c·w)/w).
     if (coc <= 0.0) {
-        textureStore(dst, xy, o);
+        textureStore(dst, xy, zebra(xy, o, coc));
         return;
     }
 
@@ -372,7 +389,7 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
     if (n <= 0.0) {
-        textureStore(dst, xy, o);
+        textureStore(dst, xy, zebra(xy, o, coc));
         return;
     }
 
@@ -392,5 +409,5 @@ fn dof(@builtin(global_invocation_id) gid: vec3<u32>) {
     // The defocused result replaces the original, blended by Mix. There is no
     // composite menu: an effect that wants its balls added over a sharp plate is
     // an adjustment layer with a blend mode, which already exists.
-    textureStore(dst, xy, mix(o, v, p.mix_amt));
+    textureStore(dst, xy, zebra(xy, mix(o, v, p.mix_amt), coc));
 }

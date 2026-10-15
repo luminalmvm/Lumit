@@ -48,6 +48,7 @@ the focus distance remain sharp. Everything either side of that value blurs.
 | **Detect edge threshold** | Slider | 0 to 1 | 0.1 | - |
 | **Repeat edge pixels** | Checkbox | On or off | On | - |
 | **Display** | Dropdown | Rendered · Depth map · Focus map | Rendered | - |
+| **Zebra** | Checkbox | On or off | Off | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
 
@@ -108,6 +109,8 @@ Additional properties:
 - **Display** is a diagnostic view. Depth map shows what the effect reads;
   Focus map shows white where the picture is kept sharp. In a
   [node graph](/use/node-graphs/) each view is also an output socket on the box.
+- **Zebra** draws stripes over what is in focus, in the Viewer only. Exports and other
+  layers reading this one never show them.
 - **Mix**: how much of the result replaces the original.
 
 ## Related

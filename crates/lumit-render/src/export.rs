@@ -10,6 +10,7 @@
 
 use lumit_audio::mix::MixPlan;
 use lumit_audio::stream::Source;
+use lumit_core::fx::effects::dof;
 use lumit_core::model::{Document, LayerKind, ProjectItem};
 pub use lumit_core::pixels::{px_tile, solid_rgba, srgb_decode, srgb_encode};
 use lumit_core::retime::Interpolation;
@@ -1944,7 +1945,14 @@ fn apply_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Docu
     // takes the same care, for the same reason).
     let set_proxies =
         doc.use_proxies != opts.use_proxies && doc.proxies.values().any(|p| p.enabled);
-    if !opts.changes_document() && !drop_guides && !set_proxies {
+    // The depth of field Zebra leaves by the same road. Its stripes are drawn
+    // for the Viewer, and this snapshot's frames are named without them, so a
+    // striped frame banked by the Viewer is never served to the file either.
+    let drop_zebra = doc.items.iter().any(|item| match item {
+        ProjectItem::Composition(comp) => comp.effects().any(dof::zebra_on),
+        _ => false,
+    });
+    if !opts.changes_document() && !drop_guides && !set_proxies && !drop_zebra {
         return None;
     }
     let mut copy = Document::clone(doc);
@@ -1953,6 +1961,7 @@ fn apply_overrides(doc: &Arc<Document>, opts: &RenderOptions) -> Option<Arc<Docu
         let ProjectItem::Composition(comp) = item else {
             continue;
         };
+        comp.effects_mut().for_each(dof::clear_zebra);
         // The master switch is a comp setting, so it is set here rather than in
         // the layer loop — and in *every* comp, nested ones included, because
         // "on for checked layers" that stopped at the top comp would leave a
@@ -4832,6 +4841,30 @@ mod tests {
             doc.comp(comp_id).unwrap().layers[0].interpolation,
             Interpolation::Blend
         );
+    }
+
+    /// Depth of field's Zebra is for the Viewer: the export's copy has it off,
+    /// so its frames are named, and drawn, without the stripes.
+    #[test]
+    fn an_export_draws_no_focus_zebra() {
+        let (doc, comp_id) = solid_doc(32, 16);
+        let mut striped = Document::clone(&doc);
+        for item in &mut striped.items {
+            if let ProjectItem::Composition(c) = item {
+                let mut dof = lumit_core::fx::instantiate("dof").unwrap();
+                dof.params
+                    .iter_mut()
+                    .filter(|p| p.id == "zebra")
+                    .for_each(|p| p.value = lumit_core::model::EffectValue::Bool(true));
+                c.layers[0].effects.push(dof);
+            }
+        }
+        let striped = Arc::new(striped);
+        let zebra = |doc: &Document| doc.comp(comp_id).unwrap().effects().any(dof::zebra_on);
+        assert!(zebra(&striped));
+        let delivery = apply_render_overrides(&striped, &RenderOptions::default())
+            .expect("the Zebra is switched off");
+        assert!(!zebra(&delivery));
     }
 
     /// Preview equals export with a guide layer present: the file an export

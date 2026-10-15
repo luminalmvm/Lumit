@@ -1197,6 +1197,7 @@ Map<String, String> get _built => {
       "Yellows": l10n.fxYellows,
       "Z amount": l10n.fxZAmount,
       "Z frequency": l10n.fxZFrequency,
+      "Zebra": l10n.fxZebra,
       "Zoom": l10n.fxZoom,
       // Settings -> Keymap: what each shortcut does, and the headings saying
       // where it is live (crates/lumit-keymap/src/lib.rs).

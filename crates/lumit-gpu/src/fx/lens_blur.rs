@@ -36,6 +36,8 @@ pub struct LensBlurOp {
     pub mix: f32,
     /// Half-width cap, px.
     pub max_span_px: f32,
+    /// Stripes over what blurs less than a pixel.
+    pub zebra: bool,
 }
 
 /// The traced table, as `lumit_core::fx::lens_blur::BokehBake` has it.
@@ -86,7 +88,8 @@ struct Params {
     boost: f32,
     mix_amt: f32,
     max_span: f32,
-    _p2: f32,
+    /// 1 = the focus zebra, in the word that was padding.
+    zebra: f32,
 }
 
 const TILE: u32 = 16;
@@ -505,7 +508,7 @@ impl FxEngine {
                     boost: op.boost,
                     mix_amt: op.mix,
                     max_span: op.max_span_px,
-                    _p2: 0.0,
+                    zebra: if op.zebra { 1.0 } else { 0.0 },
                 }),
                 usage: wgpu::BufferUsages::UNIFORM,
             });

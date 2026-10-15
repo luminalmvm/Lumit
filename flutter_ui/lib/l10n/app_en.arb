@@ -4711,6 +4711,10 @@
   "@fxZFrequency": {
     "description": "Effect controls — a control on Shake."
   },
+  "fxZebra": "Zebra",
+  "@fxZebra": {
+    "description": "Effect controls — a control on Depth of field and Depth of field pro: stripes in the Viewer over what is in focus."
+  },
   "fxZoom": "Zoom",
   "@fxZoom": {
     "description": "Effect controls — a control on Radial blur."

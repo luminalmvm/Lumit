@@ -1976,7 +1976,8 @@ fn comp_walk(
                 let drivers = drivers_for(src, slt, context.clone());
                 (
                     lumit_core::fx::resolve_stack_temporal_named(
-                        &src.effects,
+                        // Read by another effect, so no focus stripes.
+                        &lumit_core::fx::effects::dof::without_zebra(&src.effects),
                         &drivers,
                         slt,
                         slt,
@@ -3051,7 +3052,8 @@ fn comp_walk(
                 let drivers = drivers_for(src, mlt, context.clone());
                 (
                     lumit_core::fx::resolve_stack_temporal_named(
-                        &src.effects,
+                        // A matte is read, not looked at: no focus stripes.
+                        &lumit_core::fx::effects::dof::without_zebra(&src.effects),
                         &drivers,
                         mlt,
                         mlt,
