@@ -1647,7 +1647,7 @@ impl Crop {
     /// `per_px` counts *elements* of `T` in a pixel — four bytes for an
     /// eight-bit frame, four codes for a sixteen-bit one — so one row copy
     /// serves both depths.
-    pub fn apply<T: Copy>(self, frame: &[T], w: u32, h: u32, per_px: usize) -> Vec<T> {
+    pub fn apply<T: Copy>(self, frame: Vec<T>, w: u32, h: u32, per_px: usize) -> Vec<T> {
         let (x, y, out_w, out_h) = self.window(w, h);
         let src_row = (w as usize).saturating_mul(per_px);
         // Nothing to crop, an empty frame, or a buffer smaller than the frame
@@ -1655,7 +1655,7 @@ impl Crop {
         // (docs/14 §4), and a caller bug must show as a full-size frame rather
         // than a crash halfway through an export.
         if self.is_none() || w == 0 || h == 0 || frame.len() < src_row.saturating_mul(h as usize) {
-            return frame.to_vec();
+            return frame;
         }
         let dst_row = (out_w as usize) * per_px;
         let skip = (x as usize) * per_px;
@@ -2161,6 +2161,24 @@ pub fn pack_frame<C: lumit_core::pixels::Channel>(
     let straight = channels == Channels::RgbAlpha && alpha == AlphaMode::Straight;
     let opaque = channels == Channels::Rgb;
     let mut out = Vec::with_capacity(px.len() * C::BYTES);
+    // No transform and no division, which is nearly every export: nothing
+    // to work out a pixel at a time. The frame goes out in one copy and an
+    // opaque file has its alpha written over afterwards. The loop below
+    // took most of a 4K frame's time to give the same bytes.
+    if colour.is_none() && !straight {
+        let whole = px.len() - px.len() % 4;
+        C::write_all_le(&px[..whole], &mut out);
+        if opaque {
+            let mut full = Vec::with_capacity(C::BYTES);
+            C::FULL.write_le(&mut full);
+            for pixel in out.chunks_exact_mut(4 * C::BYTES) {
+                if let Some(a) = pixel.get_mut(3 * C::BYTES..) {
+                    a.copy_from_slice(&full);
+                }
+            }
+        }
+        return out;
+    }
     for chunk in px.chunks_exact(4) {
         let a = chunk[3].to_f64();
         let mut rgba = [chunk[0], chunk[1], chunk[2], chunk[3]];
@@ -3140,7 +3158,7 @@ fn run(
             BitDepth::Eight => {
                 let (px, _, _) =
                     renderer.render_preview(doc, comp_id, src as u64, spec.render.quality, 1.0)?;
-                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
+                let px = spec.crop.apply(px, comp.width, comp.height, 4);
                 let px = if resize {
                     lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
                 } else {
@@ -3151,7 +3169,7 @@ fn run(
             BitDepth::Sixteen => {
                 let (px, _, _) =
                     renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
-                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
+                let px = spec.crop.apply(px, comp.width, comp.height, 4);
                 let px = if resize {
                     lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
                 } else {
@@ -3172,7 +3190,7 @@ fn run(
                     src as u64,
                     spec.render.quality,
                 )?;
-                let px = spec.crop.apply(&px, comp.width, comp.height, 4);
+                let px = spec.crop.apply(px, comp.width, comp.height, 4);
                 let px = if resize {
                     letterbox_resize_f32(&px, crop_w, crop_h, tw, th)
                 } else {
@@ -4108,7 +4126,7 @@ mod tests {
             bottom: 1,
             right: 1,
         };
-        assert_eq!(one_off_each_side.apply(&frame, 4, 3, 1), vec![5, 6]);
+        assert_eq!(one_off_each_side.apply(frame.clone(), 4, 3, 1), vec![5, 6]);
         // Four bytes a pixel, the real shape.
         let rgba: Vec<u8> = (0..(4 * 2 * 2)).collect();
         let right_half = Crop {
@@ -4118,16 +4136,23 @@ mod tests {
             right: 0,
         };
         assert_eq!(
-            right_half.apply(&rgba, 2, 2, 4),
+            right_half.apply(rgba, 2, 2, 4),
             vec![4, 5, 6, 7, 12, 13, 14, 15]
         );
         // No crop is the frame itself, and a buffer too small comes back
         // whole rather than panicking mid-export.
-        assert_eq!(Crop::NONE.apply(&frame, 4, 3, 1), frame);
-        assert_eq!(one_off_each_side.apply(&[1, 2, 3], 4, 3, 1), vec![1, 2, 3]);
+        assert_eq!(Crop::NONE.apply(frame.clone(), 4, 3, 1), frame);
+        assert_eq!(
+            one_off_each_side.apply(vec![1, 2, 3], 4, 3, 1),
+            vec![1, 2, 3]
+        );
         // Regression: a zero-sized frame used to index past an empty buffer.
-        assert!(one_off_each_side.apply::<u8>(&[], 0, 0, 4).is_empty());
-        assert!(one_off_each_side.apply::<u8>(&[], 4, 0, 4).is_empty());
+        assert!(one_off_each_side
+            .apply::<u8>(Vec::new(), 0, 0, 4)
+            .is_empty());
+        assert!(one_off_each_side
+            .apply::<u8>(Vec::new(), 4, 0, 4)
+            .is_empty());
     }
 
     /// The pack stage: what each channel/alpha choice does to the finished
