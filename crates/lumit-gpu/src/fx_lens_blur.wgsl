@@ -63,6 +63,8 @@ struct P {
 const TILE: i32 = 16;
 // The least blur, px, that is drawn as a layer over what is behind it.
 const FRONT_SPAN: f32 = 3.0;
+// The least blur, px, whose highlights are drawn as sprites.
+const SPRITE_SPAN: f32 = 1.5;
 const TAU: f32 = 6.2831853;
 
 fn channel_of(c: vec4<f32>) -> f32 {
@@ -147,20 +149,21 @@ fn radial_of(j: vec2<i32>) -> vec2<f32> {
     return o / l;
 }
 
-fn atlas_texel(slice: u32, x: i32, y: i32) -> vec3<f32> {
-    let k = i32(p.kernel_res);
+fn atlas_texel(slice: u32, x: i32, y: i32, level: u32) -> vec3<f32> {
+    let k = i32(p.kernel_res >> level);
     if (x < 0 || y < 0 || x >= k || y >= k) {
         return vec3<f32>(0.0);
     }
     let col = i32(slice % p.atlas_cols);
     let row = i32(slice / p.atlas_cols);
-    return textureLoad(atlas, vec2<i32>(col * k + x, row * k + y), 0).rgb;
+    return textureLoad(atlas, vec2<i32>(col * k + x, row * k + y), i32(level)).rgb;
 }
 
 // A kernel's light per px² at local (tangential, radial) offset `l` from its
-// centre, for a kernel `span` px wide each way. Bilinear between cells.
-fn kernel_local(slice: u32, mirror: f32, span: f32, l: vec2<f32>) -> vec3<f32> {
-    let k = f32(p.kernel_res);
+// centre, for a kernel `span` px wide each way. Bilinear between cells of the
+// atlas's `level`, each a quarter the cells of the one before.
+fn kernel_local(slice: u32, mirror: f32, span: f32, l: vec2<f32>, level: u32) -> vec3<f32> {
+    let k = f32(p.kernel_res >> level);
     let u = (l.x * mirror / span * 0.5 + 0.5) * k - 0.5;
     let v = (l.y / span * 0.5 + 0.5) * k - 0.5;
     if (u < -1.0 || v < -1.0 || u > k || v > k) {
@@ -171,8 +174,8 @@ fn kernel_local(slice: u32, mirror: f32, span: f32, l: vec2<f32>) -> vec3<f32> {
     let f = vec2<f32>(u - x0, v - y0);
     let xi = i32(x0);
     let yi = i32(y0);
-    let a = mix(atlas_texel(slice, xi, yi), atlas_texel(slice, xi + 1, yi), f.x);
-    let b = mix(atlas_texel(slice, xi, yi + 1), atlas_texel(slice, xi + 1, yi + 1), f.x);
+    let a = mix(atlas_texel(slice, xi, yi, level), atlas_texel(slice, xi + 1, yi, level), f.x);
+    let b = mix(atlas_texel(slice, xi, yi + 1, level), atlas_texel(slice, xi + 1, yi + 1, level), f.x);
     let cell = 2.0 * span / k;
     return mix(a, b, f.y) / (cell * cell);
 }
@@ -181,19 +184,28 @@ fn kernel_local(slice: u32, mirror: f32, span: f32, l: vec2<f32>) -> vec3<f32> {
 fn kernel_at(o: vec4<f32>, j: vec2<i32>, d: vec2<f32>) -> vec3<f32> {
     let r = radial_of(j);
     let t = vec2<f32>(-r.y, r.x);
-    return kernel_local(u32(o.z), o.w, o.x, vec2<f32>(dot(d, t), dot(d, r)));
+    return kernel_local(u32(o.z), o.w, o.x, vec2<f32>(dot(d, t), dot(d, r)), 0u);
 }
 
-// How much of a pixel goes to the highlight sprites rather than the gather.
-fn hi_frac(c: vec4<f32>, span: f32) -> f32 {
-    if (span < 1.5) {
-        return 0.0;
-    }
+// How much of a pixel is over the highlight threshold.
+fn hi_frac(c: vec4<f32>) -> f32 {
     let l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
     if (l <= p.threshold || l <= 0.0) {
         return 0.0;
     }
     return (l - p.threshold) / l;
+}
+
+// What a pixel puts into the gather. A wide blur's highlight goes to the
+// sprites instead. A narrow one stays and is boosted here, eased in from no
+// blur, so Blur size can run down to 0 without the highlights jumping.
+fn gathered(c: vec4<f32>, span: f32) -> vec4<f32> {
+    let k = hi_frac(c);
+    if (span >= SPRITE_SPAN) {
+        return c * (1.0 - k);
+    }
+    let b = mix(1.0, p.boost, clamp(span - 0.5, 0.0, 1.0));
+    return vec4<f32>(c.rgb * (1.0 + k * (b - 1.0)), c.a);
 }
 
 fn hash(xy: vec2<i32>) -> f32 {
@@ -312,7 +324,7 @@ fn lb_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (me.x >= 0.5) {
             w = kernel_at(me, xy, vec2<f32>(0.0));
         }
-        let cb = c_me * (1.0 - hi_frac(c_me, me.x));
+        let cb = gathered(c_me, me.x);
         if (me_front) {
             front += vec4<f32>(cb.rgb * w, cb.a * w.g);
             front_w += w;
@@ -359,7 +371,7 @@ fn lb_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (o.x >= 0.5) {
                 w += kernel_at(vec4<f32>(max(o.x, sqrt(area)), o.yzw), j, d) * area;
             }
-            let cb = c * (1.0 - hi_frac(c, o.x));
+            let cb = gathered(c, o.x);
             back += vec4<f32>(cb.rgb * w, cb.a * w.g);
             back_w += w;
             continue;
@@ -377,7 +389,7 @@ fn lb_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
         // samples either miss or count many times over, which shows as
         // speckle.
         let w = kernel_at(vec4<f32>(max(o.x, sqrt(area)), o.yzw), j, d) * area;
-        let cb = c * (1.0 - hi_frac(c, o.x));
+        let cb = gathered(c, o.x);
         if (in_front) {
             front += vec4<f32>(cb.rgb * w, cb.a * w.g);
             front_w += w;
@@ -436,8 +448,8 @@ fn lb_sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32
     let j = vec2<i32>(i32(ii % p.w), i32(ii / p.w));
     let o = textureLoad(info, j, 0);
     let c = textureLoad(src, j, 0);
-    let k = hi_frac(c, o.x);
-    if (k <= 0.0) {
+    let k = hi_frac(c);
+    if (o.x < SPRITE_SPAN || k <= 0.0) {
         return out;
     }
     var corners = array<vec2<f32>, 6>(
@@ -448,7 +460,8 @@ fn lb_sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32
         vec2<f32>(1.0, -1.0),
         vec2<f32>(1.0, 1.0),
     );
-    let local = corners[vi] * o.x;
+    // A pixel wider, so every pixel the kernel's edge reaches is drawn.
+    let local = corners[vi] * (o.x + 1.0);
     let r = radial_of(j);
     let t = vec2<f32>(-r.y, r.x);
     let px = vec2<f32>(j) + 0.5 + t * local.x + r * local.y;
@@ -469,7 +482,11 @@ fn lb_sprite_fs(in: SpriteOut) -> @location(0) vec4<f32> {
     if (d.y < in.at.y && length(vec2<f32>(here) - in.src_px) > d.x + 1.0) {
         discard;
     }
-    let w = kernel_local(u32(in.at.z), in.at.w, in.at.x, in.local);
+    // Read at pixel centres, a small kernel's cells would be missed or hit
+    // whole. Read the copy whose cells are at most a pixel apart.
+    let fine = log2(f32(p.kernel_res) / (2.0 * in.at.x));
+    let level = u32(clamp(ceil(fine), 0.0, f32(textureNumLevels(atlas) - 1u)));
+    let w = kernel_local(u32(in.at.z), in.at.w, in.at.x, in.local, level);
     return vec4<f32>(in.colour.rgb * w, in.colour.a * w.g);
 }
 

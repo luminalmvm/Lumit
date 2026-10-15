@@ -290,18 +290,44 @@ impl LensBlurFx {
         }
         let rows = slices.div_ceil(ATLAS_COLS);
         let (aw, ah) = (ATLAS_COLS * k, rows * k);
-        let mut texels = vec![0_u16; (aw * ah * 4) as usize];
+        let mut level = vec![[0.0_f32; 3]; (aw * ah) as usize];
         for s in 0..slices {
             let (col, row) = (s % ATLAS_COLS, s / ATLAS_COLS);
             for y in 0..k {
                 for x in 0..k {
-                    let c = data.kernels[((s * k + y) * k + x) as usize];
-                    let at = (((row * k + y) * aw + col * k + x) * 4) as usize;
-                    for ch in 0..3 {
-                        texels[at + ch] = half::f16::from_f32(c[ch]).to_bits();
-                    }
+                    level[((row * k + y) * aw + col * k + x) as usize] =
+                        data.kernels[((s * k + y) * k + x) as usize];
                 }
             }
+        }
+        // Smaller copies, each cell the sum of four, for small sprites to read
+        // without falling between cells. Halved while a slice still has
+        // whole cells.
+        let mut texels = Vec::new();
+        let (mut lw, mut lh, mut lk, mut mips) = (aw, ah, k, 1);
+        loop {
+            for c in &level {
+                texels.extend(c.map(|v| half::f16::from_f32(v).to_bits()));
+                texels.push(0);
+            }
+            if lk % 2 != 0 || mips == 4 {
+                break;
+            }
+            let (nw, nh) = (lw / 2, lh / 2);
+            level = (0..nw * nh)
+                .map(|i| {
+                    let (x, y) = (i % nw * 2, i / nw * 2);
+                    let mut c = [0.0; 3];
+                    for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                        let t = level[((y + dy) * lw + x + dx) as usize];
+                        for ch in 0..3 {
+                            c[ch] += t[ch];
+                        }
+                    }
+                    c
+                })
+                .collect();
+            (lw, lh, lk, mips) = (nw, nh, lk / 2, mips + 1);
         }
         use wgpu::util::DeviceExt;
         let atlas = ctx.device.create_texture_with_data(
@@ -313,7 +339,7 @@ impl LensBlurFx {
                     height: ah,
                     depth_or_array_layers: 1,
                 },
-                mip_level_count: 1,
+                mip_level_count: mips,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba16Float,
