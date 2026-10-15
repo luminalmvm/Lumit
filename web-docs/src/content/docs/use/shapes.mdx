@@ -87,6 +87,64 @@ A shape row's keyframes appear as diamonds on its Timeline lane but have no curv
 as well as of the path.
 :::
 
+## Shape operations
+
+Right-click a shape group in the Timeline for **Add** and **Remove**, which list the
+operations it can be given and the ones it has. An operation's rows appear under the group
+once it is added. Every row is animatable.
+
+They apply in a fixed order: smooth, twist, deform, then offset, trim and the repeater. The
+stroke taper narrows the outline last.
+
+### Smooth
+
+**Smooth** rounds off the whole path, jags and corners alike. Its one row, also **Smooth**,
+is how far along the path each point is averaged with its neighbours, in pixels. 0 leaves
+the path alone.
+
+The path never bulges past its own points; a large smooth shrinks it a little instead. An
+open path's ends stay where they are.
+
+### Twist
+
+**Twist** spins the shape about an axis and flattens it, as if seen side-on. The turn runs
+half a revolution from one end of the shape to the other, so a circle is a lens at 0° and a
+figure eight at 90°.
+
+- **Twist angle**: how far the twist is spun, in degrees. A full turn loops.
+- **Twist axis**: the direction of the axis, in degrees.
+- **Twist centre x** and **y**: the point the axis passes through. It starts in the middle of
+  the shape.
+
+### Deform
+
+**Deform** moves the outline with a smooth noise field. The **Deform** row picks
+**Displace**, which pushes the outline in and out along itself, or **Scale**, which scales
+each point's distance from the middle of the shape.
+
+- **Deform amount**: how far, in pixels for Displace and as a percentage for Scale.
+- **Deform scale**: the size of the noise's features, in pixels.
+- **Deform evolution**: moves through the noise, in degrees. Key it to animate the outline.
+- **Deform seed**: picks a different noise.
+- **Deform detail**: how often the noise is read along the path, per feature. Lower values
+  bend the outline more broadly.
+
+### Stroke taper
+
+**Stroke taper** narrows a shape's outline towards its ends, like a brush stroke. It is
+offered only for a shape with a stroke.
+
+- **Taper scope**: **Each path** tapers every path of the shape on its own; **Whole shape**
+  runs one taper along all of them in order.
+- **Start taper** and **End taper**: how much of the width is gone at each end, as a
+  percentage. 100 comes to a point.
+- **Start length** and **End length**: how far along the path each narrowing runs, as a
+  percentage of its length. When the two add up to more than 100 they are shrunk together.
+- **Taper ease**: how rounded the narrowing is. 0 is a straight ramp.
+
+The taper follows the trimmed path, and each dash takes the width the outline has where it
+falls.
+
 ## Trim paths
 
 Twirl a shape group open in the Timeline and it carries **Trim start**, **Trim end**

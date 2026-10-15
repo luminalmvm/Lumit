@@ -3,6 +3,8 @@
 //
 // Split out of timeline_panel_frb.dart.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
@@ -51,19 +53,106 @@ class ShapeItemRow extends StatelessWidget {
       shapeItemWith(i, name: name, opacity: opacity);
 
   /// Write the contents back with this item changed, or dropped.
-  void _write({String? name, double? opacity, bool delete = false}) {
+  void _write(
+      {String? name,
+      double? opacity,
+      bool delete = false,
+      BridgeShapeItem Function(BridgeShapeItem)? change}) {
     try {
       layer.setShapeContents(contents: [
         for (final other in layer.getShapeContents())
           if (other.id != item.id)
             other
           else if (!delete)
-            _with(other, name: name, opacity: opacity),
+            change?.call(other) ?? _with(other, name: name, opacity: opacity),
       ]);
       onChanged();
     } catch (_) {
       // The item or its layer went away between the draw and the click.
     }
+  }
+
+  /// [i] with [op] taken off, or added where it was missing. A twist starts
+  /// in the middle of the path's own points, so it turns the shape in place.
+  static BridgeShapeItem _toggled(BridgeShapeItem i, ShapeOp op) {
+    if (hasShapeOp(i, op)) return shapeItemWith(i, remove: op);
+    final xs = i.vertices.map((v) => v.x);
+    final ys = i.vertices.map((v) => v.y);
+    final centre = i.vertices.isEmpty
+        ? Offset.zero
+        : Offset((xs.reduce(math.min) + xs.reduce(math.max)) / 2,
+            (ys.reduce(math.min) + ys.reduce(math.max)) / 2);
+    return switch (op) {
+      ShapeOp.twist => shapeItemWith(i,
+          twist: BridgeShapeTwist(
+            angle: const BridgeScalar.static_(0),
+            axis: const BridgeScalar.static_(0),
+            centreX: BridgeScalar.static_(centre.dx),
+            centreY: BridgeScalar.static_(centre.dy),
+          )),
+      ShapeOp.deform => shapeItemWith(i,
+          deform: const BridgeShapeDeform(
+            mode: 0,
+            amount: BridgeScalar.static_(10),
+            scale: BridgeScalar.static_(100),
+            evolution: BridgeScalar.static_(0),
+            seed: BridgeScalar.static_(0),
+            detail: BridgeScalar.static_(4),
+          )),
+      ShapeOp.smooth =>
+        shapeItemWith(i, smooth: const BridgeScalar.static_(10)),
+      ShapeOp.taper => shapeItemWith(i,
+          taper: const BridgeShapeTaper(
+            start: BridgeScalar.static_(100),
+            end: BridgeScalar.static_(100),
+            startLength: BridgeScalar.static_(50),
+            endLength: BridgeScalar.static_(50),
+            ease: BridgeScalar.static_(0),
+            scope: 0,
+          )),
+    };
+  }
+
+  /// The menu's Add and Remove, each a list of the operations it can act on
+  /// and left off where that list is empty. An item combined into the one
+  /// above lends its path and nothing else, so it has neither.
+  List<Widget> _opRows(VoidCallback close) {
+    if (item.combine != 0) return const [];
+    // A taper narrows an outline, so an item with none is not offered one.
+    final open = [
+      for (final op in ShapeOp.values)
+        if (op != ShapeOp.taper || item.stroke != null) op,
+    ];
+    final has = [for (final op in open) if (hasShapeOp(item, op)) op];
+    final lacks = [for (final op in open) if (!hasShapeOp(item, op)) op];
+    Widget submenu(String key, String label, List<ShapeOp> ops) => SubmenuRow(
+          key: ValueKey<String>('tl-shape-$key-${item.id}'),
+          closeParent: close,
+          submenu: (dismiss) => FloatSurface(
+            width: 150,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final op in ops)
+                  MenuRow(
+                    key: ValueKey<String>(
+                        'tl-shape-$key-${op.name}-${item.id}'),
+                    onPressed: () {
+                      dismiss();
+                      _write(change: (i) => _toggled(i, op));
+                    },
+                    child: Text(shapeOpLabel(op)),
+                  ),
+              ],
+            ),
+          ),
+          child: Text(label),
+        );
+    return [
+      if (lacks.isNotEmpty) submenu('add', l10n.shapeOpAdd, lacks),
+      if (has.isNotEmpty) submenu('remove', l10n.shapeOpRemove, has),
+    ];
   }
 
   @override
@@ -97,6 +186,7 @@ class ShapeItemRow extends StatelessWidget {
       onRename: (name) => _write(name: name),
       onDelete: () => _write(delete: true),
       deleteLabel: l10n.deleteShape,
+      menuRows: _opRows,
     );
   }
 }
@@ -584,10 +674,28 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientStopPosition ||
         ShapeValue.gradientStopOpacity =>
           (0, 100, '%'),
+        ShapeValue.smoothAmount => (0, 1000, ' px'),
+        ShapeValue.twistAngle || ShapeValue.twistAxis => (-3600, 3600, '°'),
+        ShapeValue.twistCentreX ||
+        ShapeValue.twistCentreY =>
+          (-10000, 10000, ' px'),
+        // Pixels pushed out, or a per cent of the distance from the middle.
+        ShapeValue.deformAmount =>
+          widget.item.deform?.mode == 1 ? (-1000, 1000, '%') : (-1000, 1000, ' px'),
+        ShapeValue.deformScale => (1, 10000, ' px'),
+        ShapeValue.deformEvolution => (-3600, 3600, '°'),
+        ShapeValue.deformSeed => (0, 100000, ''),
+        ShapeValue.deformDetail => (0.1, 100, ''),
         ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),
         ShapeValue.dashOffset => (-1000, 1000, ' px'),
+        ShapeValue.taperStart ||
+        ShapeValue.taperEnd ||
+        ShapeValue.taperStartLength ||
+        ShapeValue.taperEndLength ||
+        ShapeValue.taperEase =>
+          (0, 100, '%'),
         // The repeater: the count and which copy the original is are whole
         // things, and the step is read in the units the layer's own transform
         // is — pixels, degrees, per cent.
@@ -1057,6 +1165,34 @@ class ShapePaintRow extends StatelessWidget {
                       gradientColour: _picked(p, i.gradientColour?.a ?? 1))),
                 ),
               ShapePaint.gradientStops => _rampChip(context, key),
+              // Displace or Scale.
+              ShapePaint.deformMode => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: item.deform?.mode == 1 ? 1 : 0,
+                    options: const [0, 1],
+                    label: (k) => k == 1
+                        ? l10n.shapeDeformModeScale
+                        : l10n.shapeDeformModeDisplace,
+                    onChanged: (k) =>
+                        _write((i) => shapeItemWith(i, deformMode: k)),
+                  ),
+                ),
+              // Each path, or the whole shape as one.
+              ShapePaint.taperScope => SizedBox(
+                  width: 96,
+                  child: BareDropdown<int>(
+                    key: ValueKey<String>(key),
+                    value: item.taper?.scope == 1 ? 1 : 0,
+                    options: const [0, 1],
+                    label: (k) => k == 1
+                        ? l10n.shapeTaperScopeWhole
+                        : l10n.shapeTaperScopeEach,
+                    onChanged: (k) =>
+                        _write((i) => shapeItemWith(i, taperScope: k)),
+                  ),
+                ),
             },
           ),
         ),

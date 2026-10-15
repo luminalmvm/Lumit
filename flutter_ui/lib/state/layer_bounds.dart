@@ -119,20 +119,32 @@ Rect? shapeContentsRect(List<BridgeShapeItem> contents, {double t = 0}) {
     // it sits further out still. Pulled in it never needs more room.
     final half = (item.stroke != null ? item.strokeWidth / 2 : 0.0) +
         math.max(0.0, evaluateScalar(item.offsetAmount, t));
-    double? ix0, iy0, ix1, iy1;
-    for (final v in item.vertices) {
-      for (final (x, y) in [
-        (v.x, v.y),
-        (v.x + v.tanInX, v.y + v.tanInY),
-        (v.x + v.tanOutX, v.y + v.tanOutY),
-      ]) {
-        ix0 = ix0 == null ? x - half : math.min(ix0, x - half);
-        iy0 = iy0 == null ? y - half : math.min(iy0, y - half);
-        ix1 = ix1 == null ? x + half : math.max(ix1, x + half);
-        iy1 = iy1 == null ? y + half : math.max(iy1, y + half);
+    final own = _boxOf(_controlPoints(item));
+    if (own == null) continue;
+    var box = own;
+    // A twist keeps the art inside the box it was turned in, as the engine's
+    // `Twist::bounds` says.
+    if (item.twist case final twist?) box = _twistBox(item, twist, t);
+    // A deform moves the outline no further than its amount: `Deform::bounds`.
+    if (item.deform case final deform?) {
+      final amount = evaluateScalar(deform.amount, t).abs();
+      if (deform.mode != 1) {
+        box = (
+          box.$1 - amount,
+          box.$2 - amount,
+          box.$3 + amount,
+          box.$4 + amount
+        );
+      } else {
+        final (mx, my) = ((own.$1 + own.$3) / 2, (own.$2 + own.$4) / 2);
+        final grow = 1 + amount / 100;
+        final rx = math.max((box.$1 - mx).abs(), (box.$3 - mx).abs()) * grow;
+        final ry = math.max((box.$2 - my).abs(), (box.$4 - my).abs()) * grow;
+        box = (mx - rx, my - ry, mx + rx, my + ry);
       }
     }
-    if (ix0 == null || iy0 == null || ix1 == null || iy1 == null) continue;
+    final (ix0, iy0, ix1, iy1) =
+        (box.$1 - half, box.$2 - half, box.$3 + half, box.$4 + half);
     // Every copy's box, unioned. One copy and the identity — every shape
     // nobody has repeated — is exactly the box above.
     for (final m in shapeCopyTransforms(item, t)) {
@@ -153,6 +165,55 @@ Rect? shapeContentsRect(List<BridgeShapeItem> contents, {double t = 0}) {
   }
   if (minX == null || minY == null || maxX == null || maxY == null) return null;
   return Rect.fromLTRB(minX, minY, maxX, maxY);
+}
+
+/// Every vertex of [item]'s path and both its handles' ends.
+Iterable<(double, double)> _controlPoints(BridgeShapeItem item) => [
+      for (final v in item.vertices) ...[
+        (v.x, v.y),
+        (v.x + v.tanInX, v.y + v.tanInY),
+        (v.x + v.tanOutX, v.y + v.tanOutY),
+      ],
+    ];
+
+/// The box round [points] as (left, top, right, bottom), or null for none.
+(double, double, double, double)? _boxOf(Iterable<(double, double)> points) {
+  (double, double, double, double)? box;
+  for (final (x, y) in points) {
+    box = box == null
+        ? (x, y, x, y)
+        : (
+            math.min(box.$1, x),
+            math.min(box.$2, y),
+            math.max(box.$3, x),
+            math.max(box.$4, y),
+          );
+  }
+  return box;
+}
+
+/// The box a twisted [item] stays inside: how far its control points reach
+/// along the axis from the centre, and across it either way. The engine's
+/// `Twist::bounds`.
+(double, double, double, double) _twistBox(
+    BridgeShapeItem item, BridgeShapeTwist twist, double t) {
+  final turn = evaluateScalar(twist.axis, t) * math.pi / 180;
+  final (ax, ay) = (math.cos(turn), math.sin(turn));
+  final cx = evaluateScalar(twist.centreX, t);
+  final cy = evaluateScalar(twist.centreY, t);
+  var (back, forward, across) = (0.0, 0.0, 0.0);
+  for (final (x, y) in _controlPoints(item)) {
+    final along = (x - cx) * ax + (y - cy) * ay;
+    final side = -(x - cx) * ay + (y - cy) * ax;
+    back = math.min(back, along);
+    forward = math.max(forward, along);
+    across = math.max(across, side.abs());
+  }
+  return _boxOf([
+    for (final along in [back, forward])
+      for (final side in [-across, across])
+        (cx + along * ax - side * ay, cy + along * ay + side * ax),
+  ])!;
 }
 
 /// The size of that box, floored at a pixel each way so a straight line still

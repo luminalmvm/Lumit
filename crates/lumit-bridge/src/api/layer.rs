@@ -279,6 +279,55 @@ pub struct BridgeShapeItem {
     pub repeat_scale: BridgeScalar,
     pub repeat_start_opacity: BridgeScalar,
     pub repeat_end_opacity: BridgeScalar,
+    /// **Twist**, or `None` for none.
+    pub twist: Option<BridgeShapeTwist>,
+    /// **Deform**, or `None` for none.
+    pub deform: Option<BridgeShapeDeform>,
+    /// **Smooth**: how far along the path each point is averaged with its
+    /// neighbours, in pixels, or `None` for no smooth.
+    pub smooth: Option<BridgeScalar>,
+    /// **Stroke taper**, or `None` for the full width all the way.
+    pub taper: Option<BridgeShapeTaper>,
+}
+
+/// A shape's stroke taper: how much of the width is gone at each end, how
+/// far along the line each narrowing runs and how rounded it is, all per
+/// cent. `scope` 0 tapers each path on its own, 1 the whole shape as one.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeShapeTaper {
+    pub start: BridgeScalar,
+    pub end: BridgeScalar,
+    pub start_length: BridgeScalar,
+    pub end_length: BridgeScalar,
+    pub ease: BridgeScalar,
+    pub scope: u32,
+}
+
+/// A shape's twist: `angle` and `axis` in degrees, the centre in layer
+/// pixels. Every one animates.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeShapeTwist {
+    pub angle: BridgeScalar,
+    pub axis: BridgeScalar,
+    pub centre_x: BridgeScalar,
+    pub centre_y: BridgeScalar,
+}
+
+/// A shape's deform: `mode` 0 pushes the outline along its normals by
+/// `amount` pixels, 1 scales it from the middle by `amount` per cent. `scale`
+/// is the field's feature size in pixels, `evolution` degrees, and `detail`
+/// how many times a feature the field is read along the path.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeShapeDeform {
+    pub mode: u32,
+    pub amount: BridgeScalar,
+    pub scale: BridgeScalar,
+    pub evolution: BridgeScalar,
+    pub seed: BridgeScalar,
+    pub detail: BridgeScalar,
 }
 
 impl BridgeShapeItem {
@@ -348,6 +397,32 @@ impl BridgeShapeItem {
             repeat_scale: BridgeScalar::read_at(&item.repeat_scale, offset),
             repeat_start_opacity: BridgeScalar::read_at(&item.repeat_start_opacity, offset),
             repeat_end_opacity: BridgeScalar::read_at(&item.repeat_end_opacity, offset),
+            twist: item.twist.as_ref().map(|w| BridgeShapeTwist {
+                angle: BridgeScalar::read_at(&w.angle, offset),
+                axis: BridgeScalar::read_at(&w.axis, offset),
+                centre_x: BridgeScalar::read_at(&w.centre_x, offset),
+                centre_y: BridgeScalar::read_at(&w.centre_y, offset),
+            }),
+            deform: item.deform.as_ref().map(|d| BridgeShapeDeform {
+                mode: d.mode,
+                amount: BridgeScalar::read_at(&d.amount, offset),
+                scale: BridgeScalar::read_at(&d.scale, offset),
+                evolution: BridgeScalar::read_at(&d.evolution, offset),
+                seed: BridgeScalar::read_at(&d.seed, offset),
+                detail: BridgeScalar::read_at(&d.detail, offset),
+            }),
+            smooth: item
+                .smooth
+                .as_ref()
+                .map(|s| BridgeScalar::read_at(&s.amount, offset)),
+            taper: item.taper.as_ref().map(|w| BridgeShapeTaper {
+                start: BridgeScalar::read_at(&w.start, offset),
+                end: BridgeScalar::read_at(&w.end, offset),
+                start_length: BridgeScalar::read_at(&w.start_length, offset),
+                end_length: BridgeScalar::read_at(&w.end_length, offset),
+                ease: BridgeScalar::read_at(&w.ease, offset),
+                scope: w.scope,
+            }),
         }
     }
 
@@ -487,6 +562,48 @@ impl BridgeShapeItem {
             repeat_scale: clamped_property(&self.repeat_scale, offset, -10_000.0, 10_000.0)?,
             repeat_start_opacity: clamped_property(&self.repeat_start_opacity, offset, 0.0, 100.0)?,
             repeat_end_opacity: clamped_property(&self.repeat_end_opacity, offset, 0.0, 100.0)?,
+            // Degrees wrap and the centre is the art's own coordinates, so
+            // only the far ends are held.
+            twist: match &self.twist {
+                Some(w) => Some(lumit_core::shape::Twist {
+                    angle: clamped_property(&w.angle, offset, -360_000.0, 360_000.0)?,
+                    axis: clamped_property(&w.axis, offset, -360_000.0, 360_000.0)?,
+                    centre_x: clamped_property(&w.centre_x, offset, -100_000.0, 100_000.0)?,
+                    centre_y: clamped_property(&w.centre_y, offset, -100_000.0, 100_000.0)?,
+                }),
+                None => None,
+            },
+            // Two readings and no third; the feature size and the detail stay
+            // above nothing, as a field read nowhere is no field.
+            deform: match &self.deform {
+                Some(d) => Some(lumit_core::shape::Deform {
+                    mode: if d.mode <= 1 { d.mode } else { 0 },
+                    amount: clamped_property(&d.amount, offset, -100_000.0, 100_000.0)?,
+                    scale: clamped_property(&d.scale, offset, 1.0, 100_000.0)?,
+                    evolution: clamped_property(&d.evolution, offset, -360_000.0, 360_000.0)?,
+                    seed: clamped_property(&d.seed, offset, 0.0, 1_000_000.0)?,
+                    detail: clamped_property(&d.detail, offset, 0.1, 100.0)?,
+                }),
+                None => None,
+            },
+            smooth: match &self.smooth {
+                Some(amount) => Some(lumit_core::shape::Smooth {
+                    amount: clamped_property(amount, offset, 0.0, 10_000.0)?,
+                }),
+                None => None,
+            },
+            // All per cent, held to 0..100.
+            taper: match &self.taper {
+                Some(w) => Some(lumit_core::shape::Taper {
+                    start: clamped_property(&w.start, offset, 0.0, 100.0)?,
+                    end: clamped_property(&w.end, offset, 0.0, 100.0)?,
+                    start_length: clamped_property(&w.start_length, offset, 0.0, 100.0)?,
+                    end_length: clamped_property(&w.end_length, offset, 0.0, 100.0)?,
+                    ease: clamped_property(&w.ease, offset, 0.0, 100.0)?,
+                    scope: if w.scope <= 1 { w.scope } else { 0 },
+                }),
+                None => None,
+            },
             extra: serde_json::Map::new(),
         })
     }
