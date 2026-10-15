@@ -267,6 +267,18 @@ fn resolved(
                         .push((NodeRef::Effect(*target), ParamId::new(socket), v));
                 }
             }
+            (
+                OutputRef::EffectData { effect, port },
+                InputRef::Param {
+                    node: NodeRef::Effect(target),
+                    port: socket,
+                },
+            ) => {
+                if let Some(v) = ev.effect_number(*effect, port, lt) {
+                    out.subs
+                        .push((NodeRef::Effect(*target), ParamId::new(socket), v));
+                }
+            }
             // A wire between two drivers is followed on demand above; one into
             // a node this layer does not have was refused at commit and is a
             // stale line to ignore here (14-ENGINEERING-RULES §4).
@@ -705,6 +717,7 @@ impl Eval<'_> {
                 node: src,
                 port: src_port,
             } => self.output(*src, src_port, t, depth),
+            OutputRef::EffectData { effect, port } => self.effect_number(*effect, port, t),
             // Neither of these is a number a driver could be handed. The source
             // matte is a texture; a points stream is a whole frame's particles,
             // read through [`points_input`](Self::points_input) instead
@@ -712,8 +725,67 @@ impl Eval<'_> {
             // unwired, which is the documented no-op rather than a wrong
             // number — and is unreachable through a validated document, where
             // the type check refused it at commit.
-            OutputRef::SourceMatte | OutputRef::EffectData { .. } => None,
+            OutputRef::SourceMatte => None,
         }
+    }
+
+    /// A number a picture effect hands out, such as Depth of field pro's focus
+    /// distance: what its `eval_driver` pushes from its own rows at `t`. A
+    /// points port answers `None` here and is read as a stream instead.
+    ///
+    /// ponytail: wires into the effect's own rows are not followed, so a driven
+    /// row hands out its keyframed value. Follow them as `output` does if a
+    /// chain of effect numbers ever needs it.
+    fn effect_number(&self, effect: Uuid, port: &str, t: f64) -> Option<Value> {
+        let inst = match self.stack {
+            Some(boxes) => boxes.iter().find(|e| e.id == effect)?,
+            None => {
+                let doc = &self.context.document;
+                let comp = doc.comp(self.context.comp?)?;
+                let layer = comp
+                    .layers
+                    .iter()
+                    .find(|l| Some(l.id) == self.context.layer)?;
+                layer.effects.iter().find(|e| e.id == effect)?
+            }
+        };
+        if !inst.enabled {
+            return None;
+        }
+        let def = super::BUILTIN_DEFS.get(&inst.effect.match_name)?;
+        self.with_arena(|bag| {
+            resolve_into_arena(
+                def,
+                inst,
+                NodeRef::Effect(effect),
+                t,
+                0.0,
+                1.0,
+                &MarkerContext::NONE,
+                bag,
+                self.context.clone(),
+                &ResolvedDrivers::default(),
+            );
+            let fx = bag.get(0)?;
+            let cx = DriverCx {
+                node: effect,
+                inst,
+                lt: t,
+                context: &self.context,
+                params: fx.params,
+                audio: self.audio,
+                sample_input: &|_, _| None,
+                points_input: &|_| None,
+                clone: self.clone,
+            };
+            let mut found = None;
+            def.eval_driver(&cx, &mut |id, value| {
+                if id == port {
+                    found = Some(value);
+                }
+            });
+            found
+        })
     }
 
     /// The **points stream** feeding `node`'s data input `port`, or `None`

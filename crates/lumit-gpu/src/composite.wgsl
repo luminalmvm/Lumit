@@ -35,6 +35,9 @@ struct LayerUniform {
 struct VsOut {
     @builtin(position) pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
+    // Clip w, which through the camera is the distance along its forward
+    // axis over its zoom (Scene depth).
+    @location(1) w: f32,
 };
 
 @vertex
@@ -48,6 +51,7 @@ fn vs_layer(@builtin(vertex_index) i: u32) -> VsOut {
     var out: VsOut;
     out.pos = layer.matrix * vec4<f32>(c, 0.0, 1.0);
     out.uv = c;
+    out.w = out.pos.w;
     return out;
 }
 
@@ -266,6 +270,21 @@ fn fs_layer(in: VsOut) -> @location(0) vec4<f32> {
         a = a * clamp(strength, 0.0, 1.0);
     }
     return vec4<f32>(texel.rgb * a, a);
+}
+
+// Scene depth: how far this layer's pixel is from the camera, metres, where
+// the layer covers at least half of it. `target_size.w` is metres per unit of
+// clip w. Hard edged, the way a depth pass is, so a soft edge never reads as
+// half way between two distances.
+@fragment
+fn fs_layer_depth(in: VsOut) -> @location(0) vec4<f32> {
+    let texel = textureSample(src, samp, in.uv);
+    let a = texel.a * layer.params.x * textureSample(layer_mask, samp, in.uv).a;
+    if (a < 0.5) {
+        discard;
+    }
+    let m = in.w * layer.target_size.w;
+    return vec4<f32>(m, m, m, 1.0);
 }
 
 // The adjustment-layer seed, drawn rather than copied (docs/impl/anti-aliasing.md,

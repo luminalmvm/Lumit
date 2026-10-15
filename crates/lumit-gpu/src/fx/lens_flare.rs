@@ -248,6 +248,9 @@ struct Scratch {
 /// The lens flare's pipelines, its bake cache and its scratch pool, one field
 /// on [`FxEngine`].
 pub struct LensFlareFx {
+    /// The lights-against-depth pass, built the first time a flare has a
+    /// depth to read.
+    depth_pass: OnceLock<(wgpu::BindGroupLayout, wgpu::ComputePipeline)>,
     trace: wgpu::ComputePipeline,
     build_splats: wgpu::ComputePipeline,
     detect_tiles: wgpu::ComputePipeline,
@@ -1072,6 +1075,7 @@ impl LensFlareFx {
             cache: Mutex::new(BakeCache::new(Self::CACHE_CAP)),
             scratch: Mutex::new(None),
             baker: OnceLock::new(),
+            depth_pass: OnceLock::new(),
             deferred: std::sync::atomic::AtomicBool::new(false),
             last_drawn: Mutex::new(None),
             in_flight: Mutex::new(HashSet::new()),
@@ -1717,6 +1721,26 @@ impl FxEngine {
         bake: &FlareBake,
         probe: &dyn Fn(&FlareProbeBake) -> Vec<u32>,
     ) -> wgpu::Texture {
+        self.lens_flare_at_depth(ctx, src, w, h, op, matte, None, bake, probe)
+    }
+
+    /// [`Self::lens_flare`] with a depth in metres and the manual light's own
+    /// distance: a light hidden behind something nearer makes no flare, and
+    /// each light's starburst fades as it goes out of focus
+    /// (`fx_lens_flare_depth.wgsl`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn lens_flare_at_depth(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        op: &LensFlareOp,
+        matte: Option<&wgpu::Texture>,
+        depth: Option<(&wgpu::Texture, f32)>,
+        bake: &FlareBake,
+        probe: &dyn Fn(&FlareProbeBake) -> Vec<u32>,
+    ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
         let out = work_texture(ctx, w, h, "fx-lens-flare-out");
         let lf = self.lens_flare.get();
@@ -1889,6 +1913,56 @@ impl FxEngine {
             }
             // No matte bound: the zero-filled lights render nothing — the
             // labelled-no-op convention for an unset layer reference.
+        }
+        if let (true, Some((depth, light_m)), Some(baked)) = (live, depth, &baked) {
+            let (bgl, pipe) = lf.depth_pass.get_or_init(|| depth_pass(&ctx.device));
+            let dp = ctx
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("fx-lens-flare-depth-params"),
+                    contents: bytemuck::cast_slice(&[
+                        w as f32,
+                        h as f32,
+                        baked.focal_mm,
+                        op.fstop,
+                        op.focus_m,
+                        w as f32 / SENSOR_MM_W,
+                        light_m,
+                        f32::from_bits(u32::from(!matte_mode)),
+                        f32::from_bits(light_count),
+                        0.0,
+                        0.0,
+                        0.0,
+                    ]),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                });
+            let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("fx-lens-flare-depth-bind"),
+                layout: bgl,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(
+                            &depth.create_view(&Default::default()),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: lights_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: dp.as_entire_binding(),
+                    },
+                ],
+            });
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("fx-lens-flare-depth-pass"),
+                timestamp_writes: None,
+            });
+            cpass.set_pipeline(pipe);
+            cpass.set_bind_group(0, &bind, &[]);
+            cpass.dispatch_workgroups(1, 1, 1);
         }
 
         // Always clear the flare buffer (a zero-ghost frame must not read
@@ -2629,4 +2703,65 @@ impl FxEngine {
             })
             .collect()
     }
+}
+
+/// The sensor width every flare frame maps the raster onto, mm; lumit-core's
+/// `lens_flare::SENSOR_MM[0]`.
+const SENSOR_MM_W: f32 = 36.0;
+
+/// Build the lights-against-depth pass: the depth, the lights, its numbers.
+fn depth_pass(device: &wgpu::Device) -> (wgpu::BindGroupLayout, wgpu::ComputePipeline) {
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("fx-lens-flare-depth"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("../fx_lens_flare_depth.wgsl").into()),
+    });
+    let entry = |binding: u32, ty: wgpu::BindingType| wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty,
+        count: None,
+    };
+    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("fx-lens-flare-depth"),
+        entries: &[
+            entry(
+                0,
+                wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+            ),
+            entry(
+                1,
+                wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            ),
+            entry(
+                2,
+                wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            ),
+        ],
+    });
+    let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("fx-lens-flare-depth"),
+        bind_group_layouts: &[&bgl],
+        push_constant_ranges: &[],
+    });
+    let pipe = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("fx-lens-flare-depth"),
+        layout: Some(&pl),
+        module: &module,
+        entry_point: Some("flare_depth"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    (bgl, pipe)
 }

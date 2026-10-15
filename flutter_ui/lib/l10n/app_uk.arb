@@ -1462,10 +1462,6 @@
   "@fxFocusDistance": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxFocusM": "Focus (m)",
-  "@fxFocusM": {
-    "description": "Effect controls — a control on Lens flare."
-  },
   "fxFocusMap": "Focus map",
   "@fxFocusMap": {
     "description": "Effect controls — a control on Depth of field."

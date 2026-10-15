@@ -345,6 +345,9 @@ fn feed_comp(
                 pose.rotation_deg.0,
                 pose.rotation_deg.1,
                 pose.rotation_deg.2,
+                // Scene depth's scale: a lens effect reading this comp's
+                // distance draws differently when it moves.
+                comp.px_per_metre(t),
             ] {
                 feed_f64(h, v);
             }
@@ -858,6 +861,14 @@ fn feed_effect_stack(
                 h.update(&(text.len() as u64).to_le_bytes());
                 h.update(text.as_bytes());
             }
+        }
+        // A lens kept in the effect lives in `extra` too, and changes the
+        // picture as much as a different Lens row does. Its name moves no
+        // pixel.
+        if let Some((_, text)) = lumit_core::fx::lens::embedded(e) {
+            h.update(b"lens/");
+            h.update(&(text.len() as u64).to_le_bytes());
+            h.update(text.as_bytes());
         }
         // Track points draws nothing until its analysis lands, and a landing
         // changes no row. Whether one is in hand for these rows joins the key,

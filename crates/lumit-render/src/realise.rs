@@ -359,23 +359,27 @@ impl Realiser<'_> {
         p.layer_done(l.layer, ms, effects);
     }
 
-    /// Read a layer's `lens_file` paths into (content hash, text) slots,
-    /// 1:1 with the stack's `lens_flare` ops. A `None`
+    /// Read a layer's lenses (a kept lens's text, or a `lens_file` path) into
+    /// (content hash, text) slots, 1:1 with the stack's lens ops. A `None`
     /// slot (unset, missing on disk, unreadable) degrades to the picked
     /// library lens inside the bake — a labelled fallback, never a fault.
     /// No cache, deliberately: a .lens file is about a kilobyte, the read
     /// is microseconds beside the frame it feeds, and the GPU bake cache
     /// keys on the CONTENT hash — so an edited file takes effect on the
     /// next frame instead of whenever a path-keyed cache is purged.
-    fn load_flare_lens(&self, files: &[Option<String>]) -> Vec<Option<(u64, String)>> {
+    fn load_flare_lens(
+        &self,
+        files: &[Option<lumit_core::fx::lens::LensSource>],
+    ) -> Vec<Option<(u64, String)>> {
+        use lumit_core::fx::lens::LensSource;
         files
             .iter()
             .map(|slot| {
-                slot.as_ref().and_then(|path| {
-                    std::fs::read_to_string(path)
-                        .ok()
-                        .map(|text| (lumit_core::fx::lens_flare::lens_text_hash(&text), text))
-                })
+                let text = match slot.as_ref()? {
+                    LensSource::Text(text) => text.clone(),
+                    LensSource::File(path) => std::fs::read_to_string(path).ok()?,
+                };
+                Some((lumit_core::fx::lens_flare::lens_text_hash(&text), text))
             })
             .collect()
     }
@@ -595,7 +599,20 @@ impl Realiser<'_> {
                 // A Precomp input realises its nested comp exactly as a
                 // Precomp layer's picture does; anything else is
                 // the uploaded source pixels.
-                let linear = if let Some(n) = &d.nested {
+                let linear = if let Some(n) = d.nested.as_ref().filter(|n| n.scene_depth) {
+                    // Distance, not a picture, so the referenced layer's own
+                    // stack below has nothing to work on.
+                    let depth = self.realise_scene_depth(n);
+                    return LayerInput::Texture(crate::fxops::render_layer_input(
+                        self.compositor,
+                        &self.ctx,
+                        w,
+                        h,
+                        &depth,
+                        d.tex_w as f32,
+                        d.tex_h as f32,
+                    ));
+                } else if let Some(n) = &d.nested {
                     self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
                 } else {
                     // Through the referenced layer's own colour space:
@@ -839,6 +856,21 @@ impl Realiser<'_> {
             let tex = match step {
                 // The picture handed in, or nothing at all.
                 GraphStep::Provided => provided.cloned().map(|t| (t, frame)),
+                GraphStep::SceneDepth(n) => {
+                    let depth = self.realise_scene_depth(n);
+                    Some((
+                        crate::fxops::render_layer_input(
+                            self.compositor,
+                            &self.ctx,
+                            w,
+                            h,
+                            &depth,
+                            n.width as f32,
+                            n.height as f32,
+                        ),
+                        frame,
+                    ))
+                }
                 // A further picture Input: a layer rendered alone, on the
                 // depth pass's own road.
                 GraphStep::Picture(input) => {
@@ -1335,6 +1367,7 @@ impl Realiser<'_> {
                 &layers[start..i],
                 &acc,
                 region,
+                None,
             );
             // An adjustment layer processes the composite below, which has no
             // footage neighbour frames. A temporal effect's neighbours are
@@ -1457,6 +1490,7 @@ impl Realiser<'_> {
             &layers[start..],
             &acc,
             region,
+            None,
         )
     }
 
@@ -1907,6 +1941,7 @@ impl Realiser<'_> {
         layers: &[CompLayerDraw],
         seed: &Option<wgpu::Texture>,
         region: Option<lumit_gpu::Region>,
+        scene_depth: Option<f32>,
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
         // How much wider and taller each layer's finished picture is than the
@@ -2303,6 +2338,17 @@ impl Realiser<'_> {
                 }
             })
             .collect();
+        if let (Some(metres_per_w), Some(cam)) = (scene_depth, cam_mat) {
+            return self.compositor.composite_depth(
+                &self.ctx,
+                width,
+                height,
+                &comp_layers,
+                cam,
+                metres_per_w,
+                self.render_scale,
+            );
+        }
         self.compositor.composite_seeded(
             &self.ctx,
             width,
@@ -2315,6 +2361,34 @@ impl Realiser<'_> {
             self.samples,
             region,
         )
+    }
+
+    /// **Scene depth**: a Precomp's 3D layers as how far each pixel is from its
+    /// camera, metres, which is what a lens effect's Depth row reads from a
+    /// Precomp. Each layer's picture is made as for colour, so what its effects
+    /// cut away is not there. Adjustment and 2D layers draw nothing, and a comp
+    /// with no camera is all far away.
+    pub fn realise_scene_depth(&self, n: &crate::draw::NestedInputDraw) -> wgpu::Texture {
+        // ponytail: 2D layers are still made here and only dropped by the depth
+        // pass. Skip them before making them if a heavy 2D layer ever shows.
+        let draws: &[CompLayerDraw] = if n.camera.is_some() { &n.draws } else { &[] };
+        let metres_per_w = n
+            .camera
+            .map_or(1.0, |c| (c.zoom / n.px_per_metre.max(1e-6)) as f32);
+        let (tw, th) = lumit_gpu::scaled_size(n.width, n.height, self.render_scale);
+        self.open_frame(tw, th, draws);
+        let out = self.realise_segment(
+            n.camera,
+            n.width,
+            n.height,
+            [0.0; 4],
+            draws,
+            &None,
+            None,
+            Some(metres_per_w),
+        );
+        self.ctx.end_frame();
+        out
     }
 }
 

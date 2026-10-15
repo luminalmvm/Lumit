@@ -33,6 +33,10 @@ use crate::model::{Composition, Document, EffectInstance, EffectValue, Layer, Pr
 /// word every driver's own output already uses, so no new word is minted.
 pub const VALUE_PORT: Port = Port::new("value", "Value", PortType::Number);
 
+/// A Read's second output: how far from its camera each pixel of a comp's
+/// 3D layers is, metres (Scene depth).
+pub const READ_DEPTH_PORT: Port = Port::new("depth", "Depth", PortType::Depth);
+
 /// The Merge's second picture: what its A is laid over.
 pub const BACKGROUND_PORT: Port = Port::new("background", "B", PortType::Image);
 
@@ -289,7 +293,10 @@ pub fn ports_of(
 ) -> (Vec<GraphPort>, Vec<GraphPort>) {
     match node {
         // A Read is a source: it brings a picture in and takes nothing.
-        GraphNode::Read { .. } => (Vec::new(), vec![GraphPort::of(OUTPUT_PORT)]),
+        GraphNode::Read { .. } => (
+            Vec::new(),
+            vec![GraphPort::of(OUTPUT_PORT), GraphPort::of(READ_DEPTH_PORT)],
+        ),
         GraphNode::Input { input, .. } => {
             let out = match input.kind.value_type() {
                 None => GraphPort::of(OUTPUT_PORT),
@@ -398,7 +405,12 @@ fn fx_ports(
         for param in schema.params {
             let is_matte = schema.matte.param() == Some(param.id);
             if matches!(param.kind, ParamKind::Layer { .. }) && !is_matte {
-                ins.push(GraphPort::new(param.id, param.label, PortType::Image));
+                let ty = if def.depth_inputs().contains(&param.id) {
+                    PortType::Depth
+                } else {
+                    PortType::Image
+                };
+                ins.push(GraphPort::new(param.id, param.label, ty));
             }
         }
     }
@@ -445,10 +457,14 @@ pub fn view_ports(inst: &EffectInstance) -> Vec<GraphPort> {
     let Some((param, options)) = view_menu(inst) else {
         return Vec::new();
     };
+    let types = crate::fx::def(&inst.effect.match_name).map_or(&[][..], |d| d.view_types());
     options
         .iter()
         .enumerate()
-        .map(|(i, label)| GraphPort::new(format!("{param}_{i}"), *label, PortType::Image))
+        .map(|(i, label)| {
+            let ty = types.get(i).copied().unwrap_or(PortType::Image);
+            GraphPort::new(format!("{param}_{i}"), *label, ty)
+        })
         .collect()
 }
 

@@ -70,6 +70,7 @@ import 'plane_display_frb.dart';
 import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'roto_display_frb.dart';
+import 'lens_window.dart';
 import 'shader_editor.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
@@ -1636,6 +1637,16 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 param: param,
                 onApplied: ui.model.refresh,
               )) {
+            return;
+          }
+          // Edit lens… opens the lens window, shared by both lens effects.
+          if (pressLensButton(
+            context: context,
+            home: _shaderHome(layer),
+            effect: effect,
+            param: param,
+            onApplied: ui.model.refresh,
+          )) {
             return;
           }
           // The Node graph's Open graph row is the frontend's own the same

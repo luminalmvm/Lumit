@@ -1021,6 +1021,14 @@ pub fn presets_dir() -> Option<PathBuf> {
     Some(dirs.data_dir().join("presets"))
 }
 
+/// The user's own lenses, as `.lens` files: saved from the lens window and
+/// offered to every project. Beside the effect presets. `None` only when the
+/// platform has no home directory; callers create it lazily.
+pub fn lenses_dir() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_dir().join("lenses"))
+}
+
 /// Where the user's own **export** presets live (docs/07 §11) — one small
 /// JSON file beside the effect-preset library, in the same roaming app-data
 /// area, because a saved export setting should follow the user between

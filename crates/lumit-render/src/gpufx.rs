@@ -384,6 +384,8 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &OcioLook,
     &OcioFile,
     &Dof,
+    &DofPro,
+    &LensDirt,
     &ChannelBlur,
     &Transform,
     &Shake,
@@ -2554,6 +2556,135 @@ impl GpuEffect for Dof {
     }
 }
 
+struct DofPro;
+impl GpuEffect for DofPro {
+    fn match_name(&self) -> &'static str {
+        "dof_pro"
+    }
+    /// A lens kept in the effect, on the flare's lens carriage.
+    fn aux(&self) -> AuxKind {
+        AuxKind::LensFile
+    }
+    /// The depth is the Depth row's metres, else the matte read as a 0..1 pass,
+    /// as Depth of field's is. With neither the whole frame sits at the far
+    /// distance. The lens is traced in lumit-core only when no table for these
+    /// optics is kept.
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        use lumit_core::fx::lens_blur;
+        let e = effects::dof_pro::DofPro::read(p);
+        let custom = aux.lens_file();
+        let optics = e.bake_inputs(w, h);
+        let text = custom.map(|(_, text)| text.clone());
+        let metres = aux.layer_input();
+        let depth = metres.or(aux.matte());
+        fx.lens_blur(
+            ctx,
+            tex,
+            w,
+            h,
+            depth,
+            &lumit_gpu::fx::LensBlurOp {
+                bake_key: lens_blur::bake_key(&optics, custom.map(|(hash, _)| *hash)),
+                depth_bound: depth.is_some(),
+                depth_metres: metres.is_some(),
+                display_depth: e.display == 1,
+                depth_channel: e
+                    .depth_channel
+                    .min(lumit_core::fx::CHANNEL_OPTIONS.len() as u32 - 1),
+                depth_invert: e.depth_invert,
+                focus_m: e.focus_m.max(0.01),
+                use_focus_point: e.use_focus_point,
+                focus_point: [e.focus_point_x, e.focus_point_y],
+                near_m: e.near_m.max(0.01),
+                far_m: e.far_m.max(0.01),
+                sensor_w_mm: e.sensor_w_mm(),
+                size: e.size.max(0.0),
+                blades: optics.blades,
+                rotation_deg: e.rotation,
+                threshold: e.threshold.max(0.0),
+                boost: e.boost.max(0.0),
+                mix: (e.mix / 100.0).clamp(0.0, 1.0),
+                max_span_px: lens_blur::MAX_SPAN_PX,
+            },
+            &move || {
+                let b = lens_blur::bake(&optics, text.as_deref())?;
+                Some(lumit_gpu::fx::LensBlurBakeData {
+                    kernels: b.kernels,
+                    span_mm: b.span_mm,
+                    dz_max_mm: b.dz_max_mm,
+                    field_max_mm: b.field_max_mm,
+                    focal_mm: b.focal_mm,
+                    field_bins: lens_blur::FIELD_BINS as u32,
+                    defocus_bins: lens_blur::DEFOCUS_BINS as u32,
+                    azimuth_bins: lens_blur::AZIMUTH_BINS as u32,
+                    kernel_res: lens_blur::KERNEL_RES as u32,
+                })
+            },
+        )
+    }
+}
+
+struct LensDirt;
+impl GpuEffect for LensDirt {
+    fn match_name(&self) -> &'static str {
+        "lens_dirt"
+    }
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        _aux: AuxSlot<'_>,
+    ) -> Tex {
+        let e = effects::lens_dirt::LensDirt::read(p);
+        fx.lens_dirt(
+            ctx,
+            tex,
+            w,
+            h,
+            &lumit_gpu::fx::LensDirtOp {
+                seed: e.seed,
+                intensity: e.intensity.max(0.0),
+                defocus: e.defocus(),
+                scale: (e.scale / 100.0).max(0.01),
+                dust: e.dust.clamp(0.0, 1.0),
+                smudges: e.smudges.clamp(0.0, 1.0),
+                haze: e.haze.clamp(0.0, 1.0),
+                scratches: e.scratches.clamp(0.0, 1.0),
+                droplets: e.droplets.clamp(0.0, 1.0),
+                refraction: e.refraction.max(0.0),
+                grit: e.grit.clamp(0.0, 1.0),
+                hairs: e.hairs.clamp(0.0, 1.0),
+                ambient: e.ambient.max(0.0),
+                alone: e.display == 1,
+                blades: e.blades.clamp(3, 16) as u32,
+                roundness: e.roundness.clamp(0.0, 1.0),
+                rotation_deg: e.rotation,
+                threshold: e.threshold.max(0.0),
+                spread: e.spread.max(0.0),
+                tint: [e.tint[0], e.tint[1], e.tint[2]],
+                tint_2: [e.tint_2[0], e.tint_2[1], e.tint_2[2]],
+                gradient: e.colour == 1,
+                variation: e.variation.clamp(0.0, 1.0),
+                curvature: e.curvature.clamp(-2.0, 2.0),
+                mix: (e.mix / 100.0).clamp(0.0, 1.0),
+            },
+        )
+    }
+}
+
 struct ChannelBlur;
 impl GpuEffect for ChannelBlur {
     fn match_name(&self) -> &'static str {
@@ -3697,6 +3828,11 @@ impl GpuEffect for LensFlare {
     ) -> Tex {
         use lumit_core::fx::lens_flare as lf;
         let (matte, custom) = (aux.matte(), aux.lens_file());
+        // The Depth row's metres, with a placed light's own distance.
+        let depth = aux.layer_input().map(|d| {
+            let e = effects::lens_flare::LensFlare::read(p);
+            (d, e.light_distance_m.max(0.01))
+        });
         let (lights, light_count) = effects::lens_flare::LensFlare::lights_of(p);
         let params = effects::lens_flare::LensFlare::read(p).packed(lights, light_count);
         let p = &params;
@@ -3790,13 +3926,14 @@ impl GpuEffect for LensFlare {
             );
             lf::plan_frame_grids(grid, pb.spreads, &needs)
         };
-        fx.lens_flare(
+        fx.lens_flare_at_depth(
             ctx,
             tex,
             w,
             h,
             &op,
             matte,
+            depth,
             // The bake as something the bake thread can own and run: one
             // small `Arc` a flare a frame, beside a pass that traces hundreds of
             // thousands of rays. Whether it is actually run beside the frame or

@@ -132,6 +132,8 @@ pub enum PortType {
     Points,
     /// Sound.
     Audio,
+    /// Distance from the camera: a picture whose every pixel is metres.
+    Depth,
 }
 
 /// One socket on the graph canvas: its stable id, the English word beside it,

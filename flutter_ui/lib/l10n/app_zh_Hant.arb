@@ -2837,10 +2837,6 @@
   "@fxFocusDistance": {
     "description": "Effect controls — a control on Depth of field."
   },
-  "fxFocusM": "對焦（米）",
-  "@fxFocusM": {
-    "description": "Effect controls — a control on Lens flare."
-  },
   "fxFocusMap": "對焦圖",
   "@fxFocusMap": {
     "description": "Effect controls — a control on Depth of field."

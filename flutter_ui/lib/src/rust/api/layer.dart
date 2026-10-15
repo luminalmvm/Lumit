@@ -316,12 +316,14 @@ class BridgeCameraSettings {
   final bool depthOfField;
   final bool lockToZoom;
   final double filmSizeMm;
+  final double pxPerMetre;
 
   const BridgeCameraSettings({
     required this.twoNode,
     required this.depthOfField,
     required this.lockToZoom,
     required this.filmSizeMm,
+    required this.pxPerMetre,
   });
 
   @override
@@ -329,7 +331,8 @@ class BridgeCameraSettings {
       twoNode.hashCode ^
       depthOfField.hashCode ^
       lockToZoom.hashCode ^
-      filmSizeMm.hashCode;
+      filmSizeMm.hashCode ^
+      pxPerMetre.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -339,7 +342,8 @@ class BridgeCameraSettings {
           twoNode == other.twoNode &&
           depthOfField == other.depthOfField &&
           lockToZoom == other.lockToZoom &&
-          filmSizeMm == other.filmSizeMm;
+          filmSizeMm == other.filmSizeMm &&
+          pxPerMetre == other.pxPerMetre;
 }
 
 /// The Viewer's fixed 3D views ([`lumit_core::camera::View`]).

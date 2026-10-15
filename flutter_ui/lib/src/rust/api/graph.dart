@@ -371,5 +371,6 @@ enum BridgePortType {
   shape,
   points,
   audio,
+  depth,
   ;
 }

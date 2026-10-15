@@ -7,6 +7,7 @@ import '../api.dart';
 import '../frb_generated.dart';
 import 'graph.dart';
 import 'layer.dart';
+import 'lens.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
@@ -346,6 +347,9 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// [`crate::api::layer::LayerReference`] address it by.
   UuidValue id();
 
+  /// The lens this effect keeps, which wins over its Lens row.
+  BridgeLens? keptLens();
+
   /// Every row **this instance** draws, in order: the rows its effect
   /// declares, then the rows its own state derives (docs/impl/custom-shader.md
   /// §1.5, docs/impl/effect-registry.md §4).
@@ -515,6 +519,10 @@ abstract class BridgeEffectInstance implements RustOpaqueInterface {
   /// Stage new text on an Expression box. The graph's own commit writes it, so
   /// an edit is one undo step.
   void setExpressionSource({required String source});
+
+  /// Keep `lens` in the effect, or `None` to go back to the Lens row. Staged
+  /// like `set_value`; `LayerReference::set_effects` commits it.
+  void setKeptLens({BridgeLens? lens});
 
   /// Chain or unchain the vector pair keyed by `stem`, on the **staged**
   /// copy — `LayerReference::set_effects` is the commit, exactly as

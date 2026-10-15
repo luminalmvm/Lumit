@@ -1835,6 +1835,8 @@ fn comp_walk(
                 key: keys
                     .filter(|_| !driven_inputs(src))
                     .and_then(|k| k.nested_key_with(nested, slt, src.graph_inputs.as_ref())),
+                px_per_metre: nested.px_per_metre(slt),
+                scene_depth: false,
             }))
         };
     let nested_input_for = |src: &lumit_core::model::Layer| -> Option<DofInputDraw> {
@@ -2358,9 +2360,10 @@ fn comp_walk(
                 .filter_map(|e| {
                     let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
                     let param = def.schema().layer_input()?;
-                    def.is_image_op().then_some((e, def.schema(), param))
+                    def.is_image_op().then_some((e, def, param))
                 })
-                .map(|(e, schema, param)| {
+                .map(|(e, def, param)| {
+                    let schema = def.schema();
                     let slot = |param: &str| {
                         // "This layer": a reference to the layer the effect
                         // is ON is not a second render — it is the effect's own
@@ -2368,7 +2371,17 @@ fn comp_walk(
                         if e.layer_ref(param) == Some(owner) {
                             return LayerInputDraw::ThisLayer;
                         }
-                        layer_slot(e, param).map_or(LayerInputDraw::Absent, LayerInputDraw::Layer)
+                        let Some(mut d) = layer_slot(e, param) else {
+                            return LayerInputDraw::Absent;
+                        };
+                        // A Depth row pointed at a Precomp reads its 3D layers'
+                        // distance rather than its picture.
+                        if def.depth_inputs().contains(&param) {
+                            if let Some(n) = d.nested.as_mut() {
+                                n.scene_depth = true;
+                            }
+                        }
+                        LayerInputDraw::Layer(d)
                     };
                     // Clone to points lays its own list out.
                     if e.effect.match_name == "clone_to_points" {
@@ -4068,19 +4081,22 @@ fn colour_tables(
         .collect()
 }
 
-/// The `lens_file` paths of the enabled built-in `lens_flare` effects, 1:1
-/// and in order with the stack's `lens_flare` ops — the LUT-files
-/// pattern for the flare's custom prescription.
-fn flare_lens_files(effects: &[lumit_core::model::EffectInstance], lt: f64) -> Vec<Option<String>> {
+/// The lens each enabled built-in lens effect reads other than its Lens row,
+/// 1:1 and in order with the stack's lens ops, as the LUT files are.
+fn flare_lens_files(
+    effects: &[lumit_core::model::EffectInstance],
+    lt: f64,
+) -> Vec<Option<lumit_core::fx::lens::LensSource>> {
+    use lumit_core::fx::lens;
     use lumit_core::model::EffectNamespace;
     effects
         .iter()
         .filter(|e| {
             e.enabled
                 && e.effect.namespace == EffectNamespace::Builtin
-                && e.effect.match_name == "lens_flare"
+                && lens::takes_a_lens(&e.effect.match_name)
         })
-        .map(|e| e.path_at("lens_file", lt).map(str::to_owned))
+        .map(|e| lens::source_at(e, lt))
         .collect()
 }
 
@@ -4395,6 +4411,15 @@ impl GraphLower<'_> {
                 // own.
                 GraphNode::Output { .. } => continue,
                 GraphNode::Read { item, .. } => {
+                    let depth = lumit_core::comp_graph::READ_DEPTH_PORT.id;
+                    if graph
+                        .edges
+                        .iter()
+                        .any(|e| e.from == id && e.from_port == depth && order.contains(&e.to))
+                    {
+                        let step = self.depth_step(graph_comp, id, *item, visited, plan);
+                        steps.push((id, depth.into(), step));
+                    }
                     self.read_step(graph_comp, id, *item, visited, plan)
                 }
                 GraphNode::Input { input, .. } => {
@@ -4832,6 +4857,58 @@ impl GraphLower<'_> {
         plan.steps.push(GraphStep::Read(Box::new(read_draw(
             &layer, source, natural,
         ))));
+        Some(plan.steps.len() - 1)
+    }
+
+    /// A Read's Depth output: the comp it reads, walked as for its picture and
+    /// drawn as distance. `None`, which reads as no depth, for anything that is
+    /// not a layered comp.
+    fn depth_step(
+        &self,
+        graph_comp: &lumit_core::model::Composition,
+        id: Uuid,
+        item: Uuid,
+        visited: &mut Vec<Uuid>,
+        plan: &mut GraphDraw,
+    ) -> Option<usize> {
+        let layer = lumit_core::comp_graph::read_layer(id, self.doc.item(item)?, graph_comp)?;
+        let lumit_core::model::LayerKind::Precomp { comp: nested_id } = layer.kind else {
+            return None;
+        };
+        let nested = self.doc.comp(nested_id)?;
+        if visited.contains(&nested_id) || nested.graph.is_some() {
+            return None;
+        }
+        visited.push(nested_id);
+        let draws = comp_walk(
+            self.doc,
+            nested,
+            self.t,
+            self.frame_t,
+            self.pixels_by_layer,
+            visited,
+            self.keys,
+            false,
+            Walk {
+                clone: self.clone,
+                values: &[],
+                rebuild: false,
+            },
+            None,
+        );
+        visited.pop();
+        plan.steps.push(GraphStep::SceneDepth(Box::new(
+            crate::draw::NestedInputDraw {
+                width: nested.width,
+                height: nested.height,
+                background: [0.0, 0.0, 0.0, 0.0],
+                draws,
+                camera: crate::track::camera_pose(self.doc, nested, self.t),
+                key: None,
+                px_per_metre: nested.px_per_metre(self.t),
+                scene_depth: true,
+            },
+        )));
         Some(plan.steps.len() - 1)
     }
 

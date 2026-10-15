@@ -1,0 +1,124 @@
+---
+title: Lens dirt
+description: "Dust, smudges and water on the lens, lit by the bright parts of the picture."
+---
+
+Lens dirt is a [Stylise](/effects/#stylise) effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Dirt on the glass of a lens: dust, grit, hairs, smudges, haze, scratches and water. The dirt
+only shows where light from the bright parts of the picture reaches it. The glass is always out
+of focus by the **F-stop**: wide open a speck of dust is a large faint disc in the iris's
+shape, stopped down a small bright one. Droplets bend the picture behind them.
+
+The pattern comes from the **Seed**, sized against the frame, so every preview resolution
+shows the same dirt.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Intensity** | Slider | 0 to 2; higher | 0.35 | - |
+| **F-stop** | Slider | 0.95 to 22; down to 0.7 and up to 32 | 2.8 | - |
+| **Focus distance (m)** | Slider | 0.3 to 100; down to 0.05 and higher | 100 | - |
+| **Dirt scale** | Slider | 25 to 400; down to 5 and up to 2000 | 100 | Per cent |
+| **Glass curvature** | Slider | -1 to 1; down to -2 and up to 2 | 0.3 | - |
+| **Seed** | Seed | Any whole number | A fresh random seed per instance | - |
+| **Dust** | Slider | 0 to 1 | 0.35 | - |
+| **Grit** | Slider | 0 to 1 | 0.2 | - |
+| **Hairs** | Slider | 0 to 1 | 0 | - |
+| **Smudges** | Slider | 0 to 1 | 0.5 | - |
+| **Haze** | Slider | 0 to 1 | 0.2 | - |
+| **Scratches** | Slider | 0 to 1 | 0.15 | - |
+| **Droplets** | Slider | 0 to 1 | 0 | - |
+| **Refraction** | Slider | 0 to 1; up to 2 | 0.5 | - |
+| **Blades** | Slider, whole numbers | 3 to 16 | 9 | - |
+| **Roundness** | Slider | 0 to 1 | 0.6 | - |
+| **Rotation** | Dial | Any angle; snaps every 15° while a modifier is held | 0° | Degrees |
+| **Threshold** | Slider | 0 to 4; higher | 0.9 | - |
+| **Spread** | Slider | 0 to 1; up to 2 | 0.35 | - |
+| **Ambient** | Slider | 0 to 1; higher | 0 | - |
+| **Colour** | Dropdown | Single · Gradient | Single | - |
+| **Tint** | Colour | Each channel 0 to 4, scene-linear | 1, 1, 1, 1 | - |
+| **Second tint** | Colour | Each channel 0 to 4, scene-linear | 0.75, 0.8, 1.2, 1 | - |
+| **Colour variation** | Slider | 0 to 1 | 0.15 | - |
+| **Display** | Dropdown | Final · Dirt alone | Final | - |
+| **Mix** | Slider | 0 to 100 | 100 | Per cent |
+| **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Dirt** groups **Dust**, **Grit**, **Hairs**, **Smudges**, **Haze**, **Scratches**, **Droplets**, **Refraction**.
+- **Iris** groups **Blades**, **Roundness**, **Rotation**, and starts closed.
+- **Light** groups **Threshold**, **Spread**, **Ambient**, and starts closed.
+- **Colour** groups **Colour**, **Tint**, **Second tint**, **Colour variation**, and starts closed.
+- **Second tint** is editable while **Colour** is set to Gradient.
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Intensity**: how bright the lit dirt is.
+- **F-stop**: how far out of focus the glass is. In a [node graph](/use/node-graphs/), wire
+  Depth of field pro's **F-stop** here to follow it.
+- **Focus distance (m)**: where the lens is focused. Focusing close brings the dirt a little
+  sharper. Wire Depth of field pro's **Focus distance (m)** here to follow it.
+- **Dirt scale**: the size of the pattern.
+- **Glass curvature**: how far the glass bulges. The dirt crowds towards the edges of the frame
+  as the glass turns away, and spreads out on dished glass below 0. Type up to 2 for the hard
+  bend of a fisheye's front glass. Wire Depth of field pro's
+  **Glass curvature** here to follow its lens.
+- **Seed**: picks a different pattern.
+
+The **Dirt** group:
+
+- **Dust**, **Grit**, **Hairs**, **Smudges**, **Haze**, **Scratches** and **Droplets**: how
+  much of each is on the glass. Dust sits on several surfaces, so its discs come in many
+  sizes and turn into cat's eyes towards the frame's edge. Grit and hairs sit near the
+  sensor and stay sharp. Fingerprint ridges in the smudges show only when stopped down.
+- **Refraction**: how hard droplets bend the picture behind them.
+
+The **Iris** group shapes the out-of-focus dust:
+
+- **Blades** is how many straight edges the iris has.
+- **Roundness** blends the blades towards a circle.
+- **Rotation** rotates the iris.
+
+The **Light** group:
+
+- **Threshold**: the brightness above which the picture lights the dirt.
+- **Spread**: how far across the glass a light reaches.
+- **Ambient**: lights all of the glass, whatever the picture.
+
+The **Colour** group:
+
+- **Colour**: **Single** gives all the dirt the **Tint**. **Gradient** gives each speck a
+  colour picked at random between **Tint** and **Second tint**.
+- **Colour variation**: how far each speck's hue and brightness stray either side of its
+  colour. Smudges and haze vary slowly across the glass instead.
+
+Additional properties:
+
+- **Display**: **Final** is the picture with its dirt, **Dirt alone** the lit dirt over
+  black, to lay over something else.
+- **Mix**: how much of the result replaces the original.
+
+## Related
+
+- [Lens flare](/effects/stylise/lens-flare/)
+- [Depth of field pro](/effects/blur-sharpen/depth-of-field-pro/)
+- [Stylise](/effects/#stylise)
+- [Effects](/use/effects/)

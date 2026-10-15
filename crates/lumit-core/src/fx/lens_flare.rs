@@ -939,62 +939,23 @@ pub struct Prescription {
 /// `radius thickness ior abbe semi_ap coating` with `stop`/`inf` keywords.
 /// Malformed rows are skipped; a file with under 3 surfaces is rejected.
 pub(crate) fn parse_lens(text: &str) -> Option<Prescription> {
-    let mut focal = 0.0_f32;
-    let mut in_surfaces = false;
-    let mut rows: Vec<(f32, f32, f32, f32, f32, f32, bool)> = Vec::new();
-    for raw in text.lines() {
-        let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if !in_surfaces {
-            if let Some(v) = line.strip_prefix("focal_length:") {
-                focal = v.trim().parse().unwrap_or(0.0);
-            } else if line.starts_with("surfaces:") {
-                in_surfaces = true;
-            }
-            continue;
-        }
-        let mut it = line.split_whitespace();
-        let radius_tok = it.next().unwrap_or("");
-        let is_stop = radius_tok.eq_ignore_ascii_case("stop");
-        let radius = if is_stop || radius_tok.eq_ignore_ascii_case("inf") {
-            0.0
-        } else {
-            match radius_tok.parse::<f32>() {
-                Ok(r) => r,
-                Err(_) => continue,
-            }
-        };
-        let mut f = |d: f32| it.next().and_then(|t| t.parse::<f32>().ok()).unwrap_or(d);
-        let thickness = f(0.0);
-        let ior = f(1.0);
-        let abbe = f(0.0);
-        let semi_ap = f(0.0);
-        let coating = f(0.0);
-        if semi_ap <= 0.0 {
-            continue;
-        }
-        rows.push((radius, thickness, ior, abbe, semi_ap, coating, is_stop));
-    }
-    if rows.len() < 3 || focal <= 0.0 {
-        return None;
-    }
+    let lens = super::lens::rows(text)?;
+    let (focal, rows) = (lens.focal_mm, lens.rows);
     let mut z = 0.0_f32;
     let mut surfaces = Vec::with_capacity(rows.len());
-    for &(radius, thickness, ior, abbe, semi_ap, coating, is_stop) in &rows {
-        let (a, b) = cauchy_from_abbe(ior, abbe);
+    for r in &rows {
+        let (a, b) = cauchy_from_abbe(r.ior, r.abbe);
         surfaces.push(FlareSurface {
-            radius_mm: radius,
+            radius_mm: r.radius_mm,
             z_mm: z,
-            semi_ap_mm: semi_ap,
+            semi_ap_mm: r.semi_ap_mm,
             cauchy_a: a,
             cauchy_b: b,
-            coating_layers: coating.max(0.0),
-            is_stop: if is_stop { 1.0 } else { 0.0 },
+            coating_layers: r.coating,
+            is_stop: if r.stop { 1.0 } else { 0.0 },
             coating_design: COATING_AS_FILE as f32,
         });
-        z += thickness;
+        z += r.thickness_mm;
     }
     Some(Prescription {
         focal_mm: focal,

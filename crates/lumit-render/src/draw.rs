@@ -249,6 +249,11 @@ pub struct NestedInputDraw {
     /// The nested frame's own content name, as for
     /// [`DrawSource::Nested::key`]; `None` realises it every time.
     pub key: Option<u128>,
+    /// How many of the comp's pixels make a metre, off its camera.
+    pub px_per_metre: f64,
+    /// Draw the comp's 3D layers as distance from its camera instead of its
+    /// picture: what a lens effect's Depth row reads from a Precomp.
+    pub scene_depth: bool,
 }
 
 /// One node graph's picture as plain data (docs/impl/node-graph-comp.md §2.3):
@@ -294,6 +299,8 @@ pub enum GraphStep {
     /// A project item at default placement, realised alone into the graph's
     /// frame - the synthetic layer of §2.1.
     Read(Box<CompLayerDraw>),
+    /// A Read's Depth output: the comp it reads as distance, metres.
+    SceneDepth(Box<NestedInputDraw>),
     /// One catalogue effect, resolved to plain numbers at this frame. Always
     /// exactly one op: the graph runs each box on its own, so `ops` holds one
     /// entry and the parallel lists hold one slot each.
@@ -315,7 +322,7 @@ pub enum GraphStep {
         /// 1:1 with the op, as [`CompLayerDraw::lut_files`] is with its stack.
         colour_tables: Vec<Option<crate::colour::TableRequest>>,
         /// 1:1 with the op, as [`CompLayerDraw::flare_lens_files`] is.
-        flare_lens_files: Vec<Option<String>>,
+        flare_lens_files: Vec<Option<lumit_core::fx::lens::LensSource>>,
         /// What a background analysis filed for this box at this frame: a Roto
         /// brush's matte, or a planes-tier plane. Both describe the **file**
         /// the box reads, which is the footage of the Read its picture comes
@@ -616,12 +623,12 @@ pub struct CompLayerDraw {
     /// gets everywhere else. Empty on every layer that applies no graph, which
     /// is almost all of them.
     pub graph_fx: Vec<GraphDraw>,
-    /// The `lens_file` paths of the layer's enabled built-in `lens_flare`
-    /// effects, 1:1 with the stack's `lens_flare` ops —
-    /// None = unset. The caller reads and hashes each file and passes the
-    /// parallel `flare_lens` texts to `run_ops`; a missing or unreadable
-    /// file degrades to the picked library lens (labelled fallback).
-    pub flare_lens_files: Vec<Option<String>>,
+    /// The lens each of the layer's enabled built-in lens effects reads other
+    /// than its Lens row (a kept lens or a Lens file), 1:1 with the stack's
+    /// lens ops, `None` for the Lens row. The caller reads and hashes each and
+    /// passes the parallel `flare_lens` texts to `run_ops`; a missing or
+    /// unreadable file degrades to the picked library lens (labelled fallback).
+    pub flare_lens_files: Vec<Option<lumit_core::fx::lens::LensSource>>,
     /// The raster width this layer's `fx` were RESOLVED against, when it
     /// can differ from the raster they will RUN on — set for
     /// Adjust layers (the comp width; their stack runs on the render

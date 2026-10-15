@@ -49,6 +49,7 @@ pub enum BridgePortType {
     Shape,
     Points,
     Audio,
+    Depth,
 }
 
 impl BridgePortType {
@@ -63,6 +64,7 @@ impl BridgePortType {
             PortType::Shape => BridgePortType::Shape,
             PortType::Points => BridgePortType::Points,
             PortType::Audio => BridgePortType::Audio,
+            PortType::Depth => BridgePortType::Depth,
         }
     }
 }

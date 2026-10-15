@@ -95,6 +95,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
   late bool _depthOfField;
   late bool _lockToZoom;
   late double _filmMm;
+  late double _pxPerMetre;
   late CameraUnits _units;
 
   /// The four animatable numbers this window can write, or null where the
@@ -120,6 +121,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
     _depthOfField = widget.settings.depthOfField;
     _lockToZoom = widget.settings.lockToZoom;
     _filmMm = widget.settings.filmSizeMm;
+    _pxPerMetre = widget.settings.pxPerMetre;
     _units = CameraUnits.pixels;
     _zoom = staticCameraValue(widget.channels.zoom);
     _focus = staticCameraValue(widget.channels.focusDistance);
@@ -186,6 +188,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
         depthOfField: _depthOfField,
         lockToZoom: _lockToZoom,
         filmSizeMm: _filmMm,
+        pxPerMetre: _pxPerMetre,
       ),
     );
     final props = <BridgeTransformProp>[];
@@ -238,6 +241,7 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
           _row(t, l10n.cameraAngleOfView, _angleRow(t)),
           _row(t, l10n.cameraFilmSize, _filmRow(t)),
           _row(t, l10n.cameraFocalLength, _focalRow(t)),
+          _row(t, l10n.cameraPixelsPerMetre, _metreRow(t)),
         ]),
         _section(t, l10n.cameraDepthOfField, [
           _row(t, l10n.cameraDepthOfField, _depthRow(t)),
@@ -374,6 +378,26 @@ class _CameraSettingsBodyState extends State<_CameraSettingsBody> {
             Text(l10n.unitSymbolDegrees, style: dialogMono(t)),
           ],
         );
+
+  Widget _metreRow(LumitTheme t) => Row(
+        children: [
+          SizedBox(
+            width: cameraWell,
+            height: dialogControlHeight,
+            child: DragValueField(
+              key: const ValueKey('camera-px-per-metre'),
+              value: _pxPerMetre,
+              min: 1,
+              max: 100000,
+              decimals: 0,
+              fill: t.surface0,
+              onChanged: (v) => setState(() => _pxPerMetre = v.toDouble()),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(l10n.unitSymbolPx, style: dialogMono(t)),
+        ],
+      );
 
   Widget _filmRow(LumitTheme t) => Row(
         children: [

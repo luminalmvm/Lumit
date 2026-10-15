@@ -8940,7 +8940,10 @@ fn a_read_is_added_wired_and_undone_in_one_step() {
     assert!(!brought_in.missing);
     assert!(brought_in.item.is_some(), "and names it for the panel");
     assert!(
-        brought_in.outputs.iter().all(|p| p.wired),
+        brought_in
+            .outputs
+            .iter()
+            .any(|p| p.id == "output" && p.wired),
         "its picture socket has the wire on it"
     );
     assert!(after.nodes[1].inputs.iter().all(|p| p.wired));

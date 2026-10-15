@@ -90,6 +90,7 @@ use super::effects::{
     directional_blur::{DirectionalBlur, DirectionalBlurDef},
     displacement_map::{DisplacementMap, DisplacementMapDef},
     dof::{Dof, DofDef},
+    dof_pro::{DofPro, DofProDef},
     drop_shadow::{DropShadow, DropShadowDef},
     echo::{Echo, EchoDef},
     emboss::{Emboss, EmbossDef},
@@ -110,6 +111,7 @@ use super::effects::{
     invert::{Invert, InvertDef},
     iris_wipe::{IrisWipe, IrisWipeDef},
     label_points::{LabelPoints, LabelPointsDef},
+    lens_dirt::{LensDirt, LensDirtDef},
     lens_distort::{LensDistort, LensDistortDef},
     lens_flare::{LensFlare, LensFlareDef},
     levels::{Levels, LevelsDef},
@@ -217,6 +219,7 @@ crate::catalogue![
     OcioLookDef => OcioLook,
     OcioFileDef => OcioFile,
     DofDef => Dof,
+    DofProDef => DofPro,
     // The utility batch's blur, at the Blur & sharpen family's end.
     ChannelBlurDef => ChannelBlur,
     TransformDef => Transform,
@@ -347,6 +350,7 @@ crate::catalogue![
     BlackAndWhiteDef => BlackAndWhite,
     ShadowHighlightDef => ShadowHighlight,
     LensFlareDef => LensFlare,
+    LensDirtDef => LensDirt,
     // Drop shadow, at the Stylise family's end.
     DropShadowDef => DropShadow,
     // Roughen edges (docs/08 §3.57), at the Stylise family's end after it.

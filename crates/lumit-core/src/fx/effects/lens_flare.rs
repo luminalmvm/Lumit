@@ -37,7 +37,8 @@
 
 use crate::fx::lens_flare as lf;
 use crate::fx::{
-    EffectDef, EffectMetadata, EffectSchema, ParamGroup, ParamId, Params, ResolveCx, Value,
+    EffectDef, EffectMetadata, EffectSchema, EnabledCond, EnabledWhen, ParamGroup, ParamId, Params,
+    ResolveCx, Value,
 };
 use crate::model::EffectValue;
 use lumit_fx_macros::Effect;
@@ -50,7 +51,6 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     ParamGroup {
         label: "Lens options",
         params: &[
-            "focus",
             "anamorphic",
             "blades",
             "aperture_rotation",
@@ -239,7 +239,23 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
         visible_when: Some(("source_type", &[1])),
         visible_when_lens_elements: None,
     },
+    // A placed light's own distance: headerless, and only where the light is
+    // placed rather than found in the picture.
+    ParamGroup {
+        label: "",
+        params: &["light_distance_m"],
+        collapsed: false,
+        visible_when: Some(("source_type", &[0, 2])),
+        visible_when_lens_elements: None,
+    },
 ];
+
+/// Light distance only means something against a depth.
+pub const LENS_FLARE_ENABLED_WHEN: &[EnabledWhen] = &[EnabledWhen {
+    param: "light_distance_m",
+    on: "depth_m",
+    cond: EnabledCond::LayerSet,
+}];
 
 /// The Lens flare's controls.
 ///
@@ -270,6 +286,7 @@ pub const LENS_FLARE_GROUPS: &[ParamGroup] = &[
     // An additive light overlay, the Glow shape.
     premultiplied = true,
     groups = LENS_FLARE_GROUPS,
+    enabled_when = LENS_FLARE_ENABLED_WHEN,
     // The flare already declares a parameter called `matte`, and it means
     // something deeper than strength — it is where the flare *detects its
     // sources*. Naming the id claims it inside the flare's own maths and puts it
@@ -339,22 +356,6 @@ pub struct LensFlare {
     #[slider(min = 0.0, max = 4.0, default = 1.0, hard_min = 0.0, unit = Raw)]
     pub intensity: f32,
 
-    /// The working f-stop: stops the iris down from the lens's native f-number.
-    /// Wider (a smaller number) grows the ghost discs and softens the starburst
-    /// ringing. The default is the default lens's native stop (the Master
-    /// Prime is a T1.3), so a dropped-on flare starts wide open and at its
-    /// brightest - stopping down dims it honestly.
-    #[slider(
-        label = "F-stop",
-        min = 1.0,
-        max = 22.0,
-        default = 1.3,
-        hard_min = 0.7,
-        hard_max = 32.0,
-        unit = Raw
-    )]
-    pub fstop: f32,
-
     /// The embedded prescription library (curated to twenty):
     /// real lenses, transcribed patent data, chosen for maximally different flare
     /// characters. Sorted by name; the default is the Master Prime 50, the
@@ -386,20 +387,41 @@ pub struct LensFlare {
     #[file(filter = ["lens"], filter_name = "Lens prescription")]
     pub lens_file: Option<u32>,
 
-    // ---- The Lens options twirl ----
+    /// Opens the lens window, shared with Depth of field pro. A lens chosen there
+    /// is kept in the effect and wins over both rows above.
+    #[action(label = "Edit lens…")]
+    pub edit_lens: (),
+
+    /// The working f-stop: stops the iris down from the lens's native f-number.
+    /// Wider (a smaller number) grows the ghost discs and softens the starburst
+    /// ringing. The default is the default lens's native stop (the Master
+    /// Prime is a T1.3), so a dropped-on flare starts wide open and at its
+    /// brightest - stopping down dims it honestly.
+    #[slider(
+        label = "F-stop",
+        min = 0.95,
+        max = 22.0,
+        default = 1.3,
+        hard_min = 0.7,
+        hard_max = 32.0,
+        unit = Raw
+    )]
+    pub fstop: f32,
+
     /// Focus distance in metres: shifts the sensor from its calibrated
     /// infinity position by the thin-lens image shift, changing the whole flare's
     /// shape — real flares breathe with focus. Large values are infinity.
     #[slider(
-        label = "Focus (m)",
-        min = 0.5,
+        label = "Focus distance (m)",
+        min = 0.3,
         max = 100.0,
         default = 100.0,
-        hard_min = 0.2,
+        hard_min = 0.05,
         unit = Raw
     )]
     pub focus: f32,
 
+    // ---- The Lens options twirl ----
     /// Horizontal stretch of the whole flare about the frame centre
     /// (1 = spherical, 1.33 / 2 = anamorphic looks).
     #[slider(
@@ -754,6 +776,25 @@ pub struct LensFlare {
     #[slider(min = 0.0, max = 1.0, default = 0.25, hard_min = 0.0, unit = Raw)]
     pub threshold_softness: f32,
 
+    /// Distance in metres per pixel, from a 3D precomp's Scene depth or Depth
+    /// of field pro. Set, a light with something nearer in front of it makes no
+    /// flare, and each light's starburst fades as it goes out of focus.
+    /// Decided by the render, so always `false` here.
+    #[layer(label = "Depth", self_default = false)]
+    pub depth_m: bool,
+
+    /// How far away a placed light is, metres, read against the Depth. A
+    /// found light sits at the depth under it.
+    #[slider(
+        label = "Light distance (m)",
+        min = 1.0,
+        max = 1000.0,
+        default = 1000.0,
+        hard_min = 0.01,
+        unit = Raw
+    )]
+    pub light_distance_m: f32,
+
     /// The ray-grid density and traced wavelength count; Draft renders the flare
     /// buffer at half resolution.
     #[choice(options = ["Draft", "Normal", "High", "Ultra"], default = 1)]
@@ -1011,6 +1052,10 @@ pub struct LensFlareDef;
 impl EffectDef for LensFlareDef {
     fn schema(&self) -> &'static EffectSchema {
         &<LensFlare as EffectMetadata>::SCHEMA
+    }
+
+    fn depth_inputs(&self) -> &'static [&'static str] {
+        &["depth_m"]
     }
 
     /// **Lights mode's sources**: the comp's own Light layers,

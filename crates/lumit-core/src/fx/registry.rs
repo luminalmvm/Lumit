@@ -438,6 +438,18 @@ pub trait EffectDef: Sync + Send + 'static {
         None
     }
 
+    /// What each option of the view menu hands out, in option order. An
+    /// option past the end is a picture.
+    fn view_types(&self) -> &'static [super::schema::PortType] {
+        &[]
+    }
+
+    /// The layer-reference rows that take a depth in metres rather than a
+    /// picture. In a node graph they are depth sockets.
+    fn depth_inputs(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// Compute a driver's outputs, pushing `(port id, value)` for each one it
     /// declares. Every image effect pushes nothing, which is the default.
     ///

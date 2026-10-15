@@ -16,7 +16,9 @@ struct Light {
     b: f32,
     ext_x: f32,
     ext_y: f32,
-    _pad2: f32,
+    // How far this light's starburst has faded for being out of focus:
+    // 0 sharp, 1 gone (fx_lens_flare_depth.wgsl).
+    fade: f32,
 };
 
 struct CombineParams {
@@ -252,7 +254,7 @@ fn combine(@builtin(global_invocation_id) gid: vec3<u32>) {
             let ny = sb_stamp_count(light.ext_y);
             // The share folded into the colour, not applied after the sprite:
             // the CPU twin does it here too, so the two agree op for op.
-            let rgb = vec3<f32>(light.r, light.g, light.b) * (1.0 / f32(nx * ny));
+            let rgb = vec3<f32>(light.r, light.g, light.b) * ((1.0 - light.fade) / f32(nx * ny));
             for (var iy = 0u; iy < ny; iy = iy + 1u) {
                 for (var ix = 0u; ix < nx; ix = ix + 1u) {
                     let sp_x = light.pos_x + sb_stamp_offset(ix, nx) * light.ext_x;
