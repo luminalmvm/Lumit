@@ -102,6 +102,46 @@ Future<void> downloadAsset(
   }
 }
 
+/// Fetch [length] bytes of [url] from [start] onto the end of [into], for a
+/// patched update (`blockmap.dart`). The Range header survives the redirect to
+/// the CDN. A server that answers with the whole file instead is an error, and
+/// so is a short answer.
+Future<void> downloadRange(
+  Uri url,
+  int start,
+  int length,
+  IOSink into, {
+  required void Function(int bytes) onBytes,
+  required bool Function() cancelled,
+}) async {
+  final client = HttpClient()..connectionTimeout = _connectTimeout;
+  try {
+    final request = await client.getUrl(url);
+    request.headers.set(HttpHeaders.userAgentHeader, 'Lumit');
+    request.headers
+        .set(HttpHeaders.rangeHeader, 'bytes=$start-${start + length - 1}');
+    final response = await request.close();
+    if (response.statusCode != 206) {
+      await response.drain<void>();
+      throw HttpException(l10n.updateDownloadAnswered('${response.statusCode}'),
+          uri: url);
+    }
+    var received = 0;
+    await for (final chunk in response) {
+      if (cancelled()) return;
+      received += chunk.length;
+      if (received > length) break;
+      into.add(chunk);
+      onBytes(chunk.length);
+    }
+    if (received != length) {
+      throw HttpException(l10n.updateIncomplete, uri: url);
+    }
+  } finally {
+    client.close(force: true);
+  }
+}
+
 /// Check [file] against what it was published as: [size] bytes, and [sha256] as
 /// a hex digest with or without a `sha256:` in front of it.
 ///

@@ -14,11 +14,13 @@
 // shell does both (`shell/update_dialog_frb.dart`), because *when* to ask the
 // user something is a question about the interface, not about updating.
 //
-// **Full installers, never patches.** The download is the whole
-// installer every time. A patch system means publishing a patch per pair of
-// versions, a tool to apply them, and a fallback for when the pair is missing —
-// three new things that can go wrong to save bandwidth GitHub gives us for
-// nothing. A few hundred megabytes, once in a while, on a deliberate click.
+// **Patched where it can be, whole where it can't.** What ends up on disk is
+// always the full installer or archive, checked against the published digest
+// before anything runs it. The file from the last update is kept, and most of
+// the new one is copied out of it with only the changed pieces fetched
+// (`blockmap.dart`). Nothing is paired to a version, so nightly, stable and
+// the switch between them all patch alike. Any problem, and the whole file is
+// fetched instead.
 //
 // **Nothing is downloaded behind the user's back.** With automatic updates on,
 // Lumit *looks* on launch, at most once a day, and says what it found in the
@@ -32,6 +34,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
+import 'blockmap.dart';
 import 'cache_dir.dart';
 import 'download.dart';
 import 'install_site.dart';
@@ -149,6 +152,10 @@ class UpdateRelease {
   final Uri? manifestUrl;
   final Uri? manifestSignatureUrl;
 
+  /// The attachment's blockmap, which lets it be patched out of the last
+  /// update's file. Null on releases from before they were published.
+  final Uri? blockmapUrl;
+
   /// What the release says to read before it is applied, a line at a time.
   /// Empty for most releases, which have nothing to say ([updateNoticeFrom]).
   final List<UpdateNoticeLine> notice;
@@ -167,13 +174,14 @@ class UpdateRelease {
     this.sha256,
     this.manifestUrl,
     this.manifestSignatureUrl,
+    this.blockmapUrl,
     this.notice = const [],
     this.changes = const [],
   });
 
   /// How big the download is, for a sentence a human reads. Whole MB: the
   /// difference between 412 and 412.4 MB is not a decision anybody makes.
-  String get sizeLabel => '${(assetBytes / (1 << 20)).round()} MB';
+  String get sizeLabel => megabytes(assetBytes);
 
   /// Read a release out of the GitHub API's answer, picking the attachment for
   /// [platform]. Null when the release has nothing this machine can install —
@@ -249,11 +257,15 @@ class UpdateRelease {
       sha256: chosen['digest'] is String ? chosen['digest'] as String : null,
       manifestUrl: attachment(releaseManifestName),
       manifestSignatureUrl: attachment(releaseManifestSignatureName),
+      blockmapUrl: attachment(blockmapNameFor(name)),
       notice: updateNoticeFrom(body),
       changes: releaseChangesFrom(body),
     );
   }
 }
+
+/// [bytes] in whole MB, for a sentence a human reads.
+String megabytes(int bytes) => '${(bytes / (1 << 20)).round()} MB';
 
 /// The heading a release puts over what to read before it is applied.
 ///
@@ -569,6 +581,7 @@ class UpdateService extends ChangeNotifier {
   List<UpdateNoticeLine> _said = const [];
   File? _downloaded;
   double _progress = 0;
+  int _downloadBytes = 0;
   String? _failure;
   bool _cancelRequested = false;
 
@@ -602,6 +615,10 @@ class UpdateService extends ChangeNotifier {
 
   /// How far the download has got, 0 to 1. Zero at every other stage.
   double get progress => _progress;
+
+  /// How much the download in progress fetches: the whole file, or only the
+  /// pieces a patch needs.
+  int get downloadBytes => _downloadBytes;
 
   /// Why the last attempt did not finish, in a sentence fit for the status
   /// line. Null unless [stage] is [UpdateStage.failed].
@@ -731,6 +748,7 @@ class UpdateService extends ChangeNotifier {
     if (release == null || busy) return;
     _cancelRequested = false;
     _progress = 0;
+    _downloadBytes = release.assetBytes;
     _stage = UpdateStage.downloading;
     _failure = null;
     notifyListeners();
@@ -741,41 +759,63 @@ class UpdateService extends ChangeNotifier {
       folder.createSync(recursive: true);
       file =
           File('${folder.path}${Platform.pathSeparator}${release.assetName}');
-      // A leftover from an abandoned attempt would otherwise be appended to or
-      // mistaken for a finished download.
-      if (file.existsSync()) file.deleteSync();
-
-      await _download(
-        release.assetUrl,
-        file,
-        onProgress: (received, total) {
-          // `contentLength` is -1 when the server does not say, in which case
-          // the size the release published is the best answer there is.
-          final expected = total > 0 ? total : release.assetBytes;
-          final fraction = expected > 0 ? received / expected : 0.0;
-          final was = (_progress * 100).round();
-          _progress = fraction.clamp(0.0, 1.0).toDouble();
-          // Once per whole per cent, not once per HTTP chunk: every listener
-          // rebuild (the menu bar among them) is far dearer than a download
-          // chunk, and no progress bar reads finer than a per cent anyway.
-          if ((_progress * 100).round() != was) notifyListeners();
-        },
-        cancelled: () => _cancelRequested,
-      );
-
-      if (_cancelRequested) {
-        _discard(file);
-        _stage = UpdateStage.available;
-        _progress = 0;
-        notifyListeners();
-        return;
+      // The file this installation was updated from has the same name with
+      // this build's version in it. It is what the new one is patched from,
+      // and everything else here is a leftover, the new file's included.
+      final current = currentVersion();
+      final baseName = current == null
+          ? release.assetName
+          : release.assetName.replaceFirst(release.version, current);
+      final base = baseName == release.assetName
+          ? null
+          : File('${folder.path}${Platform.pathSeparator}$baseName');
+      for (final old in folder.listSync().whereType<File>()) {
+        if (old.path.split(Platform.pathSeparator).last != baseName) {
+          _discard(old);
+        }
       }
 
-      final problem = await _verify(file, release);
-      if (problem != null) {
-        _discard(file);
-        _fail(problem);
-        return;
+      void onProgress(int received, int total) {
+        // `contentLength` is -1 when the server does not say, in which case
+        // the size the release published is the best answer there is.
+        final expected = total > 0 ? total : release.assetBytes;
+        final fraction = expected > 0 ? received / expected : 0.0;
+        final was = (_progress * 100).round();
+        final resized = expected != _downloadBytes;
+        _downloadBytes = expected;
+        _progress = fraction.clamp(0.0, 1.0).toDouble();
+        // Once per whole per cent, not once per HTTP chunk: every listener
+        // rebuild (the menu bar among them) is far dearer than a download
+        // chunk, and no progress bar reads finer than a per cent anyway.
+        if (resized || (_progress * 100).round() != was) notifyListeners();
+      }
+
+      final patched =
+          base != null && await _patch(release, base, file, onProgress);
+      if (!patched) {
+        if (!_cancelRequested) {
+          await _download(
+            release.assetUrl,
+            file,
+            onProgress: onProgress,
+            cancelled: () => _cancelRequested,
+          );
+        }
+
+        if (_cancelRequested) {
+          _discard(file);
+          _stage = UpdateStage.available;
+          _progress = 0;
+          notifyListeners();
+          return;
+        }
+
+        final problem = await _verify(file, release);
+        if (problem != null) {
+          _discard(file);
+          _fail(problem);
+          return;
+        }
       }
 
       _downloaded = file;
@@ -789,6 +829,58 @@ class UpdateService extends ChangeNotifier {
       return;
     }
     notifyListeners();
+  }
+
+  /// Make [into] out of [base], the file this installation was updated from,
+  /// fetching only the pieces it lacks (`blockmap.dart`).
+  ///
+  /// True once the result passes the same checks as a full download. False
+  /// for anything else, a cancel included, and the caller fetches the whole
+  /// file. Needs a digest, since a file put together from pieces would
+  /// otherwise only be checked by its length.
+  Future<bool> _patch(UpdateRelease release, File base, File into,
+      void Function(int received, int total) onProgress) async {
+    final map = release.blockmapUrl;
+    if (map == null || !base.existsSync()) return false;
+    if (release.sha256 == null && !releaseSigningIsEnforced) return false;
+    try {
+      final wanted =
+          decodeBlockmap(utf8.decode(await _fetchBytes(map, blockmapMaxBytes)));
+      if (wanted == null) return false;
+      final plan = patchPlan(wanted, await piecesInBackground(base.path));
+      final total = bytesToFetch(plan);
+      // Little in common, as on the release that switched to per-file
+      // compression. One request for the whole file is quicker.
+      if (total > release.assetBytes * 0.8) return false;
+      onProgress(0, total);
+
+      var received = 0;
+      final sink = into.openWrite();
+      try {
+        for (final run in plan) {
+          if (_cancelRequested) break;
+          if (run.fetch) {
+            await downloadRange(release.assetUrl, run.from, run.size, sink,
+                onBytes: (bytes) {
+                  received += bytes;
+                  onProgress(received, total);
+                },
+                cancelled: () => _cancelRequested);
+          } else {
+            await sink.addStream(base.openRead(run.from, run.from + run.size));
+          }
+        }
+      } finally {
+        await sink.close();
+      }
+      if (!_cancelRequested && await _verify(into, release) == null) {
+        return true;
+      }
+    } catch (_) {
+      // Whatever went wrong, the whole file is still there to fetch.
+    }
+    _discard(into);
+    return false;
   }
 
   /// Abandon a download in progress. Safe at any other stage, where it does
