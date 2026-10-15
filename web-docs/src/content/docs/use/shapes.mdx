@@ -87,6 +87,25 @@ A shape row's keyframes appear as diamonds on its Timeline lane but have no curv
 as well as of the path.
 :::
 
+## Shape operations
+
+Right-click a shape group in the Timeline for **Add** and **Remove**, which list the
+operations it can be given and the ones it has. An operation's rows appear under the group
+once it is added. Every row is animatable.
+
+They apply in a fixed order: twist, then offset, trim and the repeater.
+
+### Twist
+
+**Twist** spins the shape about an axis and flattens it, as if seen side-on. The turn runs
+half a revolution from one end of the shape to the other, so a circle is a lens at 0° and a
+figure eight at 90°.
+
+- **Twist angle**: how far the twist is spun, in degrees. A full turn loops.
+- **Twist axis**: the direction of the axis, in degrees.
+- **Twist centre x** and **y**: the point the axis passes through. It starts in the middle of
+  the shape.
+
 ## Trim paths
 
 Twirl a shape group open in the Timeline and it carries **Trim start**, **Trim end**

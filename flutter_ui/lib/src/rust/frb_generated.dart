@@ -20394,6 +20394,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeShapeTwist dco_decode_box_autoadd_bridge_shape_twist(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_bridge_shape_twist(raw);
+  }
+
+  @protected
   BridgeShareEnding dco_decode_box_autoadd_bridge_share_ending(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_share_ending(raw);
@@ -23749,8 +23755,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 35)
-      throw Exception('unexpected arr length: expect 35 but see ${arr.length}');
+    if (arr.length != 36)
+      throw Exception('unexpected arr length: expect 36 but see ${arr.length}');
     return BridgeShapeItem(
       id: dco_decode_Uuid(arr[0]),
       name: dco_decode_String(arr[1]),
@@ -23787,6 +23793,21 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       repeatScale: dco_decode_bridge_scalar(arr[32]),
       repeatStartOpacity: dco_decode_bridge_scalar(arr[33]),
       repeatEndOpacity: dco_decode_bridge_scalar(arr[34]),
+      twist: dco_decode_opt_box_autoadd_bridge_shape_twist(arr[35]),
+    );
+  }
+
+  @protected
+  BridgeShapeTwist dco_decode_bridge_shape_twist(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return BridgeShapeTwist(
+      angle: dco_decode_bridge_scalar(arr[0]),
+      axis: dco_decode_bridge_scalar(arr[1]),
+      centreX: dco_decode_bridge_scalar(arr[2]),
+      centreY: dco_decode_bridge_scalar(arr[3]),
     );
   }
 
@@ -25859,6 +25880,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeShapeTwist? dco_decode_opt_box_autoadd_bridge_shape_twist(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_bridge_shape_twist(raw);
+  }
+
+  @protected
   BridgeShareOnline? dco_decode_opt_box_autoadd_bridge_share_online(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -26703,6 +26730,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_shape_item(deserializer));
+  }
+
+  @protected
+  BridgeShapeTwist sse_decode_box_autoadd_bridge_shape_twist(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bridge_shape_twist(deserializer));
   }
 
   @protected
@@ -30247,6 +30281,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_repeatScale = sse_decode_bridge_scalar(deserializer);
     var var_repeatStartOpacity = sse_decode_bridge_scalar(deserializer);
     var var_repeatEndOpacity = sse_decode_bridge_scalar(deserializer);
+    var var_twist = sse_decode_opt_box_autoadd_bridge_shape_twist(deserializer);
     return BridgeShapeItem(
         id: var_id,
         name: var_name,
@@ -30282,7 +30317,22 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         repeatRotation: var_repeatRotation,
         repeatScale: var_repeatScale,
         repeatStartOpacity: var_repeatStartOpacity,
-        repeatEndOpacity: var_repeatEndOpacity);
+        repeatEndOpacity: var_repeatEndOpacity,
+        twist: var_twist);
+  }
+
+  @protected
+  BridgeShapeTwist sse_decode_bridge_shape_twist(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_angle = sse_decode_bridge_scalar(deserializer);
+    var var_axis = sse_decode_bridge_scalar(deserializer);
+    var var_centreX = sse_decode_bridge_scalar(deserializer);
+    var var_centreY = sse_decode_bridge_scalar(deserializer);
+    return BridgeShapeTwist(
+        angle: var_angle,
+        axis: var_axis,
+        centreX: var_centreX,
+        centreY: var_centreY);
   }
 
   @protected
@@ -33298,6 +33348,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeShapeTwist? sse_decode_opt_box_autoadd_bridge_shape_twist(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_bridge_shape_twist(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   BridgeShareOnline? sse_decode_opt_box_autoadd_bridge_share_online(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -34295,6 +34357,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeShapeItem self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_shape_item(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_bridge_shape_twist(
+      BridgeShapeTwist self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_shape_twist(self, serializer);
   }
 
   @protected
@@ -37063,6 +37132,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.repeatScale, serializer);
     sse_encode_bridge_scalar(self.repeatStartOpacity, serializer);
     sse_encode_bridge_scalar(self.repeatEndOpacity, serializer);
+    sse_encode_opt_box_autoadd_bridge_shape_twist(self.twist, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_shape_twist(
+      BridgeShapeTwist self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_scalar(self.angle, serializer);
+    sse_encode_bridge_scalar(self.axis, serializer);
+    sse_encode_bridge_scalar(self.centreX, serializer);
+    sse_encode_bridge_scalar(self.centreY, serializer);
   }
 
   @protected
@@ -39466,6 +39546,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_bridge_sequence_rate(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_shape_twist(
+      BridgeShapeTwist? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_bridge_shape_twist(self, serializer);
     }
   }
 

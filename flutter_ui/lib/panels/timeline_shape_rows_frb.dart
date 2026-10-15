@@ -3,6 +3,8 @@
 //
 // Split out of timeline_panel_frb.dart.
 
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/engine_labels.dart';
 import 'package:lumit_flutter/main.dart';
@@ -51,19 +53,82 @@ class ShapeItemRow extends StatelessWidget {
       shapeItemWith(i, name: name, opacity: opacity);
 
   /// Write the contents back with this item changed, or dropped.
-  void _write({String? name, double? opacity, bool delete = false}) {
+  void _write(
+      {String? name,
+      double? opacity,
+      bool delete = false,
+      BridgeShapeItem Function(BridgeShapeItem)? change}) {
     try {
       layer.setShapeContents(contents: [
         for (final other in layer.getShapeContents())
           if (other.id != item.id)
             other
           else if (!delete)
-            _with(other, name: name, opacity: opacity),
+            change?.call(other) ?? _with(other, name: name, opacity: opacity),
       ]);
       onChanged();
     } catch (_) {
       // The item or its layer went away between the draw and the click.
     }
+  }
+
+  /// [i] with [op] taken off, or added where it was missing. A twist starts
+  /// in the middle of the path's own points, so it turns the shape in place.
+  static BridgeShapeItem _toggled(BridgeShapeItem i, ShapeOp op) {
+    if (hasShapeOp(i, op)) return shapeItemWith(i, remove: op);
+    final xs = i.vertices.map((v) => v.x);
+    final ys = i.vertices.map((v) => v.y);
+    final centre = i.vertices.isEmpty
+        ? Offset.zero
+        : Offset((xs.reduce(math.min) + xs.reduce(math.max)) / 2,
+            (ys.reduce(math.min) + ys.reduce(math.max)) / 2);
+    return switch (op) {
+      ShapeOp.twist => shapeItemWith(i,
+          twist: BridgeShapeTwist(
+            angle: const BridgeScalar.static_(0),
+            axis: const BridgeScalar.static_(0),
+            centreX: BridgeScalar.static_(centre.dx),
+            centreY: BridgeScalar.static_(centre.dy),
+          )),
+    };
+  }
+
+  /// The menu's Add and Remove, each a list of the operations it can act on
+  /// and left off where that list is empty. An item combined into the one
+  /// above lends its path and nothing else, so it has neither.
+  List<Widget> _opRows(VoidCallback close) {
+    if (item.combine != 0) return const [];
+    const open = ShapeOp.values;
+    final has = [for (final op in open) if (hasShapeOp(item, op)) op];
+    final lacks = [for (final op in open) if (!hasShapeOp(item, op)) op];
+    Widget submenu(String key, String label, List<ShapeOp> ops) => SubmenuRow(
+          key: ValueKey<String>('tl-shape-$key-${item.id}'),
+          closeParent: close,
+          submenu: (dismiss) => FloatSurface(
+            width: 150,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final op in ops)
+                  MenuRow(
+                    key: ValueKey<String>(
+                        'tl-shape-$key-${op.name}-${item.id}'),
+                    onPressed: () {
+                      dismiss();
+                      _write(change: (i) => _toggled(i, op));
+                    },
+                    child: Text(shapeOpLabel(op)),
+                  ),
+              ],
+            ),
+          ),
+          child: Text(label),
+        );
+    return [
+      if (lacks.isNotEmpty) submenu('add', l10n.shapeOpAdd, lacks),
+      if (has.isNotEmpty) submenu('remove', l10n.shapeOpRemove, has),
+    ];
   }
 
   @override
@@ -97,6 +162,7 @@ class ShapeItemRow extends StatelessWidget {
       onRename: (name) => _write(name: name),
       onDelete: () => _write(delete: true),
       deleteLabel: l10n.deleteShape,
+      menuRows: _opRows,
     );
   }
 }
@@ -584,6 +650,10 @@ class _ShapeValueRowState extends State<ShapeValueRow> {
         ShapeValue.gradientStopPosition ||
         ShapeValue.gradientStopOpacity =>
           (0, 100, '%'),
+        ShapeValue.twistAngle || ShapeValue.twistAxis => (-3600, 3600, '°'),
+        ShapeValue.twistCentreX ||
+        ShapeValue.twistCentreY =>
+          (-10000, 10000, ' px'),
         ShapeValue.trimStart || ShapeValue.trimEnd => (0, 100, '%'),
         ShapeValue.trimOffset => (-3600, 3600, '°'),
         ShapeValue.dash || ShapeValue.gap => (0, 1000, ' px'),

@@ -9003,6 +9003,34 @@
   "@shapeTrimOffset": {
     "description": "Timeline row under a shape layer's art: how far the trimmed piece is slid along the path, in degrees."
   },
+  "shapeOpAdd": "Add",
+  "@shapeOpAdd": {
+    "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it can be given, such as Twist."
+  },
+  "shapeOpRemove": "Remove",
+  "@shapeOpRemove": {
+    "description": "Row in the right-click menu of a shape layer's art in the Timeline, opening the list of operations it has, to take one off."
+  },
+  "shapeTwist": "Twist",
+  "@shapeTwist": {
+    "description": "Shape operation, in the Add and Remove menus of a shape layer's art: spins the shape about an axis and flattens it, so a circle becomes a figure eight."
+  },
+  "shapeTwistAngle": "Twist angle",
+  "@shapeTwistAngle": {
+    "description": "Timeline row under a shape layer's art: how far the twist is spun, in degrees. A full turn comes back to the start."
+  },
+  "shapeTwistAxis": "Twist axis",
+  "@shapeTwistAxis": {
+    "description": "Timeline row under a shape layer's art: which way the line the shape twists about points, in degrees."
+  },
+  "shapeTwistCentreX": "Twist centre x",
+  "@shapeTwistCentreX": {
+    "description": "Timeline row under a shape layer's art: the x of the point the twist's axis passes through, in pixels."
+  },
+  "shapeTwistCentreY": "Twist centre y",
+  "@shapeTwistCentreY": {
+    "description": "Timeline row under a shape layer's art: the y of the point the twist's axis passes through, in pixels."
+  },
   "stretchTitle": "Stretch",
   "@stretchTitle": {
     "description": "Title of the small dialogue that stretches a layer: a new speed, or the duration that speed implies."

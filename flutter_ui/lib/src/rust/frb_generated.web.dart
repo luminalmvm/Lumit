@@ -343,6 +343,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeShapeItem dco_decode_box_autoadd_bridge_shape_item(dynamic raw);
 
   @protected
+  BridgeShapeTwist dco_decode_box_autoadd_bridge_shape_twist(dynamic raw);
+
+  @protected
   BridgeShareEnding dco_decode_box_autoadd_bridge_share_ending(dynamic raw);
 
   @protected
@@ -1107,6 +1110,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeShapeItem dco_decode_bridge_shape_item(dynamic raw);
 
   @protected
+  BridgeShapeTwist dco_decode_bridge_shape_twist(dynamic raw);
+
+  @protected
   BridgeShareAsking dco_decode_bridge_share_asking(dynamic raw);
 
   @protected
@@ -1812,6 +1818,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  BridgeShapeTwist? dco_decode_opt_box_autoadd_bridge_shape_twist(dynamic raw);
+
+  @protected
   BridgeShareOnline? dco_decode_opt_box_autoadd_bridge_share_online(
       dynamic raw);
 
@@ -2237,6 +2246,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShapeItem sse_decode_box_autoadd_bridge_shape_item(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeShapeTwist sse_decode_box_autoadd_bridge_shape_twist(
       SseDeserializer deserializer);
 
   @protected
@@ -3119,6 +3132,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeShapeItem sse_decode_bridge_shape_item(SseDeserializer deserializer);
 
   @protected
+  BridgeShapeTwist sse_decode_bridge_shape_twist(SseDeserializer deserializer);
+
+  @protected
   BridgeShareAsking sse_decode_bridge_share_asking(
       SseDeserializer deserializer);
 
@@ -3968,6 +3984,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeShapeTwist? sse_decode_opt_box_autoadd_bridge_shape_twist(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeShareOnline? sse_decode_opt_box_autoadd_bridge_share_online(
       SseDeserializer deserializer);
 
@@ -4407,6 +4427,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_shape_item(
       BridgeShapeItem self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_shape_twist(
+      BridgeShapeTwist self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_share_ending(
@@ -5393,6 +5417,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeShapeItem self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_shape_twist(
+      BridgeShapeTwist self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_share_asking(
       BridgeShareAsking self, SseSerializer serializer);
 
@@ -6273,6 +6301,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_sequence_rate(
       BridgeSequenceRate? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_shape_twist(
+      BridgeShapeTwist? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_share_online(

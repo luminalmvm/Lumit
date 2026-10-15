@@ -279,6 +279,19 @@ pub struct BridgeShapeItem {
     pub repeat_scale: BridgeScalar,
     pub repeat_start_opacity: BridgeScalar,
     pub repeat_end_opacity: BridgeScalar,
+    /// **Twist**, or `None` for none.
+    pub twist: Option<BridgeShapeTwist>,
+}
+
+/// A shape's twist: `angle` and `axis` in degrees, the centre in layer
+/// pixels. Every one animates.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeShapeTwist {
+    pub angle: BridgeScalar,
+    pub axis: BridgeScalar,
+    pub centre_x: BridgeScalar,
+    pub centre_y: BridgeScalar,
 }
 
 impl BridgeShapeItem {
@@ -348,6 +361,12 @@ impl BridgeShapeItem {
             repeat_scale: BridgeScalar::read_at(&item.repeat_scale, offset),
             repeat_start_opacity: BridgeScalar::read_at(&item.repeat_start_opacity, offset),
             repeat_end_opacity: BridgeScalar::read_at(&item.repeat_end_opacity, offset),
+            twist: item.twist.as_ref().map(|w| BridgeShapeTwist {
+                angle: BridgeScalar::read_at(&w.angle, offset),
+                axis: BridgeScalar::read_at(&w.axis, offset),
+                centre_x: BridgeScalar::read_at(&w.centre_x, offset),
+                centre_y: BridgeScalar::read_at(&w.centre_y, offset),
+            }),
         }
     }
 
@@ -487,6 +506,17 @@ impl BridgeShapeItem {
             repeat_scale: clamped_property(&self.repeat_scale, offset, -10_000.0, 10_000.0)?,
             repeat_start_opacity: clamped_property(&self.repeat_start_opacity, offset, 0.0, 100.0)?,
             repeat_end_opacity: clamped_property(&self.repeat_end_opacity, offset, 0.0, 100.0)?,
+            // Degrees wrap and the centre is the art's own coordinates, so
+            // only the far ends are held.
+            twist: match &self.twist {
+                Some(w) => Some(lumit_core::shape::Twist {
+                    angle: clamped_property(&w.angle, offset, -360_000.0, 360_000.0)?,
+                    axis: clamped_property(&w.axis, offset, -360_000.0, 360_000.0)?,
+                    centre_x: clamped_property(&w.centre_x, offset, -100_000.0, 100_000.0)?,
+                    centre_y: clamped_property(&w.centre_y, offset, -100_000.0, 100_000.0)?,
+                }),
+                None => None,
+            },
             extra: serde_json::Map::new(),
         })
     }

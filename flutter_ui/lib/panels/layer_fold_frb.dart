@@ -214,6 +214,10 @@ enum ShapeValue {
   gradientStartY,
   gradientEndX,
   gradientEndY,
+  twistAngle,
+  twistAxis,
+  twistCentreX,
+  twistCentreY,
   offsetPath,
   trimStart,
   trimEnd,
@@ -232,6 +236,30 @@ enum ShapeValue {
   repeatStartOpacity,
   repeatEndOpacity,
 }
+
+/// The operations a shape item can be given from its menu. Each is absent
+/// until it is added, and its rows with it.
+enum ShapeOp { twist }
+
+/// Whether [item] has [op].
+bool hasShapeOp(BridgeShapeItem item, ShapeOp op) => switch (op) {
+      ShapeOp.twist => item.twist != null,
+    };
+
+/// What [op] is called in the item's menu.
+String shapeOpLabel(ShapeOp op) => switch (op) {
+      ShapeOp.twist => l10n.shapeTwist,
+    };
+
+/// The operation [value] belongs to, or null for a number every item has.
+ShapeOp? shapeOpOf(ShapeValue value) => switch (value) {
+      ShapeValue.twistAngle ||
+      ShapeValue.twistAxis ||
+      ShapeValue.twistCentreX ||
+      ShapeValue.twistCentreY =>
+        ShapeOp.twist,
+      _ => null,
+    };
 
 /// Which of a shape item's numbers are the dashes' — shown only under an item
 /// that actually has an outline to dash.
@@ -269,7 +297,9 @@ bool isGradientValue(ShapeValue value) => switch (value) {
 /// Which of a shape item's numbers describe the **step** the repeater takes —
 /// everything but the count itself, which is the row that turns the
 /// repeater on and so is always there to find.
-bool isRepeatStepValue(ShapeValue value) => switch (value) {
+bool isRepeatStepValue(ShapeValue value) =>
+    shapeOpOf(value) == null &&
+    switch (value) {
       ShapeValue.path ||
       ShapeValue.gradientStartOpacity ||
       ShapeValue.gradientEndOpacity ||
@@ -1101,6 +1131,10 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.gradientStartY => l10n.shapeGradientStartY,
       ShapeValue.gradientEndX => l10n.shapeGradientEndX,
       ShapeValue.gradientEndY => l10n.shapeGradientEndY,
+      ShapeValue.twistAngle => l10n.shapeTwistAngle,
+      ShapeValue.twistAxis => l10n.shapeTwistAxis,
+      ShapeValue.twistCentreX => l10n.shapeTwistCentreX,
+      ShapeValue.twistCentreY => l10n.shapeTwistCentreY,
       ShapeValue.offsetPath => l10n.shapeOffsetPath,
       ShapeValue.trimStart => l10n.shapeTrimStart,
       ShapeValue.trimEnd => l10n.shapeTrimEnd,
@@ -1119,6 +1153,8 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.repeatStartOpacity => l10n.shapeRepeatStartOpacity,
       ShapeValue.repeatEndOpacity => l10n.shapeRepeatEndOpacity,
     };
+
+const BridgeScalar _none = BridgeScalar.static_(0);
 
 /// The first pair of an item's dash list, or a still zero where it has none —
 /// which is what a solid outline reads as.
@@ -1147,6 +1183,12 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       ShapeValue.gradientStartY => item.gradientStartY,
       ShapeValue.gradientEndX => item.gradientEndX,
       ShapeValue.gradientEndY => item.gradientEndY,
+      // An operation the item does not have reads as the still zero nobody
+      // draws, as a gone stop does.
+      ShapeValue.twistAngle => item.twist?.angle ?? _none,
+      ShapeValue.twistAxis => item.twist?.axis ?? _none,
+      ShapeValue.twistCentreX => item.twist?.centreX ?? _none,
+      ShapeValue.twistCentreY => item.twist?.centreY ?? _none,
       ShapeValue.offsetPath => item.offsetAmount,
       ShapeValue.trimStart => item.trimStart,
       ShapeValue.trimEnd => item.trimEnd,
@@ -1191,9 +1233,12 @@ BridgeShapeItem shapeItemWith(
   List<BridgeGradientStop>? gradientStops,
   int? combine,
   int stop = 0,
+  BridgeShapeTwist? twist,
+  ShapeOp? remove,
 }) {
   BridgeScalar at(ShapeValue which, BridgeScalar was) =>
       value == which ? to! : was;
+  final twisted = item.twist;
   return BridgeShapeItem(
     id: item.id,
     name: name ?? item.name,
@@ -1262,6 +1307,17 @@ BridgeShapeItem shapeItemWith(
     repeatStartOpacity:
         at(ShapeValue.repeatStartOpacity, item.repeatStartOpacity),
     repeatEndOpacity: at(ShapeValue.repeatEndOpacity, item.repeatEndOpacity),
+    twist: remove == ShapeOp.twist
+        ? null
+        : twist ??
+            (twisted == null
+                ? null
+                : BridgeShapeTwist(
+                    angle: at(ShapeValue.twistAngle, twisted.angle),
+                    axis: at(ShapeValue.twistAxis, twisted.axis),
+                    centreX: at(ShapeValue.twistCentreX, twisted.centreX),
+                    centreY: at(ShapeValue.twistCentreY, twisted.centreY),
+                  )),
   );
 }
 
@@ -1947,6 +2003,9 @@ List<LayerFoldRow> layerFoldRows({
           // The gradient's two points aim a ramp and its two opacities fade
           // one; with no ramp there is nothing for them to work on.
           if (isGradientValue(value) && item.gradient == 0) continue;
+          // An operation's rows come with it, from the item's menu.
+          final op = shapeOpOf(value);
+          if (op != null && !hasShapeOp(item, op)) continue;
           // A stop between the ends has two rows of its own, so these are
           // made once for each stop rather than once for the item.
           if (value == ShapeValue.gradientStopOpacity) continue;

@@ -24,8 +24,8 @@
 //! carries Trim Paths, the Repeater and the rest as entries in a nested group,
 //! where their position decides what they act on. Lumit's list is flat, so each
 //! modifier is a property of the item it modifies and the order they apply in is
-//! fixed and written down here rather than dragged: **combine, then offset, then
-//! trim, then repeat**. A **combine** is the one field that reaches past
+//! fixed and written down here rather than dragged: **combine, then twist,
+//! then offset, then trim, then repeat**. A **combine** is the one field that reaches past
 //! its own item: it says how this item's path joins the item before it, and the
 //! run that makes is drawn once with the first item's paint. The
 //! nested tree is still the long-term shape (docs/03 §9.2); nothing stored here
@@ -295,6 +295,10 @@ pub struct ShapeItem {
         skip_serializing_if = "crate::paint::is_static_full"
     )]
     pub repeat_end_opacity: Property,
+    /// **Twist**: the path spun about an axis and seen side-on. `None` is no
+    /// twist, which is every shape until somebody adds one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub twist: Option<Twist>,
     /// Unknown fields from newer Lumit versions, preserved on load/save
     /// (docs/10-FILE-FORMAT.md §1.1).
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -303,6 +307,27 @@ pub struct ShapeItem {
 
 fn full_opacity() -> f64 {
     100.0
+}
+
+/// A twist: the path turned about a line through `centre`, pointing
+/// `axis` degrees round from the x axis, and flattened back onto the
+/// layer as if seen side-on.
+///
+/// The turn is not the same everywhere: it runs half a turn from one end of
+/// the shape to the other along the axis, the way a ribbon twists. `angle`
+/// spins the whole twist, so a circle is a lens at 0 and a figure eight at
+/// 90, and a full turn of it comes back to where it started.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Twist {
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub angle: Property,
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub axis: Property,
+    /// In layer pixels, the art's own coordinates.
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub centre_x: Property,
+    #[serde(default = "Property::zero", with = "crate::mask::still_or_keyed")]
+    pub centre_y: Property,
 }
 
 /// A colour part way along a gradient, between the fill at its start and the
@@ -390,6 +415,7 @@ impl ShapeItem {
             repeat_scale: crate::paint::full(),
             repeat_start_opacity: crate::paint::full(),
             repeat_end_opacity: crate::paint::full(),
+            twist: None,
             extra: serde_json::Map::new(),
         }
     }
@@ -429,15 +455,39 @@ impl ShapeItem {
     /// The order is **offset, then trim** (docs/03 §7.2.1): the offset makes
     /// the outline, and the trim cuts whatever outline there is by its length.
     fn trimmed_at(&self, t: f64) -> Option<Vec<(f64, f64)>> {
-        if !self.trims_at(t) && self.offset_amount.value_at(t) == 0.0 {
+        let reshapes = self.reshapes_at(t);
+        if !reshapes && !self.trims_at(t) && self.offset_amount.value_at(t) == 0.0 {
             return None;
         }
         let path = self.path_at(t);
-        let points = flatten_path(&path);
+        // A path about to be bent is walked finely, so its curves are still
+        // curves once they have moved.
+        let points = if reshapes {
+            flatten_fine(&path)
+        } else {
+            flatten_path(&path)
+        };
         if points.len() < 2 {
             return None;
         }
         Some(self.shaped(points, path.closed, t))
+    }
+
+    /// True when the twist moves the path at `t`.
+    fn reshapes_at(&self, _t: f64) -> bool {
+        self.twist.is_some()
+    }
+
+    /// `points` once the twist has had them. The control points of the
+    /// item's own path are what the twist measures the shape by, so every
+    /// contour of a combined run is twisted the same way.
+    fn reshaped(&self, points: Vec<(f64, f64)>, t: f64) -> Vec<(f64, f64)> {
+        // Straight edges have to be cut up before they can bend.
+        let mut points = densified(&points, FINE_STEP);
+        if let Some(twist) = &self.twist {
+            twist.apply(&mut points, &self.path_at(t), t);
+        }
+        points
     }
 
     /// One polyline pushed out by this item's offset and cut by its trim — the
@@ -445,6 +495,9 @@ impl ShapeItem {
     /// are offset and trimmed by exactly the same arithmetic the item's own
     /// path is.
     fn shaped(&self, mut points: Vec<(f64, f64)>, closed: bool, t: f64) -> Vec<(f64, f64)> {
+        if self.reshapes_at(t) {
+            points = self.reshaped(points, t);
+        }
         let amount = self.offset_amount.value_at(t);
         if amount != 0.0 {
             points = offset_polyline(&points, amount, closed);
@@ -654,20 +707,14 @@ impl ShapeItem {
     /// takes art away, and the box stays the untrimmed one for the reason a
     /// paint stroke's bounds give.
     pub fn bounds(&self, t: f64) -> Option<(f64, f64, f64, f64)> {
-        let mut out: Option<(f64, f64, f64, f64)> = None;
-        for v in &self.path_at(t).vertices {
-            for (x, y) in [
-                v.pos,
-                (v.pos.0 + v.tan_in.0, v.pos.1 + v.tan_in.1),
-                (v.pos.0 + v.tan_out.0, v.pos.1 + v.tan_out.1),
-            ] {
-                out = Some(match out {
-                    None => (x, y, x, y),
-                    Some(b) => (b.0.min(x), b.1.min(y), b.2.max(x), b.3.max(y)),
-                });
-            }
-        }
-        let (x0, y0, x1, y1) = out?;
+        let path = self.path_at(t);
+        let (x0, y0, x1, y1) = box_of(control_points(&path))?;
+        // A twist keeps the art inside the box it was turned in, which can
+        // reach past the path's own where the axis runs at a slant.
+        let (x0, y0, x1, y1) = match &self.twist {
+            Some(twist) => twist.bounds(&path, t).unwrap_or((x0, y0, x1, y1)),
+            None => (x0, y0, x1, y1),
+        };
         // Half the stroke sits outside the path, so the box has to hold it.
         // Inflating **before** the copies are placed is what makes a scaled
         // copy's outline fit too: the copy's transform grows the margin with
@@ -957,7 +1004,7 @@ impl<'a> Art<'a> {
     /// the outline still runs through them. An offset moves it off them and a
     /// combine cuts it elsewhere, and then there are none to name.
     fn own(&self, to_box: &Affine, t: f64) -> Option<Vec<(f64, f64)>> {
-        if self.ring || self.item.offset_amount.value_at(t) != 0.0 {
+        if self.ring || self.item.offset_amount.value_at(t) != 0.0 || self.item.reshapes_at(t) {
             return None;
         }
         let mut own: Vec<(f64, f64)> = self
@@ -1225,6 +1272,167 @@ pub fn flatten_path(path: &BezierPath) -> Vec<(f64, f64)> {
         }
     }
     out
+}
+
+/// How far apart the points of a path being bent are, in layer pixels: close
+/// enough that the bend reads as a curve and not as a run of facets.
+const FINE_STEP: f64 = 2.0;
+
+/// The most points one bent contour is walked into. A path long enough to
+/// need more is walked more coarsely instead, so the cost of a frame stays
+/// bounded whatever size the art is.
+const MAX_FINE_POINTS: f64 = 16_384.0;
+
+/// The path as a polyline fine enough to bend: like [`flatten_path`], but each
+/// cubic is walked in steps of about [`FINE_STEP`] rather than a fixed sixteen.
+fn flatten_fine(path: &BezierPath) -> Vec<(f64, f64)> {
+    let n = path.vertices.len();
+    if n < 2 {
+        return flatten_path(path);
+    }
+    let last = if path.closed { n } else { n - 1 };
+    let segment = |i: usize| {
+        let a = &path.vertices[i];
+        let b = &path.vertices[(i + 1) % n];
+        [
+            a.pos,
+            (a.pos.0 + a.tan_out.0, a.pos.1 + a.tan_out.1),
+            (b.pos.0 + b.tan_in.0, b.pos.1 + b.tan_in.1),
+            b.pos,
+        ]
+    };
+    // The control polygon is never shorter than the curve, so stepping it
+    // keeps the steps no longer than asked.
+    let hull = |c: [(f64, f64); 4]| dist(c[0], c[1]) + dist(c[1], c[2]) + dist(c[2], c[3]);
+    let total: f64 = (0..last).map(|i| hull(segment(i))).sum();
+    let step = FINE_STEP.max(total / MAX_FINE_POINTS);
+    let mut out = vec![path.vertices[0].pos];
+    for i in 0..last {
+        let [p0, p1, p2, p3] = segment(i);
+        let steps = ((hull(segment(i)) / step).ceil() as usize).max(FLATTEN_STEPS);
+        for k in 1..=steps {
+            out.push(cubic_at(p0, p1, p2, p3, k as f64 / steps as f64));
+        }
+    }
+    out
+}
+
+/// `points` with every segment longer than `step` cut into equal pieces no
+/// longer than it, so a straight edge has points along it to move.
+fn densified(points: &[(f64, f64)], step: f64) -> Vec<(f64, f64)> {
+    let total: f64 = points.windows(2).map(|p| dist(p[0], p[1])).sum();
+    let step = step.max(total / MAX_FINE_POINTS);
+    let mut out = Vec::with_capacity(points.len());
+    for pair in points.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        out.push(a);
+        let pieces = (dist(a, b) / step).ceil() as usize;
+        for k in 1..pieces {
+            let f = k as f64 / pieces as f64;
+            out.push((a.0 + (b.0 - a.0) * f, a.1 + (b.1 - a.1) * f));
+        }
+    }
+    if let Some(&last) = points.last() {
+        out.push(last);
+    }
+    out
+}
+
+fn dist(a: (f64, f64), b: (f64, f64)) -> f64 {
+    (b.0 - a.0).hypot(b.1 - a.1)
+}
+
+/// Every vertex of `path` and both its handles' ends: the hull a cubic never
+/// leaves.
+fn control_points(path: &BezierPath) -> impl Iterator<Item = (f64, f64)> + '_ {
+    path.vertices.iter().flat_map(|v| {
+        [
+            v.pos,
+            (v.pos.0 + v.tan_in.0, v.pos.1 + v.tan_in.1),
+            (v.pos.0 + v.tan_out.0, v.pos.1 + v.tan_out.1),
+        ]
+    })
+}
+
+/// The box round `points`, or `None` for none.
+fn box_of(points: impl Iterator<Item = (f64, f64)>) -> Option<(f64, f64, f64, f64)> {
+    points.fold(None, |out, (x, y)| {
+        Some(match out {
+            None => (x, y, x, y),
+            Some(b) => (b.0.min(x), b.1.min(y), b.2.max(x), b.3.max(y)),
+        })
+    })
+}
+
+impl Twist {
+    /// The axis's direction, the direction across it, and the centre.
+    fn frame(&self, t: f64) -> ((f64, f64), (f64, f64), (f64, f64)) {
+        let (sin, cos) = self.axis.value_at(t).to_radians().sin_cos();
+        (
+            (cos, sin),
+            (-sin, cos),
+            (self.centre_x.value_at(t), self.centre_y.value_at(t)),
+        )
+    }
+
+    /// How far `path` reaches back and forward along the axis from the
+    /// centre, and how far across it at most.
+    fn reach(&self, path: &BezierPath, t: f64) -> (f64, f64, f64) {
+        let (a, n, c) = self.frame(t);
+        control_points(path).fold((0.0f64, 0.0f64, 0.0f64), |r, p| {
+            let d = (p.0 - c.0, p.1 - c.1);
+            let along = d.0 * a.0 + d.1 * a.1;
+            let across = d.0 * n.0 + d.1 * n.1;
+            (r.0.min(along), r.1.max(along), r.2.max(across.abs()))
+        })
+    }
+
+    /// Twist `points` in place. Each point keeps its place along the axis;
+    /// its distance across it is what you see of that distance once its
+    /// slice of the shape has turned, which is half a turn from one end of
+    /// `path` to the other, plus the angle.
+    fn apply(&self, points: &mut [(f64, f64)], path: &BezierPath, t: f64) {
+        let (a, n, c) = self.frame(t);
+        let (back, forward, _) = self.reach(path, t);
+        let half = back.abs().max(forward);
+        let per = if half > 1e-9 {
+            std::f64::consts::FRAC_PI_2 / half
+        } else {
+            0.0
+        };
+        let angle = self.angle.value_at(t).to_radians();
+        for p in points {
+            let d = (p.0 - c.0, p.1 - c.1);
+            let along = d.0 * a.0 + d.1 * a.1;
+            let across = (d.0 * n.0 + d.1 * n.1) * (angle + along * per).cos();
+            *p = (
+                c.0 + along * a.0 + across * n.0,
+                c.1 + along * a.1 + across * n.1,
+            );
+        }
+    }
+
+    /// The box the twisted `path` stays inside: its reach along the axis, and
+    /// as far across it either way as it ever reached.
+    fn bounds(&self, path: &BezierPath, t: f64) -> Option<(f64, f64, f64, f64)> {
+        let (a, n, c) = self.frame(t);
+        let (back, forward, across) = self.reach(path, t);
+        let corner = |along: f64, side: f64| {
+            (
+                c.0 + along * a.0 + side * n.0,
+                c.1 + along * a.1 + side * n.1,
+            )
+        };
+        box_of(
+            [
+                corner(back, -across),
+                corner(back, across),
+                corner(forward, -across),
+                corner(forward, across),
+            ]
+            .into_iter(),
+        )
+    }
 }
 
 fn cubic_at(p0: (f64, f64), p1: (f64, f64), p2: (f64, f64), p3: (f64, f64), t: f64) -> (f64, f64) {
