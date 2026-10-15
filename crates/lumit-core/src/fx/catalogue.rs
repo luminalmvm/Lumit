@@ -21,6 +21,7 @@
 
 use super::drivers::{
     audio_level::{AudioLevel, AudioLevelDef},
+    beat_trigger::{BeatTrigger, BeatTriggerDef},
     clone_index::{CloneIndex, CloneIndexDef},
     colour_cycle::{ColourCycle, ColourCycleDef},
     combine::{Combine, CombineDef},
@@ -473,4 +474,7 @@ crate::catalogue![
     CloneIndexDef => CloneIndex,
     // How big another layer's content is, which no other driver reads.
     MeasureDef => Measure,
+    // The music as events rather than a level: markers, beats found in the
+    // sound, or a band rising past a threshold.
+    BeatTriggerDef => BeatTrigger,
 ];

@@ -22,6 +22,7 @@ Add to picked
 Age
 Align to motion
 Align to path
+All
 All edges
 All points
 Alpha
@@ -64,6 +65,7 @@ Backwards
 Bake
 Bake points
 Balance
+Band
 Band 1 Q
 Band 1 frequency
 Band 1 gain
@@ -91,6 +93,8 @@ Band 5 on
 Band 5 type
 Basic
 Beam
+Beat markers
+Beat trigger
 Behind
 Bend
 Between
@@ -261,6 +265,7 @@ Despot black
 Despot white
 Detail
 Detect edge threshold
+Detected beats
 Detector
 Diagonal
 Difference
@@ -337,7 +342,9 @@ End colour
 End thickness
 End x
 End y
+Envelope
 Even
+Events
 Every Nth beat
 Every layer
 Every nth
@@ -458,6 +465,7 @@ Highlight threshold
 Highlight tonal width
 Highlights
 Hold
+Hold off
 Horizontal
 Horizontal amount
 Horizontal axis
@@ -540,6 +548,7 @@ Lens file
 Lens flare
 Lens options
 Level
+Level crossing
 Levels
 Life
 Life jitter
@@ -618,6 +627,7 @@ Midtones
 Min
 Min area
 Minimum
+Minimum gap
 Mirror
 Mirror edges
 Mix
@@ -773,6 +783,7 @@ Producer x
 Producer y
 Propagate
 Pull
+Pulse
 Quality
 Quarter
 RGB split
@@ -1022,6 +1033,7 @@ Tile width
 Time
 Time offset
 Time samples
+Time since last
 Time step
 Tint
 Tint colour

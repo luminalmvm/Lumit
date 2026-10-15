@@ -1,0 +1,75 @@
+---
+title: Beat trigger
+description: "Turns beats and loud moments into events other effects react to."
+---
+
+Beat trigger is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Fires an event on each beat marker, on each beat found in the sound, or each time one band
+of the sound gets louder than **Threshold**. It has four sockets: **Pulse**, 1 on the frame
+of an event and 0 otherwise, **Count**, the events so far, **Envelope**, 1 at each event and
+falling away over **Decay**, and **Time since last**, in seconds.
+
+Every value is worked out from the start of the composition, so scrubbing and exporting give
+the same numbers.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Events** | Dropdown | Beat markers · Detected beats · Level crossing | Beat markers | - |
+| **Source** | Dropdown | This comp · Layer · Clip | This comp | - |
+| **Audio** | Layer | Any layer in the composition | None | - |
+| **Clip** | clip | - | - | - |
+| **Band** | Dropdown | All · Low · High | All | - |
+| **Sensitivity** | Slider | 0 to 100 | 50 | Per cent |
+| **Minimum gap** | Slider | 0 to 1; higher | 0 | Seconds |
+| **Threshold** | Slider | 0 to 1; higher | 0.2 | - |
+| **Hold off** | Slider | 0 to 30; higher | 4 | Frames |
+| **Decay** | Slider | 0.01 to 2; down to 0 and higher | 0.25 | Seconds |
+
+In the Effect Controls panel:
+
+- **Source** is editable while **Events** is anything but Beat markers.
+- **Audio** is editable while **Source** is anything but This comp.
+- **Clip** is editable while **Source** is set to Clip.
+- **Band** is editable while **Events** is anything but Beat markers.
+- **Sensitivity** is editable while **Events** is set to Detected beats.
+- **Minimum gap** is editable while **Events** is set to Detected beats.
+- **Threshold** is editable while **Events** is set to Level crossing.
+- **Hold off** is editable while **Events** is set to Level crossing.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Events**: **Beat markers** fires on the composition's beat markers. **Detected beats**
+  finds beats in the sound, as **Composition ▸ Detect beats** does. **Level crossing** fires when the
+  band's level rises past **Threshold**.
+- **Source**: the sound listened to, the composition's mix, one layer of it or one clip.
+- **Audio**: the layer **Layer** and **Clip** listen to.
+- **Clip**: the clip **Clip** listens to.
+- **Band**: the whole sound, below 200 Hz, or above 4 kHz.
+- **Sensitivity**: how readily a beat is found.
+- **Minimum gap**: of two beats closer than this, the stronger counts.
+- **Threshold**: the level the band has to rise past.
+- **Hold off**: frames after a crossing before the next can fire.
+- **Decay**: how fast **Envelope** falls. It is down to about a third after this long.
+
+## Related
+
+- [Audio level](/effects/drivers/audio-level/)
+- [Flash](/effects/stylise/flash/)
+- [The node graph](/use/nodes/)
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)

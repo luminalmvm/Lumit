@@ -18,18 +18,24 @@ pub fn flash_envelope(trigger: &Property, t: f64, decay_s: f64) -> f64 {
                 if kt > t {
                     break; // keys are sorted; later hits cannot contribute
                 }
-                let fall = if decay_s > 0.0 {
-                    (-(t - kt) / decay_s).exp()
-                } else if t == kt {
-                    1.0
-                } else {
-                    0.0
-                };
-                env = env.max(k.value.clamp(0.0, 1.0) * fall);
+                env = env.max(k.value.clamp(0.0, 1.0) * decayed_hit(t - kt, decay_s));
             }
             env
         }
         Animation::Expression(_) => 0.0,
+    }
+}
+
+/// What one hit is worth `elapsed` seconds after it: 1 on the hit, falling to
+/// 1/e over `decay_s`. With no decay it is the hit's own instant and nothing
+/// after. Flash's Manual hits and the Beat trigger driver's Envelope.
+pub fn decayed_hit(elapsed: f64, decay_s: f64) -> f64 {
+    if decay_s > 0.0 {
+        (-elapsed / decay_s).exp()
+    } else if elapsed == 0.0 {
+        1.0
+    } else {
+        0.0
     }
 }
 

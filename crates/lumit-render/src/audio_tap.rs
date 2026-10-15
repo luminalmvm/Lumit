@@ -38,6 +38,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
+use lumit_audio::beat::BandAnalysis;
 use lumit_core::model::{Composition, Document, LayerKind, ProjectItem};
 use lumit_media::{AudioBuffer, SoundSource};
 use uuid::Uuid;
@@ -134,6 +135,23 @@ fn decoded(sound: &SoundSource) -> Option<Arc<AudioBuffer>> {
     decoded
 }
 
+/// One filtered mix, named by the mix's fingerprint, whether it is heard
+/// before any duck, and the strip and clip it was filtered to.
+type AnalysisKey = (u64, bool, Option<Uuid>, Option<Uuid>);
+
+/// When an analysed mix was last read, and the analysis.
+type Analysed = (u64, Option<Arc<BandAnalysis>>);
+
+/// How many analysed mixes the process keeps. One is a few hundred kilobytes
+/// for a long song, so this is a count rather than a budget, and the least
+/// recently read goes first.
+const ANALYSED_KEEP: usize = 16;
+
+/// Whole mixes read once for the Beat trigger driver, shared across renders as
+/// [`DECODED`] is. `None` is a mix with nothing in it.
+static ANALYSED: LazyLock<Mutex<HashMap<AnalysisKey, Analysed>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 /// The tap over one composition's layers.
 ///
 /// Borrowed rather than owned: it is made where the draw list is built, from
@@ -181,6 +199,72 @@ impl<'a> DocumentAudio<'a> {
             pre_duck: true,
             ..Self::new(doc, comp, t_comp)
         }
+    }
+
+    /// The comp's audio jobs, built once per tap.
+    fn jobs(&self) -> &[crate::export::AudioJob] {
+        self.jobs.get_or_init(|| {
+            let mut jobs = crate::headless::AudioJobsBuilder::new().audio_jobs(self.doc, self.comp);
+            if self.pre_duck {
+                for job in &mut jobs {
+                    job.driven = None;
+                }
+            }
+            jobs
+        })
+    }
+
+    /// The whole of the mix [`Self::strip`] would filter to, analysed once and
+    /// kept.
+    ///
+    /// ponytail: the first frame that asks mixes and analyses the whole comp on
+    /// its own thread, uncancelled, as [`decoded`] decodes. A few hundred
+    /// milliseconds for a song; hand it to the decode-ahead worker if a long
+    /// comp ever holds the first frame for longer than that.
+    fn analysed(&self, layer: Option<Uuid>, clip: Option<Uuid>) -> Option<Arc<BandAnalysis>> {
+        let key = (
+            mix_fingerprint(self.doc, self.comp),
+            self.pre_duck,
+            layer,
+            clip,
+        );
+        if let Ok(mut cache) = ANALYSED.lock() {
+            if let Some((touched, hit)) = cache.get_mut(&key) {
+                *touched = TOUCH.fetch_add(1, Ordering::Relaxed);
+                return hit.clone();
+            }
+        }
+        // The lock is let go for the mixdown, as it is for a decode.
+        let jobs: Vec<crate::export::AudioJob> = self
+            .jobs()
+            .iter()
+            .filter(|job| {
+                layer.is_none_or(|id| job.layer == id) && clip.is_none_or(|id| job.clip == Some(id))
+            })
+            .cloned()
+            .collect();
+        let analysed = (!jobs.is_empty()).then(|| {
+            let stereo = crate::export::mixdown_at(
+                &jobs,
+                TAP_RATE,
+                self.comp.duration.0.to_f64(),
+                lumit_audio::mix::db_to_gain(self.comp.master_volume_db),
+            );
+            let mono = lumit_audio::beat::downmix_stereo(&stereo);
+            Arc::new(lumit_audio::beat::analyse_bands(&mono, TAP_RATE))
+        });
+        if let Ok(mut cache) = ANALYSED.lock() {
+            let touched = TOUCH.fetch_add(1, Ordering::Relaxed);
+            cache.insert(key, (touched, analysed.clone()));
+            while cache.len() > ANALYSED_KEEP {
+                let Some(oldest) = cache.iter().min_by_key(|(_, (t, _))| *t).map(|(k, _)| *k)
+                else {
+                    break;
+                };
+                cache.remove(&oldest);
+            }
+        }
+        analysed
     }
 
     /// The file `layer` plays, if it is a footage layer whose item is still in
@@ -283,15 +367,7 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
         if window == 0 {
             return None;
         }
-        let jobs = self.jobs.get_or_init(|| {
-            let mut jobs = crate::headless::AudioJobsBuilder::new().audio_jobs(self.doc, self.comp);
-            if self.pre_duck {
-                for job in &mut jobs {
-                    job.driven = None;
-                }
-            }
-            jobs
-        });
+        let jobs = self.jobs();
         let decoded: Vec<(Arc<lumit_media::AudioBuffer>, &crate::export::AudioJob)> = jobs
             .iter()
             .filter(|job| {
@@ -341,6 +417,52 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
             ),
         ));
         Some(rate)
+    }
+
+    fn onsets(
+        &self,
+        layer: Option<Uuid>,
+        clip: Option<Uuid>,
+        band: u32,
+        until: f64,
+        sensitivity: &dyn Fn(f64) -> f64,
+        out: &mut Vec<(f64, f32)>,
+    ) -> bool {
+        let Some(analysed) = self.analysed(layer, clip) else {
+            return false;
+        };
+        // The sensitivity the Beats panel offers, read at each moment.
+        let delta = |t: f64| {
+            let percent = sensitivity(t).clamp(0.0, 100.0).round() as u8;
+            lumit_audio::beat::delta_from_sensitivity(percent)
+        };
+        let found = analysed.onsets(band as usize, until, &delta);
+        out.extend(found.iter().map(|o| (o.time, o.confidence)));
+        true
+    }
+
+    fn levels(
+        &self,
+        layer: Option<Uuid>,
+        clip: Option<Uuid>,
+        band: u32,
+        until: f64,
+        out: &mut Vec<(f64, f32)>,
+    ) -> bool {
+        let Some(analysed) = self.analysed(layer, clip) else {
+            return false;
+        };
+        let Some(level) = analysed.level.get(band as usize) else {
+            return false;
+        };
+        out.extend(
+            level
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (analysed.step_time(i), *v))
+                .take_while(|(t, _)| *t <= until),
+        );
+        true
     }
 }
 

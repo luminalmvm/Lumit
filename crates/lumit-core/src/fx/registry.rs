@@ -238,6 +238,41 @@ pub trait AudioTap: Sync {
     fn mix(&self, half: f64, out: &mut Vec<f32>) -> Option<f64> {
         self.strip(None, None, half, out)
     }
+
+    /// The onsets in the sound [`Self::strip`] would filter to, as comp
+    /// seconds and a 0 to 1 confidence, in time order up to `until`. `band` is
+    /// 0 for the whole sound, 1 for the low band and 2 for the top. Each one
+    /// is picked at the sensitivity, 0 to 100, that `sensitivity` gives at its
+    /// own time. The whole sound is read once and kept, so asking again each
+    /// frame costs the picking and nothing else. `false` where there is no
+    /// sound.
+    fn onsets(
+        &self,
+        layer: Option<uuid::Uuid>,
+        clip: Option<uuid::Uuid>,
+        band: u32,
+        until: f64,
+        sensitivity: &dyn Fn(f64) -> f64,
+        out: &mut Vec<(f64, f32)>,
+    ) -> bool {
+        let _ = (layer, clip, band, until, sensitivity, out);
+        false
+    }
+
+    /// The level of `band` in the same sound, a step at a time up to `until`:
+    /// each step's comp seconds and its RMS. Read once and kept, as
+    /// [`Self::onsets`] is. `false` where there is no sound.
+    fn levels(
+        &self,
+        layer: Option<uuid::Uuid>,
+        clip: Option<uuid::Uuid>,
+        band: u32,
+        until: f64,
+        out: &mut Vec<(f64, f32)>,
+    ) -> bool {
+        let _ = (layer, clip, band, until, out);
+        false
+    }
 }
 
 /// One effect's behaviour: everything the engine needs of it that is not the
