@@ -2802,6 +2802,29 @@ fn comp_walk(
                 let window = ((longest / dt).ceil() as i64).saturating_add(1);
                 let mut schedule =
                     lumit_core::fx::points::Schedule::scan(dt, upto, window, &rate_at);
+                // Bursts read their rows over the window, and Trigger
+                // follows its wire there: the driver walk reads the same.
+                let row_at = |id: &str, lt: f64| -> f64 {
+                    let wired = owner.filter(|_| id == "trigger").and_then(|layer| {
+                        lumit_core::fx::drivers::driven_param(
+                            &layer.graph,
+                            e.id,
+                            id,
+                            lt,
+                            context.clone(),
+                            Some(&audio),
+                        )
+                    });
+                    wired.unwrap_or_else(|| {
+                        e.float_at_with_context(id, lt, context.clone())
+                            .unwrap_or(0.0)
+                    })
+                };
+                lumit_core::fx::effects::particulate::Particulate::add_bursts(
+                    e,
+                    &mut schedule,
+                    &row_at,
+                );
                 schedule.trim_to_newest(lumit_gpu::fx::MAX_CANDIDATES);
                 lumit_core::fx::points::PointsSchedule {
                     schedule,

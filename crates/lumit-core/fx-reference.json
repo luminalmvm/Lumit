@@ -9879,6 +9879,13 @@
           "self_default": true
         },
         {
+          "id": "density_layer",
+          "label": "Density layer",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
           "id": "emit_rate",
           "label": "Emit rate",
           "kind": "float",
@@ -9946,6 +9953,50 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "burst",
+          "label": "Burst",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Off",
+            "Once at start",
+            "Every N frames",
+            "On trigger"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "burst_count",
+          "label": "Burst count",
+          "kind": "float",
+          "unit": "raw",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 1000.0,
+          "hard_min": 0.0,
+          "hard_max": 1000000.0
+        },
+        {
+          "id": "burst_interval",
+          "label": "Burst interval",
+          "kind": "float",
+          "unit": "frames",
+          "default": 24.0,
+          "slider_min": 1.0,
+          "slider_max": 120.0,
+          "hard_min": 1.0
+        },
+        {
+          "id": "trigger",
+          "label": "Trigger",
+          "kind": "float",
+          "unit": "raw",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 1.0
         },
         {
           "id": "life",
@@ -10085,6 +10136,65 @@
           "default": false
         },
         {
+          "id": "size_by",
+          "label": "Size by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Age",
+            "Speed",
+            "Random"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "opacity_by",
+          "label": "Opacity by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Age",
+            "Speed",
+            "Random"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "colour_by",
+          "label": "Colour by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Age",
+            "Speed",
+            "Random"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "speed_min",
+          "label": "Speed min",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "speed_max",
+          "label": "Speed max",
+          "kind": "float",
+          "unit": "px",
+          "default": 200.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "gravity",
           "label": "Gravity",
           "kind": "float",
@@ -10161,6 +10271,29 @@
           "hard_min": 0.0
         },
         {
+          "id": "edge",
+          "label": "Edge",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "None",
+            "Kill",
+            "Wrap"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "edge_margin",
+          "label": "Edge margin",
+          "kind": "float",
+          "unit": "px",
+          "default": 20.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "mode",
           "label": "Mode",
           "kind": "choice",
@@ -10200,6 +10333,42 @@
           "slider_min": 0.0,
           "slider_max": 0.1,
           "hard_min": 0.0
+        },
+        {
+          "id": "particle_blend",
+          "label": "Particle blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
         },
         {
           "id": "max_particles",
@@ -10309,6 +10478,7 @@
             "emitter_angle",
             "path_from",
             "mask_path",
+            "density_layer",
             "emit_rate",
             "direction",
             "direction_z",
@@ -10316,6 +10486,16 @@
             "spread_z",
             "initial_speed",
             "speed_jitter"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Bursts",
+          "params": [
+            "burst",
+            "burst_count",
+            "burst_interval",
+            "trigger"
           ],
           "collapsed": false
         },
@@ -10338,6 +10518,17 @@
           "collapsed": false
         },
         {
+          "label": "Variation",
+          "params": [
+            "size_by",
+            "opacity_by",
+            "colour_by",
+            "speed_min",
+            "speed_max"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Forces",
           "params": [
             "gravity",
@@ -10352,12 +10543,21 @@
           "collapsed": false
         },
         {
+          "label": "Edges",
+          "params": [
+            "edge",
+            "edge_margin"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Render",
           "params": [
             "mode",
             "feather",
             "sprite_layer",
             "streak_length",
+            "particle_blend",
             "max_particles",
             "seed"
           ],
@@ -10382,6 +10582,30 @@
           "on": "mode",
           "cond": "choice_is",
           "value": 2
+        },
+        {
+          "param": "burst_count",
+          "on": "burst",
+          "cond": "choice_is_not",
+          "value": 0
+        },
+        {
+          "param": "burst_interval",
+          "on": "burst",
+          "cond": "choice_is",
+          "value": 2
+        },
+        {
+          "param": "trigger",
+          "on": "burst",
+          "cond": "choice_is",
+          "value": 3
+        },
+        {
+          "param": "edge_margin",
+          "on": "edge",
+          "cond": "choice_is_not",
+          "value": 0
         },
         {
           "param": "mask_path",

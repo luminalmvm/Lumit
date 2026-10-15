@@ -43,9 +43,17 @@ import 'controls.dart';
 /// A hue/saturation/value triple: `h` in [0, 360), `s` and `v` in [0, 1].
 typedef Hsv = (double h, double s, double v);
 
-/// Convert HSV to an opaque RGB colour. Thin wrapper over the standard
-/// sextant formula so tests can pin an exact conversion table.
+/// Convert HSV to an opaque RGB colour. Thin wrapper over [hsvToChannels] so
+/// tests can pin an exact conversion table.
 Color hsvToRgb(double h, double s, double v) {
+  final (r, g, b) = hsvToChannels(h, s, v);
+  int ch(double f) => (f * 255).round().clamp(0, 255);
+  return documentColour(ch(r), ch(g), ch(b), 0xff);
+}
+
+/// HSV to red, green and blue in 0-1, unrounded, since near black one byte is
+/// a large share of the saturation and the ring would jump off the pointer.
+(double, double, double) hsvToChannels(double h, double s, double v) {
   var hue = h % 360;
   if (hue < 0) hue += 360;
   final c = v * s;
@@ -77,8 +85,7 @@ Color hsvToRgb(double h, double s, double v) {
     gg = 0;
     bb = x;
   }
-  int ch(double f) => ((f + m) * 255).round().clamp(0, 255);
-  return documentColour(ch(rr), ch(gg), ch(bb), 0xff);
+  return (rr + m, gg + m, bb + m);
 }
 
 /// Convert an RGB colour to HSV. For greys (`delta == 0`) the hue is 0 —
@@ -424,15 +431,11 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
   /// white has no place on a 0–1 value dial.
   late PickedColour _colour;
 
-  /// The hue, carried separately: it is undefined for a grey, so rebuilding it
-  /// from the channels would swing the square to red the moment saturation
-  /// reached zero.
-  late double _hue;
-
-  /// The saturation, carried for the same reason: it is undefined for black,
-  /// so dragging the square down to the bottom edge threw the ring to the
-  /// left-hand corner.
-  late double _sat;
+  /// Where the square and the strip put their rings, carried rather than
+  /// worked back out of the channels, so a ring stays exactly where it was
+  /// put. The hue is undefined for a grey and the saturation for black, so
+  /// rebuilding them would throw the ring to red or to the left-hand corner.
+  late Hsv _ring;
 
   late final TextEditingController _hexController;
   final FocusNode _hexFocus = FocusNode();
@@ -447,9 +450,7 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
     super.initState();
     _shelf = widget.shelf?.swatches ?? const [];
     _colour = widget.initial;
-    final hsv = _colour.hsv;
-    _hue = hsv.$1;
-    _sat = hsv.$2;
+    _ring = _colour.hsv;
     _hexController = TextEditingController(text: formatHex(_colour.clipped));
     _hexFocus.addListener(() {
       if (!_hexFocus.hasFocus) _commitHex();
@@ -467,13 +468,11 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
     super.dispose();
   }
 
-  /// The colour as the square and the strip see it, with the hue and, at
-  /// black, the saturation it has been carrying. Editing them multiplies the
-  /// colour's peak back in, so dragging the square about does not quietly
-  /// throw away a value above white.
-  Hsv get _hsv {
-    final hsv = _colour.hsv;
-    return (_hue, hsv.$3 > 0 ? hsv.$2 : _sat, hsv.$3);
+  /// The ring for a colour arriving whole, keeping the carried hue for a grey
+  /// and the carried saturation for black.
+  Hsv _ringFor(PickedColour colour) {
+    final (h, s, v) = colour.hsv;
+    return (s > 0 ? h : _ring.$1, v > 0 ? s : _ring.$2, v);
   }
 
   /// Push the current colour back into the hex field unless the user is
@@ -484,16 +483,14 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
 
   /// Take a new colour and show it everywhere: the square, the strip, the
   /// numbers, the hex box — and the thing being coloured.
-  void _apply(PickedColour next,
-      {required bool settled, double? hue, double? sat}) {
+  void _apply(PickedColour next, {required bool settled, required Hsv ring}) {
     final clamped = PickedColour(
       next.r.clamp(widget.min, widget.max),
       next.g.clamp(widget.min, widget.max),
       next.b.clamp(widget.min, widget.max),
     );
     setState(() {
-      if (hue != null) _hue = hue;
-      if (sat != null) _sat = sat;
+      _ring = ring;
       _colour = clamped;
       _syncHex();
     });
@@ -504,17 +501,16 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
   /// whatever the colour was over-range by.
   void _fromHsv(double h, double s, double v, {required bool settled}) {
     final gain = _colour.gain;
-    final base = hsvToRgb(h, s, v);
+    final (r, g, b) = hsvToChannels(h, s, v);
     _apply(
-      PickedColour(base.r * gain, base.g * gain, base.b * gain),
+      PickedColour(r * gain, g * gain, b * gain),
       settled: settled,
-      hue: h,
-      sat: s,
+      ring: (h, s, v),
     );
   }
 
   void _setSV(Offset local, {required bool settled}) {
-    final hsv = _hsv;
+    final hsv = _ring;
     _fromHsv(
       hsv.$1,
       (local.dx / _pickerWidth).clamp(0.0, 1.0),
@@ -524,7 +520,7 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
   }
 
   void _setHue(Offset local, {required bool settled}) {
-    final hsv = _hsv;
+    final hsv = _ring;
     _fromHsv(
       (local.dx / _pickerWidth).clamp(0.0, 1.0) * 360,
       hsv.$2,
@@ -534,15 +530,8 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
   }
 
   /// A colour arriving whole — a preset, a hex, Cancel's restore.
-  void _setColour(PickedColour colour, {required bool settled}) {
-    final hsv = colour.hsv;
-    // Keep the chosen hue when the pick is a pure grey (hue undefined) — the
-    // square would otherwise jump to red the moment saturation reached zero.
-    _apply(colour,
-        settled: settled,
-        hue: hsv.$2 > 0 ? hsv.$1 : _hue,
-        sat: hsv.$3 > 0 ? hsv.$2 : _sat);
-  }
+  void _setColour(PickedColour colour, {required bool settled}) =>
+      _apply(colour, settled: settled, ring: _ringFor(colour));
 
   /// One of the three channel numbers, in the scale being edited.
   void _setChannel(int index, double value, {required bool settled}) {
@@ -562,11 +551,9 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
   void _onHexTyped(String text) {
     final parsed = parseHex(text);
     if (parsed == null) return;
-    final hsv = rgbToHsv(parsed);
     setState(() {
-      if (hsv.$2 > 0) _hue = hsv.$1;
-      if (hsv.$3 > 0) _sat = hsv.$2;
       _colour = PickedColour.of(parsed);
+      _ring = _ringFor(_colour);
     });
     widget.onPreview(_colour);
   }
@@ -589,7 +576,7 @@ class _ColourPickerBodyState extends State<_ColourPickerBody> {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final bytes = widget.scale == ColourScale.bytes;
-    final hsv = _hsv;
+    final hsv = _ring;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,

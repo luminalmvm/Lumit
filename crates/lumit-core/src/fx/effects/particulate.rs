@@ -50,9 +50,9 @@ const fn group(label: &'static str, params: &'static [&'static str]) -> ParamGro
     }
 }
 
-/// The four kickers particulate.md §2 lists its controls under. None starts
-/// closed: every one of them holds a control someone reaches for on the first
-/// day.
+/// The kickers particulate.md §2 lists its controls under, and the ones added
+/// since. None starts closed: every one of them holds a control someone
+/// reaches for on the first day.
 pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
     group(
         "Emitter",
@@ -67,6 +67,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "emitter_angle",
             "path_from",
             "mask_path",
+            "density_layer",
             "emit_rate",
             "direction",
             "direction_z",
@@ -75,6 +76,10 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "initial_speed",
             "speed_jitter",
         ],
+    ),
+    group(
+        "Bursts",
+        &["burst", "burst_count", "burst_interval", "trigger"],
     ),
     group(
         "Particle",
@@ -94,6 +99,16 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
         ],
     ),
     group(
+        "Variation",
+        &[
+            "size_by",
+            "opacity_by",
+            "colour_by",
+            "speed_min",
+            "speed_max",
+        ],
+    ),
+    group(
         "Forces",
         &[
             "gravity",
@@ -106,6 +121,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "turbulence_speed",
         ],
     ),
+    group("Edges", &["edge", "edge_margin"]),
     group(
         "Render",
         &[
@@ -113,6 +129,7 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "feather",
             "sprite_layer",
             "streak_length",
+            "particle_blend",
             "max_particles",
             "seed",
         ],
@@ -142,6 +159,27 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         param: "streak_length",
         on: "mode",
         cond: EnabledCond::ChoiceIs(2),
+    },
+    // Each burst row means something only in the bursts that read it.
+    EnabledWhen {
+        param: "burst_count",
+        on: "burst",
+        cond: EnabledCond::ChoiceIsNot(0),
+    },
+    EnabledWhen {
+        param: "burst_interval",
+        on: "burst",
+        cond: EnabledCond::ChoiceIs(2),
+    },
+    EnabledWhen {
+        param: "trigger",
+        on: "burst",
+        cond: EnabledCond::ChoiceIs(3),
+    },
+    EnabledWhen {
+        param: "edge_margin",
+        on: "edge",
+        cond: EnabledCond::ChoiceIsNot(0),
     },
     // Following the shape leaves no mask to choose.
     EnabledWhen {
@@ -226,6 +264,11 @@ pub struct Particulate {
     #[mask_path(label = "Mask path")]
     pub mask_path: bool,
 
+    /// A picture births follow: a particle is born where it is bright, inside
+    /// the emitter's shape. Unset, births fill the shape evenly as before.
+    #[layer(label = "Density layer")]
+    pub density_layer: bool,
+
     /// Births per second of layer time. Its integral **is** the birth schedule
     /// (points.rs), which is what makes a keyframed or driven rate an ordinary
     /// control rather than a new mechanism.
@@ -291,6 +334,39 @@ pub struct Particulate {
         unit = Percent
     )]
     pub speed_jitter: f32,
+
+    /// Bursts beside the steady flow. Off is the steady flow alone, as
+    /// every project made before bursts existed reads.
+    #[choice(label = "Burst", options = *points::Burst::OPTIONS, default = 0)]
+    pub burst: u32,
+
+    /// How many particles one burst throws. Read at the frame it goes off.
+    #[slider(
+        label = "Burst count",
+        min = 0.0,
+        max = 1000.0,
+        default = 100.0,
+        hard_min = 0.0,
+        hard_max = 1_000_000.0,
+        unit = Raw
+    )]
+    pub burst_count: f32,
+
+    /// Every N frames' N, counted from the layer's first frame.
+    #[slider(
+        label = "Burst interval",
+        min = 1.0,
+        max = 120.0,
+        default = 24.0,
+        hard_min = 1.0,
+        unit = Frames
+    )]
+    pub burst_interval: f32,
+
+    /// On trigger bursts once each time this rises past a half. A beat
+    /// driver wired here puts out 1 on each beat and 0 between.
+    #[slider(min = 0.0, max = 1.0, default = 0.0, unit = Raw)]
+    pub trigger: f32,
 
     /// How long a particle lasts, seconds.
     #[slider(min = 0.1, max = 10.0, default = 2.0, hard_min = 0.0, unit = Seconds)]
@@ -372,6 +448,43 @@ pub struct Particulate {
     #[toggle(label = "Align to motion", default = false)]
     pub align_to_motion: bool,
 
+    /// What runs Size over life: the particle's age, its speed, or a number
+    /// of its own. Age is how every project made before this reads.
+    #[choice(label = "Size by", options = *points::Drive::OPTIONS, default = 0)]
+    pub size_by: u32,
+
+    /// What runs Opacity over life; see [`size_by`](Self::size_by).
+    #[choice(label = "Opacity by", options = *points::Drive::OPTIONS, default = 0)]
+    pub opacity_by: u32,
+
+    /// What runs the blend from Colour to End colour; see
+    /// [`size_by`](Self::size_by).
+    #[choice(label = "Colour by", options = *points::Drive::OPTIONS, default = 0)]
+    pub colour_by: u32,
+
+    /// The speed a Speed drive reads as the left end of its curve, px@comp
+    /// per second.
+    #[slider(
+        label = "Speed min",
+        min = 0.0,
+        max = 2000.0,
+        default = 0.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub speed_min: f32,
+
+    /// The speed a Speed drive reads as the right end, px@comp per second.
+    #[slider(
+        label = "Speed max",
+        min = 0.0,
+        max = 2000.0,
+        default = 200.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub speed_max: f32,
+
     /// px@comp per second², positive down.
     #[slider(min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub gravity: f32,
@@ -429,6 +542,22 @@ pub struct Particulate {
     )]
     pub turbulence_speed: f32,
 
+    /// What a particle does at the edge of the layer's frame. None, the
+    /// default, lets it carry on out of sight as before.
+    #[choice(label = "Edge", options = *points::Edge::OPTIONS, default = 0)]
+    pub edge: u32,
+
+    /// How far past the frame a particle goes before Edge acts, px@comp.
+    #[slider(
+        label = "Edge margin",
+        min = 0.0,
+        max = 500.0,
+        default = 20.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub edge_margin: f32,
+
     /// What a particle is drawn as. All three are the same instanced quad with
     /// a different coverage inside it ([`points::RenderMode`]).
     ///
@@ -466,6 +595,18 @@ pub struct Particulate {
         unit = Seconds
     )]
     pub streak_length: f32,
+
+    /// How particles combine with each other where they overlap, by the
+    /// layer blend modes verbatim. They then go over the picture together,
+    /// as Normal ones always did. An index into
+    /// [`BlendMode::ALL`](crate::model::BlendMode::ALL).
+    #[choice(
+        label = "Particle blend",
+        options = *crate::model::BlendMode::NAMES,
+        default = 0,
+        dividers_after = crate::fx::CHOICE_UNGROUPED
+    )]
+    pub particle_blend: u32,
 
     /// **The budget dial**: the most particles that may be live at
     /// once, and the peak scratch the governor grants against. Over budget the
@@ -549,6 +690,10 @@ impl Particulate {
                 rotation_jitter_deg: self.rotation_jitter.clamp(0.0, 360.0),
                 spin_deg: self.spin,
                 align_to_motion: self.align_to_motion,
+                size_by: points::Drive::from_code(self.size_by),
+                opacity_by: points::Drive::from_code(self.opacity_by),
+                colour_by: points::Drive::from_code(self.colour_by),
+                speed_range: [self.speed_min.max(0.0), self.speed_max.max(0.0)],
             },
             forces: Forces {
                 gravity: self.gravity,
@@ -565,6 +710,10 @@ impl Particulate {
             // the caller that does — the renderer, or the driver walk — pins it
             // with `PointsParams::projected`.
             projection: points::Projection::FLAT,
+            edge: points::Edge::from_code(self.edge),
+            margin: self.edge_margin.max(0.0),
+            // The picture's size is the caller's to say, as the camera is.
+            frame: [0.0; 2],
         }
     }
 
@@ -588,6 +737,28 @@ impl Particulate {
             },
             mix: (self.mix / 100.0).clamp(0.0, 1.0),
         }
+    }
+
+    /// Add `inst`'s bursts to `sched`, after the scan and before any trim.
+    ///
+    /// `at` answers one of the instance's rows at a layer time, the way the
+    /// scan reads Emit rate. Trigger is the one a wire usually drives, so the
+    /// caller that holds the layer's graph answers it with the wire's value.
+    pub fn add_bursts(
+        inst: &crate::model::EffectInstance,
+        sched: &mut points::Schedule,
+        at: &dyn Fn(&str, f64) -> f64,
+    ) {
+        let burst = match inst.param("burst") {
+            Some(crate::model::EffectValue::Choice(c)) => points::Burst::from_code(*c),
+            _ => points::Burst::Off,
+        };
+        sched.add_bursts(
+            burst,
+            &|lt| at("burst_count", lt),
+            &|lt| at("burst_interval", lt),
+            &|lt| at("trigger", lt),
+        );
     }
 
     /// How many frames back a particle born then could still be alive now —
