@@ -168,7 +168,6 @@ pub const CLONE_GROUPS: &[ParamGroup] = &[
             "clone_layer_4",
             "choose_by",
             "choose_name",
-            "seed",
         ],
         collapsed: true,
         visible_when: None,
@@ -314,10 +313,6 @@ pub struct CloneToPoints {
     /// or one of the `@` names. Empty is the number it carries.
     #[text(label = "Name", default = "")]
     pub choose_name: ShortText,
-
-    /// Which dice a Random choice of layer and a Random time offset roll.
-    #[seed]
-    pub seed: u32,
 
     /// Shows each stamp its layer at another moment, so one animated layer
     /// becomes a cascade. In order steps back once a stamp, Random shuffles
@@ -489,6 +484,10 @@ pub struct CloneToPoints {
         unit = Raw
     )]
     pub max_clones: i32,
+
+    /// Which dice a Random choice of layer and a Random time offset roll.
+    #[seed]
+    pub seed: u32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     #[slider(

@@ -57,8 +57,8 @@ pub const ALONG_GROUPS: &[ParamGroup] = &[
         ],
         None,
     ),
-    group("", &["seed"], Some(("placement", &[1]))),
     group("Point", &["size", "feather", "colour"], None),
+    group("", &["seed"], Some(("placement", &[1]))),
 ];
 
 const fn grey(param: &'static str) -> EnabledWhen {
@@ -194,10 +194,6 @@ pub struct PointsAlongPath {
     #[toggle(label = "Align to path", default = true)]
     pub align: bool,
 
-    /// Which random places. The reseed button rolls it.
-    #[seed]
-    pub seed: u32,
-
     /// The diameter of the disc a point is drawn as, px@comp.
     #[slider(min = 0.0, max = 200.0, default = 8.0, hard_min = 0.0, unit = Px)]
     pub size: f32,
@@ -217,6 +213,10 @@ pub struct PointsAlongPath {
     /// useful under a glow.
     #[colour(default = [1.0, 1.0, 1.0, 1.0], max = 4.0)]
     pub colour: [f32; 4],
+
+    /// Which random places. The reseed button rolls it.
+    #[seed]
+    pub seed: u32,
 
     /// The Mix every effect ends with, per cent. At 0 the stream is still
     /// emitted and nothing is drawn.

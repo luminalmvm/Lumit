@@ -126,7 +126,7 @@ pub const FLOW_GROUPS: &[ParamGroup] = &[
     ),
     group(
         "",
-        &["noise_scale", "noise_speed", "seed"],
+        &["noise_scale", "noise_speed"],
         Some(("field", &[CURL, COMBINED])),
     ),
     group(
@@ -137,6 +137,7 @@ pub const FLOW_GROUPS: &[ParamGroup] = &[
     group("", &["direction"], Some(("field", &[WIND, COMBINED]))),
     group("Time", &["clock", "steps"], None),
     group("Point", &["feather"], None),
+    group("", &["seed"], Some(("field", &[CURL, COMBINED]))),
 ];
 
 pub const FLOW_ENABLED_WHEN: &[EnabledWhen] = &[APPLY_GROUP_WHEN, APPLY_THRESHOLD_WHEN];
@@ -258,10 +259,6 @@ pub struct FlowPoints {
     )]
     pub noise_speed: f32,
 
-    /// Which noise.
-    #[seed]
-    pub seed: u32,
-
     /// The middle of a Vortex or a Pull, px@comp.
     #[slider(label = "Centre X", min = 0.0, max = 3840.0, default = 960.0, unit = Px)]
     pub centre_x: f32,
@@ -319,6 +316,10 @@ pub struct FlowPoints {
         unit = Percent
     )]
     pub feather: f32,
+
+    /// Which noise.
+    #[seed]
+    pub seed: u32,
 
     /// The Mix every effect ends with, per cent. At 0 the stream is still
     /// handed on and nothing is drawn.
