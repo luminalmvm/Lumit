@@ -114,7 +114,6 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
             "sprite_layer",
             "streak_length",
             "max_particles",
-            "seed",
         ],
     ),
 ];

@@ -8448,12 +8448,6 @@
           "slider_max": 100.0
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "amplitude",
           "label": "Amplitude",
           "kind": "float",
@@ -8551,6 +8545,12 @@
           "kind": "bool",
           "unit": "raw",
           "default": true
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
         },
         {
           "id": "mix",
@@ -9437,12 +9437,6 @@
           "hard_min": 0.0
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "opacity",
           "label": "Opacity",
           "kind": "float",
@@ -9459,6 +9453,12 @@
           "kind": "bool",
           "unit": "raw",
           "default": true
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
         },
         {
           "id": "mix",
@@ -10331,8 +10331,7 @@
             "feather",
             "sprite_layer",
             "streak_length",
-            "max_particles",
-            "seed"
+            "max_particles"
           ],
           "collapsed": false
         }
@@ -10537,12 +10536,6 @@
           "hard_min": 0.0
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "start_angle",
           "label": "Start angle",
           "kind": "angle",
@@ -10616,6 +10609,12 @@
           "slider_max": 200000.0,
           "hard_min": 1.0,
           "hard_max": 1000000.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
         },
         {
           "id": "mix",
@@ -10713,8 +10712,7 @@
             "position_z",
             "jitter_x",
             "jitter_y",
-            "jitter_z",
-            "seed"
+            "jitter_z"
           ],
           "collapsed": false
         },
@@ -10839,12 +10837,6 @@
           "hard_min": 0.0
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "size",
           "label": "Size",
           "kind": "float",
@@ -10889,6 +10881,12 @@
           "slider_max": 200000.0,
           "hard_min": 1.0,
           "hard_max": 1000000.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
         },
         {
           "id": "mix",
@@ -10956,8 +10954,7 @@
         {
           "label": "Scatter",
           "params": [
-            "density",
-            "seed"
+            "density"
           ],
           "collapsed": false
         },
@@ -11015,12 +11012,6 @@
           "hard_min": 0.0
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "size",
           "label": "Size",
           "kind": "float",
@@ -11065,6 +11056,12 @@
           "slider_max": 200000.0,
           "hard_min": 1.0,
           "hard_max": 1000000.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
         },
         {
           "id": "mix",
@@ -11149,8 +11146,7 @@
           "params": [
             "source",
             "threshold",
-            "density",
-            "seed"
+            "density"
           ],
           "collapsed": false
         },
@@ -11264,12 +11260,6 @@
           "default": true
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "size",
           "label": "Size",
           "kind": "float",
@@ -11303,6 +11293,12 @@
           ],
           "slider_min": 0.0,
           "slider_max": 4.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
         },
         {
           "id": "mix",
@@ -11398,6 +11394,15 @@
           "collapsed": false
         },
         {
+          "label": "Point",
+          "params": [
+            "size",
+            "feather",
+            "colour"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "",
           "params": [
             "seed"
@@ -11409,15 +11414,6 @@
               1
             ]
           }
-        },
-        {
-          "label": "Point",
-          "params": [
-            "size",
-            "feather",
-            "colour"
-          ],
-          "collapsed": false
         }
       ],
       "enabled_when": [
@@ -12037,12 +12033,6 @@
           "default": ""
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "time_offset",
           "label": "Time offset",
           "kind": "choice",
@@ -12229,6 +12219,12 @@
           "hard_max": 1000000.0
         },
         {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",
@@ -12313,8 +12309,7 @@
             "clone_layer_3",
             "clone_layer_4",
             "choose_by",
-            "choose_name",
-            "seed"
+            "choose_name"
           ],
           "collapsed": true
         },
@@ -13389,12 +13384,6 @@
           ]
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "noise_scale",
           "label": "Noise scale",
           "kind": "float",
@@ -13785,6 +13774,12 @@
           "hard_max": 100.0
         },
         {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",
@@ -13869,20 +13864,6 @@
             "curve"
           ],
           "collapsed": false
-        },
-        {
-          "label": "",
-          "params": [
-            "seed"
-          ],
-          "collapsed": false,
-          "visible_when": {
-            "param": "pattern",
-            "values": [
-              1,
-              2
-            ]
-          }
         },
         {
           "label": "",
@@ -14058,6 +14039,20 @@
             "feather"
           ],
           "collapsed": false
+        },
+        {
+          "label": "",
+          "params": [
+            "seed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              1,
+              2
+            ]
+          }
         }
       ],
       "enabled_when": [
@@ -14232,12 +14227,6 @@
           "default": false
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "noise_scale",
           "label": "Noise scale",
           "kind": "float",
@@ -14393,6 +14382,12 @@
           "hard_max": 100.0
         },
         {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
+        },
+        {
           "id": "mix",
           "label": "Mix",
           "kind": "float",
@@ -14479,20 +14474,6 @@
             "invert"
           ],
           "collapsed": false
-        },
-        {
-          "label": "",
-          "params": [
-            "seed"
-          ],
-          "collapsed": false,
-          "visible_when": {
-            "param": "pattern",
-            "values": [
-              1,
-              2
-            ]
-          }
         },
         {
           "label": "",
@@ -14639,6 +14620,20 @@
             "feather"
           ],
           "collapsed": false
+        },
+        {
+          "label": "",
+          "params": [
+            "seed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "pattern",
+            "values": [
+              1,
+              2
+            ]
+          }
         }
       ],
       "enabled_when": [
@@ -15602,12 +15597,6 @@
           "hard_min": 0.0
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "centre_x",
           "label": "Centre X",
           "kind": "float",
@@ -15692,6 +15681,12 @@
           "slider_max": 100.0,
           "hard_min": 0.0,
           "hard_max": 100.0
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
         },
         {
           "id": "mix",
@@ -15799,8 +15794,7 @@
           "label": "",
           "params": [
             "noise_scale",
-            "noise_speed",
-            "seed"
+            "noise_speed"
           ],
           "collapsed": false,
           "visible_when": {
@@ -15857,6 +15851,20 @@
             "feather"
           ],
           "collapsed": false
+        },
+        {
+          "label": "",
+          "params": [
+            "seed"
+          ],
+          "collapsed": false,
+          "visible_when": {
+            "param": "field",
+            "values": [
+              0,
+              4
+            ]
+          }
         }
       ],
       "enabled_when": [
@@ -20787,12 +20795,6 @@
           "hard_max": 2.0
         },
         {
-          "id": "seed",
-          "label": "Seed",
-          "kind": "seed",
-          "unit": "raw"
-        },
-        {
           "id": "dust",
           "label": "Dust",
           "kind": "float",
@@ -21003,6 +21005,12 @@
             "Dirt alone"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "seed",
+          "label": "Seed",
+          "kind": "seed",
+          "unit": "raw"
         },
         {
           "id": "mix",

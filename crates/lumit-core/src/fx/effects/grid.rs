@@ -58,7 +58,6 @@ pub const GRID_GROUPS: &[ParamGroup] = &[
             "jitter_x",
             "jitter_y",
             "jitter_z",
-            "seed",
         ],
     ),
     // The rows only Rings reads.
@@ -320,10 +319,6 @@ pub struct Grid {
     )]
     pub jitter_z: f32,
 
-    /// Which jitter (§2.4). The reseed button rolls it.
-    #[seed]
-    pub seed: u32,
-
     /// Where round a ring its first point sits, degrees.
     #[dial(label = "Start angle", default = 0.0)]
     pub start_angle: f32,
@@ -389,6 +384,10 @@ pub struct Grid {
         unit = Raw
     )]
     pub max_points: i32,
+
+    /// Which jitter (§2.4). The reseed button rolls it.
+    #[seed]
+    pub seed: u32,
 
     /// The host-uniform Mix every effect ends with (docs/08 §1.5), per cent.
     /// **At nought the stream is still emitted and nothing is drawn**, which is
