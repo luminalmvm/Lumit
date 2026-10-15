@@ -7406,6 +7406,78 @@ fn relinking_leaves_an_item_whose_file_is_still_there_alone() {
     );
 }
 
+/// A pasted mask path is the shape as it was at the copy: an edit to the
+/// source in between does not reach the paste.
+#[test]
+fn a_pasted_mask_path_is_the_shape_that_was_copied() {
+    use crate::api::layer::{BridgeMask, BridgeMaskMode, BridgeVertex};
+
+    let (_project, layer) = project_with_layer();
+    let square = |x: f64| {
+        [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
+            .map(|(cx, cy)| BridgeVertex {
+                x: cx + x,
+                y: cy,
+                tan_in_x: 0.0,
+                tan_in_y: 0.0,
+                tan_out_x: 0.0,
+                tan_out_y: 0.0,
+            })
+            .to_vec()
+    };
+    let mask = |name: &str| BridgeMask {
+        id: uuid::Uuid::now_v7(),
+        name: name.into(),
+        vertices: square(0.0),
+        closed: true,
+        inverted: false,
+        opacity: BridgeScalar::Static(100.0),
+        mode: BridgeMaskMode::Add,
+        feather: BridgeScalar::Static(0.0),
+        vertex_feather: Vec::new(),
+        expansion: BridgeScalar::Static(0.0),
+        path_keys: Vec::new(),
+    };
+    let (from, onto) = (mask("From"), mask("Onto"));
+    layer.add_mask(from.clone()).expect("added");
+    layer.add_mask(onto.clone()).expect("added");
+    let zero = BridgeRational { num: 0, den: 1 };
+    let one = BridgeRational { num: 1, den: 1 };
+    layer.toggle_mask_path_key(from.id, zero).expect("keyed");
+    let shape_of = |id: uuid::Uuid, at: lumit_core::time::Rational| {
+        let item = layer.item().expect("the layer");
+        let mask = item.masks.iter().find(|m| m.id == id).expect("the mask");
+        let key = mask.path_keys.iter().find(|k| k.time == at).expect("a key");
+        key.path.clone()
+    };
+    let copied_shape = shape_of(from.id, lumit_core::time::Rational::ZERO);
+
+    let copied = layer
+        .copy_mask_path_keys(from.id, vec![zero])
+        .expect("copied");
+    layer
+        .set_mask(
+            BridgeMask {
+                vertices: square(25.0),
+                ..from.clone()
+            },
+            Some(zero),
+        )
+        .expect("the source edited after the copy");
+    assert_ne!(
+        shape_of(from.id, lumit_core::time::Rational::ZERO),
+        copied_shape
+    );
+
+    assert!(layer
+        .paste_mask_path_keys(onto.id, copied, vec![zero], vec![one])
+        .expect("pasted"));
+    assert_eq!(
+        shape_of(onto.id, lumit_core::time::Rational::new(1, 1).expect("1 s")),
+        copied_shape
+    );
+}
+
 /// **A mask's per-point feather widths cross the bridge, and each is clamped
 /// exactly as the one width is**.
 ///

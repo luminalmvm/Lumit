@@ -31,7 +31,27 @@ class GraphClipChannel {
   final GraphChannel source;
   final List<BridgeKeyframe> keys;
   final double? staticValue;
-  const GraphClipChannel(this.source, this.keys, {this.staticValue});
+
+  /// A mask path's shapes as they were at the copy, kept by the engine as
+  /// text.
+  final String? shapes;
+  const GraphClipChannel(this.source, this.keys,
+      {this.staticValue, this.shapes});
+}
+
+/// [channel]'s [keys] for the clipboard. A mask path's shapes are taken now,
+/// so an edit to the mask after the copy does not change what pastes.
+GraphClipChannel _clipOf(GraphChannel channel, List<BridgeKeyframe> keys) {
+  String? shapes;
+  if (channel.isMaskPath) {
+    try {
+      shapes = channel.entry.layer.copyMaskPathKeys(
+          id: channel.mask!.id, times: [for (final k in keys) k.time]);
+    } catch (_) {
+      // The mask has gone, so its shapes have nothing to paste.
+    }
+  }
+  return GraphClipChannel(channel, keys, shapes: shapes);
 }
 
 /// The in-app keyframe clipboard: full fidelity, and the one a paste prefers.
@@ -78,7 +98,7 @@ bool copySelectedKeys({
       for (var i = 0; i < keys.length; i++)
         if (selectedKeys.contains('${channel.id}#$i')) keys[i],
     ];
-    if (hit.isNotEmpty) copied.add(GraphClipChannel(channel, hit));
+    if (hit.isNotEmpty) copied.add(_clipOf(channel, hit));
   }
   if (copied.isEmpty) return false;
   graphKeyClipboard = copied;
@@ -145,13 +165,14 @@ bool copyChannels({
   required double fps,
 }) {
   if (channels.isEmpty) return false;
-  graphKeyClipboard = [
+  final full = [
     for (final channel in channels)
       if (channel.scalar case BridgeScalar_Static(:final field0))
         GraphClipChannel(channel, const [], staticValue: field0)
       else
-        GraphClipChannel(channel, channel.keys),
+        _clipOf(channel, channel.keys),
   ];
+  graphKeyClipboard = full;
 
   // The system clipboard gets the keyframe table for whatever is animated, and
   // — when nothing is — the plain numbers, tab-joined, which is what a value
@@ -178,13 +199,7 @@ bool copyChannels({
   );
   // `copySelectedKeys` has just replaced the in-app clipboard with the animated
   // rows alone; put the full set — static rows included — back.
-  graphKeyClipboard = [
-    for (final channel in channels)
-      if (channel.scalar case BridgeScalar_Static(:final field0))
-        GraphClipChannel(channel, const [], staticValue: field0)
-      else
-        GraphClipChannel(channel, channel.keys),
-  ];
+  graphKeyClipboard = full;
   return true;
 }
 
@@ -640,19 +655,20 @@ class _Paste {
       if (_edits.isNotEmpty) commitChannelEdits(_edits);
       for (final (layer, path, mask, had, i) in _paths) {
         final clip = clips![i];
+        final shapes = clip.shapes;
+        if (shapes == null) continue;
         final at = [for (final (f, _) in sources[i]) f + shift];
         try {
           if (!layer.pasteMaskPathKeys(
             id: mask,
-            from: clip.source.entry.layer,
-            fromMask: clip.source.mask!.id,
+            copied: shapes,
             times: [for (final k in clip.keys) k.time],
             to: [for (final f in at) timeOfSubframe(f, fpsNum, fpsDen)],
           )) {
             continue;
           }
         } catch (_) {
-          // The mask has gone since the copy.
+          // The mask it was going onto has gone.
           continue;
         }
         pathed = true;

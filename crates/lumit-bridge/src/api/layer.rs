@@ -3430,28 +3430,57 @@ impl LayerReference {
         Ok(true)
     }
 
-    /// Put copies of shape keys from `from`'s mask `from_mask` onto this
-    /// layer's mask `id`: how a pasted mask path lands. The shapes stay on
-    /// this side, so only times cross. `times` names the copied keys and `to`
-    /// where each lands, both composition time.
+    /// The shape keys of mask `id` at `times`, composition time, as text for
+    /// [`Self::paste_mask_path_keys`]. Taken at copy time, so an edit to this
+    /// mask afterwards does not change what pastes.
+    #[frb(sync)]
+    pub fn copy_mask_path_keys(
+        &self,
+        id: Uuid,
+        times: Vec<BridgeRational>,
+    ) -> Result<String, BridgeError> {
+        let layer = self.item()?;
+        let mask = layer
+            .masks
+            .iter()
+            .find(|m| m.id == id)
+            .ok_or(BridgeError::NoSuchMask)?;
+        let mut keys = Vec::with_capacity(times.len());
+        for key in &mask.path_keys {
+            // Kept in composition time, which is what the paste names them by.
+            let time = key
+                .time
+                .checked_add(layer.start_offset.0)
+                .map_err(|_| BridgeError::InvalidKeyframes)?;
+            if times
+                .iter()
+                .any(|t| Rational::new(t.num, t.den).is_ok_and(|t| t == time))
+            {
+                keys.push(lumit_core::mask::PathKeyframe {
+                    time,
+                    ..key.clone()
+                });
+            }
+        }
+        serde_json::to_string(&keys).map_err(|_| BridgeError::InvalidKeyframes)
+    }
+
+    /// Put the shape keys [`Self::copy_mask_path_keys`] gave as `copied` onto
+    /// this layer's mask `id`: how a pasted mask path lands. `times` names
+    /// the copied keys and `to` where each lands, both composition time.
     ///
-    /// A key already on a landing time is replaced. A copied time the source
-    /// no longer has is passed over, and `false` means nothing was left.
+    /// A key already on a landing time is replaced. A time `copied` does not
+    /// hold is passed over, and `false` means nothing was left.
     #[frb(sync)]
     pub fn paste_mask_path_keys(
         &self,
         id: Uuid,
-        from: &LayerReference,
-        from_mask: Uuid,
+        copied: String,
         times: Vec<BridgeRational>,
         to: Vec<BridgeRational>,
     ) -> Result<bool, BridgeError> {
-        let source = from.item()?;
-        let copied = source
-            .masks
-            .iter()
-            .find(|m| m.id == from_mask)
-            .ok_or(BridgeError::NoSuchMask)?;
+        let copied: Vec<lumit_core::mask::PathKeyframe> =
+            serde_json::from_str(&copied).map_err(|_| BridgeError::InvalidKeyframes)?;
         let layer = self.item()?;
         let mut masks = layer.masks;
         let mask = masks
@@ -3466,8 +3495,8 @@ impl LayerReference {
         };
         let mut pasted = false;
         for (time, at) in times.iter().zip(&to) {
-            let time = local(time, source.start_offset.0)?;
-            let Some(key) = copied.path_keys.iter().find(|k| k.time == time) else {
+            let time = local(time, Rational::ZERO)?;
+            let Some(key) = copied.iter().find(|k| k.time == time) else {
                 continue;
             };
             let at = local(at, layer.start_offset.0)?;
