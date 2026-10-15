@@ -41,7 +41,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 ChangesAssociations=yes
 Compression=lzma2
-SolidCompression=yes
+; Each file compressed on its own, so a file that didn't change between two
+; releases is the same bytes in both installers and an update only fetches
+; the rest (flutter_ui/lib/state/blockmap.dart). Costs about 0.5% in size.
+SolidCompression=no
 
 [Files]
 ; The whole runner directory, recursively, which is how `lumit-ofx-broker.exe`,
@@ -112,7 +115,7 @@ Root: HKA; Subkey: "Software\Classes\Lumit.Theme\DefaultIcon"; ValueType: string
   ValueData: "{app}\icons\lumit-theme.ico"
 
 [Run]
-; No `skipifsilent`. `/SILENT` is how Lumit runs this installer on
+; No `skipifsilent`. `/VERYSILENT` is how Lumit runs this installer on
 ; itself to apply an update: it quits, the installer replaces it, and
 ; without this line nothing starts again — a "Restart now" button that does
 ; not restart, which is exactly the complaint. Interactive installs are

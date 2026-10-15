@@ -6,8 +6,10 @@
 # Linux .flatpak — one per platform, and the Linux tarball is withdrawn. Beside
 # them rides the plain macOS .zip the in-place updater fetches, which is not an
 # installer and is not offered as a way to install. Windows updates run the
-# setup .exe again, silently. Every job gates the release; nothing is
-# continue-on-error, so a partial release is never published quietly.
+# setup .exe again, silently. The setup .exe and the macOS .zip each get a
+# .blockmap, so an update only fetches the parts that changed. Every job
+# gates the release; nothing is continue-on-error, so a partial release is
+# never published quietly.
 #
 # Toolchain steps mirror ci.yml's `windows` and `flutter-linux` jobs exactly
 # (same FFmpeg 8.1 shared build, same LLVM 18 pin, same Flutter 3.47.1); when
@@ -157,13 +159,23 @@ jobs:
         run: |
           $version = "$env:RELEASE_VERSION".TrimStart('v')
           & packaging/windows/build-installer.ps1 -Version $version
+      # What an update patches the installer from. Made from the finished
+      # file, so anything that changes the installer has to come before it.
+      - name: Map the installer for patched updates
+        shell: pwsh
+        working-directory: flutter_ui
+        run: |
+          dart run tool/blockmap.dart (Get-ChildItem ../packaging/windows/dist/*.exe).FullName
+          if ($LASTEXITCODE -ne 0) { throw "blockmap failed" }
       # The installer is the whole Windows release. An update downloads it
       # again and runs it silently, which is also what renames or removes
       # files the last version left, so there is no plain archive beside it.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-installer
-          path: packaging/windows/dist/*.exe
+          path: |
+            packaging/windows/dist/*.exe
+            packaging/windows/dist/*.blockmap
           if-no-files-found: error
 
   linux-bundle:
@@ -376,12 +388,14 @@ jobs:
           mkdir -p packaging/macos/dist
           ditto -c -k --keepParent "$app" \
             "packaging/macos/dist/lumit-$version-macos-$(uname -m).zip"
+          (cd flutter_ui && dart run tool/blockmap.dart ../packaging/macos/dist/*.zip)
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: macos-dmg
           path: |
             packaging/macos/dist/*.dmg
             packaging/macos/dist/*.zip
+            packaging/macos/dist/*.blockmap
           if-no-files-found: error
 
   publish:

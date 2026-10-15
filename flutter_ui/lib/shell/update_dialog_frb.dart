@@ -426,7 +426,7 @@ class _DownloadProgress extends StatelessWidget {
           WidgetsBinding.instance.addPostFrameCallback((_) => onDone());
         }
         final fraction = updates.progress;
-        final done = (release.assetBytes * fraction / (1 << 20)).round();
+        final done = (updates.downloadBytes * fraction / (1 << 20)).round();
         return FloatSurface(
           width: 400,
           child: Column(
@@ -446,7 +446,8 @@ class _DownloadProgress extends StatelessWidget {
                     HouseProgressBar(fraction: fraction, height: 6),
                     const SizedBox(height: 6),
                     Text(
-                      l10n.updateProgressOf('$done', release.sizeLabel),
+                      l10n.updateProgressOf(
+                          '$done', megabytes(updates.downloadBytes)),
                       style: t.small.copyWith(color: t.textMuted),
                     ),
                   ],
