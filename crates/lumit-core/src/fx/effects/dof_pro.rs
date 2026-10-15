@@ -259,8 +259,7 @@ pub struct DofPro {
     #[choice(options = ["Final", "Depth"], default = 0)]
     pub display: u32,
 
-    /// Stripes over what blurs less than a pixel, in the Viewer only, as
-    /// Depth of field's are.
+    /// Stripes over what blurs less than a pixel, as Depth of field's are.
     #[toggle(default = false)]
     pub zebra: bool,
 

@@ -1930,16 +1930,18 @@ class BridgeShapeTaper {
           scope == other.scope;
 }
 
-/// A shape's twist: `angle` and `axis` in degrees, the centre in layer
-/// pixels. Every one animates.
+/// A shape's twist: `angle`, `rotation` and `axis` in degrees, the centre in
+/// layer pixels. Every one animates.
 class BridgeShapeTwist {
   final BridgeScalar angle;
+  final BridgeScalar rotation;
   final BridgeScalar axis;
   final BridgeScalar centreX;
   final BridgeScalar centreY;
 
   const BridgeShapeTwist({
     required this.angle,
+    required this.rotation,
     required this.axis,
     required this.centreX,
     required this.centreY,
@@ -1947,7 +1949,11 @@ class BridgeShapeTwist {
 
   @override
   int get hashCode =>
-      angle.hashCode ^ axis.hashCode ^ centreX.hashCode ^ centreY.hashCode;
+      angle.hashCode ^
+      rotation.hashCode ^
+      axis.hashCode ^
+      centreX.hashCode ^
+      centreY.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1955,6 +1961,7 @@ class BridgeShapeTwist {
       other is BridgeShapeTwist &&
           runtimeType == other.runtimeType &&
           angle == other.angle &&
+          rotation == other.rotation &&
           axis == other.axis &&
           centreX == other.centreX &&
           centreY == other.centreY;
@@ -2747,6 +2754,14 @@ class LayerReference {
         that: this,
       );
 
+  /// The shape keys of mask `id` at `times`, composition time, as text for
+  /// [`Self::paste_mask_path_keys`]. Taken at copy time, so an edit to this
+  /// mask afterwards does not change what pastes.
+  String copyMaskPathKeys(
+          {required UuidValue id, required List<BridgeRational> times}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCopyMaskPathKeys(
+          that: this, id: id, times: times);
+
   /// The shape of this Sequence layer — where its cuts fall and how each
   /// piece is ramped — as text, for [`Self::paste_sequence_shape`].
   ///
@@ -3429,26 +3444,19 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferencePasteEffects(
           that: this, text: text, atFrame: atFrame);
 
-  /// Put copies of shape keys from `from`'s mask `from_mask` onto this
-  /// layer's mask `id`: how a pasted mask path lands. The shapes stay on
-  /// this side, so only times cross. `times` names the copied keys and `to`
-  /// where each lands, both composition time.
+  /// Put the shape keys [`Self::copy_mask_path_keys`] gave as `copied` onto
+  /// this layer's mask `id`: how a pasted mask path lands. `times` names
+  /// the copied keys and `to` where each lands, both composition time.
   ///
-  /// A key already on a landing time is replaced. A copied time the source
-  /// no longer has is passed over, and `false` means nothing was left.
+  /// A key already on a landing time is replaced. A time `copied` does not
+  /// hold is passed over, and `false` means nothing was left.
   bool pasteMaskPathKeys(
           {required UuidValue id,
-          required LayerReference from,
-          required UuidValue fromMask,
+          required String copied,
           required List<BridgeRational> times,
           required List<BridgeRational> to}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferencePasteMaskPathKeys(
-          that: this,
-          id: id,
-          from: from,
-          fromMask: fromMask,
-          times: times,
-          to: to);
+          that: this, id: id, copied: copied, times: times, to: to);
 
   /// Cut and ramp this Sequence layer to the shape in `text`, keeping its
   /// own media.

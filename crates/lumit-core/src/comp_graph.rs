@@ -481,8 +481,6 @@ pub fn held_on_view(inst: &EffectInstance, port: &str) -> Option<EffectInstance>
     }
     let mut held = inst.clone();
     set_param(&mut held, param, EffectValue::Choice(option));
-    // A view socket hands on a map for other boxes, so no focus stripes.
-    crate::fx::effects::dof::clear_zebra(&mut held);
     Some(held)
 }
 

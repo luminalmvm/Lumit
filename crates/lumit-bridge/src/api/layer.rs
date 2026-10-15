@@ -304,12 +304,13 @@ pub struct BridgeShapeTaper {
     pub scope: u32,
 }
 
-/// A shape's twist: `angle` and `axis` in degrees, the centre in layer
-/// pixels. Every one animates.
+/// A shape's twist: `angle`, `rotation` and `axis` in degrees, the centre in
+/// layer pixels. Every one animates.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeShapeTwist {
     pub angle: BridgeScalar,
+    pub rotation: BridgeScalar,
     pub axis: BridgeScalar,
     pub centre_x: BridgeScalar,
     pub centre_y: BridgeScalar,
@@ -399,6 +400,7 @@ impl BridgeShapeItem {
             repeat_end_opacity: BridgeScalar::read_at(&item.repeat_end_opacity, offset),
             twist: item.twist.as_ref().map(|w| BridgeShapeTwist {
                 angle: BridgeScalar::read_at(&w.angle, offset),
+                rotation: BridgeScalar::read_at(&w.rotation, offset),
                 axis: BridgeScalar::read_at(&w.axis, offset),
                 centre_x: BridgeScalar::read_at(&w.centre_x, offset),
                 centre_y: BridgeScalar::read_at(&w.centre_y, offset),
@@ -567,6 +569,7 @@ impl BridgeShapeItem {
             twist: match &self.twist {
                 Some(w) => Some(lumit_core::shape::Twist {
                     angle: clamped_property(&w.angle, offset, -360_000.0, 360_000.0)?,
+                    rotation: clamped_property(&w.rotation, offset, -360_000.0, 360_000.0)?,
                     axis: clamped_property(&w.axis, offset, -360_000.0, 360_000.0)?,
                     centre_x: clamped_property(&w.centre_x, offset, -100_000.0, 100_000.0)?,
                     centre_y: clamped_property(&w.centre_y, offset, -100_000.0, 100_000.0)?,
@@ -3427,28 +3430,57 @@ impl LayerReference {
         Ok(true)
     }
 
-    /// Put copies of shape keys from `from`'s mask `from_mask` onto this
-    /// layer's mask `id`: how a pasted mask path lands. The shapes stay on
-    /// this side, so only times cross. `times` names the copied keys and `to`
-    /// where each lands, both composition time.
+    /// The shape keys of mask `id` at `times`, composition time, as text for
+    /// [`Self::paste_mask_path_keys`]. Taken at copy time, so an edit to this
+    /// mask afterwards does not change what pastes.
+    #[frb(sync)]
+    pub fn copy_mask_path_keys(
+        &self,
+        id: Uuid,
+        times: Vec<BridgeRational>,
+    ) -> Result<String, BridgeError> {
+        let layer = self.item()?;
+        let mask = layer
+            .masks
+            .iter()
+            .find(|m| m.id == id)
+            .ok_or(BridgeError::NoSuchMask)?;
+        let mut keys = Vec::with_capacity(times.len());
+        for key in &mask.path_keys {
+            // Kept in composition time, which is what the paste names them by.
+            let time = key
+                .time
+                .checked_add(layer.start_offset.0)
+                .map_err(|_| BridgeError::InvalidKeyframes)?;
+            if times
+                .iter()
+                .any(|t| Rational::new(t.num, t.den).is_ok_and(|t| t == time))
+            {
+                keys.push(lumit_core::mask::PathKeyframe {
+                    time,
+                    ..key.clone()
+                });
+            }
+        }
+        serde_json::to_string(&keys).map_err(|_| BridgeError::InvalidKeyframes)
+    }
+
+    /// Put the shape keys [`Self::copy_mask_path_keys`] gave as `copied` onto
+    /// this layer's mask `id`: how a pasted mask path lands. `times` names
+    /// the copied keys and `to` where each lands, both composition time.
     ///
-    /// A key already on a landing time is replaced. A copied time the source
-    /// no longer has is passed over, and `false` means nothing was left.
+    /// A key already on a landing time is replaced. A time `copied` does not
+    /// hold is passed over, and `false` means nothing was left.
     #[frb(sync)]
     pub fn paste_mask_path_keys(
         &self,
         id: Uuid,
-        from: &LayerReference,
-        from_mask: Uuid,
+        copied: String,
         times: Vec<BridgeRational>,
         to: Vec<BridgeRational>,
     ) -> Result<bool, BridgeError> {
-        let source = from.item()?;
-        let copied = source
-            .masks
-            .iter()
-            .find(|m| m.id == from_mask)
-            .ok_or(BridgeError::NoSuchMask)?;
+        let copied: Vec<lumit_core::mask::PathKeyframe> =
+            serde_json::from_str(&copied).map_err(|_| BridgeError::InvalidKeyframes)?;
         let layer = self.item()?;
         let mut masks = layer.masks;
         let mask = masks
@@ -3463,8 +3495,8 @@ impl LayerReference {
         };
         let mut pasted = false;
         for (time, at) in times.iter().zip(&to) {
-            let time = local(time, source.start_offset.0)?;
-            let Some(key) = copied.path_keys.iter().find(|k| k.time == time) else {
+            let time = local(time, Rational::ZERO)?;
+            let Some(key) = copied.iter().find(|k| k.time == time) else {
                 continue;
             };
             let at = local(at, layer.start_offset.0)?;

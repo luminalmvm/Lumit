@@ -216,6 +216,7 @@ enum ShapeValue {
   gradientEndY,
   smoothAmount,
   twistAngle,
+  twistRotation,
   twistAxis,
   twistCentreX,
   twistCentreY,
@@ -272,6 +273,7 @@ String shapeOpLabel(ShapeOp op) => switch (op) {
 ShapeOp? shapeOpOf(ShapeValue value) => switch (value) {
       ShapeValue.smoothAmount => ShapeOp.smooth,
       ShapeValue.twistAngle ||
+      ShapeValue.twistRotation ||
       ShapeValue.twistAxis ||
       ShapeValue.twistCentreX ||
       ShapeValue.twistCentreY =>
@@ -1171,6 +1173,7 @@ String shapeValueLabel(ShapeValue value, {int stop = 0}) => switch (value) {
       ShapeValue.gradientEndY => l10n.shapeGradientEndY,
       ShapeValue.smoothAmount => l10n.shapeSmooth,
       ShapeValue.twistAngle => l10n.shapeTwistAngle,
+      ShapeValue.twistRotation => l10n.shapeTwistRotation,
       ShapeValue.twistAxis => l10n.shapeTwistAxis,
       ShapeValue.twistCentreX => l10n.shapeTwistCentreX,
       ShapeValue.twistCentreY => l10n.shapeTwistCentreY,
@@ -1236,6 +1239,7 @@ BridgeScalar shapeScalarOf(BridgeShapeItem item, ShapeValue value,
       // draws, as a gone stop does.
       ShapeValue.smoothAmount => item.smooth ?? _none,
       ShapeValue.twistAngle => item.twist?.angle ?? _none,
+      ShapeValue.twistRotation => item.twist?.rotation ?? _none,
       ShapeValue.twistAxis => item.twist?.axis ?? _none,
       ShapeValue.twistCentreX => item.twist?.centreX ?? _none,
       ShapeValue.twistCentreY => item.twist?.centreY ?? _none,
@@ -1381,6 +1385,7 @@ BridgeShapeItem shapeItemWith(
                 ? null
                 : BridgeShapeTwist(
                     angle: at(ShapeValue.twistAngle, twisted.angle),
+                    rotation: at(ShapeValue.twistRotation, twisted.rotation),
                     axis: at(ShapeValue.twistAxis, twisted.axis),
                     centreX: at(ShapeValue.twistCentreX, twisted.centreX),
                     centreY: at(ShapeValue.twistCentreY, twisted.centreY),
