@@ -3139,91 +3139,158 @@ fn run(
     // answer two million times over.
     let colour = spec.colour_space.transform();
 
-    let mut audio_fed = 0usize;
-    for frame_n in 0..total {
-        if cancel.load(Ordering::Relaxed) {
-            sink.remove_written(out_path);
-            return Ok(());
-        }
-        // The comp frame under this output frame: exact when the rates match
-        // (the rounding is then of an integer), nearest otherwise.
-        let src = first + ((frame_n as f64) * fps / out_fps).round() as usize;
-        let src = src.min(end.saturating_sub(1));
+    let (tw, th) = sink.size();
+    let audio_mix = audio_mix.as_deref();
+    // The file is written on a thread of its own, so one frame is encoded
+    // while the next is rendered. Only one finished frame waits between the
+    // two, so this holds a frame or two more than a loop that took turns.
+    let (rendered, written) = std::thread::scope(|s| {
+        let (frames, queued) = std::sync::mpsc::sync_channel::<Vec<u8>>(1);
+        let sink = &mut sink;
+        let writer = std::thread::Builder::new()
+            .name("lumit-export-writer".into())
+            .spawn_scoped(s, move || -> Result<usize, String> {
+                let mut audio_fed = 0usize;
+                for (frame_n, rgba) in queued.iter().enumerate() {
+                    sink.write_rgba(&rgba)?;
+                    // Interleave: after each picture frame, the samples that cover it,
+                    // so the muxer keeps sound and picture together in the file.
+                    if let (Some(mix), Sink::Video { encoder, .. }) = (audio_mix, &mut *sink) {
+                        let upto = audio_samples_through(frame_n + 1, out_fps, rate)
+                            .min(mix.len() / chans);
+                        if upto > audio_fed {
+                            encoder
+                                .write_audio(&mix[audio_fed * chans..upto * chans])
+                                .map_err(|e| e.to_string())?;
+                            audio_fed = upto;
+                        }
+                    }
+                    let _ = tx.send(ExportEvent::Progress {
+                        frame: frame_n + 1,
+                        total,
+                    });
+                }
+                Ok(audio_fed)
+            })
+            .map_err(|e| format!("export writer: {e}"))?;
         // Crop in composition pixels first, then letterbox into the delivery
         // frame when the size was changed, then pack to what the file carries.
         // The two arms differ only in how wide a channel is: a sixteen-bit
         // export reads the composite back at sixteen bits and stays there, so
         // the extra width is the pipeline's own rather than a stretched byte.
-        let (tw, th) = sink.size();
-        let rgba = match spec.depth {
-            BitDepth::Eight => {
-                let (px, _, _) =
-                    renderer.render_preview(doc, comp_id, src as u64, spec.render.quality, 1.0)?;
-                let px = spec.crop.apply(px, comp.width, comp.height, 4);
-                let px = if resize {
-                    lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
-                } else {
-                    px
-                };
-                pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
-            }
-            BitDepth::Sixteen => {
-                let (px, _, _) =
-                    renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
-                let px = spec.crop.apply(px, comp.width, comp.height, 4);
-                let px = if resize {
-                    lumit_core::pixels::letterbox_resize(&px, crop_w, crop_h, tw, th, spec.resample)
-                } else {
-                    px
-                };
-                pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
-            }
-            // The float depths read the composite back as it stands: no
-            // display transform, no curve, no clamp (docs/06 §7.4a). The
-            // channel and alpha choices still apply — they are about what the
-            // file carries, not about how bright it is — and the resize runs
-            // on the floats so a delivered EXR is filtered rather than
-            // point-sampled.
-            BitDepth::Half | BitDepth::Float => {
-                let (px, _, _) = renderer.render_preview_linear(
-                    doc,
-                    comp_id,
-                    src as u64,
-                    spec.render.quality,
-                )?;
-                let px = spec.crop.apply(px, comp.width, comp.height, 4);
-                let px = if resize {
-                    letterbox_resize_f32(&px, crop_w, crop_h, tw, th)
-                } else {
-                    px
-                };
-                pack_frame_f32(&px, spec.channels, spec.alpha)
-            }
+        let render = |renderer: &mut crate::headless::HeadlessRenderer,
+                      src: usize|
+         -> Result<Vec<u8>, String> {
+            Ok(match spec.depth {
+                BitDepth::Eight => {
+                    let (px, _, _) = renderer.render_preview(
+                        doc,
+                        comp_id,
+                        src as u64,
+                        spec.render.quality,
+                        1.0,
+                    )?;
+                    let px = spec.crop.apply(px, comp.width, comp.height, 4);
+                    let px = if resize {
+                        lumit_core::pixels::letterbox_resize(
+                            &px,
+                            crop_w,
+                            crop_h,
+                            tw,
+                            th,
+                            spec.resample,
+                        )
+                    } else {
+                        px
+                    };
+                    pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
+                }
+                BitDepth::Sixteen => {
+                    let (px, _, _) =
+                        renderer.render_preview16(doc, comp_id, src as u64, spec.render.quality)?;
+                    let px = spec.crop.apply(px, comp.width, comp.height, 4);
+                    let px = if resize {
+                        lumit_core::pixels::letterbox_resize(
+                            &px,
+                            crop_w,
+                            crop_h,
+                            tw,
+                            th,
+                            spec.resample,
+                        )
+                    } else {
+                        px
+                    };
+                    pack_frame(&px, spec.channels, spec.alpha, colour.as_ref())
+                }
+                // The float depths read the composite back as it stands: no
+                // display transform, no curve, no clamp (docs/06 §7.4a). The
+                // channel and alpha choices still apply — they are about what the
+                // file carries, not about how bright it is — and the resize runs
+                // on the floats so a delivered EXR is filtered rather than
+                // point-sampled.
+                BitDepth::Half | BitDepth::Float => {
+                    let (px, _, _) = renderer.render_preview_linear(
+                        doc,
+                        comp_id,
+                        src as u64,
+                        spec.render.quality,
+                    )?;
+                    let px = spec.crop.apply(px, comp.width, comp.height, 4);
+                    let px = if resize {
+                        letterbox_resize_f32(&px, crop_w, crop_h, tw, th)
+                    } else {
+                        px
+                    };
+                    pack_frame_f32(&px, spec.channels, spec.alpha)
+                }
+            })
         };
-        if let Err(e) = sink.write_rgba(&rgba) {
+        let mut rendered = Ok(());
+        for frame_n in 0..total {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            // The comp frame under this output frame: exact when the rates match
+            // (the rounding is then of an integer), nearest otherwise.
+            let src = first + ((frame_n as f64) * fps / out_fps).round() as usize;
+            let src = src.min(end.saturating_sub(1));
+            let rgba = match render(&mut renderer, src) {
+                Ok(rgba) => rgba,
+                Err(e) => {
+                    rendered = Err(e);
+                    break;
+                }
+            };
+            // Refused only when the writer has stopped, and it says why below.
+            if frames.send(rgba).is_err() {
+                break;
+            }
+        }
+        // Joined here rather than by the scope, so a writer that panicked
+        // is an error like any other.
+        drop(frames);
+        let written = writer
+            .join()
+            .unwrap_or_else(|_| Err("the export's writer stopped".into()));
+        Ok::<_, String>((rendered, written))
+    })?;
+    rendered?;
+    if cancel.load(Ordering::Relaxed) {
+        sink.remove_written(out_path);
+        return Ok(());
+    }
+    let audio_fed = match written {
+        Ok(fed) => fed,
+        Err(e) => {
             // A folder of stills that failed half-way is tidied rather than
             // left as a trap that looks like a finished export.
             sink.remove_written(out_path);
             return Err(e);
         }
-        // Interleave: after each picture frame, the samples that cover it,
-        // so the muxer keeps sound and picture together in the file.
-        if let (Some(mix), Sink::Video { encoder, .. }) = (&audio_mix, &mut sink) {
-            let upto = audio_samples_through(frame_n + 1, out_fps, rate).min(mix.len() / chans);
-            if upto > audio_fed {
-                encoder
-                    .write_audio(&mix[audio_fed * chans..upto * chans])
-                    .map_err(|e| e.to_string())?;
-                audio_fed = upto;
-            }
-        }
-        let _ = tx.send(ExportEvent::Progress {
-            frame: frame_n + 1,
-            total,
-        });
-    }
+    };
     // Any samples the per-frame rounding left behind.
-    if let (Some(mix), Sink::Video { encoder, .. }) = (&audio_mix, &mut sink) {
+    if let (Some(mix), Sink::Video { encoder, .. }) = (audio_mix, &mut sink) {
         if mix.len() / chans > audio_fed {
             encoder
                 .write_audio(&mix[audio_fed * chans..])
