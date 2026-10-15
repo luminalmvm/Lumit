@@ -98,6 +98,16 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
         ],
     ),
     group(
+        "Variation",
+        &[
+            "size_by",
+            "opacity_by",
+            "colour_by",
+            "speed_min",
+            "speed_max",
+        ],
+    ),
+    group(
         "Forces",
         &[
             "gravity",
@@ -431,6 +441,43 @@ pub struct Particulate {
     #[toggle(label = "Align to motion", default = false)]
     pub align_to_motion: bool,
 
+    /// What runs Size over life: the particle's age, its speed, or a number
+    /// of its own. Age is how every project made before this reads.
+    #[choice(label = "Size by", options = *points::Drive::OPTIONS, default = 0)]
+    pub size_by: u32,
+
+    /// What runs Opacity over life; see [`size_by`](Self::size_by).
+    #[choice(label = "Opacity by", options = *points::Drive::OPTIONS, default = 0)]
+    pub opacity_by: u32,
+
+    /// What runs the blend from Colour to End colour; see
+    /// [`size_by`](Self::size_by).
+    #[choice(label = "Colour by", options = *points::Drive::OPTIONS, default = 0)]
+    pub colour_by: u32,
+
+    /// The speed a Speed drive reads as the left end of its curve, px@comp
+    /// per second.
+    #[slider(
+        label = "Speed min",
+        min = 0.0,
+        max = 2000.0,
+        default = 0.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub speed_min: f32,
+
+    /// The speed a Speed drive reads as the right end, px@comp per second.
+    #[slider(
+        label = "Speed max",
+        min = 0.0,
+        max = 2000.0,
+        default = 200.0,
+        hard_min = 0.0,
+        unit = Px
+    )]
+    pub speed_max: f32,
+
     /// px@comp per second², positive down.
     #[slider(min = -2000.0, max = 2000.0, default = 0.0, unit = Px)]
     pub gravity: f32,
@@ -624,6 +671,10 @@ impl Particulate {
                 rotation_jitter_deg: self.rotation_jitter.clamp(0.0, 360.0),
                 spin_deg: self.spin,
                 align_to_motion: self.align_to_motion,
+                size_by: points::Drive::from_code(self.size_by),
+                opacity_by: points::Drive::from_code(self.opacity_by),
+                colour_by: points::Drive::from_code(self.colour_by),
+                speed_range: [self.speed_min.max(0.0), self.speed_max.max(0.0)],
             },
             forces: Forces {
                 gravity: self.gravity,

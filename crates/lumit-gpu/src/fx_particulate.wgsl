@@ -142,7 +142,18 @@ struct Params {
     // than written as a literal, because FXC folds a literal nought into the
     // lattice's modulus inside the edge walk's loop and refuses to compile it.
     turb_cycle: i32,
+
+    // == lumit_core::fx::points::Drive's codes, for size, opacity and colour,
+    // and the speed range a Speed drive reads.
+    size_by: u32,
+    opacity_by: u32,
+    colour_by: u32,
+    speed_min: f32,
+    speed_max: f32,
 };
+
+const DRIVE_SPEED: u32 = 1u;
+const DRIVE_RANDOM: u32 = 2u;
 
 const EDGE_KILL: u32 = 1u;
 const EDGE_WRAP: u32 = 2u;
@@ -177,6 +188,9 @@ const A_TURB_PHASE: u32 = 6u;
 const A_ROTATION: u32 = 7u;
 const A_EMIT_W: u32 = 8u;
 const A_DIRECTION_Z: u32 = 9u;
+const A_RANDOM_SIZE: u32 = 10u;
+const A_RANDOM_OPACITY: u32 = 11u;
+const A_RANDOM_COLOUR: u32 = 12u;
 
 // Scatter's acceptance die, well clear of the per-particle draws above
 // and of the turbulence lattices below.
@@ -495,6 +509,22 @@ fn pt_bounds() -> vec4<f32> {
     return vec4<f32>(-p.margin, -p.margin, p.target_w + p.margin, p.target_h + p.margin);
 }
 
+// == the CPU's `drive` closure: what runs one of the over-life changes.
+fn pt_drive(by: u32, u: f32, speed: f32, lo: u32, hi: u32, die: u32) -> f32 {
+    if (by == DRIVE_SPEED) {
+        // == lumit_core::fx::points::drive_speed.
+        let span = p.speed_max - p.speed_min;
+        if (span > 0.0) {
+            return clamp((speed - p.speed_min) / span, 0.0, 1.0);
+        }
+        return select(0.0, 1.0, speed >= p.speed_min);
+    }
+    if (by == DRIVE_RANDOM) {
+        return pt_die(lo, hi, die);
+    }
+    return u;
+}
+
 // == lumit_core::fx::points::has_left.
 fn pt_has_left(b: vec4<f32>, l: Launch, life: f32, age: f32) -> bool {
     let g = vec2<f32>(0.0, abs(p.gravity));
@@ -663,10 +693,14 @@ fn pt_scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
     let d_prev = pt_turbulence(p0, phase, age - p.eps);
     let u = clamp(age / life, 0.0, 1.0);
     let speed_out = m.vel + (d_next - d_prev) / (2.0 * p.eps);
-    let size = pt_jitter(p.size, p.size_jitter, pt_die(lo, hi, A_SIZE)) * pt_curve(u, 0u);
-    let alpha = p.colour.a * pt_curve(u, CURVE_TABLE);
+    let fast = length(speed_out);
+    let size = pt_jitter(p.size, p.size_jitter, pt_die(lo, hi, A_SIZE))
+        * pt_curve(pt_drive(p.size_by, u, fast, lo, hi, A_RANDOM_SIZE), 0u);
+    let alpha = p.colour.a
+        * pt_curve(pt_drive(p.opacity_by, u, fast, lo, hi, A_RANDOM_OPACITY), CURVE_TABLE);
     // Premultiplied, and the blend to End colour is in working space.
-    let tint = p.colour.rgb + (p.end_colour.rgb - p.colour.rgb) * u;
+    let toward = pt_drive(p.colour_by, u, fast, lo, hi, A_RANDOM_COLOUR);
+    let tint = p.colour.rgb + (p.end_colour.rgb - p.colour.rgb) * toward;
     let colour = vec4<f32>(tint * alpha, alpha);
 
     var rot = radians(p.rotation);

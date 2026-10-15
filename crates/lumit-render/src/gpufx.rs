@@ -4567,6 +4567,12 @@ fn particulate_op<'a>(
         projection,
         edge: packed.edge as u32,
         margin: packed.margin,
+        drives: [
+            look.size_by as u32,
+            look.opacity_by as u32,
+            look.colour_by as u32,
+        ],
+        speed_range: look.speed_range,
     }
 }
 
@@ -5840,6 +5846,11 @@ mod tests {
             rotation_jitter: 240.0,
             spin: 90.0,
             align_to_motion: false,
+            size_by: 0,
+            opacity_by: 0,
+            colour_by: 0,
+            speed_min: 0.0,
+            speed_max: 200.0,
             gravity: 120.0,
             wind_x: 40.0,
             wind_y: -10.0,
@@ -5931,6 +5942,8 @@ mod tests {
         // particles left as well as where the rest are.
         inst.edge = 1;
         inst.edge_margin = 0.0;
+        // Size run by speed, so the speed's length is held to the CPU's too.
+        inst.size_by = 1;
         inst.shape = shape;
         if lumit_core::fx::points::EmitterShape::from_code(shape).is_outline() {
             // **Turbulence off for the outline twin, on purpose.** What this
@@ -6069,6 +6082,9 @@ mod tests {
             // its head.
             inst.edge = 2;
             inst.edge_margin = 0.0;
+            // Opacity by a number of each particle's own, colour by speed.
+            inst.opacity_by = 2;
+            inst.colour_by = 1;
             let (packed, style, frames, curves) = particulate_pieces(inst, &carriage);
             let packed = packed.framed(w as f32, h as f32);
             let (cpu_stream, tails) = lumit_core::fx::points::evaluate_with_tail(

@@ -145,6 +145,11 @@ pub struct ParticulateOp<'a> {
     pub edge: u32,
     /// How far past the frame a particle goes before the edge acts, px.
     pub margin: f32,
+    /// The `Drive` codes for size, opacity and colour: 0 Age, 1 Speed,
+    /// 2 Random.
+    pub drives: [u32; 3],
+    /// The speeds, px per second, a Speed drive reads as its two ends.
+    pub speed_range: [f32; 2],
 }
 
 #[repr(C)]
@@ -233,6 +238,14 @@ pub(super) struct ParticulateParams {
     pub(super) margin: f32,
     /// Always nought; see the kernel's `turb_cycle`.
     pub(super) turb_cycle: i32,
+
+    pub(super) size_by: u32,
+    pub(super) opacity_by: u32,
+    pub(super) colour_by: u32,
+    pub(super) speed_min: f32,
+
+    pub(super) speed_max: f32,
+    pub(super) _pad: [u32; 3],
 }
 
 /// The scan's block width — the same 256 the kernel declares.
@@ -457,6 +470,12 @@ impl FxEngine {
             edge: op.edge,
             margin: op.margin,
             turb_cycle: 0,
+            size_by: op.drives[0],
+            opacity_by: op.drives[1],
+            colour_by: op.drives[2],
+            speed_min: op.speed_range[0],
+            speed_max: op.speed_range[1],
+            _pad: [0; 3],
         };
         let ubuf = ctx
             .device

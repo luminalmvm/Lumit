@@ -3375,6 +3375,30 @@
   "@fxKill": {
     "description": "Effect controls — an Edge setting on Particulate: a particle dies the first time it leaves the frame."
   },
+  "fxVariation": "Variation",
+  "@fxVariation": {
+    "description": "Effect controls — a group heading on Particulate, over the controls choosing what changes a particle's size, opacity and colour."
+  },
+  "fxSizeBy": "Size by",
+  "@fxSizeBy": {
+    "description": "Effect controls — a control on Particulate: whether Size over life follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxOpacityBy": "Opacity by",
+  "@fxOpacityBy": {
+    "description": "Effect controls — a control on Particulate: whether Opacity over life follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxColourBy": "Colour by",
+  "@fxColourBy": {
+    "description": "Effect controls — a control on Particulate: whether the blend from Colour to End colour follows the particle's age, its speed, or a random number of its own."
+  },
+  "fxSpeedMin": "Speed min",
+  "@fxSpeedMin": {
+    "description": "Effect controls — a control on Particulate: the speed, in pixels per second, that counts as the start of the change when a control is set to follow speed."
+  },
+  "fxSpeedMax": "Speed max",
+  "@fxSpeedMax": {
+    "description": "Effect controls — a control on Particulate: the speed, in pixels per second, that counts as the end of the change when a control is set to follow speed."
+  },
   "fxEmitter": "Emitter",
   "@fxEmitter": {
     "description": "Effect controls — a group heading on Particulate, over the controls saying where particles are born and which way they leave."

@@ -6538,6 +6538,8 @@ fn every_parameter_declares_a_unit() {
             ("particulate", "depth"),
             ("particulate", "initial_speed"),
             ("particulate", "size"),
+            ("particulate", "speed_min"),
+            ("particulate", "speed_max"),
             ("particulate", "gravity"),
             ("particulate", "wind_x"),
             ("particulate", "wind_y"),

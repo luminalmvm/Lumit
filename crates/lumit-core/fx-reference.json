@@ -10102,6 +10102,65 @@
           "default": false
         },
         {
+          "id": "size_by",
+          "label": "Size by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Age",
+            "Speed",
+            "Random"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "opacity_by",
+          "label": "Opacity by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Age",
+            "Speed",
+            "Random"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "colour_by",
+          "label": "Colour by",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Age",
+            "Speed",
+            "Random"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "speed_min",
+          "label": "Speed min",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "speed_max",
+          "label": "Speed max",
+          "kind": "float",
+          "unit": "px",
+          "default": 200.0,
+          "slider_min": 0.0,
+          "slider_max": 2000.0,
+          "hard_min": 0.0
+        },
+        {
           "id": "gravity",
           "label": "Gravity",
           "kind": "float",
@@ -10384,6 +10443,17 @@
             "rotation_jitter",
             "spin",
             "align_to_motion"
+          ],
+          "collapsed": false
+        },
+        {
+          "label": "Variation",
+          "params": [
+            "size_by",
+            "opacity_by",
+            "colour_by",
+            "speed_min",
+            "speed_max"
           ],
           "collapsed": false
         },

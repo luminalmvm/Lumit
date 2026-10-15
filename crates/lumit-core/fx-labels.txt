@@ -185,6 +185,7 @@ Colour A
 Colour B
 Colour balance
 Colour burn
+Colour by
 Colour control
 Colour correction
 Colour cycle
@@ -681,6 +682,7 @@ Once at start
 One point
 Opacity
 Opacity %
+Opacity by
 Opacity over life
 Open graph
 Operate on alpha
@@ -916,6 +918,7 @@ Sine
 Single
 Single layer, straw
 Size
+Size by
 Size from width
 Size jitter
 Size over life
@@ -947,6 +950,8 @@ Spacing z
 Span mode
 Speed
 Speed jitter
+Speed max
+Speed min
 Spherize
 Spiky
 Spin
@@ -1088,6 +1093,7 @@ Use point size
 Use source colour
 Utility
 Value
+Variation
 Vary points
 Vector scale
 Vegas

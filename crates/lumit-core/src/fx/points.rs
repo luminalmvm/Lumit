@@ -467,6 +467,34 @@ pub struct Emitter {
     pub speed_jitter: f32,
 }
 
+/// What moves a particle along its Size, Opacity or Colour change: its age,
+/// its speed, or a number of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Drive {
+    /// Normalised age, birth to death.
+    #[default]
+    Age,
+    /// Speed, from the speed range's low end to its high end.
+    Speed,
+    /// A number of its own from the seed, the same all its life.
+    Random,
+}
+
+impl Drive {
+    /// The Choice option labels, in code order.
+    pub const OPTIONS: &'static [&'static str] = &["Age", "Speed", "Random"];
+
+    /// The drive for a stored Choice index; anything unknown is Age.
+    #[must_use]
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Drive::Speed,
+            2 => Drive::Random,
+            _ => Drive::Age,
+        }
+    }
+}
+
 /// What a particle looks like and how long it lasts.
 ///
 /// Not `Copy`: it carries the two baked over-life curves, which are the same
@@ -500,6 +528,13 @@ pub struct ParticleLook {
     pub spin_deg: f32,
     /// Rotation follows the direction of travel; `rotation_deg` adds on top.
     pub align_to_motion: bool,
+    /// What runs `size_curve`, `opacity_curve` and the blend to `end_colour`.
+    pub size_by: Drive,
+    pub opacity_by: Drive,
+    pub colour_by: Drive,
+    /// The speeds, px per second, a Speed drive reads as the curve's left
+    /// and right ends.
+    pub speed_range: [f32; 2],
 }
 
 /// The four v1 forces — exactly the set with closed-form integrals.
@@ -1704,6 +1739,11 @@ mod attr {
     pub const EMIT_W: u32 = 8;
     /// The elevation draw, out of the layer's plane.
     pub const DIRECTION_Z: u32 = 9;
+    /// The stable draws a Random [`Drive`](super::Drive) reads, one each for
+    /// size, opacity and colour so the three do not move together.
+    pub const RANDOM_SIZE: u32 = 10;
+    pub const RANDOM_OPACITY: u32 = 11;
+    pub const RANDOM_COLOUR: u32 = 12;
 }
 
 /// The noise lattices turbulence displaces along, one per axis. Channels of the
@@ -1872,6 +1912,19 @@ fn wrapped(bounds: [f32; 4], p: [f32; 3]) -> [f32; 3] {
         q[i] = p[i] - span * ((p[i] - bounds[i]) / span).floor();
     }
     q
+}
+
+/// Where `speed` sits in `range`, 0 at its low end and 1 at its high end. A
+/// range with no width is a step at its low end.
+fn drive_speed(speed: f32, range: [f32; 2]) -> f32 {
+    let span = range[1] - range[0];
+    if span > 0.0 {
+        ((speed - range[0]) / span).clamp(0.0, 1.0)
+    } else if speed >= range[0] {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// Where in the emitter this particle starts.
@@ -2045,9 +2098,20 @@ pub fn evaluate_with_tail(
             vel[1] + (d_next[1] - d_prev[1]) / (2.0 * eps),
             vel[2] + (d_next[2] - d_prev[2]) / (2.0 * eps),
         ];
+        let fast = speed_out[0].hypot(speed_out[1]).hypot(speed_out[2]);
+        let drive = |by: Drive, die: u32| match by {
+            Drive::Age => u,
+            Drive::Speed => drive_speed(fast, look.speed_range),
+            Drive::Random => draw(p.seed, b, die),
+        };
         let size = jitter(look.size, look.size_jitter, draw(p.seed, b, attr::SIZE))
-            * curve_at(u, &look.size_curve);
-        let alpha = look.colour[3] * curve_at(u, &look.opacity_curve);
+            * curve_at(drive(look.size_by, attr::RANDOM_SIZE), &look.size_curve);
+        let alpha = look.colour[3]
+            * curve_at(
+                drive(look.opacity_by, attr::RANDOM_OPACITY),
+                &look.opacity_curve,
+            );
+        let toward = drive(look.colour_by, attr::RANDOM_COLOUR);
         // Premultiplied, and the blend to End colour is in working space —
         // which is what "in working space" costs: one lerp, no encode.
         let mut colour = [alpha; 4];
@@ -2056,7 +2120,7 @@ pub fn evaluate_with_tail(
             .zip(look.colour.iter().zip(look.end_colour.iter()))
             .take(3)
         {
-            *c = (from + (to - from) * u) * alpha;
+            *c = (from + (to - from) * toward) * alpha;
         }
         // The per-particle rotation spread: a uniform draw of ±half the
         // dial about Rotation, from the seed hash like every other die, so two

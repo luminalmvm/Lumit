@@ -56,6 +56,11 @@ A particle system.
 | **Rotation jitter** | Slider | 0 to 360 | 360 | Degrees |
 | **Spin** | Slider | -720 to 720; any value by typing | 0 | Degrees |
 | **Align to motion** | Checkbox | On or off | Off | - |
+| **Size by** | Dropdown | Age · Speed · Random | Age | - |
+| **Opacity by** | Dropdown | Age · Speed · Random | Age | - |
+| **Colour by** | Dropdown | Age · Speed · Random | Age | - |
+| **Speed min** | Slider | 0 to 2000; higher | 0 | Pixels at composition size |
+| **Speed max** | Slider | 0 to 2000; higher | 200 | Pixels at composition size |
 | **Gravity** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **Wind x** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
 | **Wind y** | Slider | -2000 to 2000; any value by typing | 0 | Pixels at composition size |
@@ -83,6 +88,7 @@ In the Effect Controls panel:
 - **Emitter** groups **Shape**, **Position x**, **Position y**, **Position z**, **Width**, **Height**, **Depth**, **Emitter angle**, **Follow**, **Mask path**, **Emit rate**, **Direction**, **Direction z**, **Spread**, **Spread z**, **Initial speed**, **Speed jitter**.
 - **Bursts** groups **Burst**, **Burst count**, **Burst interval**, **Trigger**.
 - **Particle** groups **Life**, **Life jitter**, **Size**, **Size jitter**, **Size over life**, **Opacity over life**, **Colour**, **End colour**, **Rotation**, **Rotation jitter**, **Spin**, **Align to motion**.
+- **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Edges** groups **Edge**, **Edge margin**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Max particles**, **Seed**.
@@ -142,6 +148,15 @@ The **Particle** group, how a particle looks:
 - **Spin**: how fast that rotation turns.
 - **Align to motion**: turns each particle to face the way it is travelling, with Spin added
   on top.
+
+The **Variation** group, what runs those changes:
+
+- **Size by**, **Opacity by** and **Colour by**: what runs Size over life, Opacity over life
+  and the blend to End colour. **Age** runs from birth to death. **Speed** runs from Speed
+  min to Speed max. **Random** is a number of the particle's own that stays the same all
+  its life.
+- **Speed min** and **Speed max**: the speeds, in pixels per second, at the left and right
+  ends of the curve or blend.
 
 The **Forces** group, what moves them:
 
