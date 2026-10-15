@@ -25963,13 +25963,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   ScopedChange dco_decode_scoped_change(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return ScopedChange(
       project: dco_decode_project_reference(arr[0]),
       item: dco_decode_opt_box_autoadd_item_reference(arr[1]),
       layer: dco_decode_opt_box_autoadd_layer_reference(arr[2]),
       items: dco_decode_bool(arr[3]),
+      local: dco_decode_bool(arr[4]),
     );
   }
 
@@ -33467,11 +33468,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_item = sse_decode_opt_box_autoadd_item_reference(deserializer);
     var var_layer = sse_decode_opt_box_autoadd_layer_reference(deserializer);
     var var_items = sse_decode_bool(deserializer);
+    var var_local = sse_decode_bool(deserializer);
     return ScopedChange(
         project: var_project,
         item: var_item,
         layer: var_layer,
-        items: var_items);
+        items: var_items,
+        local: var_local);
   }
 
   @protected
@@ -39567,6 +39570,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_opt_box_autoadd_item_reference(self.item, serializer);
     sse_encode_opt_box_autoadd_layer_reference(self.layer, serializer);
     sse_encode_bool(self.items, serializer);
+    sse_encode_bool(self.local, serializer);
   }
 
   @protected

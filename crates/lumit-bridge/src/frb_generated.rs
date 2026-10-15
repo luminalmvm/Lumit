@@ -29828,11 +29828,13 @@ impl SseDecode for crate::api::state::ScopedChange {
             <Option<crate::api::project_item::ItemReference>>::sse_decode(deserializer);
         let mut var_layer = <Option<crate::api::layer::LayerReference>>::sse_decode(deserializer);
         let mut var_items = <bool>::sse_decode(deserializer);
+        let mut var_local = <bool>::sse_decode(deserializer);
         return crate::api::state::ScopedChange {
             project: var_project,
             item: var_item,
             layer: var_layer,
             items: var_items,
+            local: var_local,
         };
     }
 }
@@ -38186,6 +38188,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::state::ScopedChange {
             self.item.into_into_dart().into_dart(),
             self.layer.into_into_dart().into_dart(),
             self.items.into_into_dart().into_dart(),
+            self.local.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -44523,6 +44526,7 @@ impl SseEncode for crate::api::state::ScopedChange {
         <Option<crate::api::project_item::ItemReference>>::sse_encode(self.item, serializer);
         <Option<crate::api::layer::LayerReference>>::sse_encode(self.layer, serializer);
         <bool>::sse_encode(self.items, serializer);
+        <bool>::sse_encode(self.local, serializer);
     }
 }
 

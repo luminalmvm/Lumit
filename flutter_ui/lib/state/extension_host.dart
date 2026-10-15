@@ -126,7 +126,9 @@ class ExtensionHost with WidgetsBindingObserver {
     _projectWas = _projectKey();
     _shareWas = _shareKey();
     if (_allowed(BridgeExtensionPermission.activity)) {
-      _edits = app.onChange.listen((_) {
+      // Only edits made here. A partner's in a shared project is their work.
+      _edits = app.onChange.listen((change) {
+        if (!change.local) return;
         _editTimer ??= Timer(_editSettle, _tellEdit);
       });
     }

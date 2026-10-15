@@ -674,7 +674,7 @@ class LumitState extends ChangeNotifier {
         // panel reads again, the way it does when a project is swapped.
         final open = project;
         if (open != null) {
-          handleChange(ScopedChange(project: open, items: true));
+          handleChange(ScopedChange(project: open, items: true, local: false));
         }
         final online = share.online != null;
         if (online) _tellActivity();
@@ -769,7 +769,7 @@ class LumitState extends ChangeNotifier {
         // they do when an item is relinked.
         final open = project;
         if (placed && open != null) {
-          handleChange(ScopedChange(project: open, items: true));
+          handleChange(ScopedChange(project: open, items: true, local: false));
         }
         share.footageChanged();
       case BridgeShareEvent_ExportAsked(:final job, :final from, :final comp):
@@ -1206,7 +1206,7 @@ class LumitState extends ChangeNotifier {
     // Last, after the worker is up: a subscriber rebuilds on this, and it
     // should rebuild against a project whose worker is answering. `handleChange`
     // notifies as well, which is what this replaces.
-    handleChange(ScopedChange(project: opened, items: true));
+    handleChange(ScopedChange(project: opened, items: true, local: false));
     unawaited(_backfillThumbnail());
   }
 

@@ -237,6 +237,10 @@ pub struct HistoryEntry {
 /// scoped change so only the affected panels rebuild, rather than the whole UI.
 pub struct DocumentChange {
     pub op: Op,
+    /// Made on this machine: a commit, undo or redo here. False for an edit
+    /// someone else made in a shared project, and for the host's answer to
+    /// one made here, which was counted when it was made.
+    pub local: bool,
 }
 
 type ChangeCallback = Arc<dyn Fn(DocumentChange) + Send + Sync>;
@@ -298,12 +302,12 @@ impl DocumentStore {
     /// it down a Dart stream over FFI), and docs/14 §3 forbids holding a lock
     /// across FFI. Dropping it also lets the observer re-enter the store —
     /// notifying under the lock would deadlock on its first `commit`.
-    fn notify(&self, op: Op) {
+    fn notify(&self, op: Op, local: bool) {
         // A lock-free read: the callback re-enters the store (the bridge
         // commits from inside it) and crosses FFI, so it must never run under
         // any lock.
         if let Some(callback) = self.on_change.load_full() {
-            callback(DocumentChange { op });
+            callback(DocumentChange { op, local });
         }
     }
 
@@ -528,7 +532,7 @@ impl DocumentStore {
         self.current.store(arc.clone());
         self.bump_revision();
         drop(journal);
-        self.notify(observed);
+        self.notify(observed, true);
 
         Ok(arc)
     }
@@ -576,7 +580,7 @@ impl DocumentStore {
         drop(journal);
         // The observer sees the *inverse* — the op that actually moved the
         // document — not the op being undone.
-        self.notify(observed);
+        self.notify(observed, true);
 
         Ok(Some(arc))
     }
@@ -616,7 +620,7 @@ impl DocumentStore {
         self.current.store(arc.clone());
         self.bump_revision();
         drop(journal);
-        self.notify(observed);
+        self.notify(observed, true);
 
         Ok(Some(arc))
     }
@@ -807,7 +811,7 @@ impl DocumentStore {
         self.current.store(Arc::new(doc));
         self.bump_revision();
         drop(journal);
-        self.notify(applied);
+        self.notify(applied, false);
         Ok(())
     }
 
@@ -864,7 +868,7 @@ impl DocumentStore {
         self.current.store(Arc::new(doc));
         self.bump_revision();
         drop(journal);
-        self.notify(op.clone());
+        self.notify(op.clone(), false);
         Ok(())
     }
 
@@ -891,7 +895,7 @@ impl DocumentStore {
         self.bump_revision();
         drop(journal);
         if let Some((_, inverse)) = refused {
-            self.notify(inverse);
+            self.notify(inverse, false);
         }
         Ok(())
     }

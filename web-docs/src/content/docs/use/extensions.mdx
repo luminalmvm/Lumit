@@ -114,7 +114,7 @@ An extension never shares or joins by itself: the person presses the button in t
 | Permission | Event | When |
 | --- | --- | --- |
 | `project` | `project.changed` | A project opens, saves or closes. Carries `project.info`. |
-| `activity` | `activity.edit` | An edit is made. `{step, at}`: the step's name in the History list and the time in milliseconds. Edits within 0.4 s arrive as one. |
+| `activity` | `activity.edit` | An edit, undo or redo is made on this computer. Edits from others in a shared project do not count. `{step, at}`: the step's name in the History list and the time in milliseconds. Edits within 0.4 s arrive as one. |
 | `activity` | `activity.focus` | Lumit becomes the front window or stops being it. `{focused}`. |
 | `export` | `export.started`, `export.progress`, `export.finished`, `export.failed` | Carry `export.state`. |
 | `import` | `import.added` | A watched file was imported. `{path}`. |
