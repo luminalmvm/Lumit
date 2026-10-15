@@ -2763,6 +2763,74 @@
   "@fxNormalised": {
     "description": "Node graph — an output of the Clone index driver: the copy's number as a fraction, 0 at the first copy and 1 at the last."
   },
+  "fxMeasure": "Measure",
+  "@fxMeasure": {
+    "description": "Driver name in the Graph panel — gives the size and edges of a layer's content as numbers."
+  },
+  "fxPaddingX": "Padding x",
+  "@fxPaddingX": {
+    "description": "Effect controls — a control on the Measure driver: room added to the left and right of the measured box, in pixels."
+  },
+  "fxPaddingY": "Padding y",
+  "@fxPaddingY": {
+    "description": "Effect controls — a control on the Measure driver: room added above and below the measured box, in pixels."
+  },
+  "fxSpace": "Space",
+  "@fxSpace": {
+    "description": "Effect controls — a dropdown on the Measure driver: whether the box is measured in the layer's own pixels or in the composition's."
+  },
+  "fxComp": "Comp",
+  "@fxComp": {
+    "description": "Effect controls — an option of the Measure driver's Space dropdown: measure in the composition's pixels, after the layer's transform. Short for composition."
+  },
+  "fxBeatTrigger": "Beat trigger",
+  "@fxBeatTrigger": {
+    "description": "Driver name in the Graph panel — turns beats or loud moments in the audio into events other effects react to."
+  },
+  "fxEvents": "Events",
+  "@fxEvents": {
+    "description": "Effect controls — a dropdown on the Beat trigger driver: what counts as an event."
+  },
+  "fxBeatMarkers": "Beat markers",
+  "@fxBeatMarkers": {
+    "description": "Effect controls — an option of the Beat trigger driver's Events dropdown: the composition's beat markers."
+  },
+  "fxDetectedBeats": "Detected beats",
+  "@fxDetectedBeats": {
+    "description": "Effect controls — an option of the Beat trigger driver's Events dropdown: beats found in the sound itself."
+  },
+  "fxLevelCrossing": "Level crossing",
+  "@fxLevelCrossing": {
+    "description": "Effect controls — an option of the Beat trigger driver's Events dropdown: an event each time the sound gets louder than a threshold."
+  },
+  "fxBand": "Band",
+  "@fxBand": {
+    "description": "Effect controls — a dropdown on the Beat trigger driver: which part of the sound is listened to, all of it, the low end or the top end."
+  },
+  "fxAll": "All",
+  "@fxAll": {
+    "description": "Effect controls — an option of the Beat trigger driver's Band dropdown: the whole sound, every frequency."
+  },
+  "fxMinimumGap": "Minimum gap",
+  "@fxMinimumGap": {
+    "description": "Effect controls — a control on the Beat trigger driver: of two beats closer together than this, in seconds, only the stronger counts."
+  },
+  "fxHoldOff": "Hold off",
+  "@fxHoldOff": {
+    "description": "Effect controls — a control on the Beat trigger driver: how many frames after an event before the next can fire."
+  },
+  "fxPulse": "Pulse",
+  "@fxPulse": {
+    "description": "Node graph — an output of the Beat trigger driver: 1 on the frame of each event and 0 otherwise."
+  },
+  "fxEnvelope": "Envelope",
+  "@fxEnvelope": {
+    "description": "Node graph — an output of the Beat trigger driver: 1 at each event, falling away over the Decay time."
+  },
+  "fxTimeSinceLast": "Time since last",
+  "@fxTimeSinceLast": {
+    "description": "Node graph — an output of the Beat trigger driver: seconds since the last event."
+  },
   "fxOff": "Off",
   "@fxOff": {
     "description": "Effect controls — a dropdown option on Clone to points: no time offset, or no render per clone."

@@ -1,0 +1,57 @@
+---
+title: Measure
+description: "The size and edges of a layer's content, as numbers."
+---
+
+Measure is a **Drivers** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Measures the box round what a layer shows. It has eight sockets: **Width**, **Height**,
+**Centre X**, **Centre Y**, **Left**, **Top**, **Right** and **Bottom**.
+
+A Text layer is measured round its letters as they are set, not round its text box, and
+follows the words as they change. A Shape layer is measured round its art. A solid and a
+precomp are their frame. A points stream wired into **Points** is measured instead of the
+layer.
+
+A Null, a camera, a light and an empty layer measure nought.
+
+:::note[Not yet built]
+Footage measures the composition's frame, not its own. A layer turned in X or Y measures as
+if it lay flat.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Layer** | Layer | Any layer in the composition | This layer | - |
+| **Padding x** | Slider | 0 to 200; any value by typing | 0 | Pixels at composition size |
+| **Padding y** | Slider | 0 to 200; any value by typing | 0 | Pixels at composition size |
+| **Space** | Dropdown | Layer · Comp | Layer | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Layer**: the layer measured. A new Measure measures the layer it is on.
+- **Padding x**: room added to the left and right of the box.
+- **Padding y**: room added above and below the box.
+- **Space**: **Layer** measures in the layer's own pixels. **Comp** measures where the
+  layer is drawn, after its transform and its parents'.
+
+## Related
+
+- [Expressions](/use/expressions/)
+- [The node graph](/use/nodes/)
+- [Drivers](/effects/#drivers)
+- [Effects](/use/effects/)

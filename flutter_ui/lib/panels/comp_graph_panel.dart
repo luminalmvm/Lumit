@@ -645,6 +645,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
               node.matchName == 'node_graph',
           inputs: _labelled(node.inputs),
           outputs: _labelled(node.outputs),
+          noStream: graphNoStreamPorts(node.inputs, node.matchName),
         ),
         placed,
         open: open,
