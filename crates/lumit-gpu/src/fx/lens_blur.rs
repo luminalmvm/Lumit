@@ -97,6 +97,14 @@ const ATLAS_COLS: u32 = 32;
 /// Block sizes the highlight sprites are drawn in, 1 to 32 px, as
 /// `fx_lens_blur.wgsl` has it.
 const SPRITE_LEVELS: u32 = 6;
+/// The most work one submission holds. Windows resets the driver when one
+/// submission keeps the card for about two seconds, so a heavy frame goes in
+/// pieces: the gather in bands of rows, priced at its most samples a pixel, and
+/// the sprites in runs of instances.
+const GATHER_SAMPLES_PER_SUBMIT: u64 = 400_000_000;
+/// The gather's most samples a pixel, as `fx_lens_blur.wgsl` caps them.
+const GATHER_MAX_SAMPLES: u64 = 768;
+const SPRITES_PER_SUBMIT: u32 = 1 << 20;
 /// Tables kept on the card. One is about 12 MB.
 const CACHE_CAP: usize = 4;
 
@@ -199,6 +207,7 @@ impl LensBlurFx {
                 (7, Slot::Tex),
                 (8, Slot::Store(F::Rgba16Float)),
                 (3, Slot::Uniform),
+                (12, Slot::Uniform),
             ],
         );
         let finish = compute(
@@ -219,6 +228,7 @@ impl LensBlurFx {
                 (4, Slot::Tex),
                 (7, Slot::Tex),
                 (3, Slot::Uniform),
+                (12, Slot::Uniform),
             ],
             wgpu::ShaderStages::VERTEX_FRAGMENT,
         );
@@ -595,27 +605,42 @@ impl FxEngine {
             &fx.dilate.0,
             &[(6, T(&v_tiles)), (5, T(&v_reach)), (3, u.clone())],
         );
-        let gather = bind(
-            &fx.gather.0,
-            &[
-                (0, T(&v_src)),
-                (1, T(&v_depth)),
-                (4, T(&v_info)),
-                (6, T(&v_reach)),
-                (7, T(&v_atlas)),
-                (8, T(&v_acc)),
-                (3, u.clone()),
-            ],
-        );
-        let sprite = bind(
-            &fx.sprite.0,
-            &[
-                (0, T(&v_src)),
-                (4, T(&v_info)),
-                (7, T(&v_atlas)),
-                (3, u.clone()),
-            ],
-        );
+        // Where one submission's share starts.
+        let part = |start: u32| {
+            ctx.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("fx-lens-blur-part"),
+                    contents: bytemuck::cast_slice(&[start, 0u32, 0, 0]),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                })
+        };
+        let gather = |part: &wgpu::Buffer| {
+            bind(
+                &fx.gather.0,
+                &[
+                    (0, T(&v_src)),
+                    (1, T(&v_depth)),
+                    (4, T(&v_info)),
+                    (6, T(&v_reach)),
+                    (7, T(&v_atlas)),
+                    (8, T(&v_acc)),
+                    (3, u.clone()),
+                    (12, part.as_entire_binding()),
+                ],
+            )
+        };
+        let sprite = |part: &wgpu::Buffer| {
+            bind(
+                &fx.sprite.0,
+                &[
+                    (0, T(&v_src)),
+                    (4, T(&v_info)),
+                    (7, T(&v_atlas)),
+                    (3, u.clone()),
+                    (12, part.as_entire_binding()),
+                ],
+            )
+        };
         let finish = bind(
             &fx.finish.0,
             &[
@@ -623,12 +648,15 @@ impl FxEngine {
                 (4, T(&v_info)),
                 (9, T(&v_acc)),
                 (10, T(&v_out)),
-                (3, u),
+                (3, u.clone()),
             ],
         );
 
-        let mut enc = ctx.encoder("fx-lens-blur");
-        let mut run = |pipe: &wgpu::ComputePipeline, group: &wgpu::BindGroup, gx: u32, gy: u32| {
+        let run = |enc: &mut wgpu::CommandEncoder,
+                   pipe: &wgpu::ComputePipeline,
+                   group: &wgpu::BindGroup,
+                   gx: u32,
+                   gy: u32| {
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("fx-lens-blur"),
                 timestamp_writes: None,
@@ -637,34 +665,54 @@ impl FxEngine {
             pass.set_bind_group(0, group, &[]);
             pass.dispatch_workgroups(gx.div_ceil(8), gy.div_ceil(8), 1);
         };
-        run(&fx.prep.1, &prep, w, h);
+        let mut enc = ctx.encoder("fx-lens-blur");
+        run(&mut enc, &fx.prep.1, &prep, w, h);
         // The Depth view only needs what prep worked out.
         if !op.display_depth {
-            run(&fx.tiles.1, &tile, tw, th);
-            run(&fx.dilate.1, &dilate, tw, th);
-            run(&fx.gather.1, &gather, w, h);
+            run(&mut enc, &fx.tiles.1, &tile, tw, th);
+            run(&mut enc, &fx.dilate.1, &dilate, tw, th);
         }
+        drop(enc);
         if !op.display_depth {
-            let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("fx-lens-blur-sprites"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &v_acc,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                ..Default::default()
-            });
-            rp.set_pipeline(&fx.sprite.1);
-            rp.set_bind_group(0, &sprite, &[]);
+            // Bands of rows, a whole number of workgroups tall.
+            let per = GATHER_SAMPLES_PER_SUBMIT / (u64::from(w) * GATHER_MAX_SAMPLES).max(1);
+            let rows = (u32::try_from(per).unwrap_or(u32::MAX) / 8 * 8).clamp(8, h.max(8));
+            for y in (0..h).step_by(rows as usize) {
+                let at = part(y);
+                let mut enc = ctx.encoder("fx-lens-blur-gather");
+                run(&mut enc, &fx.gather.1, &gather(&at), w, rows.min(h - y));
+                drop(enc);
+                ctx.flush();
+            }
             // One instance per block at every level.
             let blocks: u32 = (0..SPRITE_LEVELS)
                 .map(|l| w.div_ceil(1 << l) * h.div_ceil(1 << l))
                 .sum();
-            rp.draw(0..6, 0..blocks);
+            for start in (0..blocks).step_by(SPRITES_PER_SUBMIT as usize) {
+                let at = part(start);
+                let group = sprite(&at);
+                let mut enc = ctx.encoder("fx-lens-blur-sprites");
+                let mut rp = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("fx-lens-blur-sprites"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &v_acc,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    ..Default::default()
+                });
+                rp.set_pipeline(&fx.sprite.1);
+                rp.set_bind_group(0, &group, &[]);
+                rp.draw(0..6, 0..SPRITES_PER_SUBMIT.min(blocks - start));
+                drop(rp);
+                drop(enc);
+                ctx.flush();
+            }
         }
+        let mut enc = ctx.encoder("fx-lens-blur-finish");
         let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("fx-lens-blur-finish"),
             timestamp_writes: None,
