@@ -607,22 +607,35 @@ impl Realiser<'_> {
                     LayerInputDraw::Several(list) => return self.several(list, w, h, of),
                     LayerInputDraw::Layer(d) => d,
                 };
+                // Onto the consuming layer's raster, where its placement says.
+                let set_down = |linear: &wgpu::Texture| match &d.place {
+                    Some(place) => crate::fxops::place_layer_input(
+                        self.compositor,
+                        &self.ctx,
+                        w,
+                        h,
+                        linear,
+                        d.natural,
+                        place,
+                        of,
+                    ),
+                    None => crate::fxops::render_layer_input(
+                        self.compositor,
+                        &self.ctx,
+                        w,
+                        h,
+                        linear,
+                        d.tex_w as f32,
+                        d.tex_h as f32,
+                    ),
+                };
                 // A Precomp input realises its nested comp exactly as a
                 // Precomp layer's picture does; anything else is
                 // the uploaded source pixels.
                 let linear = if let Some(n) = d.nested.as_ref().filter(|n| n.scene_depth) {
                     // Distance, not a picture, so the referenced layer's own
                     // stack below has nothing to work on.
-                    let depth = self.realise_scene_depth(n);
-                    return LayerInput::Texture(crate::fxops::render_layer_input(
-                        self.compositor,
-                        &self.ctx,
-                        w,
-                        h,
-                        &depth,
-                        d.tex_w as f32,
-                        d.tex_h as f32,
-                    ));
+                    return LayerInput::Texture(set_down(&self.realise_scene_depth(n)));
                 } else if let Some(n) = &d.nested {
                     self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
                 } else {
@@ -720,27 +733,7 @@ impl Realiser<'_> {
                 // is placed by `d.tex_w × d.tex_h` just below, so its own stack
                 // is cropped back to that raster rather than growing it.
                 let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, d.tex_w, d.tex_h);
-                LayerInput::Texture(match &d.place {
-                    Some(place) => crate::fxops::place_layer_input(
-                        self.compositor,
-                        &self.ctx,
-                        w,
-                        h,
-                        &linear,
-                        d.natural,
-                        place,
-                        of,
-                    ),
-                    None => crate::fxops::render_layer_input(
-                        self.compositor,
-                        &self.ctx,
-                        w,
-                        h,
-                        &linear,
-                        d.tex_w as f32,
-                        d.tex_h as f32,
-                    ),
-                })
+                LayerInput::Texture(set_down(&linear))
             })
             .collect()
     }

@@ -27,8 +27,8 @@
 //!
 //! ## Two traps this file exists to have already fallen into
 //!
-//! 1. **A matte source is resampled to the effect's raster.** A 32-wide white
-//!    solid pointed at *directly* is stretched to fill the frame and arrives as
+//! 1. **A matte source used to be stretched to the effect's raster.** A 32-wide
+//!    white solid pointed at *directly* filled the frame and arrived as
 //!    a uniformly white matte — the test would pass its "inside" check and
 //!    silently be testing nothing. Wrapping the band in a full-size comp gives
 //!    it real geometry first, which is how this is authored anyway: a white
@@ -539,4 +539,35 @@ fn emit_from_image_reads_its_source_where_the_source_sits() {
             "{name}: {outside} lit pixels away from the square"
         );
     }
+}
+
+/// **A matte is read where its layer sits.** The grey layer is 32 wide and
+/// starts at x 24, so the full-frame band's edge at x 32 crosses it a quarter
+/// of the way in. Stretched over the layer, the band would light its left half
+/// instead, out to x 40.
+#[test]
+fn a_matte_lines_up_with_a_layer_that_is_not_full_frame() {
+    let Ok(mut r) = HeadlessRenderer::shared() else {
+        lumit_gpu::no_adapter();
+        return;
+    };
+    let (doc, comp_id) = project(true);
+    let mut doc = (*doc).clone();
+    for item in &mut doc.items {
+        match item {
+            ProjectItem::Solid(s) if s.name == "grey" => (s.width, s.height) = (BAND, 16),
+            ProjectItem::Composition(c) if c.name == "Comp" => {
+                let t = &mut c.layers[1].transform;
+                t.position_x = lumit_core::anim::Property::fixed(24.0);
+                t.position_y = lumit_core::anim::Property::fixed(24.0);
+            }
+            _ => {}
+        }
+    }
+    let (rgba, w, _) = r
+        .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
+        .expect("the render");
+    let source = lumit_core::pixels::srgb_encode(0.25);
+    assert_ne!(px(&rgba, w, 27), source, "x 27 is under the lit band");
+    assert_eq!(px(&rgba, w, 36), source, "x 36 is past the band's edge");
 }

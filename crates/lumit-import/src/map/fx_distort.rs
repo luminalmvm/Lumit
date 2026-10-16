@@ -154,7 +154,7 @@ fn set_matte(fx: &mut Fx<'_, '_>) {
     fx.layer(1, "matte");
     fx.channel(2, "channel", None);
     fx.toggle(3, "matte_invert");
-    fx.drop_ae(4); // If Layer Sizes Differ — the Matte row is always "stretch to fit"
+    fx.drop_ae(4); // If Layer Sizes Differ — the Matte row is read as placed in comp
     fx.toggle(5, "combine");
     fx.drop_ae(6); // Premultiply Matte Layer — Lumit composites premultiplied throughout
 }
