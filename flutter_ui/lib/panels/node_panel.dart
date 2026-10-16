@@ -654,8 +654,11 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
       builder: (context, playhead, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _header(context,
-              picked.info.customName ?? engineLabel(picked.info.name)),
+          // The box's own title. The instance's name is its schema key.
+          _header(context, switch (_box) {
+            final box? => _boxName(box),
+            null => picked.info.customName ?? effectLabelOf(picked.info.name),
+          }),
           Expanded(child: _rows(ui, picked, layer, playhead)),
         ],
       ),
@@ -667,7 +670,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
   String _boxName(BridgeCompNode box) => switch (box.kind) {
         BridgeCompNodeKind.read || BridgeCompNodeKind.input =>
           box.customName ?? box.label,
-        _ => engineLabel(box.label),
+        _ => box.customName ?? engineLabel(box.label),
       };
 
   /// The panel's own strip: the kicker, the box's name, and how many of its
@@ -746,7 +749,7 @@ class _NodePanelFrbState extends State<NodePanelFrb> {
             effect: id,
             onOpen: () {
               final name =
-                  picked.info.customName ?? engineLabel(picked.info.name);
+                  picked.info.customName ?? effectLabelOf(picked.info.name);
               if (layer == null) {
                 ui.enterShaderGraphInComp(ui.selectedComp!, id,
                     effectName: name);

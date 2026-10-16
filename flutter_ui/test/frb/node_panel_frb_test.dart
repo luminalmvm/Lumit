@@ -91,7 +91,9 @@ void main() {
       p.uiState.graphNode.value = effectRef(p.layer);
       await mount(tester, p, const NodePanelFrb());
 
-      expect(find.byKey(const ValueKey('node-name')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('node-name'))).data,
+          'Gaussian blur',
+          reason: 'its label, not its schema key');
       final id = p.layer.getEffects().single.id();
       for (final param in cachedListParameters('blur')) {
         expect(find.byKey(ValueKey<String>('node-row-$id-${param.id}')),
