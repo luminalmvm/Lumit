@@ -59,6 +59,8 @@ struct P {
 @group(0) @binding(9) var acc: texture_2d<f32>;
 @group(0) @binding(10) var dst: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(11) var<storage, read> spans: array<f32>;
+// Where this submission's share of the gather's rows or the sprites starts.
+@group(0) @binding(12) var<uniform> part: vec4<u32>;
 
 const TILE: i32 = 16;
 // The least blur, px, that is drawn as a layer over what is behind it.
@@ -292,10 +294,11 @@ fn lb_dilate(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 @compute @workgroup_size(8, 8)
 fn lb_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
-    if (gid.x >= p.w || gid.y >= p.h) {
+    let y = gid.y + part.x;
+    if (gid.x >= p.w || y >= p.h) {
         return;
     }
-    let xy = vec2<i32>(gid.xy);
+    let xy = vec2<i32>(i32(gid.x), i32(y));
     let me = textureLoad(info, xy, 0);
     let c_me = textureLoad(src, xy, 0);
     let reach = max(textureLoad(tiles, xy / TILE, 0).x, me.x);
@@ -458,7 +461,7 @@ fn lb_sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32
     out.colour = vec4<f32>(0.0);
     out.at = vec4<f32>(0.0);
     out.src_px = vec2<f32>(0.0);
-    var n = ii;
+    var n = ii + part.x;
     var level = 0u;
     var bw = p.w;
     for (; level < SPRITE_LEVELS; level++) {
