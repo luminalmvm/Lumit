@@ -1,11 +1,11 @@
 // The Viewer's preview progress bar (docs/07 §2.5).
 //
 // **In plain terms.** When a frame takes long enough to notice, this says so: a
-// slim bar on the right-hand end of the Viewer's transport that fills as the
+// slim bar just left of the reading on the Viewer's transport that fills as the
 // engine works through the frame, with a word for what it is doing. When the
 // frame arrives the bar goes.
 //
-// **Where it lives.** On the transport, at the far right, not floating over the
+// **Where it lives.** On the transport, not floating over the
 // picture. Over the picture it covered the bottom of the composition — the one
 // thing the Viewer exists to show — and it did so exactly while a frame was
 // being waited on, which is when people are looking hardest. On the bar it has
@@ -118,7 +118,7 @@ class _ViewerProgressBarState extends State<ViewerProgressBar>
 
     return IgnorePointer(
       child: Padding(
-        padding: const EdgeInsets.only(left: 12),
+        padding: const EdgeInsets.only(right: 12),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
