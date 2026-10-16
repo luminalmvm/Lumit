@@ -645,6 +645,9 @@ pub fn forward_migrate(doc: &mut Document) -> Result<(), ProjectError> {
                 lumit_core::fx::migrate_percent_to_px(&mut layer.styles, w, h);
                 lumit_core::fx::normalise_styles(&mut layer.styles);
             }
+            if let Some(graph) = &mut comp.graph {
+                graph.migrate_dof_pro_depth();
+            }
         }
     }
     Ok(())

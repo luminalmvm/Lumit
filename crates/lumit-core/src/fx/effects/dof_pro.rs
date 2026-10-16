@@ -2,14 +2,15 @@
 //!
 //! The lens is one of the bundled prescriptions, or one kept in the effect
 //! (see [`crate::fx::lens`]). [`crate::fx::lens_blur`] traces it into a table
-//! of out-of-focus shapes. The frame reads a depth from the matte, turns it into
-//! metres and then into how far that point's image lands from the sensor, and
-//! blurs each pixel with the shape the lens gives there.
+//! of out-of-focus shapes. The frame reads a distance from the Depth row, turns
+//! it into how far that point's image lands from the sensor, and blurs each
+//! pixel with the shape the lens gives there.
 //!
-//! The **Depth** row takes distance in metres instead, from a 3D precomp's
-//! Scene depth or another lens effect, and wins over the matte. With neither,
-//! every pixel sits at the far distance, so the effect can be dropped on
-//! footage to defocus it with a lens's character.
+//! The Depth row reads metres from a precomp with 3D layers in it (its Scene
+//! depth) or a Depth wire, and any other layer as a grey depth pass placed
+//! between Nearest and Farthest. Unset, every pixel sits at the far distance,
+//! so the effect can be dropped on footage to defocus it with a lens's
+//! character. The Matte is the ordinary one, a mask for the whole effect.
 //!
 //! In a node graph the Depth view hands on the metres it used, and Focus
 //! distance, F-stop and Glass curvature hand out how it is set, so the other
@@ -38,7 +39,7 @@ pub const DOF_PRO_GROUPS: &[ParamGroup] = &[
     },
     ParamGroup {
         label: "Depth map",
-        params: &["depth_channel", "near_m", "far_m"],
+        params: &["near_m", "far_m"],
         collapsed: true,
         visible_when: None,
         visible_when_lens_elements: None,
@@ -83,33 +84,28 @@ pub const DOF_PRO_ENABLED_WHEN: &[EnabledWhen] = &[
 #[effect(
     match_name = "dof_pro",
     label = "Depth of field pro",
-    version = 1,
+    version = 2,
     category = BlurSharpen,
     cost = Heavy,
     roi = PaddedPx(256.0), // lens_blur::MAX_SPAN_PX
     premultiplied = true,
     groups = DOF_PRO_GROUPS,
     enabled_when = DOF_PRO_ENABLED_WHEN,
-    matte = (
-        "depth",
-        "a depth pass: 0 is the nearest distance and 1 the farthest, and \
-         each pixel is blurred by how far it sits from the focus distance",
-    ),
-    matte_channel = false,
 )]
 pub struct DofPro {
-    /// The depth pass, on the matte carriage as Depth of field's is. Decided
+    /// How far away each pixel is: metres from a 3D precomp or a Depth wire,
+    /// otherwise a grey depth pass, 0 the nearest and 1 the farthest. Decided
     /// by the render, so always `false` here.
-    #[layer(label = "Matte", self_default = false)]
+    #[layer(label = "Depth", self_default = false)]
     pub depth: bool,
 
+    /// Which channel of a depth pass is read. Metres ignore it.
+    #[choice(options = *CHANNEL_OPTIONS, default = 0)]
+    pub depth_channel: u32,
+
+    /// Reads a depth pass the other way up. Metres ignore it.
     #[toggle(label = "Invert", default = false)]
     pub depth_invert: bool,
-
-    /// Distance in metres per pixel. Set, it wins over the matte and the
-    /// Depth map rows. Decided by the render, so always `false` here.
-    #[layer(label = "Depth", self_default = false)]
-    pub depth_m: bool,
 
     /// The bundled lens. A lens kept in the effect wins over it.
     #[choice(
@@ -229,9 +225,6 @@ pub struct DofPro {
     pub boost: f32,
 
     // ---- Depth map ----
-    #[choice(options = *CHANNEL_OPTIONS, default = 0)]
-    pub depth_channel: u32,
-
     /// The distance a depth of 0 means, metres.
     #[slider(
         label = "Nearest (m)",
@@ -244,7 +237,7 @@ pub struct DofPro {
     pub near_m: f32,
 
     /// The distance a depth of 1 means, metres, and where everything sits
-    /// with no matte.
+    /// with no depth.
     #[slider(
         label = "Farthest (m)",
         min = 1.0,
@@ -319,7 +312,11 @@ impl EffectDef for DofProDef {
     }
 
     fn depth_inputs(&self) -> &'static [&'static str] {
-        &["depth_m"]
+        &["depth"]
+    }
+
+    fn depth_takes_a_pass(&self) -> bool {
+        true
     }
 
     fn signature(&self) -> Signature {

@@ -485,6 +485,13 @@ pub trait EffectDef: Sync + Send + 'static {
         &[]
     }
 
+    /// Whether those rows also take a grey depth pass, which the effect places
+    /// between distances of its own. A node graph then lets a picture wire into
+    /// the depth socket too.
+    fn depth_takes_a_pass(&self) -> bool {
+        false
+    }
+
     /// Compute a driver's outputs, pushing `(port id, value)` for each one it
     /// declares. Every image effect pushes nothing, which is the default.
     ///

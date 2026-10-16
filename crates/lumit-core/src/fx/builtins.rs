@@ -396,6 +396,7 @@ pub fn backfill_builtin_params(effects: &mut [EffectInstance]) {
         };
         migrate_lens_flare_background(e);
         migrate_audio_level_source(e);
+        migrate_dof_pro_depth(e);
         // A Map placement row missing beside a Layer row that was saved: that
         // map was stretched, so it goes on being stretched.
         let stretched: Vec<&str> = s
@@ -628,6 +629,34 @@ fn migrate_audio_level_source(e: &mut EffectInstance) {
         }),
         extra: serde_json::Map::new(),
     });
+}
+
+/// Fold a saved Depth of field pro's metres row into the one Depth row.
+///
+/// It had a Matte holding a depth pass and a Depth row holding metres, and the
+/// Depth row won when both were set. The Matte's reference was stored under
+/// `depth`, which is the merged row's id, so a pass carries over by itself.
+/// Metres move across over it, as they won before, and the old row is dropped.
+fn migrate_dof_pro_depth(e: &mut EffectInstance) {
+    if e.effect.match_name != "dof_pro" {
+        return;
+    }
+    e.effect.version = e.effect.version.max(2);
+    let Some(old) = e.params.iter().position(|p| p.id == "depth_m") else {
+        return;
+    };
+    let metres = e.params.remove(old);
+    if !matches!(metres.value, EffectValue::Layer(Some(_))) {
+        return;
+    }
+    match e.params.iter_mut().find(|p| p.id == "depth") {
+        Some(depth) => depth.value = metres.value,
+        None => e.params.push(EffectParam {
+            id: "depth".to_owned(),
+            value: metres.value,
+            extra: serde_json::Map::new(),
+        }),
+    }
 }
 
 /// Point every `self_default` Layer parameter in `inst` at `layer` — the
