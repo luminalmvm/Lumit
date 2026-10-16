@@ -776,9 +776,12 @@ fn mark_banked(
     let Ok(slot) = usize::try_from(frame) else {
         return;
     };
+    // Held here, at full size. A bare 2 left the size half empty, which the bar
+    // draws as its shortest step until the next sweep put it right.
+    let held = crate::framecache::bar::pack(2, lumit_eval::schedule::FINEST_TIER as u8);
     if let Some(value) = strip.get_mut(slot) {
-        if *value != 2 {
-            *value = 2;
+        if *value != held {
+            *value = held;
             *dirty = true;
         }
     }
