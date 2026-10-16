@@ -307,8 +307,8 @@ impl Source {
                 // a prefix on every entry, so match the file name rather than
                 // the whole path.
                 let found = (0..zip.len()).find(|&i| {
-                    zip.name_for_index(i)
-                        .is_some_and(|entry| entry.rsplit('/').next() == Some(name))
+                    matches!(zip.name_for_index(i),
+                        Some(Ok(entry)) if entry.rsplit('/').next() == Some(name))
                 });
                 let Some(index) = found else {
                     return Ok(None);

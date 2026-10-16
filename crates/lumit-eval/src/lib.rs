@@ -724,6 +724,14 @@ fn feed_effect_stack(
         return Some(());
     }
     h.update(b"effects/");
+    let context = Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp.id),
+        layer: marker_layer.map(|l| l.id),
+        comp_time: t,
+        current_depth: 0,
+        inputs: None,
+    });
 
     // **The driver graph.** A wire substitutes a value where a keyframe would
     // have been read, so the pixels depend on it and the key must too. The
@@ -759,18 +767,7 @@ fn feed_effect_stack(
         feed_f64(h, lt);
         feed_f64(
             h,
-            lumit_core::fx::temporal_window(
-                &l.graph,
-                lt,
-                std::sync::Arc::new(lumit_core::expression::ExpressionContext {
-                    document: doc.clone(),
-                    comp: Some(comp.id),
-                    layer: Some(l.id),
-                    comp_time: t,
-                    current_depth: 0,
-                    inputs: None,
-                }),
-            ),
+            lumit_core::fx::temporal_window(&l.graph, lt, context.clone()),
         );
         for edge in &l.graph.edges {
             feed_edge(h, edge);
@@ -1110,18 +1107,23 @@ fn feed_effect_stack(
                 }
             }
         }
+        // An expression is read about its layer at this moment, as the builder
+        // reads it. Without that it ran detached, so `time` and anything naming
+        // a layer gave the same number on every frame, and the stale frame was
+        // served until some other row moved.
+        let at = |v: &lumit_core::anim::Property| v.value_at_with_context(lt, context.clone());
         for p in &e.params {
             h.update(p.id.as_bytes());
             use lumit_core::model::EffectValue;
             match &p.value {
-                EffectValue::Float(v) => feed_f64(h, v.value_at(lt)),
+                EffectValue::Float(v) => feed_f64(h, at(v)),
                 EffectValue::Point(x, y) => {
-                    feed_f64(h, x.value_at(lt));
-                    feed_f64(h, y.value_at(lt));
+                    feed_f64(h, at(x));
+                    feed_f64(h, at(y));
                 }
                 EffectValue::Colour(c) => {
                     for ch in c {
-                        feed_f64(h, ch.value_at(lt));
+                        feed_f64(h, at(ch));
                     }
                 }
                 EffectValue::Bool(b) => {
@@ -2912,6 +2914,30 @@ mod tests {
         bypassed.nodes[0].enabled = false;
         let off = comp_with(vec![layer_with(bypassed)]);
         assert_ne!(key(&doc, &driven, 1.0), key(&doc, &off, 1.0));
+    }
+
+    /// An effect row driven by an expression is named by what it gives at
+    /// this frame, in either language, so the picture moves with it.
+    #[test]
+    fn an_effect_expression_reaches_the_frame_key() {
+        use lumit_core::expression::Language;
+        let doc = Document::new();
+        for language in [Language::Rhai, Language::JavaScript] {
+            let mut blur = lumit_core::fx::instantiate("blur").unwrap();
+            for p in &mut blur.params {
+                if let (true, lumit_core::model::EffectValue::Float(radius)) =
+                    (p.id == "radius", &mut p.value)
+                {
+                    radius
+                        .set_animation(lumit_core::anim::Animation::Expression("time * 10".into()));
+                    radius.set_expression_language(language);
+                }
+            }
+            let mut layer = text_layer("hello", 0.0, 5.0, 0.0);
+            layer.effects = vec![blur];
+            let comp = comp_with(vec![layer]);
+            assert_ne!(key(&doc, &comp, 1.0), key(&doc, &comp, 1.5), "{language:?}");
+        }
     }
 
     /// Same content, different instance ids and names → the same key. This
