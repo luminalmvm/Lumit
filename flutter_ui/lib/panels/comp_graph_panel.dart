@@ -108,12 +108,15 @@ UuidValue compItemId(ItemReference item) => switch (item) {
 
 /// Whether a wire of [from] may land on a socket of [into].
 ///
-/// Types must be equal, with one exception (§1.4): a **matte socket takes an
+/// Types must be equal, with two exceptions (§1.4): a **matte socket takes an
 /// image wire** as well as a matte one, because what the row means by matte is
-/// the picture's own channel, chosen by the row's Channel setting.
+/// the picture's own channel, chosen by the row's Channel setting. A depth
+/// socket takes one too, as a grey depth pass. The engine refuses that on Lens
+/// flare, which only reads metres.
 bool compTypesFit(BridgePortType from, BridgePortType into) =>
     from == into ||
-    (into == BridgePortType.matte && from == BridgePortType.image);
+    (into == BridgePortType.matte && from == BridgePortType.image) ||
+    (into == BridgePortType.depth && from == BridgePortType.image);
 
 /// The sockets a catalogue entry would draw **in a node graph**, before it is
 /// in the document. Auto-wire and the console's filter work from these.

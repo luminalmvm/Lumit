@@ -635,7 +635,7 @@ impl Realiser<'_> {
                 let linear = if let Some(n) = d.nested.as_ref().filter(|n| n.scene_depth) {
                     // Distance, not a picture, so the referenced layer's own
                     // stack below has nothing to work on.
-                    return LayerInput::Texture(set_down(&self.realise_scene_depth(n)));
+                    return LayerInput::Depth(set_down(&self.realise_scene_depth(n)));
                 } else if let Some(n) = &d.nested {
                     self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
                 } else {
@@ -900,7 +900,7 @@ impl Realiser<'_> {
                         .into_iter()
                         .next()
                     {
-                        Some(LayerInput::Texture(t)) => Some((t, frame)),
+                        Some(LayerInput::Texture(t) | LayerInput::Depth(t)) => Some((t, frame)),
                         // `ThisLayer` cannot reach here: a graph has no layer
                         // for a reference to name.
                         _ => None,
@@ -1001,6 +1001,7 @@ impl Realiser<'_> {
                     ops,
                     matte,
                     picture,
+                    picture_depth,
                     colour_tables,
                     flare_lens_files,
                     roto,
@@ -1067,7 +1068,10 @@ impl Realiser<'_> {
                         &[],
                         &[],
                         &luts,
-                        &[bind(picture)],
+                        &[match bind(picture) {
+                            LayerInput::Texture(t) if *picture_depth => LayerInput::Depth(t),
+                            other => other,
+                        }],
                         &flare_lens,
                         &[bind(matte)],
                         // A graph has no masks, no birth schedules and no graph

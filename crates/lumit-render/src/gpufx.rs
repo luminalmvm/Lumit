@@ -2567,10 +2567,10 @@ impl GpuEffect for DofPro {
     fn aux(&self) -> AuxKind {
         AuxKind::LensFile
     }
-    /// The depth is the Depth row's metres, else the matte read as a 0..1 pass,
-    /// as Depth of field's is. With neither the whole frame sits at the far
-    /// distance. The lens is traced in lumit-core only when no table for these
-    /// optics is kept.
+    /// The depth is the Depth row: metres from a 3D precomp or a Depth wire,
+    /// otherwise a 0..1 pass. Unset, the whole frame sits at the far distance.
+    /// The Matte is the generic dissolve, run beside this. The lens is traced
+    /// in lumit-core only when no table for these optics is kept.
     fn run(
         &self,
         fx: &FxEngine,
@@ -2586,8 +2586,8 @@ impl GpuEffect for DofPro {
         let custom = aux.lens_file();
         let optics = e.bake_inputs(w, h);
         let text = custom.map(|(_, text)| text.clone());
-        let metres = aux.layer_input();
-        let depth = metres.or(aux.matte());
+        let picture = aux.layer_inputs().first().and_then(Option::as_ref);
+        let depth = picture.map(|p| &p.tex);
         fx.lens_blur(
             ctx,
             tex,
@@ -2597,7 +2597,7 @@ impl GpuEffect for DofPro {
             &lumit_gpu::fx::LensBlurOp {
                 bake_key: lens_blur::bake_key(&optics, custom.map(|(hash, _)| *hash)),
                 depth_bound: depth.is_some(),
-                depth_metres: metres.is_some(),
+                depth_metres: picture.is_some_and(|p| p.depth),
                 display_depth: e.display == 1,
                 depth_channel: e
                     .depth_channel

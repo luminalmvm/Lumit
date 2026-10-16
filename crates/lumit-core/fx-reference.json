@@ -3529,16 +3529,31 @@
       "slug": "depth-of-field-pro",
       "match_name": "dof_pro",
       "label": "Depth of field pro",
-      "version": 1,
+      "version": 2,
       "category": "Blur & sharpen",
       "category_slug": "blur-sharpen",
       "params": [
         {
           "id": "depth",
-          "label": "Matte",
+          "label": "Depth",
           "kind": "layer",
           "unit": "raw",
           "self_default": false
+        },
+        {
+          "id": "depth_channel",
+          "label": "Depth channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
         },
         {
           "id": "depth_invert",
@@ -3546,13 +3561,6 @@
           "kind": "bool",
           "unit": "raw",
           "default": false
-        },
-        {
-          "id": "depth_m",
-          "label": "Depth",
-          "kind": "layer",
-          "unit": "raw",
-          "self_default": false
         },
         {
           "id": "lens_model",
@@ -3735,21 +3743,6 @@
           "hard_max": 64.0
         },
         {
-          "id": "depth_channel",
-          "label": "Depth channel",
-          "kind": "choice",
-          "unit": "raw",
-          "default": 0,
-          "options": [
-            "Luminance",
-            "Alpha",
-            "Red",
-            "Green",
-            "Blue"
-          ],
-          "dividers_after": []
-        },
-        {
           "id": "near_m",
           "label": "Nearest (m)",
           "kind": "float",
@@ -3834,6 +3827,35 @@
             "Luminosity"
           ],
           "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "matte_channel",
+          "label": "Channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
         }
       ],
       "groups": [
@@ -3857,7 +3879,6 @@
         {
           "label": "Depth map",
           "params": [
-            "depth_channel",
             "near_m",
             "far_m"
           ],
@@ -3899,11 +3920,7 @@
           "cond": "layer_set"
         }
       ],
-      "matte": {
-        "param": "depth",
-        "meaning": "a depth pass: 0 is the nearest distance and 1 the farthest, and each pixel is blurred by how far it sits from the focus distance"
-      },
-      "matte_role": "own"
+      "matte_role": "strength"
     },
     {
       "slug": "channel-blur",

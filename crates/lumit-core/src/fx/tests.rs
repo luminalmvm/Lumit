@@ -4272,6 +4272,36 @@ fn lens_flare_backfill_restores_missing_params() {
     assert_eq!(effects[0].params.len(), count);
 }
 
+// A Depth of field pro saved with a Matte (a depth pass) and a Depth row
+// (metres) opens with one Depth row: the pass where only it was set, the
+// metres where both were, as the metres won. The old row goes.
+#[test]
+fn dof_pro_depth_rows_merge_on_open() {
+    let (pass, metres) = (uuid::Uuid::now_v7(), uuid::Uuid::now_v7());
+    for (saved_m, want) in [(None, pass), (Some(metres), metres)] {
+        let mut inst = instantiate("dof_pro").unwrap();
+        inst.effect.version = 1;
+        inst.params.retain(|p| !p.id.starts_with("matte"));
+        if let Some(p) = inst.params.iter_mut().find(|p| p.id == "depth") {
+            p.value = EffectValue::Layer(Some(pass));
+        }
+        inst.params.push(crate::model::EffectParam {
+            id: "depth_m".to_owned(),
+            value: EffectValue::Layer(saved_m),
+            extra: serde_json::Map::new(),
+        });
+        let mut effects = vec![inst];
+        backfill_builtin_params(&mut effects);
+        assert!(effects[0].params.iter().all(|p| p.id != "depth_m"));
+        assert_eq!(effects[0].layer_ref("depth"), Some(want));
+        assert_eq!(
+            effects[0].layer_ref("matte"),
+            None,
+            "the new Matte starts unset"
+        );
+    }
+}
+
 // The Background → Blend migration. A project
 // saved with Transparent lands on Add — the same pixels it always rendered —
 // and one saved with Black lands on Normal, the flare on opaque black that
@@ -7393,7 +7423,6 @@ fn every_effect_carries_a_matte_row() {
         let claims = matches!(
             s.match_name,
             "dof"
-                | "dof_pro"
                 | "rgb_split"
                 | "chromatic_aberration"
                 | "shake"
@@ -7529,14 +7558,14 @@ fn every_effect_carries_a_matte_row() {
         );
         // The Channel choice rides beside the injected pair on every
         // effect that does not pick its matte's channels itself. The four that
-        // do — Depth of field and Depth of field pro (`depth_channel`), Displacement map (its two
+        // do — Depth of field (`depth_channel`), Displacement map (its two
         // channel choices), the Lens flare (source detection) and Scatter,
         // which reads **alpha and only alpha** — carry none, and the
         // seam leaves their matte raw. Set matte used to be a fifth, and
         // carries no Matte row at all now.
         let owns_channel = matches!(
             s.match_name,
-            "dof" | "dof_pro" | "displacement_map" | "lens_flare" | "scatter"
+            "dof" | "displacement_map" | "lens_flare" | "scatter"
         );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(

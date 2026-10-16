@@ -509,6 +509,35 @@ fn spare_switch_socket(graph: &CompGraph, node: Uuid) -> u32 {
 }
 
 impl CompGraph {
+    /// Rewire Depth of field pro boxes saved before their two depth sockets
+    /// became one. The matte socket held a depth pass and `depth_m` held
+    /// metres, which won when both were wired. Both now go into `depth`, and
+    /// the matte socket is a mask, so the box is moved on to version 2 and a
+    /// mask wired later is left alone.
+    pub fn migrate_dof_pro_depth(&mut self) {
+        for node in &mut self.nodes {
+            let GraphNode::Fx(inst) = node else {
+                continue;
+            };
+            if inst.effect.match_name != "dof_pro" || inst.effect.version >= 2 {
+                continue;
+            }
+            inst.effect.version = 2;
+            let id = inst.id;
+            let metres = self
+                .edges
+                .iter()
+                .any(|e| e.to == id && e.to_port == "depth_m");
+            self.edges
+                .retain(|e| !(metres && e.to == id && e.to_port == MATTE_PORT.id));
+            for e in &mut self.edges {
+                if e.to == id && (e.to_port == "depth_m" || e.to_port == MATTE_PORT.id) {
+                    e.to_port = "depth".to_owned();
+                }
+            }
+        }
+    }
+
     /// A fresh node graph: one Output box at the canvas origin, which is what
     /// **New node graph** seeds.
     #[must_use]
@@ -689,10 +718,18 @@ impl CompGraph {
             // **A matte socket takes a picture as well as a matte**: what the
             // row means by matte is the picture's own channel, chosen by its
             // Channel setting, and refusing a picture there would refuse the
-            // thing people reach for first. Everywhere else a wire's type must
-            // equal its socket's.
+            // thing people reach for first. A depth socket whose effect also
+            // reads a grey depth pass takes a picture for the same reason.
+            // Everywhere else a wire's type must equal its socket's.
+            let takes_a_pass = || match to {
+                GraphNode::Fx(inst) => {
+                    crate::fx::def(&inst.effect.match_name).is_some_and(|d| d.depth_takes_a_pass())
+                }
+                _ => false,
+            };
             let matched = source.ty == sink.ty
-                || (sink.ty == PortType::Matte && source.ty == PortType::Image);
+                || (sink.ty == PortType::Matte && source.ty == PortType::Image)
+                || (sink.ty == PortType::Depth && source.ty == PortType::Image && takes_a_pass());
             if !matched {
                 return Err(GraphError::PortTypeMismatch);
             }
@@ -1173,6 +1210,35 @@ mod tests {
             exposed: Vec::new(),
             groups: Vec::new(),
         }
+    }
+
+    /// An old Depth of field pro box's depth wires land on its one Depth
+    /// socket, metres winning over a pass as they did, and a box already moved
+    /// on keeps a mask wired to its matte.
+    #[test]
+    fn dof_pro_depth_wires_merge_on_open() {
+        let (pass, metres) = (fx("depth"), fx("depth"));
+        let mut old = instantiate("dof_pro").unwrap();
+        old.effect.version = 1;
+        let (old, new) = (GraphNode::Fx(old), fx("dof_pro"));
+        let mut g = built(
+            vec![pass.clone(), metres.clone(), old.clone(), new.clone()],
+            vec![
+                wire(&pass, OUTPUT_PORT.id, &old, MATTE_PORT.id),
+                wire(&metres, OUTPUT_PORT.id, &old, "depth_m"),
+                wire(&pass, OUTPUT_PORT.id, &new, MATTE_PORT.id),
+            ],
+        );
+        g.migrate_dof_pro_depth();
+        assert_eq!(
+            g.wire_into(old.id(), "depth").map(|w| *w.0),
+            Some(metres.id())
+        );
+        assert_eq!(g.wire_into(old.id(), MATTE_PORT.id), None);
+        assert_eq!(
+            g.wire_into(new.id(), MATTE_PORT.id).map(|w| *w.0),
+            Some(pass.id())
+        );
     }
 
     /// The shape every other test bends: one Read through a blur into the

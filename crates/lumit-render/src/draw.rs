@@ -336,6 +336,9 @@ pub enum GraphStep {
         /// such row on one effect is not carried: `EffectSchema::layer_input`
         /// answers with one parameter, and that is the one the walk binds.
         picture: Option<usize>,
+        /// The picture comes down a Depth wire, so it is metres rather than a
+        /// picture.
+        picture_depth: bool,
         /// 1:1 with the op, as [`CompLayerDraw::lut_files`] is with its stack.
         colour_tables: Vec<Option<crate::colour::TableRequest>>,
         /// 1:1 with the op, as [`CompLayerDraw::flare_lens_files`] is.

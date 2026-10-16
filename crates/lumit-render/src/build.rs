@@ -2450,9 +2450,18 @@ fn comp_walk(
                         let Some(mut d) = layer_slot(e, param) else {
                             return LayerInputDraw::Absent;
                         };
-                        // A Depth row pointed at a Precomp reads its 3D layers'
-                        // distance rather than its picture.
-                        if def.depth_inputs().contains(&param) {
+                        // A Depth row pointed at a Precomp with 3D layers in it
+                        // reads their distance rather than its picture. A flat
+                        // precomp is a picture, a depth pass made as a comp.
+                        let three_d = e
+                            .layer_ref(param)
+                            .and_then(|id| comp.layers.iter().find(|l| l.id == id))
+                            .and_then(|l| match l.kind {
+                                LayerKind::Precomp { comp } => doc.comp(comp),
+                                _ => None,
+                            })
+                            .is_some_and(|c| c.layers.iter().any(|l| l.switches.three_d));
+                        if def.depth_inputs().contains(&param) && three_d {
                             if let Some(n) = d.nested.as_mut() {
                                 n.scene_depth = true;
                             }
@@ -4520,6 +4529,7 @@ impl GraphLower<'_> {
                 fx_ids: vec![id],
                 matte: None,
                 picture: source,
+                picture_depth: false,
                 colour_tables: vec![None],
                 flare_lens_files: vec![None],
                 roto: None,
@@ -4783,15 +4793,32 @@ impl GraphLower<'_> {
                                 if ops.is_empty() {
                                     return input;
                                 }
-                                let picture = lumit_core::fx::def(&inst.effect.match_name)
-                                    .and_then(|d| d.schema().layer_input())
-                                    .and_then(|param| wired(&steps, id, param));
+                                let param = lumit_core::fx::def(&inst.effect.match_name)
+                                    .and_then(|d| d.schema().layer_input());
+                                let picture = param.and_then(|param| wired(&steps, id, param));
+                                // Whether that wire carries metres, from the
+                                // socket it leaves.
+                                let picture_depth = param
+                                    .and_then(|param| graph.wire_into(id, param))
+                                    .and_then(|(from, port)| {
+                                        let node = graph.node(*from)?;
+                                        lumit_core::comp_graph::ports_of(
+                                            graph,
+                                            node,
+                                            Some(&**self.doc),
+                                        )
+                                        .1
+                                        .into_iter()
+                                        .find(|p| p.id == port)
+                                    })
+                                    .is_some_and(|p| p.ty == lumit_core::fx::PortType::Depth);
                                 plan.steps.push(GraphStep::Fx {
                                     input,
                                     ops,
                                     fx_ids,
                                     matte: wired(&steps, id, MATTE_PORT.id),
                                     picture,
+                                    picture_depth,
                                     colour_tables: colour_tables(
                                         std::slice::from_ref(inst),
                                         self.t,

@@ -560,6 +560,9 @@ pub enum LayerInput {
     ThisLayer,
     /// Another layer, already rendered alone at this raster.
     Texture(Tex),
+    /// Distance in metres rather than a picture: a 3D precomp's Scene depth
+    /// or a Depth wire.
+    Depth(Tex),
     /// One op's whole list of layers, for an effect with more than one layer
     /// row. Each entry has the layer's own size beside it, px at composition
     /// size, where it is another layer's picture.
@@ -579,7 +582,7 @@ impl LayerInput {
         match self {
             LayerInput::Absent | LayerInput::Several(_) | LayerInput::Late => None,
             LayerInput::ThisLayer => Some(current),
-            LayerInput::Texture(t) => Some(t),
+            LayerInput::Texture(t) | LayerInput::Depth(t) => Some(t),
         }
     }
 
@@ -589,7 +592,7 @@ impl LayerInput {
         match self {
             LayerInput::Absent | LayerInput::ThisLayer => false,
             // A late list is pictures nothing names yet.
-            LayerInput::Texture(_) | LayerInput::Late => true,
+            LayerInput::Texture(_) | LayerInput::Depth(_) | LayerInput::Late => true,
             LayerInput::Several(list) => list.iter().any(|(l, _)| l.binds_a_picture()),
         }
     }
@@ -603,6 +606,8 @@ pub struct LayerPicture {
     /// the effect's own input and for a picture nobody measured, which are
     /// the size of the frame.
     pub size: Option<[f32; 2]>,
+    /// Metres rather than a picture.
+    pub depth: bool,
 }
 
 /// Render one referenced layer alone into the depth input a depth-of-field
@@ -1394,6 +1399,7 @@ pub fn run_ops(
                 l.texture(&tex).cloned().map(|t| LayerPicture {
                     tex: lumit_gpu::fx::fit_centred(ctx, t, lw, lh),
                     size,
+                    depth: matches!(l, LayerInput::Depth(_)),
                 })
             };
             // A list that waited for this op's points is made now that the
