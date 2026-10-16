@@ -229,14 +229,20 @@ fn media_source(
 /// each offset. The planner and the builder both ask here, so the footage one
 /// fetches is the footage the other draws. Empty for a stack that reads only
 /// its own frame.
+///
+/// The second half of each entry is the flow offset a field measured against
+/// that picture is filed under, `None` when nothing measures it. On the frame
+/// before a cut (`crosses`, asked per offset) Motion blur is measured a frame
+/// back and filed under its own `1`, so the next shot is never read as motion.
 pub(crate) fn rebuild_offsets(
     layer: &lumit_core::model::Layer,
     lt: f64,
     comp_dt: f64,
-) -> Vec<(i32, bool)> {
+    crosses: impl Fn(i32) -> bool,
+) -> Vec<(i32, Option<i32>)> {
     let fx_on = layer.switches.fx;
-    let flow = lumit_core::fx::stack_flow_neighbours(&layer.effects, fx_on);
-    let mut offsets = flow.clone();
+    let flow = lumit_core::fx::stack_flow_sides(&layer.effects, fx_on, crosses);
+    let mut offsets: Vec<i32> = flow.iter().map(|&(_, side)| side).collect();
     if lumit_core::fx::stack_is_temporal(&layer.effects, fx_on) {
         // Asked at the layer's frame, as a footage layer's window is.
         offsets.extend(lumit_core::fx::stack_temporal_window(
@@ -248,9 +254,16 @@ pub(crate) fn rebuild_offsets(
     offsets.retain(|&o| o != 0);
     offsets.sort_unstable();
     offsets.dedup();
+    // ponytail: one field per picture. Datamosh and Motion blur on one layer
+    // both measuring a frame back lose Motion blur on that frame.
     offsets
         .into_iter()
-        .map(|o| (o, flow.contains(&o)))
+        .map(|o| {
+            (
+                o,
+                flow.iter().find(|&&(_, side)| side == o).map(|&(f, _)| f),
+            )
+        })
         .collect()
 }
 
@@ -411,7 +424,7 @@ pub fn collect_comp_jobs(
     // comp.
     let mut rebuilt = moments.to_vec();
     let mut layer_moments = Vec::with_capacity(comp.layers.len());
-    for l in &comp.layers {
+    for (idx, l) in comp.layers.iter().enumerate() {
         // And the moments a Clone to points shows this layer at.
         let cloned = clone_moments.iter().filter(|(id, _)| *id == l.id);
         layer_moments.push(
@@ -428,8 +441,12 @@ pub fn collect_comp_jobs(
             && !(any_solo && !l.switches.solo)
         {
             let lt = lumit_core::time::layer_time(t, l.start_offset.0);
+            let below = &comp.layers[idx + 1..];
+            let crosses = |o| {
+                lumit_core::fx::cut_between(below, t, lumit_core::time::frames_on(t, o, comp_dt))
+            };
             rebuilt.extend(
-                rebuild_offsets(l, lt, comp_dt)
+                rebuild_offsets(l, lt, comp_dt, crosses)
                     .into_iter()
                     .map(|(o, _)| lumit_core::time::frames_on(t, o, comp_dt)),
             );
@@ -830,8 +847,15 @@ pub fn collect_comp_jobs(
                         };
                         nested_moments.extend(layer_moments[idx].iter().map(|&tau| nested_at(tau)));
                         if !collapsed && !layer.is_adjustment() {
+                            let crosses = |o| {
+                                lumit_core::fx::cut_between(
+                                    &nested.layers,
+                                    st,
+                                    nested_at(t + f64::from(o) * comp_dt),
+                                )
+                            };
                             nested_moments.extend(
-                                rebuild_offsets(layer, lt, comp_dt)
+                                rebuild_offsets(layer, lt, comp_dt, crosses)
                                     .into_iter()
                                     .map(|(o, _)| nested_at(t + f64::from(o) * comp_dt)),
                             );

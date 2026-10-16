@@ -603,6 +603,43 @@ pub fn stack_flow_neighbours(effects: &[EffectInstance], fx_on: bool) -> Vec<i32
     offsets
 }
 
+/// Where each flow consumer in the stack measures its motion, as the offset
+/// it asked for and the offset it is measured against. That is the one it
+/// asked for, unless `crosses` says a cut lies that way: then the other side,
+/// and the field is turned round. With a cut both ways there is no field, and
+/// the effect passes the picture through.
+pub fn stack_flow_sides(
+    effects: &[EffectInstance],
+    fx_on: bool,
+    crosses: impl Fn(i32) -> bool,
+) -> Vec<(i32, i32)> {
+    stack_flow_neighbours(effects, fx_on)
+        .into_iter()
+        .filter_map(|o| [o, -o].into_iter().find(|&s| !crosses(s)).map(|s| (o, s)))
+        .collect()
+}
+
+/// Whether `layers` show another shot at comp time `b` than at `a`: a layer
+/// that draws starts or ends between them, or a Sequence layer moves on to
+/// another clip. The difference between two shots is not motion.
+pub fn cut_between(layers: &[Layer], a: f64, b: f64) -> bool {
+    layers
+        .iter()
+        .filter(|l| l.switches.visible && !l.audio_only)
+        .any(|l| {
+            let live = |t: f64| t >= l.in_point.0.to_f64() && t < l.out_point.0.to_f64();
+            let clip = |t: f64| match &l.kind {
+                crate::model::LayerKind::Sequence { clips } => crate::sequence::active_clip(
+                    clips,
+                    crate::time::layer_time(t, l.start_offset.0),
+                )
+                .map(|c| c.id),
+                _ => None,
+            };
+            live(a) != live(b) || clip(a) != clip(b)
+        })
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod extracted_channel_tests {

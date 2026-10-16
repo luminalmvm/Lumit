@@ -1680,11 +1680,27 @@ fn feed_layer(
                 .into_iter()
                 .filter(|&o| o != 0)
         };
+        // And on the frame before a cut, the frame on the other side that
+        // Motion blur is measured against instead.
+        let turned = |crosses: &dyn Fn(i32) -> bool| {
+            lumit_core::fx::stack_flow_sides(&layer.effects, layer.switches.fx, crosses)
+                .into_iter()
+                .filter(|(o, side)| o != side)
+                .map(|(_, side)| side)
+        };
         if layer.is_adjustment() {
             h.update(b"temporal-below/");
             let any_solo = lumit_core::model::any_picture_solo(comp);
             let below = comp.layers.iter().skip_while(|l| l.id != layer.id).skip(1);
-            for o in window() {
+            let under = comp
+                .layers
+                .iter()
+                .position(|l| l.id == layer.id)
+                .map_or(&[][..], |i| &comp.layers[i + 1..]);
+            let crosses = |o| {
+                lumit_core::fx::cut_between(under, t, lumit_core::time::frames_on(t, o, comp_dt))
+            };
+            for o in window().chain(turned(&crosses)) {
                 let tau = lumit_core::time::frames_on(t, o, comp_dt);
                 h.update(&o.to_le_bytes());
                 // The gates `feed_comp` puts in front of a layer, at `tau`.
@@ -1707,15 +1723,20 @@ fn feed_layer(
                 .filter(|_| !visited.contains(nested_id))
             {
                 h.update(b"temporal-nested/");
-                for o in window() {
-                    let nt = lumit_core::model::nested_source_time(
+                let nested_at = |o: i32| {
+                    lumit_core::model::nested_source_time(
                         layer,
                         nested,
                         lumit_core::time::layer_time(
                             t + f64::from(o) * comp_dt,
                             layer.start_offset.0,
                         ),
-                    );
+                    )
+                };
+                let crosses =
+                    |o| lumit_core::fx::cut_between(&nested.layers, nested_at(0), nested_at(o));
+                for o in window().chain(turned(&crosses)) {
+                    let nt = nested_at(o);
                     visited.push(*nested_id);
                     let r = comp_key_visited(doc, nested, nt, quality, stamper, visited);
                     visited.pop();

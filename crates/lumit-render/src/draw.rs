@@ -716,9 +716,11 @@ pub struct CompLayerDraw {
     ///
     /// The same pictures are the neighbour frames of any other temporal effect
     /// on these two kinds (Echo, a plugin that reads the frames either side),
-    /// so the list covers the stack's whole window. The last field says
-    /// whether a flow consumer asked for that offset: only those are measured,
-    /// and an Echo pays for the render and nothing else.
+    /// so the list covers the stack's whole window. The last field is the
+    /// flow offset the field measured against that picture is filed under:
+    /// only those are measured, and an Echo pays for the render and nothing
+    /// else. It is the picture's own offset, or on the frame before a cut the
+    /// other side's, with the field turned round (`rebuild_offsets`).
     ///
     /// Empty on every layer whose motion the decode worker can measure and on
     /// every layer that asks for none, which is almost all of them.
@@ -727,6 +729,6 @@ pub struct CompLayerDraw {
         i32,
         Vec<CompLayerDraw>,
         Option<lumit_core::model::CameraPose>,
-        bool,
+        Option<i32>,
     )>,
 }
