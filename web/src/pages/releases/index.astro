@@ -46,19 +46,25 @@ const rendered = await Promise.all(
                 </a>
               ))}
             </nav>
-            <div class="mt-4">
-              {rendered.map(({ release, Content }, i) => (
-                <ReleaseEntry
-                  id={release.id}
-                  versionNumber={release.data.versionNumber}
-                  date={release.data.date}
-                  latest={i === 0}
-                  last={i === rendered.length - 1}
-                >
-                  <Content />
-                </ReleaseEntry>
-              ))}
+            {/* The newest two are on the page from the start. The rest wait in
+                templates and join as the reader scrolls (script below). */}
+            <div class="mt-4" data-releases>
+              {rendered.map(({ release, Content }, i) => {
+                const entry = (
+                  <ReleaseEntry
+                    id={release.id}
+                    versionNumber={release.data.versionNumber}
+                    date={release.data.date}
+                    latest={i === 0}
+                    last={i === rendered.length - 1}
+                  >
+                    <Content />
+                  </ReleaseEntry>
+                );
+                return i < 2 ? entry : <template data-version={`v${release.data.versionNumber}`}>{entry}</template>;
+              })}
             </div>
+            <div data-more aria-hidden="true"></div>
           </>
         )
       }
@@ -103,3 +109,38 @@ const rendered = await Promise.all(
     color: var(--color-fg);
   }
 </style>
+
+<script>
+  // The next release joins while it is still a couple of screens below, so
+  // scrolling never reaches the end of what is there. A jump link, or a link
+  // straight to an older version, brings in everything down to it first.
+  const list = document.querySelector<HTMLElement>("[data-releases]");
+  const more = document.querySelector<HTMLElement>("[data-more]");
+  if (list && more) {
+    const add = () => {
+      const next = list.querySelector("template");
+      next?.replaceWith(next.content);
+      return next;
+    };
+    const observer = new IntersectionObserver(
+      ([seen]) => {
+        if (!seen.isIntersecting) return;
+        if (!add()) return observer.disconnect();
+        // Watching it afresh reports it again, in case it is still in range.
+        observer.unobserve(more);
+        observer.observe(more);
+      },
+      { rootMargin: "0px 0px 200% 0px" },
+    );
+    observer.observe(more);
+
+    const reach = () => {
+      const id = decodeURIComponent(location.hash.slice(1));
+      if (!id || !list.querySelector(`template[data-version="${CSS.escape(id)}"]`)) return;
+      while (!document.getElementById(id) && add());
+      document.getElementById(id)?.scrollIntoView();
+    };
+    addEventListener("hashchange", reach);
+    reach();
+  }
+</script>
