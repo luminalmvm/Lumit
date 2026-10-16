@@ -220,21 +220,21 @@ class ViewerBar extends StatelessWidget {
               if (loose)
                 Flexible(
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Flexible(child: reading),
-                    // Nothing at all while no frame is being waited on, so at
-                    // rest the reading really is the bar's right-hand end.
+                    // Before the reading, so the reading stays put at the
+                    // bar's right-hand end while a frame is waited on.
                     ViewerProgressBar(
                       tracker: Provider.of<LumitUiState>(context, listen: false)
                           .previewProgress,
                     ),
+                    Flexible(child: reading),
                   ]),
                 )
               else if (keepsReading) ...[
-                reading,
                 ViewerProgressBar(
                   tracker: Provider.of<LumitUiState>(context, listen: false)
                       .previewProgress,
                 ),
+                reading,
               ],
             ],
           );
