@@ -402,6 +402,7 @@ MenuEntry addExpressionRow(
                           .toString(),
                       ui.workspace.defaultExpressionLanguage),
               fresh: was is! BridgeScalar_Expression,
+              held: was,
               comp: comp,
               layer: layer,
               onCommit: (next) {

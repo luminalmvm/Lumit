@@ -10002,14 +10002,16 @@ fn an_illustrator_document_imports_as_a_comp_of_its_layers() {
 #[test]
 fn a_transform_expression_keeps_its_language_through_undo() {
     use crate::api::effect::{
-        sample_scalar_with_context, BridgeExpressionLanguage, BridgeRational, BridgeScalar,
+        expression_fault, sample_scalar_with_context, BridgeExpressionLanguage, BridgeRational,
+        BridgeScalar,
     };
     use crate::api::layer::BridgeTransformProp;
 
     let (project, layer) = project_with_layer();
     let rotation = BridgeTransformProp::Rotation;
     let read = || layer.get_transform().expect("transform").rotation;
-    let shown = || sample_scalar_with_context(read(), BridgeRational { num: 0, den: 1 }, layer);
+    let at = || BridgeRational { num: 0, den: 1 };
+    let shown = || sample_scalar_with_context(read(), at(), layer, None);
     layer
         .set_transform(rotation, BridgeScalar::Static(30.0))
         .expect("a number");
@@ -10023,6 +10025,19 @@ fn a_transform_expression_keeps_its_language_through_undo() {
         .expect("an expression");
     assert_eq!(read(), typed);
     assert_eq!(shown(), 34.0, "30 underneath, and 3.5 rounded up");
+
+    // Text typed over it in the editor reads the same 30, so wiggle is no fault.
+    let js = BridgeExpressionLanguage::JavaScript;
+    let draft = "wiggle(0, 0) + 1".to_owned();
+    assert_eq!(
+        expression_fault(draft.clone(), js, at(), layer, Some(read())),
+        None
+    );
+    let typing = BridgeScalar::Expression(draft, js);
+    assert_eq!(
+        sample_scalar_with_context(typing, at(), layer, Some(read())),
+        31.0
+    );
 
     // The same text as Rhai is a different expression, and says so.
     layer

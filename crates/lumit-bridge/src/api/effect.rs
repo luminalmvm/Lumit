@@ -725,6 +725,7 @@ pub fn sample_scalar_with_context(
     scalar: BridgeScalar,
     time: BridgeRational,
     layer: LayerReference,
+    held: Option<BridgeScalar>,
 ) -> f64 {
     let seconds = seconds_of(time);
     match scalar {
@@ -756,9 +757,10 @@ pub fn sample_scalar_with_context(
                 current_depth: 0,
                 inputs: None,
             });
+            let slot = own_slot(&context, &expr, held, seconds);
             // This runs on the interface's thread, for every row on screen.
             lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
-                lumit_core::expression::evaluate_in(language.read(), &expr, Some(context))
+                lumit_core::expression::evaluate_with(language.read(), &expr, Some(context), slot)
             })
         }
     }
@@ -772,6 +774,7 @@ pub fn expression_fault(
     language: BridgeExpressionLanguage,
     time: BridgeRational,
     layer: LayerReference,
+    held: Option<BridgeScalar>,
 ) -> Option<String> {
     let doc = document_for(&layer)?;
     let context = Arc::new(ExpressionContext {
@@ -784,10 +787,29 @@ pub fn expression_fault(
         current_depth: 0,
         inputs: None,
     });
+    let slot = own_slot(&context, &expression, held, seconds_of(time));
     // On the interface's thread, as the sampler above is.
     lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
-        lumit_core::expression::fault_in(language.read(), &expression, Some(context))
+        lumit_core::expression::fault_in(language.read(), &expression, Some(context), slot)
     })
+}
+
+/// What an expression knows about its property, as a render gives it: `value`
+/// and `wiggle` read this. `held` is the property as it is while new text is
+/// typed for it, and `None` when the text is already the property's own.
+fn own_slot(
+    context: &ExpressionContext,
+    expression: &str,
+    held: Option<BridgeScalar>,
+    seconds: f64,
+) -> lumit_core::expression::Slot {
+    use lumit_core::expression::{slot_on_layer, Slot};
+    match held {
+        None => slot_on_layer(context, expression),
+        Some(BridgeScalar::Expression(text, _)) => slot_on_layer(context, &text),
+        // Not an expression yet, so the number it shows is what one will read.
+        Some(number) => Slot::new(&[sample_at(number, seconds)], 0, 0),
+    }
 }
 
 /// The project document a layer reference points into.

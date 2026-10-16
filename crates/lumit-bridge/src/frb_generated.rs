@@ -8950,6 +8950,8 @@ fn wire__crate__api__effect__expression_fault_impl(
                 <crate::api::effect::BridgeExpressionLanguage>::sse_decode(&mut deserializer);
             let api_time = <crate::api::effect::BridgeRational>::sse_decode(&mut deserializer);
             let api_layer = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
+            let api_held =
+                <Option<crate::api::effect::BridgeScalar>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Result::<_, ()>::Ok(crate::api::effect::expression_fault(
@@ -8957,6 +8959,7 @@ fn wire__crate__api__effect__expression_fault_impl(
                     api_language,
                     api_time,
                     api_layer,
+                    api_held,
                 ))?;
                 Ok(output_ok)
             })())
@@ -20515,11 +20518,14 @@ fn wire__crate__api__effect__sample_scalar_with_context_impl(
             let api_scalar = <crate::api::effect::BridgeScalar>::sse_decode(&mut deserializer);
             let api_time = <crate::api::effect::BridgeRational>::sse_decode(&mut deserializer);
             let api_layer = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
+            let api_held =
+                <Option<crate::api::effect::BridgeScalar>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
-                let output_ok = Result::<_, ()>::Ok(
-                    crate::api::effect::sample_scalar_with_context(api_scalar, api_time, api_layer),
-                )?;
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::effect::sample_scalar_with_context(
+                        api_scalar, api_time, api_layer, api_held,
+                    ))?;
                 Ok(output_ok)
             })())
         },
