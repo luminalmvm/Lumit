@@ -3538,7 +3538,18 @@ fn comp_walk(
                 // the neighbour's own moment (`pixels_at_moment`).
                 // Empty unless one of those effects is live.
                 let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-                flow_below = crate::plan::rebuild_offsets(layer, lt, dt)
+                let nested_at = |offset: i32| {
+                    lumit_core::model::nested_source_time(
+                        layer,
+                        nested,
+                        lumit_core::time::layer_time(
+                            t_comp + f64::from(offset) * dt,
+                            layer.start_offset.0,
+                        ),
+                    )
+                };
+                let crosses = |o| lumit_core::fx::cut_between(&nested.layers, st, nested_at(o));
+                flow_below = crate::plan::rebuild_offsets(layer, lt, dt, crosses)
                     .into_iter()
                     // None inside a walk that is itself a neighbour.
                     .filter(|_| !with.rebuild)
@@ -3546,14 +3557,7 @@ fn comp_walk(
                         // The neighbour's own layer time, then the Retime
                         // map (§5.6): a retimed Precomp measures its
                         // motion between the moments it actually shows.
-                        let nt = lumit_core::model::nested_source_time(
-                            layer,
-                            nested,
-                            lumit_core::time::layer_time(
-                                t_comp + f64::from(offset) * dt,
-                                layer.start_offset.0,
-                            ),
-                        );
+                        let nt = nested_at(offset);
                         // Under the same Input values the frame itself is
                         // built under, read at the neighbour's moment. On
                         // the graph's defaults the neighbour was another
@@ -5548,14 +5552,16 @@ fn adjustment_flow_below(
     i32,
     Vec<CompLayerDraw>,
     Option<lumit_core::model::CameraPose>,
-    bool,
+    Option<i32>,
 )> {
     // The comp's own frame interval: the shutter this effect smears over is a
     // frame of the render, not a frame of some source nobody here has.
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let below = &comp.layers[idx + 1..];
-    crate::plan::rebuild_offsets(layer, lt, dt)
+    let crosses =
+        |o| lumit_core::fx::cut_between(below, t_comp, lumit_core::time::frames_on(t_comp, o, dt));
+    crate::plan::rebuild_offsets(layer, lt, dt, crosses)
         .into_iter()
         .map(|(offset, measure)| {
             let (draws, camera) = below_draws_cloned(
@@ -6912,6 +6918,37 @@ mod render_below_at_tests {
         );
     }
 
+    // On the frame before a cut the next frame is another shot, and the
+    // difference between the two is not motion. Motion blur is measured a
+    // frame back there, so the shot after the cut changes nothing.
+    #[test]
+    fn an_adjustment_motion_blur_does_not_measure_across_a_cut() {
+        let Some(rig) = FlowRig::new() else {
+            return;
+        };
+        let doc = Document::new();
+        let cut = lumit_core::time::CompTime(Rational::new(6, 10).unwrap());
+        let mut shot = sweeping_text(100.0);
+        shot.out_point = cut;
+        let mut next = text_layer(0.0);
+        next.transform.position_x = ramp(300.0, -100.0);
+        next.in_point = cut;
+        let blur = flow_adjustment(&["motion_blur"]);
+        let with_next = comp_with(10, vec![blur.clone(), next, shot.clone()]);
+        let alone = comp_with(10, vec![blur, shot.clone()]);
+        let smeared = rig.render(&doc, &with_next, 0.5);
+        assert!(
+            smeared == rig.render(&doc, &alone, 0.5),
+            "the shot after the cut is not read as motion"
+        );
+        let plain = rig.render(&doc, &comp_with(10, vec![shot]), 0.5);
+        let (w, h) = (320usize, 180usize);
+        assert!(
+            lit_columns(&smeared, w, h) > lit_columns(&plain, w, h),
+            "and the shot still smears by its own motion"
+        );
+    }
+
     // A stand-in for a plugin that reads the frame before this one, as a
     // motion blur does: it paints the picture with its -1 neighbour, and
     // leaves it alone when it is handed none.
@@ -7207,7 +7244,7 @@ mod render_below_at_tests {
                     .iter()
                     .map(|(o, inner, _, measure)| (*o, clip_colour(inner), *measure))
                     .collect::<Vec<_>>(),
-                vec![(-1, ORANGE, false), (1, ORANGE, false)],
+                vec![(-1, ORANGE, None), (1, ORANGE, None)],
                 "{what}: each neighbour is the clip at its own moment, with no flow asked for"
             );
 
@@ -7386,7 +7423,7 @@ mod render_below_at_tests {
                 .iter()
                 .map(|(o, below, _, measure)| (*o, clip_colour(below), *measure))
                 .collect::<Vec<_>>(),
-            vec![(-1, ORANGE, false), (1, ORANGE, false)],
+            vec![(-1, ORANGE, None), (1, ORANGE, None)],
             "each neighbour is the clip below at its own moment"
         );
 
@@ -7435,7 +7472,7 @@ mod render_below_at_tests {
                 Some(&|_, _, _| held),
             )
         };
-        let rebuilds = |comp: &Composition| -> Vec<(i32, bool)> {
+        let rebuilds = |comp: &Composition| -> Vec<(i32, Option<i32>)> {
             let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
             let mut v = vec![comp.id];
             build_comp_draws(
@@ -7476,7 +7513,7 @@ mod render_below_at_tests {
         let echoed = precomp(&["echo"]);
         let trail = rebuilds(&echoed);
         assert_eq!(trail.len(), 16, "one rebuild per frame of the window");
-        assert!(trail.iter().all(|(o, measure)| *o < 0 && !measure));
+        assert!(trail.iter().all(|(o, measure)| *o < 0 && measure.is_none()));
         // A rebuild is made from pixels, so its footage is decoded even
         // where the frame itself is held.
         let jobs = plan(&echoed, true);
@@ -7487,7 +7524,7 @@ mod render_below_at_tests {
         assert!(!job.shutter.is_empty());
 
         // Motion blur still gets its measurement.
-        assert_eq!(rebuilds(&precomp(&["motion_blur"])), vec![(1, true)]);
+        assert_eq!(rebuilds(&precomp(&["motion_blur"])), vec![(1, Some(1))]);
     }
 
     // Echo on a Precomp layer had the same fault as the plugin: every tap

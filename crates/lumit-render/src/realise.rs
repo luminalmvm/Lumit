@@ -1686,9 +1686,12 @@ impl Realiser<'_> {
         for (offset, draws, camera, measure) in &l.flow_below {
             let then = self.realise(*camera, width, height, background, draws);
             // Only an offset a flow consumer asked for is measured. An Echo
-            // or a plugin reads the neighbour picture and nothing more.
-            if let Some(field) = measure.then(|| self.measure_flow(now, &then)).flatten() {
-                fields.push((*offset, field));
+            // or a plugin reads the neighbour picture and nothing more. A
+            // field measured on the other side of the frame is turned round.
+            if let Some(under) = *measure {
+                if let Some(field) = self.measure_flow(now, &then, under != *offset) {
+                    fields.push((under, field));
+                }
             }
             neighbours.push((*offset, then));
         }
@@ -1723,7 +1726,12 @@ impl Realiser<'_> {
     /// while the footage path holds it, this is the whole of the difference.
     /// The upgrade is to name the below-composite the way a nested comp's
     /// frame is named, and then both halves can be cached under the one name.
-    fn measure_flow(&self, a: &wgpu::Texture, b: &wgpu::Texture) -> Option<wgpu::Texture> {
+    fn measure_flow(
+        &self,
+        a: &wgpu::Texture,
+        b: &wgpu::Texture,
+        turned: bool,
+    ) -> Option<wgpu::Texture> {
         let cell = self.flow?;
         // The solver reads these two pictures on an encoder of its own, and a
         // command that has not been submitted has not run.
@@ -1748,7 +1756,10 @@ impl Realiser<'_> {
         // a composite's field and a footage layer's are the same kind of thing.
         let conf = lumit_flow::confidence(&fwd, &bwd);
         let (w, h) = (a.width(), a.height());
-        let (u, v, c) = lumit_flow::field_to_size(&fwd, &conf, w as usize, h as usize);
+        let (mut u, mut v, c) = lumit_flow::field_to_size(&fwd, &conf, w as usize, h as usize);
+        if turned {
+            u.iter_mut().chain(v.iter_mut()).for_each(|x| *x = -*x);
+        }
         Some(lumit_gpu::fx::upload_flow_field(
             &self.ctx, &u, &v, &c, w, h,
         ))
