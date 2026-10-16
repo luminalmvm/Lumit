@@ -209,7 +209,11 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
     if (asked != _faultOf) {
       _faultOf = asked;
       _fault = expressionFault(
-          expression: _code.text, language: _language, time: time, layer: layer);
+          expression: _code.text,
+          language: _language,
+          time: time,
+          layer: layer,
+          held: on.scalar);
     }
     final fault = _fault;
     return Padding(
@@ -228,6 +232,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                     scalar: BridgeScalar_Expression(_code.text, _language),
                     time: time,
                     layer: layer,
+                    held: on.scalar,
                   ).toStringAsPrecision(6)}',
                   style: t.mono.copyWith(color: t.textMuted),
                 ),

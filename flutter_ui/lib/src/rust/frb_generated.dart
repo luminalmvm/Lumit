@@ -1044,7 +1044,8 @@ abstract class BridgeLibApi extends BaseApi {
       {required String expression,
       required BridgeExpressionLanguage language,
       required BridgeRational time,
-      required LayerReference layer});
+      required LayerReference layer,
+      BridgeScalar? held});
 
   String? crateApiExtensionsExtensionDataDir({required String id});
 
@@ -2259,7 +2260,8 @@ abstract class BridgeLibApi extends BaseApi {
   double crateApiEffectSampleScalarWithContext(
       {required BridgeScalar scalar,
       required BridgeRational time,
-      required LayerReference layer});
+      required LayerReference layer,
+      BridgeScalar? held});
 
   Float64List crateApiEffectSampleScalars(
       {required List<BridgeScalar> scalars, required BridgeRational time});
@@ -9308,7 +9310,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       {required String expression,
       required BridgeExpressionLanguage language,
       required BridgeRational time,
-      required LayerReference layer}) {
+      required LayerReference layer,
+      BridgeScalar? held}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -9316,6 +9319,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_bridge_expression_language(language, serializer);
         sse_encode_box_autoadd_bridge_rational(time, serializer);
         sse_encode_box_autoadd_layer_reference(layer, serializer);
+        sse_encode_opt_box_autoadd_bridge_scalar(held, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 240)!;
       },
       codec: SseCodec(
@@ -9323,7 +9327,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         decodeErrorData: null,
       ),
       constMeta: kCrateApiEffectExpressionFaultConstMeta,
-      argValues: [expression, language, time, layer],
+      argValues: [expression, language, time, layer, held],
       apiImpl: this,
     ));
   }
@@ -9331,7 +9335,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiEffectExpressionFaultConstMeta =>
       const TaskConstMeta(
         debugName: "expression_fault",
-        argNames: ["expression", "language", "time", "layer"],
+        argNames: ["expression", "language", "time", "layer", "held"],
       );
 
   @override
@@ -18973,13 +18977,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   double crateApiEffectSampleScalarWithContext(
       {required BridgeScalar scalar,
       required BridgeRational time,
-      required LayerReference layer}) {
+      required LayerReference layer,
+      BridgeScalar? held}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_bridge_scalar(scalar, serializer);
         sse_encode_box_autoadd_bridge_rational(time, serializer);
         sse_encode_box_autoadd_layer_reference(layer, serializer);
+        sse_encode_opt_box_autoadd_bridge_scalar(held, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 592)!;
       },
       codec: SseCodec(
@@ -18987,7 +18993,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         decodeErrorData: null,
       ),
       constMeta: kCrateApiEffectSampleScalarWithContextConstMeta,
-      argValues: [scalar, time, layer],
+      argValues: [scalar, time, layer, held],
       apiImpl: this,
     ));
   }
@@ -18995,7 +19001,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiEffectSampleScalarWithContextConstMeta =>
       const TaskConstMeta(
         debugName: "sample_scalar_with_context",
-        argNames: ["scalar", "time", "layer"],
+        argNames: ["scalar", "time", "layer", "held"],
       );
 
   @override

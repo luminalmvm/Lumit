@@ -38,6 +38,7 @@ const double _minWidth = 420;
 /// expression, or a plain number when the expression was taken off.
 /// [fresh] is an expression that was only just put there, holding the number
 /// the property had, so it opens selected and the first key typed replaces it.
+/// [held] is what the property holds, when that is not [value].
 Future<void> showExpressionEditor({
   required BuildContext context,
   required Rect over,
@@ -47,6 +48,7 @@ Future<void> showExpressionEditor({
   void Function(BridgeScalar_Expression draft)? onLive,
   required void Function(BridgeScalar next) onCommit,
   bool fresh = false,
+  BridgeScalar? held,
 }) async {
   final frame =
       Provider.of<LumitUiState>(context, listen: false).playheadFrame.value;
@@ -61,13 +63,14 @@ Future<void> showExpressionEditor({
       width: math.max(over.width, _minWidth),
       value: value,
       fresh: fresh,
-      sample: (scalar) =>
-          sampleScalarWithContext(scalar: scalar, time: time, layer: layer),
+      sample: (scalar) => sampleScalarWithContext(
+          scalar: scalar, time: time, layer: layer, held: held ?? value),
       fault: (scalar) => expressionFault(
           expression: scalar.field0,
           language: scalar.field1,
           time: time,
-          layer: layer),
+          layer: layer,
+          held: held ?? value),
       onDraft: (next) {
         draft = next;
         onLive?.call(next);
@@ -85,8 +88,8 @@ Future<void> showExpressionEditor({
   );
   if (removed) {
     // The number the expression was showing, so the picture does not move.
-    onCommit(BridgeScalar.static_(
-        sampleScalarWithContext(scalar: draft, time: time, layer: layer)));
+    onCommit(BridgeScalar.static_(sampleScalarWithContext(
+        scalar: draft, time: time, layer: layer, held: held ?? value)));
   } else if (draft != value) {
     // A cancelled edit that was previewed has to be written back over it.
     if (!cancelled) {

@@ -307,7 +307,7 @@ fn javascript_number(expression: &str, context: Option<&ExpressionContext>, slot
 /// For the callers that hold an expression's text and not the property it
 /// came off: the panels, which sample a row to show its number and its curve.
 /// A point's two rows carry the same text, and the first is the one found.
-fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
+pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
     use crate::anim::{Animation, Property};
     use crate::model::EffectValue;
 
@@ -423,6 +423,20 @@ pub fn evaluate_in(
                 .map_or_else(Slot::default, |context| slot_on_layer(context, expression));
             javascript_number(expression, context.as_deref(), slot)
         }
+    }
+}
+
+/// [`evaluate_in`] with what the expression knows about its property given,
+/// not looked up: for text still being typed, which no property holds yet.
+pub fn evaluate_with(
+    language: Language,
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+    slot: Slot,
+) -> f64 {
+    match language {
+        Language::Rhai => evaluate(expression, context),
+        Language::JavaScript => javascript_number(expression, context.as_deref(), slot),
     }
 }
 
@@ -566,8 +580,18 @@ pub fn evaluate_value_in(
     context: Option<Arc<ExpressionContext>>,
     vars: &[(&str, f64)],
 ) -> Result<ExprValue, String> {
+    value_with(language, expression, context, Slot::default(), vars)
+}
+
+fn value_with(
+    language: Language,
+    expression: &str,
+    context: Option<Arc<ExpressionContext>>,
+    slot: Slot,
+    vars: &[(&str, f64)],
+) -> Result<ExprValue, String> {
     if language == Language::JavaScript {
-        return match run_javascript(expression, context.as_deref(), Slot::default(), vars)? {
+        return match run_javascript(expression, context.as_deref(), slot, vars)? {
             script::Answer::Number(n) => Ok(ExprValue::Number(n)),
             script::Answer::List(list) => list_value(&list),
             script::Answer::Text(_) => Err("a string - not a number, a point or a colour".into()),
@@ -601,13 +625,15 @@ pub fn evaluate_value_in(
 ///
 /// [`evaluate_in`] cannot say: it hands the property of a failed expression a
 /// number all the same, so that a render has something to draw. This is for
-/// the editor, which shows the sentence.
+/// the editor, which shows the sentence. `slot` is what the expression knows
+/// about its property, as a render gives it, so `value` and `wiggle` run.
 pub fn fault_in(
     language: Language,
     expression: &str,
     context: Option<Arc<ExpressionContext>>,
+    slot: Slot,
 ) -> Option<String> {
-    match evaluate_value_in(language, expression, context, &[]) {
+    match value_with(language, expression, context, slot, &[]) {
         Err(why) => Some(why),
         Ok(ExprValue::Number(n)) if !n.is_finite() => Some("not a finite number".into()),
         Ok(ExprValue::Number(_)) => None,
