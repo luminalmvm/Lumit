@@ -537,7 +537,7 @@ trait ZipEntry {
     fn size(&self) -> u64;
 }
 
-impl ZipEntry for zip::read::ZipFile<'_> {
+impl<R: std::io::Read + ?Sized> ZipEntry for zip::read::ZipFile<'_, R> {
     fn size(&self) -> u64 {
         zip::read::ZipFile::size(self)
     }

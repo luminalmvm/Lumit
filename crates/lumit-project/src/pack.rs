@@ -153,7 +153,10 @@ fn media_index(archive: usize, zip: &mut ZipArchive<File>, length: u64, into: &m
         if entry.is_dir() || entry.compression() != CompressionMethod::Stored {
             continue;
         }
-        let Some((folder, name)) = split_entry(entry.name()) else {
+        let Ok(entry_name) = entry.name() else {
+            continue;
+        };
+        let Some((folder, name)) = split_entry(&entry_name) else {
             continue;
         };
         listed = listed.saturating_add(entry.size());

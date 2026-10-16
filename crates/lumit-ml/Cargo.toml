@@ -28,7 +28,7 @@ serde_json = "1"
 thiserror = "2"
 # Unpacking a download. Deflate only, the same pin `lumit-project` reads `.lum`
 # files with, so the addon installer adds no compression codec to the graph.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 # DirectX 12 hardware on Windows. The execution provider is a feature of the
 # same crate, so it rides a per-target table the way `lumit-gpu` carries
