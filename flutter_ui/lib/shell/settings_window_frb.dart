@@ -914,7 +914,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
         settings.tabOpensNodeSearch = shipped.tabOpensNodeSearch;
         settings.shiftAOpensNodeSearch = shipped.shiftAOpensNodeSearch;
-        settings.hangingWires = shipped.hangingWires;
+        settings.wireStyle = shipped.wireStyle;
         workspace.settingsChanged();
       case SettingsPage.viewer:
         workspace.setSmoothZoomedViewer(false);
@@ -2031,11 +2031,24 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.shiftAOpensNodeSearch = on;
             changed();
           }),
-          _flag(t, 'settings-hanging-wires', l10n.settingsHangingWires,
-              value: settings.hangingWires, set: (on) {
-            settings.hangingWires = on;
-            changed();
-          }),
+          _row(
+            t,
+            l10n.settingsWireStyle,
+            _dropdown<WireStyle>(
+              key: 'settings-wire-style',
+              value: settings.wireStyle,
+              options: WireStyle.values,
+              label: (style) => switch (style) {
+                WireStyle.curved => l10n.wireStyleCurved,
+                WireStyle.hanging => l10n.wireStyleHanging,
+                WireStyle.angled => l10n.wireStyleAngled,
+              },
+              onChanged: (style) => setState(() {
+                settings.wireStyle = style;
+                changed();
+              }),
+            ),
+          ),
         ],
       ),
     ]);

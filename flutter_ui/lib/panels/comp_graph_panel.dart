@@ -1670,7 +1670,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
       final ends = _edgeEnds(layout, edge);
       if (ends == null) continue;
       if (graphWireDistance(ends.$1, ends.$2, at,
-              hanging: _ui!.workspace.interface.hangingWires) >
+              wires: _ui!.workspace.interface.wireStyle) >
           graphWireGrab) {
         continue;
       }
@@ -2208,7 +2208,7 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                         dragged: t.textPrimary,
                         pan: _pan,
                         zoom: _zoom,
-                        hanging: ThemeScope.of(context).hangingWires,
+                        wireStyle: ThemeScope.of(context).wireStyle,
                       ),
                     ),
                   ),
@@ -2277,7 +2277,7 @@ class _CompWirePainter extends CustomPainter {
   final Color dragged;
   final Offset pan;
   final double zoom;
-  final bool hanging;
+  final WireStyle wireStyle;
 
   const _CompWirePainter({
     required this.wires,
@@ -2285,7 +2285,7 @@ class _CompWirePainter extends CustomPainter {
     required this.dragged,
     required this.pan,
     required this.zoom,
-    required this.hanging,
+    required this.wireStyle,
   });
 
   Offset _screen(Offset canvas) => canvas * zoom + pan;
@@ -2303,7 +2303,7 @@ class _CompWirePainter extends CustomPainter {
   void _wire(Canvas canvas, Offset from, Offset to, Color colour,
       {required bool dashes, double weight = 1}) {
     final path = graphWirePath(_screen(from), _screen(to),
-        zoom: zoom, hanging: hanging);
+        zoom: zoom, wires: wireStyle);
     final paint = Paint()
       ..color = colour
       ..style = PaintingStyle.stroke

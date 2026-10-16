@@ -13656,9 +13656,21 @@
   "@settingsShiftAOpensNodeSearch": {
     "description": "Settings window, Timeline page: the name of one setting - whether Shift+A over a focused node graph canvas opens the search for adding a box at the pointer. On by default. Keep Shift+A as the key combination."
   },
-  "settingsHangingWires": "Hanging wires",
-  "@settingsHangingWires": {
-    "description": "Settings window, Timeline page: the name of one setting - whether the wires between boxes in a node graph droop like slack cables instead of running in the usual S-curve. Off by default."
+  "settingsWireStyle": "Wires",
+  "@settingsWireStyle": {
+    "description": "Settings window, Timeline page: the name of one setting - how the wires between boxes in a node graph are drawn. A dropdown of Curved, Angled and Hanging follows it."
+  },
+  "wireStyleCurved": "Curved",
+  "@wireStyleCurved": {
+    "description": "Settings window, the Wires dropdown: wires run out of each socket in a smooth S-curve. The default."
+  },
+  "wireStyleHanging": "Hanging",
+  "@wireStyleHanging": {
+    "description": "Settings window, the Wires dropdown: wires droop between their sockets like slack cables."
+  },
+  "wireStyleAngled": "Angled",
+  "@wireStyleAngled": {
+    "description": "Settings window, the Wires dropdown: wires run in straight lines that turn only at 45 or 90 degrees, with each turn slightly rounded."
   },
   "closePanel": "Close panel",
   "@closePanel": {
