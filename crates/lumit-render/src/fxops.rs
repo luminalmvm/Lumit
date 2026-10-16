@@ -620,10 +620,11 @@ pub struct LayerPicture {
 /// resampled to fill `(w, h)` — the depth pass is expected to share the
 /// footage's framing (the standard "footage + matching depth pass" workflow),
 /// so it is stretched to the working raster and its own transform is not
-/// applied. A placement-aware depth is a recorded follow-up. `linear` is the
-/// referenced layer's source in the working linear format, sized
-/// `(src_w, src_h)`; each caller uploads/linearises it its own way, as the
-/// matte path does, and this helper owns only the resample so it never drifts.
+/// applied. A matte or a depth row is set down by [`place_layer_input`]
+/// instead. `linear` is the referenced layer's source in the working linear
+/// format, sized `(src_w, src_h)`; each caller uploads/linearises it its own
+/// way, as the matte path does, and this helper owns only the resample so it
+/// never drifts.
 pub fn render_layer_input(
     compositor: &lumit_gpu::Compositor,
     ctx: &GpuContext,

@@ -43,7 +43,8 @@ pub const CHANNEL_OPTIONS: &[&str] = &["Luminance", "Alpha", "Red", "Green", "Bl
 /// own layer. An effect offers the choice by declaring a Choice row with these
 /// options, named after its Layer row with `_placement` on the end
 /// (`source_placement` for `source`). A Layer row with no such row is
-/// stretched, as every read was before the choice existed.
+/// stretched, as every read was before the choice existed, except a matte or
+/// a depth row, which is read as placed.
 pub const MAP_PLACEMENT_OPTIONS: &[&str] = &["As placed in comp", "Stretch to fit", "Centre"];
 
 /// The three readings of a Map placement row, in [`MAP_PLACEMENT_OPTIONS`]
@@ -65,7 +66,16 @@ pub fn map_placement(e: &EffectInstance, row: &str) -> MapPlacement {
     match e.param(&format!("{row}_placement")) {
         Some(EffectValue::Choice(0)) => MapPlacement::AsPlaced,
         Some(EffectValue::Choice(2)) => MapPlacement::Centre,
-        _ => MapPlacement::Stretch,
+        Some(_) => MapPlacement::Stretch,
+        // A matte or a depth pass is read pixel for pixel against the
+        // picture, so it has to line up with it in the comp.
+        None if def(&e.effect.match_name).is_some_and(|d| {
+            d.schema().matte.param() == Some(row) || d.depth_inputs().contains(&row)
+        }) =>
+        {
+            MapPlacement::AsPlaced
+        }
+        None => MapPlacement::Stretch,
     }
 }
 
