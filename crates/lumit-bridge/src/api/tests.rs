@@ -10029,9 +10029,15 @@ fn a_transform_expression_keeps_its_language_through_undo() {
     // Text typed over it in the editor reads the same 30, so wiggle is no fault.
     let js = BridgeExpressionLanguage::JavaScript;
     let draft = "wiggle(0, 0) + 1".to_owned();
-    assert_eq!(expression_fault(draft.clone(), js, at(), layer, Some(read())), None);
+    assert_eq!(
+        expression_fault(draft.clone(), js, at(), layer, Some(read())),
+        None
+    );
     let typing = BridgeScalar::Expression(draft, js);
-    assert_eq!(sample_scalar_with_context(typing, at(), layer, Some(read())), 31.0);
+    assert_eq!(
+        sample_scalar_with_context(typing, at(), layer, Some(read())),
+        31.0
+    );
 
     // The same text as Rhai is a different expression, and says so.
     layer
