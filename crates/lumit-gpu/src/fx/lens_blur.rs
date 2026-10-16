@@ -94,6 +94,9 @@ struct Params {
 
 const TILE: u32 = 16;
 const ATLAS_COLS: u32 = 32;
+/// Block sizes the highlight sprites are drawn in, 1 to 32 px, as
+/// `fx_lens_blur.wgsl` has it.
+const SPRITE_LEVELS: u32 = 6;
 /// Tables kept on the card. One is about 12 MB.
 const CACHE_CAP: usize = 4;
 
@@ -656,7 +659,11 @@ impl FxEngine {
             });
             rp.set_pipeline(&fx.sprite.1);
             rp.set_bind_group(0, &sprite, &[]);
-            rp.draw(0..6, 0..w * h);
+            // One instance per block at every level.
+            let blocks: u32 = (0..SPRITE_LEVELS)
+                .map(|l| w.div_ceil(1 << l) * h.div_ceil(1 << l))
+                .sum();
+            rp.draw(0..6, 0..blocks);
         }
         let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("fx-lens-blur-finish"),

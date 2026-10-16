@@ -65,6 +65,8 @@ const TILE: i32 = 16;
 const FRONT_SPAN: f32 = 3.0;
 // The least blur, px, whose highlights are drawn as sprites.
 const SPRITE_SPAN: f32 = 1.5;
+// Block sizes highlights are drawn in, 1 to 32 px. Mirrored in lens_blur.rs.
+const SPRITE_LEVELS: u32 = 6u;
 const TAU: f32 = 6.2831853;
 
 fn channel_of(c: vec4<f32>) -> f32 {
@@ -435,8 +437,19 @@ struct SpriteOut {
     @location(3) @interpolate(flat) src_px: vec2<f32>,
 }
 
-// One instance per pixel. Anything that is not a blurred highlight collapses
-// to nothing; a highlight becomes a quad the size of its kernel.
+// Which block size a highlight of blur `span` is drawn in: blocks of 2^level
+// px, no wider than an eighth of the blur. One sprite per pixel costs the
+// square of the blur for every bright pixel, which on a wide blur over a
+// bright sky is minutes a frame. A block's highlights are summed into one
+// sprite at their centre of light, so a lone highlight still lands where it
+// is, and a bright area's edge is a few even steps too faint to see.
+fn sprite_level(span: f32) -> u32 {
+    return u32(clamp(floor(log2(span / 8.0)), 0.0, f32(SPRITE_LEVELS - 1u)));
+}
+
+// One instance per block at every level, pixels first. A block sums the
+// blurred highlights in it whose own level is this one, and becomes a quad the
+// size of their kernel. A block with none collapses to nothing.
 @vertex
 fn lb_sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> SpriteOut {
     var out: SpriteOut;
@@ -445,13 +458,55 @@ fn lb_sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32
     out.colour = vec4<f32>(0.0);
     out.at = vec4<f32>(0.0);
     out.src_px = vec2<f32>(0.0);
-    let j = vec2<i32>(i32(ii % p.w), i32(ii / p.w));
-    let o = textureLoad(info, j, 0);
-    let c = textureLoad(src, j, 0);
-    let k = hi_frac(c);
-    if (o.x < SPRITE_SPAN || k <= 0.0) {
+    var n = ii;
+    var level = 0u;
+    var bw = p.w;
+    for (; level < SPRITE_LEVELS; level++) {
+        bw = (p.w + (1u << level) - 1u) >> level;
+        let bh = (p.h + (1u << level) - 1u) >> level;
+        if (n < bw * bh) {
+            break;
+        }
+        n -= bw * bh;
+    }
+    let b = i32(1u << level);
+    let base = vec2<i32>(i32(n % bw), i32(n / bw)) * b;
+    var hi = vec4<f32>(0.0);
+    var sum_w = 0.0;
+    var at = vec2<f32>(0.0);
+    var span = 0.0;
+    var dist = 0.0;
+    var best = vec4<f32>(0.0);
+    var best_w = 0.0;
+    for (var y = 0; y < b; y++) {
+        for (var x = 0; x < b; x++) {
+            let j = base + vec2<i32>(x, y);
+            if (j.x >= i32(p.w) || j.y >= i32(p.h)) {
+                continue;
+            }
+            let o = textureLoad(info, j, 0);
+            let c = textureLoad(src, j, 0);
+            let k = hi_frac(c);
+            if (o.x < SPRITE_SPAN || k <= 0.0 || sprite_level(o.x) != level) {
+                continue;
+            }
+            let w = k * (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
+            hi += c * k;
+            sum_w += w;
+            at += vec2<f32>(j) * w;
+            span += o.x * w;
+            dist += o.y * w;
+            if (w > best_w) {
+                best = o;
+                best_w = w;
+            }
+        }
+    }
+    if (sum_w <= 0.0) {
         return out;
     }
+    at /= sum_w;
+    let o = vec4<f32>(span / sum_w, dist / sum_w, best.z, best.w);
     var corners = array<vec2<f32>, 6>(
         vec2<f32>(-1.0, -1.0),
         vec2<f32>(1.0, -1.0),
@@ -462,15 +517,14 @@ fn lb_sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32
     );
     // A pixel wider, so every pixel the kernel's edge reaches is drawn.
     let local = corners[vi] * (o.x + 1.0);
-    let r = radial_of(j);
+    let r = radial_of(vec2<i32>(round(at)));
     let t = vec2<f32>(-r.y, r.x);
-    let px = vec2<f32>(j) + 0.5 + t * local.x + r * local.y;
+    let px = at + 0.5 + t * local.x + r * local.y;
     out.pos = vec4<f32>(px.x / f32(p.w) * 2.0 - 1.0, 1.0 - px.y / f32(p.h) * 2.0, 0.0, 1.0);
     out.local = local;
-    let hi = c * k;
     out.colour = vec4<f32>(hi.rgb * p.boost, hi.a);
     out.at = o;
-    out.src_px = vec2<f32>(j);
+    out.src_px = at;
     return out;
 }
 
