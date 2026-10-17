@@ -1,4 +1,4 @@
-platform :osx, '10.15'
+platform :osx, '12.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -45,6 +45,9 @@ post_install do |installer|
     # macOS pass takes on universal binaries properly (docs/TODO.md).
     target.build_configurations.each do |config|
       config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+      # Each pod at the app's own minimum, as Xcode no longer builds for
+      # the 10.x ones some of their podspecs ask for.
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '12.0'
     end
   end
 end
