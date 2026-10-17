@@ -164,8 +164,48 @@ class _KeyLaneState extends State<KeyLane> {
   /// out costs no undo step — it simply never becomes one.
   final DragEscape _escape = DragEscape();
 
+  /// The lanes' horizontal scroll while a drag holds a key. Taking the pointer
+  /// to either end of the lanes scrolls them, and whatever scrolls by is added
+  /// to the key's travel, so it stays under the pointer.
+  ScrollPosition? _hScroll;
+  EdgeDraggingAutoScroller? _edgeScroll;
+  double _scrolledFrom = 0;
+
+  /// Around the pointer, in global coordinates. The lanes scroll once this
+  /// reaches either end of them, so they start 20 pixels short of the end:
+  /// a maximised window's right end is the screen's, and the pointer stops
+  /// there.
+  Rect _pointer = Rect.zero;
+
+  /// Asked again after every step, as the pointer may be held still.
+  void _scrollToPointer() => _edgeScroll?.startAutoScrollIfNecessary(_pointer);
+
+  void _followScroll() {
+    final p = _hScroll;
+    if (p == null) return;
+    setState(() => _deltaPx += p.pixels - _scrolledFrom);
+    _scrolledFrom = p.pixels;
+    _publish();
+  }
+
+  void _stopScroll() {
+    _edgeScroll?.stopAutoScroll();
+    _edgeScroll = null;
+    _hScroll?.removeListener(_followScroll);
+    _hScroll = null;
+  }
+
+  /// The pointer has moved with a key in hand.
+  void _dragBy(DragUpdateDetails d) {
+    setState(() => _deltaPx += d.delta.dx);
+    _publish();
+    _pointer = Rect.fromCenter(center: d.globalPosition, width: 40, height: 0);
+    _scrollToPointer();
+  }
+
   @override
   void dispose() {
+    _stopScroll();
     _escape.dispose();
     _hoverIx.dispose();
     super.dispose();
@@ -221,6 +261,13 @@ class _KeyLaneState extends State<KeyLane> {
       // the block stretch captures its own.
       _held = {...widget.selectedKeys};
     });
+    final scrollable = Scrollable.maybeOf(context, axis: Axis.horizontal);
+    if (scrollable != null) {
+      _edgeScroll = EdgeDraggingAutoScroller(scrollable,
+          velocityScalar: 50, onScrollViewScrolled: _scrollToPointer);
+      _hScroll = scrollable.position..addListener(_followScroll);
+      _scrolledFrom = scrollable.position.pixels;
+    }
     _escape.begin(_abandon);
   }
 
@@ -313,6 +360,7 @@ class _KeyLaneState extends State<KeyLane> {
   /// Put the key back where the drag found it, leaving nothing behind — what
   /// `Escape` does, and what a cancelled gesture does.
   void _abandon() {
+    _stopScroll();
     widget.stretch.value = null;
     if (!mounted) return;
     setState(() {
@@ -331,6 +379,7 @@ class _KeyLaneState extends State<KeyLane> {
   /// recogniser beside the drag would make the drag wait out the slop, and the
   /// pixels it waited through are frames the key would never travel.
   void _commit(int index) {
+    _stopScroll();
     final moved = widget.stretch.value;
     final wasClick = _deltaPx == 0;
     widget.stretch.value = null;
@@ -452,8 +501,7 @@ class _KeyLaneState extends State<KeyLane> {
                 },
                 onHorizontalDragUpdate: (d) {
                   if (!_escape.running || _dragging == null) return;
-                  setState(() => _deltaPx += d.delta.dx);
-                  _publish();
+                  _dragBy(d);
                 },
                 onHorizontalDragEnd: (_) {
                   final i = _dragging;
@@ -508,8 +556,7 @@ class _KeyLaneState extends State<KeyLane> {
                   // would make the way out look like a stutter.
                   onHorizontalDragUpdate: (d) {
                     if (!_escape.running) return;
-                    setState(() => _deltaPx += d.delta.dx);
-                    _publish();
+                    _dragBy(d);
                   },
                   onHorizontalDragEnd: (_) {
                     if (_escape.end()) _commit(i);
