@@ -68,13 +68,16 @@ pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 /// exists so a plugin that never comes back is still a plugin that stopped.
 pub const PRESS_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
-/// How long a describe may take: the handshake's ceiling, or a quirks-table
-/// control deadline set longer than it. The audio broker's twin, for the same
-/// reason: the first describe opens the bundle from disk on a process
-/// that has only just said hello, which is a program starting rather than a
-/// plugin thinking, and nothing on a render waits on it.
+/// How long a bundle gets to load and describe itself. Long, because only the
+/// plugin scan waits on it and Sapphire takes 16 seconds for its 286 effects
+/// on a fast machine. A plugin that runs out of time is killed, and killing one
+/// that is still loading holds up every bundle after it.
+pub const DESCRIBE_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// How long a describe may take: [`DESCRIBE_TIMEOUT`], or a quirks-table
+/// control deadline set longer than it.
 pub(crate) fn describe_deadline(quirks: &crate::quirks::Quirks) -> Duration {
-    HANDSHAKE_TIMEOUT.max(quirks.control_timeout)
+    DESCRIBE_TIMEOUT.max(quirks.control_timeout)
 }
 
 /// How many instances of one bundle's plugins may be alive at once.
@@ -1070,8 +1073,9 @@ impl Broker {
         self.start(&fresh_identifier()?)?;
 
         let control = self.config.quirks.control_timeout;
+        let describe = describe_deadline(&self.config.quirks);
         if let Ok(BrokerMessage::Described { plugins, .. }) =
-            self.exchange(&HostMessage::Describe, control, None)
+            self.exchange(&HostMessage::Describe, describe, None)
         {
             self.descriptors = plugins;
         }
@@ -1173,15 +1177,15 @@ fn read_loop(listener: Listener, tx: &mpsc::Sender<Incoming>) {
 
 #[cfg(test)]
 mod describe_deadline_tests {
-    use super::{describe_deadline, HANDSHAKE_TIMEOUT};
+    use super::{describe_deadline, DESCRIBE_TIMEOUT};
     use crate::quirks::Quirks;
 
     /// The shipped two-second control deadline is not what describe waits
     /// under: the first describe opens the module, which is a program starting.
     #[test]
-    fn describe_takes_the_handshake_ceiling_by_default() {
+    fn describe_takes_its_own_ceiling_by_default() {
         let quirks = Quirks::default();
-        assert!(quirks.control_timeout < HANDSHAKE_TIMEOUT);
-        assert_eq!(describe_deadline(&quirks), HANDSHAKE_TIMEOUT);
+        assert!(quirks.control_timeout < DESCRIBE_TIMEOUT);
+        assert_eq!(describe_deadline(&quirks), DESCRIBE_TIMEOUT);
     }
 }
