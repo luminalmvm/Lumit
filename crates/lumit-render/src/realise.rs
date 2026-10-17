@@ -645,6 +645,9 @@ impl Realiser<'_> {
                     // it happens to be.
                     self.upload_source(&d.rgba, d.tex_w, d.tex_h, d.format, &d.colour_space)
                 };
+                // The size it came out at. A comp is realised at the render
+                // scale, so in a zoomed-out Viewer it is smaller than `d.tex_w`.
+                let (lw, lh) = (linear.width(), linear.height());
                 // Effects-and-masks depth: run the depth layer's own
                 // stack on its texture before it is resampled, when the consumer's
                 // depth source is Effects and masks (`d.fx` non-empty). Temporal
@@ -732,7 +735,7 @@ impl Realiser<'_> {
                 // Same boundary as the matte's: the referenced layer
                 // is placed by `d.tex_w × d.tex_h` just below, so its own stack
                 // is cropped back to that raster rather than growing it.
-                let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, d.tex_w, d.tex_h);
+                let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, lw, lh);
                 LayerInput::Texture(set_down(&linear))
             })
             .collect()
@@ -1797,6 +1800,8 @@ impl Realiser<'_> {
             // nothing but a shape.
             self.upload_source(&m.rgba, m.tex_w, m.tex_h, m.format, &m.colour_space)
         };
+        // As for a layer input: a comp comes out at the render scale.
+        let (lw, lh) = (linear.width(), linear.height());
         // After-effects matte: run the matte source's own
         // stack on its texture before it gates the consumer, so a keyed
         // or blurred matte works. Temporal inputs stay empty in v1 — the
@@ -1876,7 +1881,7 @@ impl Realiser<'_> {
         // either: it is placed by `m.natural_size` below,
         // and a matte is a shape, not a picture that reaches
         // further. Cropped back to the size it was placed at.
-        let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, m.tex_w, m.tex_h);
+        let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, lw, lh);
         self.compositor.composite_with_camera(
             &self.ctx,
             width,
