@@ -137,7 +137,7 @@ pub enum Variant {
     /// `com.lumitlab.testplug` v2: the same identifier at another version, with
     /// a different parameter list, so two versions cannot come out the same.
     Slim,
-    /// Declares only the generator context, which this package does not drive.
+    /// Declares only the generator context.
     GeneratorOnly,
     /// Answers `kOfxStatFailed` to describe.
     Broken,
