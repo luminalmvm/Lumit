@@ -68,8 +68,8 @@ ViewerSnap snapToLines({
 }
 
 /// Every line a drag on the picture can land on, on screen (docs/07 §2.2 item
-/// 6): the comp's **guides**, and — only while *Snap to grid* is ticked — the
-/// **grid**'s own lines and the frame's four edges.
+/// 6): the comp's **guides**, the frame's edges and middle, and — only while
+/// *Snap to grid* is ticked — the **grid**'s own lines.
 ///
 /// [vertical] picks the axis: the lines a horizontal movement lands on (comp
 /// x), or the ones a vertical movement lands on (comp y).
@@ -85,15 +85,18 @@ List<double> viewerSnapTargets({
   bool grid = false,
   int divisions = 8,
 }) {
+  final from = vertical ? picture.left : picture.top;
+  final span = vertical ? picture.width : picture.height;
   final out = <double>[
     for (final guide in guides)
       if (guide.vertical == vertical)
         viewerGuideScreen(guide, picture: picture, compSize: compSize),
+    from,
+    from + span / 2,
+    from + span,
   ];
   if (grid && divisions > 0) {
-    final from = vertical ? picture.left : picture.top;
-    final span = vertical ? picture.width : picture.height;
-    for (var i = 0; i <= divisions; i++) {
+    for (var i = 1; i < divisions; i++) {
       out.add(from + span * i / divisions);
     }
   }
