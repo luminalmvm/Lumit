@@ -97,6 +97,8 @@ fn a_broker(root: &Path, env: &[(&str, &str)]) -> Option<(Broker, u32)> {
     // the mechanism, not a test hook.
     config.quirks.render_timeout = Duration::from_millis(400);
     config.quirks.control_timeout = Duration::from_secs(5);
+    // A hang on a first frame waits this out, once per strike.
+    config.quirks.warm_up_timeout = Duration::from_secs(2);
     config.exe = Some(PathBuf::from(env!("CARGO_BIN_EXE_lumit-ofx-broker")));
     config.env = env
         .iter()

@@ -28,6 +28,10 @@ use serde::Deserialize;
 const DEFAULT_RENDER_TIMEOUT: Duration = Duration::from_secs(10);
 /// See [`DEFAULT_RENDER_TIMEOUT`].
 const DEFAULT_CONTROL_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long a plugin gets to warm up: making an instance, and the first frame
+/// that instance renders in a fresh process. A plugin that loads a model or
+/// builds its kernels does it here, and that can take a minute.
+const DEFAULT_WARM_UP_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// The whole table.
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -74,6 +78,8 @@ pub struct Quirks {
     pub render_timeout: Duration,
     /// The deadline for describe, instance and other control actions.
     pub control_timeout: Duration,
+    /// The deadline for making an instance and for its first frame.
+    pub warm_up_timeout: Duration,
     /// Suite versions this plugin must be given, by suite name.
     pub suite_versions: BTreeMap<String, i32>,
     /// Why this plugin has an entry, for the diagnostics panel and for the
@@ -89,6 +95,7 @@ impl Default for Quirks {
         Self {
             render_timeout: DEFAULT_RENDER_TIMEOUT,
             control_timeout: DEFAULT_CONTROL_TIMEOUT,
+            warm_up_timeout: DEFAULT_WARM_UP_TIMEOUT,
             suite_versions: BTreeMap::new(),
             note: None,
             present_as: None,
