@@ -28,7 +28,8 @@ bezier with speed and influence.
 
 If you aren't used to all of Lumit's keybinds, an After Effects keymap 
 preset ships in Settings, which you can access via **Edit ▸ Settings ▸ Shortcuts**.
-Choosing **After Effects** when Lumit asks *How do you edit?* on its first run loads it.
+Choosing **After Effects** when Lumit asks *How do you edit?* on its first run, with
+**Use the After Effects shortcuts** ticked, loads it.
 
 Whole projects come across too. **File ▸ Import ▸ After Effects project**, and a 
 report will appear telling you what was carried across with or without adjustments. 
@@ -53,9 +54,9 @@ is applied from **Animation ▸ Apply animation preset**. See
 | Automatic crossfades | **Auto crossfade**, on the Cut timeline |
 | Quantize to frames | **Quantise**, on the Cut timeline |
 
-Choosing **Vegas** on the first run makes video arrive as a Sequence layer, opens the
-Retime graph to speed, and loads the Vegas shortcuts. They are also the **Vegas** preset in
-[Settings ▸ Shortcuts](/use/settings/).
+Choosing **Vegas** on the first run makes video arrive as a Sequence layer and opens the
+Retime graph to speed. Tick **Use the Vegas shortcuts** to load those too. They are also the
+**Vegas** preset in [Settings ▸ Shortcuts](/use/settings/).
 
 ## Premiere Pro or Resolve to Lumit
 

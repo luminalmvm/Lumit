@@ -3,8 +3,9 @@
 // On the very first launch — a machine with no settings file — Lumit asks how
 // the user edits and what the interface should look like: the style, the
 // colour scheme, where the toolbar stands and how much the chrome moves. The
-// After Effects answer loads the After Effects shortcuts with it, and the
-// Premiere Pro or Resolve answer opens the Cut workspace. One page, no steps.
+// After Effects and Vegas answers can load that editor's shortcuts too, and
+// the Premiere Pro or Resolve answer opens the Cut workspace. One page, no
+// steps.
 // Every setting it writes is an ordinary row in Settings
 // afterwards — the editing pair under Interface ▸ Editing, the look under
 // Appearance and Interface, the update tick under General ▸ Updates — so
@@ -42,9 +43,11 @@ enum FirstRunEditor {
 /// on, which is exactly what this screen is for. A null editor is Skip.
 /// [sequenceLayers] is false when the tick on the Vegas card asks for the
 /// Retime graph alone, and means nothing with the other answers.
+/// [shortcuts] is the chosen card's tick for loading that editor's keys.
 typedef FirstRunAnswer = ({
   FirstRunEditor? editor,
   bool sequenceLayers,
+  bool shortcuts,
   bool autoUpdate,
 });
 
@@ -52,7 +55,8 @@ typedef FirstRunAnswer = ({
 /// answer. Does nothing at all on any later launch, so callers can call it
 /// unconditionally at start-up.
 ///
-/// [keymap] is what the After Effects answer loads its shortcuts into.
+/// [keymap] is what the After Effects or Vegas answer loads its shortcuts
+/// into, when its tick asks for them.
 Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
     {KeymapState? keymap}) async {
   if (workspace.firstRunDone) return;
@@ -82,15 +86,14 @@ Future<void> maybeShowFirstRunFrb(BuildContext context, Workspace workspace,
       workspace.skipFirstRun();
     case FirstRunEditor.afterEffects:
       workspace.setEditingStyle(speedGraph: false, sequenceLayers: false);
-      // The card says After Effects, so its keys come too: the preset the
-      // After Effects button on Settings > Shortcuts loads.
-      await keymap?.loadPreset(BridgeKeymapPreset.afterEffects);
+      // The preset the After Effects button on Settings > Shortcuts loads.
+      if (answer!.shortcuts) {
+        await keymap?.loadPreset(BridgeKeymapPreset.afterEffects);
+      }
     case FirstRunEditor.vegas:
       workspace.setEditingStyle(
           speedGraph: true, sequenceLayers: answer!.sequenceLayers);
-      // The Vegas keys come with the card, as the After Effects ones do with
-      // theirs, unless only the Retime graph was asked for.
-      if (answer.sequenceLayers) {
+      if (answer.shortcuts) {
         await keymap?.loadPreset(BridgeKeymapPreset.vegas);
       }
     case FirstRunEditor.cut:
@@ -121,6 +124,11 @@ class _FirstRunState extends State<_FirstRun> {
   /// together are what the card describes.
   bool _retimeOnly = false;
 
+  /// The ticks for loading After Effects' or Vegas' own shortcuts. Clear to
+  /// begin with: Lumit's keys stay unless asked.
+  bool _aeKeys = false;
+  bool _vegasKeys = false;
+
   /// Ticked to begin with. Nothing is downloaded either way — this is
   /// permission to look, not permission to fetch.
   bool _autoUpdate = true;
@@ -130,6 +138,7 @@ class _FirstRunState extends State<_FirstRun> {
   void _answer(FirstRunEditor? editor) => widget.onChoose((
         editor: editor,
         sequenceLayers: !_retimeOnly,
+        shortcuts: editor == FirstRunEditor.vegas ? _vegasKeys : _aeKeys,
         autoUpdate: _autoUpdate,
       ));
 
@@ -177,10 +186,19 @@ class _FirstRunState extends State<_FirstRun> {
                                 editor: FirstRunEditor.afterEffects,
                                 title: l10n.keymapAfterEffects,
                                 blurb: l10n.firstRunAfterEffects,
-                                note: l10n.firstRunAfterEffectsKeys,
                                 chosen: _editor == FirstRunEditor.afterEffects,
                                 onTap: () => setState(
                                     () => _editor = FirstRunEditor.afterEffects),
+                                options: [
+                                  (
+                                    label: l10n.firstRunAfterEffectsShortcuts,
+                                    on: _aeKeys,
+                                    set: (on) => setState(() {
+                                      _aeKeys = on;
+                                      _editor = FirstRunEditor.afterEffects;
+                                    }),
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -190,20 +208,29 @@ class _FirstRunState extends State<_FirstRun> {
                                 editor: FirstRunEditor.vegas,
                                 title: l10n.firstRunVegasName,
                                 blurb: l10n.firstRunVegas,
-                                note: _retimeOnly
-                                    ? null
-                                    : l10n.firstRunVegasKeys,
                                 chosen: _editor == FirstRunEditor.vegas,
                                 onTap: () => setState(
                                     () => _editor = FirstRunEditor.vegas),
-                                // Ticking or clearing it is choosing Vegas:
-                                // it is a question about that answer.
-                                option: l10n.firstRunVegasRetimeOnly,
-                                optionOn: _retimeOnly,
-                                onOption: (on) => setState(() {
-                                  _retimeOnly = on;
-                                  _editor = FirstRunEditor.vegas;
-                                }),
+                                // Ticking or clearing either is choosing
+                                // Vegas: they are questions about that answer.
+                                options: [
+                                  (
+                                    label: l10n.firstRunVegasRetimeOnly,
+                                    on: _retimeOnly,
+                                    set: (on) => setState(() {
+                                      _retimeOnly = on;
+                                      _editor = FirstRunEditor.vegas;
+                                    }),
+                                  ),
+                                  (
+                                    label: l10n.firstRunVegasShortcuts,
+                                    on: _vegasKeys,
+                                    set: (on) => setState(() {
+                                      _vegasKeys = on;
+                                      _editor = FirstRunEditor.vegas;
+                                    }),
+                                  ),
+                                ],
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -459,29 +486,21 @@ class _Choice extends StatelessWidget {
   final FirstRunEditor editor;
   final String title;
   final String blurb;
-
-  /// One more line under the blurb, for something else the answer does.
-  final String? note;
   final bool chosen;
   final VoidCallback onTap;
 
-  /// A tick at the foot of the card, for an answer that comes in two
-  /// strengths: its words, whether it is on, and what changes it.
-  final String? option;
-  final bool optionOn;
-  final ValueChanged<bool>? onOption;
+  /// Ticks at the foot of the card, for what else the answer can do: each
+  /// one's words, whether it is on, and what changes it.
+  final List<({String label, bool on, ValueChanged<bool> set})> options;
 
   const _Choice({
     required this.id,
     required this.editor,
     required this.title,
     required this.blurb,
-    this.note,
     required this.chosen,
     required this.onTap,
-    this.option,
-    this.optionOn = false,
-    this.onOption,
+    this.options = const [],
   });
 
   @override
@@ -504,22 +523,18 @@ class _Choice extends StatelessWidget {
           Text(title, style: t.bodyPrimary),
           const SizedBox(height: 4),
           Text(blurb, style: t.small.copyWith(color: t.textSecondary)),
-          if (note case final note?) ...[
-            const SizedBox(height: 8),
-            Text(note, style: t.small.copyWith(color: t.textSecondary)),
-          ],
-          if (option case final option?) ...[
+          for (final (i, option) in options.indexed) ...[
             const SizedBox(height: 8),
             Row(
               children: [
                 HouseCheckbox(
-                  key: ValueKey<String>('$id-option'),
-                  value: optionOn,
-                  onChanged: onOption,
+                  key: ValueKey<String>('$id-option-$i'),
+                  value: option.on,
+                  onChanged: option.set,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(option,
+                  child: Text(option.label,
                       style: t.small.copyWith(color: t.textPrimary)),
                 ),
               ],

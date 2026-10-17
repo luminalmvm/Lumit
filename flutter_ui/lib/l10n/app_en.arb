@@ -1615,9 +1615,9 @@
   "@firstRunAfterEffects": {
     "description": "First run: what choosing After Effects habits does. Retime is a Lumit product term."
   },
-  "firstRunAfterEffectsKeys": "The After Effects shortcuts are loaded too.",
-  "@firstRunAfterEffectsKeys": {
-    "description": "First run: a second line on the After Effects card, saying that choosing it also switches the keyboard shortcuts to the After Effects preset."
+  "firstRunAfterEffectsShortcuts": "Use the After Effects shortcuts",
+  "@firstRunAfterEffectsShortcuts": {
+    "description": "First-run screen: a tick on the After Effects card that loads the After Effects keyboard shortcuts as well. Off by default."
   },
   "firstRunAutoUpdate": "Check for new versions of Lumit automatically.",
   "@firstRunAutoUpdate": {
@@ -1643,9 +1643,9 @@
   "@firstRunVegasRetimeOnly": {
     "description": "First run: a tick on the Vegas card. Ticked, the Retime graph opens to speed and nothing else changes: video still arrives as an ordinary layer. Retime is a Lumit product term."
   },
-  "firstRunVegasKeys": "The Vegas shortcuts are loaded too.",
-  "@firstRunVegasKeys": {
-    "description": "First-run screen, a note under the Vegas card: choosing it also loads the Vegas keyboard shortcuts. Shown unless the card's own tick asks for the Retime graph alone."
+  "firstRunVegasShortcuts": "Use the Vegas shortcuts",
+  "@firstRunVegasShortcuts": {
+    "description": "First-run screen: a tick on the Vegas card that loads the Vegas keyboard shortcuts as well. Off by default."
   },
   "firstRunVegasName": "Vegas",
   "@firstRunVegasName": {
