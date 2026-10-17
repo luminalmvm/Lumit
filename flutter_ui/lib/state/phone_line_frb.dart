@@ -4,8 +4,8 @@
 // the server and says there, once a second, what it is exporting and what it
 // could, so a phone can show it. A phone joins the account by scanning a code
 // this computer shows ([pair]), and the room says when one has. A phone may
-// start, cancel and remove exports through the room too, unless Settings says
-// not to ([_command]).
+// start, cancel and remove exports through the room too, and have a finished
+// one sent as a preview, unless Settings says not to ([_command]).
 //
 // Only names go up: the project's and each export's file, never a path, and
 // nothing a phone sends is used as one. Nothing here is on a rebuild path.
@@ -256,9 +256,12 @@ class PhoneLine extends ChangeNotifier {
       return null;
     }
     if (what == 'queue') return _queue(j);
-    if (what != 'cancel' && what != 'remove') return 'failed';
+    if (what != 'cancel' && what != 'remove' && what != 'preview') {
+      return 'failed';
+    }
     final item = exportQueueList().where((i) => i.id == j['item']).firstOrNull;
     if (item == null) return 'not_found';
+    if (what == 'preview') return _preview(item);
     if (what == 'cancel') {
       exportQueueCancel(id: item.id);
       app.postNotice(l10n.phoneCancelledExport(item.compName));
@@ -371,6 +374,33 @@ class PhoneLine extends ChangeNotifier {
           end: end,
           project: project.path() ?? ''));
     }
+    return null;
+  }
+
+  /// Send a finished export as a preview, the way [_queue] does: exported
+  /// again at preview size, since the file itself may be any format and size.
+  /// The queue keeps the composition's name and range rather than its id, so
+  /// it is found by name, and a range left to the default is the work area.
+  String? _preview(BridgeExportQueueItem item) {
+    if (item.state is! BridgeExportQueueState_Done) return 'failed';
+    final project = app.project;
+    // ponytail: two compositions of the same name take the first. Carry the
+    // id on the queue item if that bites.
+    final comp = project == null
+        ? null
+        : app.comps().where((c) => c.$2 == item.compName).firstOrNull?.$1;
+    if (comp == null) return 'no_project';
+    final area = item.rangeStartFrame < 0 ? workAreaFrames(comp) : null;
+    final start = area?.start ?? item.rangeStartFrame;
+    final end = area?.end ?? item.rangeEndFrame;
+    unawaited(reviews.send(comp,
+        into: reviews.linkOf(comp),
+        title: item.compName,
+        edge: 1080,
+        start: start,
+        end: end,
+        project: project!.path() ?? ''));
+    app.postNotice(l10n.phoneSentPreview(item.compName));
     return null;
   }
 

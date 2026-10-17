@@ -20036,6 +20036,15 @@
       }
     }
   },
+  "phoneSentPreview": "A phone is sending {name} as a preview",
+  "@phoneSentPreview": {
+    "description": "Quiet notice on the status line: one of the account's paired phones asked for a finished export to be sent as a preview, and the send has started.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "phonesExport": "Phones can start exports",
   "@phonesExport": {
     "description": "Switch in Settings, Account, Devices group: whether the paired phones may start, cancel and remove exports on this computer. Kept for this computer only."
