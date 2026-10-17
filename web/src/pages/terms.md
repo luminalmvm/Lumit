@@ -31,6 +31,15 @@ Pro is a subscription allowing access to additional online features.
 - We will tell you before any price change.
 - See [refunds](/refunds).
 
+### Bought in the iPhone app
+
+- Pro bought in Lumit for iPhone is sold by Apple, under Apple's
+  [terms](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/). It renews monthly or yearly
+  until you cancel.
+- Cancel at any time in your iPhone's Settings, under your name ▸ Subscriptions. Pro continues until the
+  next renewal date.
+- Refunds are Apple's to give: ask at [reportaproblem.apple.com](https://reportaproblem.apple.com).
+
 ## Dealing with misuse
 
 If the features provided with Pro are used in a way to harm or negatively 
