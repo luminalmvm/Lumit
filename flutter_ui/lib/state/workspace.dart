@@ -949,6 +949,15 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// Whether the account's phones may start, cancel and remove exports here.
+  /// This machine's own answer, so in no profile group.
+  bool phonesExport = true;
+
+  void setPhonesExport(bool on) {
+    phonesExport = on;
+    save();
+  }
+
   /// The relay a shared project keeps a room at, as `host` or `host:port`,
   /// or null for none. Somebody's own server, which Lumit only uses once it
   /// has been typed here.
@@ -1871,6 +1880,7 @@ class Workspace extends ChangeNotifier {
         'share_router': shareOutside,
         'share_relay': shareRelay,
         'share_cloud': shareCloud,
+        'phones_export': phonesExport,
         'share_up_limit': shareUpLimit,
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
@@ -1986,6 +1996,7 @@ class Workspace extends ChangeNotifier {
     final relay = j['share_relay'];
     shareRelay = relay is String && relay.isNotEmpty ? relay : null;
     shareCloud = j['share_cloud'] is! bool || j['share_cloud'] as bool;
+    phonesExport = j['phones_export'] is! bool || j['phones_export'] as bool;
     final (up, down) = (j['share_up_limit'], j['share_down_limit']);
     shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
     shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;

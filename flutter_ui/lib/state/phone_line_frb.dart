@@ -22,6 +22,7 @@ import 'package:lumit_flutter/src/rust/api/state.dart' show ScopedChange;
 import 'account.dart';
 import 'app_state.dart';
 import 'updates.dart' show versionFromBootLine;
+import 'workspace.dart';
 
 /// A computer or phone signed in to the account. [me] is this computer.
 typedef AccountDevice = ({String id, String name, bool phone, bool me});
@@ -29,8 +30,9 @@ typedef AccountDevice = ({String id, String name, bool phone, bool me});
 class PhoneLine extends ChangeNotifier {
   final AccountState account;
   final LumitState app;
+  final Workspace workspace;
 
-  PhoneLine(this.account, this.app);
+  PhoneLine(this.account, this.app, this.workspace);
 
   /// The phone that last took the code this computer showed, by name. The
   /// Add a phone window clears it as it opens.
@@ -142,6 +144,7 @@ class PhoneLine extends ChangeNotifier {
       'compositions': _compositions(),
       // A small file, read again each time so a preset saved shows at once.
       'presets': [for (final preset in exportPresetList()) preset.name],
+      'remote': workspace.phonesExport,
     });
     if (said == _said) return;
     _said = said;

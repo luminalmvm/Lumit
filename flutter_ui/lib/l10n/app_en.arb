@@ -20005,6 +20005,10 @@
   "@phoneAdd": {
     "description": "Button under the paired phones in Settings, and the title of the window it opens, which shows a code for a phone to scan."
   },
+  "phonesExport": "Phones can start exports",
+  "@phonesExport": {
+    "description": "Switch in Settings, Account, Devices group: whether the paired phones may start, cancel and remove exports on this computer. Kept for this computer only."
+  },
   "phoneAddScan": "Scan with your iPhone camera or the Lumit app.",
   "@phoneAddScan": {
     "description": "The one line under the code in the Add a phone window. The Lumit app is Lumit's iPhone app."

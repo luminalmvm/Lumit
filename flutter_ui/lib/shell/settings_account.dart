@@ -44,6 +44,7 @@ List<String> accountSettingsRows() => [
       l10n.settingsAccountPlan,
       l10n.settingsStorage,
       l10n.settingsPhones,
+      l10n.phonesExport,
       l10n.settingsSyncOn,
       for (final group in ProfileGroup.values) profileGroupLabel(group),
       l10n.backupSettingsOn,
@@ -74,7 +75,8 @@ class AccountSettings extends StatelessWidget {
         section(l10n.settingsAccountProfiles, _profiles(context, t));
         section(l10n.settingsAccountGroup, _account(context, t));
         // Keyed by the account, so another one starts from its own list.
-        if (ui.account.pro && matches(l10n.settingsPhones)) {
+        if (ui.account.pro &&
+            (matches(l10n.settingsPhones) || matches(l10n.phonesExport))) {
           sections.add(_Phones(
               key: ValueKey(ui.account.account?.id),
               ui: ui,
@@ -656,6 +658,18 @@ class _PhonesState extends State<_Phones> {
             await showAddPhone(context);
             await _read();
           }),
+        ),
+        // This machine's own answer, which the line sends with its state.
+        settingsRow(
+          t,
+          l10n.phonesExport,
+          '',
+          HouseToggle(
+            key: const ValueKey('settings-phones-export'),
+            value: widget.ui.workspace.phonesExport,
+            onChanged: (on) =>
+                setState(() => widget.ui.workspace.setPhonesExport(on)),
+          ),
         ),
       ],
       first: widget.first,
