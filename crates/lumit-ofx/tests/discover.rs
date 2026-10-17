@@ -146,10 +146,11 @@ fn a_folder_of_bundles_becomes_exactly_the_effects_it_should() {
         registered,
         vec![
             "ofx:com.lumitlab.testplug",
+            "ofx:com.lumitlab.testplug.generator",
             "ofx:com.lumitlab.testplug.passthrough",
             "ofx:com.lumitlab.testplug.unsafe",
         ],
-        "the disabled plugin, the two that will not describe and the one with \
+        "the disabled plugin, the one that will not describe and the one with \
          colliding parameter ids are all absent"
     );
 
@@ -190,7 +191,7 @@ fn a_folder_of_bundles_becomes_exactly_the_effects_it_should() {
     );
     assert_eq!(
         catalogue.names.len(),
-        3,
+        4,
         "the catalogue took each name exactly once"
     );
 

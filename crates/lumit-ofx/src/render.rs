@@ -41,6 +41,7 @@
 //! `kOfxImageEffectRenderFullySafe` plugin render at once; an unsafe one
 //! queues behind one lock (docs/12 §2.3, [`crate::instance::ThreadSafety`]).
 
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -48,6 +49,7 @@ use lumit_eval::epoch::{Cancelled, EpochToken};
 use thiserror::Error;
 
 use crate::bundle::PluginRef;
+use crate::describe::Context;
 use crate::ffi::{
     actions, frames_needed_key, prop_keys as keys, prop_values as values, region_of_interest_key,
 };
@@ -77,6 +79,53 @@ pub const RENDER_ACTIONS: [&str; 8] = [
 pub const OUTPUT_CLIP: &str = "Output";
 /// The one input clip this host drives, by the name OFX gives a filter's input.
 pub const SOURCE_CLIP: &str = "Source";
+/// A transition's two inputs: the picture it leaves, and the one it arrives at.
+pub const SOURCE_FROM_CLIP: &str = "SourceFrom";
+/// See [`SOURCE_FROM_CLIP`].
+pub const SOURCE_TO_CLIP: &str = "SourceTo";
+
+/// The clip the layer's picture goes in as: a transition's is the one it
+/// leaves, and a generator has none.
+pub(crate) fn source_clip(context: Context) -> Option<&'static str> {
+    match context {
+        Context::Filter | Context::General => Some(SOURCE_CLIP),
+        Context::Transition => Some(SOURCE_FROM_CLIP),
+        Context::Generator => None,
+    }
+}
+
+/// The request with its clips named the way the instance's context names
+/// them. The engine always hands the layer over as `Source`. A transition
+/// takes it as `SourceFrom`, with a transparent `SourceTo` beside it, and a
+/// generator takes nothing at all.
+fn in_context(
+    request: &RenderRequest,
+    context: Context,
+) -> Result<Cow<'_, RenderRequest>, RenderError> {
+    let Some(source) = request.inputs.get(SOURCE_CLIP) else {
+        return Ok(Cow::Borrowed(request));
+    };
+    let inputs = match context {
+        Context::Filter | Context::General => return Ok(Cow::Borrowed(request)),
+        Context::Generator => BTreeMap::new(),
+        Context::Transition => BTreeMap::from([
+            (SOURCE_FROM_CLIP.to_owned(), source.clone()),
+            (
+                SOURCE_TO_CLIP.to_owned(),
+                Frame16::black(source.width(), source.height())?,
+            ),
+        ]),
+    };
+    let neighbours = match context {
+        Context::Generator => Vec::new(),
+        _ => request.neighbours.clone(),
+    };
+    Ok(Cow::Owned(RenderRequest {
+        inputs,
+        neighbours,
+        ..*request
+    }))
+}
 
 /// What went wrong, as a value.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
@@ -111,6 +160,7 @@ impl From<Cancelled> for RenderError {
 }
 
 /// One frame's worth of question: when, how big, and what to work from.
+#[derive(Clone)]
 pub struct RenderRequest {
     /// The frame being asked for.
     pub time: f64,
@@ -304,6 +354,9 @@ pub fn render_with_prefetch(
 ) -> Result<Rendered, RenderError> {
     let handle = instance.handle();
     token.check()?;
+    let adapted = in_context(request, instance.context())?;
+    let request: &RenderRequest = &adapted;
+    let source = source_clip(instance.context()).unwrap_or(SOURCE_CLIP);
 
     // **The pictures go on before the first question, not before the render.**
     // A plugin's `getRegionOfDefinition` and `isIdentity` ask their input clip
@@ -328,7 +381,7 @@ pub fn render_with_prefetch(
     for (offset, frame) in &request.neighbours {
         let at = crate::instance::time_key(request.time + f64::from(*offset));
         images_at.insert(
-            (SOURCE_CLIP.to_owned(), at),
+            (source.to_owned(), at),
             Image::from_frame(frame, request.order)?,
         );
     }
@@ -418,6 +471,7 @@ fn ask(
     prefetch: Prefetch<'_>,
 ) -> Result<Answers, RenderError> {
     let handle = instance.handle();
+    let source = source_clip(instance.context()).unwrap_or(SOURCE_CLIP);
 
     let region_of_definition = get_region_of_definition(plugin, handle, request)?;
     token.check()?;
@@ -458,7 +512,7 @@ fn ask(
         .iter()
         .map(|(offset, _)| {
             let at = time_key(request.time + f64::from(*offset));
-            (SOURCE_CLIP.to_owned(), at)
+            (source.to_owned(), at)
         })
         .collect();
     let wanted: Vec<FrameWanted> = frames_wanted(&frames_needed, request.time)

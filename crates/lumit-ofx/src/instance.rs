@@ -307,6 +307,7 @@ impl InstanceState {
 /// unpredictable moments, possibly while the host lock is held.
 pub struct Instance {
     handle: Handle,
+    context: Context,
     thread_safety: ThreadSafety,
     lock: Arc<Mutex<()>>,
 }
@@ -365,6 +366,7 @@ impl Instance {
         }
         Ok(Self {
             handle,
+            context,
             thread_safety,
             lock,
         })
@@ -374,6 +376,12 @@ impl Instance {
     #[must_use]
     pub const fn handle(&self) -> Handle {
         self.handle
+    }
+
+    /// The context it was created in.
+    #[must_use]
+    pub const fn context(&self) -> Context {
+        self.context
     }
 
     /// What the plugin declared about concurrent renders.
@@ -632,7 +640,9 @@ impl Instance {
         );
         let mut images = BTreeMap::new();
         images.insert(
-            SOURCE_CLIP.to_owned(),
+            crate::render::source_clip(self.context)
+                .unwrap_or(SOURCE_CLIP)
+                .to_owned(),
             Image::from_frame(source, RowOrder::BottomUp)?,
         );
         images.insert(

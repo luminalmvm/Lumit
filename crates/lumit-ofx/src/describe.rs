@@ -19,11 +19,9 @@
 //!    and its parameters — they belong to the context, because the same plugin
 //!    is a different effect as a filter and as a general effect.
 //!
-//! **Contexts.** This package drives two, filter and general, which is what
-//! ofx-host.md §3 names and what covers every plugin the test bench cares
-//! about. docs/12 §2.1 lists four for the finished host — generator and
-//! transition arrive with the packages that can render them — and its rule for
-//! the gap is written down: *plugins adapt or are rejected at describe time
+//! **Contexts.** This package drives the four docs/12 §2.1 lists: filter,
+//! general, generator and transition. Its rule for anything else (retimer,
+//! paint) is written down: *plugins adapt or are rejected at describe time
 //! with a report entry*. So a plugin whose only context is one we cannot drive
 //! is rejected **with a reason**, the scan carries on, and the reason is a line
 //! in the report rather than a silence.
@@ -117,6 +115,12 @@ pub enum Context {
     Filter,
     /// As many inputs as the plugin asked for.
     General,
+    /// No input: the plugin makes the picture, which replaces the layer's.
+    Generator,
+    /// From one picture to another by a `Transition` control. The layer is
+    /// what it leaves and transparent is what it arrives at, so it reveals
+    /// whatever is under the layer, as Lumit's own wipes do.
+    Transition,
 }
 
 impl Context {
@@ -126,6 +130,8 @@ impl Context {
         match self {
             Context::Filter => values::CONTEXT_FILTER,
             Context::General => values::CONTEXT_GENERAL,
+            Context::Generator => values::CONTEXT_GENERATOR,
+            Context::Transition => values::CONTEXT_TRANSITION,
         }
     }
 
@@ -136,14 +142,22 @@ impl Context {
         match name {
             values::CONTEXT_FILTER => Some(Context::Filter),
             values::CONTEXT_GENERAL => Some(Context::General),
+            values::CONTEXT_GENERATOR => Some(Context::Generator),
+            values::CONTEXT_TRANSITION => Some(Context::Transition),
             _ => None,
         }
     }
 }
 
 /// **Preference order.** A filter is the simpler contract — one source, one
-/// output — so a plugin that offers both is driven as a filter.
-const PREFERRED_CONTEXTS: [Context; 2] = [Context::Filter, Context::General];
+/// output — so a plugin that offers both is driven as a filter. One that is
+/// also a generator or a transition is an effect on the layer first.
+const PREFERRED_CONTEXTS: [Context; 4] = [
+    Context::Filter,
+    Context::General,
+    Context::Generator,
+    Context::Transition,
+];
 
 /// One parameter, as an owned copy of everything the plugin said about it.
 ///
@@ -241,7 +255,7 @@ pub enum Rejection {
     #[error("describe failed ({0:?})")]
     DescribeFailed(Status),
     /// The plugin works only in contexts this host does not drive yet.
-    #[error("it works only in {}, and this host drives filter and general", .declared.join(", "))]
+    #[error("it works only in {}, which this host does not drive", .declared.join(", "))]
     NoDrivenContext {
         /// What it did declare, verbatim, so the report can name it.
         declared: Vec<String>,
