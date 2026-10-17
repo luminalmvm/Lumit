@@ -390,6 +390,9 @@ class PhoneLine extends ChangeNotifier {
         ? null
         : app.comps().where((c) => c.$2 == item.compName).firstOrNull?.$1;
     if (comp == null) return 'no_project';
+    // One send at a time, and the one under way would quietly take this one's place.
+    final under = reviews.sending;
+    if (under != null && under.stage != SendStage.done && under.stage != SendStage.failed) return 'busy';
     final area = item.rangeStartFrame < 0 ? workAreaFrames(comp) : null;
     final start = area?.start ?? item.rangeStartFrame;
     final end = area?.end ?? item.rangeEndFrame;
