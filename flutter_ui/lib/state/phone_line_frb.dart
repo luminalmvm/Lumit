@@ -1,8 +1,8 @@
 // The line between this computer and the account's phones.
 //
 // While the account has Pro, Lumit holds one socket to the account's room on
-// the server and says there, once a second, what it is exporting, so a phone
-// can show it. A phone joins the account by scanning a code this computer
+// the server and says there, once a second, what it is exporting and what it
+// could, so a phone can show it. A phone joins the account by scanning a code this computer
 // shows ([pair]), and the room says when one has.
 //
 // Only names go up: the project's and each export's file, never a path.
@@ -16,6 +16,8 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart' show lumitVersion;
 import 'package:lumit_flutter/src/rust/api/export.dart';
+import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/state.dart' show ScopedChange;
 
 import 'account.dart';
 import 'app_state.dart';
@@ -45,6 +47,12 @@ class PhoneLine extends ChangeNotifier {
   /// The last thing said, so the same thing is not said again.
   String? _said;
 
+  /// The open project's compositions as said, read again after the project
+  /// or anything in it changes rather than every second.
+  List<Map<String, Object>>? _comps;
+  ProjectReference? _compsOf;
+  StreamSubscription<ScopedChange>? _changes;
+
   /// When each export was first seen running, and first seen finished, in
   /// unix seconds, by its id in the queue.
   final Map<int, int> _ran = {}, _ended = {};
@@ -54,6 +62,7 @@ class PhoneLine extends ChangeNotifier {
   void start() {
     if (_started) return;
     _started = true;
+    _changes = app.onChange.listen((_) => _comps = null);
     account.addListener(_accountChanged);
     _accountChanged();
   }
@@ -130,10 +139,33 @@ class PhoneLine extends ChangeNotifier {
       'version': versionFromBootLine(lumitVersion()) ?? '',
       'project': projectNameFor(app.project?.path()),
       'queue': [for (final item in items) _item(item, now)],
+      'compositions': _compositions(),
+      // A small file, read again each time so a preset saved shows at once.
+      'presets': [for (final preset in exportPresetList()) preset.name],
     });
     if (said == _said) return;
     _said = said;
     socket.add(said);
+  }
+
+  /// Each by the id it is found again by, with whether it has a work area.
+  List<Map<String, Object>> _compositions() {
+    final project = app.project;
+    if (_comps != null && project == _compsOf) return _comps!;
+    _compsOf = project;
+    try {
+      return _comps = [
+        for (final (comp, name) in app.comps())
+          {
+            'id': '${comp.internalid}',
+            'name': name,
+            'workArea': comp.getWorkArea() != null,
+          },
+      ];
+    } catch (_) {
+      // Closed meanwhile.
+      return _comps = [];
+    }
   }
 
   Map<String, Object?> _item(BridgeExportQueueItem item, int now) {
@@ -216,6 +248,7 @@ class PhoneLine extends ChangeNotifier {
     _gone = true;
     _beat?.cancel();
     _retry?.cancel();
+    unawaited(_changes?.cancel());
     unawaited(_live?.close());
     if (_started) account.removeListener(_accountChanged);
     super.dispose();
