@@ -911,6 +911,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.pasteLayersAtOriginalTime = shipped.pasteLayersAtOriginalTime;
         settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
         settings.transformInEffectControls = shipped.transformInEffectControls;
+        workspace.setFxKeyStrip(true);
         settings.easingInPopup = shipped.easingInPopup;
         settings.quantiseSound = shipped.quantiseSound;
         settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
@@ -1987,6 +1988,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.transformInEffectControls = on;
             changed();
           }),
+          _flag(t, 'settings-fx-key-strip', l10n.settingsFxKeyStrip,
+              value: ui.workspace.fxKeyStrip,
+              set: ui.workspace.setFxKeyStrip),
           _flag(t, 'settings-easing-in-popup', l10n.settingsShapeEasesInAPopup,
               value: settings.easingInPopup, set: (on) {
             settings.easingInPopup = on;

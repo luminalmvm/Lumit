@@ -7704,6 +7704,10 @@
   "@settingsTransformInEffectControls": {
     "description": "Settings window: the name of one setting."
   },
+  "settingsFxKeyStrip": "Keyframes in Effect controls",
+  "@settingsFxKeyStrip": {
+    "description": "Settings window, Timeline page, Panels group: the name of one setting - whether the Effect controls panel shows its small keyframe timeline beside the parameters. On by default."
+  },
   "settingsUsedMbIn": "{megabytes} MB in {entries}",
   "@settingsUsedMbIn": {
     "description": "Settings: what a cache holds — an amount in megabytes and how many frames it is spread over. Shown for the RAM, VRAM and disk tiers.",
