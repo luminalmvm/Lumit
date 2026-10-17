@@ -192,7 +192,6 @@ r.addEventListener("input",set);set()})})`,
               items: [
                 {
                   label: "Effects",
-                  collapsed: true,
                   items: [{ slug: "effects" }, ...effectCategories],
                 },
                 { label: "How Lumit works", autogenerate: { directory: "engine" } },
