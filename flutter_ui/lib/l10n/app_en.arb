@@ -20005,6 +20005,37 @@
   "@phoneAdd": {
     "description": "Button under the paired phones in Settings, and the title of the window it opens, which shows a code for a phone to scan."
   },
+  "phoneStartedQueue": "A phone started the export queue",
+  "@phoneStartedQueue": {
+    "description": "Quiet notice on the status line: one of the account's paired phones started this computer's export queue."
+  },
+  "phoneQueuedExport": "A phone is exporting {name}",
+  "@phoneQueuedExport": {
+    "description": "Quiet notice on the status line: one of the account's paired phones added a composition to the export queue and started it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneCancelledExport": "A phone cancelled the export of {name}",
+  "@phoneCancelledExport": {
+    "description": "Quiet notice on the status line: one of the account's paired phones cancelled an export in the queue.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneRemovedExport": "A phone removed {name} from the queue",
+  "@phoneRemovedExport": {
+    "description": "Quiet notice on the status line: one of the account's paired phones removed an export from the export queue.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "phonesExport": "Phones can start exports",
   "@phonesExport": {
     "description": "Switch in Settings, Account, Devices group: whether the paired phones may start, cancel and remove exports on this computer. Kept for this computer only."

@@ -2,11 +2,13 @@
 //
 // While the account has Pro, Lumit holds one socket to the account's room on
 // the server and says there, once a second, what it is exporting and what it
-// could, so a phone can show it. A phone joins the account by scanning a code this computer
-// shows ([pair]), and the room says when one has.
+// could, so a phone can show it. A phone joins the account by scanning a code
+// this computer shows ([pair]), and the room says when one has. A phone may
+// start, cancel and remove exports through the room too, unless Settings says
+// not to ([_command]).
 //
-// Only names go up: the project's and each export's file, never a path.
-// Nothing here is on a rebuild path.
+// Only names go up: the project's and each export's file, never a path, and
+// nothing a phone sends is used as one. Nothing here is on a rebuild path.
 
 import 'dart:async';
 import 'dart:convert';
@@ -14,13 +16,21 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/timeline_extras_frb.dart'
+    show workAreaFrames;
 import 'package:lumit_flutter/shell/about_window_frb.dart' show lumitVersion;
+import 'package:lumit_flutter/shell/export_dialog_frb.dart'
+    show exportDefaultPath;
+import 'package:lumit_flutter/shell/status_line_frb.dart'
+    show statusLineExportStarted;
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart' show ScopedChange;
 
 import 'account.dart';
 import 'app_state.dart';
+import 'reviews.dart';
 import 'updates.dart' show versionFromBootLine;
 import 'workspace.dart';
 
@@ -32,7 +42,10 @@ class PhoneLine extends ChangeNotifier {
   final LumitState app;
   final Workspace workspace;
 
-  PhoneLine(this.account, this.app, this.workspace);
+  /// What sends a preview, for an export a phone asks to have sent as one.
+  final ReviewsState reviews;
+
+  PhoneLine(this.account, this.app, this.workspace, this.reviews);
 
   /// The phone that last took the code this computer showed, by name. The
   /// Add a phone window clears it as it opens.
@@ -212,6 +225,153 @@ class PhoneLine extends ChangeNotifier {
       justPaired = j['name'] as String;
       notifyListeners();
     }
+    if (j is Map && j['type'] == 'command') _command(j);
+  }
+
+  /// Do what a phone asked, and always answer it: ok, or why not. Said on the
+  /// status line like anything else done here, and nothing opens.
+  void _command(Map<dynamic, dynamic> j) {
+    String? error;
+    try {
+      error = workspace.phonesExport ? _do(j) : 'turned_off';
+    } catch (_) {
+      error = 'failed';
+    }
+    _live?.add(jsonEncode({
+      'type': 'reply',
+      'id': j['id'],
+      'to': j['from'],
+      if (error == null) 'ok': true else 'error': error,
+    }));
+    // The queue as it is now, rather than at the next beat.
+    _say();
+  }
+
+  String? _do(Map<dynamic, dynamic> j) {
+    final what = j['do'];
+    if (what == 'start') {
+      exportQueueStart();
+      statusLineExportStarted.value++;
+      app.postNotice(l10n.phoneStartedQueue);
+      return null;
+    }
+    if (what == 'queue') return _queue(j);
+    if (what != 'cancel' && what != 'remove') return 'failed';
+    final item = exportQueueList().where((i) => i.id == j['item']).firstOrNull;
+    if (item == null) return 'not_found';
+    if (what == 'cancel') {
+      exportQueueCancel(id: item.id);
+      app.postNotice(l10n.phoneCancelledExport(item.compName));
+    } else {
+      exportQueueRemove(id: item.id);
+      app.postNotice(l10n.phoneRemovedExport(item.compName));
+    }
+    return null;
+  }
+
+  /// Add a composition to the queue with a saved preset and start it, as the
+  /// export dialogue's Export button would with that preset chosen: to where
+  /// Settings > Export says, named as it names it, never over a file there.
+  String? _queue(Map<dynamic, dynamic> j) {
+    final project = app.project;
+    if (project == null) return 'no_project';
+    final comp = app
+        .comps()
+        .where((c) => '${c.$1.internalid}' == j['composition'])
+        .firstOrNull
+        ?.$1;
+    final preset = j['preset'];
+    if (comp == null || preset is! String || preset.isEmpty) return 'not_found';
+    final stored = exportPresetGet(name: preset);
+    if (stored == null) return 'not_found';
+    final settings = comp.getSettings();
+    var path = exportDefaultPath(exportDefaultsGet(),
+        preset: preset,
+        compName: settings.name,
+        codec: stored.codec,
+        projectPath: project.path());
+    if (path == null) return 'no_folder';
+    if (exportPathTaken(path: path, codec: stored.codec)) {
+      path = exportFreePath(path: path, codec: stored.codec);
+    }
+    final area = j['range'] == 'whole' ? null : workAreaFrames(comp);
+    final start = area?.start ?? 0;
+    final end = area?.end ?? comp.durationFrames();
+    // The dialogue's fields as the preset fills them. Its own ticks are off,
+    // the Viewer's region is not in it, and it sends the size the frame
+    // comes out at unless that is the composition's own.
+    BridgeExportSpec spec(int width, int height) => BridgeExportSpec(
+          preset: preset,
+          codec: stored.codec,
+          width: width,
+          height: height,
+          bitrateMbps: stored.bitrateMbps,
+          peakMbps: stored.peakMbps,
+          bitrateAuto: stored.bitrateAuto,
+          fps: stored.fps,
+          rangeStartFrame: start,
+          rangeEndFrame: end,
+          includeAudio: stored.includeAudio,
+          audioBitRate: stored.audioBitRate,
+          audioRate: stored.audioRate,
+          audioDepth: stored.audioDepth,
+          audioChannels: stored.audioChannels,
+          depth: stored.depth,
+          alphaChannel: stored.alphaChannel,
+          straightAlpha: stored.straightAlpha,
+          colourSpace: stored.colourSpace,
+          resample: stored.resample,
+          cropTop: stored.cropTop,
+          cropLeft: stored.cropLeft,
+          cropBottom: stored.cropBottom,
+          cropRight: stored.cropRight,
+          useRegionOfInterest: false,
+          region: Float64List(0),
+          metadata: const [],
+          qualityDivisor: stored.qualityDivisor,
+          diskCacheReadOnly: stored.diskCacheReadOnly,
+          effects: stored.effects,
+          honourSolo: stored.honourSolo,
+          renderGuides: stored.renderGuides,
+          motionBlur: stored.motionBlur,
+          retimeBlend: stored.retimeBlend,
+          useProxies: stored.useProxies,
+          makeANoise: false,
+          openFolder: false,
+        );
+    var (width, height) = (stored.width, stored.height);
+    if (width <= 0 || height <= 0) {
+      final crop = exportCropFor(
+          spec: spec(0, 0),
+          compWidth: settings.width,
+          compHeight: settings.height);
+      final divisor = stored.qualityDivisor.clamp(1, 4);
+      width = (crop.width / divisor).round().clamp(1, 16384);
+      height = (crop.height / divisor).round().clamp(1, 16384);
+    }
+    final own = width == settings.width && height == settings.height;
+    try {
+      comp.queueExport(
+          spec: spec(own ? 0 : width, own ? 0 : height),
+          path: path,
+          start: true);
+    } catch (_) {
+      return 'failed';
+    }
+    statusLineExportStarted.value++;
+    app.postNotice(l10n.phoneQueuedExport(settings.name));
+    // A preview is its own export, made and sent the way Send as a preview
+    // does it, behind this one in the queue.
+    if (j['preview'] == true) {
+      unawaited(reviews.send(comp,
+          into: reviews.linkOf(comp),
+          title: settings.name,
+          edge: 1080,
+          start: start,
+          end: end,
+          project: project.path() ?? ''));
+    }
+    return null;
   }
 
   /// A code for a phone to scan, at its address, and when it runs out. Asking

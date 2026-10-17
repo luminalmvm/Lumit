@@ -441,7 +441,7 @@ class LumitUiState extends ChangeNotifier {
   /// The account's review links, and the comments left on them.
   late final ReviewsState reviews = ReviewsState(account, profiles);
   /// The line to the account's phones, and what pairs one.
-  late final PhoneLine phones = PhoneLine(account, _app, workspace);
+  late final PhoneLine phones = PhoneLine(account, _app, workspace, reviews);
   /// The open project's backup and the account's backed-up projects.
   late final BackupState backup = BackupState(_app, account, profiles,
       looking: () => (selectedComp, playheadFrame.value));
