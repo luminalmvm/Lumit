@@ -945,9 +945,22 @@ fn open_video(
         }
     };
 
+    // Apple's players only open HEVC in mp4 or mov when it is tagged `hvc1`,
+    // and the muxer writes `hev1` unless told, whichever rung encoded it.
+    let apple_hevc = video.codec == VideoCodec::Hevc
+        && matches!(output.oformat().name().to_bytes(), b"mp4" | b"mov");
     {
+        let mut par = ctx.extract_codecpar();
+        if apple_hevc {
+            // SAFETY: `par` is a fresh copy this function owns, and the tag is
+            // a plain field the muxer reads when the header is written.
+            #[allow(unsafe_code)]
+            unsafe {
+                (*par.as_mut_ptr()).codec_tag = u32::from_le_bytes(*b"hvc1");
+            }
+        }
         let mut stream = output.new_stream();
-        stream.set_codecpar(ctx.extract_codecpar());
+        stream.set_codecpar(par);
         stream.set_time_base(AVRational {
             num: video.fps_den,
             den: video.fps_num,
@@ -1677,7 +1690,8 @@ mod tests {
     }
 
     /// HEVC is a first-class delivery codec now: the ladder must open one
-    /// (hardware or x265) and the result must probe as HEVC.
+    /// (hardware or x265) and the result must probe as HEVC, tagged `hvc1`
+    /// so Apple's players open it.
     #[test]
     fn hevc_round_trips_through_our_own_probe() {
         let dir = tempfile::tempdir().unwrap();
@@ -1699,6 +1713,9 @@ mod tests {
         let video = probe.video.unwrap();
         assert_eq!(video.codec, "hevc");
         assert_eq!((video.width, video.height), (320, 240));
+        let input = crate::probe::open_input(&(&path).into()).unwrap();
+        let tag = input.streams()[0].codecpar().codec_tag;
+        assert_eq!(&tag.to_le_bytes(), b"hvc1");
     }
 
     /// Every sample rate, sample width and channel layout the export dialog
