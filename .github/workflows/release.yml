@@ -22,7 +22,7 @@
 # code-signing certificate, which is a purchase and not code.
 #
 # Nightly builds come out of the same jobs. Once a night the schedule builds
-# `main` as a pre-release named for the next patch version
+# the `nightly` branch as a pre-release named for the next patch version
 # (v0.6.1-nightly.20261012.57), skipping the night when nothing has landed
 # since the last one. A nightly differs from a release in two files' worth:
 # scripts/stamp-nightly.sh gives it its version and its own icon. Being a
@@ -70,6 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
     steps:
       - id: plan
         env:
@@ -77,6 +78,13 @@ jobs:
           REQUESTED: ${{ inputs.version || github.ref_name }}
         run: |
           set -euo pipefail
+          # The schedule always starts on main, but a nightly is built from
+          # the nightly branch. Every other run builds the commit it started on.
+          sha="$GITHUB_SHA"
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/nightly" --jq .sha)"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
           if [ "$GITHUB_EVENT_NAME" != schedule ] && [ "$REQUESTED" != nightly ]; then
             echo "version=$REQUESTED" >> "$GITHUB_OUTPUT"
             exit 0
@@ -86,7 +94,7 @@ jobs:
             --jq '.[] | select(.draft | not) | .tag_name' \
             | grep -e '-nightly\.' | sort -V | tail -n 1 || true)"
           if [ "$GITHUB_EVENT_NAME" = schedule ] && [ -n "$last" ] \
-            && [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$last" --jq .sha)" = "$GITHUB_SHA" ]; then
+            && [ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$last" --jq .sha)" = "$sha" ]; then
             echo "Nothing has landed since $last. No nightly tonight."
             exit 0
           fi
@@ -115,6 +123,10 @@ jobs:
       FFMPEG_SHA256: 0a41f31caff48e3035b48f09f5d840bd8d1863008240fc43e457f15e589cf5b3
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
@@ -190,6 +202,10 @@ jobs:
       FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
@@ -310,6 +326,10 @@ jobs:
       APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: stable
@@ -410,6 +430,10 @@ jobs:
       RELEASE_VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           merge-multiple: true
@@ -545,6 +569,6 @@ jobs:
             before="--notes-file before.md" ;;
           esac
           gh release create "$tag" dist/* \
-            --target "$GITHUB_SHA" \
+            --target "${{ needs.plan.outputs.sha }}" \
             --title "Lumit $tag" \
             --generate-notes $prerelease $before

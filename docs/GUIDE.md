@@ -110,8 +110,9 @@ flutter analyze
 
 ### CI
 
-`.github/workflows/ci.yml` runs on every pull request and push to `main`. A red CI blocks
-everything else.
+`.github/workflows/ci.yml` runs on every pull request and push to `main` or `nightly`. A red CI blocks
+everything else. Bug fixes go to `main`, which merges itself into `nightly`. New features go to
+`nightly`, which merges into `main` for the next minor release.
 
 | Job | Checks |
 |---|---|
@@ -227,4 +228,4 @@ crate knows a UI exists. `lumit-core` has no GPU, codec or audio dependency.
 | `scripts/` | `build`, `check`, `codegen`, `translations`, `manual-pages`, `shots`, `win-dev-env`. Each answers `-?` |
 | `packaging/` | Windows installer, macOS dmg, Linux desktop files, Flatpak |
 | `tools/` | The After Effects export script and its audit kit |
-| `.github/workflows/` | `ci.yml`, and `release.yml` on a `v*` tag and nightly from `main` |
+| `.github/workflows/` | `ci.yml`, and `release.yml` on a `v*` tag and nightly from `nightly` |

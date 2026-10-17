@@ -8,7 +8,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, nightly]
   pull_request:
   # Run it by hand from the Actions tab. GitHub occasionally does not deliver
   # the `pull_request` event for a push — a branch sits at "pending" with no run

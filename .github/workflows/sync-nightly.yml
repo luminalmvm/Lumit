@@ -1,0 +1,32 @@
+# Whatever lands on main, a bug fix most often, is merged on into nightly
+# straight away, so the next nightly has it too. A merge that conflicts fails
+# here and is done by hand.
+name: sync-nightly
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# One at a time. A waiting run is replaced by a newer one, which merges the
+# same commits and more.
+concurrency:
+  group: sync-nightly
+
+jobs:
+  merge:
+    name: Merge main into nightly
+    if: github.repository == 'luminalmvm/Lumit'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: nightly
+          fetch-depth: 0
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898231+github-actions[bot]@users.noreply.github.com"
+          git merge --no-edit -m "Merge main into nightly" origin/main
+          git push origin nightly
