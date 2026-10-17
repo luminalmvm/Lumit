@@ -250,7 +250,6 @@ class _PaletteState extends State<_Palette> {
     final matches = _matches;
 
     return Focus(
-      autofocus: true,
       onKeyEvent: (node, event) {
         if (event is! KeyDownEvent) return KeyEventResult.ignored;
         switch (event.logicalKey) {
@@ -284,6 +283,7 @@ class _PaletteState extends State<_Palette> {
               child: HouseTextField(
                 key: const ValueKey('palette-query'),
                 controller: _query,
+                focusNode: _focus,
                 width: 400,
                 onSubmitted: (_) => _runHighlighted(matches),
               ),
