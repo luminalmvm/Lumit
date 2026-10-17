@@ -1,13 +1,13 @@
 // Signing in to a Lumit account.
 //
 // One window with a few pages. An email and a password, then a line that
-// says "or", then Google and Discord. Creating an account, typing the code
-// that was emailed and choosing a new password are the same window turned to
-// another page, so nobody is sent somewhere else to do them.
+// says "or", then Apple, Google and Discord. Creating an account, typing the
+// code that was emailed and choosing a new password are the same window
+// turned to another page, so nobody is sent somewhere else to do them.
 //
-// Discord and Google are done in the person's own browser, where they are
-// already signed in and where the address bar shows who is asking. The window
-// waits here while that happens.
+// Apple, Discord and Google are done in the person's own browser, where they
+// are already signed in and where the address bar shows who is asking. The
+// window waits here while that happens.
 //
 // Only what the server has switched on is offered ([CloudConfig]). The window
 // asks it once when it opens.
@@ -402,9 +402,22 @@ class _SignInState extends State<_SignIn> {
           ],
       };
 
-  /// The line that says "or", and the two buttons under it.
+  /// The line that says "or", and the buttons under it.
   List<Widget> _others(LumitTheme t, CloudConfig config) {
-    if (!config.discord && !config.google) return const [];
+    final buttons = [
+      if (config.apple)
+        _provider(t, SignInWith.apple, l10n.signInApple,
+            'assets/brand/apple.svg',
+            tinted: true),
+      if (config.google)
+        _provider(t, SignInWith.google, l10n.signInGoogle,
+            'assets/brand/google.svg'),
+      if (config.discord)
+        _provider(t, SignInWith.discord, l10n.signInDiscord,
+            'assets/brand/discord.svg',
+            tinted: true),
+    ];
+    if (buttons.isEmpty) return const [];
     return [
       if (config.email)
         Padding(
@@ -421,19 +434,15 @@ class _SignInState extends State<_SignIn> {
             ],
           ),
         ),
-      if (config.google)
-        _provider(t, SignInWith.google, l10n.signInGoogle,
-            'assets/brand/google.svg'),
-      if (config.discord && config.google) const SizedBox(height: 8),
-      if (config.discord)
-        _provider(t, SignInWith.discord, l10n.signInDiscord,
-            'assets/brand/discord.svg',
-            tinted: true),
+      for (final (i, button) in buttons.indexed) ...[
+        if (i > 0) const SizedBox(height: 8),
+        button,
+      ],
     ];
   }
 
   /// The privacy page and the terms, on the two pages an account can be made
-  /// from. Signing in with Google or Discord makes one too.
+  /// from. Signing in with Apple, Google or Discord makes one too.
   List<Widget> _smallPrint(LumitTheme t) => [
         const SizedBox(height: 14),
         Row(
@@ -505,8 +514,9 @@ class _SignInState extends State<_SignIn> {
                 asset,
                 width: 14,
                 height: 14,
-                // Discord's mark takes the text colour. Google's keeps its
-                // own four, which are the mark.
+                // Apple's and Discord's marks take the text colour, white
+                // or black with the theme. Google's keeps its own four,
+                // which are the mark.
                 theme: SvgTheme(
                     currentColor: tinted ? t.textPrimary : t.textPrimary),
               ),

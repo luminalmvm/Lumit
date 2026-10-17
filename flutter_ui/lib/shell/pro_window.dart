@@ -294,7 +294,10 @@ class _ProWindowState extends State<_ProWindow>
           note(line.$1, warning: line.$2),
           const SizedBox(height: 12),
         ],
-        if (account.subscription != null) ...[
+        if (account.onIphone) ...[
+          note(l10n.proManagedOnIphone),
+          const SizedBox(height: 12),
+        ] else if (account.subscription != null) ...[
           action('manage', l10n.proManage,
               () => unawaited(openSubscriptionPage(_account)),
               primary: false),

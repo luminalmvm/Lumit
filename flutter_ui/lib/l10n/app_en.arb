@@ -17185,6 +17185,10 @@
   "@proManage": {
     "description": "Button that opens the shop's page for changing or ending a Lumit Pro subscription, in the browser."
   },
+  "proManagedOnIphone": "Managed on your iPhone",
+  "@proManagedOnIphone": {
+    "description": "Line in place of the Manage subscription button when Lumit Pro was bought in the iPhone app, so it is changed or ended in the iPhone's settings."
+  },
   "syncStatusSynced": "Settings in sync",
   "@syncStatusSynced": {
     "description": "Line in the profile card when this profile's settings match what is kept on Lumit's server."
@@ -17255,7 +17259,7 @@
   },
   "signInOr": "or",
   "@signInOr": {
-    "description": "The word in the middle of the line that divides signing in by email from the Discord and Google buttons. Lower case."
+    "description": "The word in the middle of the line that divides signing in by email from the Apple, Google and Discord buttons. Lower case."
   },
   "signInGoogle": "Continue with Google",
   "@signInGoogle": {
@@ -17264,6 +17268,10 @@
   "signInDiscord": "Continue with Discord",
   "@signInDiscord": {
     "description": "Button that signs in with a Discord account, in the browser."
+  },
+  "signInApple": "Continue with Apple",
+  "@signInApple": {
+    "description": "Button that signs in with an Apple Account, in the browser. Apple's own wording for the button, so use the wording Apple gives for this language."
   },
   "signInForgot": "Forgot password?",
   "@signInForgot": {
@@ -19976,5 +19984,107 @@
   "lensNotSaved": "The lens could not be saved.",
   "@lensNotSaved": {
     "description": "Lens window, footer line: saving to the user's lenses failed."
+  },
+  "settingsPhones": "Devices",
+  "@settingsPhones": {
+    "description": "Group heading on the Account page of Settings: this computer, then the phones paired with the account, which show what it is exporting. Lumit Pro only."
+  },
+  "deviceThisComputer": "This computer",
+  "@deviceThisComputer": {
+    "description": "Settings, Phones group: the quiet line under the first row's name, which is the computer Lumit is running on."
+  },
+  "deviceRename": "Rename…",
+  "@deviceRename": {
+    "description": "Button in Settings beside this computer and each paired phone: change the name the account knows it by."
+  },
+  "deviceRenameTitle": "Rename device",
+  "@deviceRenameTitle": {
+    "description": "Title of the small window that asks for a new name for this computer or a paired phone."
+  },
+  "deviceNameLong": "Names can be up to 40 characters.",
+  "@deviceNameLong": {
+    "description": "Notice when a new name for this computer or a phone is too long for the server."
+  },
+  "phoneRemove": "Remove",
+  "@phoneRemove": {
+    "description": "Button in Settings beside a paired phone: unpair it from the account."
+  },
+  "phoneAdd": "Add a phone",
+  "@phoneAdd": {
+    "description": "Button under the paired phones in Settings, and the title of the window it opens, which shows a code for a phone to scan."
+  },
+  "phoneStartedQueue": "A phone started the export queue",
+  "@phoneStartedQueue": {
+    "description": "Quiet notice on the status line: one of the account's paired phones started this computer's export queue."
+  },
+  "phoneQueuedExport": "A phone is exporting {name}",
+  "@phoneQueuedExport": {
+    "description": "Quiet notice on the status line: one of the account's paired phones added a composition to the export queue and started it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneCancelledExport": "A phone cancelled the export of {name}",
+  "@phoneCancelledExport": {
+    "description": "Quiet notice on the status line: one of the account's paired phones cancelled an export in the queue.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneRemovedExport": "A phone removed {name} from the queue",
+  "@phoneRemovedExport": {
+    "description": "Quiet notice on the status line: one of the account's paired phones removed an export from the export queue.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneSentPreview": "A phone is sending {name} as a preview",
+  "@phoneSentPreview": {
+    "description": "Quiet notice on the status line: one of the account's paired phones asked for a finished export to be sent as a preview, and the send has started.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "phonesExport": "Phones can start exports",
+  "@phonesExport": {
+    "description": "Switch in Settings, Account, Devices group: whether the paired phones may start, cancel and remove exports on this computer. Kept for this computer only."
+  },
+  "phoneAddScan": "Scan with your iPhone camera or the Lumit app.",
+  "@phoneAddScan": {
+    "description": "The one line under the code in the Add a phone window. The Lumit app is Lumit's iPhone app."
+  },
+  "phoneCodeLeft": "{time} left",
+  "@phoneCodeLeft": {
+    "description": "Add a phone window, under the code: how long it can still be scanned. {time} is minutes and seconds, such as 4:32.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneCodeExpired": "This code has run out.",
+  "@phoneCodeExpired": {
+    "description": "Add a phone window, in place of the code once it can no longer be scanned."
+  },
+  "phoneCodeNew": "New code",
+  "@phoneCodeNew": {
+    "description": "Add a phone window: button that asks for a fresh code to scan, after one ran out or could not be had."
+  },
+  "phonePaired": "Paired with {name}",
+  "@phonePaired": {
+    "description": "Notice once a phone has scanned the code and joined the account. {name} is the phone's name, such as Mack's iPhone.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

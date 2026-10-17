@@ -14,10 +14,12 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../state/account.dart';
 import '../state/app_state.dart';
+import '../state/phone_line_frb.dart' show AccountDevice;
 import '../state/profiles.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'add_phone_window.dart';
 import 'pro_window.dart';
 import 'profile_chip.dart';
 import 'project_history_window.dart' show backupSize, backupTime;
@@ -41,6 +43,8 @@ List<String> accountSettingsRows() => [
       l10n.settingsAccountProfiles,
       l10n.settingsAccountPlan,
       l10n.settingsStorage,
+      l10n.settingsPhones,
+      l10n.phonesExport,
       l10n.settingsSyncOn,
       for (final group in ProfileGroup.values) profileGroupLabel(group),
       l10n.backupSettingsOn,
@@ -70,6 +74,14 @@ class AccountSettings extends StatelessWidget {
 
         section(l10n.settingsAccountProfiles, _profiles(context, t));
         section(l10n.settingsAccountGroup, _account(context, t));
+        // Keyed by the account, so another one starts from its own list.
+        if (ui.account.pro &&
+            (matches(l10n.settingsPhones) || matches(l10n.phonesExport))) {
+          sections.add(_Phones(
+              key: ValueKey(ui.account.account?.id),
+              ui: ui,
+              first: sections.isEmpty));
+        }
         section(l10n.settingsSync, _sync(context, t));
         section(l10n.backupSettingsGroup, [
           if (matches(l10n.backupSettingsOn)) _BackupRow(ui: ui),
@@ -206,11 +218,17 @@ class AccountSettings extends StatelessWidget {
               Text(l10n.settingsAccountPlanFree,
                   style: t.small.copyWith(color: t.textSecondary)),
             const SizedBox(width: 10),
-            account.subscription != null
-                ? _button(t, 'manage', l10n.proManage,
-                    () => unawaited(openSubscriptionPage(ui.account)))
-                : _button(t, 'pro', l10n.shareCloudSee,
-                    () => unawaited(showProWindow(context))),
+            // Bought in the iPhone app, it is changed there, and with Pro
+            // already on there is nothing here to buy.
+            if (account.onIphone && account.pro)
+              Text(l10n.proManagedOnIphone,
+                  style: t.small.copyWith(color: t.textSecondary))
+            else if (account.subscription != null && !account.onIphone)
+              _button(t, 'manage', l10n.proManage,
+                  () => unawaited(openSubscriptionPage(ui.account)))
+            else
+              _button(t, 'pro', l10n.shareCloudSee,
+                  () => unawaited(showProWindow(context))),
           ],
         ),
         description: plan?.$1 ?? '',
@@ -544,6 +562,124 @@ class _KeptOnlineState extends State<_KeptOnline> {
           ],
         ),
     };
+  }
+}
+
+/// This computer and the phones paired with the account, each with the way
+/// to rename it, the phones with the way to remove one, and the way to add
+/// one. It asks the server as it is shown.
+class _Phones extends StatefulWidget {
+  final LumitUiState ui;
+
+  /// Whether this is the page's first section, which has no rule above it.
+  final bool first;
+  const _Phones({super.key, required this.ui, required this.first});
+
+  @override
+  State<_Phones> createState() => _PhonesState();
+}
+
+class _PhonesState extends State<_Phones> {
+  List<AccountDevice> _devices = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_read());
+  }
+
+  Future<void> _read() async {
+    try {
+      final devices = await widget.ui.phones.devices();
+      if (mounted) setState(() => _devices = devices);
+    } on CloudError {
+      // Out of reach. Nothing is listed, and nothing is said of it here.
+    }
+  }
+
+  Future<void> _rename(AccountDevice device) async {
+    final name = await askProfileName(context,
+        title: l10n.deviceRenameTitle,
+        suggested: device.name,
+        confirm: l10n.rename);
+    if (name == null || !mounted) return;
+    await _run(() => widget.ui.phones.rename(device.id, name));
+  }
+
+  /// [call], then the list read again. What went wrong is said as a notice.
+  Future<void> _run(Future<void> Function() call) async {
+    try {
+      await call();
+    } on CloudError catch (e) {
+      if (mounted) {
+        // An empty name never gets this far, so a bad one is a long one.
+        context.read<LumitState>().postNotice(
+            e.code == 'bad_name' ? l10n.deviceNameLong : cloudErrorText(e),
+            error: true);
+      }
+    }
+    await _read();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    Widget button(String id, String label, VoidCallback onPressed) =>
+        HouseButton(
+          key: ValueKey<String>('settings-phone-$id'),
+          small: true,
+          onPressed: onPressed,
+          child: Text(label, style: t.small),
+        );
+    return settingsSection(
+      t,
+      l10n.settingsPhones,
+      [
+        for (final me in _devices.where((d) => d.me))
+          settingsRow(t, me.name, l10n.deviceThisComputer,
+              button('rename-${me.id}', l10n.deviceRename,
+                  () => unawaited(_rename(me)))),
+        for (final phone in _devices.where((d) => d.phone))
+          settingsRow(
+            t,
+            phone.name,
+            '',
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                button('remove-${phone.id}', l10n.phoneRemove,
+                    () => unawaited(_run(
+                        () => widget.ui.phones.forget(phone.id)))),
+                const SizedBox(width: 8),
+                button('rename-${phone.id}', l10n.deviceRename,
+                    () => unawaited(_rename(phone))),
+              ],
+            ),
+          ),
+        settingsRow(
+          t,
+          '',
+          '',
+          button('add', l10n.phoneAdd, () async {
+            await showAddPhone(context);
+            await _read();
+          }),
+        ),
+        // This machine's own answer, which the line sends with its state.
+        settingsRow(
+          t,
+          l10n.phonesExport,
+          '',
+          HouseToggle(
+            key: const ValueKey('settings-phones-export'),
+            value: widget.ui.workspace.phonesExport,
+            onChanged: (on) =>
+                setState(() => widget.ui.workspace.setPhonesExport(on)),
+          ),
+        ),
+      ],
+      first: widget.first,
+    );
   }
 }
 
