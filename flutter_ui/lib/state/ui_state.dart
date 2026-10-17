@@ -4026,6 +4026,11 @@ class LumitUiState extends ChangeNotifier {
     final where = openComps.indexOf(gone);
     final at = where < 0 ? 0 : where;
     openComps.remove(gone);
+    // A Viewer pane held to the gone comp lets go of it too, or it would go
+    // on asking the engine for a comp that is not there.
+    for (final view in views.views) {
+      if (view.compId == gone.toString()) view.compId = null;
+    }
 
     // Where the user came from, then leftwards from where the gone tab stood,
     // then rightwards — after the removal the tab that stood at `at` is the

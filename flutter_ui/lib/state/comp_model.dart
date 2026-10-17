@@ -201,8 +201,11 @@ class CompModel extends ChangeNotifier {
       _revision = revision;
     } catch (_) {
       // The comp has gone (deleted, or the project closed): an empty model,
-      // not a crash — the panels show their placeholders.
+      // not a crash — the panels show their placeholders. The revision goes
+      // too, so `refreshIfMoved` tells its listeners and the shell can front
+      // a comp that is still there.
       _model = null;
+      _revision = null;
     }
   }
 

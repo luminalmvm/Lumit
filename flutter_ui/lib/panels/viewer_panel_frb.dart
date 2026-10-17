@@ -515,13 +515,17 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
   /// (docs/impl/ui-performance.md §4.5).
   ({BridgeCompSettings settings, BridgeCompSize size})? _facts;
 
-  ({BridgeCompSettings settings, BridgeCompSize size}) _factsOf(
+  ({BridgeCompSettings settings, BridgeCompSize size})? _factsOf(
       CompositionReference comp) {
     final held = _facts;
     if (held != null) return held;
-    final next = (settings: comp.getSettings(), size: comp.getSize());
-    _facts = next;
-    return next;
+    try {
+      return _facts = (settings: comp.getSettings(), size: comp.getSize());
+    } catch (_) {
+      // Deleted a moment ago. The shell fronts another comp once the
+      // engine's change arrives; until then there is nothing to show.
+      return null;
+    }
   }
 
   /// Which of the comp's layers have a file behind them, off the read model.
@@ -620,6 +624,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     }
 
     final facts = _factsOf(comp);
+    if (facts == null) return const EmptyStageFrb();
     final settings = facts.settings;
     // Once per rebuild of the panel rather than per rebuild of the stage: the
     // stage redraws on every arriving frame, and a walk of the model there
