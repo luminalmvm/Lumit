@@ -1604,9 +1604,9 @@ fn comp_walk(
             // size. Unlike every other kind, that size moves when the art is
             // edited.
             LayerKind::Shape { contents } => in_span(layer)
-                .then(|| lumit_core::shape::contents_bounds(contents, lt))
-                .flatten()
-                .map(|(x0, y0, x1, y1)| {
+                .then(|| lumit_core::shape::contents_at(contents, lt, &context))
+                .and_then(|contents| {
+                    let (x0, y0, x1, y1) = lumit_core::shape::contents_bounds(&contents, lt)?;
                     let natural_w = (x1 - x0).max(1.0);
                     let natural_h = (y1 - y0).max(1.0);
                     // The same reduced-resolution rule the other rasterised
@@ -1614,14 +1614,14 @@ fn comp_walk(
                     // placement matrix carry the natural size.
                     let w = natural_w.round().max(1.0) as u32;
                     let h = natural_h.round().max(1.0) as u32;
-                    (
+                    Some((
                         Arc::new(lumit_core::shape::rasterise_contents(
-                            contents, w, h, x0, y0, x1, y1, lt,
+                            &contents, w, h, x0, y0, x1, y1, lt,
                         )),
                         w,
                         h,
                         (natural_w as f32, natural_h as f32),
-                    )
+                    ))
                 }),
             LayerKind::Precomp { .. } => None, // handled as Nested below
             LayerKind::Camera { .. } => None,  // shapes the view, draws nothing
