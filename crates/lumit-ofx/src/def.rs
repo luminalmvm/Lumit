@@ -1005,9 +1005,6 @@ pub struct SharedBroker {
     /// set answers identity with a badge instead of queueing behind a window
     /// that may stay open for minutes.
     pressing: AtomicBool,
-    /// How long a render waits its turn for the broker before it gives up,
-    /// the broker's own render deadline.
-    patience: Duration,
 }
 
 impl SharedBroker {
@@ -1015,19 +1012,26 @@ impl SharedBroker {
     #[must_use]
     pub fn new(broker: Broker) -> Self {
         Self {
-            patience: broker.render_timeout(),
             broker: Mutex::new(broker),
             pressing: AtomicBool::new(false),
         }
     }
 
-    /// The broker, or `None` while a plugin in this bundle is in a press or
-    /// the wait ran past the deadline.
+    /// The broker, or `None` while a plugin in this bundle is in a press.
+    ///
+    /// A render waits its turn however long the queue is. Every render ahead
+    /// of it ends within the broker's own deadline, and one that gave up here
+    /// would be the layer drawn without its effect, in export too. A project
+    /// with dozens of Sapphire effects queues past any fixed wait.
     fn lock(&self) -> Option<parking_lot::MutexGuard<'_, Broker>> {
-        if self.pressing.load(Ordering::Acquire) {
-            return None;
+        loop {
+            if self.pressing.load(Ordering::Acquire) {
+                return None;
+            }
+            if let Some(guard) = self.broker.try_lock_for(SETTLE_PATIENCE) {
+                return Some(guard);
+            }
         }
-        self.broker.try_lock_for(self.patience)
     }
 
     /// [`Self::lock`] for an edit, which is made on the interface's thread and
@@ -1036,7 +1040,7 @@ impl SharedBroker {
         if self.pressing.load(Ordering::Acquire) {
             return None;
         }
-        self.broker.try_lock_for(SETTLE_PATIENCE.min(self.patience))
+        self.broker.try_lock_for(SETTLE_PATIENCE)
     }
 }
 
