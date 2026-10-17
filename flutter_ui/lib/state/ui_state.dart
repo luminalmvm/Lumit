@@ -75,6 +75,7 @@ import 'package:lumit_flutter/state/online_door.dart';
 import 'package:lumit_flutter/state/online_footage.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
 import 'package:lumit_flutter/state/panel_folds.dart';
+import 'package:lumit_flutter/state/phone_line_frb.dart';
 import 'package:lumit_flutter/state/playback_loop.dart';
 import 'package:lumit_flutter/state/preview_progress.dart';
 import 'package:lumit_flutter/state/profiles.dart';
@@ -439,6 +440,8 @@ class LumitUiState extends ChangeNotifier {
 
   /// The account's review links, and the comments left on them.
   late final ReviewsState reviews = ReviewsState(account, profiles);
+  /// The line to the account's phones, and what pairs one.
+  late final PhoneLine phones = PhoneLine(account, _app);
   /// The open project's backup and the account's backed-up projects.
   late final BackupState backup = BackupState(_app, account, profiles,
       looking: () => (selectedComp, playheadFrame.value));
@@ -2771,6 +2774,7 @@ class LumitUiState extends ChangeNotifier {
     _lifecycle.dispose();
     _clock.dispose();
     reviews.dispose();
+    phones.dispose();
     backup.dispose();
     profiles.dispose();
     _app.share.roster.removeListener(_mindDoors);
