@@ -50,8 +50,12 @@ void main() {
     test('a pane makes the views its layout asks for, and no more', () {
       final views = viewsWith(4);
       expect(views.forPane(Panel.viewer.pane()).length, 4);
+      views.forPane(Panel.viewer.pane()).first.mode = ViewMode.footage;
       views.setLayout(Panel.viewer.pane(), ViewLayout.one);
       expect(views.forPane(Panel.viewer.pane()).length, 1);
+      expect(views.forPane(Panel.viewer.pane()).single.mode,
+          ViewMode.composition,
+          reason: 'the source side goes before the composition does');
       expect(views.views.length, 1, reason: 'the closed views are let go of');
       expect(views.takeClosed().length, 3,
           reason: 'and the engine is told, so their textures go with them');
