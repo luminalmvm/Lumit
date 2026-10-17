@@ -547,9 +547,18 @@ void main() {
       await choose(tester, 'Window', 'Command palette…');
       await tester.pump();
 
+      final query = find.byKey(const ValueKey('palette-query'));
+      expect(
+          tester
+              .widget<EditableText>(find.descendant(
+                  of: query, matching: find.byType(EditableText)))
+              .focusNode
+              .hasFocus,
+          isTrue,
+          reason: 'typing goes straight into the search');
+
       // Each category surfaces under its badge when searched for (the list
       // is lazy, so the badges are asserted where their rows are on screen).
-      final query = find.byKey(const ValueKey('palette-query'));
       await tester.enterText(query, 'timeline');
       await tester.pump();
       expect(find.text('Panel'), findsWidgets);
