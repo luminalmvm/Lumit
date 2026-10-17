@@ -731,6 +731,10 @@ class UpdateService extends ChangeNotifier {
         _release = null;
         _builds = const [];
       }
+    } on HttpException catch (e) {
+      // GitHub's answer, such as a 403 when its hourly limit is used up.
+      _fail(e.message);
+      return;
     } catch (_) {
       _fail(l10n.updateCheckFailed);
       return;
