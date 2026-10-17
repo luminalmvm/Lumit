@@ -21,8 +21,8 @@ import 'account.dart';
 import 'app_state.dart';
 import 'updates.dart' show versionFromBootLine;
 
-/// A phone the account is paired with.
-typedef PairedPhone = ({String id, String name});
+/// A computer or phone signed in to the account. [me] is this computer.
+typedef AccountDevice = ({String id, String name, bool phone, bool me});
 
 class PhoneLine extends ChangeNotifier {
   final AccountState account;
@@ -126,7 +126,6 @@ class PhoneLine extends ChangeNotifier {
     _ended.removeWhere((id, _) => !ids.contains(id));
     final said = jsonEncode({
       'type': 'state',
-      'name': AccountState.deviceLabel,
       'platform': Platform.operatingSystem,
       'version': versionFromBootLine(lumitVersion()) ?? '',
       'project': projectNameFor(app.project?.path()),
@@ -192,14 +191,23 @@ class PhoneLine extends ChangeNotifier {
     );
   }
 
-  Future<List<PairedPhone>> phones() async {
-    final j = await account.call('GET', '/v1/phones');
+  Future<List<AccountDevice>> devices() async {
+    final j = await account.call('GET', '/v1/devices');
     return [
-      if (j['phones'] case final List<dynamic> all)
-        for (final p in all)
-          if (p is Map) (id: '${p['id']}', name: '${p['name']}'),
+      if (j['devices'] case final List<dynamic> all)
+        for (final d in all)
+          if (d is Map)
+            (
+              id: '${d['id']}',
+              name: '${d['name']}',
+              phone: d['phone'] == true,
+              me: d['me'] == true,
+            ),
     ];
   }
+
+  Future<void> rename(String id, String name) =>
+      account.call('PATCH', '/v1/devices/$id', body: {'name': name});
 
   Future<void> forget(String id) => account.call('DELETE', '/v1/phones/$id');
 

@@ -19979,7 +19979,23 @@
   },
   "settingsPhones": "Phones",
   "@settingsPhones": {
-    "description": "Group heading on the Account page of Settings: the phones paired with the account, which show what this computer is exporting. Lumit Pro only."
+    "description": "Group heading on the Account page of Settings: this computer, then the phones paired with the account, which show what it is exporting. Lumit Pro only."
+  },
+  "deviceThisComputer": "This computer",
+  "@deviceThisComputer": {
+    "description": "Settings, Phones group: the quiet line under the first row's name, which is the computer Lumit is running on."
+  },
+  "deviceRename": "Rename…",
+  "@deviceRename": {
+    "description": "Button in Settings beside this computer and each paired phone: change the name the account knows it by."
+  },
+  "deviceRenameTitle": "Rename device",
+  "@deviceRenameTitle": {
+    "description": "Title of the small window that asks for a new name for this computer or a paired phone."
+  },
+  "deviceNameLong": "Names can be up to 40 characters.",
+  "@deviceNameLong": {
+    "description": "Notice when a new name for this computer or a phone is too long for the server."
   },
   "phoneRemove": "Remove",
   "@phoneRemove": {

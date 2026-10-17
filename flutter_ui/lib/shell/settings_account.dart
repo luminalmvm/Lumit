@@ -14,7 +14,7 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../state/account.dart';
 import '../state/app_state.dart';
-import '../state/phone_line_frb.dart' show PairedPhone;
+import '../state/phone_line_frb.dart' show AccountDevice;
 import '../state/profiles.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
@@ -557,8 +557,9 @@ class _KeptOnlineState extends State<_KeptOnline> {
   }
 }
 
-/// The phones paired with the account, each with the way to remove it, and
-/// the way to add one. It asks the server as it is shown.
+/// This computer and the phones paired with the account, each with the way
+/// to rename it, the phones with the way to remove one, and the way to add
+/// one. It asks the server as it is shown.
 class _Phones extends StatefulWidget {
   final LumitUiState ui;
 
@@ -571,7 +572,7 @@ class _Phones extends StatefulWidget {
 }
 
 class _PhonesState extends State<_Phones> {
-  List<PairedPhone> _phones = const [];
+  List<AccountDevice> _devices = const [];
 
   @override
   void initState() {
@@ -581,19 +582,32 @@ class _PhonesState extends State<_Phones> {
 
   Future<void> _read() async {
     try {
-      final phones = await widget.ui.phones.phones();
-      if (mounted) setState(() => _phones = phones);
+      final devices = await widget.ui.phones.devices();
+      if (mounted) setState(() => _devices = devices);
     } on CloudError {
       // Out of reach. Nothing is listed, and nothing is said of it here.
     }
   }
 
-  Future<void> _remove(PairedPhone phone) async {
+  Future<void> _rename(AccountDevice device) async {
+    final name = await askProfileName(context,
+        title: l10n.deviceRenameTitle,
+        suggested: device.name,
+        confirm: l10n.rename);
+    if (name == null || !mounted) return;
+    await _run(() => widget.ui.phones.rename(device.id, name));
+  }
+
+  /// [call], then the list read again. What went wrong is said as a notice.
+  Future<void> _run(Future<void> Function() call) async {
     try {
-      await widget.ui.phones.forget(phone.id);
+      await call();
     } on CloudError catch (e) {
       if (mounted) {
-        context.read<LumitState>().postNotice(cloudErrorText(e), error: true);
+        // An empty name never gets this far, so a bad one is a long one.
+        context.read<LumitState>().postNotice(
+            e.code == 'bad_name' ? l10n.deviceNameLong : cloudErrorText(e),
+            error: true);
       }
     }
     await _read();
@@ -613,10 +627,27 @@ class _PhonesState extends State<_Phones> {
       t,
       l10n.settingsPhones,
       [
-        for (final phone in _phones)
-          settingsRow(t, phone.name, '',
-              button('remove-${phone.id}', l10n.phoneRemove,
-                  () => unawaited(_remove(phone)))),
+        for (final me in _devices.where((d) => d.me))
+          settingsRow(t, me.name, l10n.deviceThisComputer,
+              button('rename-${me.id}', l10n.deviceRename,
+                  () => unawaited(_rename(me)))),
+        for (final phone in _devices.where((d) => d.phone))
+          settingsRow(
+            t,
+            phone.name,
+            '',
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                button('remove-${phone.id}', l10n.phoneRemove,
+                    () => unawaited(_run(
+                        () => widget.ui.phones.forget(phone.id)))),
+                const SizedBox(width: 8),
+                button('rename-${phone.id}', l10n.deviceRename,
+                    () => unawaited(_rename(phone))),
+              ],
+            ),
+          ),
         settingsRow(
           t,
           '',
