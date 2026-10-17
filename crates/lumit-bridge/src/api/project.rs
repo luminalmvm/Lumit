@@ -653,6 +653,10 @@ impl ProjectReference {
     /// [`Self::import_files`], which stops when `carry_on` says no. It is
     /// asked before each file is read, with how many have been and how many
     /// there are, and once more before the project is touched.
+    ///
+    /// Everything that reads the disk happens in that first pass, so the bar
+    /// moves and Cancel works however slow the drive is. Filing what was read
+    /// afterwards is quick.
     #[frb(ignore)]
     pub(crate) fn import_while(
         &self,
@@ -662,6 +666,7 @@ impl ProjectReference {
         let total = paths.len() as u64;
         #[cfg(feature = "media")]
         let mut read = Vec::new();
+        let mut footage = Vec::new();
         let mut stopped = false;
         for (at, path) in paths.iter().enumerate() {
             stopped = !carry_on(at as u64, total);
@@ -669,9 +674,14 @@ impl ProjectReference {
                 break;
             }
             #[cfg(feature = "media")]
-            read.push(crate::layered::Layered::open(std::path::Path::new(path)));
+            let layered = crate::layered::Layered::open(std::path::Path::new(path));
+            #[cfg(feature = "media")]
+            let flat = layered.is_none();
             #[cfg(not(feature = "media"))]
-            let _ = path;
+            let flat = true;
+            footage.push(flat.then(|| Self::footage_from_disk(path)));
+            #[cfg(feature = "media")]
+            read.push(layered);
         }
         if stopped || !carry_on(total, total) {
             return Ok(BridgeImported {
@@ -684,15 +694,18 @@ impl ProjectReference {
         if group {
             self.begin_undo_group()?;
         }
-        let mut placed = paths.into_iter().enumerate();
-        let left_out = placed.try_fold(0_u32, |left_out, (at, path)| {
+        let mut placed = paths.into_iter().zip(footage).enumerate();
+        let left_out = placed.try_fold(0_u32, |left_out, (at, (path, item))| {
             #[cfg(feature = "media")]
             if let Some(Some(layered)) = read.get(at) {
                 return Ok(left_out + self.place_layers(path.into(), layered)?);
             }
             #[cfg(not(feature = "media"))]
-            let _ = at;
-            self.import_footage(path).map(|_| left_out)
+            let _ = (at, path);
+            match item {
+                Some(item) => self.file_footage(item?).map(|_| left_out),
+                None => Ok(left_out),
+            }
         });
         // A group left open records nothing, so it closes whatever happened.
         if group {
@@ -730,12 +743,24 @@ impl ProjectReference {
     /// selecting the whole folder still imports it once.
     #[frb(sync)]
     pub fn import_footage(&self, path: String) -> Result<FootageReference, BridgeError> {
-        use lumit_core::model::{FootageItem, MediaRef, ProjectItem, SequenceRef};
+        self.file_footage(Self::footage_from_disk(&path)?)
+    }
+
+    /// The footage item for `path`, with everything [`Self::import_footage`]
+    /// has to ask the disk already asked: whether it is part of a run of
+    /// stills, and its fingerprint. Touches no project.
+    // ponytail: each still of a picked run lists its folder again. Remember
+    // the runs found in one import if picking a big run is slow.
+    #[frb(ignore)]
+    pub(crate) fn footage_from_disk(
+        path: &str,
+    ) -> Result<lumit_core::model::FootageItem, BridgeError> {
+        use lumit_core::model::{FootageItem, MediaRef, SequenceRef};
 
         if path.trim().is_empty() {
             return Err(BridgeError::MediaPathUnresolved);
         }
-        let picked = std::path::PathBuf::from(&path);
+        let picked = std::path::PathBuf::from(path);
 
         // A run of one is a still, and a still is not a sequence: it decodes,
         // saves and relinks exactly as it did before this existed.
@@ -758,7 +783,7 @@ impl ProjectReference {
             Some((first, display)) => (first.clone(), display.clone()),
             None => (
                 picked,
-                std::path::Path::new(&path)
+                std::path::Path::new(path)
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "footage".into()),
@@ -769,7 +794,7 @@ impl ProjectReference {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| name.clone());
 
-        let item = FootageItem {
+        Ok(FootageItem {
             id: Uuid::now_v7(),
             name,
             media: MediaRef {
@@ -787,8 +812,21 @@ impl ProjectReference {
             colour_space: None,
             source_layer: None,
             interpretation: Default::default(),
-        };
+        })
+    }
+
+    /// File an item from [`Self::footage_from_disk`] in the project, as one
+    /// undo step, and start reading the file in the background.
+    #[frb(ignore)]
+    pub(crate) fn file_footage(
+        &self,
+        item: lumit_core::model::FootageItem,
+    ) -> Result<FootageReference, BridgeError> {
+        use lumit_core::model::ProjectItem;
+
         let item_id = item.id;
+        let file = std::path::PathBuf::from(&item.media.absolute_path);
+        let run = item.sequence.is_some();
 
         let state = self.state()?;
         {
@@ -798,7 +836,7 @@ impl ProjectReference {
             // Selecting a whole folder calls this once per file. Every call
             // after the first finds the run already imported and returns it,
             // rather than filing two thousand items that all mean one shot.
-            if run.is_some() {
+            if run {
                 if let Some(existing) = doc.items.iter().find_map(|i| match i {
                     ProjectItem::Footage(f)
                         if f.sequence.is_some()
@@ -827,8 +865,8 @@ impl ProjectReference {
         #[cfg(feature = "media")]
         crate::probe::request(lumit_media::MediaSource {
             path: file,
-            sequence_fps: run.map(|_| {
-                let r = SequenceRef::default().frame_rate;
+            sequence_fps: run.then(|| {
+                let r = lumit_core::model::SequenceRef::default().frame_rate;
                 (r.num(), r.den())
             }),
             source_layer: None,

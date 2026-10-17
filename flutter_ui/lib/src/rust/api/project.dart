@@ -21,7 +21,7 @@ import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
+// These functions are ignored because they are not marked as `pub`: `file_footage`, `footage_from_disk`, `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
