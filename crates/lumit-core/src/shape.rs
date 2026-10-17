@@ -955,6 +955,68 @@ pub fn contents_bounds(contents: &[ShapeItem], t: f64) -> Option<(f64, f64, f64,
     out
 }
 
+/// `contents` as they are at `t`: every keyed or expression-driven number
+/// replaced by its value then, and every keyed path by its shape then.
+///
+/// The frame key and the renderer both read the art through this. The key
+/// hashes the art, and stored keys say the same thing at every frame, so
+/// without it every frame of a moving shape had one name. And the rasteriser
+/// reads numbers without the layer's context, so an expression had no `time`.
+/// Art with nothing moving comes back as it was, so a still shape keeps its
+/// name and its pixels.
+///
+/// Walked as the file writes it, so no new field can be missed.
+#[must_use]
+pub fn contents_at<'a>(
+    contents: &'a [ShapeItem],
+    t: f64,
+    context: &std::sync::Arc<crate::expression::ExpressionContext>,
+) -> std::borrow::Cow<'a, [ShapeItem]> {
+    use serde_json::Value;
+    fn freeze(
+        v: &mut Value,
+        t: f64,
+        context: &std::sync::Arc<crate::expression::ExpressionContext>,
+    ) -> bool {
+        let moves = v
+            .get("animation")
+            .and_then(Value::as_object)
+            .is_some_and(|a| !a.contains_key("Static"));
+        if moves {
+            if let Ok(p) = serde_json::from_value::<Property>(v.clone()) {
+                *v = Value::from(p.value_at_with_context(t, context.clone()));
+                return true;
+            }
+        }
+        match v {
+            Value::Object(map) => map
+                .values_mut()
+                .fold(false, |moved, v| freeze(v, t, context) | moved),
+            Value::Array(list) => list
+                .iter_mut()
+                .fold(false, |moved, v| freeze(v, t, context) | moved),
+            _ => false,
+        }
+    }
+    let mut value = match serde_json::to_value(contents) {
+        Ok(value) => value,
+        Err(_) => return contents.into(),
+    };
+    let moved = freeze(&mut value, t, context);
+    let paths_move = contents.iter().any(ShapeItem::path_is_animated);
+    if !moved && !paths_move {
+        return contents.into();
+    }
+    let Ok(mut frozen) = serde_json::from_value::<Vec<ShapeItem>>(value) else {
+        return contents.into();
+    };
+    for item in frozen.iter_mut().filter(|item| item.path_is_animated()) {
+        item.path = item.path_at(t).into_owned();
+        item.path_keys.clear();
+    }
+    frozen.into()
+}
+
 /// The outlines a layer's art draws at `t`, as one run for an effect to walk
 /// in the pixels of the layer's own picture: every line the picture strokes,
 /// in list order, once a combine, an offset, a trim and the dashes have had

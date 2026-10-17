@@ -2369,9 +2369,19 @@ fn feed_source(
             // moved vertex or a recoloured fill must retire the cached frames
             // that drew the old one. Serialised rather than hashed field by
             // field, so a new field on a shape item cannot quietly stop
-            // counting.
+            // counting. Read at this time, as the renderer draws it, or a
+            // keyed or expression-driven shape has one name for every frame.
+            let context = Arc::new(ExpressionContext {
+                document: doc.clone(),
+                comp: Some(owner.id),
+                layer: Some(layer.id),
+                comp_time,
+                current_depth: 0,
+                inputs: None,
+            });
+            let contents = lumit_core::shape::contents_at(contents, lt, &context);
             h.update(b"shape/");
-            if let Ok(json) = serde_json::to_vec(contents) {
+            if let Ok(json) = serde_json::to_vec(&*contents) {
                 h.update(&json);
             }
         }
@@ -3235,6 +3245,52 @@ mod tests {
         shifted.start_offset = secs(1.0);
         let moved = comp_with(vec![shifted]);
         assert_eq!(key(&doc, &animated, 0.5), key(&doc, &moved, 1.5));
+    }
+
+    /// A keyed Twist or Deform on a shape renames the frame it moves in, or
+    /// playback shows the first frame drawn for the whole of it. A still
+    /// shape keeps one name.
+    #[test]
+    fn a_keyed_shape_keys_the_frame_it_moves_in() {
+        use lumit_core::shape::{Deform, ShapeItem, Twist};
+        let doc = Document::new();
+        let shape = |item: ShapeItem| {
+            let mut layer = text_layer("s", 0.0, 10.0, 0.0);
+            layer.kind = LayerKind::Shape {
+                contents: vec![item],
+            };
+            comp_with(vec![layer])
+        };
+        let mut item = ShapeItem::filled(
+            "e",
+            lumit_core::mask::Mask::ellipse(50.0, 50.0, 40.0, 30.0).path,
+            LinearColour([1.0, 1.0, 1.0, 1.0]),
+        );
+        let still = shape(item.clone());
+        assert_eq!(key(&doc, &still, 0.0), key(&doc, &still, 1.0));
+
+        let keyed = linear_retime(&[(0.0, 0.0), (2.0, 540.0)]);
+        item.twist = Some(Twist {
+            angle: keyed.clone(),
+            rotation: Property::zero(),
+            axis: Property::zero(),
+            centre_x: Property::fixed(50.0),
+            centre_y: Property::fixed(50.0),
+        });
+        let twisted = shape(item.clone());
+        assert_ne!(key(&doc, &twisted, 0.0), key(&doc, &twisted, 1.0));
+
+        item.twist = None;
+        item.deform = Some(Deform {
+            mode: 0,
+            amount: keyed,
+            scale: Property::fixed(20.0),
+            evolution: Property::zero(),
+            seed: Property::zero(),
+            detail: Property::fixed(4.0),
+        });
+        let deformed = shape(item);
+        assert_ne!(key(&doc, &deformed, 0.0), key(&doc, &deformed, 1.0));
     }
 
     /// The Custom shader's source is content and its origin is not
