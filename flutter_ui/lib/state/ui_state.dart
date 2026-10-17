@@ -3078,6 +3078,36 @@ class LumitUiState extends ChangeNotifier {
     views.touch();
   }
 
+  /// Plays or stops the source side, set by its bar while it is on screen.
+  VoidCallback? sourcePlayToggle;
+
+  /// A transport key pressed with the source side in front: it plays and
+  /// steps the clip rather than the composition. False for any other key, so
+  /// it carries on to the composition.
+  bool driveSource(ViewerSurface view, String action) {
+    if (action == 'playback.toggle') {
+      sourcePlayToggle?.call();
+      return sourcePlayToggle != null;
+    }
+    final footage = footageOf(view);
+    final facts = footage == null ? null : itemFacts(footage);
+    if (facts == null) return false;
+    final last = framesOf(facts) - 1;
+    final at = view.sourceFrame;
+    final to = switch (action) {
+      'playback.frame.prev' => at - 1,
+      'playback.frame.next' => at + 1,
+      'playback.frame.prev10' => at - 10,
+      'playback.frame.next10' => at + 10,
+      'playback.comp.start' => 0,
+      'playback.comp.end' => last,
+      _ => null,
+    };
+    if (to == null) return false;
+    seekFootageView(view, to.clamp(0, last));
+    return true;
+  }
+
   /// Whether a footage view is on screen for an opened clip to load into,
   /// which is what the Cut workspace's source side is.
   bool get hasSourceView =>
