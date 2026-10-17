@@ -13618,7 +13618,7 @@
   },
   "settingsLayerNamesOnLaneBars": "Layer names on lane bars",
   "@settingsLayerNamesOnLaneBars": {
-    "description": "Settings window, Timeline page: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
+    "description": "Settings window, Appearance page, Panels group: the name of one setting - whether each layer bar in the Timeline lane area is labelled with the layer name. Off by default."
   },
   "settingsQuantiseSound": "Sound moves in whole frames",
   "@settingsQuantiseSound": {
@@ -13626,15 +13626,15 @@
   },
   "settingsMarkerLines": "Marker lines",
   "@settingsMarkerLines": {
-    "description": "Settings window, Timeline page: the name of one setting - whether each composition marker draws a thin line down through the rows of the Timeline, the Cut timeline and the Audio timeline. On by default."
+    "description": "Settings window, Appearance page, Panels group: the name of one setting - whether each composition marker draws a thin line down through the rows of the Timeline, the Cut timeline and the Audio timeline. On by default."
   },
   "settingsThumbnailsOnFootageRows": "Thumbnails on footage rows",
   "@settingsThumbnailsOnFootageRows": {
-    "description": "Settings window, Timeline page, Panels group: the name of one setting - whether each footage row in the Project panel carries a small poster frame in place of its type glyph. Off by default."
+    "description": "Settings window, Appearance page, Panels group: the name of one setting - whether each footage row in the Project panel carries a small poster frame in place of its type glyph. Off by default."
   },
   "settingsTimelineMinimap": "Minimap under the lanes",
   "@settingsTimelineMinimap": {
-    "description": "Settings window, Timeline page: the name of one setting - whether a thin strip under the Timeline's lanes draws every layer's bar in miniature, with the part in view as a window that drags to scroll. On by default in the Lantern style, off in the others."
+    "description": "Settings window, Appearance page, Panels group: the name of one setting - whether a thin strip under the Timeline's lanes draws every layer's bar in miniature, with the part in view as a window that drags to scroll. On by default in the Lantern style, off in the others."
   },
   "settingsGroupNodeGraphs": "Node graphs",
   "@settingsGroupNodeGraphs": {
@@ -13654,7 +13654,7 @@
   },
   "settingsWireStyle": "Wires",
   "@settingsWireStyle": {
-    "description": "Settings window, Timeline page: the name of one setting - how the wires between boxes in a node graph are drawn. A dropdown of Curved, Angled and Hanging follows it."
+    "description": "Settings window, Appearance page, Panels group: the name of one setting - how the wires between boxes in a node graph are drawn. A dropdown of Curved, Angled and Hanging follows it."
   },
   "wireStyleCurved": "Curved",
   "@wireStyleCurved": {

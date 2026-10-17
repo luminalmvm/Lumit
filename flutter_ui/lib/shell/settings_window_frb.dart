@@ -896,6 +896,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.labelCase = shipped.labelCase;
         settings.toolBarPosition = shipped.toolBarPosition;
         settings.rangeSliders = shipped.rangeSliders;
+        settings.projectThumbnails = shipped.projectThumbnails;
+        settings.layerNamesOnBars = shipped.layerNamesOnBars;
+        settings.markerLines = shipped.markerLines;
+        settings.timelineMinimap = shipped.timelineMinimap;
+        settings.wireStyle = shipped.wireStyle;
         workspace.recompose();
         workspace.save();
       case SettingsPage.timeline:
@@ -907,14 +912,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
         settings.transformInEffectControls = shipped.transformInEffectControls;
         settings.easingInPopup = shipped.easingInPopup;
-        settings.layerNamesOnBars = shipped.layerNamesOnBars;
-        settings.markerLines = shipped.markerLines;
         settings.quantiseSound = shipped.quantiseSound;
-        settings.timelineMinimap = shipped.timelineMinimap;
         settings.rightClickOpensNodeSearch = shipped.rightClickOpensNodeSearch;
         settings.tabOpensNodeSearch = shipped.tabOpensNodeSearch;
         settings.shiftAOpensNodeSearch = shipped.shiftAOpensNodeSearch;
-        settings.wireStyle = shipped.wireStyle;
         workspace.settingsChanged();
       case SettingsPage.viewer:
         workspace.setSmoothZoomedViewer(false);
@@ -1523,6 +1524,57 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ],
       ),
       (
+        l10n.settingsGroupPanels,
+        [
+          // Off by default: the Project panel's rows are a list of names,
+          // and the preview card carries the picture.
+          _flag(t, 'settings-project-thumbnails',
+              l10n.settingsThumbnailsOnFootageRows,
+              value: settings.projectThumbnails, set: (on) {
+            settings.projectThumbnails = on;
+            ui.workspace.settingsChanged();
+          }),
+          // Off by default: the lane area draws bars, and the names
+          // are already a column away in the outline.
+          _flag(t, 'settings-layer-names-on-bars',
+              l10n.settingsLayerNamesOnLaneBars,
+              value: settings.layerNamesOnBars, set: (on) {
+            settings.layerNamesOnBars = on;
+            ui.workspace.settingsChanged();
+          }),
+          _flag(t, 'settings-marker-lines', l10n.settingsMarkerLines,
+              value: settings.markerLines, set: (on) {
+            settings.markerLines = on;
+            ui.workspace.settingsChanged();
+          }),
+          // Unset, it follows the style: on in Lantern, off in the others.
+          _flag(t, 'settings-timeline-minimap', l10n.settingsTimelineMinimap,
+              value: settings.timelineMinimap ?? t.shape == ThemeShape.lantern,
+              set: (on) {
+            settings.timelineMinimap = on;
+            ui.workspace.settingsChanged();
+          }),
+          _row(
+            t,
+            l10n.settingsWireStyle,
+            _dropdown<WireStyle>(
+              key: 'settings-wire-style',
+              value: settings.wireStyle,
+              options: WireStyle.values,
+              label: (style) => switch (style) {
+                WireStyle.curved => l10n.wireStyleCurved,
+                WireStyle.hanging => l10n.wireStyleHanging,
+                WireStyle.angled => l10n.wireStyleAngled,
+              },
+              onChanged: (style) => setState(() {
+                settings.wireStyle = style;
+                ui.workspace.settingsChanged();
+              }),
+            ),
+          ),
+        ],
+      ),
+      (
         l10n.settingsGroupWaveforms,
         [
           _row(
@@ -1940,39 +1992,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.easingInPopup = on;
             changed();
           }),
-          // Off by default: the Project panel's rows are a list of names,
-          // and the preview card carries the picture.
-          _flag(t, 'settings-project-thumbnails',
-              l10n.settingsThumbnailsOnFootageRows,
-              value: settings.projectThumbnails, set: (on) {
-            settings.projectThumbnails = on;
-            changed();
-          }),
-          // Off by default: the lane area draws bars, and the names
-          // are already a column away in the outline.
-          _flag(t, 'settings-layer-names-on-bars',
-              l10n.settingsLayerNamesOnLaneBars,
-              value: settings.layerNamesOnBars, set: (on) {
-            settings.layerNamesOnBars = on;
-            changed();
-          }),
-          _flag(t, 'settings-marker-lines', l10n.settingsMarkerLines,
-              value: settings.markerLines, set: (on) {
-            settings.markerLines = on;
-            changed();
-          }),
           // The Cut timeline's Quantise switch, here as well because the
           // Audio timeline reads it and has no switch of its own.
           _flag(t, 'settings-quantise-sound', l10n.settingsQuantiseSound,
               value: settings.quantiseSound, set: (on) {
             settings.quantiseSound = on;
-            changed();
-          }),
-          // Unset, it follows the style: on in Lantern, off in the others.
-          _flag(t, 'settings-timeline-minimap', l10n.settingsTimelineMinimap,
-              value: settings.timelineMinimap ?? t.shape == ThemeShape.lantern,
-              set: (on) {
-            settings.timelineMinimap = on;
             changed();
           }),
         ],
@@ -1997,24 +2021,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             settings.shiftAOpensNodeSearch = on;
             changed();
           }),
-          _row(
-            t,
-            l10n.settingsWireStyle,
-            _dropdown<WireStyle>(
-              key: 'settings-wire-style',
-              value: settings.wireStyle,
-              options: WireStyle.values,
-              label: (style) => switch (style) {
-                WireStyle.curved => l10n.wireStyleCurved,
-                WireStyle.hanging => l10n.wireStyleHanging,
-                WireStyle.angled => l10n.wireStyleAngled,
-              },
-              onChanged: (style) => setState(() {
-                settings.wireStyle = style;
-                changed();
-              }),
-            ),
-          ),
         ],
       ),
     ]);
