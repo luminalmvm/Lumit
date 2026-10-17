@@ -231,10 +231,10 @@ void main() {
       await mount(tester);
 
       expect(find.byKey(const ValueKey('empty-stage')), findsOneWidget);
-      expect(find.byKey(const ValueKey('welcome-card-new')), findsOneWidget);
+      expect(find.byKey(const ValueKey('empty-stage-import')), findsOneWidget);
       expect(find.byKey(const ValueKey('welcome-card-open')), findsOneWidget);
-      expect(find.byKey(const ValueKey('welcome-card-blank')), findsNothing,
-          reason: 'the same two the welcome offers, and no third');
+      expect(find.byKey(const ValueKey('welcome-card-new')), findsNothing,
+          reason: 'a project is already open, so it offers import instead');
       expect(find.text(l10n.selectACompositionFirst), findsNothing);
     });
 
