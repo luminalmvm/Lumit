@@ -14,10 +14,12 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../state/account.dart';
 import '../state/app_state.dart';
+import '../state/phone_line_frb.dart' show PairedPhone;
 import '../state/profiles.dart';
 import '../state/ui_state.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
+import 'add_phone_window.dart';
 import 'pro_window.dart';
 import 'profile_chip.dart';
 import 'project_history_window.dart' show backupSize, backupTime;
@@ -41,6 +43,7 @@ List<String> accountSettingsRows() => [
       l10n.settingsAccountProfiles,
       l10n.settingsAccountPlan,
       l10n.settingsStorage,
+      l10n.settingsPhones,
       l10n.settingsSyncOn,
       for (final group in ProfileGroup.values) profileGroupLabel(group),
       l10n.backupSettingsOn,
@@ -70,6 +73,13 @@ class AccountSettings extends StatelessWidget {
 
         section(l10n.settingsAccountProfiles, _profiles(context, t));
         section(l10n.settingsAccountGroup, _account(context, t));
+        // Keyed by the account, so another one starts from its own list.
+        if (ui.account.pro && matches(l10n.settingsPhones)) {
+          sections.add(_Phones(
+              key: ValueKey(ui.account.account?.id),
+              ui: ui,
+              first: sections.isEmpty));
+        }
         section(l10n.settingsSync, _sync(context, t));
         section(l10n.backupSettingsGroup, [
           if (matches(l10n.backupSettingsOn)) _BackupRow(ui: ui),
@@ -544,6 +554,81 @@ class _KeptOnlineState extends State<_KeptOnline> {
           ],
         ),
     };
+  }
+}
+
+/// The phones paired with the account, each with the way to remove it, and
+/// the way to add one. It asks the server as it is shown.
+class _Phones extends StatefulWidget {
+  final LumitUiState ui;
+
+  /// Whether this is the page's first section, which has no rule above it.
+  final bool first;
+  const _Phones({super.key, required this.ui, required this.first});
+
+  @override
+  State<_Phones> createState() => _PhonesState();
+}
+
+class _PhonesState extends State<_Phones> {
+  List<PairedPhone> _phones = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_read());
+  }
+
+  Future<void> _read() async {
+    try {
+      final phones = await widget.ui.phones.phones();
+      if (mounted) setState(() => _phones = phones);
+    } on CloudError {
+      // Out of reach. Nothing is listed, and nothing is said of it here.
+    }
+  }
+
+  Future<void> _remove(PairedPhone phone) async {
+    try {
+      await widget.ui.phones.forget(phone.id);
+    } on CloudError catch (e) {
+      if (mounted) {
+        context.read<LumitState>().postNotice(cloudErrorText(e), error: true);
+      }
+    }
+    await _read();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    Widget button(String id, String label, VoidCallback onPressed) =>
+        HouseButton(
+          key: ValueKey<String>('settings-phone-$id'),
+          small: true,
+          onPressed: onPressed,
+          child: Text(label, style: t.small),
+        );
+    return settingsSection(
+      t,
+      l10n.settingsPhones,
+      [
+        for (final phone in _phones)
+          settingsRow(t, phone.name, '',
+              button('remove-${phone.id}', l10n.phoneRemove,
+                  () => unawaited(_remove(phone)))),
+        settingsRow(
+          t,
+          '',
+          '',
+          button('add', l10n.phoneAdd, () async {
+            await showAddPhone(context);
+            await _read();
+          }),
+        ),
+      ],
+      first: widget.first,
+    );
   }
 }
 

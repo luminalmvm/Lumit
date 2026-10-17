@@ -913,6 +913,12 @@ class LumitTheme {
       ? _rgb(0x1a, 0x1d, 0x20)
       : _rgb(0xee, 0xf1, 0xf2);
 
+  /// The squares of a code a phone scans, and the ground they stand on. The
+  /// same under every scheme: a camera reads dark on light far more surely
+  /// than the other way round.
+  Color get qrInk => _rgb(0x14, 0x16, 0x18);
+  Color get qrPaper => _rgb(0xff, 0xff, 0xff);
+
   /// The ground outside the work area: a step *away* from the surface ramp's
   /// direction — darker under a dark scheme, and darker again under a light
   /// one, because on white the only direction with anywhere to go is down.

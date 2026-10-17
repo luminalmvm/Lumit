@@ -19976,5 +19976,47 @@
   "lensNotSaved": "The lens could not be saved.",
   "@lensNotSaved": {
     "description": "Lens window, footer line: saving to the user's lenses failed."
+  },
+  "settingsPhones": "Phones",
+  "@settingsPhones": {
+    "description": "Group heading on the Account page of Settings: the phones paired with the account, which show what this computer is exporting. Lumit Pro only."
+  },
+  "phoneRemove": "Remove",
+  "@phoneRemove": {
+    "description": "Button in Settings beside a paired phone: unpair it from the account."
+  },
+  "phoneAdd": "Add a phone",
+  "@phoneAdd": {
+    "description": "Button under the paired phones in Settings, and the title of the window it opens, which shows a code for a phone to scan."
+  },
+  "phoneAddScan": "Scan with your iPhone camera or the Lumit app.",
+  "@phoneAddScan": {
+    "description": "The one line under the code in the Add a phone window. The Lumit app is Lumit's iPhone app."
+  },
+  "phoneCodeLeft": "{time} left",
+  "@phoneCodeLeft": {
+    "description": "Add a phone window, under the code: how long it can still be scanned. {time} is minutes and seconds, such as 4:32.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneCodeExpired": "This code has run out.",
+  "@phoneCodeExpired": {
+    "description": "Add a phone window, in place of the code once it can no longer be scanned."
+  },
+  "phoneCodeNew": "New code",
+  "@phoneCodeNew": {
+    "description": "Add a phone window: button that asks for a fresh code to scan, after one ran out or could not be had."
+  },
+  "phonePaired": "Paired with {name}",
+  "@phonePaired": {
+    "description": "Notice once a phone has scanned the code and joined the account. {name} is the phone's name, such as Mack's iPhone.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }
