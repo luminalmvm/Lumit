@@ -1270,10 +1270,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
-          // Desk's rooms are colour schemes, and this row is the one tap that
-          // picks one: choosing Desk leaves the scheme where it was.
-          if (ui.shape == ThemeShape.desk)
-            _row(t, l10n.settingsDeskRooms, _deskRoomChips(t, ui)),
           // Only Lantern has a room to choose; the other two shapes never
           // draw one, so the row would be a dial wired to nothing.
           if (ui.shape == ThemeShape.lantern)
@@ -1587,36 +1583,6 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                     ThemeShape.lantern => l10n.shapeLantern,
                   }),
                   style: ui.shape == shape ? t.kickerOn : t.kicker,
-                ),
-              ),
-            ),
-          ],
-        ],
-      );
-
-  /// Grey room or Graphite, drawn like the shape chips with the scheme in
-  /// force outlined. A chip sets the scheme and nothing else.
-  Widget _deskRoomChips(LumitTheme t, LumitUiState ui) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final (key, scheme) in const [
-            ('settings-desk-room-grey', LumitColorScheme.greyRoom),
-            ('settings-desk-room-graphite', LumitColorScheme.graphite),
-          ]) ...[
-            if (scheme != LumitColorScheme.greyRoom) const SizedBox(width: 2),
-            SizedBox(
-              height: settingsControlHeight,
-              child: HouseButton(
-                key: ValueKey<String>(key),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                frameless: ui.workspace.colorScheme != scheme,
-                onPressed: () =>
-                    setState(() => ui.workspace.setScheme(scheme)),
-                child: Text(
-                  t.kickerCase(scheme.label),
-                  style: ui.workspace.colorScheme == scheme
-                      ? t.kickerOn
-                      : t.kicker,
                 ),
               ),
             ),

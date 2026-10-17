@@ -2035,10 +2035,6 @@
   "@labelCaseLower": {
     "description": "Label case option: every label in small letters."
   },
-  "settingsDeskRooms": "Rooms drawn for Desk",
-  "@settingsDeskRooms": {
-    "description": "Settings window, Appearance: the name of the row offering the two colour schemes drawn for the Desk shape, Grey room and Graphite."
-  },
   "settingsRangeSliders": "Range sliders",
   "@settingsRangeSliders": {
     "description": "Settings window: the name of the switch that draws a track beside a ranged parameter's number."

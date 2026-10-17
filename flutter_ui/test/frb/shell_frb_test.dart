@@ -215,8 +215,6 @@ void main() {
           'settings-theme-swatches',
           'settings-shape-studio',
           'settings-shape-desk',
-          'settings-desk-room-grey',
-          'settings-desk-room-graphite',
           'settings-shape-lantern',
           'settings-lantern-room',
           'settings-customise',
@@ -368,17 +366,10 @@ void main() {
       expect(p.uiState.theme.mode, isNot(ThemeMode2.dark),
           reason: 'the derived theme follows the choice');
 
-      // Desk's rooms are a row of their own: picking the shape leaves the
-      // scheme alone, and a room chip is the one tap that changes it.
       await tester.tap(find.byKey(const ValueKey('settings-shape-desk')));
       await tester.pumpAndSettle();
       expect(p.uiState.scheme, LumitColorScheme.light,
           reason: 'picking Desk never changes the scheme by itself');
-      await tester
-          .tap(find.byKey(const ValueKey('settings-desk-room-graphite')));
-      await tester.pumpAndSettle();
-      expect(p.uiState.scheme, LumitColorScheme.graphite);
-      expect(p.uiState.theme.accent, const Color(0xffe8712a));
     });
   }, skip: !engineAvailable);
 
