@@ -3085,27 +3085,17 @@ class LumitUiState extends ChangeNotifier {
 
   /// The Cut workspace has a source side in its Viewer and the others do not,
   /// which a dock tree cannot say. So choosing Cut puts one there, and choosing
-  /// another takes away the one Cut put there.
-  bool _sourceFromCut = false;
-
+  /// any other workspace, one of the user's own included, takes it away.
   void _onPresetApplied() {
     if (workspace.activePreset == WorkspacePreset.cut) {
-      if (!hasSourceView) {
-        showSourceView();
-        _sourceFromCut = hasSourceView;
-      }
+      showSourceView();
       return;
     }
-    if (!_sourceFromCut) return;
-    _sourceFromCut = false;
     final source = sourceView;
     if (source == null) return;
     for (final entry in views.paneViews.entries) {
       if (!entry.value.contains(source.id) || entry.value.length != 2) continue;
-      // The source goes last, which is the view a narrower layout drops.
-      entry.value
-        ..remove(source.id)
-        ..add(source.id);
+      // One view keeps the composition and lets the source go.
       views.setLayout(entry.key, ViewLayout.one);
       saveLayout();
       rememberSession();

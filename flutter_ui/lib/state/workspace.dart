@@ -1460,9 +1460,10 @@ class Workspace extends ChangeNotifier {
     presetApplied.value++;
   }
 
-  /// Bumped every time a shipped preset is applied — pressing the strip's word
-  /// a second time included. Its own notifier rather than [notifyListeners]
-  /// because this class notifies for a theme edit too, and a listener acting
+  /// Bumped every time a shipped preset or one of the user's own is applied —
+  /// pressing the strip's word a second time included. Its own notifier
+  /// rather than [notifyListeners] because this class notifies for a theme
+  /// edit too, and a listener acting
   /// on "the user asked for this arrangement" must not fire on those; and
   /// because re-applying the preset already in force notifies nobody else.
   ///
@@ -1603,6 +1604,7 @@ class Workspace extends ChangeNotifier {
     activeUserWorkspace = name;
     notifyListeners();
     save();
+    presetApplied.value++;
   }
 
   /// Rename one of the user's own, keeping the selection on it. Returns the
