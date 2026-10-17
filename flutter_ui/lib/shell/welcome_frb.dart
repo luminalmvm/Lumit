@@ -481,9 +481,8 @@ class _WelcomeScreenFrbState extends State<WelcomeScreenFrb> {
 ///
 /// From the welcome screen there is nothing to make — the empty project the
 /// application boots with is already loaded (see `main`), so this is the card
-/// that says "get out of my way". From the empty shell, where the project may
-/// be one that *does* have a home on disk with nothing shown in it, it starts
-/// a fresh one.
+/// that says "get out of my way". If the open project already has a file on
+/// disk, it starts a fresh one.
 ///
 /// **It does not ask where the file goes.** A second card did, ahead of the
 /// editor, and the owner has taken it off the page: a project with nothing
@@ -514,14 +513,19 @@ Future<void> startOpenProject(
 /// shell behind it — so the ways to start work cannot drift apart. [onStarted]
 /// is what a card does once it has put a document up: on the welcome that hands
 /// the window to the shell, and in the shell there is nothing left to do.
+///
+/// In the shell a project is already open, so [inShell] swaps New project for
+/// Import footage. A second New project there looked like it did nothing.
 class StartCards extends StatelessWidget {
   final VoidCallback? onStarted;
   final Future<String?> Function()? openPicker;
+  final bool inShell;
 
   const StartCards({
     super.key,
     this.onStarted,
     this.openPicker,
+    this.inShell = false,
   });
 
   @override
@@ -530,12 +534,19 @@ class StartCards extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _WelcomeCard(
-            id: 'welcome-card-new',
-            title: l10n.welcomeNewProject,
-            note: l10n.welcomeNewProjectNote,
-            onTap: () => startNewProject(app, onStarted: onStarted),
-          ),
+          child: inShell
+              ? _WelcomeCard(
+                  id: 'empty-stage-import',
+                  title: l10n.importFootage,
+                  note: l10n.emptyStageImportNote,
+                  onTap: () => importFootageFrb(context, app),
+                )
+              : _WelcomeCard(
+                  id: 'welcome-card-new',
+                  title: l10n.welcomeNewProject,
+                  note: l10n.welcomeNewProjectNote,
+                  onTap: () => startNewProject(app, onStarted: onStarted),
+                ),
         ),
         const SizedBox(width: welcomeCardGap),
         Expanded(
@@ -557,8 +568,7 @@ class StartCards extends StatelessWidget {
 /// In plain terms: the welcome screen can be closed with nothing open, so
 /// something has to be behind it — and an empty editor whose largest panel says
 /// "select a composition" when there is no composition to select is a dead end.
-/// The three ways to start work stand there instead, until something is
-/// displayed.
+/// The ways to start work stand there instead, until something is displayed.
 ///
 /// A project that *has* compositions and simply has none fronted is a different
 /// sentence, and keeps the panel's ordinary empty line.
@@ -590,6 +600,7 @@ class EmptyStageFrb extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: welcomeColumnWidth),
           child: StartCards(
             openPicker: openPicker,
+            inShell: true,
           ),
         ),
       ),

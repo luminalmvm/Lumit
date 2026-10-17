@@ -11682,6 +11682,10 @@
   "@welcomeOpenProjectNote": {
     "description": "Welcome screen: the small note under Open, naming the file type it picks. '.lum' is Lumit's project extension and is never translated."
   },
+  "emptyStageImportNote": "Video, stills, sound",
+  "@emptyStageImportNote": {
+    "description": "Empty editor: the small note under the Import footage card that stands where the picture would be before anything is open. One line in a 180px card."
+  },
   "welcomeRecent": "Recent",
   "@welcomeRecent": {
     "description": "Welcome screen: the heading over the list of recently opened projects. Drawn in capitals, so give the sentence-case word."
