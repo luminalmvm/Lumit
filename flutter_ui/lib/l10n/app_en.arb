@@ -19977,7 +19977,7 @@
   "@lensNotSaved": {
     "description": "Lens window, footer line: saving to the user's lenses failed."
   },
-  "settingsPhones": "Phones",
+  "settingsPhones": "Devices",
   "@settingsPhones": {
     "description": "Group heading on the Account page of Settings: this computer, then the phones paired with the account, which show what it is exporting. Lumit Pro only."
   },
