@@ -218,11 +218,17 @@ class AccountSettings extends StatelessWidget {
               Text(l10n.settingsAccountPlanFree,
                   style: t.small.copyWith(color: t.textSecondary)),
             const SizedBox(width: 10),
-            account.subscription != null
-                ? _button(t, 'manage', l10n.proManage,
-                    () => unawaited(openSubscriptionPage(ui.account)))
-                : _button(t, 'pro', l10n.shareCloudSee,
-                    () => unawaited(showProWindow(context))),
+            // Bought in the iPhone app, it is changed there, and with Pro
+            // already on there is nothing here to buy.
+            if (account.onIphone && account.pro)
+              Text(l10n.proManagedOnIphone,
+                  style: t.small.copyWith(color: t.textSecondary))
+            else if (account.subscription != null && !account.onIphone)
+              _button(t, 'manage', l10n.proManage,
+                  () => unawaited(openSubscriptionPage(ui.account)))
+            else
+              _button(t, 'pro', l10n.shareCloudSee,
+                  () => unawaited(showProWindow(context))),
           ],
         ),
         description: plan?.$1 ?? '',

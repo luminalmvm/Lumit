@@ -312,7 +312,7 @@ class _ProfileCard extends StatelessWidget {
                     child: Text(l10n.profileSignIn),
                   )
                 else ...[
-                  if (account.subscription != null)
+                  if (account.subscription != null && !account.onIphone)
                     MenuRow(
                       key: const ValueKey('profile-manage'),
                       onPressed: () {

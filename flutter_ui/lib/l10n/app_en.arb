@@ -17185,6 +17185,10 @@
   "@proManage": {
     "description": "Button that opens the shop's page for changing or ending a Lumit Pro subscription, in the browser."
   },
+  "proManagedOnIphone": "Managed on your iPhone",
+  "@proManagedOnIphone": {
+    "description": "Line in place of the Manage subscription button when Lumit Pro was bought in the iPhone app, so it is changed or ended in the iPhone's settings."
+  },
   "syncStatusSynced": "Settings in sync",
   "@syncStatusSynced": {
     "description": "Line in the profile card when this profile's settings match what is kept on Lumit's server."

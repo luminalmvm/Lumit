@@ -141,6 +141,10 @@ class CloudAccount {
   /// `apple`.
   final List<String> providers;
 
+  /// Where the subscription was bought: `paddle`, `apple` (the iPhone app),
+  /// or null when there is none.
+  final String? store;
+
   /// Whether the server emails this account about new comments on its
   /// review links. On until it is turned off.
   final bool reviewMail;
@@ -154,6 +158,7 @@ class CloudAccount {
     this.preview = false,
     this.subscription,
     this.providers = const [],
+    this.store,
     this.reviewMail = true,
   });
 
@@ -170,6 +175,7 @@ class CloudAccount {
             for (final p in all)
               if (p is String) p,
         ],
+        store: j['store'] is String ? j['store'] as String : null,
         reviewMail: j['review_mail'] != false,
       );
 
@@ -183,6 +189,9 @@ class CloudAccount {
         'providers': providers,
         'review_mail': reviewMail,
       };
+
+  /// Bought in the iPhone app, so changed or ended there and not at Paddle.
+  bool get onIphone => store == 'apple';
 }
 
 /// Who a person can sign in with besides a password.
