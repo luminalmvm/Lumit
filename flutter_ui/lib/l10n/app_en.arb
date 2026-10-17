@@ -17255,7 +17255,7 @@
   },
   "signInOr": "or",
   "@signInOr": {
-    "description": "The word in the middle of the line that divides signing in by email from the Discord and Google buttons. Lower case."
+    "description": "The word in the middle of the line that divides signing in by email from the Apple, Google and Discord buttons. Lower case."
   },
   "signInGoogle": "Continue with Google",
   "@signInGoogle": {
@@ -17264,6 +17264,10 @@
   "signInDiscord": "Continue with Discord",
   "@signInDiscord": {
     "description": "Button that signs in with a Discord account, in the browser."
+  },
+  "signInApple": "Continue with Apple",
+  "@signInApple": {
+    "description": "Button that signs in with an Apple Account, in the browser. Apple's own wording for the button, so use the wording Apple gives for this language."
   },
   "signInForgot": "Forgot password?",
   "@signInForgot": {

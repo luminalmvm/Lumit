@@ -65,7 +65,7 @@ class CloudPrice {
 
 /// What the server has switched on. The sign-in window only offers what is.
 class CloudConfig {
-  final bool email, google, discord;
+  final bool email, google, discord, apple;
 
   /// Pro is free for everyone who signs in, while it is being tried out.
   final bool preview;
@@ -78,6 +78,7 @@ class CloudConfig {
     this.email = false,
     this.google = false,
     this.discord = false,
+    this.apple = false,
     this.preview = false,
     this.billing = false,
     this.monthly,
@@ -90,6 +91,7 @@ class CloudConfig {
       email: j['email'] == true,
       google: j['google'] == true,
       discord: j['discord'] == true,
+      apple: j['apple'] == true,
       preview: j['preview'] == true,
       billing: j['billing'] == true,
       monthly: prices is Map ? CloudPrice.from(prices['monthly']) : null,
@@ -97,7 +99,7 @@ class CloudConfig {
     );
   }
 
-  bool get anySignIn => email || google || discord;
+  bool get anySignIn => email || google || discord || apple;
 }
 
 /// A subscription as the shop last described it.
@@ -135,7 +137,8 @@ class CloudAccount {
   final bool preview;
   final CloudSubscription? subscription;
 
-  /// How this account can be signed in to: `password`, `google`, `discord`.
+  /// How this account can be signed in to: `password`, `google`, `discord`,
+  /// `apple`.
   final List<String> providers;
 
   /// Whether the server emails this account about new comments on its
@@ -183,7 +186,7 @@ class CloudAccount {
 }
 
 /// Who a person can sign in with besides a password.
-enum SignInWith { google, discord }
+enum SignInWith { google, discord, apple }
 
 /// How many times a password is stretched, and the shortest one taken. The
 /// count is the one OWASP gives for PBKDF2 with SHA-256.
@@ -494,7 +497,8 @@ class AccountState extends ChangeNotifier {
   /// under way.
   HttpServer? _returning;
 
-  /// Sign in with a Google or Discord account, in the person's own browser.
+  /// Sign in with a Google, Discord or Apple account, in the person's own
+  /// browser.
   ///
   /// Lumit listens on this machine alone, opens the browser at the server,
   /// and the server sends the browser back here once the person has agreed.
