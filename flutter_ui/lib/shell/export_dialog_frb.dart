@@ -133,6 +133,41 @@ const String exportDestinationAsk = 'ask';
 const String exportDestinationProject = 'project';
 const String exportDestinationFolder = 'folder';
 
+/// Where the export defaults put a file of [codec] made with [preset] from a
+/// composition called [compName], or null when they ask each time.
+///
+/// *Beside the project* is null too when the project at [projectPath] has never
+/// been saved and so has no folder to be beside: a policy that cannot be
+/// honoured is not a reason to invent a folder. The engine builds the name,
+/// since the template's tokens are its own.
+String? exportDefaultPath(BridgeExportDefaults defaults,
+    {required String preset,
+    required String compName,
+    required String codec,
+    String? projectPath}) {
+  final cut = projectPath?.lastIndexOf(RegExp(r'[/\\]')) ?? -1;
+  final folder = switch (defaults.destination) {
+    exportDestinationFolder => defaults.folder,
+    exportDestinationProject when cut > 0 => projectPath!.substring(0, cut),
+    _ => '',
+  };
+  if (folder.isEmpty) return null;
+  final name = exportPreset(
+    preset: preset,
+    compName: compName,
+    template: defaults.filenameTemplate,
+  ).defaultName;
+  if (name.isEmpty) return null;
+  final extension = _formats
+      .firstWhere((f) => f.key == codec, orElse: () => _formats.first)
+      .extension;
+  // In the separator the folder itself is written with: a Windows folder
+  // keeps its backslashes.
+  final file = name.replaceFirst(RegExp(r'\.[A-Za-z0-9]+$'), '.$extension');
+  if (folder.endsWith('/') || folder.endsWith('\\')) return '$folder$file';
+  return '$folder${folder.contains('\\') ? '\\' : '/'}$file';
+}
+
 /// The tokens a filename template may carry — the exporter's own, and the
 /// whole list: it substitutes these three and nothing else. Syntax rather than
 /// prose, which is why they are spelled here and not in the arb: a translated
@@ -2421,47 +2456,21 @@ class _ExportDialogState extends State<_ExportDialog> {
   /// always writes to the same place opens the dialog with a file name already
   /// in the Destination row.
   ///
-  /// *Ask* leaves it empty, which is what the dialog has always done. *Beside
-  /// the project* falls back to asking when the project has never been saved
-  /// and so has no folder to be beside — a policy that cannot be honoured is
-  /// not a reason to invent a folder.
+  /// *Ask* leaves it empty, which is what the dialog has always done, and so
+  /// does *beside the project* for a project never saved.
   void _seedDestination(BridgeExportDefaults defaults) {
-    final folder = switch (defaults.destination) {
-      exportDestinationFolder => defaults.folder,
-      exportDestinationProject => _projectFolder(),
-      _ => '',
-    };
-    if (folder.isEmpty) return;
-    // The engine builds the name: the template's tokens are its own, and a
-    // second substitution in Dart is a second answer to the same question.
-    final name = exportPreset(
-      preset: _preset,
-      compName: _compName,
-      template: defaults.filenameTemplate,
-    ).defaultName;
-    if (name.isEmpty) return;
-    _path = _join(folder,
-        name.replaceFirst(RegExp(r'\.[A-Za-z0-9]+$'), '.${_format.extension}'));
-  }
-
-  /// The folder the open project's file sits in, or empty where it has never
-  /// been saved.
-  String _projectFolder() {
+    String? project;
     try {
-      final path = widget.project?.path();
-      if (path == null) return '';
-      final cut = path.lastIndexOf(RegExp(r'[/\\]'));
-      return cut <= 0 ? '' : path.substring(0, cut);
+      project = widget.project?.path();
     } catch (_) {
-      return '';
+      // Closed meanwhile: no folder to be beside.
     }
-  }
-
-  /// A folder and a file name as one path, in the separator the folder itself
-  /// is written with — a Windows folder keeps its backslashes.
-  static String _join(String folder, String name) {
-    if (folder.endsWith('/') || folder.endsWith('\\')) return '$folder$name';
-    return '$folder${folder.contains('\\') ? '\\' : '/'}$name';
+    _path = exportDefaultPath(defaults,
+            preset: _preset,
+            compName: _compName,
+            codec: _format.key,
+            projectPath: project) ??
+        _path;
   }
 
   /// *Set as default*: remember the preset and the format in force as what the
