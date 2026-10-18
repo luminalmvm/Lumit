@@ -181,6 +181,13 @@ pub struct WorkerState {
     /// picture (serve the hit, measure afterwards). One slot: only the
     /// frame being looked at is worth the numbers.
     pending_measure: Option<(Uuid, u64, lumit_render::Quality)>,
+    /// The last picture each view showed of each comp, newest last, so going
+    /// back to a comp shows it at once while its frame is made ([`stand_in`]).
+    // ponytail: capped at 8 and held outside the cache's budget, about 270 MB
+    // of the card at 4K; count them against it if that ever matters.
+    stand_ins: Vec<(u32, Uuid, lumit_render::PreparedFrame)>,
+    /// Turned over by each request as it is sent ([`WorkerSender`]).
+    epochs: std::sync::Arc<WorkerEpochs>,
 }
 
 impl WorkerState {
@@ -1788,10 +1795,13 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         if used + frame_bytes > budget && state.renderer.demotions_saturated() {
             return;
         }
+        // Any request stops the fill's frame, which is made again next turn.
+        let _stop = lumit_render::cancel::Scope::new(state.epochs.any.token());
         match prepare_frame(state, &document, comp_ref.id, frame, quality, bgra, true) {
             // Tell the frontend, or the fill is invisible: the cache bar only
             // redraws when it hears something, and a fill shows no frame.
             Ok(_) => _ = stream.add(WorkerResponse::CacheFilled),
+            Err(e) if e == lumit_render::cancel::CANCELLED => {}
             // A comp that will not render must not be retried in a loop.
             Err(_) => state.fill_exhausted = true,
         }
@@ -2739,9 +2749,71 @@ fn playback_priority(playing: bool) {
 #[frb(ignore)]
 fn playback_priority(_playing: bool) {}
 
+/// The way into the render worker. Each send also turns over the epochs of
+/// the work it replaces, so a render the worker is part way through can see it
+/// is no longer wanted and stop (`lumit_render::cancel`).
+#[frb(ignore)]
+pub struct WorkerSender {
+    tx: std::sync::mpsc::Sender<WorkerRequest>,
+    epochs: std::sync::Arc<WorkerEpochs>,
+}
+
+/// The render worker has stopped, so a request went nowhere.
+#[frb(ignore)]
+#[derive(Debug)]
+pub struct WorkerGone;
+
+/// What the worker's renders are checked against: `any` turns over with every
+/// request, which is what stops the idle fill, and each picture lane turns
+/// over with a newer picture for it, which is what stops a frame it replaces.
+#[frb(ignore)]
+#[derive(Default)]
+struct WorkerEpochs {
+    any: lumit_eval::epoch::Epoch,
+    lanes: std::sync::Mutex<Vec<(u32, lumit_eval::epoch::Epoch)>>,
+}
+
+impl WorkerEpochs {
+    fn lane(&self, lane: u32) -> lumit_eval::epoch::Epoch {
+        let mut lanes = self.lanes.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, epoch)) = lanes.iter().find(|(l, _)| *l == lane) {
+            return epoch.clone();
+        }
+        let epoch = lumit_eval::epoch::Epoch::new();
+        lanes.push((lane, epoch.clone()));
+        epoch
+    }
+}
+
+impl WorkerSender {
+    pub(crate) fn new(tx: std::sync::mpsc::Sender<WorkerRequest>) -> Self {
+        Self {
+            tx,
+            epochs: std::sync::Arc::default(),
+        }
+    }
+
+    /// Err when the worker has stopped.
+    pub(crate) fn send(&self, request: WorkerRequest) -> Result<(), WorkerGone> {
+        let lane = match classify_request(&request) {
+            DrainClass::PictureNewestWins(lane) => Some(lane),
+            _ => None,
+        };
+        // Sent first, so a render that sees the turn finds the request queued.
+        self.tx.send(request).map_err(|_| WorkerGone)?;
+        self.epochs.any.bump();
+        if let Some(lane) = lane {
+            self.epochs.lane(lane).bump();
+        }
+        Ok(())
+    }
+}
+
 #[frb(ignore)]
 pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
     let (send_to_worker, receive_from_app) = std::sync::mpsc::channel::<WorkerRequest>();
+    let send_to_worker = WorkerSender::new(send_to_worker);
+    let epochs = send_to_worker.epochs.clone();
 
     {
         let Ok(state) = project.state() else {
@@ -2756,7 +2828,7 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
         state.sender = Some(send_to_worker);
     }
 
-    std::thread::spawn(move || worker_loop(project, receive_from_app, stream));
+    std::thread::spawn(move || worker_loop(project, receive_from_app, stream, epochs));
 }
 
 /// Build the Viewer's renderer, with everything a Viewer's renderer carries —
@@ -2988,6 +3060,8 @@ fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) 
     state.fill_exhausted = false;
     state.backup_exhausted = false;
     state.published_bar = None;
+    // Held pictures belong to the old device.
+    state.stand_ins.clear();
     _ = stream.add(WorkerResponse::DeviceReset);
     // And put the picture back, on the new device.
     republish_last_frame(state, stream);
@@ -2998,6 +3072,7 @@ fn worker_loop(
     project: ProjectReference,
     receiver: Receiver<WorkerRequest>,
     stream: WorkerResponseStream,
+    epochs: std::sync::Arc<WorkerEpochs>,
 ) {
     // Before anything else the worker does, because everything it does after
     // this can fault. The hook is what makes a panic name itself on disk — the
@@ -3071,6 +3146,8 @@ fn worker_loop(
         bakes_seen: 0,
         layer_sample: None,
         pending_measure: None,
+        stand_ins: Vec::new(),
+        epochs,
     };
 
     // How many turns in a row have panicked. Reset by the first turn that
@@ -4032,7 +4109,12 @@ fn handle_requests(
         // to survive to serve the next request.
         for request in pictures.into_iter().chain(scope).chain(sample) {
             let outcome = match request {
-                WorkerRequest::RenderComp(req) => render_comp(req, state, stream),
+                // A newer picture for the same view stops this one part way.
+                WorkerRequest::RenderComp(req) => {
+                    let _stop =
+                        lumit_render::cancel::Scope::new(state.epochs.lane(req.view).token());
+                    render_comp(req, state, stream)
+                }
                 WorkerRequest::SamplePixels(req) => sample_pixels(req, state, stream),
                 // Named for what it does rather than "render", so the three
                 // variants do not all share a prefix that says nothing.
@@ -4046,6 +4128,8 @@ fn handle_requests(
                 }
                 WorkerRequest::TraceScope(req) => trace_scope(req, state, stream),
                 WorkerRequest::RenderCompWithPreview(req) => {
+                    let _stop =
+                        lumit_render::cancel::Scope::new(state.epochs.lane(u32::MAX).token());
                     render_comp_with_preview(req, state, stream)
                 }
                 WorkerRequest::Play(req) => start_playback(req, state),
@@ -4060,6 +4144,7 @@ fn handle_requests(
                 WorkerRequest::RenderItem(req) => render_item(req, state, stream),
                 WorkerRequest::CloseView(view) => {
                     state.looks.remove(&view);
+                    state.stand_ins.retain(|(v, ..)| *v != view);
                     state.renderer.drop_view_targets(view);
                     Ok(())
                 }
@@ -5344,6 +5429,72 @@ fn publish_frame(
     }
 }
 
+/// What a view that has just changed comps shows while its frame is made:
+/// that comp's last picture there, or a blank one, rather than the comp it
+/// left. None when the view is not changing comps or the frame is held.
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "linux", feature = "shared-texture-linux"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+fn stand_in(
+    state: &mut WorkerState,
+    comp: Uuid,
+    frame: u64,
+    scale: f32,
+    document: &std::sync::Arc<lumit_core::Document>,
+    bgra: bool,
+) -> Option<lumit_render::PreparedFrame> {
+    let view = state.view_id();
+    let showing = state
+        .stand_ins
+        .iter()
+        .rev()
+        .find(|(v, ..)| *v == view)
+        .map(|(_, c, _)| *c);
+    if showing.is_none_or(|c| c == comp) {
+        return None;
+    }
+    // A frame the card holds is on screen straight away anyway.
+    if state
+        .renderer
+        .frame_key(document, comp, frame, still_quality(scale))
+        .is_some_and(|key| state.renderer.has_frame_texture(key, bgra))
+    {
+        return None;
+    }
+    if let Some((.., last)) = state
+        .stand_ins
+        .iter()
+        .rev()
+        .find(|(v, c, _)| *v == view && *c == comp)
+    {
+        return Some(last.clone());
+    }
+    let size = document.comp(comp)?;
+    let s = scale.clamp(0.05, 1.0);
+    state.renderer.blank_frame(
+        ((size.width as f32 * s) as u32).max(1),
+        ((size.height as f32 * s) as u32).max(1),
+        bgra,
+    )
+}
+
+/// Note what this view now shows of `comp`, for [`stand_in`].
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "linux", feature = "shared-texture-linux"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+fn remember_shown(state: &mut WorkerState, comp: Uuid, prepared: &lumit_render::PreparedFrame) {
+    let view = state.view_id();
+    state.stand_ins.retain(|(v, c, _)| (*v, *c) != (view, comp));
+    state.stand_ins.push((view, comp, prepared.clone()));
+    if state.stand_ins.len() > 8 {
+        state.stand_ins.remove(0);
+    }
+}
+
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
 #[allow(clippy::too_many_arguments)]
 fn publish_zero_copy(
@@ -5369,6 +5520,9 @@ fn publish_zero_copy(
     // already made was invisible to the scrub that wanted it, and the picture
     // was composited from scratch with the cache bar showing green over it.
     let _ = mode;
+    if let Some(shown) = stand_in(state, comp, frame, scale, document, false) {
+        send_dmabuf(state, frame, &shown, stream);
+    }
     // Through the ladder, not straight to a composite: a frame already held on
     // the card, in memory, or parked on disk costs a copy or an upload rather
     // than a render (see `prepare_frame`).
@@ -5384,18 +5538,33 @@ fn publish_zero_copy(
         Ok(prepared) => prepared,
         Err(err) => {
             // Dropped, not fatal: the next request renders afresh.
-            note!("Shared DMA-BUF render failed, dropping frame: {err}");
+            if err != lumit_render::cancel::CANCELLED {
+                note!("Shared DMA-BUF render failed, dropping frame: {err}");
+            }
             return;
         }
     };
+    if send_dmabuf(state, frame, &prepared, stream) {
+        remember_shown(state, comp, &prepared);
+    }
+}
+
+/// Show a prepared frame through the DMA-BUF; false when it could not be.
+#[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+fn send_dmabuf(
+    state: &mut WorkerState,
+    frame: u64,
+    prepared: &lumit_render::PreparedFrame,
+    stream: &mut WorkerResponseStream,
+) -> bool {
     let shared = match state
         .renderer
-        .present_prepared_dmabuf(&prepared, state.view_id())
+        .present_prepared_dmabuf(prepared, state.view_id())
     {
         Ok(shared) => shared,
         Err(err) => {
             note!("Shared DMA-BUF present failed, dropping frame: {err}");
-            return;
+            return false;
         }
     };
 
@@ -5421,6 +5590,7 @@ fn publish_zero_copy(
         reach: prepared.reach().map(|r| r.rect.map(f64::from)),
         reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
     }));
+    true
 }
 
 #[cfg(any(
@@ -5451,6 +5621,9 @@ fn publish_zero_copy(
     // already made was invisible to the scrub that wanted it, and the picture
     // was composited from scratch with the cache bar showing green over it.
     let _ = mode;
+    if let Some(shown) = stand_in(state, comp, frame, scale, document, true) {
+        send_shared(state, frame, &shown, stream);
+    }
     // Through the ladder, not straight to a composite — see `prepare_frame`.
     let prepared = match prepare_frame(
         state,
@@ -5464,15 +5637,34 @@ fn publish_zero_copy(
         Ok(prepared) => prepared,
         Err(err) => {
             // Dropped, not fatal: the next request renders afresh.
-            note!("Shared-texture render failed, dropping frame: {err}");
+            if err != lumit_render::cancel::CANCELLED {
+                note!("Shared-texture render failed, dropping frame: {err}");
+            }
             return;
         }
     };
-    let shared = match state.renderer.present_prepared(&prepared, state.view_id()) {
+    if send_shared(state, frame, &prepared, stream) {
+        remember_shown(state, comp, &prepared);
+    }
+}
+
+/// Show a prepared frame through the shared texture; false when it could not
+/// be.
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+fn send_shared(
+    state: &mut WorkerState,
+    frame: u64,
+    prepared: &lumit_render::PreparedFrame,
+    stream: &mut WorkerResponseStream,
+) -> bool {
+    let shared = match state.renderer.present_prepared(prepared, state.view_id()) {
         Ok(shared) => shared,
         Err(err) => {
             note!("Shared-texture present failed, dropping frame: {err}");
-            return;
+            return false;
         }
     };
 
@@ -5491,6 +5683,7 @@ fn publish_zero_copy(
             reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
         },
     ));
+    true
 }
 
 #[cfg(test)]
@@ -6024,6 +6217,8 @@ mod tests {
             bakes_seen: 0,
             layer_sample: None,
             pending_measure: None,
+            stand_ins: Vec::new(),
+            epochs: std::sync::Arc::default(),
         })
     }
 

@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    sync::{mpsc::Sender, Arc, LazyLock, Mutex, RwLock},
+    sync::{Arc, LazyLock, Mutex, RwLock},
 };
 
 use flutter_rust_bridge::frb;
@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     api::{
         composition::CompositionReference, layer::LayerReference, project::ProjectReference,
-        project_item::ItemReference, worker_thread::WorkerRequest, BridgeError,
+        project_item::ItemReference, BridgeError,
     },
     frb_generated::StreamSink,
     media::MediaCache,
@@ -43,7 +43,7 @@ pub struct LumitBridgeState {
     /// or another person in a shared project can set that one
     /// (`lumit_project::auto_pack_note`).
     pub(crate) auto_pack_here: bool,
-    pub sender: Option<Sender<WorkerRequest>>,
+    pub sender: Option<crate::api::worker_thread::WorkerSender>,
     /// The project's OCIO config as the *seam* holds it: the parse and
     /// the baked output-space tables the colour reads answer from.
     ///

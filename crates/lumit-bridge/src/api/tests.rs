@@ -6215,7 +6215,7 @@ fn a_closed_project_is_forgotten_and_its_worker_channel_disconnects() {
     {
         let state = project.state().expect("state");
         let mut state = state.write().expect("write");
-        state.sender = Some(sender);
+        state.sender = Some(crate::api::worker_thread::WorkerSender::new(sender));
     }
 
     project.close().expect("closed");

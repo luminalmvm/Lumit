@@ -998,22 +998,30 @@ pub fn contents_at<'a>(
             _ => false,
         }
     }
-    let mut value = match serde_json::to_value(contents) {
+    // Keyed paths are settled first and their keys dropped, so the walk below
+    // never carries them. They hold nothing it changes, and a drawn morph can
+    // be megabytes of keys, which every frame then sent through JSON and back.
+    let paths_move = contents.iter().any(ShapeItem::path_is_animated);
+    let settled: std::borrow::Cow<'a, [ShapeItem]> = if paths_move {
+        let mut items = contents.to_vec();
+        for item in items.iter_mut().filter(|item| item.path_is_animated()) {
+            item.path = item.path_at(t).into_owned();
+            item.path_keys.clear();
+        }
+        items.into()
+    } else {
+        contents.into()
+    };
+    let mut value = match serde_json::to_value(&*settled) {
         Ok(value) => value,
         Err(_) => return contents.into(),
     };
-    let moved = freeze(&mut value, t, context);
-    let paths_move = contents.iter().any(ShapeItem::path_is_animated);
-    if !moved && !paths_move {
-        return contents.into();
+    if !freeze(&mut value, t, context) {
+        return settled;
     }
-    let Ok(mut frozen) = serde_json::from_value::<Vec<ShapeItem>>(value) else {
+    let Ok(frozen) = serde_json::from_value::<Vec<ShapeItem>>(value) else {
         return contents.into();
     };
-    for item in frozen.iter_mut().filter(|item| item.path_is_animated()) {
-        item.path = item.path_at(t).into_owned();
-        item.path_keys.clear();
-    }
     frozen.into()
 }
 

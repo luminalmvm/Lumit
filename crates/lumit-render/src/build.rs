@@ -3024,6 +3024,11 @@ fn comp_walk(
     let any_solo = lumit_core::model::any_picture_solo(comp);
     let mut draws: Vec<CompLayerDraw> = Vec::new();
     for (idx, layer) in comp.layers.iter().enumerate().rev() {
+        // A frame nobody wants any more stops here, and the renderer throws
+        // the half-built list away (see `crate::cancel`).
+        if crate::cancel::requested() {
+            break;
+        }
         // The walk is bottom-up, so a unit opens at its span's bottom row and
         // closes the moment the walk moves above its top — checked before any
         // of this row's own gates, so a skipped row still closes a unit it
