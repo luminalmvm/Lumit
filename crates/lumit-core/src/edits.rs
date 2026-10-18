@@ -708,3 +708,69 @@ pub fn comp_settings_ops(comp: &lumit_core::model::Composition, settings: CompSe
     }
     ops
 }
+
+/// One key given on the composition's clock, moved onto the layer's own by
+/// `offset`, the layer's `start_offset`. The engine keys every property in
+/// layer time so a layer's animation travels with it, while people draw, edit
+/// and write keys in comp time. `None` when the time overflows.
+pub fn key_on_layer_clock(
+    key: lumit_core::anim::Keyframe,
+    offset: Rational,
+) -> Option<lumit_core::anim::Keyframe> {
+    Some(lumit_core::anim::Keyframe {
+        time: key.time.checked_sub(offset).ok()?,
+        ..key
+    })
+}
+
+/// `keys` as a keyframed animation, or `None` when there are none or their
+/// times are not strictly ascending. `anim::evaluate` walks the list assuming
+/// it is sorted, so an unsorted one does not error, it silently evaluates
+/// wrongly.
+pub fn keyframed(keys: Vec<lumit_core::anim::Keyframe>) -> Option<lumit_core::anim::Animation> {
+    if keys.is_empty() || keys.windows(2).any(|pair| pair[1].time <= pair[0].time) {
+        return None;
+    }
+    Some(lumit_core::anim::Animation::Keyframed(keys))
+}
+
+/// The ops that put `animation` on one transform or camera property of
+/// `layer` in `comp`: its animation, and beside it what an expression knows
+/// about the property (its language, the value underneath, its seed) whenever
+/// that changes. `language` is the expression's, when `animation` is one.
+///
+/// The note is worked out here and carried whole in the op, so undo puts
+/// back the one that was there and a replayed journal writes the same seed.
+pub fn transform_ops(
+    comp: Uuid,
+    layer: &Layer,
+    prop: lumit_core::model::TransformProp,
+    animation: lumit_core::anim::Animation,
+    language: Option<lumit_core::expression::Language>,
+) -> Vec<Op> {
+    use lumit_core::expression::SLOT_KEY;
+
+    let mut ops = vec![Op::SetTransformProperty {
+        comp,
+        layer: layer.id,
+        prop,
+        animation: animation.clone(),
+    }];
+    if let Some(held) = layer.prop(prop) {
+        let mut next = held.clone();
+        next.set_animation(animation);
+        if let Some(language) = language {
+            next.set_expression_language(language);
+        }
+        let slot = next.extra.get(SLOT_KEY).cloned();
+        if slot.as_ref() != held.extra.get(SLOT_KEY) {
+            ops.push(Op::SetTransformExpressionSlot {
+                comp,
+                layer: layer.id,
+                prop,
+                slot,
+            });
+        }
+    }
+    ops
+}
