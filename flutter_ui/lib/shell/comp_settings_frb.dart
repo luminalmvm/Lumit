@@ -522,9 +522,9 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
                   child: Center(
                     child: lumitIcon(
                       _locked ? LumitIcon.link : LumitIcon.unlink,
-                      size: 12,
+                      size: iconSize,
                       color: _locked
-                          ? t.textPrimary
+                          ? t.accent
                           : Color.lerp(t.textMuted, t.textPrimary, lit)!,
                     ),
                   ),
