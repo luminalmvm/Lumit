@@ -1,6 +1,6 @@
 ---
 title: Command line
-description: Export, run scripts and let other programs edit a project without opening Lumit.
+description: Export, run scripts and let other programs edit a project from the command line.
 sidebar:
   order: 19.8
 ---
@@ -86,9 +86,32 @@ Most programs list them under `mcpServers`, under any name:
 }
 ```
 
-:::note[Not built yet]
-Editing the project open in Lumit. **mcp** without `--project` stops with exit status 2.
-:::
+## Let another program edit the project open in Lumit
+
+```
+lumit-cli mcp
+```
+
+Without `--project`, **mcp** edits the project open in Lumit, with the same tools. It needs
+**Settings ▸ General ▸ Let other programs drive Lumit**, which is off until turned on. With
+the setting off, or Lumit closed, **mcp** stops with exit status 1.
+
+- Every edit is a step in **History**. `script_run` is one step, and covers the window with
+  **Stop** until it ends.
+- While a program is connected, the status line names it. **Disconnect** lets it go, and
+  so does turning the setting off.
+- One program at a time. A second is refused.
+- Footage, saves and exports keep to the project's folder, as with `--project`. A project
+  that has not been saved yet is not saved, imported into or exported from.
+- An edit sent during a drag in the window waits for the drag to end, and is refused after
+  two seconds.
+
+Lumit listens on a named pipe on Windows and a socket file on macOS and Linux, never on a
+network port. The name is random, and it is kept with a secret in a file only the signed-in
+user can read. A program has to prove it holds the secret before Lumit reads anything it
+sends.
+
+A program starts it the same way, with `"args": ["mcp"]`.
 
 ## What it prints
 
