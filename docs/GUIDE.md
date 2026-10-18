@@ -205,6 +205,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-ml` | Installed addons: model packs and the model runtime |
 | `lumit-import` | After Effects import |
 | `lumit-keymap` | Shortcuts |
+| `lumit-script` | Commands: the named edits scripts, the command line and MCP make, all through one `dispatch` |
 | `lumit-ingress` | Limits for reading untrusted input |
 | `lumit-peer` | Authenticating the plugin broker pipes |
 | `lumit-share` | Shared projects: the host's end, a guest's end, the encrypted channel between them, and a member's end of a project kept online (`online.rs`). Lumit's own relay and its server are each dialled through a door the interface keeps (`state/relay_door.dart`, `state/online_door.dart`) |

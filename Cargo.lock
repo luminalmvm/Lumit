@@ -2360,6 +2360,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-script"
+version = "0.8.1"
+dependencies = [
+ "lumit-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "lumit-share"
 version = "0.8.1"
 dependencies = [
