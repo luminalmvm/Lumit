@@ -1892,6 +1892,11 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
   final ScrollController _vOutline = ScrollController();
   final ScrollController _vLane = ScrollController();
 
+  /// Bumped when layout moves the outline's scroll, such as a precomp with
+  /// fewer rows pulling it back up. Flutter doesn't tell the controller about
+  /// that, so the seams and the lanes listen to this as well.
+  final ValueNotifier<int> _outlineSettled = ValueNotifier(0);
+
   /// The lanes' horizontal scroll, once zoomed past fit.
   ///
   /// Anchored: a zoom hands it the frame to hold and where to hold it,
@@ -3380,6 +3385,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _markerPreview.dispose();
     _vOutline.dispose();
     _vLane.dispose();
+    _outlineSettled.dispose();
     _hLane.dispose();
     super.dispose();
   }
@@ -4549,7 +4555,16 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                 // the row list windows itself against.
                                 child: LayoutBuilder(
                                     builder: (context, box) =>
-                                        SingleChildScrollView(
+                                        NotificationListener<
+                                            ScrollMetricsNotification>(
+                                      onNotification: (n) {
+                                        if (n.depth == 0) {
+                                          _outlineSettled.value++;
+                                          _followScroll(_vOutline, _vLane);
+                                        }
+                                        return false;
+                                      },
+                                      child: SingleChildScrollView(
                                           controller: _vOutline,
                                           // **One outline, in both views**:
                                           // Graph mode's colour-ticked filtered list
@@ -4590,7 +4605,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                                             },
                                             onChanged: ui.model.refresh,
                                           ),
-                                        )),
+                                        ))),
                               ),
                             ),
                           ],
@@ -4638,6 +4653,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
                     // of so a layer in hand is drawn over them.
                     animation: Listenable.merge([
                       _vOutline,
+                      _outlineSettled,
                       _layerDrag.band,
                       _layerDrag.seams,
                       _layerDrag.mark,
