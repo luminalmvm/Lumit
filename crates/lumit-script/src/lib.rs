@@ -63,6 +63,13 @@ pub trait Host {
     /// Stop export `job`. Stopping one that has finished does nothing.
     fn export_cancel(&self, job: u64) -> Result<(), ScriptError>;
 
+    /// Show `comp` in the Viewer. Where there is no Viewer, as on the command
+    /// line, this does nothing.
+    fn open_comp(&self, comp: Uuid) -> Result<(), ScriptError> {
+        let _ = comp;
+        Ok(())
+    }
+
     /// The ops that make `parent` the parent of `layer` in `comp`, or leave it
     /// with none. By default only the parent changes, so the layer jumps with
     /// it; a host that can place layers also changes the layer's transform so
