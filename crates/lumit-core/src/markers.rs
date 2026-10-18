@@ -204,4 +204,55 @@ mod tests {
         assert_eq!(times, vec![rat(0, 1), rat(2, 1), rat(3, 1), rat(4, 1)]);
         assert_eq!(merged.iter().filter(|m| m.is_beat()).count(), 2);
     }
+
+    #[test]
+    fn merged_edits_keep_what_the_panel_cannot_see() {
+        let rate = crate::time::FrameRate::new(25, 1).unwrap();
+        let mut beat = Marker::beat(Uuid::now_v7(), rat(1, 1), 0.7);
+        // A span finer than a frame, and a field from a newer Lumit.
+        beat.duration = Some(rat(1, 10));
+        beat.extra.insert("newer".into(), true.into());
+        let same = rate.frame_at(CompTime(rat(1, 10)));
+        let edit = |id, duration_frames| MarkerEdit {
+            id,
+            time: CompTime(rat(2, 1)),
+            label: "Drop".into(),
+            colour: Some(3),
+            duration_frames,
+        };
+        let new = Uuid::now_v7();
+        let merged = merge_edits(
+            vec![
+                edit(beat.id, Some(same)),
+                edit(beat.id, Some(5)),
+                edit(beat.id, Some(0)),
+                edit(beat.id, None),
+                edit(new, Some(5)),
+            ],
+            std::slice::from_ref(&beat),
+            rate,
+        );
+
+        let durations: Vec<_> = merged.iter().map(|m| m.duration).collect();
+        assert_eq!(
+            durations,
+            [
+                Some(rat(1, 10)),
+                Some(rat(1, 5)),
+                None,
+                None,
+                Some(rat(1, 5))
+            ]
+        );
+        for m in &merged[..4] {
+            assert_eq!(m.kind, beat.kind);
+            assert_eq!(m.extra, beat.extra);
+            assert_eq!(
+                (m.time, m.label.as_str(), m.colour),
+                (CompTime(rat(2, 1)), "Drop", Some(3))
+            );
+        }
+        assert_eq!(merged[4].kind, MarkerKind::User);
+        assert!(merged[4].extra.is_empty());
+    }
 }
