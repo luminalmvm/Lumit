@@ -2749,7 +2749,6 @@ fn playback_priority(playing: bool) {
 #[frb(ignore)]
 fn playback_priority(_playing: bool) {}
 
-#[frb(ignore)]
 /// The way into the render worker. Each send also turns over the epochs of
 /// the work it replaces, so a render the worker is part way through can see it
 /// is no longer wanted and stop (`lumit_render::cancel`).
@@ -2810,6 +2809,7 @@ impl WorkerSender {
     }
 }
 
+#[frb(ignore)]
 pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
     let (send_to_worker, receive_from_app) = std::sync::mpsc::channel::<WorkerRequest>();
     let send_to_worker = WorkerSender::new(send_to_worker);
