@@ -498,3 +498,213 @@ pub fn fresh_ids(comps: &mut [lumit_core::model::Composition]) -> Option<()> {
     }
     Some(())
 }
+
+/// What a composition is made with, or changed to: the engine's half of the
+/// New composition and Composition settings dialogues.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CompSettings {
+    /// A blank name on a new comp gets the next "Comp N".
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub frame_rate: lumit_core::time::FrameRate,
+    pub duration: lumit_core::time::Duration,
+    /// Scene-linear RGBA.
+    pub background: [f32; 4],
+    /// The master shutter's angle in degrees, and how many sub-frame samples a
+    /// blurred layer is drawn at. The shutter's phase is left as it stands.
+    pub shutter_angle: f64,
+    pub motion_blur_samples: u32,
+}
+
+impl Default for CompSettings {
+    /// What a comp gets when nobody chose: 1920×1080, 60 fps, 30 seconds,
+    /// black, and the model's own shutter. One place decides what a comp is.
+    fn default() -> Self {
+        use lumit_core::time::{Duration, FrameRate};
+        let blur = lumit_core::model::MotionBlur::default();
+        CompSettings {
+            name: String::new(),
+            width: 1920,
+            height: 1080,
+            frame_rate: FrameRate::new(60, 1).unwrap_or(FrameRate::FPS_25),
+            duration: Duration(Rational::new(30, 1).unwrap_or(Rational::ONE)),
+            background: [0.0, 0.0, 0.0, 1.0],
+            shutter_angle: blur.shutter_angle,
+            motion_blur_samples: blur.samples,
+        }
+    }
+}
+
+/// A comp's length for `seconds` at `rate`. A comp shorter than one frame has
+/// nothing to show, so the floor is one frame at that rate.
+pub fn comp_duration(
+    rate: lumit_core::time::FrameRate,
+    seconds: Rational,
+) -> Option<lumit_core::time::Duration> {
+    let floor = rate.frame_duration().ok()?;
+    Some(lumit_core::time::Duration(seconds.max(floor.0)))
+}
+
+/// The name a comp made now would get if nobody typed one. `node_graph`
+/// counts and names the node graphs; otherwise the comps. The two are counted
+/// apart, so making a graph does not push the next comp's number along and
+/// neither reads as the other's.
+pub fn next_comp_name(doc: &lumit_core::model::Document, node_graph: bool) -> String {
+    let existing = doc
+        .items
+        .iter()
+        .filter(|i| match i {
+            ProjectItem::Composition(c) => c.graph.is_some() == node_graph,
+            _ => false,
+        })
+        .count();
+    if node_graph {
+        format!("Node graph {}", existing + 1)
+    } else {
+        format!("Comp {}", existing + 1)
+    }
+}
+
+/// The ops that add a composition and file it, with the new comp's id.
+/// Nothing is committed, so a caller can add to the batch.
+pub fn new_comp_ops(
+    doc: &lumit_core::model::Document,
+    settings: CompSettings,
+    graph: Option<lumit_core::comp_graph::CompGraph>,
+) -> (Uuid, Vec<Op>) {
+    use lumit_core::model::{Composition, MotionBlur};
+
+    let name = if settings.name.trim().is_empty() {
+        next_comp_name(doc, graph.is_some())
+    } else {
+        settings.name
+    };
+
+    let mut ops: Vec<Op> = Vec::new();
+    let folder_id = match doc
+        .auto_folders
+        .compositions
+        .filter(|id| doc.folder(*id).is_some())
+    {
+        Some(id) => id,
+        None => {
+            let id = Uuid::now_v7();
+            ops.push(Op::AddItem {
+                index: doc.items.len(),
+                item: Box::new(ProjectItem::Folder(Folder {
+                    id,
+                    name: "Compositions".into(),
+                    children: Vec::new(),
+                    extra: serde_json::Map::new(),
+                })),
+            });
+            ops.push(Op::SetAutoFolder {
+                kind: AutoFolderKind::Compositions,
+                folder: Some(id),
+            });
+            id
+        }
+    };
+
+    let comp = Composition {
+        graph,
+        master_volume_db: 0.0,
+        sound_mix: false,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: Uuid::now_v7(),
+        name,
+        width: settings.width.clamp(16, 16384),
+        height: settings.height.clamp(16, 16384),
+        frame_rate: settings.frame_rate,
+        duration: settings.duration,
+        // The dialog's own answers: the Background row and the
+        // Motion blur section decide these at creation, and a settings
+        // block that was never filled in carries the defaults anyway.
+        background: LinearColour(settings.background),
+        work_area: None,
+        layers: Vec::new(),
+        markers: Vec::new(),
+        motion_blur: MotionBlur {
+            shutter_angle: settings.shutter_angle,
+            samples: settings.motion_blur_samples.max(1),
+            ..MotionBlur::default()
+        },
+        extra: serde_json::Map::new(),
+    };
+    let comp_id = comp.id;
+
+    // The comp's index has to account for any AddItem already queued ahead of
+    // it in this same batch.
+    let queued = ops
+        .iter()
+        .filter(|o| matches!(o, Op::AddItem { .. }))
+        .count();
+    ops.push(Op::AddItem {
+        index: doc.items.len() + queued,
+        item: Box::new(ProjectItem::Composition(comp)),
+    });
+
+    // The folder may have been created earlier in this same batch, so it is
+    // absent from `doc` and its children start empty.
+    let mut children = doc
+        .folder(folder_id)
+        .map(|f| f.children.clone())
+        .unwrap_or_default();
+    children.push(comp_id);
+    ops.push(Op::SetFolderChildren {
+        folder: folder_id,
+        children,
+    });
+
+    (comp_id, ops)
+}
+
+/// The ops that give `comp` new settings, to be committed in order as one undo
+/// step.
+///
+/// Dimensions are clamped to 16..=16384. The other settings go first, at the
+/// size the frame has, so the step is named for the settings in the undo list.
+/// Then a new frame size, which keeps the picture's middle in the middle: the
+/// frame is cropped (or grown) evenly about its centre, which moves the layers
+/// with it. Without this every layer stays where it was against the top-left
+/// corner and a narrower comp shows them pushed to one side.
+pub fn comp_settings_ops(comp: &lumit_core::model::Composition, settings: CompSettings) -> Vec<Op> {
+    let motion_blur = lumit_core::model::MotionBlur {
+        // The dialog does not ask whether the master switch is on, or what
+        // the shutter's phase is; both are left exactly as they stand.
+        shutter_angle: settings.shutter_angle,
+        samples: settings.motion_blur_samples.max(1),
+        ..comp.motion_blur
+    };
+    let (width, height) = (
+        settings.width.clamp(16, 16384),
+        settings.height.clamp(16, 16384),
+    );
+    let mut ops = vec![Op::SetCompSettings {
+        comp: comp.id,
+        name: settings.name,
+        width: comp.width,
+        height: comp.height,
+        frame_rate: settings.frame_rate,
+        duration: settings.duration,
+        background: LinearColour(settings.background),
+    }];
+    if (width, height) != (comp.width, comp.height) {
+        ops.push(Op::CropCompToRegion {
+            comp: comp.id,
+            x: (f64::from(comp.width) - f64::from(width)) / 2.0,
+            y: (f64::from(comp.height) - f64::from(height)) / 2.0,
+            width,
+            height,
+        });
+    }
+    if motion_blur != comp.motion_blur {
+        ops.push(Op::SetCompMotionBlur {
+            comp: comp.id,
+            motion_blur,
+        });
+    }
+    ops
+}

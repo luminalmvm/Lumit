@@ -350,34 +350,40 @@ impl BridgeCompSettings {
     /// what a default comp is.
     #[frb(sync)]
     pub fn defaults() -> BridgeCompSettings {
+        let d = lumit_core::edits::CompSettings::default();
         BridgeCompSettings {
-            name: String::new(),
-            width: 1920,
-            height: 1080,
-            fps_num: 60,
-            fps_den: 1,
-            duration: BridgeRational { num: 30, den: 1 },
-            // Black, and the model's own shutter — one place decides what a
-            // comp is, and this is it.
-            background: [0.0, 0.0, 0.0, 1.0],
-            shutter_angle: lumit_core::model::MotionBlur::default().shutter_angle,
-            motion_blur_samples: lumit_core::model::MotionBlur::default().samples,
+            name: d.name,
+            width: d.width,
+            height: d.height,
+            fps_num: d.frame_rate.num(),
+            fps_den: d.frame_rate.den(),
+            duration: BridgeRational {
+                num: d.duration.0.num(),
+                den: d.duration.0.den(),
+            },
+            background: d.background,
+            shutter_angle: d.shutter_angle,
+            motion_blur_samples: d.motion_blur_samples,
         }
     }
 
-    /// The engine types this settings block names, or `None` when the rate or
+    /// The engine's settings this block names, or `None` when the rate or
     /// duration is not a time at all.
     #[frb(ignore)]
-    pub(crate) fn to_engine(
-        &self,
-    ) -> Option<(lumit_core::time::FrameRate, lumit_core::time::Duration)> {
-        use lumit_core::time::{Duration, FrameRate, Rational};
-        let rate = FrameRate::new(self.fps_num, self.fps_den).ok()?;
+    pub(crate) fn to_engine(&self) -> Option<lumit_core::edits::CompSettings> {
+        use lumit_core::time::{FrameRate, Rational};
+        let frame_rate = FrameRate::new(self.fps_num, self.fps_den).ok()?;
         let duration = Rational::new(self.duration.num, self.duration.den).ok()?;
-        // A comp shorter than one frame has nothing to show, so the floor is one
-        // frame at the rate being applied.
-        let floor = rate.frame_duration().ok()?;
-        Some((rate, Duration(duration.max(floor.0))))
+        Some(lumit_core::edits::CompSettings {
+            name: self.name.clone(),
+            width: self.width,
+            height: self.height,
+            frame_rate,
+            duration: lumit_core::edits::comp_duration(frame_rate, duration)?,
+            background: self.background,
+            shutter_angle: self.shutter_angle,
+            motion_blur_samples: self.motion_blur_samples,
+        })
     }
 }
 
@@ -647,68 +653,18 @@ impl CompositionReference {
     #[frb(sync)]
     pub fn set_settings(&self, settings: BridgeCompSettings) -> Result<(), BridgeError> {
         let comp = self.composition()?;
-        let (frame_rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+        let settings = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+        let ops = lumit_core::edits::comp_settings_ops(&comp, settings);
 
-        let motion_blur = lumit_core::model::MotionBlur {
-            // The dialog does not ask whether the master switch is on, or what
-            // the shutter's phase is; both are left exactly as they stand.
-            shutter_angle: settings.shutter_angle,
-            samples: settings.motion_blur_samples.max(1),
-            ..comp.motion_blur
-        };
-
-        let (width, height) = (
-            settings.width.clamp(16, 16384),
-            settings.height.clamp(16, 16384),
-        );
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.begin_undo_group();
-        // The other settings first, at the size the frame has, so the step
-        // is named for the settings in the undo list. Then a new frame size,
-        // which keeps the picture's middle in the middle: the frame is
-        // cropped (or grown) evenly about its centre, which moves the layers
-        // with it. Without this every layer stays where it was against the
-        // top-left corner and a narrower comp shows them pushed to one side.
-        let applied = proj
-            .store
-            .commit(lumit_core::Op::SetCompSettings {
-                comp: self.id,
-                name: settings.name,
-                width: comp.width,
-                height: comp.height,
-                frame_rate,
-                duration,
-                background: lumit_core::model::LinearColour(settings.background),
-            })
-            .map_err(BridgeError::OpError)
-            .and_then(|_| {
-                if (width, height) == (comp.width, comp.height) {
-                    return Ok(());
-                }
-                proj.store
-                    .commit(lumit_core::Op::CropCompToRegion {
-                        comp: self.id,
-                        x: (f64::from(comp.width) - f64::from(width)) / 2.0,
-                        y: (f64::from(comp.height) - f64::from(height)) / 2.0,
-                        width,
-                        height,
-                    })
-                    .map(|_| ())
-                    .map_err(BridgeError::OpError)
-            })
-            .and_then(|_| {
-                if motion_blur == comp.motion_blur {
-                    return Ok(());
-                }
-                proj.store
-                    .commit(lumit_core::Op::SetCompMotionBlur {
-                        comp: self.id,
-                        motion_blur,
-                    })
-                    .map(|_| ())
-                    .map_err(BridgeError::OpError)
-            });
+        let applied = ops.into_iter().try_for_each(|op| {
+            proj.store
+                .commit(op)
+                .map(|_| ())
+                .map_err(BridgeError::OpError)
+        });
         proj.store.end_undo_group();
         applied
     }
