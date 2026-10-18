@@ -20,7 +20,7 @@
 //! is handed back to the caller's thread to run, and the script waits for the
 //! answer.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -148,6 +148,7 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
                 .filter_map(|p| p.canonicalize().ok())
                 .collect(),
         }),
+        edited: Cell::new(false),
     };
     let name = if options.name.is_empty() {
         "Script".to_owned()
@@ -186,6 +187,11 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
             if stop.load(Ordering::Relaxed) {
                 return Err(ScriptError::Stopped);
             }
+            // The run goes onto the History list as one step, which reads
+            // better named after the script than after its first edit.
+            if out.is_ok() && desk.edited.get() {
+                host.store().name_undo_group(setup.name.clone());
+            }
             out
         })
     });
@@ -218,6 +224,8 @@ struct Desk<'a> {
     /// What the script may read, and where its saves, footage and exports
     /// may go.
     reach: RefCell<Reach>,
+    /// Whether a command changed the document.
+    edited: Cell<bool>,
 }
 
 impl Desk<'_> {
@@ -278,8 +286,14 @@ impl Lumit {
                     "A script cannot undo or redo. Its whole run is one step.".into(),
                 ));
             }
+            let store = desk.host.store();
+            let before = store.revision();
             let reach = desk.reach.borrow();
-            commands::run(desk.host, Some(&*reach), &name, args)
+            let out = commands::run(desk.host, Some(&*reach), &name, args);
+            if store.revision() != before {
+                desk.edited.set(true);
+            }
+            out
         })
     }
 }
