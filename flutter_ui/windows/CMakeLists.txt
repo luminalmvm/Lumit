@@ -143,7 +143,7 @@ set(LUMIT_WORKSPACE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../..")
 # expands to nothing is not. `dev` and `release` are Cargo's own names for the
 # two profiles, and they are what `target/debug` and `target/release` below are.
 add_custom_target(lumit_brokers ALL
-  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker --profile "$<IF:$<CONFIG:Debug>,dev,release>"
+  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker -p lumit-cli --profile "$<IF:$<CONFIG:Debug>,dev,release>"
   WORKING_DIRECTORY "${LUMIT_WORKSPACE_DIR}"
   VERBATIM
   COMMENT "Building the plugin brokers")
@@ -175,5 +175,17 @@ install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-media-broker.exe"
   COMPONENT Runtime)
 install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-media-broker.exe"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  CONFIGURATIONS Profile;Release
+  COMPONENT Runtime)
+
+# The command line, lumit-cli, is built by the same command and goes in lib\
+# beside lumit_bridge.dll, which it runs from, so Windows finds FFmpeg there
+# too. It finds the brokers a folder up.
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/debug/lumit-cli.exe"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  CONFIGURATIONS Debug
+  COMPONENT Runtime)
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/release/lumit-cli.exe"
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)

@@ -141,7 +141,7 @@ else()
   set(LUMIT_CARGO_RELEASE "--release")
 endif()
 add_custom_target(lumit_brokers ALL
-  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker ${LUMIT_CARGO_RELEASE}
+  COMMAND cargo build -p lumit-ofx-broker -p lumit-aplug-broker -p lumit-media-broker -p lumit-cli ${LUMIT_CARGO_RELEASE}
   WORKING_DIRECTORY "${LUMIT_WORKSPACE_DIR}"
   VERBATIM
   COMMENT "Building the plugin brokers")
@@ -153,5 +153,10 @@ install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/${LUMIT_CARGO_DIR}/lumit-aplug-b
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/${LUMIT_CARGO_DIR}/lumit-media-broker"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+# The command line goes with them. It runs from liblumit_bridge.so in lib/,
+# which finds FFmpeg there through its own rpath.
+install(PROGRAMS "${LUMIT_WORKSPACE_DIR}/target/${LUMIT_CARGO_DIR}/lumit-cli"
   DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)

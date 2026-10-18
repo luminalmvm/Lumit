@@ -94,6 +94,7 @@ pub extern "C" fn lumit_cli_main() -> i32 {
 }
 
 fn main() -> i32 {
+    find_brokers();
     let command = match parse(std::env::args_os().skip(1).collect()) {
         Ok(command) => command,
         Err(why) => {
@@ -138,6 +139,44 @@ fn write_out(line: std::fmt::Arguments<'_>) {
             1
         };
         std::process::exit(code);
+    }
+}
+
+/// Each broker is looked for beside the program that starts it. On Windows
+/// this one is in lib\, a folder below Lumit and its brokers, so it says
+/// where they are. Before any thread starts, as setting a variable must be.
+fn find_brokers() {
+    let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    else {
+        return;
+    };
+    #[cfg(feature = "media")]
+    let media = if cfg!(windows) {
+        "lumit-media-broker.exe"
+    } else {
+        "lumit-media-broker"
+    };
+    let brokers = [
+        (
+            lumit_ofx::ipc::broker::BROKER_EXE_ENV,
+            lumit_ofx::ipc::broker::broker_exe_name(),
+        ),
+        (
+            lumit_aplug::ipc::broker::BROKER_EXE_ENV,
+            lumit_aplug::ipc::broker::broker_exe_name(),
+        ),
+        #[cfg(feature = "media")]
+        (lumit_media::ai::BROKER_EXE_ENV, media),
+    ];
+    for (variable, name) in brokers {
+        if std::env::var_os(variable).is_some() || dir.join(name).is_file() {
+            continue;
+        }
+        if let Some(up) = dir.parent().map(|up| up.join(name)).filter(|p| p.is_file()) {
+            std::env::set_var(variable, up);
+        }
     }
 }
 
