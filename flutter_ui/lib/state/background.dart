@@ -17,12 +17,15 @@ import 'workspace.dart';
 
 const MethodChannel _channel = MethodChannel('lumit/window');
 
-/// Tell the runner whether closing the window keeps Lumit running. Never
-/// throws, a runner that isn't there is a test.
+/// Tell the runner whether closing the window keeps Lumit running, and
+/// whether Lumit starts in the tray at sign-in. The runner writes or removes
+/// that entry each time, so it follows the copy of Lumit that last started.
+/// Never throws, a runner that isn't there is a test.
 Future<void> applyBackground(Workspace workspace) async {
   try {
     await _channel.invokeMethod<void>('background', {
       'keep': workspace.keepRunning,
+      'signIn': workspace.keepRunning && workspace.openAtSignIn,
       'open': l10n.trayOpen,
       'quit': l10n.trayQuit,
     });

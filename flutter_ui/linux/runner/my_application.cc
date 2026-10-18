@@ -46,6 +46,34 @@ static gchar* keep_running_file() {
                           nullptr);
 }
 
+// Start Lumit in the tray when the person signs in, with an autostart entry
+// that passes --background, or stop doing so.
+static void set_open_at_sign_in(gboolean on) {
+  g_autofree gchar* entry = g_build_filename(
+      g_get_home_dir(), ".config", "autostart", "lumit.desktop", nullptr);
+  if (!on) {
+    g_remove(entry);
+    return;
+  }
+  g_autofree gchar* exec = nullptr;
+  if (g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS)) {
+    exec = g_strdup("flatpak run " APPLICATION_ID " --background");
+  } else {
+    g_autofree gchar* self = g_file_read_link("/proc/self/exe", nullptr);
+    if (self == nullptr) {
+      return;
+    }
+    exec = g_strdup_printf("\"%s\" --background", self);
+  }
+  g_autofree gchar* text = g_strdup_printf(
+      "[Desktop Entry]\nType=Application\nName=Lumit\nExec=%s\n"
+      "X-GNOME-Autostart-enabled=true\n",
+      exec);
+  g_autofree gchar* folder = g_path_get_dirname(entry);
+  g_mkdir_with_parents(folder, 0700);
+  g_file_set_contents(entry, text, -1, nullptr);
+}
+
 // Show the window and bring it to the front, from the tray or a second start.
 static void reveal(MyApplication* self) {
   self->start_hidden = FALSE;
@@ -273,6 +301,9 @@ static void window_method_cb(FlMethodChannel* channel,
       g_remove(marker);
     }
     show_tray(self, self->keep_running, text("open"), text("quit"));
+    FlValue* sign_in = value("signIn", FL_VALUE_TYPE_BOOL);
+    set_open_at_sign_in(self->keep_running && sign_in != nullptr &&
+                        fl_value_get_bool(sign_in));
     // Started at sign-in with nothing now to come back from: the window is
     // the only way back, so it shows.
     if (!self->keep_running && self->start_hidden) {

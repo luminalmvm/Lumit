@@ -7752,6 +7752,10 @@
   "@settingsKeepRunning": {
     "description": "Settings window, General page: the name of the switch that keeps Lumit running in the system tray (the menu bar on macOS) when its window is closed, so the account's paired phones still see this computer and its exports."
   },
+  "settingsOpenAtSignIn": "Open Lumit when you sign in",
+  "@settingsOpenAtSignIn": {
+    "description": "Settings window, General page: the name of the switch, shown only while Keep running in the background is on, that starts Lumit in the system tray (the menu bar on macOS) when the person signs in to the computer."
+  },
   "trayOpen": "Open Lumit",
   "@trayOpen": {
     "description": "Row on the menu of Lumit's icon in the system tray (the menu bar on macOS), shown while Lumit keeps running in the background: brings the window back."

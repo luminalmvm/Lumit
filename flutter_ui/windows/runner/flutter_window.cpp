@@ -35,6 +35,19 @@ std::wstring ExePath() {
   return path;
 }
 
+// Start Lumit in the tray when the person signs in, with a Run value of this
+// executable and --background, or stop doing so.
+void SetOpenAtSignIn(bool on) {
+  constexpr wchar_t kRun[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+  if (!on) {
+    ::RegDeleteKeyValueW(HKEY_CURRENT_USER, kRun, L"Lumit");
+    return;
+  }
+  const std::wstring line = L"\"" + ExePath() + L"\" --background";
+  ::RegSetKeyValueW(HKEY_CURRENT_USER, kRun, L"Lumit", REG_SZ, line.c_str(),
+                    static_cast<DWORD>((line.size() + 1) * sizeof(wchar_t)));
+}
+
 std::wstring Utf16FromUtf8(const std::string& text) {
   const int length = ::MultiByteToWideChar(
       CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
@@ -315,6 +328,7 @@ bool FlutterWindow::OnCreate() {
             ::RemovePropW(hwnd, kKeepRunningProp);
           }
           ShowTray(keep_running_);
+          SetOpenAtSignIn(keep_running_ && flag("signIn"));
           // Started at sign-in with nothing now to come back from: the window
           // is the only way back, so it shows.
           if (!keep_running_ && start_hidden_) {

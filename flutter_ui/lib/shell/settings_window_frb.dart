@@ -1047,6 +1047,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               ui.workspace.setKeepRunning(on);
               unawaited(applyBackground(ui.workspace));
             }),
+            if (ui.workspace.keepRunning)
+              _flag(t, 'settings-open-at-sign-in', l10n.settingsOpenAtSignIn,
+                  value: ui.workspace.openAtSignIn, set: (on) {
+                ui.workspace.setOpenAtSignIn(on);
+                unawaited(applyBackground(ui.workspace));
+              }),
             // The project a new one starts as a copy of. The path is the
             // row's own second line, and Clear goes back to an empty project.
             _row(

@@ -41,8 +41,27 @@ class MainFlutterWindow: NSWindow {
     NSApp.activate(ignoringOtherApps: true)
   }
 
+  /// Start Lumit in the menu bar when the person signs in, with a LaunchAgent
+  /// that passes --background, or stop doing so.
+  private func setOpenAtSignIn(_ on: Bool) {
+    let agents = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/LaunchAgents")
+    let label = Bundle.main.bundleIdentifier ?? "io.github.luminalmvm.lumitFlutter"
+    let plist = agents.appendingPathComponent("\(label).plist")
+    guard on, let exe = Bundle.main.executablePath else {
+      try? FileManager.default.removeItem(at: plist)
+      return
+    }
+    try? FileManager.default.createDirectory(at: agents, withIntermediateDirectories: true)
+    let agent: NSDictionary = [
+      "Label": label, "ProgramArguments": [exe, "--background"], "RunAtLoad": true,
+    ]
+    try? agent.write(to: plist)
+  }
+
   private func setBackground(_ args: [String: Any]) {
     keepRunning = args["keep"] as? Bool ?? false
+    setOpenAtSignIn(keepRunning && args["signIn"] as? Bool == true)
     guard keepRunning else {
       if let item = statusItem {
         NSStatusBar.system.removeStatusItem(item)
