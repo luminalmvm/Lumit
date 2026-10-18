@@ -41,7 +41,8 @@ List<String> listBlendModes() =>
     BridgeLib.instance.api.crateApiCompositionListBlendModes();
 
 /// One animated mask's shape at a moment: which mask, on which layer,
-/// and the path it is showing there.
+/// and the path it is showing there. A keyed shape item comes the same way,
+/// its id in `mask`.
 class BridgeAnimatedMaskPath {
   final UuidValue layer;
   final UuidValue mask;
@@ -731,6 +732,9 @@ class CompositionReference {
   /// The **shape every animated mask is actually showing** at `frame`, so the
   /// Viewer can draw a keyed mask's wireframe where the picture has it rather
   /// than where its still path used to be.
+  ///
+  /// A shape layer's keyed paths are listed too, by item id, for the same
+  /// reason: the picture draws them at the frame, not as they were drawn.
   ///
   /// Only masks that carry path keys are listed — a still mask's own
   /// vertices already say where it is, and sending them again would put the

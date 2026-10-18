@@ -420,7 +420,8 @@ pub enum BridgePlaybackMode {
 }
 
 /// One animated mask's shape at a moment: which mask, on which layer,
-/// and the path it is showing there.
+/// and the path it is showing there. A keyed shape item comes the same way,
+/// its id in `mask`.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeAnimatedMaskPath {
@@ -2598,6 +2599,9 @@ impl CompositionReference {
     /// Viewer can draw a keyed mask's wireframe where the picture has it rather
     /// than where its still path used to be.
     ///
+    /// A shape layer's keyed paths are listed too, by item id, for the same
+    /// reason: the picture draws them at the frame, not as they were drawn.
+    ///
     /// Only masks that carry path keys are listed — a still mask's own
     /// vertices already say where it is, and sending them again would put the
     /// whole document through here on every frame. An empty answer, which is
@@ -2623,14 +2627,10 @@ impl CompositionReference {
         for layer in &comp.layers {
             // A mask lives on its layer's clock, as every other property does.
             let local = time.0.checked_sub(layer.start_offset.0).unwrap_or(time.0);
-            for mask in &layer.masks {
-                if mask.path_keys.is_empty() {
-                    continue;
-                }
-                let path = mask.path_at(local.to_f64());
+            let mut push = |id: Uuid, path: &lumit_core::mask::BezierPath| {
                 out.push(BridgeAnimatedMaskPath {
                     layer: layer.id,
-                    mask: mask.id,
+                    mask: id,
                     vertices: path
                         .vertices
                         .iter()
@@ -2644,6 +2644,16 @@ impl CompositionReference {
                         })
                         .collect(),
                 });
+            };
+            for mask in &layer.masks {
+                if !mask.path_keys.is_empty() {
+                    push(mask.id, &mask.path_at(local.to_f64()));
+                }
+            }
+            if let lumit_core::model::LayerKind::Shape { contents } = &layer.kind {
+                for item in contents.iter().filter(|i| i.path_is_animated()) {
+                    push(item.id, &item.path_at(local.to_f64()));
+                }
             }
         }
         Ok(out)

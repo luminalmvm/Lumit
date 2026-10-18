@@ -34,6 +34,7 @@ import '../state/workspace.dart' show ViewerOverlays, ViewerReach;
 import '../theme/theme.dart';
 import 'viewer_texture_controller.dart';
 import '../widgets/controls.dart';
+import 'layer_fold_frb.dart' show shapeItemWith;
 import 'viewer_anchor.dart';
 import 'viewer_camera.dart';
 import 'viewer_dropper_layer.dart';
@@ -234,7 +235,8 @@ class ViewerStage extends StatelessWidget {
     // owner's project — a sixth of a frame's budget spent interpolating three
     // masks nothing on screen was going to draw (ui-performance §3.4, §4.5).
     // A keyed mask on an outlined layer is still asked per frame, because its
-    // vertices genuinely differ frame by frame; that is the whole point.
+    // vertices genuinely differ frame by frame; that is the whole point. A
+    // keyed shape path comes back with them, for the same reason.
     final outlined = uiState.outlinedLayerIds;
     uiState.animatedMaskPaths.refresh(
       comp: comp,
@@ -242,7 +244,9 @@ class ViewerStage extends StatelessWidget {
       revision: revision,
       anyAnimated: model.heldLayers.any((entry) =>
           outlined.contains(entry.layer.internallayerId.toString()) &&
-          entry.info.masks.any((mask) => mask.pathKeys.isNotEmpty)),
+          (entry.info.masks.any((mask) => mask.pathKeys.isNotEmpty) ||
+              entry.info.shapeContents
+                  .any((item) => item.pathKeys.isNotEmpty))),
     );
     final viewScale = compSize.width == 0 ? 1.0 : fitted.width / compSize.width;
     // Where the playhead is in seconds, which is the clock a shape item's keys
@@ -281,6 +285,14 @@ class ViewerStage extends StatelessWidget {
       final rotation = read(tf.rotation, entry.layer);
       final live = uiState.liveText.value[entry.layer.internallayerId];
       final id = entry.layer.internallayerId;
+      // A keyed shape path is drawn where the picture has it, as a mask is.
+      final art = [
+        for (final item in entry.info.shapeContents)
+          switch (uiState.animatedMaskPaths.pathOf(id, item.id)) {
+            final keyed? => shapeItemWith(item, vertices: keyed),
+            _ => item,
+          }
+      ];
       out.add(LayerBox(
         layer: entry.layer,
         id: id,
@@ -334,13 +346,11 @@ class ViewerStage extends StatelessWidget {
               _ => mask,
             }
         ],
-        shapeContents: entry.info.shapeContents,
+        shapeContents: art,
         // Where the art's box starts, which is where the layer's pixels do.
         // Without it every drawn point sat a box away from its art.
         artOrigin:
-            shapeContentsRect(entry.info.shapeContents, t: playheadSeconds)
-                    ?.topLeft ??
-                Offset.zero,
+            shapeContentsRect(art, t: playheadSeconds)?.topLeft ?? Offset.zero,
         // The pins the puppet tools draw and aim at, from the same read
         // as everything else on the box.
         puppet: entry.info.puppet,
