@@ -487,18 +487,19 @@ pub(crate) fn set_budget(bytes: usize) {
 static CHOSEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Size the memory and card caches to this machine, where Settings has not
-/// named a budget: a quarter of what the governor allows each (docs/13 §3),
-/// and never less than the built-in 512 MiB.
+/// named a budget, and never less than the built-in 512 MiB. Memory gets half
+/// of what the governor allows (docs/13 §3), which is 30% of the machine, and
+/// the card gets a quarter of its own.
 ///
 /// The built-in figure holds about two seconds of 1080p at 60 fps across both
 /// tiers. A loop longer than that came off disk every time round, on a
 /// machine with tens of gigabytes standing idle.
 pub(crate) fn size_to_machine(vram: u64, ram: u64) {
-    let quarter = |bytes: u64| usize::try_from(bytes / 4).unwrap_or(usize::MAX);
+    let share = |bytes: u64, part: u64| usize::try_from(bytes / part).unwrap_or(usize::MAX);
     if !CHOSEN.load(std::sync::atomic::Ordering::Relaxed) {
-        with_cache(|c| c.set_budget(quarter(ram).max(DEFAULT_BUDGET_BYTES)));
+        with_cache(|c| c.set_budget(share(ram, 2).max(DEFAULT_BUDGET_BYTES)));
     }
-    vram::size_to_machine(quarter(vram));
+    vram::size_to_machine(share(vram, 4));
 }
 
 /// Empty the cache now (Settings → Clear cache).
