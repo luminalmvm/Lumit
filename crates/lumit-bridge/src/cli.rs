@@ -5,7 +5,8 @@
 //! Three jobs from a terminal or another program: export a comp of a project
 //! (`export`), run a script on a project, saving it after if asked (`run`),
 //! and let a program that speaks MCP edit a project through the commands
-//! (`mcp`). All open the project and export the way Lumit does, through
+//! (`mcp`), or the project open in Lumit when the person allows it. All
+//! open the project and export the way Lumit does, through
 //! [`host::Headless`]. What happens is told on standard error, and what
 //! comes out, the exported file or the script's answer, on standard output.
 //!
@@ -25,6 +26,7 @@ macro_rules! out {
 
 mod host;
 mod interrupt;
+mod relay;
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -42,7 +44,7 @@ Usage:
   lumit-cli export <project.lum> [--comp <name>] [--out <file>]
   lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>]
                 [--arg <key>=<value>]...
-  lumit-cli mcp --project <project.lum>
+  lumit-cli mcp [--project <project.lum>]
   lumit-cli --help
   lumit-cli --version
 
@@ -59,7 +61,8 @@ run        Run a JavaScript or After Effects (.jsx) script on a project, or on a
              can be read by the script.
 
 mcp        Answer MCP on standard input and output, so another program can edit
-           a project through Lumit's commands.
+           a project through Lumit's commands. Without --project, the project
+           open in Lumit, when Let other programs drive Lumit is on in Settings.
   --project  The project. Footage comes from its folder, exports go into it,
              and it saves only when asked.
 
@@ -83,7 +86,8 @@ enum Command {
         args: BTreeMap<String, String>,
     },
     Mcp {
-        project: PathBuf,
+        /// `None` for the project open in Lumit.
+        project: Option<PathBuf>,
     },
 }
 
@@ -128,7 +132,10 @@ fn main() -> i32 {
             save,
             args,
         } => run(&script, project.as_deref(), save, args),
-        Command::Mcp { project } => mcp(&project),
+        Command::Mcp { project: None } => relay::relay(),
+        Command::Mcp {
+            project: Some(project),
+        } => mcp(&project),
     };
     match done {
         Ok(()) => 0,
@@ -274,9 +281,6 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
             if !positional.is_empty() {
                 return Err("mcp takes the project with --project.".into());
             }
-            // Driving the Lumit that is open is still to come.
-            let project = project
-                .ok_or("mcp needs --project. Connecting to a running Lumit is not built yet.")?;
             Ok(Command::Mcp { project })
         }
         other => Err(format!("There is no command called {other}.")),
