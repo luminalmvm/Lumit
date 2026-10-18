@@ -15,7 +15,8 @@
 
 use serde_json::{json, Value};
 
-use crate::{dispatch, run, Host, RunOptions, COMMANDS};
+use crate::reach::Reach;
+use crate::{commands, run, Host, Limits, RunOptions, COMMANDS};
 
 /// The revision where each request carries its version.
 const MODERN: &str = "2026-07-28";
@@ -175,7 +176,8 @@ fn call(params: &Value, host: &dyn Host) -> Result<Value, Failure> {
             .iter()
             .find(|c| tool_name(c.name) == name)
             .ok_or_else(|| (-32602, format!("Unknown tool: {name}"), None))?;
-        dispatch(host, command.name, args).map_err(|e| e.to_string())
+        // Saves, footage and exports keep to the project's folder.
+        commands::run(host, Some(&Reach::project()), command.name, args).map_err(|e| e.to_string())
     };
     // A command that did nothing is the tool's answer, not the protocol's,
     // so the client reads why and can try again.
@@ -193,7 +195,11 @@ fn script(host: &dyn Host, args: &Value) -> Result<Value, String> {
         .get("source")
         .and_then(Value::as_str)
         .ok_or("script_run needs the script as source.")?;
-    let mut options = RunOptions::default();
+    let mut options = RunOptions {
+        stop: host.stop_flag(),
+        limits: Limits::Project,
+        ..RunOptions::default()
+    };
     if let Some(name) = args.get("name").and_then(Value::as_str) {
         options.name = name.to_owned();
     }
