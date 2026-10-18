@@ -455,6 +455,48 @@ pub fn reparented(
     edits
 }
 
+/// The ops that make `parent` the parent of `layer` in `comp` and keep the
+/// layer where it is at comp time `t_comp`. The parent goes first: it names
+/// the undo step, and a refused one takes the transform edits down with it.
+pub fn parent_ops(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    layer: Uuid,
+    parent: Option<Uuid>,
+    t_comp: f64,
+) -> Vec<lumit_core::Op> {
+    let mut ops = vec![lumit_core::Op::SetLayerParent {
+        comp,
+        layer,
+        parent,
+    }];
+    let Some(c) = doc.comp(comp) else {
+        return ops;
+    };
+    let Some(l) = c.layers.iter().find(|l| l.id == layer) else {
+        return ops;
+    };
+    let context = Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp),
+        layer: Some(layer),
+        comp_time: t_comp,
+        current_depth: 0,
+        inputs: None,
+    });
+    ops.extend(
+        reparented(c, l, parent, t_comp, context)
+            .into_iter()
+            .map(|(prop, animation)| lumit_core::Op::SetTransformProperty {
+                comp,
+                layer,
+                prop,
+                animation,
+            }),
+    );
+    ops
+}
+
 /// Where the composition's camera puts a particle that sits off `layer`'s own
 /// plane — the points stream's third axis, made visible.
 ///
