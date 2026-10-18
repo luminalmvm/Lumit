@@ -21,6 +21,12 @@ void audioSetMuted({required bool muted}) =>
 /// Whether the monitor is muted.
 bool audioMuted() => BridgeLib.instance.api.crateApiAudioAudioMuted();
 
+/// How late the sound is heard on this machine, in milliseconds, so playback
+/// can hold the picture back to meet it. Below zero holds the sound back
+/// instead. A setting of the machine, kept in the settings file.
+void audioSetOffsetMs({required int ms}) =>
+    BridgeLib.instance.api.crateApiAudioAudioSetOffsetMs(ms: ms);
+
 /// Move the clock to `secs` — a scrub. The play state is untouched, so
 /// scrubbing while playing keeps playing.
 void audioSeek({required double secs}) =>

@@ -925,6 +925,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ui.pushViewerLook();
       case SettingsPage.audio:
         _chooseAudioDevice(workspace, null);
+        _setAudioOffset(workspace, 0);
       case SettingsPage.autosave:
         _setAutosave(workspace, minutes: 5, keep: 5);
       case SettingsPage.export:
@@ -2110,9 +2111,31 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                         ? l10n.settingsAudioNoDevice
                         : '',
           ),
+          _row(
+            t,
+            l10n.settingsAudioOffset,
+            SizedBox(
+              width: 70,
+              height: settingsControlHeight,
+              child: DragValueField(
+                key: const ValueKey('settings-audio-offset'),
+                value: ui.workspace.audioOffsetMs.toDouble(),
+                min: -1000,
+                max: 1000,
+                decimals: 0,
+                suffix: ' ms',
+                onChanged: (ms) => _setAudioOffset(ui.workspace, ms.round()),
+              ),
+            ),
+          ),
         ],
       ),
     ]);
+  }
+
+  void _setAudioOffset(Workspace workspace, int ms) {
+    audioSetOffsetMs(ms: ms);
+    setState(() => workspace.setAudioOffsetMs(ms));
   }
 
   /// Take the choice: tell the engine, write it to the settings file, and read

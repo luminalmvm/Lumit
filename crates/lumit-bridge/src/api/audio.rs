@@ -173,6 +173,17 @@ pub fn audio_muted() -> bool {
     false
 }
 
+/// How late the sound is heard on this machine, in milliseconds, so playback
+/// can hold the picture back to meet it. Below zero holds the sound back
+/// instead. A setting of the machine, kept in the settings file.
+#[frb(sync)]
+pub fn audio_set_offset_ms(ms: i32) {
+    #[cfg(feature = "media")]
+    crate::audio::set_offset_ms(ms);
+    #[cfg(not(feature = "media"))]
+    let _ = ms;
+}
+
 /// Move the clock to `secs` — a scrub. The play state is untouched, so
 /// scrubbing while playing keeps playing.
 #[frb(sync)]

@@ -920,6 +920,16 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// How late this machine's sound is heard, in milliseconds, so playback
+  /// can hold the picture back to meet it. Bluetooth headphones are the usual
+  /// reason. Below zero the picture is the late one, as on a television.
+  int audioOffsetMs = 0;
+
+  void setAudioOffsetMs(int ms) {
+    audioOffsetMs = ms;
+    save();
+  }
+
   /// What the others in a shared project see this person called, or null
   /// until one has been typed. The person's, not the work's, so it lives here.
   String? shareName;
@@ -1886,6 +1896,7 @@ class Workspace extends ChangeNotifier {
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'audio_device': audioDevice,
+        'audio_offset_ms': audioOffsetMs,
         'share_name': shareName,
         'share_router': shareOutside,
         'share_relay': shareRelay,
@@ -1999,6 +2010,7 @@ class Workspace extends ChangeNotifier {
     // already doing.
     final device = j['audio_device'];
     audioDevice = device is String && device.isNotEmpty ? device : null;
+    audioOffsetMs = j['audio_offset_ms'] as int? ?? 0;
     final sharedAs = j['share_name'];
     shareName = sharedAs is String && sharedAs.isNotEmpty ? sharedAs : null;
     // Under a new name: the old one was written as off for everybody, back
