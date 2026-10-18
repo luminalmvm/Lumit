@@ -32,12 +32,17 @@ import '../state/app_state.dart';
 import '../state/beats_notice.dart';
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'audio_meters_feed.dart';
 import 'keyframe_controls_frb.dart';
 import 'mixer_panel_frb.dart' show PanPot, panLabel;
 import 'placeholder.dart';
+
+/// The panel's two columns: the words, then the well each row edits.
+const double audioLabelWidth = 74;
+const double audioValueWidth = 72;
 
 /// What the Range dropdown offers (docs/09 §5): the whole comp, or only the
 /// work area.
@@ -79,10 +84,16 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   /// Which layers can make a sound, probed once and remembered.
   final Map<String, bool> _hasAudio = {};
 
+  /// Whether the panel has been on screen a frame. The selected layer's rows
+  /// come up into place when the pick changes, and are simply there when the
+  /// panel itself arrives.
+  bool _settled = false;
+
   @override
   void initState() {
     super.initState();
     if (widget.feed == null) _feed.start();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _settled = true);
   }
 
   @override
@@ -157,8 +168,14 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   Widget _hair(LumitTheme t) => Container(height: 1, color: t.hairline);
 
   Widget _label(LumitTheme t, String text) => SizedBox(
-        width: 74,
+        width: audioLabelWidth,
         child: Text(text, style: t.body.copyWith(color: t.textMuted)),
+      );
+
+  /// A dropdown sized to what it says, standing at the start of the value
+  /// column rather than stretched across the panel with its words centred.
+  Widget _dropdown(Widget dropdown) => Flexible(
+        child: Align(alignment: Alignment.centerLeft, child: dropdown),
       );
 
   // --- Beats -------------------------------------------------------------
@@ -188,8 +205,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
         children: [
           Row(children: [
             _label(t, l10n.beatsSource),
-            Expanded(
-              child: BareDropdown<String>(
+            _dropdown(
+              BareDropdown<String>(
                 key: const ValueKey('beats-source'),
                 value: _source,
                 options: [
@@ -222,8 +239,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
           const SizedBox(height: 6),
           Row(children: [
             _label(t, l10n.beatsRange),
-            Expanded(
-              child: BareDropdown<BeatRange>(
+            _dropdown(
+              BareDropdown<BeatRange>(
                 key: const ValueKey('beats-range'),
                 value: _range,
                 options: BeatRange.values,
@@ -239,7 +256,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
           Row(children: [
             _label(t, l10n.beatsMinSpacing),
             SizedBox(
-              width: 64,
+              width: audioValueWidth,
               child: DragValueField(
                 key: const ValueKey('beats-spacing'),
                 value: _minSpacingMs.toDouble(),
@@ -260,19 +277,21 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _label(t, l10n.beatsBpm),
-              SizedBox(
-                width: 64,
-                child: DragValueField(
-                  key: const ValueKey('beats-bpm'),
-                  value: bpmShown,
-                  min: 0,
-                  max: 300,
-                  decimals: 2,
-                  onChanged: (v) =>
-                      setState(() => _bpmOverride = v.toDouble().clamp(0, 300)),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                _label(t, l10n.beatsBpm),
+                SizedBox(
+                  width: audioValueWidth,
+                  child: DragValueField(
+                    key: const ValueKey('beats-bpm'),
+                    value: bpmShown,
+                    min: 0,
+                    max: 300,
+                    decimals: 2,
+                    onChanged: (v) => setState(
+                        () => _bpmOverride = v.toDouble().clamp(0, 300)),
+                  ),
                 ),
-              ),
+              ]),
               HouseButton(
                 key: const ValueKey('beats-tap'),
                 small: true,
@@ -283,7 +302,17 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
               // milliseconds a press — under half a frame at 60.
               _phaseChip(t, '‹', -10),
               _phaseChip(t, '›', 10),
-              if (_bpmOverride > 0) Text(l10n.beatsGridOn, style: t.caption),
+              // Where the nudges have put the grid, so a press is seen to do
+              // something before Generate is run again.
+              if (_phaseMs != 0)
+                Text(
+                    '${_phaseMs > 0 ? '+' : ''}${_phaseMs.round()} ms',
+                    key: const ValueKey('beats-phase'),
+                    style: t.caption),
+              if (_bpmOverride > 0)
+                Text(l10n.beatsGridOn, style: t.caption)
+              else if (bpmShown == 0)
+                Text(l10n.beatsBpmAuto, style: t.caption),
             ],
           ),
           const SizedBox(height: 8),
@@ -430,7 +459,13 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
             child: Text(l10n.selectALayer, style: t.small),
           )
         else
-          _SelectedLayerBlock(
+          Entrance(
+            key: ValueKey('audio-selected-in-${entry.layer.internallayerId}'),
+            spec: _settled
+                ? ThemeScope.of(context).motion.reveal
+                : MotionSpec.still,
+            rise: ThemeScope.of(context).motion.revealRise,
+            child: _SelectedLayerBlock(
             key: ValueKey('audio-selected-${entry.layer.internallayerId}'),
             comp: comp,
             entry: entry,
@@ -442,6 +477,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
               ui.model.refresh();
               comp.audioPrepare();
             },
+          ),
           ),
       ],
     );
@@ -495,14 +531,16 @@ class _LevelsBlock extends StatelessWidget {
                   builder: (context, over) => GestureDetector(
                     key: const ValueKey('audio-clip-lamp'),
                     onTap: resetAudioClip,
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: ThemeScope.of(context).motion.mark.duration,
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
                         color: Color.lerp(lit ? t.error : t.surface2,
                             t.textPrimary, 0.35 * over),
-                        border: Border.all(color: t.hairlineStrong),
-                        borderRadius: BorderRadius.circular(1),
+                        border: Border.all(
+                            color: lit ? t.error : t.hairlineStrong),
+                        shape: BoxShape.circle,
                       ),
                     ),
                   ),
@@ -657,23 +695,13 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                KeyframeControlsFrb(
-                  scalars: [volume],
-                  comp: widget.comp,
-                  onSeek: ui.scrubTo,
-                  rowKey: 'audio-volume',
-                  onWrite: (next) {
-                    layer.setVolumeDb(value: next.single);
-                    widget.onChanged();
-                  },
-                ),
                 SizedBox(
-                  width: 56,
+                  width: audioLabelWidth,
                   child: Text(l10n.volume,
                       style: t.body.copyWith(color: t.textMuted)),
                 ),
                 SizedBox(
-                  width: 72,
+                  width: audioValueWidth,
                   child: DragValueField(
                     key: const ValueKey('audio-volume-db'),
                     value: volumeValue,
@@ -686,12 +714,42 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                         _commitVolume(volume, v.toDouble(), frame),
                   ),
                 ),
+                const SizedBox(width: 6),
+                KeyframeControlsFrb(
+                  scalars: [volume],
+                  comp: widget.comp,
+                  onSeek: ui.scrubTo,
+                  rowKey: 'audio-volume',
+                  onWrite: (next) {
+                    layer.setVolumeDb(value: next.single);
+                    widget.onChanged();
+                  },
+                ),
               ]),
               const SizedBox(height: 6),
               Wrap(
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                SizedBox(
+                  width: audioLabelWidth,
+                  child: Text(l10n.audioPan,
+                      style: t.body.copyWith(color: t.textMuted)),
+                ),
+                SizedBox(
+                  width: audioValueWidth,
+                  child: DragValueField(
+                    key: const ValueKey('audio-pan-value'),
+                    value: panValue,
+                    min: -100,
+                    max: 100,
+                    decimals: 0,
+                    speed: 0.5,
+                    onChanged: (v) => _commitPan(pan, v.toDouble(), frame),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // The stopwatch first, so it stands under Volume's.
                 KeyframeControlsFrb(
                   scalars: [pan],
                   comp: widget.comp,
@@ -702,11 +760,7 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                     widget.onChanged();
                   },
                 ),
-                SizedBox(
-                  width: 56,
-                  child: Text(l10n.audioPan,
-                      style: t.body.copyWith(color: t.textMuted)),
-                ),
+                const SizedBox(width: 6),
                 // The board's own dial beside the value well — the Mixer
                 // strip's pot, turning the same way.
                 PanPot(
@@ -715,19 +769,6 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   onLive: (v) => setState(() => _dragPan = v),
                   onCommit: (v) => _commitPan(pan, v, frame),
                   onCancel: () => setState(() => _dragPan = null),
-                ),
-                const SizedBox(width: 6),
-                SizedBox(
-                  width: 72,
-                  child: DragValueField(
-                    key: const ValueKey('audio-pan-value'),
-                    value: panValue,
-                    min: -100,
-                    max: 100,
-                    decimals: 0,
-                    speed: 0.5,
-                    onChanged: (v) => _commitPan(pan, v.toDouble(), frame),
-                  ),
                 ),
                 const SizedBox(width: 6),
                 Text(panLabel(panValue), style: t.caption),
@@ -803,7 +844,9 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
               onShape(option);
               apply();
             },
-            child: Container(
+            child: AnimatedContainer(
+              duration: ThemeScope.of(context).motion.mark.duration,
+              curve: ThemeScope.of(context).motion.mark.curve,
               margin: const EdgeInsets.only(left: 4),
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
@@ -829,11 +872,11 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         SizedBox(
-          width: 74,
+          width: audioLabelWidth,
           child: Text(label, style: t.body.copyWith(color: t.textMuted)),
         ),
         SizedBox(
-          width: 64,
+          width: audioValueWidth,
           child: DragValueField(
             key: ValueKey('$key-seconds'),
             value: seconds,
