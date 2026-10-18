@@ -2362,7 +2362,10 @@ class LumitUiState extends ChangeNotifier {
           upKilobytes: workspace.shareUpLimit,
           downKilobytes: workspace.shareDownLimit);
       bridge_share.shareSetFootage(
-          give: workspace.shareGive, take: workspace.shareTake);
+          give: workspace.shareGive,
+          take: workspace.shareTake,
+          size: workspace.shareSize,
+          every: workspace.shareEvery);
     } catch (_) {
       // No engine to tell, as in a widget test.
     }

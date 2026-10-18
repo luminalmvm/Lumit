@@ -1425,6 +1425,28 @@ class _ShareDialogState extends State<_ShareDialog> {
         ),
       );
 
+  /// How much smaller the stand-ins this computer makes are, one way of
+  /// two: 1, 2 or 4, named in that order. Nothing to choose while it sends
+  /// none.
+  Widget _smallerRow(LumitTheme t, String label, String id, int value,
+          List<String> names, ValueChanged<int> onChanged) =>
+      dialogRow(
+        t,
+        label,
+        dialogDropdown<int>(t,
+            id: id,
+            value: value,
+            options: const [1, 2, 4],
+            label: (n) => names[n == 1 ? 0 : n == 2 ? 1 : 2],
+            onChanged: _prefs.shareGive
+                ? (n) {
+                    onChanged(n);
+                    setState(() {});
+                  }
+                : null),
+        labelColumn: _labelColumn,
+      );
+
   /// A speed limit: a number, and the unit it is in.
   Widget _limitRow(LumitTheme t, String label, String id,
           TextEditingController controller) =>
@@ -1471,8 +1493,27 @@ class _ShareDialogState extends State<_ShareDialog> {
           ),
           labelColumn: _labelColumn,
         ),
-        if (!looking)
+        if (!looking) ...[
+          _smallerRow(
+              t,
+              l10n.shareStandInSize,
+              'share-size',
+              _prefs.shareSize,
+              [l10n.shareSizeFull, l10n.shareSizeHalf, l10n.shareSizeQuarter],
+              (n) => _prefs.setShareFootage(size: n)),
+          _smallerRow(
+              t,
+              l10n.shareStandInFrames,
+              'share-every',
+              _prefs.shareEvery,
+              [
+                l10n.shareFramesAll,
+                l10n.shareFramesHalf,
+                l10n.shareFramesQuarter
+              ],
+              (n) => _prefs.setShareFootage(every: n)),
           _limitRow(t, l10n.shareUpLimit, 'share-up-limit', _upLimit),
+        ],
         _limitRow(t, l10n.shareDownLimit, 'share-down-limit', _downLimit),
         _line(t, l10n.shareLimitHint),
       ];

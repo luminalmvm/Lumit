@@ -724,10 +724,13 @@ pub fn share_set_limits(up_kilobytes: u32, down_kilobytes: u32) {
 
 /// Whether this machine makes stand-ins of its own footage for the others
 /// (`give`), and whether it asks for a stand-in of what it lacks without
-/// being told to (`take`).
+/// being told to (`take`). The ones it makes are its footage's size divided
+/// by `size` each way, with a new picture every `every` frames, each 1, 2
+/// or 4.
 #[frb(sync)]
-pub fn share_set_footage(give: bool, take: bool) {
+pub fn share_set_footage(give: bool, take: bool, size: u32, every: u32) {
     crate::footage::set_sharing(give, take);
+    crate::footage::set_smaller(size, every);
 }
 
 #[frb(ignore)]
