@@ -84,6 +84,20 @@ pub struct RunOptions<'a> {
     /// Show the person a message, as After Effects' `alert` does. With none
     /// the message goes to the log.
     pub alert: Option<&'a dyn Fn(&str)>,
+    /// How far the script's saves, footage and exports may go.
+    pub limits: Limits,
+}
+
+/// How far a script's saves, footage and exports may go.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Limits {
+    /// Saves and exports into the project's folder or the script's, and
+    /// footage from the files the script may read, as File > Run script.
+    #[default]
+    Script,
+    /// Wherever the script says, as on the command line, whose caller is
+    /// the person.
+    Off,
 }
 
 fn nobody_to_ask(_: &str, _: &[String]) -> Option<PathBuf> {
@@ -100,6 +114,7 @@ impl Default for RunOptions<'_> {
             choose_file: &nobody_to_ask,
             path: None,
             alert: None,
+            limits: Limits::default(),
         }
     }
 }
@@ -152,6 +167,7 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
                 .filter_map(|p| p.canonicalize().ok())
                 .collect(),
         }),
+        limited: options.limits != Limits::Off,
         edited: Cell::new(false),
     };
     let name = if options.name.is_empty() {
@@ -234,6 +250,8 @@ struct Desk<'a> {
     /// What the script may read, and where its saves, footage and exports
     /// may go.
     reach: RefCell<Reach>,
+    /// Whether its saves, footage and exports keep to the reach.
+    limited: bool,
     /// Whether a command changed the document.
     edited: Cell<bool>,
 }
@@ -336,7 +354,8 @@ impl Lumit {
             let store = desk.host.store();
             let before = store.revision();
             let reach = desk.reach.borrow();
-            let out = commands::run(desk.host, Some(&*reach), &name, args);
+            let reach = desk.limited.then_some(&*reach);
+            let out = commands::run(desk.host, reach, &name, args);
             if store.revision() != before {
                 desk.edited.set(true);
             }

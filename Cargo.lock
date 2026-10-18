@@ -2080,6 +2080,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lumit-cli"
+version = "0.8.1"
+dependencies = [
+ "libloading 0.8.9",
+]
+
+[[package]]
 name = "lumit-colour"
 version = "0.8.1"
 dependencies = [
@@ -2431,6 +2438,7 @@ dependencies = [
  "lumit-eval",
  "lumit-extensions",
  "lumit-import",
+ "lumit-ingress",
  "lumit-keymap",
  "lumit-media",
  "lumit-ml",
