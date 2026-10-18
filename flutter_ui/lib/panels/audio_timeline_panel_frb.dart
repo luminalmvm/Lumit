@@ -64,9 +64,16 @@ import 'easing_curve.dart' show EasingCurve;
 import 'effect_controls_panel_frb.dart' show showAddEffectMenu;
 import 'graph_channels.dart' show GraphChannel, graphChannels;
 import 'graph_clipboard.dart'
-    show copySelectedKeys, graphKeyClipboard, pasteKeysAtPlayhead;
-import 'graph_edits.dart' show applyEasingToSelection;
-import 'graph_maths.dart' show rationalSeconds;
+    show
+        copySelectedEase,
+        copySelectedKeys,
+        easeClipboard,
+        graphKeyClipboard,
+        pasteEaseOnSelection,
+        pasteKeysAtPlayhead;
+import 'graph_edits.dart'
+    show applyEasingToSelection, applyInterpToSelection, deleteKeysFromChannels;
+import 'graph_maths.dart' show easyEase, rationalSeconds;
 import 'key_block.dart' show KeyStretch;
 import 'layer_fold_frb.dart';
 import '../state/share.dart';
@@ -516,11 +523,14 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// took over before its own, so a claim held from before must stand down.
   bool get _keysAreOurs => _ui?.activePanel == Panel.audioTimeline;
 
-  /// Delete: the picked clip.
+  /// Delete: the picked keyframes, or else the picked clip. Keys first, as
+  /// they sit on the clip and picking one must not cost the clip.
   bool _deleteClaim() {
     final picked = _selectedClip;
     final ui = _ui;
-    if (!mounted || ui == null || picked == null || !_keysAreOurs) return false;
+    if (!mounted || ui == null || !_keysAreOurs) return false;
+    if (_laneKeys.value.isNotEmpty && _deleteKeys()) return true;
+    if (picked == null) return false;
     for (final track in _lastTracks) {
       if (track.id != picked.track) continue;
       for (final clip in track.entry.info.clips) {
@@ -603,6 +613,83 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       if (pasted && mounted) _afterWrite();
     });
     return true;
+  }
+
+  /// Delete the picked keyframes, as one undo step.
+  bool _deleteKeys() {
+    final ui = _ui;
+    if (!mounted || ui == null) return false;
+    final channels = _keyChannels(ui);
+    final selection = _keysOnChannels(channels);
+    if (selection.isEmpty) return false;
+    asOneUndoStep(
+      Provider.of<LumitState>(context, listen: false).project,
+      () => deleteKeysFromChannels(channels: channels, selectedKeys: selection),
+    );
+    _laneKeys.value = {};
+    _afterWrite();
+    return true;
+  }
+
+  /// Linear, Easy ease or Hold on both sides of every picked keyframe.
+  void _applyInterp(BridgeSideInterp side) {
+    final ui = _ui;
+    if (!mounted || ui == null) return;
+    final channels = _keyChannels(ui);
+    final selection = _keysOnChannels(channels);
+    if (selection.isEmpty) return;
+    applyInterpToSelection(
+        channels: channels, selectedKeys: selection, side: side);
+    _afterWrite();
+  }
+
+  /// The right-click menu on a lane keyframe, the layer Timeline's own rows
+  /// less the ease editor, which wants the graph view this panel does not
+  /// have. A key that is not picked is picked first, so the menu acts on what
+  /// was clicked, and on a picked one it acts on all of them.
+  void _keyMenu(String id, Offset position) {
+    if (!_laneKeys.value.contains(id)) _selectKey(id, false);
+    final ui = _ui;
+    if (ui == null) return;
+    Widget row(String key, String label, VoidCallback act,
+            void Function(Object?) close) =>
+        MenuRow(
+          key: ValueKey<String>('atl-key-menu-$key'),
+          onPressed: () {
+            close(null);
+            act();
+          },
+          child: Text(label),
+        );
+    showMenuAt<void>(
+      context: context,
+      position: position,
+      width: 170,
+      rows: (close) => [
+        row('linear', l10n.easeLinear,
+            () => _applyInterp(const BridgeSideInterp.linear()), close),
+        row('ease', l10n.easeEasy, () => _applyInterp(easyEase), close),
+        row('hold', l10n.easeHold,
+            () => _applyInterp(const BridgeSideInterp.hold()), close),
+        row('copy-ease', l10n.keyMenuCopyEase, () {
+          final channels = _keyChannels(ui);
+          copySelectedEase(
+              channels: channels, selectedKeys: _keysOnChannels(channels));
+        }, close),
+        if (easeClipboard.isNotEmpty)
+          row('paste-ease', l10n.keyMenuPasteEase, () {
+            final channels = _keyChannels(ui);
+            if (pasteEaseOnSelection(
+              project: Provider.of<LumitState>(context, listen: false).project,
+              channels: channels,
+              selectedKeys: _keysOnChannels(channels),
+            )) {
+              _afterWrite();
+            }
+          }, close),
+        row('delete', l10n.deleteKey, _deleteKeys, close),
+      ],
+    );
   }
 
   /// A shape sent from the Easing panel, onto every span the picked keyframes
@@ -2628,11 +2715,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         snapTargets: snap,
         selectedKeys: selected,
         stretch: _keyStretch,
-        // ponytail: no key menu here, so a right click on a diamond does
-        // nothing. The ceiling is the interpolation rows and Delete key the
-        // Timeline's menu offers; the upgrade is lifting that menu out of
-        // timeline_panel_frb.dart, which is where its five commands live.
-        onKeyMenu: (index, position) {},
+        onKeyMenu: (index, position) => _keyMenu('$rowId#$index', position),
         onSelectKey: (index, additive) => _selectKey('$rowId#$index', additive),
         onMoveKeys: (moved) =>
             _moveHeldKeys(moved, _lastTracks, fps, fpsNum, fpsDen),
