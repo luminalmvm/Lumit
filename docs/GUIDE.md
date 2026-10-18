@@ -216,7 +216,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-ofx`, `-ofx-broker`, `-ofx-testplug` | The OFX host, the process a plugin runs in, test plugins |
 | `lumit-aplug`, `-aplug-broker`, `-aplug-testplug` | The same for CLAP and VST3 audio plugins |
 | `lumit-bench` | The performance harness CI runs |
-| `lumit-bridge` | The seam Flutter calls. Also carries the command line (`cli.rs`), which exports a comp and runs a script on a project with no window. Package name `lumit_bridge` |
+| `lumit-bridge` | The seam Flutter calls. Also carries the command line (`cli.rs`), which exports a comp, runs a script on a project and answers MCP on one (`lumit-script`'s `mcp.rs`), with no window. Package name `lumit_bridge` |
 
 Built-in effects live in `crates/lumit-core/src/fx/effects/`.
 

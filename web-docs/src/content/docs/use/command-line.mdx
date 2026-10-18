@@ -1,12 +1,13 @@
 ---
 title: Command line
-description: Export and run scripts without opening Lumit.
+description: Export, run scripts and let other programs edit a project without opening Lumit.
 sidebar:
   order: 19.8
 ---
 
-**lumit-cli** is Lumit without its window. It exports a composition of a project, and runs a
-JavaScript or After Effects (`.jsx`) script on a project.
+**lumit-cli** is Lumit without its window. It exports a composition of a project, runs a
+JavaScript or After Effects (`.jsx`) script on a project, and lets another program edit a
+project over MCP.
 
 | System | Where it is |
 | --- | --- |
@@ -42,6 +43,52 @@ lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>] 
 
 A script that fails or is stopped saves nothing. A file asked for with
 `lumit.chooseFile` comes back empty, and `alert` prints to standard error.
+
+## Let another program edit a project
+
+```
+lumit-cli mcp --project <project.lum>
+```
+
+**mcp** answers the Model Context Protocol (MCP) on standard input and output, for a program
+that starts **lumit-cli** itself. Each of Lumit's commands is a tool: `comp_list`,
+`layer_add`, `layer_keys`, `markers_set`, `export_start` and the rest. `script_run` runs
+JavaScript as one undo step. Standard output carries only the protocol's messages.
+
+- The project is saved only when `project_save` is called, over its own file or as a new
+  `.lum` file in its folder.
+- Footage is imported only from the project's folder and the folders inside it.
+- Exports go only into the project's folder, never over a file already there.
+- A relative path is read from the project's folder. A network path or a device is refused.
+- `script_run` reads no files, and stops after a minute.
+- A project open in Lumit is refused, and Lumit does not open the project while **mcp** has
+  it.
+
+A program takes **lumit-cli**'s path, from the table above, and its arguments:
+
+```json
+{
+  "command": "C:\\Users\\Name\\AppData\\Local\\Programs\\Lumit\\lib\\lumit-cli.exe",
+  "args": ["mcp", "--project", "C:\\Projects\\Shot\\shot.lum"]
+}
+```
+
+Most programs list them under `mcpServers`, under any name:
+
+```json
+{
+  "mcpServers": {
+    "lumit": {
+      "command": "C:\\Users\\Name\\AppData\\Local\\Programs\\Lumit\\lib\\lumit-cli.exe",
+      "args": ["mcp", "--project", "C:\\Projects\\Shot\\shot.lum"]
+    }
+  }
+}
+```
+
+:::note[Not built yet]
+Editing the project open in Lumit. **mcp** without `--project` stops with exit status 2.
+:::
 
 ## What it prints
 
