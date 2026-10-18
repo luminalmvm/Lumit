@@ -757,14 +757,22 @@ class _TimelineParamRowState extends State<_TimelineParamRow> {
       onSeek: widget.onSeek,
       onLabelTap: widget.onLabelTap,
       graphColour: widget.graphColour,
+      // A chained pair is two rows here, so each row writes both halves.
       onWrite: (effect, param, value) {
-        _editor.write(widget.layer, effect, param, value);
+        _editor.writeAll(
+            widget.layer,
+            effect,
+            withChained(
+                row.info, param, value, widget.comp, ui.playheadFrame.value));
         setState(() {});
         widget.onChanged();
       },
       onLive: (effect, param, value) => setState(() {
-        _editor.live(widget.comp, widget.layer, effect, param, value,
-            frame: ui.playheadFrame.value, scale: ui.viewerScale);
+        final frame = ui.playheadFrame.value;
+        withChained(row.info, param, value, widget.comp, frame)
+            .forEach((id, v) => _editor.live(
+                widget.comp, widget.layer, effect, id, v,
+                frame: frame, scale: ui.viewerScale));
       }),
     );
   }

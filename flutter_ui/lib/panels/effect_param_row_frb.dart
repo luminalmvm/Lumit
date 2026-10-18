@@ -2224,6 +2224,62 @@ BridgeEffectValue? chainedSibling({
           : scaledScalar(sibling, next / before));
 }
 
+/// [value] written to [param], with the other half of its pair beside it when
+/// [info] has the two chained. For the surfaces that draw the halves as two
+/// rows of their own, a node box and the Timeline, so either row moves both.
+Map<String, BridgeEffectValue> withChained(
+  BridgeEffectInstanceInfo info,
+  String param,
+  BridgeEffectValue value,
+  CompositionReference comp,
+  int frame,
+) {
+  final out = {param: value};
+  if (value is! BridgeEffectValue_Float) return out;
+  for (final pair in cachedListPairs(info.name)) {
+    if (pair.x != param && pair.y != param) continue;
+    if (!info.linkedPairs.contains(pair.stem)) break;
+    final other = pair.x == param ? pair.y : pair.x;
+    BridgeScalar? held(String id) => switch (
+            info.values.where((v) => v.id == id).firstOrNull?.value) {
+          BridgeEffectValue_Float(:final field0) => field0,
+          _ => null,
+        };
+    final was = held(param);
+    final sibling = held(other);
+    if (was == null ||
+        sibling == null ||
+        was is BridgeScalar_Expression ||
+        sibling is BridgeScalar_Expression ||
+        value.field0 is BridgeScalar_Expression) {
+      break;
+    }
+    // A new value keeps the ratio. The stopwatch or a key taken away gives the
+    // other half the same keys, so the pair stays one curve from its first key.
+    final sized = switch ((was, value.field0)) {
+      (BridgeScalar_Static(), BridgeScalar_Static()) => true,
+      (
+        BridgeScalar_Keyframed(field0: final before),
+        BridgeScalar_Keyframed(field0: final after)
+      ) =>
+        after.length >= before.length,
+      _ => false,
+    };
+    if (!sized) {
+      out[other] = BridgeEffectValue.float(
+          linkedPartnerScalar(was, sibling, value.field0));
+      break;
+    }
+    final next = scalarValueAt(value.field0, comp, frame);
+    if (next == null) break;
+    final scaled = chainedSibling(
+        was: was, next: next, sibling: sibling, comp: comp, frame: frame);
+    if (scaled != null) out[other] = scaled;
+    break;
+  }
+  return out;
+}
+
 /// The effect schema, fetched once per session and then answered from here.
 ///
 /// `listEffects` serialises every effect's declaration and `listParameters`

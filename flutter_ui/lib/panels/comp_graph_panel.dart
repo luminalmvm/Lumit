@@ -57,15 +57,13 @@ import '../widgets/marquee.dart';
 import 'effect_param_row_frb.dart'
     show
         EffectParamRowFrb,
-        cachedListPairs,
         cachedListParameterGroups,
         cachedListParameters,
-        chainedSibling,
         disabledParams,
         paramGroupVisible,
         paramRidersFor,
         relistedRows,
-        scalarValueAt;
+        withChained;
 import 'graph_groups.dart';
 import 'graph_panel.dart';
 import 'placeholder.dart';
@@ -792,43 +790,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   Map<String, BridgeEffectValue> _withChained(
       BridgeEffectInstanceInfo info, String param, BridgeEffectValue value) {
     final ui = _ui;
-    final out = {param: value};
-    if (ui == null || value is! BridgeEffectValue_Float) return out;
-    for (final pair in cachedListPairs(info.name)) {
-      if (pair.x != param && pair.y != param) continue;
-      if (!info.linkedPairs.contains(pair.stem)) break;
-      final other = pair.x == param ? pair.y : pair.x;
-      BridgeScalar? held(String id) => switch (
-              info.values.where((v) => v.id == id).firstOrNull?.value) {
-            BridgeEffectValue_Float(:final field0) => field0,
-            _ => null,
-          };
-      // A new value only. The stopwatch and a deleted key arrive through the
-      // same write, and neither is a new size for the pair to keep up with.
-      final was = held(param);
-      final sized = switch ((was, value.field0)) {
-        (BridgeScalar_Static(), BridgeScalar_Static()) => true,
-        (
-          BridgeScalar_Keyframed(field0: final before),
-          BridgeScalar_Keyframed(field0: final after)
-        ) =>
-          after.length >= before.length,
-        _ => false,
-      };
-      if (!sized) break;
-      final frame = ui.playheadFrame.value;
-      final next = scalarValueAt(value.field0, widget.comp, frame);
-      if (next == null) break;
-      final scaled = chainedSibling(
-          was: was,
-          next: next,
-          sibling: held(other),
-          comp: widget.comp,
-          frame: frame);
-      if (scaled != null) out[other] = scaled;
-      break;
-    }
-    return out;
+    if (ui == null) return {param: value};
+    return withChained(
+        info, param, value, widget.comp, ui.playheadFrame.value);
   }
 
   /// The staged boxes with these values written into one of them: what a
