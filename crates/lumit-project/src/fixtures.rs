@@ -219,6 +219,7 @@ pub fn stress_document(p: &StressParams) -> Document {
         // No proxies: the fixture's media is small already, and the master
         // switch is on like any new project.
         proxies: Default::default(),
+        footage_trims: Default::default(),
         use_proxies: true,
         // Nothing packed: the fixture names its media by path.
         packed: Default::default(),

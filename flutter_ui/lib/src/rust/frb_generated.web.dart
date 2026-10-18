@@ -710,6 +710,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeFootageShare dco_decode_bridge_footage_share(dynamic raw);
 
   @protected
+  BridgeFootageTrim dco_decode_bridge_footage_trim(dynamic raw);
+
+  @protected
   BridgeFormatCaps dco_decode_bridge_format_caps(dynamic raw);
 
   @protected
@@ -2696,6 +2699,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeFootageShare sse_decode_bridge_footage_share(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeFootageTrim sse_decode_bridge_footage_trim(
       SseDeserializer deserializer);
 
   @protected
@@ -4941,6 +4948,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_footage_share(
       BridgeFootageShare self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_footage_trim(
+      BridgeFootageTrim self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_format_caps(

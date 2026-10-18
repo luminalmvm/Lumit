@@ -16,7 +16,7 @@ import 'streams.dart';
 part 'footage.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `attach_proxy`, `media_ref_at`, `project`, `resolve_path`, `resolve_source`, `source_path`, `stored_path`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `id`, `new`, `project_id`
 
 /// How the running MAKE-PROXY job is getting on. Safe to call on the
@@ -31,6 +31,29 @@ BridgeProxyState proxyPoll() =>
 /// Ask the running MAKE-PROXY job to stop. The half-written file is removed — a
 /// cancelled proxy leaves nothing pretending to be a finished one.
 void proxyCancel() => BridgeLib.instance.api.crateApiFootageProxyCancel();
+
+/// A footage item's In and Out marks, in seconds of its own time. An end left
+/// unmarked is `None`, which reads as the item's own start or end.
+class BridgeFootageTrim {
+  final BridgeRational? trimIn;
+  final BridgeRational? trimOut;
+
+  const BridgeFootageTrim({
+    this.trimIn,
+    this.trimOut,
+  });
+
+  @override
+  int get hashCode => trimIn.hashCode ^ trimOut.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeFootageTrim &&
+          runtimeType == other.runtimeType &&
+          trimIn == other.trimIn &&
+          trimOut == other.trimOut;
+}
 
 /// A footage file's own vital statistics, as the container declares them.
 ///
@@ -503,6 +526,13 @@ class FootageReference {
       BridgeLib.instance.api.crateApiFootageFootageReferenceSetSequenceRate(
           that: this, fpsNum: fpsNum, fpsDen: fpsDen);
 
+  /// Mark the stretch this item brings into a composition, one undo step a
+  /// press. Both ends `None` clears the marks, and marks the item already
+  /// has are not written again.
+  void setTrim({BridgeRational? trimIn, BridgeRational? trimOut}) =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceSetTrim(
+          that: this, trimIn: trimIn, trimOut: trimOut);
+
   /// This item's own *use proxy* tick, leaving the proxy attached — how one
   /// clip is checked at full quality without giving up the proxy.
   ///
@@ -530,6 +560,13 @@ class FootageReference {
           {required int maxEdge, required PlatformInt64 frame}) =>
       BridgeLib.instance.api.crateApiFootageFootageReferenceThumbnail(
           that: this, maxEdge: maxEdge, frame: frame);
+
+  /// The stretch marked with In and Out on the source side, which is what
+  /// this item brings into a composition.
+  BridgeFootageTrim trim() =>
+      BridgeLib.instance.api.crateApiFootageFootageReferenceTrim(
+        that: this,
+      );
 
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;

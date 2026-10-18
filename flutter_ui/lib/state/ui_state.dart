@@ -36,7 +36,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/cut.dart' show BridgeCutResult;
 import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/footage.dart'
-    show BridgeMediaInfo, FootageReference;
+    show BridgeFootageTrim, BridgeMediaInfo, FootageReference;
 import 'package:lumit_flutter/src/rust/api/graph.dart'
     show BridgeNodeRef, BridgeNodeRef_Source;
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -2392,6 +2392,7 @@ class LumitUiState extends ChangeNotifier {
     selectedLayer.addListener(_syncSelection);
     this.workspace.presetApplied.addListener(_onPresetApplied);
     _app.addListener(_sourceNames.clear);
+    _app.addListener(_followTrims);
     // A layer that has gone must leave the selection with it. The
     // model is the one place that knows which layers exist, so the pruning
     // hangs off its refresh rather than off each of the several ways a layer
@@ -2767,6 +2768,7 @@ class LumitUiState extends ChangeNotifier {
     _app.removeListener(_adoptProjectSession);
     _app.removeListener(refreshColourSummary);
     _app.removeListener(_sourceNames.clear);
+    _app.removeListener(_followTrims);
     workspace.presetApplied.removeListener(_onPresetApplied);
     cutLinked.dispose();
     cutClip.dispose();
@@ -2946,13 +2948,24 @@ class LumitUiState extends ChangeNotifier {
     into.itemId = footage.internalid.toString();
     into.compId = null;
     into.sourceFrame = 0;
-    // The marks belong to the item that was here.
+    // The marks belong to the item that was here, and the item brings its own.
     into.sourceIn = null;
     into.sourceOut = null;
     views.front(into.id);
     // The facts the request is made of. Already in hand for an item looked at
     // once before, in which case this asks for the picture on the spot.
-    itemFacts(footage);
+    final facts = itemFacts(footage);
+    if (facts != null) {
+      _readTrim(into, footage, facts);
+    } else {
+      footage.mediaInfo().then((facts) {
+        if (facts == null || into.itemId != footage.internalid.toString()) {
+          return;
+        }
+        _readTrim(into, footage, facts);
+        views.touch();
+      }).catchError((Object _) {});
+    }
     _askForView(into, force: true);
     notifyListeners();
     rememberSession();
@@ -2973,6 +2986,11 @@ class LumitUiState extends ChangeNotifier {
     view.sourceFrame = 0;
     view.sourceIn = null;
     view.sourceOut = null;
+    // The clip's own stretch is shown, not the item's marks, which an edit
+    // must not then put back.
+    try {
+      _seenTrims[view.id] = footage.trim();
+    } catch (_) {}
     // Source time to the item's own frames, which wants the item's rate.
     void stand(BridgeMediaInfo? facts) {
       if (facts == null || view.itemId != id || facts.fpsNum <= 0) return;
@@ -3154,7 +3172,80 @@ class LumitUiState extends ChangeNotifier {
       view.sourceOut = at;
       if (view.sourceIn != null && view.sourceIn! > at) view.sourceIn = null;
     }
+    _writeTrim(view);
     views.touch();
+  }
+
+  /// The item's marks as each footage view last read or wrote them, by view
+  /// id, so an undo that changes them is told apart from marks a match frame
+  /// put on the view itself.
+  final Map<String, BridgeFootageTrim> _seenTrims = {};
+
+  /// Put the item's In and Out on a footage view, in the item's own frames.
+  void _readTrim(
+      ViewerSurface view, FootageReference footage, BridgeMediaInfo facts) {
+    final BridgeFootageTrim trim;
+    try {
+      trim = footage.trim();
+    } catch (_) {
+      return;
+    }
+    _seenTrims[view.id] = trim;
+    if (facts.fpsNum <= 0) return;
+    final last = framesOf(facts) - 1;
+    int frameOf(BridgeRational t) =>
+        t.den <= 0 ? 0 : (t.num * facts.fpsNum) ~/ (t.den * facts.fpsDen);
+    final markIn = trim.trimIn;
+    final markOut = trim.trimOut;
+    view.sourceIn = markIn == null ? null : frameOf(markIn).clamp(0, last);
+    // Out on the item is where the stretch stops, on the view the last frame
+    // kept.
+    view.sourceOut = markOut == null
+        ? null
+        : (frameOf(markOut) - 1).clamp(view.sourceIn ?? 0, last);
+  }
+
+  /// Write a footage view's marks onto its item, so they stay with it: the
+  /// next time it is opened, and when it is placed in a composition.
+  void _writeTrim(ViewerSurface view) {
+    final footage = footageOf(view);
+    final facts = footage == null ? null : itemFacts(footage);
+    if (footage == null || facts == null || facts.fpsNum <= 0) return;
+    BridgeRational? seconds(int? frame) => frame == null
+        ? null
+        : BridgeRational(num: frame * facts.fpsDen, den: facts.fpsNum);
+    final out = view.sourceOut;
+    final trim = BridgeFootageTrim(
+      trimIn: seconds(view.sourceIn),
+      trimOut: seconds(out == null ? null : out + 1),
+    );
+    try {
+      footage.setTrim(trimIn: trim.trimIn, trimOut: trim.trimOut);
+    } catch (_) {
+      return;
+    }
+    _seenTrims[view.id] = trim;
+    _app.notifyDocumentChanged();
+  }
+
+  /// After an edit, a footage view whose item's marks have changed under it,
+  /// by an undo or a guest, shows them.
+  void _followTrims() {
+    for (final view in views.views) {
+      if (view.mode != ViewMode.footage) continue;
+      final footage = footageOf(view);
+      final facts = _itemFacts[view.itemId];
+      if (footage == null || facts == null) continue;
+      final BridgeFootageTrim now;
+      try {
+        now = footage.trim();
+      } catch (_) {
+        continue;
+      }
+      if (now == _seenTrims[view.id]) continue;
+      _readTrim(view, footage, facts);
+      views.touch();
+    }
   }
 
   /// Whether edits in the Cut timeline carry linked clips along: the panel's

@@ -583,6 +583,9 @@ class CompositionReference {
   /// reconstructing seconds from those silently clamped such a clip to one frame.
   /// Place `footage` in this composition as a new layer.
   ///
+  /// A video marked with In and Out on the source side brings only that
+  /// stretch, its In on the composition's start.
+  ///
   /// `as_sequence` is Settings ▸ Interface ▸ Editing ▸ *Video arrives as a
   /// Sequence layer*, forwarded by the frontend. On, media that
   /// **runs** — a video stream longer than a single frame — arrives as a
