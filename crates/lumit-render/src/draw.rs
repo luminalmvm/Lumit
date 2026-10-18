@@ -271,6 +271,9 @@ pub struct NestedInputDraw {
     /// Draw the comp's 3D layers as distance from its camera instead of its
     /// picture: what a lens effect's Depth row reads from a Precomp.
     pub scene_depth: bool,
+    /// Also hand over the 3D layers themselves, for rays to meet: a Depth row
+    /// naming its own layer's precomp, on an effect that traces rays.
+    pub trace_layers: bool,
 }
 
 /// One node graph's picture as plain data (docs/impl/node-graph-comp.md §2.3):

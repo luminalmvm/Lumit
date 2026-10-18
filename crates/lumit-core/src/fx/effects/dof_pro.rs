@@ -77,7 +77,23 @@ pub const DOF_PRO_ENABLED_WHEN: &[EnabledWhen] = &[
         on: "depth",
         cond: EnabledCond::LayerSet,
     },
+    EnabledWhen {
+        param: "rays",
+        on: "method",
+        cond: EnabledCond::ChoiceIs(METHOD_RAYS),
+    },
+    // Rays meet the depth where the lens sends them, so there is no blur to
+    // scale after the optics.
+    EnabledWhen {
+        param: "size",
+        on: "method",
+        cond: EnabledCond::ChoiceIs(METHOD_SHAPES),
+    },
 ];
+
+/// The Method row's options.
+pub const METHOD_SHAPES: u32 = 0;
+pub const METHOD_RAYS: u32 = 1;
 
 /// Depth of field pro's controls.
 #[derive(Debug, Clone, Copy, PartialEq, Effect)]
@@ -106,6 +122,17 @@ pub struct DofPro {
     /// Reads a depth pass the other way up. Metres ignore it.
     #[toggle(label = "Invert", default = false)]
     pub depth_invert: bool,
+
+    /// Lens shapes spreads each pixel by the shape the lens traces for it.
+    /// Ray traced follows rays from each pixel back through the lens to
+    /// whatever the depth puts in their way.
+    #[choice(options = ["Lens shapes", "Ray traced"], default = 0)]
+    pub method: u32,
+
+    /// Rays per pixel for Ray traced, shared out over red, green and blue.
+    /// The same count draws the Viewer and the export.
+    #[counter(min = 3, max = 1024, default = 96, hard_min = 3, hard_max = 16384, unit = Raw)]
+    pub rays: i32,
 
     /// The bundled lens. A lens kept in the effect wins over it.
     #[choice(
@@ -317,6 +344,13 @@ impl EffectDef for DofProDef {
 
     fn depth_takes_a_pass(&self) -> bool {
         true
+    }
+
+    fn traces_scene(&self, inst: &crate::model::EffectInstance) -> bool {
+        matches!(
+            inst.param("method"),
+            Some(crate::model::EffectValue::Choice(METHOD_RAYS))
+        )
     }
 
     fn signature(&self) -> Signature {

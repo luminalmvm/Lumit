@@ -1855,6 +1855,7 @@ fn comp_walk(
                     .and_then(|k| k.nested_key_with(nested, slt, src.graph_inputs.as_ref())),
                 px_per_metre: nested.px_per_metre(slt),
                 scene_depth: false,
+                trace_layers: false,
             }))
         };
     let nested_input_for = |src: &lumit_core::model::Layer| -> Option<DofInputDraw> {
@@ -2441,18 +2442,10 @@ fn comp_walk(
                 .map(|(e, def, param)| {
                     let schema = def.schema();
                     let slot = |param: &str| {
-                        // "This layer": a reference to the layer the effect
-                        // is ON is not a second render — it is the effect's own
-                        // input, which `run_ops` already holds.
-                        if e.layer_ref(param) == Some(owner) {
-                            return LayerInputDraw::ThisLayer;
-                        }
-                        let Some(mut d) = layer_slot(e, param) else {
-                            return LayerInputDraw::Absent;
-                        };
                         // A Depth row pointed at a Precomp with 3D layers in it
                         // reads their distance rather than its picture. A flat
                         // precomp is a picture, a depth pass made as a comp.
+                        let depth = def.depth_inputs().contains(&param);
                         let three_d = e
                             .layer_ref(param)
                             .and_then(|id| comp.layers.iter().find(|l| l.id == id))
@@ -2461,9 +2454,22 @@ fn comp_walk(
                                 _ => None,
                             })
                             .is_some_and(|c| c.layers.iter().any(|l| l.switches.three_d));
-                        if def.depth_inputs().contains(&param) && three_d {
+                        let own = e.layer_ref(param) == Some(owner);
+                        // "This layer": a reference to the layer the effect
+                        // is ON is not a second render — it is the effect's own
+                        // input, which `run_ops` already holds. Except a Depth
+                        // row on a 3D precomp, which wants that precomp's
+                        // distance rather than its picture.
+                        if own && !(depth && three_d) {
+                            return LayerInputDraw::ThisLayer;
+                        }
+                        let Some(mut d) = layer_slot(e, param) else {
+                            return LayerInputDraw::Absent;
+                        };
+                        if depth && three_d {
                             if let Some(n) = d.nested.as_mut() {
                                 n.scene_depth = true;
+                                n.trace_layers = own && def.traces_scene(e);
                             }
                         }
                         LayerInputDraw::Layer(d)
@@ -5063,6 +5069,7 @@ impl GraphLower<'_> {
                 key: None,
                 px_per_metre: nested.px_per_metre(self.t),
                 scene_depth: true,
+                trace_layers: false,
             },
         )));
         Some(plan.steps.len() - 1)

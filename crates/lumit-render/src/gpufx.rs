@@ -2586,6 +2586,7 @@ impl GpuEffect for DofPro {
         let custom = aux.lens_file();
         let optics = e.bake_inputs(w, h);
         let text = custom.map(|(_, text)| text.clone());
+        let ray_text = text.clone();
         let picture = aux.layer_inputs().first().and_then(Option::as_ref);
         let depth = picture.map(|p| &p.tex);
         fx.lens_blur(
@@ -2617,6 +2618,11 @@ impl GpuEffect for DofPro {
                 mix: (e.mix / 100.0).clamp(0.0, 1.0),
                 max_span_px: lens_blur::MAX_SPAN_PX,
                 zebra: e.zebra,
+                rays: if e.method == effects::dof_pro::METHOD_RAYS {
+                    e.rays.clamp(3, 16384) as u32
+                } else {
+                    0
+                },
             },
             &move || {
                 let b = lens_blur::bake(&optics, text.as_deref())?;
@@ -2632,6 +2638,23 @@ impl GpuEffect for DofPro {
                     kernel_res: lens_blur::KERNEL_RES as u32,
                 })
             },
+            &move || {
+                let r = lens_blur::ray_lens(&optics, ray_text.as_deref())?;
+                Some(lumit_gpu::fx::RayLensData {
+                    surfaces: r.surfaces,
+                    stop_r: r.stop_r,
+                    sensor_z: r.sensor_z,
+                    focal: r.focal,
+                    ep_r: r.ep_r,
+                    ep_z: r.ep_z,
+                    roundness: r.roundness,
+                    inf_cross_z: r.inf_cross_z,
+                    focus_h: r.focus_h,
+                    fringing: r.fringing,
+                    glass: r.glass,
+                })
+            },
+            picture.and_then(|p| p.scene.as_deref()),
         )
     }
 }

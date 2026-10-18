@@ -561,8 +561,9 @@ pub enum LayerInput {
     /// Another layer, already rendered alone at this raster.
     Texture(Tex),
     /// Distance in metres rather than a picture: a 3D precomp's Scene depth
-    /// or a Depth wire.
-    Depth(Tex),
+    /// or a Depth wire. With the precomp's 3D layers when rays are to meet
+    /// them.
+    Depth(Tex, Option<std::sync::Arc<lumit_gpu::fx::SceneLayers>>),
     /// One op's whole list of layers, for an effect with more than one layer
     /// row. Each entry has the layer's own size beside it, px at composition
     /// size, where it is another layer's picture.
@@ -582,7 +583,7 @@ impl LayerInput {
         match self {
             LayerInput::Absent | LayerInput::Several(_) | LayerInput::Late => None,
             LayerInput::ThisLayer => Some(current),
-            LayerInput::Texture(t) | LayerInput::Depth(t) => Some(t),
+            LayerInput::Texture(t) | LayerInput::Depth(t, _) => Some(t),
         }
     }
 
@@ -592,7 +593,7 @@ impl LayerInput {
         match self {
             LayerInput::Absent | LayerInput::ThisLayer => false,
             // A late list is pictures nothing names yet.
-            LayerInput::Texture(_) | LayerInput::Depth(_) | LayerInput::Late => true,
+            LayerInput::Texture(_) | LayerInput::Depth(..) | LayerInput::Late => true,
             LayerInput::Several(list) => list.iter().any(|(l, _)| l.binds_a_picture()),
         }
     }
@@ -608,6 +609,8 @@ pub struct LayerPicture {
     pub size: Option<[f32; 2]>,
     /// Metres rather than a picture.
     pub depth: bool,
+    /// The 3D precomp's own layers, for rays to meet.
+    pub scene: Option<std::sync::Arc<lumit_gpu::fx::SceneLayers>>,
 }
 
 /// Render one referenced layer alone into the depth input a depth-of-field
@@ -1399,7 +1402,11 @@ pub fn run_ops(
                 l.texture(&tex).cloned().map(|t| LayerPicture {
                     tex: lumit_gpu::fx::fit_centred(ctx, t, lw, lh),
                     size,
-                    depth: matches!(l, LayerInput::Depth(_)),
+                    depth: matches!(l, LayerInput::Depth(..)),
+                    scene: match l {
+                        LayerInput::Depth(_, scene) => scene.clone(),
+                        _ => None,
+                    },
                 })
             };
             // A list that waited for this op's points is made now that the

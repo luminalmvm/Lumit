@@ -505,9 +505,115 @@ fn splat(
 /// One field and iris turn's kernels and half-widths, every defocus plane.
 type Traced = (Vec<[f32; 3]>, Vec<f32>);
 
-/// Trace the table. `None` only if neither the given text nor the library
-/// entry is a lens, which the library's own tests rule out.
-pub fn bake(p: &BokehLens, lens_text: Option<&str>) -> Option<BokehBake> {
+/// The front glass picture's side, cells.
+pub const GLASS_RES: usize = 128;
+
+/// What the Ray traced method takes to the card: the lens at this f-stop,
+/// focused at infinity, and where its entrance pupil sits. Lengths in mm on
+/// the lens's axis, the first surface's vertex at 0 and the sensor beyond.
+pub struct RayLens {
+    /// Per surface: radius, vertex z, clear semi-aperture and 1 on the stop,
+    /// then the Cauchy A and B of the glass after it.
+    pub surfaces: Vec<[f32; 6]>,
+    pub stop_r: f32,
+    /// The sensor at best focus for a point at infinity.
+    pub sensor_z: f32,
+    pub focal: f32,
+    pub ep_r: f32,
+    /// Where the entrance pupil sits on the axis. Distances in the scene are
+    /// measured from here.
+    pub ep_z: f32,
+    pub roundness: f32,
+    /// A green ray from infinity at [`Self::focus_h`] crosses the axis here.
+    /// Focusing moves the sensor by how far a ray from the focus distance
+    /// crosses behind it.
+    pub inf_cross_z: f32,
+    pub focus_h: f32,
+    /// Scales the glass's dispersion, as [`BokehLens::fringing`].
+    pub fringing: f32,
+    /// How much light the front glass lets through over its clear disc,
+    /// [`GLASS_RES`] square. Empty when it is clean.
+    pub glass: Vec<f32>,
+}
+
+/// The lens for the Ray traced method, from the same set-up as the bake.
+pub fn ray_lens(p: &BokehLens, lens_text: Option<&str>) -> Option<RayLens> {
+    let Setup {
+        lens,
+        ep,
+        start_z,
+        roundness,
+        ..
+    } = setup(p, lens_text)?;
+    // The entrance pupil's place: a chief ray at a small angle, run back to
+    // where it crosses the axis in front of the lens.
+    let theta = 0.01_f32;
+    let dir = [0.0, theta.sin(), theta.cos()];
+    let y0 = lens.chief_start(dir, start_z);
+    let ep_z = start_z - y0 / theta.tan();
+    let focus_h = 0.3 * ep;
+    let exit = lens.trace(
+        [0.0, focus_h, start_z],
+        [0.0, 0.0, 1.0],
+        LAMBDA_UM[1],
+        1.0,
+        None,
+    )?;
+    if exit.t[1].abs() < 1e-9 {
+        return None;
+    }
+    let inf_cross_z = exit.p[2] - exit.p[1] / exit.t[1];
+    let glass = if p.glass_dirt > 0.0 {
+        (0..GLASS_RES * GLASS_RES)
+            .map(|i| {
+                let cell = |v: usize| (v as f32 + 0.5) / GLASS_RES as f32 * 2.0 - 1.0;
+                front_glass(cell(i % GLASS_RES), cell(i / GLASS_RES), p.glass_dirt)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Some(RayLens {
+        surfaces: lens
+            .surfaces
+            .iter()
+            .map(|s| {
+                [
+                    s.radius_mm,
+                    s.z_mm,
+                    s.semi_ap_mm,
+                    s.is_stop,
+                    s.cauchy_a,
+                    s.cauchy_b,
+                ]
+            })
+            .collect(),
+        stop_r: lens.stop_r,
+        sensor_z: lens.sensor_z,
+        focal: lens.focal,
+        ep_r: ep,
+        ep_z,
+        roundness,
+        inf_cross_z,
+        focus_h,
+        fringing: p.fringing.max(0.0),
+        glass,
+    })
+}
+
+/// The lens as both methods use it: the f-stop applied, focused at infinity.
+struct Setup {
+    lens: Lens,
+    /// The entrance pupil's radius, mm.
+    ep: f32,
+    /// Where rays start in front of the first surface, mm.
+    start_z: f32,
+    roundness: f32,
+    /// The light an on-axis bundle carries, for the corners to be read against.
+    axis_weight: f32,
+}
+
+fn setup(p: &BokehLens, lens_text: Option<&str>) -> Option<Setup> {
     let entry = lens_entry(p.lens);
     let custom = lens_text.and_then(parse_lens);
     let stated = if custom.is_some() {
@@ -544,7 +650,6 @@ pub fn bake(p: &BokehLens, lens_text: Option<&str>) -> Option<BokehBake> {
 
     // Wide open the blades fold back behind the bore and the iris is round.
     let roundness = effective_roundness(p.roundness.clamp(0.0, 1.0), p.fstop, native);
-    let round = roundness >= 0.999;
     let sector = std::f32::consts::PI / p.blades.clamp(3, 16) as f32;
     let iris = |a: usize| Iris {
         blades: p.blades.clamp(3, 16),
@@ -566,6 +671,32 @@ pub fn bake(p: &BokehLens, lens_text: Option<&str>) -> Option<BokehBake> {
         lens.sensor_z -= ab / bb;
     }
     let axis_weight: f32 = axis[1].iter().map(|r| r.w).sum();
+    Some(Setup {
+        lens,
+        ep,
+        start_z,
+        roundness,
+        axis_weight,
+    })
+}
+
+/// Trace the table. `None` only if neither the given text nor the library
+/// entry is a lens, which the library's own tests rule out.
+pub fn bake(p: &BokehLens, lens_text: Option<&str>) -> Option<BokehBake> {
+    let Setup {
+        lens,
+        ep,
+        start_z,
+        roundness,
+        axis_weight,
+    } = setup(p, lens_text)?;
+    let round = roundness >= 0.999;
+    let sector = std::f32::consts::PI / p.blades.clamp(3, 16) as f32;
+    let iris = |a: usize| Iris {
+        blades: p.blades.clamp(3, 16),
+        roundness,
+        rot: std::f32::consts::FRAC_PI_2 + a as f32 / (AZIMUTH_BINS - 1) as f32 * sector,
+    };
 
     let field_max = 0.5 * p.sensor_w_mm * (1.0 + p.aspect * p.aspect).sqrt();
     let dz_max = DZ_MAX_OF_FOCAL * lens.focal;

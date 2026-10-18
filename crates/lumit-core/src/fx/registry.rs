@@ -492,6 +492,12 @@ pub trait EffectDef: Sync + Send + 'static {
         false
     }
 
+    /// Whether this instance traces rays through a 3D precomp's own layers
+    /// when its Depth row names the precomp it sits on.
+    fn traces_scene(&self, _inst: &crate::model::EffectInstance) -> bool {
+        false
+    }
+
     /// Compute a driver's outputs, pushing `(port id, value)` for each one it
     /// declares. Every image effect pushes nothing, which is the default.
     ///

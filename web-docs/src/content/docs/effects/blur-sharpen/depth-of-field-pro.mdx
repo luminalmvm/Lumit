@@ -20,6 +20,22 @@ Something near and blurred goes soft at its edges over what is behind it, which 
 through, the way a real lens sees a little round it.
 Bright pixels are drawn as whole bokeh shapes.
 
+**Ray traced** follows rays from each pixel back through every surface of the lens to where
+they meet the depth instead. It shows the lens's own softness wide open and in the
+corners, which Lens shapes leaves out near focus. What a near thing hides is filled in
+from what is around it.
+
+Pointed at the effect's own layer, when that layer is a Precomp with 3D layers, **Depth**
+gives Ray traced the layers themselves, so what a near layer hides is still there to be
+seen round its edge.
+
+:::note[Ray traced in a 3D precomp]
+- Up to 12 3D layers. With more, rays meet the precomp's distance instead.
+- Masks, track mattes, blend modes and motion blur on the 3D layers are not seen by the
+  rays.
+- 2D layers are seen as if far away.
+:::
+
 **Depth** reads distance in metres from a Precomp with 3D layers in it, and any other
 layer as a depth pass from 0 to 1. Without it, the whole frame sits at **Farthest (m)**.
 
@@ -32,6 +48,8 @@ layer as a depth pass from 0 to 1. Without it, the whole frame sits at **Farthes
 | **Depth** | Layer | Any layer in the composition | None | - |
 | **Depth channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
 | **Invert** | Checkbox | On or off | Off | - |
+| **Method** | Dropdown | Lens shapes · Ray traced | Lens shapes | - |
+| **Rays** | Slider, whole numbers | 3 to 1024; up to 16384 | 96 | - |
 | **Lens** | Dropdown | 7Artisans · 50mm F0.95 · Angenieux · DEM 180mm F2.3 APO · Canon · 50mm f1.2 (1956) · Canon · 85mm f1.5 (1952) · Canon · EF 100mm f2.8 Macro · Canon · EF 400mm f2.8L IS II · Canon · EF 70-200mm f2.8L · Canon · FD 300mm f2.8 SSC Fluorite · Leica · Elmarit 90mm F2.8 · Leica · Summilux 35mm f1.4 · Leica · Summilux-C 100mm T1.4 · Meyer Görlitz · Kino Plasmat 100mm F2 · Meyer Görlitz · Orestor 135mm F2.8 · Ross · F10 APO Process Xpres · Voigtländer · Nokton 35mm F1.2 Asph · Voigtländer · Nokton 50mm F1.0 Asph · Zeiss · Arri Master Prime T1.3 50mm · Zeiss · Biotar 50mm F1.4 · Zeiss · Tessar 100mm F4.5 · Zeiss · Ultra Prime Sonnar 135mm T1.9 | Zeiss · Biotar 50mm F1.4 | - |
 | **Edit lens…** | Button | - | - | - |
 | **F-stop** | Slider | 0.95 to 22; down to 0.7 and up to 32 | 1.4 | - |
@@ -69,6 +87,8 @@ In the Effect Controls panel:
 - **Use focus point** is editable while **Depth** names a layer.
 - **Depth channel** is editable while **Depth** names a layer.
 - **Nearest (m)** is editable while **Depth** names a layer.
+- **Rays** is editable while **Method** is set to Ray traced.
+- **Blur size** is editable while **Method** is set to Lens shapes.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
@@ -76,10 +96,15 @@ In the Effect Controls panel:
 ## What each control does
 
 - **Depth** is how far away each pixel is. A Precomp with 3D layers in it gives distance
-  in metres. Any other layer is a depth pass, 0 at **Nearest (m)** and 1 at **Farthest
-  (m)**.
+  in metres, the effect's own layer included. Any other layer is a depth pass, 0 at
+  **Nearest (m)** and 1 at **Farthest (m)**.
 - **Depth channel** selects the channel read as depth.
 - **Invert** reads the depth pass inverted.
+- **Method**: **Lens shapes** spreads each pixel by the blur shape traced for it. **Ray
+  traced** follows rays from each pixel back through the lens and takes the colour where
+  each meets the depth.
+- **Rays** is how many rays Ray traced follows for each pixel, shared between red, green
+  and blue. The Viewer and the export use the same count.
 - **Lens** picks a bundled lens. A lens chosen in the lens window replaces it.
 - **Edit lens…** opens the lens window. See [The lens window](#the-lens-window).
 - **F-stop** is the working aperture. It cannot open wider than the lens.
