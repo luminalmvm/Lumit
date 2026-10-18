@@ -8756,6 +8756,10 @@ mod tests {
     /// The scene: a full-frame red solid matted by a hidden precomp layer whose
     /// own 16×16 blue solid covers the LEFT half of a 32×16 comp. Red survives
     /// where the precomp has alpha and nowhere else.
+    ///
+    /// Also at half scale, where the comp is realised at half size. It used to
+    /// be padded back to full size rather than stretched, so the matte shrank
+    /// into the middle of its square and the corner went dark.
     #[test]
     fn a_precomp_track_matte_gates_the_layer() {
         let mut r = match HeadlessRenderer::shared() {
@@ -8786,26 +8790,40 @@ mod tests {
             comp.layers.push(matte);
         }
 
-        let (rgba, w, h) = r
-            .render_rgba(&std::sync::Arc::new(doc.clone()), comp_id, 0, 1.0)
-            .expect("render");
-        assert_eq!((w, h), (cw, ch));
-        let at = |x: u32, y: u32| {
-            let i = ((y * w + x) * 4) as usize;
-            (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3])
+        let doc = std::sync::Arc::new(doc);
+        let half = Quality {
+            auto_res: true,
+            display_scale: 0.5,
+            ..Quality::default()
         };
-        // Left half: inside the precomp's opaque square, so the red shows.
-        let (lr, _lg, _lb, la) = at(8, 8);
-        assert!(lr > 150, "red should survive under the matte, got {lr}");
-        assert_eq!(la, 255, "and it should be opaque there");
-        // Right half: the precomp is transparent there, so nothing is drawn —
-        // this is the pixel that stayed red while the matte was being dropped.
-        let (rr, rg, rb, _ra) = at(24, 8);
-        assert!(
-            rr < 30 && rg < 30 && rb < 30,
-            "outside the precomp matte the layer must be gated out, got {:?}",
-            (rr, rg, rb)
-        );
+        for quality in [Quality::default(), half] {
+            let (rgba, w, h) = r
+                .render_preview(&doc, comp_id, 0, quality, 1.0)
+                .expect("render");
+            // Comp pixels, whatever size the frame came back at.
+            let at = |x: u32, y: u32| {
+                let i = (((y * h / ch) * w + x * w / cw) * 4) as usize;
+                (rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3])
+            };
+            // Left half: inside the precomp's opaque square, so the red shows.
+            // The middle and a corner, so a shrunken matte shows too.
+            for (x, y) in [(8, 8), (2, 2)] {
+                let (lr, _lg, _lb, la) = at(x, y);
+                assert!(
+                    lr > 150,
+                    "red should survive under the matte at {x},{y}, got {lr}"
+                );
+                assert_eq!(la, 255, "and it should be opaque there");
+            }
+            // Right half: the precomp is transparent there, so nothing is drawn —
+            // this is the pixel that stayed red while the matte was being dropped.
+            let (rr, rg, rb, _ra) = at(24, 8);
+            assert!(
+                rr < 30 && rg < 30 && rb < 30,
+                "outside the precomp matte the layer must be gated out, got {:?}",
+                (rr, rg, rb)
+            );
+        }
     }
 
     /// **A paint stroke on a Precomp layer must reach the picture**.
