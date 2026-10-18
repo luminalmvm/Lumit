@@ -18573,6 +18573,10 @@
   "@reviewCopied": {
     "description": "Share a preview: heading once the link is made. Its address is already on the clipboard."
   },
+  "reviewCopiedToClipboard": "Copied to clipboard",
+  "@reviewCopiedToClipboard": {
+    "description": "Share a preview: stands in for the link's address for a second after the person clicks it to copy it again."
+  },
   "reviewErrorPro": "Previews need Lumit Pro.",
   "@reviewErrorPro": {
     "description": "Error in the Previews window when the account has no Lumit Pro."
