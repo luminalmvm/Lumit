@@ -181,6 +181,11 @@ pub struct WorkerState {
     /// picture (serve the hit, measure afterwards). One slot: only the
     /// frame being looked at is worth the numbers.
     pending_measure: Option<(Uuid, u64, lumit_render::Quality)>,
+    /// The last picture each view showed of each comp, newest last, so going
+    /// back to a comp shows it at once while its frame is made ([`stand_in`]).
+    // ponytail: capped at 8 and held outside the cache's budget, about 270 MB
+    // of the card at 4K; count them against it if that ever matters.
+    stand_ins: Vec<(u32, Uuid, lumit_render::PreparedFrame)>,
 }
 
 impl WorkerState {
@@ -2988,6 +2993,8 @@ fn rebuild_renderer(state: &mut WorkerState, stream: &mut WorkerResponseStream) 
     state.fill_exhausted = false;
     state.backup_exhausted = false;
     state.published_bar = None;
+    // Held pictures belong to the old device.
+    state.stand_ins.clear();
     _ = stream.add(WorkerResponse::DeviceReset);
     // And put the picture back, on the new device.
     republish_last_frame(state, stream);
@@ -3071,6 +3078,7 @@ fn worker_loop(
         bakes_seen: 0,
         layer_sample: None,
         pending_measure: None,
+        stand_ins: Vec::new(),
     };
 
     // How many turns in a row have panicked. Reset by the first turn that
@@ -4060,6 +4068,7 @@ fn handle_requests(
                 WorkerRequest::RenderItem(req) => render_item(req, state, stream),
                 WorkerRequest::CloseView(view) => {
                     state.looks.remove(&view);
+                    state.stand_ins.retain(|(v, ..)| *v != view);
                     state.renderer.drop_view_targets(view);
                     Ok(())
                 }
@@ -5344,6 +5353,72 @@ fn publish_frame(
     }
 }
 
+/// What a view that has just changed comps shows while its frame is made:
+/// that comp's last picture there, or a blank one, rather than the comp it
+/// left. None when the view is not changing comps or the frame is held.
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "linux", feature = "shared-texture-linux"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+fn stand_in(
+    state: &mut WorkerState,
+    comp: Uuid,
+    frame: u64,
+    scale: f32,
+    document: &std::sync::Arc<lumit_core::Document>,
+    bgra: bool,
+) -> Option<lumit_render::PreparedFrame> {
+    let view = state.view_id();
+    let showing = state
+        .stand_ins
+        .iter()
+        .rev()
+        .find(|(v, ..)| *v == view)
+        .map(|(_, c, _)| *c);
+    if showing.is_none_or(|c| c == comp) {
+        return None;
+    }
+    // A frame the card holds is on screen straight away anyway.
+    if state
+        .renderer
+        .frame_key(document, comp, frame, still_quality(scale))
+        .is_some_and(|key| state.renderer.has_frame_texture(key, bgra))
+    {
+        return None;
+    }
+    if let Some((.., last)) = state
+        .stand_ins
+        .iter()
+        .rev()
+        .find(|(v, c, _)| *v == view && *c == comp)
+    {
+        return Some(last.clone());
+    }
+    let size = document.comp(comp)?;
+    let s = scale.clamp(0.05, 1.0);
+    state.renderer.blank_frame(
+        ((size.width as f32 * s) as u32).max(1),
+        ((size.height as f32 * s) as u32).max(1),
+        bgra,
+    )
+}
+
+/// Note what this view now shows of `comp`, for [`stand_in`].
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "linux", feature = "shared-texture-linux"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+fn remember_shown(state: &mut WorkerState, comp: Uuid, prepared: &lumit_render::PreparedFrame) {
+    let view = state.view_id();
+    state.stand_ins.retain(|(v, c, _)| (*v, *c) != (view, comp));
+    state.stand_ins.push((view, comp, prepared.clone()));
+    if state.stand_ins.len() > 8 {
+        state.stand_ins.remove(0);
+    }
+}
+
 #[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
 #[allow(clippy::too_many_arguments)]
 fn publish_zero_copy(
@@ -5369,6 +5444,9 @@ fn publish_zero_copy(
     // already made was invisible to the scrub that wanted it, and the picture
     // was composited from scratch with the cache bar showing green over it.
     let _ = mode;
+    if let Some(shown) = stand_in(state, comp, frame, scale, document, false) {
+        send_dmabuf(state, frame, &shown, stream);
+    }
     // Through the ladder, not straight to a composite: a frame already held on
     // the card, in memory, or parked on disk costs a copy or an upload rather
     // than a render (see `prepare_frame`).
@@ -5388,14 +5466,27 @@ fn publish_zero_copy(
             return;
         }
     };
+    if send_dmabuf(state, frame, &prepared, stream) {
+        remember_shown(state, comp, &prepared);
+    }
+}
+
+/// Show a prepared frame through the DMA-BUF; false when it could not be.
+#[cfg(all(target_os = "linux", feature = "shared-texture-linux"))]
+fn send_dmabuf(
+    state: &mut WorkerState,
+    frame: u64,
+    prepared: &lumit_render::PreparedFrame,
+    stream: &mut WorkerResponseStream,
+) -> bool {
     let shared = match state
         .renderer
-        .present_prepared_dmabuf(&prepared, state.view_id())
+        .present_prepared_dmabuf(prepared, state.view_id())
     {
         Ok(shared) => shared,
         Err(err) => {
             note!("Shared DMA-BUF present failed, dropping frame: {err}");
-            return;
+            return false;
         }
     };
 
@@ -5421,6 +5512,7 @@ fn publish_zero_copy(
         reach: prepared.reach().map(|r| r.rect.map(f64::from)),
         reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
     }));
+    true
 }
 
 #[cfg(any(
@@ -5451,6 +5543,9 @@ fn publish_zero_copy(
     // already made was invisible to the scrub that wanted it, and the picture
     // was composited from scratch with the cache bar showing green over it.
     let _ = mode;
+    if let Some(shown) = stand_in(state, comp, frame, scale, document, true) {
+        send_shared(state, frame, &shown, stream);
+    }
     // Through the ladder, not straight to a composite — see `prepare_frame`.
     let prepared = match prepare_frame(
         state,
@@ -5468,11 +5563,28 @@ fn publish_zero_copy(
             return;
         }
     };
-    let shared = match state.renderer.present_prepared(&prepared, state.view_id()) {
+    if send_shared(state, frame, &prepared, stream) {
+        remember_shown(state, comp, &prepared);
+    }
+}
+
+/// Show a prepared frame through the shared texture; false when it could not
+/// be.
+#[cfg(any(
+    all(windows, feature = "shared-texture"),
+    all(target_os = "macos", feature = "shared-texture-macos")
+))]
+fn send_shared(
+    state: &mut WorkerState,
+    frame: u64,
+    prepared: &lumit_render::PreparedFrame,
+    stream: &mut WorkerResponseStream,
+) -> bool {
+    let shared = match state.renderer.present_prepared(prepared, state.view_id()) {
         Ok(shared) => shared,
         Err(err) => {
             note!("Shared-texture present failed, dropping frame: {err}");
-            return;
+            return false;
         }
     };
 
@@ -5491,6 +5603,7 @@ fn publish_zero_copy(
             reach_at_limit: prepared.reach().is_some_and(|r| r.at_limit),
         },
     ));
+    true
 }
 
 #[cfg(test)]
@@ -6024,6 +6137,7 @@ mod tests {
             bakes_seen: 0,
             layer_sample: None,
             pending_measure: None,
+            stand_ins: Vec::new(),
         })
     }
 

@@ -660,6 +660,7 @@ pub struct PrefetchWant {
 /// so one slow frame spends the slack the cheap frames before it banked.
 /// Holding one costs its texture's VRAM and nothing else; dropping it frees
 /// that. It is only valid on the renderer that made it.
+#[derive(Clone)]
 pub struct PreparedFrame {
     /// A share of the cached texture, not a texture of its own. The share is
     /// what tells the pool of textures for re-use that a present still needs
@@ -2460,6 +2461,21 @@ impl HeadlessRenderer {
     ///
     /// `None` when the payload is not exactly one frame of the stated size — a
     /// corrupt or truncated entry is refused rather than shown as garbage.
+    /// A frame with nothing in it, for the Viewer to show while a comp it
+    /// has no picture of yet is made. Any size does, as the Viewer stretches
+    /// it over the comp.
+    pub fn blank_frame(&mut self, width: u32, height: u32, bgra: bool) -> Option<PreparedFrame> {
+        let parts = self.parts.as_ref()?;
+        let bytes = vec![0u8; width as usize * height as usize * 4];
+        let texture = parts
+            .colour
+            .upload_display8(&self.gpu, &bytes, width, height, bgra)?;
+        Some(PreparedFrame {
+            texture: std::sync::Arc::new(texture),
+            reach: None,
+        })
+    }
+
     pub fn upload_frame_texture(&mut self, frame: Promotion<'_>) -> Option<PreparedFrame> {
         // A texture that the cache has finished with, and that nothing shows any
         // more, holds the next frame as well as a new one does. Playback goes
