@@ -301,14 +301,20 @@ Widget _capitalised(LumitTheme t, Widget child, bool on) =>
         ? Text(t.kickerCase(child.data!), style: child.style)
         : child;
 
-/// The word on an accent fill. Studio and Desk put it at the far end of the
-/// ramp from the text, `surface_0`; Lantern keeps `text_primary`, which its
-/// document measures at 4.63 to 1 against the 3.73 of `surface_0`.
-Color accentInk(LumitTheme t) => switch (t.shape) {
-      ThemeShape.studio => t.surface0,
-      ThemeShape.desk => t.surface0,
-      ThemeShape.lantern => t.textPrimary,
-    };
+/// The word on an accent fill: whichever of `text_primary` and `surface_0`
+/// stands out more against the accent. Dark words on the default spruce, or
+/// on any dark accent, made a live button look switched off.
+Color accentInk(LumitTheme t) {
+  final fill = t.accent.computeLuminance() + 0.05;
+  double contrast(Color c) {
+    final ink = c.computeLuminance() + 0.05;
+    return ink > fill ? ink / fill : fill / ink;
+  }
+
+  return contrast(t.textPrimary) >= contrast(t.surface0)
+      ? t.textPrimary
+      : t.surface0;
+}
 
 /// A 14 px themed checkbox.
 ///

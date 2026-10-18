@@ -630,6 +630,11 @@ impl ProjectReference {
     /// composition ([`Self::import_layers`]) and any other as footage
     /// ([`Self::import_footage`]). This is the call the Import command makes.
     ///
+    /// `bins` keeps an imported folder's shape. Beside each path it names the
+    /// folder that file was found in, from the imported folder down, as
+    /// `Shoot/Day 1`. Those folders are made in the project and the footage is
+    /// filed in them. A blank bin, or no bins at all, leaves it at the root.
+    ///
     /// Not sync. Every file is read before the project is touched, which is
     /// the slow part. `on_progress` hears the fraction of the files read, and
     /// [`crate::api::import::cancel_import`] stops it between two files with
@@ -637,11 +642,13 @@ impl ProjectReference {
     pub fn import_files(
         &self,
         paths: Vec<String>,
+        bins: Vec<String>,
         on_progress: Option<StreamSink<f64>>,
     ) -> Result<BridgeImported, BridgeError> {
         crate::packing::begin();
         self.import_while(
             paths,
+            bins,
             &mut crate::packing::progress(|fraction| {
                 if let Some(sink) = &on_progress {
                     let _ = sink.add(fraction);
@@ -653,15 +660,21 @@ impl ProjectReference {
     /// [`Self::import_files`], which stops when `carry_on` says no. It is
     /// asked before each file is read, with how many have been and how many
     /// there are, and once more before the project is touched.
+    ///
+    /// Everything that reads the disk happens in that first pass, so the bar
+    /// moves and Cancel works however slow the drive is. Filing what was read
+    /// afterwards is quick.
     #[frb(ignore)]
     pub(crate) fn import_while(
         &self,
         paths: Vec<String>,
+        bins: Vec<String>,
         carry_on: &mut dyn FnMut(u64, u64) -> bool,
     ) -> Result<BridgeImported, BridgeError> {
         let total = paths.len() as u64;
         #[cfg(feature = "media")]
         let mut read = Vec::new();
+        let mut footage = Vec::new();
         let mut stopped = false;
         for (at, path) in paths.iter().enumerate() {
             stopped = !carry_on(at as u64, total);
@@ -669,9 +682,14 @@ impl ProjectReference {
                 break;
             }
             #[cfg(feature = "media")]
-            read.push(crate::layered::Layered::open(std::path::Path::new(path)));
+            let layered = crate::layered::Layered::open(std::path::Path::new(path));
+            #[cfg(feature = "media")]
+            let flat = layered.is_none();
             #[cfg(not(feature = "media"))]
-            let _ = path;
+            let flat = true;
+            footage.push(flat.then(|| Self::footage_from_disk(path)));
+            #[cfg(feature = "media")]
+            read.push(layered);
         }
         if stopped || !carry_on(total, total) {
             return Ok(BridgeImported {
@@ -680,19 +698,28 @@ impl ProjectReference {
             });
         }
 
-        let group = paths.len() > 1;
+        let group = paths.len() > 1 || bins.iter().any(|b| !b.is_empty());
         if group {
             self.begin_undo_group()?;
         }
-        let mut placed = paths.into_iter().enumerate();
-        let left_out = placed.try_fold(0_u32, |left_out, (at, path)| {
+        let mut made = std::collections::HashMap::new();
+        let mut placed = paths.into_iter().zip(footage).enumerate();
+        let left_out = placed.try_fold(0_u32, |left_out, (at, (path, item))| {
             #[cfg(feature = "media")]
             if let Some(Some(layered)) = read.get(at) {
                 return Ok(left_out + self.place_layers(path.into(), layered)?);
             }
             #[cfg(not(feature = "media"))]
-            let _ = at;
-            self.import_footage(path).map(|_| left_out)
+            let _ = (at, path);
+            let Some(item) = item else {
+                return Ok(left_out);
+            };
+            let footage = self.file_footage(item?)?;
+            if let Some(bin) = bins.get(at).filter(|b| !b.is_empty()) {
+                let folder = self.bin_folder(bin, &mut made)?;
+                self.file_into(footage.id, folder)?;
+            }
+            Ok(left_out)
         });
         // A group left open records nothing, so it closes whatever happened.
         if group {
@@ -702,6 +729,50 @@ impl ProjectReference {
             cancelled: false,
             left_out: left_out?,
         })
+    }
+
+    /// The folder `bin` names, made along with any folder above it the first
+    /// time this import asks for it. `made` remembers them by their bin.
+    #[frb(ignore)]
+    fn bin_folder(
+        &self,
+        bin: &str,
+        made: &mut std::collections::HashMap<String, Uuid>,
+    ) -> Result<Uuid, BridgeError> {
+        let mut parent = None;
+        let mut key = String::new();
+        for name in bin.split('/') {
+            key.push_str(name);
+            key.push('/');
+            let id = match made.get(&key) {
+                Some(id) => *id,
+                None => {
+                    let id = self.new_folder(name.into(), parent)?.id;
+                    made.insert(key.clone(), id);
+                    id
+                }
+            };
+            parent = Some(id);
+        }
+        parent.ok_or(BridgeError::InvalidItem)
+    }
+
+    /// File `item` into `folder`. A run of stills the import found again is
+    /// already there, and that changes nothing.
+    #[frb(ignore)]
+    fn file_into(&self, item: Uuid, folder: Uuid) -> Result<(), BridgeError> {
+        let state = self.state()?;
+        let state = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        let ops = lumit_core::ops::move_to_folder_ops(&state.store.snapshot(), item, folder)
+            .ok_or(BridgeError::InvalidItem)?;
+        if ops.is_empty() {
+            return Ok(());
+        }
+        state
+            .store
+            .commit(Op::Batch { ops })
+            .map(|_| ())
+            .map_err(BridgeError::OpError)
     }
 
     /// Record `path` as a footage item, as one undo step.
@@ -730,12 +801,24 @@ impl ProjectReference {
     /// selecting the whole folder still imports it once.
     #[frb(sync)]
     pub fn import_footage(&self, path: String) -> Result<FootageReference, BridgeError> {
-        use lumit_core::model::{FootageItem, MediaRef, ProjectItem, SequenceRef};
+        self.file_footage(Self::footage_from_disk(&path)?)
+    }
+
+    /// The footage item for `path`, with everything [`Self::import_footage`]
+    /// has to ask the disk already asked: whether it is part of a run of
+    /// stills, and its fingerprint. Touches no project.
+    // ponytail: each still of a picked run lists its folder again. Remember
+    // the runs found in one import if picking a big run is slow.
+    #[frb(ignore)]
+    pub(crate) fn footage_from_disk(
+        path: &str,
+    ) -> Result<lumit_core::model::FootageItem, BridgeError> {
+        use lumit_core::model::{FootageItem, MediaRef, SequenceRef};
 
         if path.trim().is_empty() {
             return Err(BridgeError::MediaPathUnresolved);
         }
-        let picked = std::path::PathBuf::from(&path);
+        let picked = std::path::PathBuf::from(path);
 
         // A run of one is a still, and a still is not a sequence: it decodes,
         // saves and relinks exactly as it did before this existed.
@@ -758,7 +841,7 @@ impl ProjectReference {
             Some((first, display)) => (first.clone(), display.clone()),
             None => (
                 picked,
-                std::path::Path::new(&path)
+                std::path::Path::new(path)
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "footage".into()),
@@ -769,7 +852,7 @@ impl ProjectReference {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| name.clone());
 
-        let item = FootageItem {
+        Ok(FootageItem {
             id: Uuid::now_v7(),
             name,
             media: MediaRef {
@@ -787,8 +870,21 @@ impl ProjectReference {
             colour_space: None,
             source_layer: None,
             interpretation: Default::default(),
-        };
+        })
+    }
+
+    /// File an item from [`Self::footage_from_disk`] in the project, as one
+    /// undo step, and start reading the file in the background.
+    #[frb(ignore)]
+    pub(crate) fn file_footage(
+        &self,
+        item: lumit_core::model::FootageItem,
+    ) -> Result<FootageReference, BridgeError> {
+        use lumit_core::model::ProjectItem;
+
         let item_id = item.id;
+        let file = std::path::PathBuf::from(&item.media.absolute_path);
+        let run = item.sequence.is_some();
 
         let state = self.state()?;
         {
@@ -798,7 +894,7 @@ impl ProjectReference {
             // Selecting a whole folder calls this once per file. Every call
             // after the first finds the run already imported and returns it,
             // rather than filing two thousand items that all mean one shot.
-            if run.is_some() {
+            if run {
                 if let Some(existing) = doc.items.iter().find_map(|i| match i {
                     ProjectItem::Footage(f)
                         if f.sequence.is_some()
@@ -827,8 +923,8 @@ impl ProjectReference {
         #[cfg(feature = "media")]
         crate::probe::request(lumit_media::MediaSource {
             path: file,
-            sequence_fps: run.map(|_| {
-                let r = SequenceRef::default().frame_rate;
+            sequence_fps: run.then(|| {
+                let r = lumit_core::model::SequenceRef::default().frame_rate;
                 (r.num(), r.den())
             }),
             source_layer: None,

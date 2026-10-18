@@ -1964,6 +1964,7 @@ abstract class BridgeLibApi extends BaseApi {
   Future<BridgeImported> crateApiProjectProjectReferenceImportFiles(
       {required ProjectReference that,
       required List<String> paths,
+      required List<String> bins,
       RustStreamSink<double>? onProgress});
 
   FootageReference crateApiProjectProjectReferenceImportFootage(
@@ -16567,12 +16568,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   Future<BridgeImported> crateApiProjectProjectReferenceImportFiles(
       {required ProjectReference that,
       required List<String> paths,
+      required List<String> bins,
       RustStreamSink<double>? onProgress}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_list_String(paths, serializer);
+        sse_encode_list_String(bins, serializer);
         sse_encode_opt_StreamSink_f_64_Sse(onProgress, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 505, port: port_);
@@ -16583,7 +16586,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiProjectProjectReferenceImportFilesConstMeta,
-      argValues: [that, paths, onProgress],
+      argValues: [that, paths, bins, onProgress],
       apiImpl: this,
     ));
   }
@@ -16591,7 +16594,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiProjectProjectReferenceImportFilesConstMeta =>
       const TaskConstMeta(
         debugName: "project_reference_import_files",
-        argNames: ["that", "paths", "onProgress"],
+        argNames: ["that", "paths", "bins", "onProgress"],
       );
 
   @override

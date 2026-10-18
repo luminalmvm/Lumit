@@ -9549,7 +9549,7 @@ fn a_cancelled_import_leaves_the_project_as_it_was() {
     // Stopped once the first file has been read, and again at the last ask.
     for stop_at in [1, 2] {
         let ended = project
-            .import_while(paths.clone(), &mut |read, _| read < stop_at)
+            .import_while(paths.clone(), Vec::new(), &mut |read, _| read < stop_at)
             .expect("a cancel is not an error");
         assert!(ended.cancelled);
         assert!(
@@ -9560,7 +9560,7 @@ fn a_cancelled_import_leaves_the_project_as_it_was() {
     }
 
     let ended = project
-        .import_while(paths, &mut |_, _| true)
+        .import_while(paths, Vec::new(), &mut |_, _| true)
         .expect("the files import");
     assert!(!ended.cancelled);
     project.undo().expect("one import, one step");

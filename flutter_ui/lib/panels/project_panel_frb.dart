@@ -87,11 +87,12 @@ const int _thumbMaxEdge = 224;
 ///
 /// Three shapes arrive and each is answered differently:
 ///
-/// * a **folder** is read one level deep for the files the import filter
-///   offers, sorted, and handed over as if they had been picked — which is how
-///   a folder of numbered stills becomes one image-sequence item: the engine
-///   sees the run and folds it, and folds every later frame of the same run
-///   into the item it already made;
+/// * a **folder** is read all the way down for the files the import filter
+///   offers, sorted, and handed over as if they had been picked, each with
+///   the folder it was in so the project gets the same folders. A folder of
+///   numbered stills becomes one image-sequence item: the engine sees the run
+///   and folds it, and folds every later frame of the same run into the item
+///   it already made. **File › Import folder** comes here too;
 /// * a **`.lum`** or an After Effects **`.aep`/`.zip`** is *not* opened
 ///   quietly. Opening a project throws away the one on screen, and importing
 ///   an After Effects project is a long conversion with a report at the end;
@@ -103,18 +104,37 @@ const int _thumbMaxEdge = 224;
 ///   panel's own missing badge, which is a truer answer than silence.
 Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
   final media = <String>[];
+  final bins = <String>[];
   var isProject = false;
   var isAe = false;
+  String nameOf(FileSystemEntity entry) => entry.path
+      .split(RegExp(r'[/\\]'))
+      .lastWhere((part) => part.isNotEmpty, orElse: () => '');
+  // A folder that can't be read is passed over, and so is anything hidden,
+  // which is where a Mac leaves its `._clip.mov` shadows on a shared drive.
+  void walk(Directory folder, String bin) {
+    final List<FileSystemEntity> entries;
+    try {
+      entries = folder.listSync(followLinks: false)
+        ..sort((a, b) => a.path.compareTo(b.path));
+    } on FileSystemException {
+      return;
+    }
+    for (final entry in entries) {
+      if (nameOf(entry).startsWith('.')) continue;
+      if (entry is Directory) {
+        walk(entry, '$bin/${nameOf(entry)}');
+      } else if (footageExtensions.contains(_extensionOf(entry.path))) {
+        media.add(entry.path);
+        bins.add(bin);
+      }
+    }
+  }
+
   for (final path in dropped) {
     final folder = Directory(path);
     if (folder.existsSync()) {
-      media.addAll(folder
-          .listSync()
-          .whereType<File>()
-          .map((f) => f.path)
-          .where((p) => footageExtensions.contains(_extensionOf(p)))
-          .toList()
-        ..sort());
+      walk(folder, nameOf(folder));
       continue;
     }
     switch (_extensionOf(path)) {
@@ -125,11 +145,12 @@ Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
         isAe = true;
       default:
         media.add(path);
+        bins.add('');
     }
   }
   if (isProject) state.postNotice(l10n.dropProjectFile);
   if (isAe) state.postNotice(l10n.dropAeProject);
-  return state.importFootagePaths(media);
+  return state.importFootagePaths(media, bins: bins);
 }
 
 String _extensionOf(String path) {

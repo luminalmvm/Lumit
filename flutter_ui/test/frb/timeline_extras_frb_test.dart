@@ -130,7 +130,9 @@ void main() {
       expect(p.uiState.selectedComp?.internalid, inner.internalid);
 
       p.state.project!.undo();
-      p.uiState.model.refresh();
+      // What the engine's change event calls. A gone comp moved no revision,
+      // so this used to say nothing and the comp stayed fronted.
+      p.uiState.model.refreshIfMoved();
       await tester.pump();
 
       expect(p.uiState.selectedComp?.internalid, p.comp.internalid,

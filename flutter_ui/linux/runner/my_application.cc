@@ -174,6 +174,15 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
 
+  // desktop_drop asks a drop for the Flatpak's file transfer key first, and
+  // GTK has ended the drop by the time it reads it, so nothing arrives. The
+  // plain list of files works, and the Flatpak can read where footage is kept.
+  GtkTargetList* drop_targets = gtk_target_list_new(nullptr, 0);
+  gtk_target_list_add(drop_targets,
+                      gdk_atom_intern_static_string("text/uri-list"), 0, 0);
+  gtk_drag_dest_set_target_list(GTK_WIDGET(view), drop_targets);
+  gtk_target_list_unref(drop_targets);
+
   // The zero-copy Viewer bridge: register the 'lumit/viewer_texture' channel
   // on the main engine so Dart can hand it engine-drawn DMA-BUF frames to
   // show as GL external textures — the Linux twin of the Windows runner's
