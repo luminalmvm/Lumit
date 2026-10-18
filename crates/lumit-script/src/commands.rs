@@ -14,6 +14,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use crate::reach::{self, Reach};
 use crate::{Command, Host, ScriptError};
 
 // Pieces of schema the commands share. Macros rather than consts so
@@ -233,10 +234,16 @@ pub const COMMANDS: &[Command] = &[
     },
 ];
 
-pub(crate) fn run(host: &dyn Host, name: &str, args: Value) -> Result<Value, ScriptError> {
+/// `reach`, when there is one, is where the command's paths may go.
+pub(crate) fn run(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    name: &str,
+    args: Value,
+) -> Result<Value, ScriptError> {
     match name {
         "project.info" => project_info(host, parse(args)?),
-        "project.save" => project_save(host, parse(args)?),
+        "project.save" => project_save(host, reach, parse(args)?),
         "undo" => undo(host, parse(args)?, true),
         "redo" => undo(host, parse(args)?, false),
         "comp.list" => comp_list(host, parse(args)?),
@@ -249,8 +256,8 @@ pub(crate) fn run(host: &dyn Host, name: &str, args: Value) -> Result<Value, Scr
         "layer.delete" => layer_delete(host, parse(args)?),
         "layer.keys" => layer_keys(host, parse(args)?),
         "markers.set" => markers_set(host, parse(args)?),
-        "footage.import" => footage_import(host, parse(args)?),
-        "export.start" => export_start(host, parse(args)?),
+        "footage.import" => footage_import(host, reach, parse(args)?),
+        "export.start" => export_start(host, reach, parse(args)?),
         "export.status" => export_status(host, parse(args)?),
         "export.cancel" => export_cancel(host, parse(args)?),
         _ => Err(ScriptError::UnknownCommand(name.to_owned())),
@@ -440,8 +447,13 @@ struct SaveArgs {
     path: Option<PathBuf>,
 }
 
-fn project_save(host: &dyn Host, a: SaveArgs) -> Result<Value, ScriptError> {
-    let path = host.save(a.path.as_deref())?;
+fn project_save(host: &dyn Host, reach: Option<&Reach>, a: SaveArgs) -> Result<Value, ScriptError> {
+    let path = a.path.as_deref().map(reach::plain).transpose()?;
+    let path = match reach {
+        Some(reach) => reach.save(host, path)?,
+        None => path.map(Path::to_path_buf),
+    };
+    let path = host.save(path.as_deref())?;
     Ok(json!({ "path": path }))
 }
 
@@ -1081,8 +1093,20 @@ struct ImportArgs {
     paths: Vec<PathBuf>,
 }
 
-fn footage_import(host: &dyn Host, a: ImportArgs) -> Result<Value, ScriptError> {
-    let ids = host.import_footage(&a.paths)?;
+fn footage_import(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    a: ImportArgs,
+) -> Result<Value, ScriptError> {
+    let paths = a
+        .paths
+        .iter()
+        .map(|path| match (reach::plain(path)?, reach) {
+            (path, Some(reach)) => reach.footage(host, path),
+            (path, None) => Ok(path.to_path_buf()),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let ids = host.import_footage(&paths)?;
     let doc = host.store().snapshot();
     let items: Vec<Value> = ids
         .iter()
@@ -1104,9 +1128,18 @@ struct ExportArgs {
     out: Option<PathBuf>,
 }
 
-fn export_start(host: &dyn Host, a: ExportArgs) -> Result<Value, ScriptError> {
+fn export_start(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    a: ExportArgs,
+) -> Result<Value, ScriptError> {
     let comp = find_comp(&host.store().snapshot(), &a.comp)?.id;
-    let job = host.export_start(comp, a.out.as_deref().map(Path::new))?;
+    let out = a.out.as_deref().map(reach::plain).transpose()?;
+    let out = match reach {
+        Some(reach) => reach.export(host, out)?,
+        None => out.map(Path::to_path_buf),
+    };
+    let job = host.export_start(comp, out.as_deref())?;
     Ok(json!({ "job": job }))
 }
 

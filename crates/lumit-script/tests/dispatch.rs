@@ -6,11 +6,16 @@
 // (the same allow every other integration test in the workspace carries).
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::path::{Path, PathBuf};
-
 use lumit_core::model::{Composition, Document, Layer};
 use lumit_core::DocumentStore;
-use lumit_script::{dispatch, one_step, ExportStatus, Host, ScriptError, COMMANDS};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+use lumit_script::{
+    dispatch, one_step, run, ExportStatus, Host, RunOptions, ScriptError, COMMANDS,
+};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -155,4 +160,40 @@ fn a_run_of_commands_is_one_undo_step() {
     let nested = one_step(host.store(), || Ok(()));
     host.store().end_undo_group();
     assert_eq!(nested.unwrap_err().code(), "failed");
+}
+
+#[test]
+fn a_script_that_runs_away_stops_on_the_flag_and_leaves_nothing() {
+    let host = Bare(DocumentStore::new(Document::new()));
+    call(&host, "comp.new", json!({ "name": "Main" }));
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let flag = stop.clone();
+    let stopper = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(200));
+        flag.store(true, Ordering::Relaxed);
+    });
+    let report = run(
+        &host,
+        "lumit.layer.add({ comp: \"Main\", kind: \"null\" });
+print(\"added\");
+while (true) {}
+",
+        RunOptions {
+            name: "Runaway.js".into(),
+            stop,
+            ..RunOptions::default()
+        },
+    );
+    stopper.join().unwrap();
+
+    let failed = report.result.unwrap_err();
+    assert_eq!(failed.error, ScriptError::Stopped);
+    assert_eq!(report.log, ["added"]);
+    assert_eq!(
+        call(&host, "comp.get", json!({ "comp": "Main" }))["layers"],
+        json!([])
+    );
+    // Nothing of the script's is left to redo either.
+    assert!(!host.store().can_redo());
 }
