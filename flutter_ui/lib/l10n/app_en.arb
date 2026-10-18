@@ -16627,6 +16627,38 @@
   "@shareTake": {
     "description": "Text beside a tick box in the Shared project window. When ticked, Lumit asks the others for a small copy of any clip the project uses that is not on this computer."
   },
+  "shareStandInSize": "Stand-in size",
+  "@shareStandInSize": {
+    "description": "Row label in the Shared project window, under Footage: how big the stand-ins this computer makes of its own footage are. A stand-in is a small copy of a whole clip that another person can cut with."
+  },
+  "shareSizeFull": "Full",
+  "@shareSizeFull": {
+    "description": "One choice for the Stand-in size row in the Shared project window: the footage's own size."
+  },
+  "shareSizeHalf": "Half",
+  "@shareSizeHalf": {
+    "description": "One choice for the Stand-in size row in the Shared project window: half the footage's width and half its height."
+  },
+  "shareSizeQuarter": "Quarter",
+  "@shareSizeQuarter": {
+    "description": "One choice for the Stand-in size row in the Shared project window: a quarter of the footage's width and a quarter of its height."
+  },
+  "shareStandInFrames": "Stand-in frames",
+  "@shareStandInFrames": {
+    "description": "Row label in the Shared project window, under Footage: how many of the footage's frames the stand-ins this computer makes keep. The ones left out show the frame before, so the clip plays as long, only less smoothly."
+  },
+  "shareFramesAll": "All",
+  "@shareFramesAll": {
+    "description": "One choice for the Stand-in frames row in the Shared project window: every frame of the footage is kept."
+  },
+  "shareFramesHalf": "Half",
+  "@shareFramesHalf": {
+    "description": "One choice for the Stand-in frames row in the Shared project window: every second frame is kept, and each is shown for two frames."
+  },
+  "shareFramesQuarter": "Quarter",
+  "@shareFramesQuarter": {
+    "description": "One choice for the Stand-in frames row in the Shared project window: every fourth frame is kept, and each is shown for four frames."
+  },
   "shareUpLimit": "Upload limit",
   "@shareUpLimit": {
     "description": "Row label in the Shared project window: the fastest this computer sends footage to the others."

@@ -24,13 +24,14 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use lumit_core::model::{FootageItem, ProjectItem};
 use lumit_core::{Document, DocumentStore};
+use lumit_render::standin::Smaller;
 use lumit_share::{Footage, Held, Limits, News, Wanted};
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -49,6 +50,16 @@ static TAKE: AtomicBool = AtomicBool::new(true);
 pub(crate) fn set_sharing(give: bool, take: bool) {
     GIVE.store(give, Ordering::Relaxed);
     TAKE.store(take, Ordering::Relaxed);
+}
+
+/// How much smaller than its original this machine makes a stand-in: the
+/// size divided by `SIZE` each way, and a new picture every `EVERY` frames.
+static SIZE: AtomicU32 = AtomicU32::new(1);
+static EVERY: AtomicU32 = AtomicU32::new(1);
+
+pub(crate) fn set_smaller(size: u32, every: u32) {
+    SIZE.store(size, Ordering::Relaxed);
+    EVERY.store(every, Ordering::Relaxed);
 }
 
 /// The carrier of each shared project, by project. An entry goes when
@@ -174,6 +185,30 @@ fn stand_in_path(root: Option<&Path>, footage: &FootageItem) -> Option<PathBuf> 
     Some(folder(root, footage)?.join(format!("standin.{ext}")))
 }
 
+/// Where this machine keeps a stand-in it made of its own file. One made
+/// smaller has a name of its own, so a change of setting makes a new one
+/// rather than sending the last.
+fn made_path(root: Option<&Path>, footage: &FootageItem, smaller: Smaller) -> Option<PathBuf> {
+    if smaller == Smaller::NOT {
+        return stand_in_path(root, footage);
+    }
+    let Smaller { size, every } = smaller;
+    Some(folder(root, footage)?.join(format!("standin-{size}-{every}.mp4")))
+}
+
+/// How much smaller this machine makes a stand-in of `footage`, its file at
+/// `path`. Fields are rows of the file's own frames, which a smaller picture
+/// blends together, so interlaced footage keeps its size, as for a proxy.
+fn smaller_for(footage: &FootageItem, path: &Path) -> Smaller {
+    let smaller = Smaller::new(SIZE.load(Ordering::Relaxed), EVERY.load(Ordering::Relaxed));
+    let rows = lumit_render::source::interpretation(footage).separates_fields();
+    if rows || has_fields(path) {
+        Smaller { size: 1, ..smaller }
+    } else {
+        smaller
+    }
+}
+
 fn parts_path(root: Option<&Path>, footage: &FootageItem, runs: &[(u64, u64)]) -> Option<PathBuf> {
     let (first, count) = runs.first()?;
     Some(folder(root, footage)?.join(format!("parts-{first}-{count}.mp4")))
@@ -255,17 +290,31 @@ fn moves(footage: &FootageItem, path: &Path) -> bool {
             .is_ok_and(|index| index.frame_count() > 1)
 }
 
+/// Whether the file at `path` says its pictures are interlaced.
+#[cfg(feature = "media")]
+fn has_fields(path: &Path) -> bool {
+    let source = lumit_media::MediaSource::file(path.to_path_buf());
+    lumit_media::probe::facts(&source).is_ok_and(|f| f.fields != lumit_media::Fields::Off)
+}
+
 /// Encode a stand-in of `source` at `dest`, to one side first so a file at
 /// `dest` is always a whole one.
 #[cfg(feature = "media")]
-fn encode(source: &Path, dest: &Path, parts: Option<&[(usize, usize)]>, stop: &AtomicBool) -> bool {
+fn encode(
+    source: &Path,
+    dest: &Path,
+    parts: Option<&[(usize, usize)]>,
+    smaller: Smaller,
+    stop: &AtomicBool,
+) -> bool {
     let Some(folder) = dest.parent() else {
         return false;
     };
     let name = dest.file_name().unwrap_or_default().to_string_lossy();
     let making = folder.join(format!("making-{name}"));
     let made = std::fs::create_dir_all(folder).is_ok()
-        && lumit_render::standin::transcode(source, &making, parts, stop, &mut |_, _| {}).is_ok()
+        && lumit_render::standin::transcode(source, &making, parts, smaller, stop, &mut |_, _| {})
+            .is_ok()
         && !stop.load(Ordering::Relaxed)
         && std::fs::rename(&making, dest).is_ok();
     if !made {
@@ -293,7 +342,12 @@ fn frames_of(_: &Path) -> Option<u64> {
 }
 
 #[cfg(not(feature = "media"))]
-fn encode(_: &Path, _: &Path, _: Option<&[(usize, usize)]>, _: &AtomicBool) -> bool {
+fn has_fields(_: &Path) -> bool {
+    false
+}
+
+#[cfg(not(feature = "media"))]
+fn encode(_: &Path, _: &Path, _: Option<&[(usize, usize)]>, _: Smaller, _: &AtomicBool) -> bool {
     false
 }
 
@@ -429,8 +483,9 @@ impl Footage for Carrier {
                 if !moves(item, &path) {
                     return (item.sequence.is_none()).then_some(path);
                 }
-                let dest = stand_in_path(self.root.as_deref(), item)?;
-                (dest.is_file() || encode(&path, &dest, None, stop)).then_some(dest)
+                let smaller = smaller_for(item, &path);
+                let dest = made_path(self.root.as_deref(), item, smaller)?;
+                (dest.is_file() || encode(&path, &dest, None, smaller, stop)).then_some(dest)
             }
             (Wanted::Part { first, count, .. }, state) => {
                 let dest = parts_path(self.root.as_deref(), item, &[(*first, *count)])?;
@@ -449,7 +504,7 @@ impl Footage for Carrier {
                     && own(&path)
                     && within
                     && moves(item, &path)
-                    && encode(&path, &dest, Some(&runs), stop))
+                    && encode(&path, &dest, Some(&runs), Smaller::NOT, stop))
                 .then_some(dest)
             }
             (Wanted::Original { .. }, Here::Original(path)) if give && own(&path) => Some(path),

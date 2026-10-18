@@ -106,6 +106,10 @@ pub struct VideoDecoder {
     /// (docs/impl/media-io.md §4). Diagnostic — the pixels and the pts logic
     /// are identical either way.
     hardware: bool,
+    /// The original's size, for a stand-in made smaller than the file it
+    /// stands in for. Its frames are handed back at that size, as the probe
+    /// says they are.
+    own: Option<(u32, u32)>,
 }
 
 /// Build and open a codec context for `codec`/`par`, with the D3D11VA
@@ -230,6 +234,11 @@ impl VideoDecoder {
         // is rebuilt fresh in software (fallback, not error — §4).
         let (decoder, hardware) = open_codec_ctx(&codec, &par, allow_hardware)
             .or_else(|_| open_codec_ctx(&codec, &par, false))?;
+        let coded = (
+            u32::try_from(par.width).unwrap_or(0),
+            u32::try_from(par.height).unwrap_or(0),
+        );
+        let own = crate::probe::stand_in_size(input.metadata(), coded);
         Ok(Self {
             input,
             decoder,
@@ -239,6 +248,7 @@ impl VideoDecoder {
             last: None,
             seeks: 0,
             hardware,
+            own,
         })
     }
 
@@ -272,12 +282,12 @@ impl VideoDecoder {
         let it = self.index.interpret;
         if it.is_plain() {
             let frame = self.frame_exact(n)?;
-            return convert_rgba(&frame, target_width, None);
+            return self.convert(&frame, target_width, None);
         }
         let frame = match it.pick(n, self.index.entries.len()) {
             Pick::Whole(raw) => {
                 let frame = self.frame_exact(raw)?;
-                convert_rgba(&frame, target_width, it.pixel_aspect)?
+                self.convert(&frame, target_width, it.pixel_aspect)?
             }
             // Fields are rows, so they are pulled apart at the file's own
             // size and only then scaled. The field's rows are lifted out of
@@ -313,7 +323,7 @@ impl VideoDecoder {
                 // Woven in the planes, for the same reason, and then it is a
                 // whole frame like any other.
                 match weave_planes(first, second, parity) {
-                    Some(woven) => convert_rgba(&woven, target_width, it.pixel_aspect)?,
+                    Some(woven) => self.convert(&woven, target_width, it.pixel_aspect)?,
                     None => {
                         let first = convert_rgba(first, None, None)?;
                         let second = convert_rgba(second, None, None)?;
@@ -335,6 +345,11 @@ impl VideoDecoder {
     pub fn frame_luma(&mut self, n: usize) -> Result<LumaFrame, MediaError> {
         use crate::interpret::Pick;
         let it = self.index.interpret;
+        // A smaller stand-in is measured at its original's size, so a track
+        // made on it is in the original's pixels.
+        if self.own.is_some() {
+            return Ok(luma_of(&self.frame_rgba(n, None)?));
+        }
         if it.is_plain() {
             let frame = self.frame_exact(n)?;
             return convert_luma(&frame);
@@ -352,6 +367,21 @@ impl VideoDecoder {
         // is ever slow enough to matter.
         let frame = self.frame_rgba(n, None)?;
         Ok(luma_of(&frame))
+    }
+
+    /// [`convert_rgba`], at the original's size for a smaller stand-in.
+    fn convert(
+        &self,
+        frame: &AVFrame,
+        target_width: Option<u32>,
+        pixel_aspect: Option<(u32, u32)>,
+    ) -> Result<DecodedFrame, MediaError> {
+        let Some((w, h)) = self.own else {
+            return convert_rgba(frame, target_width, pixel_aspect);
+        };
+        let size = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
+        let (dst_w, dst_h) = scaled_size(size(w), size(h), target_width, pixel_aspect);
+        convert_sized(frame, dst_w, dst_h)
     }
 
     /// Decode exactly frame `n` and hand back the picture in the shared planar

@@ -10,6 +10,11 @@
 //! softer. That is the difference from a proxy, which is smaller in pixels
 //! and needs its original beside it.
 //!
+//! The person making one can make it smaller still ([`Smaller`]). A half or
+//! quarter size one carries its original's size, which `lumit-media` reads
+//! it at, and one with fewer pictures shows each for two or four frames, so
+//! it still has every frame. Either way it keeps the original's shape.
+//!
 //! The other thing made here is the stand-in an export wants: the same
 //! whole-length file, with the frames the export reads kept at a quality
 //! fit to deliver from and every other frame black, which costs next to
@@ -26,6 +31,7 @@ use lumit_media::audio::SoundReader;
 use lumit_media::encode::{
     AudioCodec, AudioSettings, ColourTags, Encoder, Metadata, VideoCodec, VideoSettings,
 };
+use lumit_media::probe::STAND_IN_TAG;
 use lumit_media::SoundSource;
 
 /// How many bits a second a stand-in spends on each pixel of a frame, and
@@ -37,6 +43,37 @@ const STAND_IN_RATE: (f64, f64) = (400e3, 8e6);
 /// own exports spend, so a delivery made from them loses nothing to see.
 const PART_BITS: f64 = 0.35;
 const PART_RATE: (f64, f64) = (4e6, 200e6);
+
+/// The least a stand-in made smaller spends, whatever it is made of.
+const SMALLEST_RATE: f64 = 64e3;
+
+/// How much smaller than its original a stand-in is made: its size divided
+/// by `size` each way, and a new picture every `every` frames. Each is 1, 2
+/// or 4.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Smaller {
+    pub size: u32,
+    pub every: u32,
+}
+
+impl Smaller {
+    /// The original's size, a picture every frame.
+    pub const NOT: Smaller = Smaller { size: 1, every: 1 };
+
+    /// Held to 1, 2 or 4 each, as anything else would be.
+    #[must_use]
+    pub fn new(size: u32, every: u32) -> Smaller {
+        let step = |n: u32| match n {
+            0 | 1 => 1,
+            2 | 3 => 2,
+            _ => 4,
+        };
+        Smaller {
+            size: step(size),
+            every: step(every),
+        }
+    }
+}
 
 /// The sound's sample rate, and its bitrate in each kind of file.
 const SOUND_RATE: u32 = 48_000;
@@ -76,8 +113,9 @@ pub fn ranges(frames: &BTreeSet<usize>, total: usize) -> Vec<(usize, usize)> {
 }
 
 /// Make a stand-in for `source` at `dest`. With `parts`, the frames in those
-/// runs are kept at delivery quality and the rest are black. Without, every
-/// frame is kept, small.
+/// runs are kept at delivery quality and the rest are black, and `smaller`
+/// is not looked at. Without, every frame is kept, small, and `smaller`
+/// says how small.
 ///
 /// Every frame is written, in order, so the file has exactly as many as the
 /// original, at its size and its rate. `progress` is called after each, and
@@ -87,6 +125,7 @@ pub fn transcode(
     source: &Path,
     dest: &Path,
     parts: Option<&[(usize, usize)]>,
+    smaller: Smaller,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(usize, usize),
 ) -> Result<(), String> {
@@ -103,15 +142,29 @@ pub fn transcode(
     }
     let mut decoder = lumit_media::decode::VideoDecoder::open(source, index.clone())
         .map_err(|e| e.to_string())?;
+    let smaller = if parts.is_some() {
+        Smaller::NOT
+    } else {
+        smaller
+    };
+    // The size a smaller one is made at, even each way as H.264 wants.
+    let across = (smaller.size > 1)
+        .then(|| (video.width / smaller.size + 1).max(2) & !1)
+        .filter(|w| *w < video.width);
     // The first frame says what size the frames arrive in, which is the size
     // the file is opened at.
-    let first = decoder.frame_rgba(0, None).map_err(|e| e.to_string())?;
+    let first = decoder.frame_rgba(0, across).map_err(|e| e.to_string())?;
     let (width, height) = (first.width, first.height);
-    let pixels = f64::from(width) * f64::from(height) * fps.max(1.0);
+    let pictures = fps.max(1.0) / f64::from(smaller.every);
+    let pixels = f64::from(width) * f64::from(height) * pictures;
     let (bits, (least, most)) = match parts {
         Some(_) => (PART_BITS, PART_RATE),
         None => (STAND_IN_BITS, STAND_IN_RATE),
     };
+    // The floor comes down with the size and the pictures kept, or a small
+    // one of an ordinary clip would spend what a full one does.
+    let fewer = f64::from(smaller.size * smaller.size * smaller.every);
+    let least = (least / fewer).max(SMALLEST_RATE.min(least));
     let rate = (pixels * bits).clamp(least, most) as i64;
     let (fps_num, fps_den) = crate::export::fps_rational(fps);
     let settings = VideoSettings {
@@ -152,12 +205,19 @@ pub fn transcode(
             Some((SoundReader::open(&stream, SOUND_RATE).ok()?, 0))
         })
         .collect();
+    // A smaller one says what size it stands in for, which is the size it
+    // is read at.
+    let mut said = Metadata::new();
+    if across.is_some() {
+        let original = format!("{STAND_IN_TAG} {}x{}", video.width, video.height);
+        said.set(Metadata::COMMENT, &original);
+    }
     let mut encoder = Encoder::open_with_sound(
         dest,
         Some(&settings),
         sound_settings.as_ref(),
         more_sound.len(),
-        &Metadata::new(),
+        &said,
     )
     .map_err(|e| e.to_string())?;
 
@@ -165,6 +225,8 @@ pub fn transcode(
         Some(runs) => runs.iter().any(|(from, to)| (*from..*to).contains(&frame)),
         None => true,
     };
+    // A frame between two pictures of one with fewer shows the one before.
+    let held_over = |frame: usize| !frame.is_multiple_of(smaller.every as usize);
     let black: Vec<u8> = [0, 0, 0, 255].repeat(first.rgba.len() / 4);
     // The last frame that decoded, to write again where one will not.
     let mut held = first.rgba;
@@ -177,7 +239,7 @@ pub fn transcode(
         if !kept(n) {
             encoder.write_rgba(&black).map_err(|e| e.to_string())?;
         } else {
-            if n > 0 {
+            if n > 0 && !held_over(n) {
                 // A frame that will not decode in passing is asked for once
                 // more from a decoder opened afresh. One that still will not,
                 // as the tail of a recording cut short does not, is the frame
@@ -186,10 +248,10 @@ pub fn transcode(
                 let again = |n: usize| {
                     let mut fresh =
                         lumit_media::decode::VideoDecoder::open(source, index.clone()).ok()?;
-                    let frame = fresh.frame_rgba(n, None).ok()?;
+                    let frame = fresh.frame_rgba(n, across).ok()?;
                     Some((fresh, frame))
                 };
-                match decoder.frame_rgba(n, None) {
+                match decoder.frame_rgba(n, across) {
                     Ok(frame) => held = frame.rgba,
                     Err(_) => {
                         if let Some((fresh, frame)) = again(n) {
@@ -306,6 +368,7 @@ mod tests {
             &source,
             &whole,
             None,
+            Smaller::NOT,
             &AtomicBool::new(false),
             &mut |_, _| {},
         )
@@ -320,6 +383,7 @@ mod tests {
             &source,
             &parts,
             Some(&kept),
+            Smaller::NOT,
             &AtomicBool::new(false),
             &mut |_, _| {},
         )
@@ -335,6 +399,38 @@ mod tests {
             "a frame nobody asked for is black"
         );
         assert!(red(25, &mut decoder) > 100, "a frame asked for is kept");
+
+        // A smaller one is read at the original's size and has every frame,
+        // so a layer of it sits where the original's does.
+        let small = dir.path().join("standin-2-2.mp4");
+        let half = Smaller::new(2, 2);
+        transcode(
+            &source,
+            &small,
+            None,
+            half,
+            &AtomicBool::new(false),
+            &mut |_, _| {},
+        )
+        .unwrap();
+        let video = lumit_media::probe::probe(&small).unwrap().video.unwrap();
+        assert_eq!((video.width, video.height), (320, 240));
+        assert_eq!(frames(&small), frames(&source));
+        let index = crate::media_index::load_or_build_index(&small).unwrap();
+        let mut decoder = lumit_media::decode::VideoDecoder::open(&small, index).unwrap();
+        let frame = decoder.frame_rgba(7, None).unwrap();
+        assert_eq!((frame.width, frame.height), (320, 240));
+
+        // A size no stand-in could be made from is not believed: the file is
+        // read at its own.
+        let forged = dir.path().join("forged.mp4");
+        let mut said = Metadata::new();
+        said.set(Metadata::COMMENT, &format!("{STAND_IN_TAG} 16000x12000"));
+        let mut enc = Encoder::open(&forged, Some(&settings), None, &said).unwrap();
+        enc.write_rgba(&[0u8; 320 * 240 * 4]).unwrap();
+        enc.finish().unwrap();
+        let video = lumit_media::probe::probe(&forged).unwrap().video.unwrap();
+        assert_eq!((video.width, video.height), (320, 240));
     }
 
     /// **A stand-in carries every audio stream of the file it stands in
@@ -352,6 +448,7 @@ mod tests {
             &source,
             &made,
             None,
+            Smaller::NOT,
             &AtomicBool::new(false),
             &mut |_, _| {},
         )
