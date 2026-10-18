@@ -8,6 +8,24 @@ sidebar:
 A **script** is a JavaScript file that edits the open project. After Effects scripts
 (`.jsx`) run as they are.
 
+## Run one
+
+1. Choose **File ▸ Run script…**.
+2. Pick the `.js` or `.jsx` file.
+
+While it runs, a card covers the window with the script's name and **Stop**. A file the
+script asks for opens the system file dialogue, and a message it shows appears in the
+status line.
+
+The whole run is one undo step, named after the file. A script that fails or is stopped
+leaves the project as it was.
+
+When a script fails, the status line gives the reason and the line it failed on.
+
+:::note[Not built yet]
+What a script prints is not shown anywhere.
+:::
+
 ## After Effects scripts
 
 | Object | What works |
