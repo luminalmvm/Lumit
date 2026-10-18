@@ -131,6 +131,32 @@ fn timecode_tag(tags: Option<rsmpeg::avutil::AVDictionaryRef>) -> Option<String>
     (!value.is_empty()).then_some(value)
 }
 
+/// How a stand-in made smaller than its original starts its comment, which
+/// goes on with the original's size: `lumit stand-in 3840x2160`.
+pub const STAND_IN_TAG: &str = "lumit stand-in";
+
+/// The size a smaller stand-in says its original is, which it is read at,
+/// so a layer of it sits as the original's does.
+///
+/// The file came from someone else's machine, so the size is only believed
+/// when it has the file's own shape and is no more than four times as big
+/// each way, which is all a stand-in is ever made smaller by.
+pub(crate) fn stand_in_size(
+    tags: Option<rsmpeg::avutil::AVDictionaryRef>,
+    coded: (u32, u32),
+) -> Option<(u32, u32)> {
+    let tags = tags?;
+    let entry = tags.get(c"comment", None, 0)?;
+    let comment = entry.value().to_string_lossy();
+    let (w, h) = comment.strip_prefix(STAND_IN_TAG)?.trim().split_once('x')?;
+    let (w, h): (u32, u32) = (w.parse().ok()?, h.parse().ok()?);
+    let (cw, ch) = coded;
+    let within = |own: u32, coded: u32| own > coded && own <= coded * 4 + 8 && own <= 16384;
+    let shape = |w: u32, h: u32| f64::from(w) / f64::from(h.max(1));
+    let alike = (shape(w, h) / shape(cw, ch) - 1.0).abs() < 0.02;
+    (cw > 0 && ch > 0 && within(w, cw) && within(h, ch) && alike).then_some((w, h))
+}
+
 /// Read [`FileFacts`] off the container. Opens the file and decodes nothing.
 pub fn facts(src: &MediaSource) -> Result<FileFacts, MediaError> {
     // Lumit's own readers hand back a picture with alpha and no more to say.
@@ -263,9 +289,14 @@ fn probe_file(src: &MediaSource) -> Result<MediaProbe, MediaError> {
                     continue;
                 }
                 let rate = stream.avg_frame_rate;
+                let coded = (
+                    u32::try_from(par.width).unwrap_or(0),
+                    u32::try_from(par.height).unwrap_or(0),
+                );
+                let (width, height) = stand_in_size(input.metadata(), coded).unwrap_or(coded);
                 video = Some(VideoInfo {
-                    width: u32::try_from(par.width).unwrap_or(0),
-                    height: u32::try_from(par.height).unwrap_or(0),
+                    width,
+                    height,
                     fps_num: rate.num,
                     fps_den: rate.den,
                     codec: codec_name(par.codec_id),

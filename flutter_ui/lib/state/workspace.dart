@@ -979,7 +979,13 @@ class Workspace extends ChangeNotifier {
   bool shareGive = true;
   bool shareTake = true;
 
-  /// Called whenever any of the four above changes, and once they are read
+  /// How much smaller than the footage the stand-ins this computer makes
+  /// are: its size divided by [shareSize] each way, and a new picture every
+  /// [shareEvery] frames. Each is 1, 2 or 4.
+  int shareSize = 1;
+  int shareEvery = 1;
+
+  /// Called whenever any of the six above changes, and once they are read
   /// from disk: what hands them to the engine.
   VoidCallback? onShareFootage;
 
@@ -990,9 +996,11 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
-  void setShareFootage({bool? give, bool? take}) {
+  void setShareFootage({bool? give, bool? take, int? size, int? every}) {
     shareGive = give ?? shareGive;
     shareTake = take ?? shareTake;
+    shareSize = size ?? shareSize;
+    shareEvery = every ?? shareEvery;
     onShareFootage?.call();
     save();
   }
@@ -1887,6 +1895,8 @@ class Workspace extends ChangeNotifier {
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
         'share_take': shareTake,
+        'share_size': shareSize,
+        'share_every': shareEvery,
         'extension_slots': extensionSlots,
         'extension_folders': extensionFolders,
         'share_hosted': shareHosted,
@@ -2004,6 +2014,9 @@ class Workspace extends ChangeNotifier {
     shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;
     shareGive = j['share_give'] is! bool || j['share_give'] as bool;
     shareTake = j['share_take'] is! bool || j['share_take'] as bool;
+    final (size, every) = (j['share_size'], j['share_every']);
+    shareSize = const [1, 2, 4].contains(size) ? size as int : 1;
+    shareEvery = const [1, 2, 4].contains(every) ? every as int : 1;
     onShareFootage?.call();
     extensionSlots.clear();
     final slots = j['extension_slots'];

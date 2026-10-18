@@ -2328,7 +2328,11 @@ abstract class BridgeLibApi extends BaseApi {
 
   int crateApiShareShareRelayPort();
 
-  void crateApiShareShareSetFootage({required bool give, required bool take});
+  void crateApiShareShareSetFootage(
+      {required bool give,
+      required bool take,
+      required int size,
+      required int every});
 
   void crateApiShareShareSetLimits(
       {required int upKilobytes, required int downKilobytes});
@@ -19666,12 +19670,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  void crateApiShareShareSetFootage({required bool give, required bool take}) {
+  void crateApiShareShareSetFootage(
+      {required bool give,
+      required bool take,
+      required int size,
+      required int every}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_bool(give, serializer);
         sse_encode_bool(take, serializer);
+        sse_encode_u_32(size, serializer);
+        sse_encode_u_32(every, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 619)!;
       },
       codec: SseCodec(
@@ -19679,7 +19689,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         decodeErrorData: null,
       ),
       constMeta: kCrateApiShareShareSetFootageConstMeta,
-      argValues: [give, take],
+      argValues: [give, take, size, every],
       apiImpl: this,
     ));
   }
@@ -19687,7 +19697,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiShareShareSetFootageConstMeta =>
       const TaskConstMeta(
         debugName: "share_set_footage",
-        argNames: ["give", "take"],
+        argNames: ["give", "take", "size", "every"],
       );
 
   @override

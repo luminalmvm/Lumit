@@ -40,9 +40,16 @@ void shareSetLimits({required int upKilobytes, required int downKilobytes}) =>
 
 /// Whether this machine makes stand-ins of its own footage for the others
 /// (`give`), and whether it asks for a stand-in of what it lacks without
-/// being told to (`take`).
-void shareSetFootage({required bool give, required bool take}) =>
-    BridgeLib.instance.api.crateApiShareShareSetFootage(give: give, take: take);
+/// being told to (`take`). The ones it makes are its footage's size divided
+/// by `size` each way, with a new picture every `every` frames, each 1, 2
+/// or 4.
+void shareSetFootage(
+        {required bool give,
+        required bool take,
+        required int size,
+        required int every}) =>
+    BridgeLib.instance.api.crateApiShareShareSetFootage(
+        give: give, take: take, size: size, every: every);
 
 /// Whether the invite in `text` needs a password given with it. False for
 /// anything that is not an invite.

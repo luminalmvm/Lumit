@@ -21383,10 +21383,12 @@ fn wire__crate__api__share__share_set_footage_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_give = <bool>::sse_decode(&mut deserializer);
             let api_take = <bool>::sse_decode(&mut deserializer);
+            let api_size = <u32>::sse_decode(&mut deserializer);
+            let api_every = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Result::<_, ()>::Ok({
-                    crate::api::share::share_set_footage(api_give, api_take);
+                    crate::api::share::share_set_footage(api_give, api_take, api_size, api_every);
                 })?;
                 Ok(output_ok)
             })())
