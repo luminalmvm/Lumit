@@ -421,11 +421,14 @@ List<MenuEntry> axisModeRows(LumitState app, LumitUiState ui) {
             : l10n.menuSeparateAxesOf(label),
         onSelection(app, ui, (entry) {
           final now = modeOf(entry, pair);
+          // Scale goes back to linked, as it does from the row's own menu.
           entry.layer.setAxisMode(
             pair: pair,
-            mode: now == BridgeAxisMode.separated
-                ? BridgeAxisMode.combined
-                : BridgeAxisMode.separated,
+            mode: now != BridgeAxisMode.separated
+                ? BridgeAxisMode.separated
+                : pair == BridgeTransformPair.scale
+                    ? BridgeAxisMode.linked
+                    : BridgeAxisMode.combined,
           );
         }),
       ),
