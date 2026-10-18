@@ -42,6 +42,8 @@ use crate::{commands, one_step, Host, ScriptError, COMMANDS};
 
 /// The `lumit` object, built in JavaScript over the runner's own functions.
 const LUMIT_JS: &str = include_str!("lumit.js");
+/// After Effects' scripting objects, built over `lumit`.
+const AE_JS: &str = include_str!("ae.js");
 
 /// The most memory a script's values may take. Stop is what ends a script
 /// that runs away; this keeps one nobody is watching, on the command line,
@@ -49,6 +51,8 @@ const LUMIT_JS: &str = include_str!("lumit.js");
 const MAX_MEMORY: usize = 1 << 30;
 /// The most a script may read from one file.
 const MAX_READ_BYTES: u64 = 64 << 20;
+/// The most entries a script is told of in one folder.
+const MAX_LISTED: usize = 100_000;
 /// Lines of `print` kept. A loop printing for ever stops being heard here.
 const MAX_LOG_LINES: usize = 10_000;
 /// The longest line printed or alert shown, and the most the whole log
@@ -158,6 +162,10 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
     let setup = Setup {
         name,
         args: options.args,
+        path: options
+            .path
+            .as_deref()
+            .and_then(|p| std::path::absolute(p).ok()),
     };
     let stop = options.stop;
     let mut at = None;
@@ -210,6 +218,8 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
 struct Setup {
     name: String,
     args: BTreeMap<String, String>,
+    /// The script's own file, as `$.fileName` gives it.
+    path: Option<PathBuf>,
 }
 
 /// A job the script hands back to the caller's thread.
@@ -256,6 +266,43 @@ impl Desk<'_> {
         })?;
         lumit_ingress::read_to_string_capped(&full, MAX_READ_BYTES)
             .map_err(|e| ScriptError::Failed(e.to_string()))
+    }
+
+    /// Whether `path` is there and whether it is a folder. Anywhere the script
+    /// may not look, it is not there, so a script can ask before it reads.
+    fn look(&self, path: &Path) -> Value {
+        let full = match self.may_read(path) {
+            Ok(()) => path.canonicalize().ok(),
+            Err(_) => None,
+        };
+        match full {
+            Some(full) => json!({ "exists": true, "folder": full.is_dir() }),
+            None => json!({ "exists": false, "folder": false }),
+        }
+    }
+
+    /// The names in folder `path`, folders marked, in name order.
+    fn list(&self, path: &Path) -> Result<Value, ScriptError> {
+        self.may_read(path)?;
+        let full = path.canonicalize().map_err(|_| {
+            ScriptError::NotFound(format!("{} could not be found.", path.display()))
+        })?;
+        let entries = std::fs::read_dir(&full).map_err(|e| {
+            ScriptError::Failed(format!("{} could not be read: {e}.", path.display()))
+        })?;
+        let mut found: Vec<(String, bool)> = entries
+            .filter_map(Result::ok)
+            .take(MAX_LISTED)
+            .map(|e| {
+                let folder = e.file_type().is_ok_and(|t| t.is_dir());
+                (e.file_name().to_string_lossy().into_owned(), folder)
+            })
+            .collect();
+        found.sort();
+        Ok(found
+            .into_iter()
+            .map(|(name, folder)| json!({ "name": name, "folder": folder }))
+            .collect())
     }
 }
 
@@ -347,6 +394,7 @@ fn evaluate(
     let stop = stop.clone();
     runtime.set_interrupt_handler(Some(Box::new(move || stop.load(Ordering::Relaxed))));
     let context = Context::full(&runtime).map_err(broken)?;
+    let source = without_directives(source)?;
     context.with(|ctx| {
         // The command error a native call last threw, so a script that lets
         // it fly comes back with the error it was rather than its text.
@@ -360,7 +408,13 @@ fn evaluate(
                 ctx.json_parse(commands.to_string())?,
                 ctx.json_parse(json!(setup.args).to_string())?,
             ))?;
-            let value: JsValue = ctx.eval_with_options(source, options(&setup.name))?;
+            let prelude: Function = ctx.eval_with_options(AE_JS, options("<after-effects>"))?;
+            let path = setup
+                .path
+                .as_ref()
+                .map(|p| p.to_string_lossy().into_owned());
+            prelude.call::<_, ()>((n.clone(), path, cfg!(windows)))?;
+            let value: JsValue = ctx.eval_with_options(source.as_str(), options(&setup.name))?;
             if let Ok(finish) = n.get::<_, Function>("finish") {
                 finish.call::<_, ()>(())?;
             }
@@ -439,6 +493,14 @@ fn natives<'js>(
         })?,
     )?;
     n.set(
+        "exists",
+        asking(|lumit, path, _| lumit.ask(move |desk| Ok(desk.look(Path::new(&path)))))?,
+    )?;
+    n.set(
+        "list",
+        asking(|lumit, path, _| lumit.ask(move |desk| desk.list(Path::new(&path))))?,
+    )?;
+    n.set(
         "alert",
         asking(|lumit, text, _| {
             lumit.ask(move |desk| {
@@ -457,6 +519,21 @@ fn natives<'js>(
         Function::new(ctx.clone(), move |line: String| keep(&printed, line))?,
     )?;
     let thrown = thrown.clone();
+    let rate_thrown = thrown.clone();
+    n.set(
+        "rateOf",
+        Function::new(
+            ctx.clone(),
+            move |ctx: Ctx<'js>, fps: f64| -> rquickjs::Result<String> {
+                FrameRate::from_decimal(fps)
+                    .map(|r| json!({ "num": r.num(), "den": r.den() }).to_string())
+                    .ok_or_else(|| {
+                        let e = ScriptError::BadArgs(format!("{fps} is not a frame rate."));
+                        throw(&ctx, &rate_thrown, e)
+                    })
+            },
+        )?,
+    )?;
     n.set(
         "frameOn",
         Function::new(
@@ -481,6 +558,36 @@ fn frame_on(seconds: f64, num: u32, den: u32) -> Result<i64, ScriptError> {
     let t = Rational::from_f64_on_grid(seconds, Rational::FLICK_DEN)
         .map_err(|_| ScriptError::BadArgs("That time is out of range.".into()))?;
     Ok(rate.nearest_frame_at(CompTime(t)))
+}
+
+/// `source` with After Effects' `#target` lines and their like blanked, as
+/// they are not JavaScript, so the line numbers stay the script's own.
+/// `#include` pulls in another file, which a run does not.
+fn without_directives(source: &str) -> Result<String, (ScriptError, Place)> {
+    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
+    let mut out = String::with_capacity(source.len());
+    for (n, line) in source.split_inclusive('\n').enumerate() {
+        let word = line
+            .trim_start()
+            .strip_prefix('#')
+            .and_then(|rest| rest.split_whitespace().next());
+        match word {
+            Some("target" | "targetengine" | "strict" | "script" | "engine") => {
+                out.push_str(&line[line.trim_end_matches(['\r', '\n']).len()..]);
+            }
+            Some("include" | "includepath") => {
+                return Err((
+                    ScriptError::BadArgs(
+                        "#include is not supported in Lumit, which runs a script as one file."
+                            .into(),
+                    ),
+                    Some((n + 1, 1)),
+                ));
+            }
+            _ => out.push_str(line),
+        }
+    }
+    Ok(out)
 }
 
 /// Throw `error` into the script as an `Error` carrying its `code`.
