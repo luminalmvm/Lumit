@@ -36,6 +36,16 @@ type Failure = (i64, String, Option<Value>);
 /// The reply to one message, `line`, or `None` when it needs none, as a
 /// notification does. The reply is one line with no line break in it.
 pub fn answer(line: &str, host: &dyn Host) -> Option<String> {
+    reply_to(line, Ok(host))
+}
+
+/// [`answer`] while there is no project to work on: a tool call answers
+/// `why`, and everything else as usual.
+pub fn answer_without(line: &str, why: &str) -> Option<String> {
+    reply_to(line, Err(why))
+}
+
+fn reply_to(line: &str, host: Result<&dyn Host, &str>) -> Option<String> {
     let message: Value = match serde_json::from_str(line) {
         Ok(message) => message,
         Err(e) => {
@@ -101,7 +111,7 @@ fn reply(id: Value, result: Result<Value, Failure>) -> String {
     message.to_string()
 }
 
-fn outcome(method: &str, params: &Value, host: &dyn Host) -> Result<Value, Failure> {
+fn outcome(method: &str, params: &Value, host: Result<&dyn Host, &str>) -> Result<Value, Failure> {
     let capabilities = json!({ "tools": {} });
     match method {
         "initialize" => {
@@ -163,21 +173,24 @@ fn tools() -> Vec<Value> {
         .collect()
 }
 
-fn call(params: &Value, host: &dyn Host) -> Result<Value, Failure> {
+fn call(params: &Value, host: Result<&dyn Host, &str>) -> Result<Value, Failure> {
     let name = params
         .get("name")
         .and_then(Value::as_str)
         .ok_or_else(|| (-32602, "tools/call needs a tool name.".to_owned(), None))?;
     let args = params.get("arguments").cloned().unwrap_or(Value::Null);
-    let done = if name == SCRIPT_TOOL {
-        script(host, &args)
-    } else {
-        let command = COMMANDS
-            .iter()
-            .find(|c| tool_name(c.name) == name)
-            .ok_or_else(|| (-32602, format!("Unknown tool: {name}"), None))?;
+    let command = COMMANDS.iter().find(|c| tool_name(c.name) == name);
+    if command.is_none() && name != SCRIPT_TOOL {
+        return Err((-32602, format!("Unknown tool: {name}"), None));
+    }
+    let done = match (host, command) {
+        (Err(why), _) => Err(why.to_owned()),
         // Saves, footage and exports keep to the project's folder.
-        commands::run(host, Some(&Reach::project()), command.name, args).map_err(|e| e.to_string())
+        (Ok(host), Some(command)) => {
+            commands::run(host, Some(&Reach::project()), command.name, args)
+                .map_err(|e| e.to_string())
+        }
+        (Ok(host), None) => script(host, &args),
     };
     // A command that did nothing is the tool's answer, not the protocol's,
     // so the client reads why and can try again.

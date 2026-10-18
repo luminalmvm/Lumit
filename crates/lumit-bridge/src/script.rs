@@ -97,6 +97,29 @@ pub(crate) fn stop() {
     }
 }
 
+/// Take the script's place for one request from a program driving Lumit, so
+/// File > Run script waits for it, it never lands inside a script's undo
+/// step, and Stop reaches it through `stop`. `None` while a script runs.
+pub(crate) fn hold(stop: Arc<AtomicBool>) -> Option<Holding> {
+    let mut running = RUNNING.lock().ok()?;
+    if running.is_some() {
+        return None;
+    }
+    *running = Some(Running { stop, answer: None });
+    Some(Holding)
+}
+
+/// The place [`hold`] took, given back when this goes.
+pub(crate) struct Holding;
+
+impl Drop for Holding {
+    fn drop(&mut self) {
+        if let Ok(mut running) = RUNNING.lock() {
+            *running = None;
+        }
+    }
+}
+
 /// The file the running script asked for, or `None` when the person
 /// cancelled.
 pub(crate) fn answer(path: Option<PathBuf>) {
@@ -126,13 +149,7 @@ fn run_file(
     if read.is_err() || source.len() as u64 > MAX_SOURCE_BYTES {
         return finished(Vec::new(), "The script could not be read.", None);
     }
-    let host = AppHost {
-        project,
-        store,
-        export: RefCell::new(None),
-        stop: stop.clone(),
-        tell,
-    };
+    let host = AppHost::new(project, store, stop.clone(), tell);
     let choose = |title: &str, extensions: &[String]| host.choose_file(title, extensions);
     let alert = |message: &str| {
         host.say(BridgeScriptEvent::Alert {
@@ -177,8 +194,8 @@ fn finished(log: Vec<String>, error: &str, line: Option<u32>) -> BridgeScriptEve
 }
 
 /// The open project, as a script sees it.
-struct AppHost<'a> {
-    project: ProjectReference,
+pub(crate) struct AppHost<'a> {
+    pub(crate) project: ProjectReference,
     store: Arc<DocumentStore>,
     /// The export this run started last. Lumit exports one thing at a time.
     export: RefCell<Option<Export>>,
@@ -187,7 +204,24 @@ struct AppHost<'a> {
     tell: &'a dyn Fn(BridgeScriptEvent) -> bool,
 }
 
-impl AppHost<'_> {
+impl<'a> AppHost<'a> {
+    /// The open `project`, whose store is `store`, for a run that `stop`
+    /// stops and that tells the interface through `tell`.
+    pub(crate) fn new(
+        project: ProjectReference,
+        store: Arc<DocumentStore>,
+        stop: Arc<AtomicBool>,
+        tell: &'a dyn Fn(BridgeScriptEvent) -> bool,
+    ) -> Self {
+        Self {
+            project,
+            store,
+            export: RefCell::new(None),
+            stop,
+            tell,
+        }
+    }
+
     /// Tell the interface something: a message to show, a comp to open in
     /// the Viewer, a file to ask for. False when nobody is listening.
     fn say(&self, event: BridgeScriptEvent) -> bool {
@@ -405,6 +439,10 @@ impl Host for AppHost<'_> {
             comp: CompositionReference::new(self.project.id, comp),
         });
         Ok(())
+    }
+
+    fn stop_flag(&self) -> Arc<AtomicBool> {
+        self.stop.clone()
     }
 
     fn parent_ops(

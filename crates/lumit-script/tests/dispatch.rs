@@ -401,3 +401,62 @@ fn mcp_answers_in_the_shape_clients_expect() {
     let unknown = ask(json!({ "jsonrpc": "2.0", "id": 4, "method": "resources/list" }));
     assert_eq!(unknown["error"]["code"], json!(-32601));
 }
+
+// The live endpoint is the one way in from another program, so a program
+// without the secret must get nothing, and one with it a working MCP.
+#[test]
+fn the_live_endpoint_answers_only_a_program_holding_the_secret() {
+    use lumit_script::live;
+    use std::io::{BufRead, Write};
+
+    let dir = std::env::var_os("LUMIT_USER_DIRS")
+        .map_or_else(std::env::temp_dir, PathBuf::from)
+        .join(format!("live-{}", Uuid::now_v7()));
+    let file = dir.join("endpoint");
+    let (listener, secret) = live::open(&file).unwrap();
+    let host = Bare(DocumentStore::new(Document::new()));
+    let (stop, leave) = (AtomicBool::new(false), AtomicBool::new(false));
+
+    // Stops the endpoint however the checks end, or a failed one would
+    // leave the scope waiting on it for ever.
+    struct Stop<'a>(&'a AtomicBool);
+    impl Drop for Stop<'_> {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            live::serve(
+                &listener,
+                &secret,
+                &stop,
+                &leave,
+                &mut |_| {},
+                &mut |line| lumit_script::mcp::answer(line, &host),
+            );
+        });
+        let _stop = Stop(&stop);
+
+        // The right name with a secret of its own is let go after its proof.
+        let text = std::fs::read_to_string(&file).unwrap();
+        let name = text.lines().next().unwrap();
+        let wrong = dir.join("wrong");
+        let other = lumit_peer::Secret::generate().unwrap().to_handover();
+        std::fs::write(&wrong, format!("{name}\n{other}")).unwrap();
+        assert_eq!(live::connect(&wrong).err(), Some(live::Unreached::Denied));
+
+        let mut link = live::connect(&file).unwrap();
+        writeln!(
+            link.to,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"2025-06-18","capabilities":{{}},"clientInfo":{{"name":"test","version":"1"}}}}}}"#
+        )
+        .unwrap();
+        let mut reply = String::new();
+        link.from.read_line(&mut reply).unwrap();
+        let reply: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply["result"]["serverInfo"]["name"], json!("lumit"));
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+}
