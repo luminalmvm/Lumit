@@ -608,22 +608,44 @@ pub fn rasterise_paths(paths: &[BezierPath], w: u32, h: u32, sx: f64, sy: f64) -
         return coverage;
     }
 
+    // Every edge once, sorted by the top of its span, so each scanline looks
+    // only at the edges that cross it. Walking every edge for every row was
+    // most of a frame on a big shape layer: thousands of edges times thousands
+    // of rows, nearly all of them rows the art never reaches. The ends are
+    // kept as the path gave them, so each crossing is the same sum as before.
+    let top = |e: &[(f64, f64); 2]| e[0].1.min(e[1].1);
+    let mut edges: Vec<[(f64, f64); 2]> = contours
+        .iter()
+        .flat_map(|points| {
+            (0..points.len()).map(move |e| [points[e], points[(e + 1) % points.len()]])
+        })
+        .filter(|[a, b]| a.1 != b.1)
+        .collect();
+    edges.sort_by(|a, b| top(a).total_cmp(&top(b)));
+    let mut next = 0;
+    let mut active: Vec<usize> = Vec::new();
+
     // Scanline with two vertical subsamples per row.
     let mut xs: Vec<f64> = Vec::with_capacity(16);
+    let mut row_cov = vec![0.0f32; w as usize];
     for row in 0..h {
-        let mut row_cov = vec![0.0f32; w as usize];
+        let mut touched = false;
         for sub in 0..2 {
             let y = f64::from(row) + 0.25 + 0.5 * f64::from(sub);
-            xs.clear();
-            for points in &contours {
-                for e in 0..points.len() {
-                    let (x0, y0) = points[e];
-                    let (x1, y1) = points[(e + 1) % points.len()];
-                    if (y0 <= y && y1 > y) || (y1 <= y && y0 > y) {
-                        xs.push(x0 + (y - y0) / (y1 - y0) * (x1 - x0));
-                    }
-                }
+            while next < edges.len() && top(&edges[next]) <= y {
+                active.push(next);
+                next += 1;
             }
+            active.retain(|&i| edges[i][0].1.max(edges[i][1].1) > y);
+            xs.clear();
+            for &i in &active {
+                let [(x0, y0), (x1, y1)] = edges[i];
+                xs.push(x0 + (y - y0) / (y1 - y0) * (x1 - x0));
+            }
+            if xs.is_empty() {
+                continue;
+            }
+            touched = true;
             xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             for pair in xs.chunks_exact(2) {
                 let (start, end) = (pair[0].max(0.0), pair[1].min(f64::from(w)));
@@ -643,9 +665,13 @@ pub fn rasterise_paths(paths: &[BezierPath], w: u32, h: u32, sx: f64, sy: f64) -
                 }
             }
         }
+        if !touched {
+            continue;
+        }
         let base = (row * w) as usize;
-        for (px, c) in row_cov.iter().enumerate() {
+        for (px, c) in row_cov.iter_mut().enumerate() {
             coverage[base + px] = (c.clamp(0.0, 1.0) * 255.0).round() as u8;
+            *c = 0.0;
         }
     }
     coverage
