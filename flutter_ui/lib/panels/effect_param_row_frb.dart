@@ -2060,12 +2060,19 @@ class EffectPointRowFrb extends StatelessWidget {
                 key: ValueKey<String>('fx-pair-link-$id-${xParam.id}'),
                 behavior: HitTestBehavior.opaque,
                 onTap: onToggleLink,
-                child: LumitIcon(
-                  linked ? LumitIcons.link : LumitIcons.unlink,
-                  size: 10,
-                  colour: linked
-                      ? t.textPrimary
-                      : Color.lerp(t.textMuted, t.textPrimary, lit),
+                // Sized and lit like the dropper beside it, so on reads as on.
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: Center(
+                    child: LumitIcon(
+                      linked ? LumitIcons.link : LumitIcons.unlink,
+                      size: iconSize,
+                      colour: linked
+                          ? t.accent
+                          : Color.lerp(t.textMuted, t.textPrimary, lit),
+                    ),
+                  ),
                 ),
               ),
             ),
