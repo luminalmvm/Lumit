@@ -135,7 +135,13 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
               _section(t, l10n.audioSectionBeats),
               _beats(context, t, ui, comp, sounding),
               _hair(t),
-              _selectedLayer(context, t, ui, comp),
+              // The pick is its own notifier: the model does not move when
+              // a layer is picked, so this listens to it directly.
+              ValueListenableBuilder<List<LayerReference>>(
+                valueListenable: ui.selectedLayers,
+                builder: (context, _, __) =>
+                    _selectedLayer(context, t, ui, comp),
+              ),
             ],
           ),
         );
