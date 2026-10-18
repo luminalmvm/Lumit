@@ -13,8 +13,36 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+#include "utils.h"
 
 namespace {
+
+// Put on the window while Lumit is kept running in the background, which is
+// what a second start looks for (ForwardToBackgroundLumit).
+constexpr wchar_t kKeepRunningProp[] = L"LumitKeepRunning";
+
+// What the tray icon sends the window when it is clicked.
+constexpr UINT kTrayMessage = WM_APP + 1;
+
+// Marks a WM_COPYDATA as a second start's arguments.
+constexpr ULONG_PTR kOpenAskedCopy = 0x4C554D54;
+
+// This executable's full path.
+std::wstring ExePath() {
+  std::wstring path(32768, L'\0');
+  path.resize(::GetModuleFileNameW(nullptr, path.data(),
+                                   static_cast<DWORD>(path.size())));
+  return path;
+}
+
+std::wstring Utf16FromUtf8(const std::string& text) {
+  const int length = ::MultiByteToWideChar(
+      CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+  std::wstring wide(static_cast<size_t>(length > 0 ? length : 0), L'\0');
+  ::MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()),
+                        wide.data(), length);
+  return wide;
+}
 
 // The window is invisible until Flutter's first frame arrives, which is what
 // keeps a half-drawn editor off the screen. The cost of that is a start-up
@@ -88,6 +116,63 @@ void RefreshShortcutIcons(const std::wstring& icon) {
 }
 
 }  // namespace
+
+bool ForwardToBackgroundLumit() {
+  // A window carrying the mark, in a process started from this same file.
+  // Another copy of Lumit elsewhere, a nightly beside a release for instance,
+  // is left alone.
+  struct Search {
+    std::wstring exe;
+    HWND found;
+  } search{ExePath(), nullptr};
+  ::EnumWindows(
+      [](HWND hwnd, LPARAM lparam) -> BOOL {
+        auto* search = reinterpret_cast<Search*>(lparam);
+        if (!::GetPropW(hwnd, kKeepRunningProp)) {
+          return TRUE;
+        }
+        DWORD pid = 0;
+        ::GetWindowThreadProcessId(hwnd, &pid);
+        HANDLE process =
+            ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+        if (!process) {
+          return TRUE;
+        }
+        std::wstring path(32768, L'\0');
+        DWORD size = static_cast<DWORD>(path.size());
+        const bool read =
+            ::QueryFullProcessImageNameW(process, 0, path.data(), &size);
+        ::CloseHandle(process);
+        path.resize(read ? size : 0);
+        if (_wcsicmp(path.c_str(), search->exe.c_str()) != 0) {
+          return TRUE;
+        }
+        search->found = hwnd;
+        return FALSE;
+      },
+      reinterpret_cast<LPARAM>(&search));
+  if (!search.found) {
+    return false;
+  }
+  // The arguments one after another, each ended by a nought.
+  std::string asked;
+  for (const std::string& argument : GetCommandLineArguments()) {
+    asked += argument;
+    asked += '\0';
+  }
+  COPYDATASTRUCT copy{kOpenAskedCopy, static_cast<DWORD>(asked.size()),
+                      asked.data()};
+  // Windows only lets the program just used put a window in front, which is
+  // this one, so it hands that on.
+  DWORD pid = 0;
+  ::GetWindowThreadProcessId(search.found, &pid);
+  ::AllowSetForegroundWindow(pid);
+  DWORD_PTR took = 0;
+  return ::SendMessageTimeoutW(search.found, WM_COPYDATA, 0,
+                               reinterpret_cast<LPARAM>(&copy),
+                               SMTO_ABORTIFHUNG, 5000, &took) != 0 &&
+         took != 0;
+}
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -165,6 +250,10 @@ bool FlutterWindow::OnCreate() {
                       reinterpret_cast<LPARAM>(icon));
         ::SendMessage(GetHandle(), WM_SETICON, ICON_SMALL,
                       reinterpret_cast<LPARAM>(icon));
+        // The tray wears the window's icon.
+        if (tray_shown_) {
+          ShowTray(true);
+        }
         result->Success();
       });
 
@@ -192,14 +281,77 @@ bool FlutterWindow::OnCreate() {
           ::ShowWindow(hwnd, ::IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
         } else if (method == "close") {
           ::PostMessage(hwnd, WM_CLOSE, 0, 0);
+        } else if (method == "background") {
+          // Settings: whether closing the window keeps Lumit running in the
+          // tray (lib/state/background.dart), and the tray menu's words.
+          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+          auto text = [args](const char* key) -> std::wstring {
+            if (args) {
+              auto found = args->find(flutter::EncodableValue(key));
+              if (found != args->end()) {
+                if (const auto* value = std::get_if<std::string>(&found->second)) {
+                  return Utf16FromUtf8(*value);
+                }
+              }
+            }
+            return L"";
+          };
+          auto flag = [args](const char* key) {
+            if (!args) {
+              return false;
+            }
+            auto found = args->find(flutter::EncodableValue(key));
+            const bool* value = found == args->end()
+                                    ? nullptr
+                                    : std::get_if<bool>(&found->second);
+            return value && *value;
+          };
+          keep_running_ = flag("keep");
+          tray_open_ = text("open");
+          tray_quit_ = text("quit");
+          if (keep_running_) {
+            ::SetPropW(hwnd, kKeepRunningProp, reinterpret_cast<HANDLE>(1));
+          } else {
+            ::RemovePropW(hwnd, kKeepRunningProp);
+          }
+          ShowTray(keep_running_);
+          // Started at sign-in with nothing now to come back from: the window
+          // is the only way back, so it shows.
+          if (!keep_running_ && start_hidden_) {
+            Reveal();
+          }
+        } else if (method == "show") {
+          Reveal();
         }
         result->Success(flutter::EncodableValue(::IsZoomed(hwnd) != 0));
+      });
+
+  // What a second start passed on (WM_COPYDATA below), until Dart takes it,
+  // as macOS's runner does with what the Finder asks for.
+  flutter::MethodChannel<> open(flutter_controller_->engine()->messenger(),
+                                "lumit/open",
+                                &flutter::StandardMethodCodec::GetInstance());
+  open.SetMethodCallHandler(
+      [this](const flutter::MethodCall<>& call,
+             std::unique_ptr<flutter::MethodResult<>> result) {
+        if (call.method_name() != "take") {
+          result->NotImplemented();
+          return;
+        }
+        flutter::EncodableList asked;
+        for (const std::string& argument : open_waiting_) {
+          asked.emplace_back(argument);
+        }
+        open_waiting_.clear();
+        result->Success(flutter::EncodableValue(asked));
       });
 
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
+    if (!start_hidden_) {
+      this->Show();
+    }
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -216,6 +368,7 @@ void FlutterWindow::OnDestroy() {
   // Tear the texture bridge down first: it holds a registrar wrapper over the
   // engine, so it must go before the controller (and its engine) do.
   viewer_texture_bridge_ = nullptr;
+  ShowTray(false);
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -228,6 +381,15 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Kept running in the background, closing the window only hides it. Asked
+  // before Flutter, which would otherwise take the close for a quit. Quit in
+  // the tray goes through Dart instead, and never comes here.
+  if (message == WM_CLOSE && keep_running_) {
+    ::ShowWindow(hwnd, SW_HIDE);
+    Tell("lumit/window", "hidden");
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
@@ -245,7 +407,7 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
         // Already up is the ordinary case: the first frame arrived and showed
         // it. Only a window nobody has seen is shown from here, so one the
         // user has since minimised is left where they put it.
-        if (!::IsWindowVisible(hwnd)) {
+        if (!::IsWindowVisible(hwnd) && !start_hidden_) {
           this->Show();
         }
         return 0;
@@ -254,7 +416,127 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case kTrayMessage:
+      if (lparam == WM_LBUTTONUP) {
+        Reveal();
+      } else if (lparam == WM_RBUTTONUP) {
+        TrayMenu();
+      }
+      return 0;
+    case WM_COPYDATA: {
+      // A second start's arguments (ForwardToBackgroundLumit).
+      const auto* copy = reinterpret_cast<const COPYDATASTRUCT*>(lparam);
+      if (copy->dwData != kOpenAskedCopy) {
+        break;
+      }
+      const std::string all(static_cast<const char*>(copy->lpData),
+                            copy->cbData);
+      bool background = false;
+      const size_t before = open_waiting_.size();
+      for (size_t at = 0; at < all.size();) {
+        size_t end = all.find('\0', at);
+        if (end == std::string::npos) {
+          end = all.size();
+        }
+        const std::string argument = all.substr(at, end - at);
+        if (argument == "--background") {
+          background = true;
+        } else if (!argument.empty()) {
+          open_waiting_.push_back(argument);
+        }
+        at = end + 1;
+      }
+      // Another start at sign-in has nothing to show.
+      if (!background) {
+        Reveal();
+      }
+      if (open_waiting_.size() > before) {
+        Tell("lumit/open", "open");
+      }
+      return TRUE;
+    }
+  }
+
+  // Explorer started again and the tray with it, empty.
+  static const UINT taskbar_created =
+      ::RegisterWindowMessageW(L"TaskbarCreated");
+  if (message == taskbar_created && tray_shown_) {
+    tray_shown_ = false;
+    ShowTray(true);
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+}
+
+void FlutterWindow::Reveal() {
+  const HWND hwnd = GetHandle();
+  if (start_hidden_) {
+    // The first showing, which knows whether the window was left maximised.
+    start_hidden_ = false;
+    Show();
+  } else if (::IsIconic(hwnd)) {
+    ::ShowWindow(hwnd, SW_RESTORE);
+  } else {
+    ::ShowWindow(hwnd, SW_SHOW);
+  }
+  ::SetForegroundWindow(hwnd);
+  if (flutter_controller_) {
+    flutter_controller_->ForceRedraw();
+  }
+}
+
+void FlutterWindow::ShowTray(bool shown) {
+  NOTIFYICONDATAW tray{};
+  tray.cbSize = sizeof(tray);
+  tray.hWnd = GetHandle();
+  tray.uID = 1;
+  if (!shown) {
+    if (tray_shown_) {
+      ::Shell_NotifyIconW(NIM_DELETE, &tray);
+    }
+    tray_shown_ = false;
+    return;
+  }
+  tray.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+  tray.uCallbackMessage = kTrayMessage;
+  tray.hIcon = reinterpret_cast<HICON>(
+      ::SendMessage(GetHandle(), WM_GETICON, ICON_SMALL, 0));
+  if (!tray.hIcon) {
+    tray.hIcon = static_cast<HICON>(::LoadImageW(
+        ::GetModuleHandle(nullptr), MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+        ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0));
+  }
+  wcscpy_s(tray.szTip, L"Lumit");
+  if (::Shell_NotifyIconW(tray_shown_ ? NIM_MODIFY : NIM_ADD, &tray)) {
+    tray_shown_ = true;
+  }
+}
+
+void FlutterWindow::TrayMenu() {
+  const HWND hwnd = GetHandle();
+  HMENU menu = ::CreatePopupMenu();
+  ::AppendMenuW(menu, MF_STRING, 1, tray_open_.c_str());
+  ::AppendMenuW(menu, MF_STRING, 2, tray_quit_.c_str());
+  POINT at;
+  ::GetCursorPos(&at);
+  // Without this the menu stays up after a click somewhere else.
+  ::SetForegroundWindow(hwnd);
+  const UINT chosen = ::TrackPopupMenu(
+      menu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, at.x, at.y, 0,
+      hwnd, nullptr);
+  ::DestroyMenu(menu);
+  if (chosen == 1) {
+    Reveal();
+  } else if (chosen == 2) {
+    Tell("lumit/window", "quit");
+  }
+}
+
+void FlutterWindow::Tell(const char* channel, const char* method) {
+  if (!flutter_controller_) {
+    return;
+  }
+  flutter::MethodChannel<>(flutter_controller_->engine()->messenger(), channel,
+                           &flutter::StandardMethodCodec::GetInstance())
+      .InvokeMethod(method, nullptr);
 }

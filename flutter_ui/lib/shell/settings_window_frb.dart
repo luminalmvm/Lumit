@@ -57,6 +57,7 @@ import '../l10n/engine_labels.dart' show addonTask;
 import '../l10n/strings.dart';
 import '../state/addons.dart';
 import '../state/app_icon.dart';
+import '../state/background.dart';
 import '../state/expression_language.dart';
 import '../state/extensions.dart';
 import '../state/external_links.dart';
@@ -874,6 +875,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         workspace.setAutoUpdate(true);
         workspace.setDiscordStatus(DiscordStatus.app);
         ui.pushDiscordStatus();
+        workspace.setKeepRunning(false);
+        unawaited(applyBackground(workspace));
         ui.setLanguage(null);
       case SettingsPage.account:
         // Nothing here has a shipped value to go back to.
@@ -1038,6 +1041,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _flag(t, 'settings-welcome-on-launch', l10n.settingsWelcomeOnLaunch,
                 value: ui.workspace.showWelcomeOnLaunch,
                 set: ui.workspace.setShowWelcomeOnLaunch),
+            // Closing the window leaves Lumit in the tray, for the phones.
+            _flag(t, 'settings-keep-running', l10n.settingsKeepRunning,
+                value: ui.workspace.keepRunning, set: (on) {
+              ui.workspace.setKeepRunning(on);
+              unawaited(applyBackground(ui.workspace));
+            }),
             // The project a new one starts as a copy of. The path is the
             // row's own second line, and Clear goes back to an empty project.
             _row(
