@@ -197,3 +197,148 @@ while (true) {}
     // Nothing of the script's is left to redo either.
     assert!(!host.store().can_redo());
 }
+
+/// An After Effects script keys a camera, and the camera in Lumit faces the
+/// way it does in After Effects, which turns by Rx · Ry · Rz where Lumit turns
+/// by Ry · Rx · Rz.
+#[test]
+fn an_after_effects_script_keys_a_camera() {
+    let host = Bare(DocumentStore::new(Document::new()));
+    let script = r#"#target aftereffects
+app.beginUndoGroup("Camera");
+var comp = app.project.items.addComp("Shot", 1920, 1080, 1, 2, 29.97);
+var cam = comp.layers.addCamera("Cam", [960, 540]);
+cam.autoOrient = AutoOrientType.NO_AUTO_ORIENT;
+var t = cam.property("ADBE Transform Group");
+var times = [0, 1 / 29.97, 2 / 29.97];
+t.property("ADBE Position").setValuesAtTimes(times, [[0, 0, -100], [10, 20, -90], [20, 40, -80]]);
+t.property("ADBE Rotate X").setValuesAtTimes(times, [10, 20, 30]);
+t.property("Y Rotation").setValuesAtTimes(times, [40, 50, 60]);
+t.property("ADBE Rotate Z").setValue(5);
+var zoom = cam.property("ADBE Camera Options Group").property("ADBE Camera Zoom");
+zoom.setValuesAtTimes(times, [1000, 1100, 1200]);
+zoom.setInterpolationTypeAtKey(2, KeyframeInterpolationType.HOLD);
+app.endUndoGroup();
+"#;
+    let report = run(
+        &host,
+        script,
+        RunOptions {
+            name: "Camera.jsx".into(),
+            ..RunOptions::default()
+        },
+    );
+    report.result.unwrap();
+
+    let comp = call(&host, "comp.get", json!({ "comp": "Shot" }));
+    assert_eq!(comp["frame_rate"], json!({ "num": 30000, "den": 1001 }));
+    assert_eq!(comp["frames"], json!(60));
+    let cam = call(
+        &host,
+        "layer.get",
+        json!({ "comp": "Shot", "layer": "Cam" }),
+    );
+    assert_eq!(cam["two_node"], json!(false));
+    let p = &cam["properties"];
+    let at = |key: &Value, n: usize| key[n]["value"].as_f64().unwrap();
+    assert_eq!(p["position"][2].as_array().unwrap().len(), 3);
+    assert_eq!(at(&p["position"][1], 2), 40.0);
+    assert_eq!(p["zoom"][1]["hold"], json!(true));
+    assert_eq!(at(&p["zoom"], 2), 1200.0);
+    let faces = |p: &Value, ae: [(f64, f64, f64); 3]| {
+        for (n, ae) in ae.iter().enumerate() {
+            let turned = (
+                at(&p["rotation_x"], n),
+                at(&p["rotation_y"], n),
+                at(&p["rotation"], n),
+            );
+            let want = Mat::rx(ae.0).mul(Mat::ry(ae.1)).mul(Mat::rz(ae.2));
+            let got = lumit_core::camera::rotation(turned);
+            for (r, row) in got.iter().enumerate() {
+                for (c, v) in row.iter().enumerate() {
+                    assert!((v - want.0[r][c]).abs() < 1e-9, "key {n}: {turned:?}");
+                }
+            }
+        }
+    };
+    faces(p, [(10.0, 40.0, 5.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)]);
+    // The whole run is one step, named after the script.
+    let history = host.store().history();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].name, "Camera.jsx");
+
+    // X and Y keyed apart from Z, as Lumit can leave them. A second run
+    // reads every axis at every key, and reads the rotation back in After
+    // Effects' order, so turning Z alone leaves X and Y as they were.
+    call(
+        &host,
+        "layer.keys",
+        json!({ "comp": "Shot", "layer": "Cam", "property": "position", "keys": [
+            { "time": 0, "value": [0, 0] },
+            { "time": 3, "value": [30, 60] },
+        ]}),
+    );
+    let again = r#"var comp;
+for (var i = 1; i <= app.project.numItems; i++) {
+    if (app.project.item(i).name === "Shot") comp = app.project.item(i);
+}
+var t = comp.layer("Cam").transform;
+var read = [t.position.numKeys].concat(t.position.keyValue(2), t.xRotation.keyValue(1), t.yRotation.keyValue(1));
+t.zRotation.setValueAtTime(0, 15);
+read"#;
+    let report = run(&host, again, RunOptions::default());
+    let read: Vec<f64> = report
+        .result
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
+    for (got, want) in read.iter().zip([4.0, 10.0, 20.0, -90.0, 10.0, 40.0]) {
+        assert!((got - want).abs() < 1e-9, "{read:?}");
+    }
+    let cam = call(
+        &host,
+        "layer.get",
+        json!({ "comp": "Shot", "layer": "Cam" }),
+    );
+    faces(
+        &cam["properties"],
+        [(10.0, 40.0, 15.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)],
+    );
+}
+
+struct Mat([[f64; 3]; 3]);
+
+impl Mat {
+    fn turn(deg: f64, axis: usize) -> Mat {
+        let (s, c) = deg.to_radians().sin_cos();
+        let (a, b) = ((axis + 1) % 3, (axis + 2) % 3);
+        let mut m = [[0.0; 3]; 3];
+        m[axis][axis] = 1.0;
+        m[a][a] = c;
+        m[b][b] = c;
+        m[a][b] = -s;
+        m[b][a] = s;
+        Mat(m)
+    }
+    fn rx(deg: f64) -> Mat {
+        Mat::turn(deg, 0)
+    }
+    fn ry(deg: f64) -> Mat {
+        Mat::turn(deg, 1)
+    }
+    fn rz(deg: f64) -> Mat {
+        Mat::turn(deg, 2)
+    }
+    fn mul(self, o: Mat) -> Mat {
+        let mut m = [[0.0; 3]; 3];
+        for (r, row) in m.iter_mut().enumerate() {
+            for (c, v) in row.iter_mut().enumerate() {
+                *v = (0..3).map(|k| self.0[r][k] * o.0[k][c]).sum();
+            }
+        }
+        Mat(m)
+    }
+}
