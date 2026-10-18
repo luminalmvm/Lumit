@@ -33,6 +33,7 @@ pub mod project;
 pub mod project_item;
 pub mod retime;
 pub mod roto;
+pub mod script;
 pub mod share;
 pub mod shell;
 pub mod solid;
