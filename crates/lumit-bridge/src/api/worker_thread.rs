@@ -2869,6 +2869,13 @@ fn build_viewer_renderer(
         );
         renderer.set_memory_budgets(vram, ram);
         crate::framecache::size_to_machine(vram, ram);
+        // Decoded footage gets an eighth of the same budget. It is counted
+        // against it, so the governor trims it when memory runs short.
+        renderer.set_decode_budget(
+            usize::try_from(ram / 8)
+                .unwrap_or(usize::MAX)
+                .max(lumit_render::decode::DEFAULT_DECODE_CACHE_BYTES),
+        );
     }
     // This is the *Viewer's* renderer, so a Lens flare's bake is made beside
     // the frame rather than inside it: picking a lens shows the lens

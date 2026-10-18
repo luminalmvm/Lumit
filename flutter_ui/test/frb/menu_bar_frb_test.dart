@@ -272,10 +272,13 @@ void main() {
       );
 
       await choose(tester, 'File', 'Import footage…');
-      // The files are read off the interface's thread.
+      // The files are read off the interface's thread. The clips can land
+      // before the import returns, so wait for its busy card to come down too.
       await settleFrb(tester,
           until: () =>
-              allItems(p.state).whereType<ItemReference_Footage>().length >= 2);
+              allItems(p.state).whereType<ItemReference_Footage>().length >=
+                  2 &&
+              p.state.busyProgress.value == null);
 
       final names = allItems(p.state)
           .whereType<ItemReference_Footage>()
