@@ -20114,5 +20114,80 @@
         "type": "String"
       }
     }
+  },
+  "menuRunScript": "Run script…",
+  "@menuRunScript": {
+    "description": "Item in the File menu. Opens a file chooser for a script, then runs it on the open project."
+  },
+  "fileTypeScript": "Script",
+  "@fileTypeScript": {
+    "description": "A file type in the system's Open dialogue for File › Run script: a JavaScript .js file or an After Effects .jsx script."
+  },
+  "scriptRunning": "Running {name}",
+  "@scriptRunning": {
+    "description": "On the card over the window while a script runs. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptStop": "Stop",
+  "@scriptStop": {
+    "description": "Button on the card over the window while a script runs. Stops the script and takes back what it did."
+  },
+  "scriptRan": "Ran {name}",
+  "@scriptRan": {
+    "description": "Bottom-strip notice after a script ran to the end. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptStopped": "Stopped {name}",
+  "@scriptStopped": {
+    "description": "Bottom-strip notice after Stop ended a script. What it did was taken back. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptFailed": "{name}: {error}",
+  "@scriptFailed": {
+    "description": "Bottom-strip notice when a script failed. {name} is the script's file name without its extension, {error} is the reason in English, as the script engine gives it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptFailedAt": "{name}, line {line}: {error}",
+  "@scriptFailedAt": {
+    "description": "Bottom-strip notice when a script failed at a line of its own. {name} is the script's file name without its extension, {line} the line number in the script, {error} the reason in English, as the script engine gives it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptCouldNotRun": "{name} could not run",
+  "@scriptCouldNotRun": {
+    "description": "Bottom-strip notice when a script could not be started at all. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }
