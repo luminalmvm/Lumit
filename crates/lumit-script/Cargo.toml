@@ -9,6 +9,10 @@ publish = false
 
 [dependencies]
 lumit-core = { path = "../lumit-core" }
+lumit-ingress = { path = "../lumit-ingress" }
+# The JavaScript engine scripts run in. Its std and os modules are never
+# loaded, so a script reaches only what the runner hands it.
+rquickjs = "0.14"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
