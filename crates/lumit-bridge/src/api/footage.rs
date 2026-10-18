@@ -91,6 +91,15 @@ pub struct BridgeSequenceRate {
     pub fps_den: u32,
 }
 
+/// A footage item's In and Out marks, in seconds of its own time. An end left
+/// unmarked is `None`, which reads as the item's own start or end.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeFootageTrim {
+    pub trim_in: Option<crate::api::effect::BridgeRational>,
+    pub trim_out: Option<crate::api::effect::BridgeRational>,
+}
+
 impl FootageReference {
     #[frb(ignore)]
     pub fn new(project: Uuid, id: Uuid) -> FootageReference {
@@ -450,6 +459,62 @@ impl FootageReference {
         if let Some(src) = repointed {
             crate::probe::request(src);
         }
+        Ok(())
+    }
+
+    /// The stretch marked with In and Out on the source side, which is what
+    /// this item brings into a composition.
+    #[frb(sync)]
+    pub fn trim(&self) -> Result<BridgeFootageTrim, BridgeError> {
+        let state = self.project()?;
+        let state = state.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        let trim = doc.footage_trims.get(&self.id);
+        let crossing = |t: Option<lumit_core::time::Rational>| {
+            t.map(|t| crate::api::effect::BridgeRational {
+                num: t.num(),
+                den: t.den(),
+            })
+        };
+        Ok(BridgeFootageTrim {
+            trim_in: crossing(trim.and_then(|t| t.in_point)),
+            trim_out: crossing(trim.and_then(|t| t.out_point)),
+        })
+    }
+
+    /// Mark the stretch this item brings into a composition, one undo step a
+    /// press. Both ends `None` clears the marks, and marks the item already
+    /// has are not written again.
+    #[frb(sync)]
+    pub fn set_trim(
+        &self,
+        trim_in: Option<crate::api::effect::BridgeRational>,
+        trim_out: Option<crate::api::effect::BridgeRational>,
+    ) -> Result<(), BridgeError> {
+        let read = |t: Option<crate::api::effect::BridgeRational>| {
+            t.map(|t| {
+                lumit_core::time::Rational::new(t.num, t.den).map_err(|_| BridgeError::InvalidTime)
+            })
+            .transpose()
+        };
+        let trim = lumit_core::model::FootageTrim {
+            in_point: read(trim_in)?,
+            out_point: read(trim_out)?,
+            extra: serde_json::Map::new(),
+        };
+        let state = self.project()?;
+        let proj = state.write().map_err(|_| BridgeError::WriteFailed)?;
+        let unmarked = trim.in_point.is_none() && trim.out_point.is_none();
+        let now = proj.store.snapshot().footage_trims.get(&self.id).cloned();
+        if now.as_ref() == Some(&trim) || (unmarked && now.is_none()) {
+            return Ok(());
+        }
+        proj.store
+            .commit(lumit_core::Op::SetFootageTrim {
+                id: self.id,
+                trim: Some(Box::new(trim)),
+            })
+            .map_err(BridgeError::OpError)?;
         Ok(())
     }
 

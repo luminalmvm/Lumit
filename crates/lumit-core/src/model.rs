@@ -295,6 +295,41 @@ impl FootageItem {
     }
 }
 
+/// The stretch of a footage item marked with In and Out on the source side,
+/// in seconds of the item's own time (AE: the Footage panel's In and Out).
+/// It is what the item brings with it into a composition. Out is where the
+/// stretch stops, so the frame standing at Out is not in it, and an unset end
+/// is the item's own.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FootageTrim {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_point: Option<Rational>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_point: Option<Rational>,
+    /// Unknown fields from newer Lumit versions, preserved on load/save
+    /// (docs/10-FILE-FORMAT.md §1.1 — mandatory forward compatibility).
+    #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl FootageTrim {
+    /// The stretch of an item `length` long that this keeps, as source times
+    /// `(in, out)`: unset ends read as the item's own, and both are held inside
+    /// it. `None` when that leaves nothing.
+    #[must_use]
+    pub fn span(&self, length: Rational) -> Option<(Rational, Rational)> {
+        if length <= Rational::ZERO {
+            return None;
+        }
+        let start = self
+            .in_point
+            .unwrap_or(Rational::ZERO)
+            .clamp(Rational::ZERO, length);
+        let end = self.out_point.unwrap_or(length).clamp(start, length);
+        (end > start).then_some((start, end))
+    }
+}
+
 /// A footage item's **proxy**: a second media reference standing in for the
 /// original while you work (docs/03-DATA-MODEL.md §3a).
 ///
@@ -3192,6 +3227,10 @@ pub struct Document {
     /// no line for it.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub proxies: std::collections::BTreeMap<Uuid, ProxyRef>,
+    /// Footage items' In and Out marks, by item id ([`FootageTrim`]). A map
+    /// beside the items for the reason `proxies` above is one.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub footage_trims: std::collections::BTreeMap<Uuid, FootageTrim>,
     /// The project-wide *use proxies* master switch (docs/03 §3a).
     ///
     /// On — the default, and what a file written before proxies existed loads
@@ -3626,6 +3665,7 @@ impl Document {
             auto_folders: AutoFolders::default(),
             item_labels: std::collections::BTreeMap::new(),
             proxies: std::collections::BTreeMap::new(),
+            footage_trims: std::collections::BTreeMap::new(),
             use_proxies: true,
             packed: std::collections::BTreeMap::new(),
             auto_pack: false,

@@ -2478,11 +2478,20 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final length = facts.duration.num > 0 && facts.duration.den > 0
           ? facts.duration
           : const BridgeRational(num: 5, den: 1);
+      // A video brings the stretch marked on it with In and Out.
+      BridgeFootageTrim? trim;
+      if (LumitUiState.framesOf(facts) > 1) {
+        try {
+          trim = f.trim();
+        } catch (_) {}
+      }
+      final start = trim?.trimIn ?? const BridgeRational(num: 0, den: 1);
+      final end = trim?.trimOut ?? length;
       final result = _cut(() => comp.cutPlace(
             target: target,
             footage: f,
-            sourceIn: const BridgeRational(num: 0, den: 1),
-            sourceOut: length,
+            sourceIn: start,
+            sourceOut: end,
             atFrame: frame,
             insert: false,
             linked: _linked,
@@ -2491,7 +2500,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _afterCut(result);
       if (result != BridgeCutResult.done) return;
       // Several files land one after another, in the order they were picked.
-      frame += (length.num / length.den * ui.model.fps).round();
+      frame += ((end.num / end.den - start.num / start.den) * ui.model.fps)
+          .round();
     }
   }
 

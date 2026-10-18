@@ -2276,6 +2276,9 @@ impl CompositionReference {
     #[frb(sync)]
     /// Place `footage` in this composition as a new layer.
     ///
+    /// A video marked with In and Out on the source side brings only that
+    /// stretch, its In on the composition's start.
+    ///
     /// `as_sequence` is Settings ▸ Interface ▸ Editing ▸ *Video arrives as a
     /// Sequence layer*, forwarded by the frontend. On, media that
     /// **runs** — a video stream longer than a single frame — arrives as a
@@ -2353,7 +2356,24 @@ impl CompositionReference {
             // have to know what the file turned out to hold. A deliberate
             // "sound only" placement says so instead.
             let audio_only = audio_only || !Self::has_picture(&p, f);
-            let sequenced = as_sequence && !audio_only && Self::runs_as_video(&p, f);
+            let runs = Self::runs_as_video(&p, f);
+            let sequenced = as_sequence && !audio_only && runs;
+
+            // The stretch marked on the source side, when a video has one: the
+            // layer starts on its In and lasts to its Out, in whole frames.
+            let zero = lumit_core::time::Rational::ZERO;
+            let marked = doc
+                .footage_trims
+                .get(&item)
+                .filter(|_| runs)
+                .and_then(|trim| trim.span(out))
+                .and_then(|(start, end)| {
+                    let length = lumit_core::time::CompTime(end.checked_sub(start).ok()?);
+                    let frames = comp.frame_rate.nearest_frame_at(length).max(1);
+                    let length = comp.frame_rate.time_of_frame(frames).ok()?.0;
+                    Some((start, start.checked_add(length).ok()?, length))
+                });
+            let (source_in, source_out, out) = marked.unwrap_or((zero, out, out));
 
             // What the layer sounds, and what each row split off beside it
             // does: nothing beside it unless the file has several streams and
@@ -2368,8 +2388,8 @@ impl CompositionReference {
             // as the picture, so the two are linked as a cut's are.
             let link = (sequenced && !rest.is_empty()).then(Uuid::now_v7);
             let clip_of = |plays: &lumit_core::model::AudioStreams| {
-                let zero = lumit_core::time::Rational::ZERO;
-                let mut clip = Clip::new(ClipSource::Footage(item), zero, out, zero, out);
+                let mut clip =
+                    Clip::new(ClipSource::Footage(item), source_in, source_out, zero, out);
                 clip.audio_streams = plays.clone();
                 clip.link = link;
                 clip
@@ -2392,6 +2412,10 @@ impl CompositionReference {
             layer.audio_only = audio_only;
             if !sequenced {
                 layer.audio_streams = first;
+                // Layer time is source time, so the In lands on comp 0.
+                if let Ok(back) = source_in.checked_neg() {
+                    layer.start_offset = lumit_core::time::CompTime(back);
+                }
             }
             crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
 

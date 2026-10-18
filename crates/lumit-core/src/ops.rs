@@ -96,6 +96,13 @@ pub enum Op {
         id: Uuid,
         proxy: Option<Box<crate::model::ProxyRef>>,
     },
+    /// Mark the stretch of a footage item it brings into a composition, or
+    /// clear the marks (`None`). Refused on anything but footage, and on an
+    /// Out that is not after the In.
+    SetFootageTrim {
+        id: Uuid,
+        trim: Option<Box<crate::model::FootageTrim>>,
+    },
     /// Flip one item's *use proxy* switch, leaving the proxy attached. Refuses
     /// on an item with no proxy: a switch on nothing would sit in the document
     /// meaning nothing, and the panel would have asked about a control it is
@@ -850,6 +857,7 @@ impl Op {
             Op::SetAutoPack { .. } => "Pack automatically",
             Op::RenameItem { .. } => "Rename item",
             Op::SetItemLabel { .. } => "Set item colour",
+            Op::SetFootageTrim { .. } => "Mark In and Out",
             Op::AddLayer { .. } => "Add layer",
             Op::RemoveLayer { .. } => "Delete layer",
             Op::ReorderLayer { .. } => "Move layer",
@@ -1206,6 +1214,29 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::RenameItem {
                 id: *id,
                 name: previous,
+            })
+        }
+        Op::SetFootageTrim { id, trim } => {
+            if !matches!(doc.item(*id), Some(crate::model::ProjectItem::Footage(_))) {
+                return Err(OpError::UnknownItem);
+            }
+            if let Some(t) = trim {
+                if let (Some(start), Some(end)) = (t.in_point, t.out_point) {
+                    if end <= start {
+                        return Err(OpError::InvalidSpan);
+                    }
+                }
+            }
+            // Marks with neither end set are no marks, and leave no entry.
+            let previous = match trim {
+                Some(t) if t.in_point.is_some() || t.out_point.is_some() => {
+                    doc.footage_trims.insert(*id, (**t).clone())
+                }
+                _ => doc.footage_trims.remove(id),
+            };
+            Ok(Op::SetFootageTrim {
+                id: *id,
+                trim: previous.map(Box::new),
             })
         }
         Op::SetItemLabel { id, label } => {

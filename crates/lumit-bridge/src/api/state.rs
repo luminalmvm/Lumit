@@ -664,6 +664,8 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         // A colour tag tints the item's row icon and feeds the panel's filter
         // chips, so the panel has to hear about it.
         | Op::SetItemLabel { .. }
+        // The marks are organisation like a colour tag: no picture changes.
+        | Op::SetFootageTrim { .. }
         | Op::SetMediaRef { .. }
         // A run of stills read at another rate is another picture at every
         // frame that reads it, and the panel's rate column says so, so the

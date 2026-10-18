@@ -14333,6 +14333,10 @@
   "@histSetSequenceRate": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histMarkInAndOut": "Mark In and Out",
+  "@histMarkInAndOut": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here. The In and Out marks set on a piece of footage in the Viewer's source side."
+  },
   "histSetProxy": "Set proxy",
   "@histSetProxy": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
