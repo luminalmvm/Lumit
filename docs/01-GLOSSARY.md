@@ -157,7 +157,7 @@ Not interchangeable.
 | **Model pack** | One addon holding one model |
 | **Extension** | A panel somebody else made: a folder with a web page and an `extension.json`, shown in the dock. It reaches Lumit only through what its manifest asked to be allowed. Not *plugin*, which is an effect |
 | **Preset** | Saved effects, properties or animation |
-| **Script** | A Rhai file that edits a project through the same commands the command line and MCP use |
+| **Script** | A JavaScript file that edits a project through the same commands the command line and MCP use. After Effects `.jsx` scripts run as they are |
 
 ## 9. Words we don't use
 
