@@ -51,7 +51,7 @@ impl TimeBase {
     /// The clock for a capture's decimal frame rate, or `None` when the number
     /// is absent or not a rate at all.
     pub(crate) fn of_fps(fps: Option<f64>) -> Option<Self> {
-        frame_rate_of(fps?).map(Self::new)
+        FrameRate::from_decimal(fps?).map(Self::new)
     }
 
     /// The clock a composition falls back to when its own rate did not arrive
@@ -85,31 +85,6 @@ impl TimeBase {
     pub(crate) fn duration(&self, d: f64) -> Duration {
         Duration(self.seconds(d))
     }
-}
-
-/// The exact rate behind a decimal frame rate.
-///
-/// After Effects reports 23.976023976023978 for what is really 24000/1001, and
-/// a project that stored the decimal would drift a frame every twenty minutes.
-/// So an NTSC-family rate is recognised first (the decimal times 1001/1000
-/// comes out whole), then a whole rate, and anything else is kept to a
-/// thousandth — which covers the hand-typed rates AE also allows.
-pub(crate) fn frame_rate_of(fps: f64) -> Option<FrameRate> {
-    if !fps.is_finite() || fps <= 0.0 || fps > 10_000.0 {
-        return None;
-    }
-    // The tolerance is loose (a thousandth of a frame) because the decimal
-    // arrives rounded — a capture may say 29.97 rather than the full
-    // 29.970029970029970. It is still far tighter than the gap to any whole
-    // rate: 25 × 1.001 misses a whole number by 0.025, twenty-five times over.
-    let ntsc = fps * 1.001;
-    if (ntsc - ntsc.round()).abs() < 1e-3 && ntsc.round() >= 1.0 {
-        return FrameRate::new((ntsc.round() as u32).saturating_mul(1000), 1001).ok();
-    }
-    if (fps - fps.round()).abs() < 1e-9 {
-        return FrameRate::new(fps.round() as u32, 1).ok();
-    }
-    FrameRate::new((fps * 1000.0).round() as u32, 1000).ok()
 }
 
 #[cfg(test)]
