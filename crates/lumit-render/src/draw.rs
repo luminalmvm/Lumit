@@ -33,6 +33,9 @@ pub struct MatteDraw {
     pub rotation_x_deg: f32,
     pub rotation_y_deg: f32,
     pub three_d: bool,
+    /// The matte source's parents, as [`CompLayerDraw::pre`] carries a
+    /// layer's, so a parented matte moves with them.
+    pub pre: Option<[[f32; 4]; 4]>,
     pub luma: bool,
     pub inverted: bool,
     /// The matte source's own effect stack, resolved at the matte's layer time
