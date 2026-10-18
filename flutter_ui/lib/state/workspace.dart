@@ -793,6 +793,10 @@ class Workspace extends ChangeNotifier {
   /// default, since a project's name can be somebody else's secret.
   DiscordStatus discordStatus = DiscordStatus.app;
 
+  /// Whether other programs on this computer may drive Lumit through its
+  /// live endpoint. Off until the person turns it on.
+  bool liveEndpoint = false;
+
   /// Whether the welcome screen opens on launch.
   ///
   /// On by default. Off is for somebody who always starts from the same
@@ -1342,6 +1346,11 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setLiveEndpoint(bool on) {
+    liveEndpoint = on;
+    settingsChanged();
+  }
+
   /// Choose the project every new one starts as a copy of, or none.
   void setProjectTemplate(String path) {
     projectTemplate = path;
@@ -1873,6 +1882,7 @@ class Workspace extends ChangeNotifier {
         'nightly_updates': nightlyUpdates,
         'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
+        'live_endpoint': liveEndpoint,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
         'last_update_check_ms': lastUpdateCheckMs,
@@ -1978,6 +1988,7 @@ class Workspace extends ChangeNotifier {
     // By name. Absent, or a name no build wrote, is the shipped default.
     discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
         DiscordStatus.app;
+    liveEndpoint = j['live_endpoint'] as bool? ?? false;
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
