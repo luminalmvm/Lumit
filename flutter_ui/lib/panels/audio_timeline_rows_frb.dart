@@ -21,6 +21,7 @@ import '../widgets/controls.dart';
 import 'layer_fold_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'timeline_metrics_frb.dart';
+import 'timeline_extras_frb.dart' show rowSelectionFill;
 import 'timeline_outline_row_frb.dart' show RowRenameField;
 
 /// The lane-mode chip's own column, wide enough for *Spectral*.
@@ -255,6 +256,9 @@ class AudioTrackOutlineRow extends StatelessWidget {
   /// whole lane row is carried, and a new drag must not spend it.
   final VoidCallback? onResizeStart;
 
+  /// A double-click on that edge: back to the usual height.
+  final VoidCallback? onResizeReset;
+
   const AudioTrackOutlineRow({
     super.key,
     required this.comp,
@@ -272,6 +276,7 @@ class AudioTrackOutlineRow extends StatelessWidget {
     required this.onChanged,
     this.onResize,
     this.onResizeStart,
+    this.onResizeReset,
   });
 
   /// One switch cell, drawn and written exactly as the layer Timeline's outline
@@ -334,7 +339,9 @@ class AudioTrackOutlineRow extends StatelessWidget {
     final switches = info.switches;
     return SizedBox(
       height: track.laneHeight,
-      child: Stack(children: [
+      child: AudioRowGround(
+        selected: selected && !track.dimmed,
+        child: Stack(children: [
         Positioned.fill(
             child: Padding(
           padding: const EdgeInsets.only(
@@ -375,17 +382,29 @@ class AudioTrackOutlineRow extends StatelessWidget {
             right: 0,
             bottom: 0,
             height: 4,
-            child: MouseRegion(
+            // Lit under the pointer, as the Cut timeline's edge is, so the
+            // four pixels say they can be taken hold of. A double-click puts
+            // the track back to its usual height.
+            child: HoverMark(
               cursor: SystemMouseCursors.resizeUpDown,
-              child: Listener(
-                key: ValueKey<String>('atl-resize-${track.id}'),
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: (_) => onResizeStart?.call(),
-                onPointerMove: (event) => onResize!(event.delta.dy),
+              builder: (context, lit) => GestureDetector(
+                onDoubleTap: onResizeReset,
+                child: Listener(
+                  key: ValueKey<String>('atl-resize-${track.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (_) => onResizeStart?.call(),
+                  onPointerMove: (event) => onResize!(event.delta.dy),
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                        height: 2, color: t.accent.withValues(alpha: lit)),
+                  ),
+                ),
               ),
             ),
           ),
       ]),
+      ),
     );
   }
 
@@ -564,6 +583,52 @@ class AudioTrackHeaderRow extends StatelessWidget {
               width: audioTrackChipWidth,
               child: kicker(l10n.columnLane, align: Alignment.center)),
         ],
+      ),
+    );
+  }
+}
+
+/// The ground under a track's head: the selection fill when the track is
+/// picked, and a faint wash under the pointer, both easing in and out as the
+/// layer Timeline's rows do.
+class AudioRowGround extends StatefulWidget {
+  final bool selected;
+  final Widget child;
+
+  const AudioRowGround({super.key, required this.selected, required this.child});
+
+  @override
+  State<AudioRowGround> createState() => _AudioRowGroundState();
+}
+
+class _AudioRowGroundState extends State<AudioRowGround> {
+  bool _over = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    final motion = scope.motion;
+    final spec = widget.selected
+        ? motion.mark
+        : _over
+            ? motion.hoverIn
+            : motion.hoverOut;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _over = true),
+      onExit: (_) => setState(() => _over = false),
+      child: AnimatedContainer(
+        duration: spec.duration,
+        curve: spec.curve,
+        decoration: BoxDecoration(
+          color: widget.selected
+              ? rowSelectionFill(t)
+              : hoverTint(t, _over ? 0.5 : 0),
+          borderRadius: t.shape == ThemeShape.lantern
+              ? BorderRadius.circular(t.tokens.controlRadius)
+              : null,
+        ),
+        child: widget.child,
       ),
     );
   }
