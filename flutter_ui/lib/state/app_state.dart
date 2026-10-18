@@ -1293,12 +1293,14 @@ class LumitState extends ChangeNotifier {
   /// or dropping six on the panel, is one action the user took, so it is one
   /// Ctrl-Z. The engine reads the files off the interface's thread and files
   /// them together, and a layered document comes in as a composition of its
-  /// layers.
+  /// layers. [bins] puts each path in the project folder of that name, as
+  /// `Shoot/Day 1`, which is how an imported folder keeps its shape.
   ///
   /// A big file takes a while to read, so a card goes up over the shell once
   /// it has, with a Cancel that leaves the project as it was. One import at a
   /// time: a second asked for while one runs is refused.
-  Future<bool> importFootagePaths(List<String> paths) async {
+  Future<bool> importFootagePaths(List<String> paths,
+      {List<String> bins = const []}) async {
     final project = this.project;
     if (project == null || paths.isEmpty) return false;
     if (_importing || opening.value || busy.value != null) return false;
@@ -1306,7 +1308,8 @@ class LumitState extends ChangeNotifier {
     try {
       final imported = await withBusyCard(
         l10n.importingFiles(paths.length),
-        (progress) => project.importFiles(paths: paths, onProgress: progress),
+        (progress) => project.importFiles(
+            paths: paths, bins: bins, onProgress: progress),
         cancel: cancelImport,
         cancelLabel: l10n.cancelImport,
         after: const Duration(milliseconds: 300),

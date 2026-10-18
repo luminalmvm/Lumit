@@ -21,7 +21,7 @@ import 'shell.dart';
 import 'solid.dart';
 import 'state.dart';
 
-// These functions are ignored because they are not marked as `pub`: `file_footage`, `footage_from_disk`, `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
+// These functions are ignored because they are not marked as `pub`: `bin_folder`, `file_footage`, `file_into`, `footage_from_disk`, `import_while`, `new_comp_ops`, `new_comp_with`, `next_comp_name_in`, `of`, `place_layers`, `save_with`, `to_model`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `state`
 
@@ -548,14 +548,21 @@ class ProjectReference {
   /// composition ([`Self::import_layers`]) and any other as footage
   /// ([`Self::import_footage`]). This is the call the Import command makes.
   ///
+  /// `bins` keeps an imported folder's shape. Beside each path it names the
+  /// folder that file was found in, from the imported folder down, as
+  /// `Shoot/Day 1`. Those folders are made in the project and the footage is
+  /// filed in them. A blank bin, or no bins at all, leaves it at the root.
+  ///
   /// Not sync. Every file is read before the project is touched, which is
   /// the slow part. `on_progress` hears the fraction of the files read, and
   /// [`crate::api::import::cancel_import`] stops it between two files with
   /// the project left as it was.
   Future<BridgeImported> importFiles(
-          {required List<String> paths, RustStreamSink<double>? onProgress}) =>
+          {required List<String> paths,
+          required List<String> bins,
+          RustStreamSink<double>? onProgress}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceImportFiles(
-          that: this, paths: paths, onProgress: onProgress);
+          that: this, paths: paths, bins: bins, onProgress: onProgress);
 
   /// Record `path` as a footage item, as one undo step.
   ///

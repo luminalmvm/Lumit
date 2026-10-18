@@ -10953,6 +10953,10 @@
   "@menuImportFootage": {
     "description": "Item in the File menu's Import submenu — opens the file chooser for video, image and audio files. Also the command palette's name for the same command."
   },
+  "menuImportFolder": "Import folder…",
+  "@menuImportFolder": {
+    "description": "Item in the File menu, under Import footage. Opens a folder chooser, then imports the footage in that folder and every folder inside it, keeping the folders as folders in the project."
+  },
   "aeBundleFromAep": "That folder holds an After Effects project file. Import the project itself with File › Import › After Effects project, or export a bundle from inside After Effects: open the project there, run the Lumit Bridge script (lumit-bridge.jsx, File › Scripts › Run script file), and import the folder it writes.",
   "@aeBundleFromAep": {
     "description": "Status line notice when the Bridge bundle folder chooser was pointed at a folder holding an .aep instead of a bundle. Names both routes; lumit-bridge.jsx is a file name and stays untranslated."
