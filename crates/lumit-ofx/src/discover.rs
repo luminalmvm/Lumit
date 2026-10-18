@@ -54,11 +54,12 @@ use crate::schema::schema_of;
 /// The frame size the shared-memory ring is built for when a bundle's broker is
 /// spawned at scan time.
 ///
-/// The scan happens before any composition is open, so there is no comp size
-/// to size the ring from. 1080p is the honest guess: it is the commonest
-/// delivery and it leaves the ring fifteen slots deep. The first bigger frame
-/// regrows it (docs/impl/ofx-host.md §4).
-pub const SCAN_FRAME: (usize, usize) = (1920, 1080);
+/// One pixel, so the scan's ring is a few kilobytes. The ring is a real file,
+/// and at 1080p every installed bundle held half a gigabyte of disk for the
+/// whole session, used or not: about 70 GB for a big plugin collection. The
+/// first real frame regrows it to the comp's size, so only the plugins in use
+/// take that room.
+pub const SCAN_FRAME: (usize, usize) = (1, 1);
 
 /// Which side of a process boundary a discovered plugin runs on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
