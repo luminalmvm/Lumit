@@ -29,7 +29,7 @@ use crate::api::{
 };
 
 /// The longest script read, far past any written by hand.
-const MAX_SOURCE_BYTES: u64 = 16 << 20;
+pub(crate) const MAX_SOURCE_BYTES: u64 = 16 << 20;
 
 /// The script that is running, if one is: how to stop it, and where the
 /// file it is waiting for goes.

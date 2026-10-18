@@ -30,7 +30,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 pub use commands::COMMANDS;
-pub use script::{run, RunError, RunOptions, RunReport};
+pub use script::{run, Limits, RunError, RunOptions, RunReport};
 
 /// What a command needs from the program it runs in. Lumit has one, and the
 /// command line has its own.

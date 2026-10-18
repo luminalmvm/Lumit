@@ -1,0 +1,22 @@
+[package]
+name = "lumit-cli"
+version.workspace = true
+edition = "2021"
+license = "GPL-3.0-only"
+# Never goes to crates.io: these crates are the application, and they
+# reference each other by path (docs/05-ARCHITECTURE.md).
+publish = false
+
+[[bin]]
+# The name the packaging puts beside the bridge library. Spelled here so
+# that renaming the crate cannot quietly rename the file.
+name = "lumit-cli"
+path = "src/main.rs"
+
+# Only a launcher: the command line itself is in the bridge library the app
+# already ships (lumit-bridge's cli.rs), so this stays a few hundred KB.
+[dependencies]
+libloading = "0.8"
+
+[lints]
+workspace = true

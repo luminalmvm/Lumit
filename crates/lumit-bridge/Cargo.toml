@@ -72,6 +72,8 @@ lumit-project = { path = "../lumit-project" }
 lumit-share = { path = "../lumit-share" }
 # File > Run script: the commands and the script runner behind them.
 lumit-script = { path = "../lumit-script" }
+# The command line reads the script it is given with a size cap.
+lumit-ingress = { path = "../lumit-ingress" }
 # Installed extensions: reading a manifest, and the folder they live in.
 lumit-extensions = { path = "../lumit-extensions" }
 # The realtime preview-tier controller lives here as a pure,
