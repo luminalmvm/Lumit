@@ -25,12 +25,7 @@ use uuid::Uuid;
 /// Shared with the frb API rather than copied: a second set of layer-seeding
 /// defaults would drift, and a footage layer added through the new bridge would
 /// then land in a different place from one added through the old.
-pub(crate) fn centred_transform(
-    nat_w: f64,
-    nat_h: f64,
-    comp_w: u32,
-    comp_h: u32,
-) -> TransformGroup {
+pub fn centred_transform(nat_w: f64, nat_h: f64, comp_w: u32, comp_h: u32) -> TransformGroup {
     use lumit_core::anim::Property;
     TransformGroup {
         anchor_x: Property::fixed(nat_w * 0.5),
@@ -45,7 +40,7 @@ pub(crate) fn centred_transform(
 /// the After Effects 50 mm zoom behind the comp centre looking down +z, the
 /// point of interest is the centre, and the focus is on that plane. A camera
 /// made this way changes no picture. `solve_link` makes it a solved camera.
-pub(crate) fn fresh_camera(
+pub fn fresh_camera(
     comp: &lumit_core::model::Composition,
     name: String,
     solve_link: Option<Uuid>,
@@ -77,7 +72,7 @@ pub(crate) fn fresh_camera(
 /// switches are the model defaults — exactly as the egui add-layer paths build.
 ///
 /// Shared with the frb API for the same reason as [`centred_transform`].
-pub(crate) fn base_layer(
+pub fn base_layer(
     name: String,
     kind: LayerKind,
     out: Rational,
@@ -149,10 +144,7 @@ pub(crate) fn base_layer(
 /// because Pre-compose asks with the layers it is packing away left out. The
 /// switch is only ever set, never cleared: a pasted layer that was soloed where
 /// it was copied from stays soloed.
-pub(crate) fn solo_on_arrival<'a>(
-    layer: &mut Layer,
-    mut existing: impl Iterator<Item = &'a Layer>,
-) {
+pub fn solo_on_arrival<'a>(layer: &mut Layer, mut existing: impl Iterator<Item = &'a Layer>) {
     let audio_only = layer.audio_only;
     if !audio_only && !layer.can_adjust() {
         return;
@@ -163,7 +155,7 @@ pub(crate) fn solo_on_arrival<'a>(
 /// The ops that guarantee `kind`'s auto-filing folder exists, plus its id —
 /// `lumit-ui`'s `ensure_auto_folder_ops`, tracked by id so renaming or nesting
 /// the folder keeps the habit.
-pub(crate) fn ensure_auto_folder_ops(
+pub fn ensure_auto_folder_ops(
     doc: &lumit_core::model::Document,
     kind: AutoFolderKind,
 ) -> (Uuid, Vec<Op>) {
@@ -203,11 +195,7 @@ pub(crate) fn ensure_auto_folder_ops(
 
 /// The op that files `item` into `folder` (appended). The folder may have been
 /// created earlier in the same batch, so its children start empty then.
-pub(crate) fn file_into_folder_op(
-    doc: &lumit_core::model::Document,
-    folder: Uuid,
-    item: Uuid,
-) -> Op {
+pub fn file_into_folder_op(doc: &lumit_core::model::Document, folder: Uuid, item: Uuid) -> Op {
     let mut children = doc
         .folder(folder)
         .map(|f| f.children.clone())
@@ -222,7 +210,7 @@ pub(crate) fn file_into_folder_op(
 /// Two callers ask for exactly this: **New solid**, which then adds a layer
 /// pointing at it, and the Modes column's adjustment toggle turned back off,
 /// which has to hand an adjustment layer a picture of its own again.
-pub(crate) fn white_solid_ops(
+pub fn white_solid_ops(
     doc: &lumit_core::model::Document,
     width: u32,
     height: u32,
@@ -265,7 +253,7 @@ pub(crate) fn white_solid_ops(
 /// Shared with the frb surface (`api::effect::list_effects`) rather than
 /// restated there, so the two frontends cannot disagree about a category key.
 /// **It therefore has to move rather than die when v0 is deleted.**
-pub(crate) fn fx_category_key(cat: lumit_core::fx::FxCategory) -> &'static str {
+pub fn fx_category_key(cat: lumit_core::fx::FxCategory) -> &'static str {
     use lumit_core::fx::FxCategory;
     match cat {
         FxCategory::BlurSharpen => "blur_sharpen",
@@ -292,7 +280,7 @@ pub(crate) fn fx_category_key(cat: lumit_core::fx::FxCategory) -> &'static str {
 /// and `outside` are copies of moving layers that a layer left outside leans
 /// on. Each map takes the original's id to its copy's on that side.
 #[derive(Default)]
-pub(crate) struct LinkCopies {
+pub struct LinkCopies {
     pub inside: Vec<Layer>,
     pub inside_ids: std::collections::HashMap<Uuid, Uuid>,
     pub outside: Vec<Layer>,
@@ -300,7 +288,7 @@ pub(crate) struct LinkCopies {
 }
 
 impl LinkCopies {
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.inside.is_empty() && self.outside.is_empty()
     }
 }
@@ -310,7 +298,7 @@ impl LinkCopies {
 /// A copy is hidden and silent, so the picture keeps one of each layer, and
 /// it takes its parent chain with it: a parent that is not on the copy's side
 /// is copied too.
-pub(crate) fn link_copies(layers: &[Layer], moving: &[Uuid]) -> LinkCopies {
+pub fn link_copies(layers: &[Layer], moving: &[Uuid]) -> LinkCopies {
     use std::collections::HashMap;
 
     fn links(layer: &Layer) -> impl Iterator<Item = Uuid> + '_ {
@@ -381,10 +369,7 @@ pub(crate) fn link_copies(layers: &[Layer], moving: &[Uuid]) -> LinkCopies {
 /// Hand `f` every composition id `comp` names: a Precomp layer's, a Sequence
 /// clip's, a node graph Read box's (which may be any project item) and a Node
 /// graph effect's. What `f` writes back is what the comp then names.
-pub(crate) fn visit_comp_refs(
-    comp: &mut lumit_core::model::Composition,
-    f: &mut dyn FnMut(&mut Uuid),
-) {
+pub fn visit_comp_refs(comp: &mut lumit_core::model::Composition, f: &mut dyn FnMut(&mut Uuid)) {
     use lumit_core::comp_graph::GraphNode;
     use lumit_core::fx::effects::node_graph;
 
@@ -437,7 +422,7 @@ pub(crate) fn visit_comp_refs(
 }
 
 /// The compositions `comp` nests directly, each once, in the order met.
-pub(crate) fn nested_comps(
+pub fn nested_comps(
     doc: &lumit_core::model::Document,
     comp: &lumit_core::model::Composition,
 ) -> Vec<Uuid> {
@@ -455,7 +440,7 @@ pub(crate) fn nested_comps(
 /// names one of them inside `comps` (a parent, a matte, a layer parameter, a
 /// wire, a box's place) follows it to the new id. What they name outside
 /// keeps pointing where it did. The comps' own ids are left alone.
-pub(crate) fn fresh_ids(comps: &mut [lumit_core::model::Composition]) -> Option<()> {
+pub fn fresh_ids(comps: &mut [lumit_core::model::Composition]) -> Option<()> {
     use serde_json::Value;
     use std::collections::HashMap;
 
