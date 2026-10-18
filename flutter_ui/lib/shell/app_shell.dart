@@ -610,6 +610,15 @@ class _LumitAppViewState extends State<LumitAppView> {
     if (event is KeyRepeatEvent && _pressedOnce(action)) {
       return KeyEventResult.handled;
     }
+    // The source side keeps its own time, so with it in front the transport
+    // keys play and step the clip and leave the composition alone.
+    final front = ui.views.active;
+    if (ui.activePanel == Panel.viewer &&
+        front != null &&
+        front.mode == ViewMode.footage &&
+        ui.driveSource(front, action)) {
+      return KeyEventResult.handled;
+    }
 
     var handled = true;
     switch (action) {

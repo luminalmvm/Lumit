@@ -1458,8 +1458,16 @@ class _SourceBarState extends State<_SourceBar>
     super.didChangeDependencies();
     final ui = Provider.of<LumitUiState>(context, listen: false);
     if (identical(ui, _ui)) return;
+    _letGo();
+    // Space plays this side while it is in front.
+    _ui = ui
+      ..playing.addListener(_onTransport)
+      ..sourcePlayToggle = _toggle;
+  }
+
+  void _letGo() {
     _ui?.playing.removeListener(_onTransport);
-    _ui = ui..playing.addListener(_onTransport);
+    if (_ui?.sourcePlayToggle == _toggle) _ui!.sourcePlayToggle = null;
   }
 
   @override
@@ -1471,7 +1479,7 @@ class _SourceBarState extends State<_SourceBar>
 
   @override
   void dispose() {
-    _ui?.playing.removeListener(_onTransport);
+    _letGo();
     if (_ticker.isActive && _sound) audioStop();
     _ticker.dispose();
     super.dispose();

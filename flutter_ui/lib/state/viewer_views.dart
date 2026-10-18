@@ -329,6 +329,16 @@ class ViewerViews extends ChangeNotifier {
 
   void setLayout(PaneId pane, ViewLayout layout) {
     if (layoutOf(pane) == layout) return;
+    // A narrower layout drops views from the end, so views of a file go there
+    // first and the composition is what stays.
+    final ids = paneViews[pane];
+    if (ids != null && layout.views < ids.length) {
+      bool isFootage(String id) => byId(id)?.mode == ViewMode.footage;
+      final footage = ids.where(isFootage).toList();
+      ids
+        ..removeWhere(isFootage)
+        ..addAll(footage);
+    }
     paneLayouts[pane] = layout;
     forPane(pane);
     notifyListeners();
