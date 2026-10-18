@@ -36,9 +36,65 @@ import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'audio_meters_feed.dart';
+import 'graph_maths.dart' show rationalSeconds;
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'mixer_panel_frb.dart' show PanPot, panLabel;
 import 'placeholder.dart';
+
+/// The fade commands' silence, the engine's own floor
+/// (`lumit_audio::mix::VOLUME_FLOOR_DB`).
+const double _fadeFloorDb = -100;
+
+/// A fade the fade commands wrote at one end of a layer: the index of its
+/// first key, how long it runs, its shape, and the level it rises to.
+typedef AudioFade = ({
+  int first,
+  double seconds,
+  BridgeFadeShape shape,
+  double level,
+});
+
+/// The fade at the layer's in point ([rising]) or out point, read off its
+/// Volume keys, or null when that end has none.
+///
+/// A fade is two neighbouring keys, silence on the edge and the level on the
+/// inside, which is all the fade commands write. The shape is read back from
+/// the two sides they set: straight at both ends is Linear, eased only at the
+/// loud end is Exponential, and anything else Ease. [slack] is how far from
+/// the edge the silent key may sit, since the edge is read in whole frames.
+AudioFade? audioFadeOf(
+  BridgeScalar volume, {
+  required double edgeSeconds,
+  required bool rising,
+  required double slack,
+}) {
+  if (volume is! BridgeScalar_Keyframed) return null;
+  final keys = volume.field0;
+  for (var i = 0; i + 1 < keys.length; i++) {
+    final quiet = rising ? keys[i] : keys[i + 1];
+    final loud = rising ? keys[i + 1] : keys[i];
+    if ((rationalSeconds(quiet.time) - edgeSeconds).abs() > slack) continue;
+    if (quiet.value > _fadeFloorDb + 0.1 || loud.value <= quiet.value) {
+      continue;
+    }
+    final quietStraight = (rising ? quiet.interpOut : quiet.interpIn)
+        is BridgeSideInterp_Linear;
+    final loudStraight =
+        (rising ? loud.interpIn : loud.interpOut) is BridgeSideInterp_Linear;
+    return (
+      first: i,
+      seconds:
+          (rationalSeconds(keys[i + 1].time) - rationalSeconds(keys[i].time))
+              .abs(),
+      shape: quietStraight
+          ? (loudStraight ? BridgeFadeShape.linear : BridgeFadeShape.exponential)
+          : BridgeFadeShape.ease,
+      level: loud.value,
+    );
+  }
+  return null;
+}
 
 /// The panel's two columns: the words, then the well each row edits.
 const double audioLabelWidth = 74;
@@ -651,11 +707,10 @@ class _SelectedLayerBlock extends StatefulWidget {
 }
 
 class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
-  /// The fade wells' seconds — panel state until a commit writes the keys.
+  /// How long a fade is made when the layer has none at that end yet. Where it
+  /// has one, the wells read the fade itself.
   double _fadeInSeconds = 0.5;
   double _fadeOutSeconds = 0.5;
-  BridgeFadeShape _fadeInShape = BridgeFadeShape.ease;
-  BridgeFadeShape _fadeOutShape = BridgeFadeShape.ease;
 
   /// The pot's live reading while it is being turned, or null at rest — the
   /// Mixer strip's own shape: the drag shows here and commits once on release.
@@ -680,6 +735,22 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
             (pan is BridgeScalar_Static
                 ? pan.field0
                 : sampledScalar(pan, timeOfFrame(widget.comp, frame)));
+        // The fades the layer already has, read off its Volume keys, so the
+        // wells and chips say what is there rather than what was last typed.
+        final fps = ui.model.fps;
+        final slack = fps > 0 ? 0.5 / fps + 0.002 : 0.002;
+        final fadeIn = fps <= 0
+            ? null
+            : audioFadeOf(volume,
+                edgeSeconds: info.inFrame.toInt() / fps,
+                rising: true,
+                slack: slack);
+        final fadeOut = fps <= 0
+            ? null
+            : audioFadeOf(volume,
+                edgeSeconds: info.outFrame.toInt() / fps,
+                rising: false,
+                slack: slack);
         return Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
           child: Column(
@@ -778,28 +849,20 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 t,
                 key: 'fade-in',
                 label: l10n.audioFadeIn,
-                seconds: _fadeInSeconds,
-                shape: _fadeInShape,
-                onSeconds: (v) => setState(() => _fadeInSeconds = v),
-                onShape: (s) => setState(() => _fadeInShape = s),
-                apply: () {
-                  layer.fadeIn(seconds: _fadeInSeconds, shape: _fadeInShape);
-                  widget.onChanged();
-                },
+                rising: true,
+                fade: fadeIn,
+                seconds: fadeIn?.seconds ?? _fadeInSeconds,
+                onDefault: (v) => _fadeInSeconds = v,
               ),
               const SizedBox(height: 6),
               _fadeRow(
                 t,
                 key: 'fade-out',
                 label: l10n.audioFadeOut,
-                seconds: _fadeOutSeconds,
-                shape: _fadeOutShape,
-                onSeconds: (v) => setState(() => _fadeOutSeconds = v),
-                onShape: (s) => setState(() => _fadeOutShape = s),
-                apply: () {
-                  layer.fadeOut(seconds: _fadeOutSeconds, shape: _fadeOutShape);
-                  widget.onChanged();
-                },
+                rising: false,
+                fade: fadeOut,
+                seconds: fadeOut?.seconds ?? _fadeOutSeconds,
+                onDefault: (v) => _fadeOutSeconds = v,
               ),
               const SizedBox(height: 10),
               ],
@@ -824,26 +887,25 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// A fade well and its three curve chips: the well holds the
-  /// length, a chip picks the shape, and either commits the keyframe pair
-  /// there and then — running it again reshapes the same fade.
+  /// A fade well and its three curve chips. The well holds the length and a
+  /// chip the shape, and either writes the fade there and then. A chip is lit
+  /// only while the layer has a fade at that end, and a length of 0 takes the
+  /// fade away.
   Widget _fadeRow(
     LumitTheme t, {
     required String key,
     required String label,
+    required bool rising,
+    required AudioFade? fade,
     required double seconds,
-    required BridgeFadeShape shape,
-    required ValueChanged<double> onSeconds,
-    required ValueChanged<BridgeFadeShape> onShape,
-    required VoidCallback apply,
+    required ValueChanged<double> onDefault,
   }) {
+    final shape = fade?.shape;
     Widget chip(String text, BridgeFadeShape option) => HoverMark(
           builder: (context, lit) => GestureDetector(
             key: ValueKey('$key-${option.name}'),
-            onTap: () {
-              onShape(option);
-              apply();
-            },
+            onTap: () => _writeFade(
+                rising: rising, fade: fade, seconds: seconds, shape: option),
             child: AnimatedContainer(
               duration: ThemeScope.of(context).motion.mark.duration,
               curve: ThemeScope.of(context).motion.mark.curve,
@@ -886,8 +948,12 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
             suffix: ' s',
             speed: 0.02,
             onChanged: (v) {
-              onSeconds(v.toDouble());
-              apply();
+              if (fade == null && v > 0) onDefault(v.toDouble());
+              _writeFade(
+                  rising: rising,
+                  fade: fade,
+                  seconds: v.toDouble(),
+                  shape: shape ?? BridgeFadeShape.ease);
             },
           ),
         ),
@@ -896,6 +962,39 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
         chip(l10n.fadeShapeExponential, BridgeFadeShape.exponential),
       ],
     );
+  }
+
+  /// Write a fade at one end, as one undo step. The old fade's pair of keys
+  /// comes off first, so a shorter fade does not leave the old far key behind
+  /// and the new one rises to the layer's real level rather than to a point
+  /// halfway up the old ramp.
+  void _writeFade({
+    required bool rising,
+    required AudioFade? fade,
+    required double seconds,
+    required BridgeFadeShape shape,
+  }) {
+    final layer = widget.entry.layer;
+    final volume = widget.entry.info.volumeDb;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      try {
+        if (fade != null && volume is BridgeScalar_Keyframed) {
+          final rest = [...volume.field0]..removeRange(fade.first, fade.first + 2);
+          layer.setVolumeDb(
+              value: rest.isEmpty
+                  ? BridgeScalar.static_(fade.level)
+                  : BridgeScalar.keyframed(rest));
+        }
+        if (seconds > 0) {
+          rising
+              ? layer.fadeIn(seconds: seconds, shape: shape)
+              : layer.fadeOut(seconds: seconds, shape: shape);
+        }
+      } catch (_) {
+        // A fade longer than the layer, or a locked layer: nothing written.
+      }
+    });
+    widget.onChanged();
   }
 
   void _commitVolume(BridgeScalar scalar, double value, int frame) {
