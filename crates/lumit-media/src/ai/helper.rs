@@ -515,7 +515,7 @@ fn cap_own_memory() {}
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-    use super::{cap_own_memory, hold_to, own_address_space, own_footprint, MEMORY_CAP};
+    use super::{cap_own_memory, hold_to, own_address_space, own_footprint, MEMORY_CAP, WATCH};
     use std::process::Command;
     use std::time::Duration;
 
@@ -536,6 +536,9 @@ mod tests {
             piece.resize(16 << 20, 1);
             taken.push(std::hint::black_box(piece));
             println!("{}", own_footprint().unwrap() / MIB);
+            // Give the watcher a turn, since on a busy Mac it can miss the
+            // whole gigabyte going by between two of its looks.
+            std::thread::sleep(2 * WATCH);
         }
     }
 
