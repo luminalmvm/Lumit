@@ -304,7 +304,8 @@ Future<String?> pickAeBundle() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
 
 /// Pick a folder — Settings → Performance's cache location, where the disk tier
-/// parks its frames (docs/07 §15). Null when the dialogue was cancelled.
+/// parks its frames (docs/07 §15), or one to import. Null when the dialogue
+/// was cancelled.
 Future<String?> pickFolder() =>
     getDirectoryPath(confirmButtonText: l10n.chooseConfirm);
 

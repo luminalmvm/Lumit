@@ -45,6 +45,7 @@ import '../l10n/engine_labels.dart';
 import '../l10n/strings.dart';
 import '../panels/effect_param_row_frb.dart' show byEffectLabel;
 import '../panels/layer_fold_frb.dart' show RevealFilter;
+import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/timeline_razor.dart' show razorCut, razorTargets;
@@ -1031,6 +1032,17 @@ List<MenuSection> lumitMenus(
                     : () =>
                         importFootageFrb(context, app, picker: footagePicker),
                 action: 'file.import'),
+            // A folder and every folder inside it, kept as project folders.
+            MenuEntry(
+                l10n.menuImportFolder,
+                project == null
+                    ? null
+                    : () async {
+                        final folder = await pickFolder();
+                        if (folder != null) {
+                          await importDroppedPaths(app, [folder]);
+                        }
+                      }),
             // The After Effects route keeps the submenu. The Bridge-bundle entry
             // is gone (owner, repeatedly): the .aep front door is the import; the
             // bundle format itself remains supported for anything that already

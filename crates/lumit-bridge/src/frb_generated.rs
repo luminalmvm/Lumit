@@ -17626,6 +17626,7 @@ fn wire__crate__api__project__project_reference_import_files_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <crate::api::project::ProjectReference>::sse_decode(&mut deserializer);
             let api_paths = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_bins = <Vec<String>>::sse_decode(&mut deserializer);
             let api_on_progress = <Option<
                 StreamSink<f64, flutter_rust_bridge::for_generated::SseCodec>,
             >>::sse_decode(&mut deserializer);
@@ -17635,6 +17636,7 @@ fn wire__crate__api__project__project_reference_import_files_impl(
                     let output_ok = crate::api::project::ProjectReference::import_files(
                         &api_that,
                         api_paths,
+                        api_bins,
                         api_on_progress,
                     )?;
                     Ok(output_ok)
