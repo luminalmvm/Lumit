@@ -166,6 +166,12 @@ pub(crate) fn map_layer(
     }
     casts_shadows(conv, &path, ae, props);
     let styles = super::styles::styles(conv, &path, props, &transform);
+    // After Effects' own label when the file has one (its None stays none),
+    // else the colour Lumit gives a new layer of this kind.
+    let label = ae.label.map_or_else(
+        || kind.default_label(),
+        |label| u8::try_from(label).unwrap_or(0),
+    );
 
     let layer = Layer {
         id,
@@ -177,7 +183,7 @@ pub(crate) fn map_layer(
         transform,
         matte: matte(conv, &path, ae, index, ids),
         parent: parent(conv, &path, ae, ids),
-        label: u8::try_from(ae.label.unwrap_or(0)).unwrap_or(0),
+        label,
         markers: markers(conv, &ae.markers),
         volume_db: volume(conv, &path, props),
         pan: lumit_core::anim::Property::zero(),

@@ -1104,6 +1104,7 @@ pub fn read_layer(id: Uuid, item: &ProjectItem, comp: &Composition) -> Option<La
         ),
         ProjectItem::Folder(_) => return None,
     };
+    let label = kind.default_label();
     Some(Layer {
         id,
         name: item.name().to_owned(),
@@ -1120,7 +1121,7 @@ pub fn read_layer(id: Uuid, item: &ProjectItem, comp: &Composition) -> Option<La
         },
         matte: None,
         parent: None,
-        label: 0,
+        label,
         markers: Vec::new(),
         volume_db: Property::zero(),
         pan: Property::zero(),
