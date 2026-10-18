@@ -77,6 +77,10 @@ abstract class ExtensionSurface {
   /// button: an extension never shares or joins by itself.
   void openShare({String? invite, String? relay});
 
+  /// Ask the person whether this extension may share the open project, and
+  /// share it if they say yes. The invite, or null for no.
+  Future<String?> shareNow({String? password});
+
   Future<String?> chooseFolder();
 }
 
@@ -118,6 +122,8 @@ class ExtensionHost with WidgetsBindingObserver {
   String? _statusWanted;
   String _projectWas = '';
   String _shareWas = '';
+  bool _shareAsking = false;
+  bool _shareRefused = false;
   BridgeExportState _exportWas = const BridgeExportState.idle();
 
   /// The file the last export made, which is the one file a page may ask
@@ -479,6 +485,28 @@ class ExtensionHost with WidgetsBindingObserver {
         final relay = params['relay'];
         surface.openShare(relay: relay is String ? relay : null);
         return null;
+      case 'share.host':
+        _need(BridgeExtensionPermission.share);
+        if (app.share.role == ShareRole.host) return app.share.link();
+        if (app.project == null || app.share.active) return null;
+        final password = params['password'];
+        if (password != null && password is! String) {
+          throw const ExtensionRefusal('bad-params', 'password is not a string');
+        }
+        // One question at a time, and none again once the person has said
+        // no or it came to nothing, so a page cannot wear them down.
+        if (_shareAsking || _shareRefused) return null;
+        _shareAsking = true;
+        try {
+          final link = await surface.shareNow(
+              password: password is String && password.isNotEmpty
+                  ? password
+                  : null);
+          _shareRefused = link == null;
+          return link;
+        } finally {
+          _shareAsking = false;
+        }
       case 'share.join':
         _need(BridgeExtensionPermission.share);
         surface.openShare(invite: _text(params, 'link'));

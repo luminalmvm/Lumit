@@ -16146,6 +16146,32 @@
   "@shareYourName": {
     "description": "Field label in the Shared project window: what the other people see this person called."
   },
+  "shareExtensionTitle": "Let {name} share this project?",
+  "@shareExtensionTitle": {
+    "description": "Title of the question asked when an extension wants to share the open project by itself. {name} is the extension's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareExtensionBody": "{name} sends the invite to whoever it chooses. They can edit the project and copy its footage until you stop sharing.",
+  "@shareExtensionBody": {
+    "description": "Body of the question asked when an extension wants to share the open project by itself. {name} is the extension's own name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "shareExtensionNo": "Don't share",
+  "@shareExtensionNo": {
+    "description": "Default button of the question asked when an extension wants to share the open project. Shares nothing."
+  },
+  "shareExtensionYes": "Share",
+  "@shareExtensionYes": {
+    "description": "Button of the question asked when an extension wants to share the open project. Starts sharing it."
+  },
   "shareDefaultName": "Someone",
   "@shareDefaultName": {
     "description": "The name the other people in a shared project see for a person who left the Your name field empty. Also that field's placeholder."
