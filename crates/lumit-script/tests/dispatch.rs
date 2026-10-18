@@ -342,3 +342,62 @@ impl Mat {
         Mat(m)
     }
 }
+
+/// MCP clients stop at the first field out of place, so the handshake, the
+/// tool list and a call are pinned here.
+#[test]
+fn mcp_answers_in_the_shape_clients_expect() {
+    let host = Bare(DocumentStore::new(Document::new()));
+    call(&host, "comp.new", json!({ "name": "Main" }));
+    let ask = |line: Value| -> Value {
+        let reply = lumit_script::mcp::answer(&line.to_string(), &host).unwrap();
+        assert!(!reply.contains('\n'));
+        serde_json::from_str(&reply).unwrap()
+    };
+
+    let hello = ask(
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {},
+        "clientInfo": { "name": "test", "version": "1" } } }),
+    );
+    assert_eq!(hello["id"], json!(1));
+    assert_eq!(hello["result"]["protocolVersion"], json!("2025-06-18"));
+    assert_eq!(hello["result"]["capabilities"], json!({ "tools": {} }));
+    assert_eq!(hello["result"]["serverInfo"]["name"], json!("lumit"));
+    let initialized = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
+    assert_eq!(
+        lumit_script::mcp::answer(&initialized.to_string(), &host),
+        None
+    );
+
+    let list = ask(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }));
+    let tools = list["result"]["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), COMMANDS.len() + 1);
+    for tool in tools {
+        let name = tool["name"].as_str().unwrap();
+        assert!(name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'));
+        assert_eq!(tool["inputSchema"]["type"], json!("object"), "{name}");
+        assert!(tool["description"].is_string());
+    }
+
+    let added = ask(
+        json!({ "jsonrpc": "2.0", "id": "a", "method": "tools/call", "params": {
+        "name": "layer_add", "arguments": { "comp": "Main", "kind": "camera" } } }),
+    );
+    assert_eq!(added["result"]["isError"], json!(false));
+    let text = added["result"]["content"][0]["text"].as_str().unwrap();
+    let layer: Value = serde_json::from_str(text).unwrap();
+    assert!(layer["id"].is_string(), "{text}");
+
+    // A command that fails is the tool's answer, an unknown method the
+    // protocol's.
+    let missing = ask(
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+        "name": "comp_get", "arguments": { "comp": "Nowhere" } } }),
+    );
+    assert_eq!(missing["result"]["isError"], json!(true));
+    let unknown = ask(json!({ "jsonrpc": "2.0", "id": 4, "method": "resources/list" }));
+    assert_eq!(unknown["error"]["code"], json!(-32601));
+}
