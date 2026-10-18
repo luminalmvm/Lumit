@@ -247,6 +247,45 @@ pub fn white_solid_ops(
     (def, name, ops)
 }
 
+/// A fresh Null layer for `comp`: an invisible layer with no source of its
+/// own, carrying only a transform, for parenting rigs. It has no size, so only
+/// its position is centred and the anchor stays at the origin.
+pub fn null_layer(comp: &lumit_core::model::Composition) -> Layer {
+    use lumit_core::anim::Property;
+    base_layer(
+        "Null".into(),
+        LayerKind::Null,
+        comp.duration.0,
+        TransformGroup {
+            position_x: Property::fixed(f64::from(comp.width) * 0.5),
+            position_y: Property::fixed(f64::from(comp.height) * 0.5),
+            ..TransformGroup::default()
+        },
+    )
+}
+
+/// A fresh Solid layer for `comp`, comp-sized, white and centred, and the ops
+/// that add the solid asset it shows ([`white_solid_ops`]). The layer itself
+/// is left for the caller to add.
+pub fn white_solid_layer(
+    doc: &lumit_core::model::Document,
+    comp: &lumit_core::model::Composition,
+) -> (Layer, Vec<Op>) {
+    let (def, name, ops) = white_solid_ops(doc, comp.width, comp.height);
+    let layer = base_layer(
+        name,
+        LayerKind::Solid { def },
+        comp.duration.0,
+        centred_transform(
+            f64::from(comp.width),
+            f64::from(comp.height),
+            comp.width,
+            comp.height,
+        ),
+    );
+    (layer, ops)
+}
+
 /// A stable machine key for a [`FxCategory`] (the variant in snake_case) — the
 /// grouping key the Dart Effects browser sorts and headers by.
 ///

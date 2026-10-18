@@ -1084,19 +1084,7 @@ impl CompositionReference {
     pub fn add_solid_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         let comp = self.composition()?;
         let doc = self.document()?;
-        let (def, name, mut ops) = crate::edits::white_solid_ops(&doc, comp.width, comp.height);
-
-        let mut layer = crate::edits::base_layer(
-            name,
-            lumit_core::model::LayerKind::Solid { def },
-            comp.duration.0,
-            crate::edits::centred_transform(
-                f64::from(comp.width),
-                f64::from(comp.height),
-                comp.width,
-                comp.height,
-            ),
-        );
+        let (mut layer, mut ops) = crate::edits::white_solid_layer(&doc, &comp);
         crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
         let id = layer.id;
         ops.push(lumit_core::Op::AddLayer {
@@ -1805,21 +1793,8 @@ impl CompositionReference {
     /// position is centred and the anchor stays at the origin.
     #[frb(sync)]
     pub fn add_null_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
-        use lumit_core::anim::Property;
-        use lumit_core::model::TransformGroup;
-
         let comp = self.composition()?;
-        let layer = crate::edits::base_layer(
-            "Null".into(),
-            lumit_core::model::LayerKind::Null,
-            comp.duration.0,
-            TransformGroup {
-                position_x: Property::fixed(f64::from(comp.width) * 0.5),
-                position_y: Property::fixed(f64::from(comp.height) * 0.5),
-                ..TransformGroup::default()
-            },
-        );
-        self.add_at(layer, row)
+        self.add_at(crate::edits::null_layer(&comp), row)
     }
 
     /// Add an empty Sequence layer — a clip row spanning the comp.
