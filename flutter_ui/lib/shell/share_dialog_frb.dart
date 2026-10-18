@@ -303,6 +303,7 @@ Widget _field(
   String? hint,
   VoidCallback? onSubmitted,
   TextStyle? style,
+  bool obscure = false,
 }) =>
     SizedBox(
       height: dialogControlHeight,
@@ -314,6 +315,7 @@ Widget _field(
         fill: t.surface0,
         style: style,
         hint: hint,
+        obscure: obscure,
         onSubmitted: onSubmitted == null ? null : (_) => onSubmitted(),
       ),
     );
@@ -1361,9 +1363,12 @@ class _ShareDialogState extends State<_ShareDialog> {
       _Veil(
         shown: shown,
         inset: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        // Dots under the ink, so what is typed is never laid out while it
+        // is hidden, not even see-through.
         builder: (hidden) => _field(t, id, controller,
             hint: hint,
             onSubmitted: onSubmitted,
+            obscure: !shown,
             style: hidden == 0
                 ? null
                 : t.bodyPrimary.copyWith(
@@ -3335,10 +3340,11 @@ class _Veil extends StatelessWidget {
     final theme = ThemeScope.of(context);
     // Twice as long as one surface takes to give way to another: the ink
     // needs the time to be seen going. Still when the theme's motion is.
+    // Hiding is instant. A fade in showed the first letters typed.
     final spec = theme.motion.swap;
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(end: shown ? 0 : 1),
-      duration: spec.duration * 2,
+      duration: shown ? spec.duration * 2 : Duration.zero,
       curve: Curves.easeInOut,
       builder: (context, hidden, _) => Stack(
         children: [
