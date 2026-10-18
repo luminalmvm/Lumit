@@ -455,12 +455,12 @@ Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect) => {
 Offset pointDeltaIn(LayerBox box, Offset screenDelta) =>
     box.map.layerOf(screenDelta) - box.map.layerOf(Offset.zero);
 
-/// A comp-space point on screen: the picture's origin plus the point at the
-/// view's scale. A motion path is in comp pixels rather than layer pixels,
-/// because Position is where the layer's anchor lands in the comp — so it goes
-/// through none of the layer's own scale or rotation.
+/// A Position-space point on screen. A motion path is in the parent's pixels
+/// (the comp's, with no parent) rather than layer pixels, because Position is
+/// where the layer's anchor lands there, so it goes through none of the
+/// layer's own scale or rotation.
 Offset compToScreen(LayerBox box, double x, double y) =>
-    box.map.origin + Offset(x, y) * box.map.viewScale;
+    box.map.parentToScreen(x, y);
 
 /// [box]'s motion path on screen, one point per comp frame; empty when the
 /// layer has none.
@@ -960,7 +960,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final by = step * (keys.isShiftPressed ? 10.0 : 1.0);
     final moves = [
       for (final box in _selected)
-        if (box.draggable) (box, box.map.px + by.dx, box.map.py + by.dy),
+        if (box.draggable)
+          if (box.map.positionStep(by) case final step)
+            (box, box.map.px + step.dx, box.map.py + step.dy),
     ];
     if (moves.isEmpty) return false;
     _place(moves);
@@ -1454,7 +1456,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
             _Align.bottom => Offset(0, frame.height - r.bottom),
           } /
           scale;
-      moves.add((box, box.map.px + d.dx, box.map.py + d.dy));
+      final step = box.map.positionStep(d);
+      moves.add((box, box.map.px + step.dx, box.map.py + step.dy));
     }
     _place(moves);
   }
@@ -1703,11 +1706,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// come through here, so the picture cannot land anywhere but where the
   /// wireframe said it would.
   (double, double) _movedPosition(LayerBox box) {
-    final delta = _moveDelta;
-    return (
-      box.map.px + delta.dx / box.map.viewScale,
-      box.map.py + delta.dy / box.map.viewScale,
-    );
+    final step = box.map.positionStep(_moveDelta / box.map.viewScale);
+    return (box.map.px + step.dx, box.map.py + step.dy);
   }
 
   void _commitMove() {
@@ -2007,10 +2007,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final key = keys[index];
     return (
       key,
-      Offset(
-        key.x + _delta.dx / box.map.viewScale,
-        key.y + _delta.dy / box.map.viewScale,
-      ),
+      Offset(key.x, key.y) + box.map.positionStep(_delta / box.map.viewScale),
     );
   }
 

@@ -9,6 +9,7 @@
 // Aliased, and not as `ui`: this file already calls the session state `ui`, and
 // a local of that name would shadow the prefix where it is needed.
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as dartui;
 
 import 'package:flutter/widgets.dart';
@@ -19,6 +20,7 @@ import 'package:lumit_flutter/src/rust/api/footage.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/wireframes.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
@@ -260,6 +262,9 @@ class ViewerStage extends StatelessWidget {
           _ => sampledScalar(s, at),
         };
 
+    final byId = {
+      for (final entry in model.heldLayers) entry.layer.internallayerId: entry
+    };
     final out = <LayerBox>[];
     for (final entry in model.heldLayers) {
       if (entry.info.kind == BridgeLayerKind.camera) continue;
@@ -289,6 +294,14 @@ class ViewerStage extends StatelessWidget {
           rotationDegrees: rotation,
           origin: fitted.topLeft,
           viewScale: viewScale,
+          parent: parentPlacement(
+            entry,
+            byId,
+            (a) =>
+                uiState.liveTransforms.value[a.layer.internallayerId] ??
+                a.info.transform,
+            read,
+          ),
         ),
         // A line being typed measures what is being typed: the
         // document holds the old one until the edit ends, so a box measured
@@ -939,6 +952,39 @@ class ViewerStage extends StatelessWidget {
   }
 }
 
+/// Where [entry]'s parents put its Position space in the comp, null when it
+/// has none: the engine's `parent_world_placement`, each ancestor placed as
+/// `place_matrix` places it, flattened to the picture. Without it a parented
+/// layer's box stays behind while its picture follows the parent.
+ParentPlacement? parentPlacement(
+  BridgeLayerEntry entry,
+  Map<UuidValue, BridgeLayerEntry> byId,
+  BridgeTransform Function(BridgeLayerEntry) transformOf,
+  double Function(BridgeScalar, LayerReference) read,
+) {
+  Matrix4? world;
+  final seen = {entry.layer.internallayerId};
+  for (var id = entry.info.parent; id != null && seen.add(id);) {
+    final up = byId[id];
+    if (up == null) break;
+    final tf = transformOf(up);
+    double at(BridgeScalar s) => read(s, up.layer);
+    double turn(BridgeScalar s) => at(s) * math.pi / 180;
+    final own = Matrix4.translationValues(
+        at(tf.positionX), at(tf.positionY), at(tf.positionZ))
+      ..rotateY(turn(tf.rotationY))
+      ..rotateX(turn(tf.rotationX))
+      ..rotateZ(turn(tf.rotation))
+      ..scaleByDouble(at(tf.scaleX) / 100, at(tf.scaleY) / 100, 1, 1)
+      ..translateByDouble(-at(tf.anchorX), -at(tf.anchorY), 0, 1);
+    world = world == null ? own : own.multiplied(world);
+    id = up.info.parent;
+  }
+  final m = world?.storage;
+  if (m == null) return null;
+  return (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]);
+}
+
 /// The layer a click on [comp]'s picture would select at [frame], with [at]
 /// in composition pixels: the gizmo's own rule ([layerAtPoint], over boxes
 /// built as [ViewerStage._boxes] builds them), for a composition and a frame
@@ -973,6 +1019,9 @@ BridgeLayerEntry? layerAtCompPoint(
     BridgeLayerKind.light,
     BridgeLayerKind.audio,
   };
+  final byId = {
+    for (final entry in model.layers) entry.layer.internallayerId: entry
+  };
   for (final entry in model.layers) {
     final info = entry.info;
     if (pictureless.contains(info.kind) || !info.switches.visible) continue;
@@ -993,6 +1042,7 @@ BridgeLayerEntry? layerAtCompPoint(
         rotationDegrees: rotation,
         origin: Offset.zero,
         viewScale: 1,
+        parent: parentPlacement(entry, byId, (a) => a.info.transform, read),
       ),
       bounds: uiState.layerBounds.boundsOf(entry,
           compSize: size, revision: revision, t: seconds),

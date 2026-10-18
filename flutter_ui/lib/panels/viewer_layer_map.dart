@@ -39,6 +39,17 @@ double nonZeroScale(double factor) {
   return factor.isNegative ? -smallest : smallest;
 }
 
+/// Where a parent chain puts a layer's Position space in the comp, flattened to
+/// the picture: `x' = a·x + c·y + e`, `y' = b·x + d·y + f`.
+typedef ParentPlacement = ({
+  double a,
+  double b,
+  double c,
+  double d,
+  double e,
+  double f,
+});
+
 /// The evaluated 2D transform of a layer at the playhead, composed with the
 /// Viewer's fitted-image placement. Construct it once per paint with
 /// [ViewerLayerMap.of] and use [toScreen] / [layerOf] to move points across the
@@ -63,6 +74,10 @@ class ViewerLayerMap {
   /// Comp pixels → screen pixels (the fitted rect width / the comp pixel width).
   final double viewScale;
 
+  /// The parent chain's placement, null for a layer with no parent. Position,
+  /// and everything under it, is in the parent's space, not the comp's.
+  final ParentPlacement? parent;
+
   const ViewerLayerMap({
     required this.px,
     required this.py,
@@ -74,6 +89,7 @@ class ViewerLayerMap {
     required this.cos,
     required this.origin,
     required this.viewScale,
+    this.parent,
   });
 
   /// Build the map from the layer's evaluated transform values (as the snapshot
@@ -90,6 +106,7 @@ class ViewerLayerMap {
     required double rotationDegrees,
     required Offset origin,
     required double viewScale,
+    ParentPlacement? parent,
   }) {
     final rot = rotationDegrees * math.pi / 180.0;
     return ViewerLayerMap(
@@ -103,6 +120,7 @@ class ViewerLayerMap {
       cos: math.cos(rot),
       origin: origin,
       viewScale: viewScale,
+      parent: parent,
     );
   }
 
@@ -124,6 +142,7 @@ class ViewerLayerMap {
       cos: math.cos(rot),
       origin: origin,
       viewScale: viewScale,
+      parent: parent,
     );
   }
 
@@ -142,6 +161,7 @@ class ViewerLayerMap {
         cos: cos,
         origin: origin,
         viewScale: viewScale,
+        parent: parent,
       );
 
   /// The same map with the layer's pivot moved to ([anchorX], [anchorY]) and
@@ -165,6 +185,7 @@ class ViewerLayerMap {
         cos: cos,
         origin: origin,
         viewScale: viewScale,
+        parent: parent,
       );
 
   /// Layer space → screen (local) coordinate.
@@ -173,18 +194,41 @@ class ViewerLayerMap {
     final dy = (y - ay) * sy;
     final rx = dx * cos - dy * sin;
     final ry = dx * sin + dy * cos;
-    return Offset(
-      origin.dx + (px + rx) * viewScale,
-      origin.dy + (py + ry) * viewScale,
-    );
+    return parentToScreen(px + rx, py + ry);
   }
+
+  /// A point in the parent's space (where Position and a motion path live)
+  /// → screen. Without a parent that space is the comp.
+  Offset parentToScreen(double x, double y) {
+    final p = parent;
+    final c = p == null
+        ? Offset(x, y)
+        : Offset(p.a * x + p.c * y + p.e, p.b * x + p.d * y + p.f);
+    return origin + c * viewScale;
+  }
+
+  /// Screen (local) → the parent's space, the inverse of [parentToScreen].
+  /// A parent scaled to nought has no inverse and is read as no parent.
+  Offset parentOf(Offset pos) {
+    final c = (pos - origin) / viewScale;
+    final p = parent;
+    final det = p == null ? 0.0 : p.a * p.d - p.b * p.c;
+    if (p == null || det == 0) return c;
+    final x = c.dx - p.e;
+    final y = c.dy - p.f;
+    return Offset((p.d * x - p.c * y) / det, (p.a * y - p.b * x) / det);
+  }
+
+  /// A move of [compDelta] comp pixels on the picture, as the change it makes
+  /// to Position.
+  Offset positionStep(Offset compDelta) =>
+      parentOf(origin + compDelta * viewScale) - parentOf(origin);
 
   /// Screen (local) → layer space coordinate (the inverse of [toScreen]).
   Offset layerOf(Offset pos) {
-    final cx = (pos.dx - origin.dx) / viewScale;
-    final cy = (pos.dy - origin.dy) / viewScale;
-    final dx = cx - px;
-    final dy = cy - py;
+    final c = parentOf(pos);
+    final dx = c.dx - px;
+    final dy = c.dy - py;
     // Inverse rotation (transpose of the forward matrix).
     final rx = dx * cos + dy * sin;
     final ry = -dx * sin + dy * cos;
@@ -207,9 +251,9 @@ class ViewerLayerMap {
     required double dyFromAnchor,
     required Offset pointer,
   }) {
-    final anchorScreen = toScreen(ax, ay);
-    final ex = (pointer.dx - anchorScreen.dx) / viewScale;
-    final ey = (pointer.dy - anchorScreen.dy) / viewScale;
+    final at = parentOf(pointer);
+    final ex = at.dx - px;
+    final ey = at.dy - py;
     // Un-rotate the screen delta into the layer's un-scaled frame.
     final ux = ex * cos + ey * sin;
     final uy = -ex * sin + ey * cos;
