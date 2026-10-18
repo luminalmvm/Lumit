@@ -64,6 +64,38 @@ pub fn euler_yxz(m: &Mat3) -> (f64, f64, f64) {
     )
 }
 
+/// Lumit's angles for a turn After Effects writes as Orientation and X, Y and
+/// Z Rotation, all in degrees.
+///
+/// After Effects builds each of the two as `Rx · Ry · Rz` and puts Orientation
+/// outside the rotations, where Lumit turns by `Ry · Rx · Rz`, so the angles
+/// only match when X or Y is zero. Every turn can be written two ways in
+/// Lumit's order, and the one nearer `near` comes back, wound on by whole turns,
+/// so a run of keys read one after the other doesn't spin between them.
+#[must_use]
+pub fn from_after_effects(
+    orientation: (f64, f64, f64),
+    rotation: (f64, f64, f64),
+    near: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let ae = |deg: (f64, f64, f64)| mul(&mul(&rot_x(deg.0), &rot_y(deg.1)), &rot_z(deg.2));
+    let one = euler_yxz(&mul(&ae(orientation), &ae(rotation)));
+    let other = (180.0 - one.0, one.1 + 180.0, one.2 + 180.0);
+    let wound = |v: (f64, f64, f64)| {
+        let wind = |a: f64, n: f64| a - ((a - n) / 360.0).round() * 360.0;
+        (wind(v.0, near.0), wind(v.1, near.1), wind(v.2, near.2))
+    };
+    let gap = |v: (f64, f64, f64)| {
+        (v.0 - near.0).powi(2) + (v.1 - near.1).powi(2) + (v.2 - near.2).powi(2)
+    };
+    let (one, other) = (wound(one), wound(other));
+    if gap(other) < gap(one) {
+        other
+    } else {
+        one
+    }
+}
+
 /// The camera's own axes for a rotation in degrees: the columns of
 /// `Ry · Rx · Rz`, in the order right, up, forward.
 #[must_use]
