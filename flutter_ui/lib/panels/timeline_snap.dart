@@ -76,10 +76,9 @@ typedef SnapResult = ({double frame, SnapTarget? caught});
 
 /// How near, in screen pixels, a drag has to come before a target takes it.
 ///
-/// Eight is a little under half a row's height: close enough that landing on a
-/// marker takes no aim, far enough that a frame either side of it is still
-/// reachable at any useful zoom.
-const double snapSlopPixels = 8;
+/// Twelve, the same reach the Viewer's anchor snap has. Eight felt too weak when
+/// dragging across a marker, and `Ctrl` still lets a drag land beside one.
+const double snapSlopPixels = 12;
 
 /// Where `frame` should land.
 ///
