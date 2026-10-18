@@ -1785,12 +1785,17 @@ impl Realiser<'_> {
     /// Both places a matte gates something come through here — an ordinary
     /// layer's picture, and an adjustment layer's coverage — so the two can
     /// never disagree about what a matte source looks like.
+    ///
+    /// `region` is the window the layer it gates is drawn into. The matte is
+    /// read by where it sits in that target, so it has to cover the same window
+    /// or the whole comp gets squeezed into it.
     fn matte_texture(
         &self,
         width: u32,
         height: u32,
         cam_mat: Option<lumit_gpu::Mat4>,
         m: &crate::draw::MatteDraw,
+        region: Option<lumit_gpu::Region>,
     ) -> wgpu::Texture {
         // A Precomp matte realises its nested comp exactly as a Precomp
         // layer's picture does (the layer-input shape); anything else is the
@@ -1886,7 +1891,7 @@ impl Realiser<'_> {
         // and a matte is a shape, not a picture that reaches
         // further. Cropped back to the size it was placed at.
         let linear = lumit_gpu::fx::fit_centred(&self.ctx, linear, lw, lh);
-        self.compositor.composite_with_camera(
+        self.compositor.composite_seeded(
             &self.ctx,
             width,
             height,
@@ -1906,9 +1911,13 @@ impl Realiser<'_> {
                 rotation_y_deg: m.rotation_y_deg,
                 three_d: m.three_d,
                 layer_mask: None,
-                pre: None,
+                pre: m.pre,
             }],
             cam_mat,
+            None,
+            1.0,
+            1,
+            region,
         )
     }
 
@@ -1936,7 +1945,8 @@ impl Realiser<'_> {
         let matte_tex = l
             .matte
             .as_ref()
-            .map(|m| self.matte_texture(width, height, cam_mat, m));
+            // No region: a comp with an adjustment layer never gets one.
+            .map(|m| self.matte_texture(width, height, cam_mat, m, None));
         let matte = matte_tex.as_ref().map(|mt| lumit_gpu::MatteInput {
             texture: mt,
             luma: l.matte.as_ref().is_some_and(|m| m.luma),
@@ -2324,7 +2334,7 @@ impl Realiser<'_> {
             .map(|l| {
                 l.matte
                     .as_ref()
-                    .map(|m| self.matte_texture(width, height, cam_mat, m))
+                    .map(|m| self.matte_texture(width, height, cam_mat, m, region))
             })
             .collect();
         let comp_layers: Vec<lumit_gpu::CompositeLayer> = linear_textures

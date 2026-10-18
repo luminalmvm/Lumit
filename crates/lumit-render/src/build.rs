@@ -3222,6 +3222,7 @@ fn comp_walk(
                 rotation_x_deg: mtr.rotation_x.value_at_with_context(mlt, context.clone()) as f32,
                 rotation_y_deg: mtr.rotation_y.value_at_with_context(mlt, context.clone()) as f32,
                 three_d: src.switches.three_d,
+                pre: parent_world_placement(comp, src, t_comp, context.clone()),
                 luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
                 inverted: mr.inverted,
                 colour_tables,

@@ -254,6 +254,11 @@ fn a_matte_bound_in_a_document_drives_the_effect_it_is_bound_to() {
 /// comp. The left half must be the grey (the matte let it through) and never
 /// the white (the matte source itself did not draw); the right half must be the
 /// comp background (the matte held it back).
+///
+/// Twice more where the matte used to land in the wrong place: with both
+/// layers parented to a layer moved 16 to the right, as a duplicated layer
+/// keeps its parent, and in a Viewer region over the right half, which the
+/// matte was squeezed into whole.
 #[test]
 fn a_hidden_layer_still_mattes_and_stays_out_of_the_picture() {
     let Ok(mut r) = HeadlessRenderer::shared() else {
@@ -268,6 +273,9 @@ fn a_hidden_layer_still_mattes_and_stays_out_of_the_picture() {
     doc.items
         .push(solid(white_def, "band", [1.0, 1.0, 1.0, 1.0], BAND, COMP));
 
+    let mut parent = layer("parent", LayerKind::Solid { def: grey_def });
+    parent.transform.position_x = lumit_core::anim::Property::fixed(16.0);
+    parent.switches.visible = false;
     let mut matte_layer = layer("matte source", LayerKind::Solid { def: white_def });
     matte_layer.switches.visible = false;
     let mut base = layer("base", LayerKind::Solid { def: grey_def });
@@ -278,27 +286,42 @@ fn a_hidden_layer_still_mattes_and_stays_out_of_the_picture() {
         source: lumit_core::model::LayerInputSource::default(),
     });
 
-    let comp = comp_of("Comp", vec![matte_layer, base]);
-    let comp_id = comp.id;
-    doc.items.push(ProjectItem::Composition(comp));
-    let doc = Arc::new(doc);
-    let (rgba, w, _h) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("render");
-
     let grey = lumit_core::pixels::srgb_encode(0.25);
-    for x in LIT {
-        assert_eq!(
-            px(&rgba, w, x),
-            grey,
-            "column {x} is under the hidden matte: the plate must show through it"
-        );
+    // How far the parent moves both layers, and the region as comp fractions.
+    for (shift, region) in [(0, None), (16, None), (0, Some([0.5, 0.0, 1.0, 1.0]))] {
+        let (mut matte_layer, mut base) = (matte_layer.clone(), base.clone());
+        if shift > 0 {
+            matte_layer.parent = Some(parent.id);
+            base.parent = Some(parent.id);
+        }
+        let mut doc = doc.clone();
+        let comp = comp_of("Comp", vec![parent.clone(), matte_layer, base]);
+        let comp_id = comp.id;
+        doc.items.push(ProjectItem::Composition(comp));
+        r.set_region(region);
+        let (rgba, w, _h) = r
+            .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
+            .expect("render");
+        // A region comes back stretched to the comp's size.
+        let [u0, _, u1, _] = region.unwrap_or([0.0, 0.0, 1.0, 1.0]);
+        for x in 0..w {
+            let at = (u0 + (x as f32 + 0.5) / w as f32 * (u1 - u0)) * COMP as f32;
+            let at = at as i64 - shift;
+            let got = px(&rgba, w, x);
+            if at >= 0 && LIT.contains(&(at as u32)) {
+                assert_eq!(
+                    got, grey,
+                    "column {x} ({shift}, {region:?}) is under the hidden matte: the plate must show through it"
+                );
+            } else if at < 0 || DARK.contains(&(at as u32)) {
+                assert_eq!(
+                    got, 0,
+                    "column {x} ({shift}, {region:?}) is past the hidden matte: the plate must be held back"
+                );
+            }
+        }
     }
-    for x in DARK {
-        assert_eq!(
-            px(&rgba, w, x),
-            0,
-            "column {x} is past the hidden matte: the plate must be held back"
-        );
-    }
+    r.set_region(None);
 }
 
 /// **The Matte dropdown on an adjustment layer gates its whole stack.**
