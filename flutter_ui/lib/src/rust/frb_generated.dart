@@ -21802,8 +21802,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeEffectInfo dco_decode_bridge_effect_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return BridgeEffectInfo(
       name: dco_decode_String(arr[0]),
       label: dco_decode_String(arr[1]),
@@ -21812,6 +21812,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       namespace: dco_decode_String(arr[4]),
       inputs: dco_decode_list_bridge_port(arr[5]),
       outputs: dco_decode_list_bridge_port(arr[6]),
+      otherNames: dco_decode_list_String(arr[7]),
     );
   }
 
@@ -28247,6 +28248,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_namespace = sse_decode_String(deserializer);
     var var_inputs = sse_decode_list_bridge_port(deserializer);
     var var_outputs = sse_decode_list_bridge_port(deserializer);
+    var var_otherNames = sse_decode_list_String(deserializer);
     return BridgeEffectInfo(
         name: var_name,
         label: var_label,
@@ -28254,7 +28256,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         categoryLabel: var_categoryLabel,
         namespace: var_namespace,
         inputs: var_inputs,
-        outputs: var_outputs);
+        outputs: var_outputs,
+        otherNames: var_otherNames);
   }
 
   @protected
@@ -35791,6 +35794,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_String(self.namespace, serializer);
     sse_encode_list_bridge_port(self.inputs, serializer);
     sse_encode_list_bridge_port(self.outputs, serializer);
+    sse_encode_list_String(self.otherNames, serializer);
   }
 
   @protected

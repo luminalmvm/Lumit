@@ -141,6 +141,20 @@ pub(crate) fn table() -> &'static Table {
     })
 }
 
+/// After Effects' names for the effects that import as `lumit`, so the effects
+/// search finds Glow under Deep Glow or S_Glow. Placeholder rows name nothing.
+pub fn other_names_of(lumit: &str) -> Vec<String> {
+    let mut names: Vec<String> = table()
+        .rows
+        .values()
+        .filter(|row| row.lumit == lumit)
+        .map(|row| row.name.clone())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 /// The edited copy beside the executable, if there is one.
 fn override_text() -> Option<String> {
     let path = std::env::current_exe().ok()?.parent()?.join(OVERRIDE_FILE);

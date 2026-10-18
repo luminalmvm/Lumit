@@ -185,7 +185,8 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
           : engineLabel(effect.categoryLabel);
       if (needle.isNotEmpty &&
           !effect.label.toLowerCase().contains(needle) &&
-          !heading.toLowerCase().contains(needle)) {
+          !heading.toLowerCase().contains(needle) &&
+          !effect.otherNames.any((n) => n.toLowerCase().contains(needle))) {
         continue;
       }
       grouped.putIfAbsent(effect.category, () => []).add(effect);

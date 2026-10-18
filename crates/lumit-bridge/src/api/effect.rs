@@ -63,6 +63,10 @@ pub struct BridgeEffectInfo {
     /// The output sockets — empty for every image effect, and the declared
     /// [`Signature::Data`](lumit_core::fx::Signature::Data) ports for a driver.
     pub outputs: Vec<crate::api::graph::BridgePort>,
+    /// What other software calls the effects that become this one on import,
+    /// such as Deep Glow and S_Glow for Glow, so the effects search finds it
+    /// under those names too.
+    pub other_names: Vec<String>,
 }
 
 /// Every built-in **effect**, in schema order — the Add-effect menu's source of
@@ -264,6 +268,7 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                     namespace: NAMESPACE_AUDIO.to_owned(),
                     inputs,
                     outputs,
+                    other_names: Vec::new(),
                 };
             }
             BridgeEffectInfo {
@@ -301,6 +306,7 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                 .to_owned(),
                 inputs,
                 outputs,
+                other_names: lumit_import::other_names_of(schema.match_name),
             }
         })
         .collect()

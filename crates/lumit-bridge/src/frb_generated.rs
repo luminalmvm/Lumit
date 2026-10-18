@@ -23290,6 +23290,7 @@ impl SseDecode for crate::api::effect::BridgeEffectInfo {
         let mut var_namespace = <String>::sse_decode(deserializer);
         let mut var_inputs = <Vec<crate::api::graph::BridgePort>>::sse_decode(deserializer);
         let mut var_outputs = <Vec<crate::api::graph::BridgePort>>::sse_decode(deserializer);
+        let mut var_otherNames = <Vec<String>>::sse_decode(deserializer);
         return crate::api::effect::BridgeEffectInfo {
             name: var_name,
             label: var_label,
@@ -23298,6 +23299,7 @@ impl SseDecode for crate::api::effect::BridgeEffectInfo {
             namespace: var_namespace,
             inputs: var_inputs,
             outputs: var_outputs,
+            other_names: var_otherNames,
         };
     }
 }
@@ -32969,6 +32971,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeEffectInfo {
             self.namespace.into_into_dart().into_dart(),
             self.inputs.into_into_dart().into_dart(),
             self.outputs.into_into_dart().into_dart(),
+            self.other_names.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -39961,6 +39964,7 @@ impl SseEncode for crate::api::effect::BridgeEffectInfo {
         <String>::sse_encode(self.namespace, serializer);
         <Vec<crate::api::graph::BridgePort>>::sse_encode(self.inputs, serializer);
         <Vec<crate::api::graph::BridgePort>>::sse_encode(self.outputs, serializer);
+        <Vec<String>>::sse_encode(self.other_names, serializer);
     }
 }
 
