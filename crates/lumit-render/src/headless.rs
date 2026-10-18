@@ -1312,6 +1312,9 @@ impl HeadlessRenderer {
         quality: Quality,
         present: Present,
     ) -> Result<(wgpu::Texture, u32, u32), String> {
+        if crate::cancel::requested() {
+            return Err(crate::cancel::CANCELLED.into());
+        }
         // The config the document names, before anything is drawn. Cheap when
         // nothing changed — one file read and a hash comparison — and the
         // reason a config edited on disk is picked up without anyone having to
@@ -1426,7 +1429,7 @@ impl HeadlessRenderer {
             crate::colour::InputTransforms::build(doc, &self.colour, &self.gpu, &parts.colour);
         let inputs = (!built.is_empty()).then_some(built);
         let reach = std::cell::Cell::new(None);
-        let out = {
+        let out = 'frame: {
             let pixels_by_layer: HashMap<Uuid, &crate::decode::CompLayerPixels> = retained
                 .pixels
                 .layers
@@ -1472,6 +1475,11 @@ impl HeadlessRenderer {
                 Some(&keys),
                 false,
             );
+            // Asked to stop during the walk: the list may be short a layer, so
+            // it is never composited.
+            if crate::cancel::requested() {
+                break 'frame Err(crate::cancel::CANCELLED.to_string());
+            }
             // The comp's backdrop is a way of viewing, not a layer;
             // with the transparency grid up the Viewer asks for none at all,
             // so what nothing covers arrives with zero alpha and the grid
@@ -4849,6 +4857,39 @@ mod tests {
             r.frame_key(&doc, comp_id, 0, q),
             neutral,
             "backdrop back, name back — frames banked opaque are hits again"
+        );
+    }
+
+    /// A Viewer frame asked to stop comes back cancelled and nothing of it is
+    /// kept, and the token ends with its scope, so the next frame renders.
+    #[test]
+    fn a_cancelled_frame_stops_and_the_next_one_renders() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (store, comp_id) = doc_with_solid(LinearColour([1.0, 0.0, 0.0, 1.0]), 8, 8);
+        let doc = store.snapshot();
+        let q = crate::plan::Quality::default();
+        let name = r.frame_key(&doc, comp_id, 0, q);
+        let epoch = lumit_eval::epoch::Epoch::new();
+        {
+            let _stop = crate::cancel::Scope::new(epoch.token());
+            epoch.bump();
+            let out = r.render_prepared_named(&doc, comp_id, 0, q, false, name);
+            assert_eq!(out.err().as_deref(), Some(crate::cancel::CANCELLED));
+            assert!(
+                !r.has_frame_texture(name.expect("named"), false),
+                "nothing of a cancelled frame is kept"
+            );
+        }
+        assert!(
+            r.render_prepared_named(&doc, comp_id, 0, q, false, name)
+                .is_ok(),
+            "the next frame renders once the scope has ended"
         );
     }
 

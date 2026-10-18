@@ -186,6 +186,8 @@ pub struct WorkerState {
     // ponytail: capped at 8 and held outside the cache's budget, about 270 MB
     // of the card at 4K; count them against it if that ever matters.
     stand_ins: Vec<(u32, Uuid, lumit_render::PreparedFrame)>,
+    /// Turned over by each request as it is sent ([`WorkerSender`]).
+    epochs: std::sync::Arc<WorkerEpochs>,
 }
 
 impl WorkerState {
@@ -1793,10 +1795,13 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
         if used + frame_bytes > budget && state.renderer.demotions_saturated() {
             return;
         }
+        // Any request stops the fill's frame, which is made again next turn.
+        let _stop = lumit_render::cancel::Scope::new(state.epochs.any.token());
         match prepare_frame(state, &document, comp_ref.id, frame, quality, bgra, true) {
             // Tell the frontend, or the fill is invisible: the cache bar only
             // redraws when it hears something, and a fill shows no frame.
             Ok(_) => _ = stream.add(WorkerResponse::CacheFilled),
+            Err(e) if e == lumit_render::cancel::CANCELLED => {}
             // A comp that will not render must not be retried in a loop.
             Err(_) => state.fill_exhausted = true,
         }
@@ -2745,8 +2750,70 @@ fn playback_priority(playing: bool) {
 fn playback_priority(_playing: bool) {}
 
 #[frb(ignore)]
+/// The way into the render worker. Each send also turns over the epochs of
+/// the work it replaces, so a render the worker is part way through can see it
+/// is no longer wanted and stop (`lumit_render::cancel`).
+#[frb(ignore)]
+pub struct WorkerSender {
+    tx: std::sync::mpsc::Sender<WorkerRequest>,
+    epochs: std::sync::Arc<WorkerEpochs>,
+}
+
+/// The render worker has stopped, so a request went nowhere.
+#[frb(ignore)]
+#[derive(Debug)]
+pub struct WorkerGone;
+
+/// What the worker's renders are checked against: `any` turns over with every
+/// request, which is what stops the idle fill, and each picture lane turns
+/// over with a newer picture for it, which is what stops a frame it replaces.
+#[frb(ignore)]
+#[derive(Default)]
+struct WorkerEpochs {
+    any: lumit_eval::epoch::Epoch,
+    lanes: std::sync::Mutex<Vec<(u32, lumit_eval::epoch::Epoch)>>,
+}
+
+impl WorkerEpochs {
+    fn lane(&self, lane: u32) -> lumit_eval::epoch::Epoch {
+        let mut lanes = self.lanes.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((_, epoch)) = lanes.iter().find(|(l, _)| *l == lane) {
+            return epoch.clone();
+        }
+        let epoch = lumit_eval::epoch::Epoch::new();
+        lanes.push((lane, epoch.clone()));
+        epoch
+    }
+}
+
+impl WorkerSender {
+    pub(crate) fn new(tx: std::sync::mpsc::Sender<WorkerRequest>) -> Self {
+        Self {
+            tx,
+            epochs: std::sync::Arc::default(),
+        }
+    }
+
+    /// Err when the worker has stopped.
+    pub(crate) fn send(&self, request: WorkerRequest) -> Result<(), WorkerGone> {
+        let lane = match classify_request(&request) {
+            DrainClass::PictureNewestWins(lane) => Some(lane),
+            _ => None,
+        };
+        // Sent first, so a render that sees the turn finds the request queued.
+        self.tx.send(request).map_err(|_| WorkerGone)?;
+        self.epochs.any.bump();
+        if let Some(lane) = lane {
+            self.epochs.lane(lane).bump();
+        }
+        Ok(())
+    }
+}
+
 pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
     let (send_to_worker, receive_from_app) = std::sync::mpsc::channel::<WorkerRequest>();
+    let send_to_worker = WorkerSender::new(send_to_worker);
+    let epochs = send_to_worker.epochs.clone();
 
     {
         let Ok(state) = project.state() else {
@@ -2761,7 +2828,7 @@ pub fn run_worker(project: ProjectReference, stream: WorkerResponseStream) {
         state.sender = Some(send_to_worker);
     }
 
-    std::thread::spawn(move || worker_loop(project, receive_from_app, stream));
+    std::thread::spawn(move || worker_loop(project, receive_from_app, stream, epochs));
 }
 
 /// Build the Viewer's renderer, with everything a Viewer's renderer carries —
@@ -3005,6 +3072,7 @@ fn worker_loop(
     project: ProjectReference,
     receiver: Receiver<WorkerRequest>,
     stream: WorkerResponseStream,
+    epochs: std::sync::Arc<WorkerEpochs>,
 ) {
     // Before anything else the worker does, because everything it does after
     // this can fault. The hook is what makes a panic name itself on disk — the
@@ -3079,6 +3147,7 @@ fn worker_loop(
         layer_sample: None,
         pending_measure: None,
         stand_ins: Vec::new(),
+        epochs,
     };
 
     // How many turns in a row have panicked. Reset by the first turn that
@@ -4040,7 +4109,12 @@ fn handle_requests(
         // to survive to serve the next request.
         for request in pictures.into_iter().chain(scope).chain(sample) {
             let outcome = match request {
-                WorkerRequest::RenderComp(req) => render_comp(req, state, stream),
+                // A newer picture for the same view stops this one part way.
+                WorkerRequest::RenderComp(req) => {
+                    let _stop =
+                        lumit_render::cancel::Scope::new(state.epochs.lane(req.view).token());
+                    render_comp(req, state, stream)
+                }
                 WorkerRequest::SamplePixels(req) => sample_pixels(req, state, stream),
                 // Named for what it does rather than "render", so the three
                 // variants do not all share a prefix that says nothing.
@@ -4054,6 +4128,8 @@ fn handle_requests(
                 }
                 WorkerRequest::TraceScope(req) => trace_scope(req, state, stream),
                 WorkerRequest::RenderCompWithPreview(req) => {
+                    let _stop =
+                        lumit_render::cancel::Scope::new(state.epochs.lane(u32::MAX).token());
                     render_comp_with_preview(req, state, stream)
                 }
                 WorkerRequest::Play(req) => start_playback(req, state),
@@ -5462,7 +5538,9 @@ fn publish_zero_copy(
         Ok(prepared) => prepared,
         Err(err) => {
             // Dropped, not fatal: the next request renders afresh.
-            note!("Shared DMA-BUF render failed, dropping frame: {err}");
+            if err != lumit_render::cancel::CANCELLED {
+                note!("Shared DMA-BUF render failed, dropping frame: {err}");
+            }
             return;
         }
     };
@@ -5559,7 +5637,9 @@ fn publish_zero_copy(
         Ok(prepared) => prepared,
         Err(err) => {
             // Dropped, not fatal: the next request renders afresh.
-            note!("Shared-texture render failed, dropping frame: {err}");
+            if err != lumit_render::cancel::CANCELLED {
+                note!("Shared-texture render failed, dropping frame: {err}");
+            }
             return;
         }
     };
@@ -6138,6 +6218,7 @@ mod tests {
             layer_sample: None,
             pending_measure: None,
             stand_ins: Vec::new(),
+            epochs: std::sync::Arc::default(),
         })
     }
 

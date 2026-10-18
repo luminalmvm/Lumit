@@ -51,6 +51,7 @@
 pub mod audio_tap;
 pub mod build;
 pub mod cache;
+pub mod cancel;
 pub mod colour;
 pub mod decode;
 pub mod diskio;
