@@ -15949,3 +15949,133 @@ fn the_matte_says_where_the_pixel_sort_spans_are() {
         "a white matte on Pixel sort must BE the unmatted sort, to the bit"
     );
 }
+
+/// Depth of field pro's Ray traced method against the optics it claims: a plane
+/// at the focus distance comes back as it was in the middle of the frame, and
+/// a far point spreads to the disc a thin lens gives at that distance and
+/// f-stop, keeping its light.
+#[test]
+fn ray_traced_depth_of_field_matches_the_thin_lens() {
+    use lumit_core::fx::lens_blur;
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let fx = ctx.fx();
+    let (w, h) = (640u32, 360u32);
+    let render = |img: &[f32], metres: f32, fstop: f32| {
+        let optics = lens_blur::BokehLens {
+            lens: 17,
+            fstop,
+            blades: 9,
+            roundness: 1.0,
+            fringing: 1.0,
+            glass_dirt: 0.0,
+            sensor_w_mm: 36.0,
+            aspect: h as f32 / w as f32,
+        };
+        let bake = || {
+            let b = lens_blur::bake(&optics, None)?;
+            Some(LensBlurBakeData {
+                kernels: b.kernels,
+                span_mm: b.span_mm,
+                dz_max_mm: b.dz_max_mm,
+                field_max_mm: b.field_max_mm,
+                focal_mm: b.focal_mm,
+                field_bins: lens_blur::FIELD_BINS as u32,
+                defocus_bins: lens_blur::DEFOCUS_BINS as u32,
+                azimuth_bins: lens_blur::AZIMUTH_BINS as u32,
+                kernel_res: lens_blur::KERNEL_RES as u32,
+            })
+        };
+        let ray_lens = || {
+            let r = lens_blur::ray_lens(&optics, None)?;
+            Some(RayLensData {
+                surfaces: r.surfaces,
+                stop_r: r.stop_r,
+                sensor_z: r.sensor_z,
+                focal: r.focal,
+                ep_r: r.ep_r,
+                ep_z: r.ep_z,
+                roundness: r.roundness,
+                inf_cross_z: r.inf_cross_z,
+                focus_h: r.focus_h,
+                fringing: r.fringing,
+                glass: r.glass,
+            })
+        };
+        let op = LensBlurOp {
+            bake_key: lens_blur::bake_key(&optics, None),
+            depth_bound: true,
+            depth_metres: true,
+            display_depth: false,
+            depth_channel: 0,
+            depth_invert: false,
+            focus_m: 3.0,
+            use_focus_point: false,
+            focus_point: [0.0, 0.0],
+            near_m: 0.5,
+            far_m: 30.0,
+            sensor_w_mm: 36.0,
+            size: 1.0,
+            blades: 9,
+            rotation_deg: 0.0,
+            threshold: 1e9,
+            boost: 1.0,
+            mix: 1.0,
+            max_span_px: lens_blur::MAX_SPAN_PX,
+            zebra: false,
+            rays: 300,
+        };
+        let src = upload_linear_f32(&ctx, img, w, h);
+        let depth = upload_linear_f32(&ctx, &vec![metres; (w * h * 4) as usize], w, h);
+        let out = fx.lens_blur(&ctx, &src, w, h, Some(&depth), &op, &bake, &ray_lens, None);
+        readback_linear_f32(&ctx, &out, w, h).expect("readback")
+    };
+
+    // A checker at the focus distance, stopped down: the middle is untouched.
+    let mut checker = vec![0f32; (w * h * 4) as usize];
+    for (i, px) in checker.chunks_mut(4).enumerate() {
+        let (x, y) = (i as u32 % w, i as u32 / w);
+        let v = if ((x / 8) + (y / 8)) % 2 == 0 {
+            0.8
+        } else {
+            0.1
+        };
+        px.copy_from_slice(&[v, v, v, 1.0]);
+    }
+    let sharp = render(&checker, 3.0, 8.0);
+    for y in h / 2 - 40..h / 2 + 40 {
+        for x in w / 2 - 40..w / 2 + 40 {
+            let i = ((y * w + x) * 4 + 1) as usize;
+            assert!(
+                (sharp[i] - checker[i]).abs() < 0.02,
+                "({x}, {y}) at the focus distance came back {} for {}",
+                sharp[i],
+                checker[i]
+            );
+        }
+    }
+
+    // One bright point at 100 m: the disc a thin lens gives, f/1.4.
+    let mut dot = vec![0f32; (w * h * 4) as usize];
+    for px in dot.chunks_mut(4) {
+        px[3] = 1.0;
+    }
+    let mid = ((h / 2 * w + w / 2) * 4) as usize;
+    dot[mid..mid + 3].copy_from_slice(&[1000.0, 1000.0, 1000.0]);
+    let out = render(&dot, 100.0, 1.4);
+    let light: f32 = out.chunks(4).map(|p| p[1]).sum();
+    assert!(
+        (light - 1000.0).abs() < 30.0,
+        "the point came out with {light} of its 1000"
+    );
+    let lit = out.chunks(4).filter(|p| p[1] > 2.0).count() as f32;
+    let across = 2.0 * (lit / std::f32::consts::PI).sqrt();
+    let (f, s, d) = (50.0f32, 3000.0f32, 100_000.0f32);
+    let want = f / 1.4 * f * (1.0 / s - 1.0 / d) / (1.0 - f / s) * w as f32 / 36.0;
+    assert!(
+        (across / want - 1.0).abs() < 0.1,
+        "the point spread {across:.1} px across, a thin lens gives {want:.1}"
+    );
+}

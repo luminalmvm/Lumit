@@ -38,6 +38,49 @@ pub struct LensBlurOp {
     pub max_span_px: f32,
     /// Stripes over what blurs less than a pixel.
     pub zebra: bool,
+    /// Rays per pixel for the Ray traced method, 0 for Lens shapes.
+    pub rays: u32,
+}
+
+/// The most 3D layers Ray traced meets in a precomp. More falls back to the
+/// precomp's depth.
+pub const SCENE_LAYERS_MAX: usize = 12;
+
+/// A precomp's 3D layers as Ray traced meets them: each one's picture, and its
+/// plane in the camera's own frame (comp pixels, the eye at the comp's middle,
+/// `zoom` in front of the picture plane).
+pub struct SceneLayers {
+    pub planes: Vec<ScenePlane>,
+    pub textures: Vec<wgpu::Texture>,
+    /// The precomp's 2D layers, drawn flat, for rays that miss every 3D one.
+    pub backdrop: Option<wgpu::Texture>,
+    pub comp: (f32, f32),
+    pub zoom: f32,
+    pub px_per_metre: f32,
+}
+
+/// One 3D layer's quad in the camera's frame, and its opacity 0..1.
+pub struct ScenePlane {
+    pub u: [f32; 3],
+    pub v: [f32; 3],
+    pub origin: [f32; 3],
+    pub opacity: f32,
+}
+
+/// The lens for the Ray traced method, as `lumit_core::fx::lens_blur::RayLens`
+/// has it.
+pub struct RayLensData {
+    pub surfaces: Vec<[f32; 6]>,
+    pub stop_r: f32,
+    pub sensor_z: f32,
+    pub focal: f32,
+    pub ep_r: f32,
+    pub ep_z: f32,
+    pub roundness: f32,
+    pub inf_cross_z: f32,
+    pub focus_h: f32,
+    pub fringing: f32,
+    pub glass: Vec<f32>,
 }
 
 /// The traced table, as `lumit_core::fx::lens_blur::BokehBake` has it.
@@ -105,6 +148,9 @@ const GATHER_SAMPLES_PER_SUBMIT: u64 = 400_000_000;
 /// The gather's most samples a pixel, as `fx_lens_blur.wgsl` caps them.
 const GATHER_MAX_SAMPLES: u64 = 768;
 const SPRITES_PER_SUBMIT: u32 = 1 << 20;
+/// Rays one submission traces, over a band of [`RAY_BAND_ROWS`] rows.
+const RAYS_PER_SUBMIT: u64 = 1 << 24;
+const RAY_BAND_ROWS: u32 = 64;
 /// Tables kept on the card. One is about 12 MB.
 const CACHE_CAP: usize = 4;
 
@@ -120,6 +166,9 @@ struct GpuBake {
     kernel_res: u32,
 }
 
+/// A ray lens and its front glass on the card.
+type RayLensGpu = (RayLensData, wgpu::Texture);
+
 pub(super) struct LensBlurFx {
     prep: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     tiles: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
@@ -127,7 +176,16 @@ pub(super) struct LensBlurFx {
     gather: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     sprite: (wgpu::BindGroupLayout, wgpu::RenderPipeline),
     finish: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    ray_min1: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    ray_min2: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    ray_setup: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    ray_invert: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    ray_back: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    ray_trace: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    ray_scene: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
+    ray_resolve: (wgpu::BindGroupLayout, wgpu::ComputePipeline),
     cache: Mutex<Vec<(u64, Arc<GpuBake>)>>,
+    ray_cache: Mutex<Vec<(u64, Arc<RayLensGpu>)>>,
 }
 
 /// One binding of a lens pass's layout.
@@ -137,6 +195,7 @@ pub(super) enum Slot {
     Store(wgpu::TextureFormat),
     Uniform,
     Spans,
+    StorageRw,
 }
 
 impl LensBlurFx {
@@ -221,6 +280,95 @@ impl LensBlurFx {
                 (3, Slot::Uniform),
             ],
         );
+        let ray_min1 = compute(
+            "fx-lens-blur-ray-min1",
+            "lb_ray_min1",
+            &[
+                (4, Slot::Tex),
+                (16, Slot::Store(F::R32Float)),
+                (15, Slot::StorageRw),
+                (3, Slot::Uniform),
+            ],
+        );
+        let ray_min2 = compute(
+            "fx-lens-blur-ray-min2",
+            "lb_ray_min2",
+            &[
+                (17, Slot::Tex),
+                (18, Slot::Store(F::R32Float)),
+                (3, Slot::Uniform),
+            ],
+        );
+        let ray_setup = compute(
+            "fx-lens-blur-ray-setup",
+            "lb_ray_setup",
+            &[
+                (1, Slot::Tex),
+                (3, Slot::Uniform),
+                (13, Slot::Spans),
+                (14, Slot::StorageRw),
+                (20, Slot::Tex),
+            ],
+        );
+        let ray_invert = compute(
+            "fx-lens-blur-ray-invert",
+            "lb_ray_invert",
+            &[(13, Slot::Spans), (14, Slot::StorageRw)],
+        );
+        let ray_back = compute(
+            "fx-lens-blur-ray-back",
+            "lb_ray_back",
+            &[
+                (0, Slot::Tex),
+                (3, Slot::Uniform),
+                (4, Slot::Tex),
+                (6, Slot::Tex),
+                (22, Slot::Store(F::Rgba16Float)),
+                (24, Slot::Store(F::R32Float)),
+            ],
+        );
+        let ray_trace = compute(
+            "fx-lens-blur-ray-trace",
+            "lb_ray_trace",
+            &[
+                (0, Slot::Tex),
+                (3, Slot::Uniform),
+                (4, Slot::Tex),
+                (12, Slot::Uniform),
+                (13, Slot::Spans),
+                (14, Slot::StorageRw),
+                (15, Slot::StorageRw),
+                (17, Slot::Tex),
+                (19, Slot::Tex),
+                (20, Slot::Tex),
+                (21, Slot::StorageRw),
+                (23, Slot::Tex),
+                (25, Slot::Tex),
+            ],
+        );
+        let mut scene_slots = vec![
+            (3, Slot::Uniform),
+            (12, Slot::Uniform),
+            (13, Slot::Spans),
+            (14, Slot::StorageRw),
+            (20, Slot::Tex),
+            (21, Slot::StorageRw),
+            (26, Slot::Spans),
+            (39, Slot::Tex),
+        ];
+        scene_slots.extend((0..SCENE_LAYERS_MAX as u32).map(|i| (27 + i, Slot::Tex)));
+        let ray_scene = compute("fx-lens-blur-ray-scene", "lb_ray_scene", &scene_slots);
+        let ray_resolve = compute(
+            "fx-lens-blur-ray-resolve",
+            "lb_ray_resolve",
+            &[
+                (0, Slot::Tex),
+                (3, Slot::Uniform),
+                (8, Slot::Store(F::Rgba16Float)),
+                (12, Slot::Uniform),
+                (21, Slot::StorageRw),
+            ],
+        );
         let sprite_bgl = layout(
             "fx-lens-blur-sprite",
             &[
@@ -279,8 +427,66 @@ impl LensBlurFx {
             gather,
             sprite: (sprite_bgl, sprite),
             finish,
+            ray_min1,
+            ray_min2,
+            ray_setup,
+            ray_invert,
+            ray_back,
+            ray_trace,
+            ray_scene,
+            ray_resolve,
             cache: Mutex::new(Vec::new()),
+            ray_cache: Mutex::new(Vec::new()),
         }
+    }
+
+    /// The ray lens for `key` and its front glass, made on a miss.
+    fn ray_lens(
+        &self,
+        ctx: &GpuContext,
+        key: u64,
+        make: &dyn Fn() -> Option<RayLensData>,
+    ) -> Option<Arc<RayLensGpu>> {
+        if let Ok(cache) = self.ray_cache.lock() {
+            if let Some((_, hit)) = cache.iter().find(|(k, _)| *k == key) {
+                return Some(hit.clone());
+            }
+        }
+        let data = make()?;
+        let side = (data.glass.len() as f64).sqrt() as u32;
+        let (side, texels) = if side > 0 && (side * side) as usize == data.glass.len() {
+            (side, data.glass.clone())
+        } else {
+            (1, vec![1.0])
+        };
+        use wgpu::util::DeviceExt;
+        let glass = ctx.device.create_texture_with_data(
+            &ctx.queue,
+            &wgpu::TextureDescriptor {
+                label: Some("fx-lens-blur-glass"),
+                size: wgpu::Extent3d {
+                    width: side,
+                    height: side,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::R32Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            },
+            wgpu::util::TextureDataOrder::LayerMajor,
+            bytemuck::cast_slice(&texels),
+        );
+        let out = Arc::new((data, glass));
+        if let Ok(mut cache) = self.ray_cache.lock() {
+            if cache.len() >= CACHE_CAP {
+                cache.remove(0);
+            }
+            cache.push((key, out.clone()));
+        }
+        Some(out)
     }
 
     /// The table for `key`, uploading a fresh bake on a miss.
@@ -426,6 +632,11 @@ pub(super) fn bind_layout(
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
+                Slot::StorageRw => wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
             },
             count: None,
         })
@@ -477,6 +688,8 @@ impl FxEngine {
         depth: Option<&wgpu::Texture>,
         op: &LensBlurOp,
         bake: &dyn Fn() -> Option<LensBlurBakeData>,
+        ray_lens: &dyn Fn() -> Option<RayLensData>,
+        scene: Option<&SceneLayers>,
     ) -> wgpu::Texture {
         let fx = self.lens_blur.get_or_init(|| LensBlurFx::new(ctx));
         let Some(b) = fx.baked(ctx, op.bake_key, bake) else {
@@ -665,15 +878,251 @@ impl FxEngine {
             pass.set_bind_group(0, group, &[]);
             pass.dispatch_workgroups(gx.div_ceil(8), gy.div_ceil(8), 1);
         };
+        // A precomp's own 3D layers, when there are few enough to meet.
+        let scene = scene.filter(|s| {
+            !s.planes.is_empty()
+                && s.planes.len() <= SCENE_LAYERS_MAX
+                && s.textures.len() == s.planes.len()
+        });
+        // A lens that will not trace falls back to Lens shapes.
+        let ray = if op.rays > 0 && !op.display_depth {
+            fx.ray_lens(ctx, op.bake_key, ray_lens)
+        } else {
+            None
+        };
         let mut enc = ctx.encoder("fx-lens-blur");
         run(&mut enc, &fx.prep.1, &prep, w, h);
-        // The Depth view only needs what prep worked out.
-        if !op.display_depth {
+        // The Depth view only needs what prep worked out. Ray traced reads
+        // the reach too, for how far behind a pixel to look.
+        if !op.display_depth && (ray.is_none() || scene.is_none()) {
             run(&mut enc, &fx.tiles.1, &tile, tw, th);
             run(&mut enc, &fx.dilate.1, &dilate, tw, th);
         }
         drop(enc);
-        if !op.display_depth {
+        if let Some(rl) = &ray {
+            let (data, glass) = &**rl;
+            let field = 0.5 * op.sensor_w_mm * (1.0 + (h as f32 / w.max(1) as f32).powi(2)).sqrt();
+            let mut words: Vec<[f32; 4]> = vec![
+                [
+                    data.surfaces.len() as f32,
+                    data.stop_r,
+                    data.sensor_z,
+                    data.focal,
+                ],
+                [data.ep_r, data.ep_z, data.roundness, op.blades as f32],
+                [
+                    data.inf_cross_z,
+                    data.focus_h,
+                    if data.glass.is_empty() { 0.0 } else { 1.0 },
+                    op.rotation_deg.to_radians(),
+                ],
+                [data.fringing, field, 0.0, 0.0],
+            ];
+            for sf in &data.surfaces {
+                words.push([sf[0], sf[1], sf[2], sf[3]]);
+                words.push([sf[4], sf[5], 0.0, 0.0]);
+            }
+            let storage = |label: &str, contents: &[u8]| {
+                ctx.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(label),
+                        contents,
+                        usage: wgpu::BufferUsages::STORAGE,
+                    })
+            };
+            let lens_buf = storage("fx-lens-blur-lens", bytemuck::cast_slice(&words));
+            let rt = storage("fx-lens-blur-rt", &[0u8; (3 + 3 * 256) * 4]);
+            let zr = storage(
+                "fx-lens-blur-range",
+                bytemuck::cast_slice(&[f32::MAX.to_bits(), 0u32]),
+            );
+            let band = RAY_BAND_ROWS.min(h.max(1));
+            let sums_bytes = u64::from(w) * u64::from(band) * 32;
+            ctx.charge_vram(sums_bytes);
+            let sums = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("fx-lens-blur-sums"),
+                size: sums_bytes.max(32),
+                usage: wgpu::BufferUsages::STORAGE,
+                mapped_at_creation: false,
+            });
+            let (m1w, m1h) = (w.div_ceil(8), h.div_ceil(8));
+            let (m2w, m2h) = (m1w.div_ceil(8), m1h.div_ceil(8));
+            let minz = |w, h, label| {
+                scratch(
+                    ctx,
+                    w,
+                    h,
+                    wgpu::TextureFormat::R32Float,
+                    U::STORAGE_BINDING | U::TEXTURE_BINDING,
+                    label,
+                )
+            };
+            let back = scratch(
+                ctx,
+                w,
+                h,
+                wgpu::TextureFormat::Rgba16Float,
+                U::STORAGE_BINDING | U::TEXTURE_BINDING,
+                "fx-lens-blur-back",
+            );
+            let backz = minz(w, h, "fx-lens-blur-backz");
+            let (v_back, v_backz) = (view(&back), view(&backz));
+            let minz1 = minz(m1w, m1h, "fx-lens-blur-minz1");
+            let minz2 = minz(m2w, m2h, "fx-lens-blur-minz2");
+            let (v_m1, v_m2, v_glass) = (view(&minz1), view(&minz2), view(glass));
+            fn buf(b: &wgpu::Buffer) -> wgpu::BindingResource<'_> {
+                b.as_entire_binding()
+            }
+            let min1 = bind(
+                &fx.ray_min1.0,
+                &[
+                    (4, T(&v_info)),
+                    (16, T(&v_m1)),
+                    (15, buf(&zr)),
+                    (3, u.clone()),
+                ],
+            );
+            let min2 = bind(
+                &fx.ray_min2.0,
+                &[(17, T(&v_m1)), (18, T(&v_m2)), (3, u.clone())],
+            );
+            let setup = bind(
+                &fx.ray_setup.0,
+                &[
+                    (1, T(&v_depth)),
+                    (3, u.clone()),
+                    (13, buf(&lens_buf)),
+                    (14, buf(&rt)),
+                    (20, T(&v_glass)),
+                ],
+            );
+            let invert = bind(&fx.ray_invert.0, &[(13, buf(&lens_buf)), (14, buf(&rt))]);
+            let behind = bind(
+                &fx.ray_back.0,
+                &[
+                    (0, T(&v_src)),
+                    (3, u.clone()),
+                    (4, T(&v_info)),
+                    (6, T(&v_reach)),
+                    (22, T(&v_back)),
+                    (24, T(&v_backz)),
+                ],
+            );
+            let scene_buf = scene.map(|sc| {
+                let mut words: Vec<[f32; 4]> = vec![
+                    [sc.planes.len() as f32, sc.comp.0, sc.comp.1, sc.zoom],
+                    [
+                        w as f32 / sc.comp.0.max(1.0),
+                        sc.px_per_metre / 1000.0,
+                        if sc.backdrop.is_some() { 1.0 } else { 0.0 },
+                        0.0,
+                    ],
+                ];
+                for pl in &sc.planes {
+                    words.push([pl.u[0], pl.u[1], pl.u[2], pl.opacity]);
+                    words.push([pl.v[0], pl.v[1], pl.v[2], 0.0]);
+                    words.push([pl.origin[0], pl.origin[1], pl.origin[2], 0.0]);
+                }
+                storage("fx-lens-blur-scene", bytemuck::cast_slice(&words))
+            });
+            let mut enc = ctx.encoder("fx-lens-blur-ray-setup");
+            if scene.is_none() {
+                run(&mut enc, &fx.ray_min1.1, &min1, m1w, m1h);
+                run(&mut enc, &fx.ray_min2.1, &min2, m2w, m2h);
+                run(&mut enc, &fx.ray_back.1, &behind, w, h);
+            }
+            for (pipe, group) in [(&fx.ray_setup.1, &setup), (&fx.ray_invert.1, &invert)] {
+                let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("fx-lens-blur-ray-setup"),
+                    timestamp_writes: None,
+                });
+                pass.set_pipeline(pipe);
+                pass.set_bind_group(0, group, &[]);
+                pass.dispatch_workgroups(256 / 64, 1, 1);
+            }
+            drop(enc);
+            // Bands of rows, each traced in runs of rays sized so no
+            // submission holds more than its share.
+            let chunk = (RAYS_PER_SUBMIT / (u64::from(w) * u64::from(band)).max(1))
+                .clamp(1, u64::from(op.rays)) as u32;
+            let part4 = |v: [u32; 4]| {
+                ctx.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("fx-lens-blur-part"),
+                        contents: bytemuck::cast_slice(&v),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    })
+            };
+            for y in (0..h).step_by(band as usize) {
+                let rows = band.min(h - y);
+                let mut start = 0;
+                while start < op.rays {
+                    let end = (start + chunk).min(op.rays);
+                    let at = part4([y, start, end, op.rays]);
+                    if let (Some(sc), Some(sb)) = (scene, &scene_buf) {
+                        let views: Vec<wgpu::TextureView> = sc.textures.iter().map(view).collect();
+                        let backdrop = sc.backdrop.as_ref().map(view);
+                        let mut entries = vec![
+                            (3, u.clone()),
+                            (12, buf(&at)),
+                            (13, buf(&lens_buf)),
+                            (14, buf(&rt)),
+                            (20, T(&v_glass)),
+                            (21, buf(&sums)),
+                            (26, buf(sb)),
+                            (39, T(backdrop.as_ref().unwrap_or(&v_src))),
+                        ];
+                        for i in 0..SCENE_LAYERS_MAX {
+                            entries.push((27 + i as u32, T(views.get(i).unwrap_or(&v_src))));
+                        }
+                        let group = bind(&fx.ray_scene.0, &entries);
+                        let mut enc = ctx.encoder("fx-lens-blur-ray-scene");
+                        run(&mut enc, &fx.ray_scene.1, &group, w, rows);
+                        drop(enc);
+                        ctx.flush();
+                        start = end;
+                        continue;
+                    }
+                    let group = bind(
+                        &fx.ray_trace.0,
+                        &[
+                            (0, T(&v_src)),
+                            (3, u.clone()),
+                            (4, T(&v_info)),
+                            (12, buf(&at)),
+                            (13, buf(&lens_buf)),
+                            (14, buf(&rt)),
+                            (15, buf(&zr)),
+                            (17, T(&v_m1)),
+                            (19, T(&v_m2)),
+                            (20, T(&v_glass)),
+                            (21, buf(&sums)),
+                            (23, T(&v_back)),
+                            (25, T(&v_backz)),
+                        ],
+                    );
+                    let mut enc = ctx.encoder("fx-lens-blur-ray-trace");
+                    run(&mut enc, &fx.ray_trace.1, &group, w, rows);
+                    drop(enc);
+                    ctx.flush();
+                    start = end;
+                }
+                let at = part4([y, 0, 0, op.rays]);
+                let group = bind(
+                    &fx.ray_resolve.0,
+                    &[
+                        (0, T(&v_src)),
+                        (3, u.clone()),
+                        (8, T(&v_acc)),
+                        (12, buf(&at)),
+                        (21, buf(&sums)),
+                    ],
+                );
+                let mut enc = ctx.encoder("fx-lens-blur-ray-resolve");
+                run(&mut enc, &fx.ray_resolve.1, &group, w, rows);
+                drop(enc);
+            }
+        } else if !op.display_depth {
             // Bands of rows, a whole number of workgroups tall.
             let per = GATHER_SAMPLES_PER_SUBMIT / (u64::from(w) * GATHER_MAX_SAMPLES).max(1);
             let rows = (u32::try_from(per).unwrap_or(u32::MAX) / 8 * 8).clamp(8, h.max(8));

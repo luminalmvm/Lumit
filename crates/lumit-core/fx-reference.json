@@ -3563,6 +3563,29 @@
           "default": false
         },
         {
+          "id": "method",
+          "label": "Method",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Lens shapes",
+            "Ray traced"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "rays",
+          "label": "Rays",
+          "kind": "int",
+          "unit": "raw",
+          "default": 96,
+          "slider_min": 3.0,
+          "slider_max": 1024.0,
+          "hard_min": 3.0,
+          "hard_max": 16384.0
+        },
+        {
           "id": "lens_model",
           "label": "Lens",
           "kind": "choice",
@@ -3918,6 +3941,18 @@
           "param": "near_m",
           "on": "depth",
           "cond": "layer_set"
+        },
+        {
+          "param": "rays",
+          "on": "method",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "size",
+          "on": "method",
+          "cond": "choice_is",
+          "value": 0
         }
       ],
       "matte_role": "strength"

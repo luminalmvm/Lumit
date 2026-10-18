@@ -3358,7 +3358,7 @@ pub mod shared_metal;
 #[cfg(any(test, feature = "test-fixtures"))]
 pub mod test_support;
 pub use composite::{
-    camera_matrix, concat_place, invert_place, place_matrix, scaled_size, unplace_matrix, Blend,
-    CompositeLayer, Compositor, MatteInput, MbSample, Region,
+    camera_frame, camera_matrix, concat_place, invert_place, place_matrix, scaled_size,
+    unplace_matrix, Blend, CompositeLayer, Compositor, MatteInput, MbSample, Region,
 };
 pub use glam::Mat4;

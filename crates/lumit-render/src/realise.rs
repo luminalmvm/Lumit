@@ -635,7 +635,9 @@ impl Realiser<'_> {
                 let linear = if let Some(n) = d.nested.as_ref().filter(|n| n.scene_depth) {
                     // Distance, not a picture, so the referenced layer's own
                     // stack below has nothing to work on.
-                    return LayerInput::Depth(set_down(&self.realise_scene_depth(n)));
+                    let mut scene = None;
+                    let depth = self.realise_scene_depth(n, n.trace_layers.then_some(&mut scene));
+                    return LayerInput::Depth(set_down(&depth), scene.map(std::sync::Arc::new));
                 } else if let Some(n) = &d.nested {
                     self.realise_nested(n.key, n.camera, n.width, n.height, n.background, &n.draws)
                 } else {
@@ -876,7 +878,7 @@ impl Realiser<'_> {
                 // The picture handed in, or nothing at all.
                 GraphStep::Provided => provided.cloned().map(|t| (t, frame)),
                 GraphStep::SceneDepth(n) => {
-                    let depth = self.realise_scene_depth(n);
+                    let depth = self.realise_scene_depth(n, None);
                     Some((
                         crate::fxops::render_layer_input(
                             self.compositor,
@@ -903,7 +905,7 @@ impl Realiser<'_> {
                         .into_iter()
                         .next()
                     {
-                        Some(LayerInput::Texture(t) | LayerInput::Depth(t)) => Some((t, frame)),
+                        Some(LayerInput::Texture(t) | LayerInput::Depth(t, _)) => Some((t, frame)),
                         // `ThisLayer` cannot reach here: a graph has no layer
                         // for a reference to name.
                         _ => None,
@@ -1072,7 +1074,7 @@ impl Realiser<'_> {
                         &[],
                         &luts,
                         &[match bind(picture) {
-                            LayerInput::Texture(t) if *picture_depth => LayerInput::Depth(t),
+                            LayerInput::Texture(t) if *picture_depth => LayerInput::Depth(t, None),
                             other => other,
                         }],
                         &flare_lens,
@@ -1396,6 +1398,7 @@ impl Realiser<'_> {
                 &acc,
                 region,
                 None,
+                None,
             );
             // An adjustment layer processes the composite below, which has no
             // footage neighbour frames. A temporal effect's neighbours are
@@ -1518,6 +1521,7 @@ impl Realiser<'_> {
             &layers[start..],
             &acc,
             region,
+            None,
             None,
         )
     }
@@ -1988,6 +1992,7 @@ impl Realiser<'_> {
         seed: &Option<wgpu::Texture>,
         region: Option<lumit_gpu::Region>,
         scene_depth: Option<f32>,
+        capture: Option<&mut Option<lumit_gpu::fx::SceneLayers>>,
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
         // How much wider and taller each layer's finished picture is than the
@@ -2385,7 +2390,7 @@ impl Realiser<'_> {
             })
             .collect();
         if let (Some(metres_per_w), Some(cam)) = (scene_depth, cam_mat) {
-            return self.compositor.composite_depth(
+            let depth = self.compositor.composite_depth(
                 &self.ctx,
                 width,
                 height,
@@ -2394,6 +2399,84 @@ impl Realiser<'_> {
                 metres_per_w,
                 self.render_scale,
             );
+            // The 3D layers themselves too, for rays to meet: each picture and
+            // its plane in the camera's frame, and the 2D layers drawn flat
+            // behind everything.
+            if let (Some(out), Some(pose)) = (capture, camera) {
+                let frame = lumit_gpu::camera_frame(
+                    width as f32,
+                    height as f32,
+                    pose.zoom as f32,
+                    (
+                        pose.position.0 as f32,
+                        pose.position.1 as f32,
+                        pose.position.2 as f32,
+                    ),
+                    (
+                        pose.rotation_deg.0 as f32,
+                        pose.rotation_deg.1 as f32,
+                        pose.rotation_deg.2 as f32,
+                    ),
+                );
+                let mut planes = Vec::new();
+                let mut textures = Vec::new();
+                for ((texture, l), g) in linear_textures.iter().zip(layers).zip(&grown) {
+                    if !l.three_d {
+                        continue;
+                    }
+                    let (dx, dy) = grow_offset(l.natural_size, *g);
+                    let placed = lumit_gpu::CompositeLayer {
+                        texture,
+                        size: grow_size(l.natural_size, *g),
+                        position: l.position,
+                        anchor: (l.anchor.0 + dx, l.anchor.1 + dy),
+                        scale: l.scale,
+                        rotation_deg: l.rotation_deg,
+                        opacity: l.opacity,
+                        z: l.z,
+                        rotation_x_deg: l.rotation_x_deg,
+                        rotation_y_deg: l.rotation_y_deg,
+                        three_d: true,
+                        matte: None,
+                        blend: l.blend,
+                        layer_mask: None,
+                        pre: l.pre,
+                    };
+                    let m = frame * placed.world();
+                    planes.push(lumit_gpu::fx::ScenePlane {
+                        u: m.col(0).truncate().to_array(),
+                        v: m.col(1).truncate().to_array(),
+                        origin: m.col(3).truncate().to_array(),
+                        opacity: (l.opacity / 100.0).clamp(0.0, 1.0),
+                    });
+                    textures.push(texture.clone());
+                }
+                let flat: Vec<lumit_gpu::CompositeLayer> =
+                    comp_layers.into_iter().filter(|c| !c.three_d).collect();
+                let backdrop = (!flat.is_empty()).then(|| {
+                    self.compositor.composite_seeded(
+                        &self.ctx,
+                        width,
+                        height,
+                        [0.0; 4],
+                        &flat,
+                        None,
+                        None,
+                        self.render_scale,
+                        self.samples,
+                        None,
+                    )
+                });
+                *out = Some(lumit_gpu::fx::SceneLayers {
+                    planes,
+                    textures,
+                    backdrop,
+                    comp: (width as f32, height as f32),
+                    zoom: pose.zoom as f32,
+                    px_per_metre: pose.zoom as f32 / metres_per_w.max(1e-9),
+                });
+            }
+            return depth;
         }
         self.compositor.composite_seeded(
             &self.ctx,
@@ -2414,7 +2497,11 @@ impl Realiser<'_> {
     /// Precomp. Each layer's picture is made as for colour, so what its effects
     /// cut away is not there. Adjustment and 2D layers draw nothing, and a comp
     /// with no camera is all far away.
-    pub fn realise_scene_depth(&self, n: &crate::draw::NestedInputDraw) -> wgpu::Texture {
+    pub fn realise_scene_depth(
+        &self,
+        n: &crate::draw::NestedInputDraw,
+        capture: Option<&mut Option<lumit_gpu::fx::SceneLayers>>,
+    ) -> wgpu::Texture {
         // ponytail: 2D layers are still made here and only dropped by the depth
         // pass. Skip them before making them if a heavy 2D layer ever shows.
         let draws: &[CompLayerDraw] = if n.camera.is_some() { &n.draws } else { &[] };
@@ -2432,6 +2519,7 @@ impl Realiser<'_> {
             &None,
             None,
             Some(metres_per_w),
+            capture,
         );
         self.ctx.end_frame();
         out

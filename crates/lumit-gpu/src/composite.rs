@@ -282,6 +282,24 @@ pub fn scaled_size(width: u32, height: u32, scale: f32) -> (u32, u32) {
 }
 
 impl CompositeLayer<'_> {
+    /// The layer's quad (0..1 each way) to comp pixels in 3D: its placement and
+    /// any parent's, before a camera sees it.
+    pub fn world(&self) -> Mat4 {
+        let mut place = Mat4::from_cols_array_2d(&place_matrix(
+            self.position,
+            self.anchor,
+            self.scale,
+            self.rotation_deg,
+            self.z,
+            self.rotation_x_deg,
+            self.rotation_y_deg,
+        ));
+        if let Some(pre) = &self.pre {
+            place = Mat4::from_cols_array_2d(pre) * place;
+        }
+        place * Mat4::from_scale(glam::vec3(self.size.0, self.size.1, 1.0))
+    }
+
     /// comp pixel space → NDC, with the layer transform applied.
     /// Full 4×4. Order: quad(0..1) → layer px → −anchor → scale →
     /// rotate → +position → (parent `pre`, when collapsed) → NDC.
@@ -363,16 +381,30 @@ pub fn camera_matrix(
         [0.0, 0.0, 0.0, 1.0],
     ]);
     // View: undo the camera's own placement (rotate about the eye).
+    persp * camera_frame(comp_w, comp_h, zoom, position, rotation_deg)
+}
+
+/// Comp space to the camera's own frame, as [`camera_matrix`] places it: the
+/// eye at `(cx, cy, -zoom)` looking along +z, the plane z = 0 seen 1:1.
+pub fn camera_frame(
+    comp_w: f32,
+    comp_h: f32,
+    zoom: f32,
+    position: (f32, f32, f32),
+    rotation_deg: (f32, f32, f32),
+) -> Mat4 {
     // cam_place maps "default camera, zoom behind the comp centre" to the
     // actual pose, so its inverse is the identity when the camera hasn't
-    // moved. The perspective above puts the eye at z = -zoom of its own
-    // frame, which is why the last translation carries +zoom.
+    // moved. The perspective puts the eye at z = -zoom of its own frame,
+    // which is why the last translation carries +zoom.
+    let zoom = zoom.max(1.0);
+    let (cx, cy) = (comp_w * 0.5, comp_h * 0.5);
     let cam_place = Mat4::from_translation(glam::vec3(position.0, position.1, position.2))
         * Mat4::from_rotation_y(rotation_deg.1.to_radians())
         * Mat4::from_rotation_x(rotation_deg.0.to_radians())
         * Mat4::from_rotation_z(rotation_deg.2.to_radians())
         * Mat4::from_translation(glam::vec3(-cx, -cy, zoom));
-    persp * cam_place.inverse()
+    cam_place.inverse()
 }
 
 /// The geometry pipelines at ONE multisample count.

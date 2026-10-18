@@ -560,6 +560,7 @@ Lens distort
 Lens file
 Lens flare
 Lens options
+Lens shapes
 Level
 Level crossing
 Levels
@@ -634,6 +635,7 @@ Measure
 Median
 Merge
 Merge points
+Method
 Micro Four Thirds
 Middle colour
 Midtone contrast
@@ -818,6 +820,8 @@ Randomness
 Range
 Rate
 Ratio
+Ray traced
+Rays
 Read
 Rec. 709
 Rectangle

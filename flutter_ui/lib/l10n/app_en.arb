@@ -19897,6 +19897,22 @@
   "@fxMicroFourThirds": {
     "description": "Effect controls — a Sensor choice on Depth of field pro: the Micro Four Thirds sensor size. A format name, usually left as it is."
   },
+  "fxMethod": "Method",
+  "@fxMethod": {
+    "description": "Effect controls — a control on Depth of field pro: how the blur is worked out, either from the lens's traced blur shapes or by tracing rays through the lens."
+  },
+  "fxLensShapes": "Lens shapes",
+  "@fxLensShapes": {
+    "description": "Effect controls — a Method choice on Depth of field pro: each pixel is spread by the blur shape traced through the lens for it."
+  },
+  "fxRayTraced": "Ray traced",
+  "@fxRayTraced": {
+    "description": "Effect controls — a Method choice on Depth of field pro: rays from each pixel are followed back through the lens to whatever the depth puts in their way."
+  },
+  "fxRays": "Rays",
+  "@fxRays": {
+    "description": "Effect controls — a control on Depth of field pro: how many rays are traced for each pixel. More is smoother and slower."
+  },
   "fxNearestM": "Nearest (m)",
   "@fxNearestM": {
     "description": "Effect controls — a control on Depth of field pro: the distance in metres that the darkest value of the depth matte means."
