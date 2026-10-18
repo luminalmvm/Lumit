@@ -33,7 +33,7 @@
 //! back as its own input, with `errored` set, and the caller puts a calm badge
 //! on the layer.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
@@ -290,6 +290,9 @@ pub struct Broker {
     descriptors: Vec<PluginDescriptor>,
     refused: Vec<String>,
     instances: BTreeMap<InstanceId, InstanceRecord>,
+    /// The instances that have rendered a frame in this process. The first
+    /// frame gets the warm-up deadline, the rest the render one.
+    warm: BTreeSet<InstanceId>,
     next_instance: InstanceId,
     next_slot: Slot,
     strikes: u32,
@@ -344,6 +347,7 @@ impl Broker {
             descriptors: Vec::new(),
             refused: Vec::new(),
             instances: BTreeMap::new(),
+            warm: BTreeSet::new(),
             next_instance: 1,
             next_slot: 0,
             strikes: 0,
@@ -527,6 +531,13 @@ impl Broker {
         self.config.quirks.render_timeout
     }
 
+    /// How long making an instance and its first frame may take. Never less
+    /// than a render, for a plugin the quirks table gives longer than this.
+    fn warm_up_deadline(&self) -> Duration {
+        let quirks = &self.config.quirks;
+        quirks.warm_up_timeout.max(quirks.render_timeout)
+    }
+
     /// Make an instance of one of the plugins.
     ///
     /// # Errors
@@ -564,8 +575,8 @@ impl Broker {
             context: record.context,
             params: record.params.clone(),
         };
-        let control = self.config.quirks.control_timeout;
-        match self.action(&message, control, None) {
+        let warm_up = self.warm_up_deadline();
+        match self.action(&message, warm_up, None) {
             Ok(BrokerMessage::Created) => {
                 self.instances.insert(instance, record);
                 Ok(instance)
@@ -755,13 +766,18 @@ impl Broker {
             inputs,
             output,
         };
-        let deadline = self.config.quirks.render_timeout;
+        let deadline = if self.warm.contains(&instance) {
+            self.config.quirks.render_timeout
+        } else {
+            self.warm_up_deadline()
+        };
         match self.action(&message, deadline, Some(source)) {
             Ok(BrokerMessage::Rendered {
                 slot,
                 frames_needed,
                 identity_of,
             }) => {
+                self.warm.insert(instance);
                 let (_, frame) = self.ring.read_frame(slot)?;
                 Ok(BrokerRender {
                     frame,
@@ -787,6 +803,7 @@ impl Broker {
         if self.instances.remove(&instance).is_none() {
             return Err(BrokerError::NoSuchInstance);
         }
+        self.warm.remove(&instance);
         let control = self.config.quirks.control_timeout;
         let _ = self.action(&HostMessage::Destroy { instance }, control, None);
         Ok(())
@@ -1058,6 +1075,8 @@ impl Broker {
     fn restart(&mut self) -> Result<(), BrokerError> {
         self.kill();
         self.restarts = self.restarts.saturating_add(1);
+        // A new process loads everything again, so every instance warms up again.
+        self.warm.clear();
         // A fresh ring, not the old one.
         //
         // The old ring's *name* is gone: it is unlinked as soon as the broker
@@ -1072,8 +1091,8 @@ impl Broker {
         self.next_slot = 0;
         self.start(&fresh_identifier()?)?;
 
-        let control = self.config.quirks.control_timeout;
         let describe = describe_deadline(&self.config.quirks);
+        let warm_up = self.warm_up_deadline();
         if let Ok(BrokerMessage::Described { plugins, .. }) =
             self.exchange(&HostMessage::Describe, describe, None)
         {
@@ -1092,7 +1111,7 @@ impl Broker {
                     context: record.context,
                     params: record.params,
                 },
-                control,
+                warm_up,
                 None,
             );
         }
