@@ -48,14 +48,14 @@ pub fn rotation(deg: (f64, f64, f64)) -> Mat3 {
 /// `M[1][2] = -sin x`, `M[0][2] = sin y cos x`, `M[2][2] = cos y cos x`,
 /// `M[1][0] = cos x sin z`, `M[1][1] = cos x cos z`. At `cos x = 0` the camera
 /// looks straight along its own y axis, y and z name the same turn, and the
-/// whole of it is spent on y.
+/// whole of it is spent on y: there `M[0][0] = cos y` and `M[2][0] = -sin y`.
 #[must_use]
 pub fn euler_yxz(m: &Mat3) -> (f64, f64, f64) {
     let sin_x = (-m[1][2]).clamp(-1.0, 1.0);
     let rx = sin_x.asin();
     let cos_x = (1.0 - sin_x * sin_x).max(0.0).sqrt();
     if cos_x < 1e-9 {
-        return (rx.to_degrees(), m[2][0].atan2(m[0][0]).to_degrees(), 0.0);
+        return (rx.to_degrees(), (-m[2][0]).atan2(m[0][0]).to_degrees(), 0.0);
     }
     (
         rx.to_degrees(),
@@ -295,6 +295,17 @@ mod tests {
         assert!(close3(f, (d.0 / len, d.1 / len, d.2 / len)));
         // The eye-behind inverse lands the eye back where it was.
         assert!(close3(eye_behind(poi, deg, len), eye));
+
+        // Looking straight up or down, y and z are one turn, and the roll on
+        // top still has to come out the right way round.
+        for (poi, pitch) in [((0.0, -100.0, 0.0), 90.0), ((0.0, 100.0, 0.0), -90.0)] {
+            let roll = (0.0, 0.0, 30.0);
+            let deg = look_at((0.0, 0.0, 0.0), poi, roll).unwrap();
+            let want = mul(&rot_x(pitch), &rotation(roll));
+            let got = rotation(deg);
+            let mut cells = got.iter().flatten().zip(want.iter().flatten());
+            assert!(cells.all(|(a, b)| close(*a, *b)), "{deg:?}");
+        }
     }
 
     #[test]
