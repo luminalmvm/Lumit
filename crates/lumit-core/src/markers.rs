@@ -90,6 +90,82 @@ pub fn with_regenerated_beats(existing: &[Marker], beats: Vec<Marker>) -> Vec<Ma
     out
 }
 
+/// A marker as a panel hands it back: what it can edit, with the span in
+/// whole frames of the owner's rate.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkerEdit {
+    pub id: Uuid,
+    pub time: CompTime,
+    pub label: String,
+    pub colour: Option<u8>,
+    /// How many frames the marker spans, or `None` for a moment.
+    pub duration_frames: Option<i64>,
+}
+
+/// A whole marker list coming back from an editor, merged onto the list the
+/// document holds.
+///
+/// **Why a merge and not a conversion.** An edited marker carries what a panel
+/// can edit — id, time, label, colour and the span — and the engine's marker
+/// carries two more it cannot: the *kind* (a detected beat's provenance, plus
+/// its confidence) and the `extra` map that keeps fields a newer Lumit wrote
+/// (docs/10 §1.1's forward-compatibility promise). Rebuilding each marker from
+/// them alone flattened those to their defaults, so **dragging
+/// or renaming a beat marker on the ruler turned it into an ordinary cue** —
+/// and then *Clear beat markers* could no longer find it, because there was
+/// nothing left to say it had ever been one. The ruler markers made that a
+/// click away.
+///
+/// So each incoming marker is matched by id against what the document already
+/// holds: found, and it keeps that marker's kind and extra; new, and it is a
+/// plain user marker, which is exactly what a marker the panel just created is.
+///
+/// **The duration crosses now, and still rides the merge.** It crosses as
+/// *frames* — what the ruler draws with — so a straight conversion back would
+/// round a marker whose span is finer than a frame down to the frame boundary
+/// every time an unrelated drag wrote the list. So a duration that still reads
+/// as the same number of frames keeps the document's exact rational, and only a
+/// span the panel actually changed is rebuilt from frames.
+pub fn merge_edits(
+    incoming: Vec<MarkerEdit>,
+    existing: &[Marker],
+    rate: crate::time::FrameRate,
+) -> Vec<Marker> {
+    incoming
+        .into_iter()
+        .map(|m| {
+            let was = existing.iter().find(|e| e.id == m.id);
+            merge_edit(m, was, rate)
+        })
+        .collect()
+}
+
+fn merge_edit(m: MarkerEdit, existing: Option<&Marker>, rate: crate::time::FrameRate) -> Marker {
+    let was = existing.and_then(|e| e.duration);
+    let duration = match m.duration_frames {
+        // Unchanged in frames: keep the exact span the document holds, so a
+        // rename or a drag cannot quantise a marker nobody resized.
+        Some(frames) if was.map(|d| rate.frame_at(CompTime(d))) == Some(frames) => was,
+        // A span the panel set. Nought frames or fewer is a moment, which is
+        // what "no span" means everywhere else.
+        Some(frames) if frames > 0 => rate.time_of_frame(frames).ok().map(|t| t.0),
+        Some(_) => None,
+        None => None,
+    };
+    Marker {
+        id: m.id,
+        time: m.time,
+        duration,
+        label: m.label,
+        colour: m.colour,
+        // Everything the panel cannot edit is carried from the marker that was
+        // already there; a marker it has just made has nothing to carry, and
+        // takes the plain-user defaults.
+        kind: existing.map(|e| e.kind).unwrap_or_default(),
+        extra: existing.map(|e| e.extra.clone()).unwrap_or_default(),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

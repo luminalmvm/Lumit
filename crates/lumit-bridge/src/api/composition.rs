@@ -84,75 +84,31 @@ pub(crate) fn bridge_marker(
 }
 
 /// A whole marker list coming back from the panel, merged onto the list the
-/// document holds.
-///
-/// **Why a merge and not a conversion.** The bridge marker carries what a panel
-/// can edit — id, time, label, colour and the span — and the engine's marker
-/// carries two more it cannot: the *kind* (a detected beat's provenance, plus
-/// its confidence) and the `extra` map that keeps fields a newer Lumit wrote
-/// (docs/10 §1.1's forward-compatibility promise). Rebuilding each marker from
-/// the bridge's fields alone flattened those to their defaults, so **dragging
-/// or renaming a beat marker on the ruler turned it into an ordinary cue** —
-/// and then *Clear beat markers* could no longer find it, because there was
-/// nothing left to say it had ever been one. The ruler markers made that a
-/// click away.
-///
-/// So each incoming marker is matched by id against what the document already
-/// holds: found, and it keeps that marker's kind and extra; new, and it is a
-/// plain user marker, which is exactly what a marker the panel just created is.
-///
-/// **The duration crosses now, and still rides the merge.** It crosses as
-/// *frames* — what the ruler draws with — so a straight conversion back would
-/// round a marker whose span is finer than a frame down to the frame boundary
-/// every time an unrelated drag wrote the list. So a duration that still reads
-/// as the same number of frames keeps the document's exact rational, and only a
-/// span the panel actually changed is rebuilt from frames.
+/// document holds ([`lumit_core::markers::merge_edits`] says why a merge).
 #[frb(ignore)]
 pub(crate) fn core_markers(
     incoming: Vec<BridgeMarker>,
     existing: &[lumit_core::markers::Marker],
     rate: lumit_core::time::FrameRate,
 ) -> Result<Vec<lumit_core::markers::Marker>, BridgeError> {
-    incoming
+    let edits = incoming
         .into_iter()
-        .map(|m| {
-            let was = existing.iter().find(|e| e.id == m.id);
-            core_marker(m, was, rate)
-        })
-        .collect()
+        .map(core_marker)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(lumit_core::markers::merge_edits(edits, existing, rate))
 }
 
 #[frb(ignore)]
-pub(crate) fn core_marker(
-    m: BridgeMarker,
-    existing: Option<&lumit_core::markers::Marker>,
-    rate: lumit_core::time::FrameRate,
-) -> Result<lumit_core::markers::Marker, BridgeError> {
+pub(crate) fn core_marker(m: BridgeMarker) -> Result<lumit_core::markers::MarkerEdit, BridgeError> {
     use lumit_core::time::{CompTime, Rational};
-    let was = existing.and_then(|e| e.duration);
-    let duration = match m.duration_frames {
-        // Unchanged in frames: keep the exact span the document holds, so a
-        // rename or a drag cannot quantise a marker nobody resized.
-        Some(frames) if was.map(|d| rate.frame_at(CompTime(d))) == Some(frames) => was,
-        // A span the panel set. Nought frames or fewer is a moment, which is
-        // what "no span" means everywhere else.
-        Some(frames) if frames > 0 => rate.time_of_frame(frames).ok().map(|t| t.0),
-        Some(_) => None,
-        None => None,
-    };
-    Ok(lumit_core::markers::Marker {
+    Ok(lumit_core::markers::MarkerEdit {
         id: m.id,
         time: CompTime(
             Rational::new(m.time.num, m.time.den).map_err(|_| BridgeError::InvalidTime)?,
         ),
-        duration,
         label: m.label,
         colour: m.colour,
-        // Everything the panel cannot edit is carried from the marker that was
-        // already there; a marker it has just made has nothing to carry, and
-        // takes the plain-user defaults.
-        kind: existing.map(|e| e.kind).unwrap_or_default(),
-        extra: existing.map(|e| e.extra.clone()).unwrap_or_default(),
+        duration_frames: m.duration_frames,
     })
 }
 
