@@ -103,7 +103,8 @@ Future<void> _start(List<String> args) async {
   // Up once the settings are read, so it speaks the person's language.
   _splash = await BootSplash.open(
       version: versionFromBootLine(lumitVersion()) ?? '',
-      step: l10n.bootLoadingExtensions);
+      step: l10n.bootLoadingExtensions,
+      accent: ui.workspace.themedSplash ? ui.workspace.theme.accent : null);
   // Every plugin is in before anything opens, so a project never draws one as
   // missing because the scan had not reached it yet.
   await _scanPlugins();

@@ -2,15 +2,16 @@
 // its own while everything Lumit loads at start-up is loaded.
 //
 // The window is the picture's shape. Its see-through pixels are see-through on
-// the desktop too, which is how the card's broken corner can reach outside the
-// card. Dart paints the whole thing and hands the runner finished pixels
-// (lumit/window "splash"), so the three runners only have to put a bitmap on
-// screen, and the picture and the words are drawn once, here.
+// the desktop too, so a picture can reach outside the card. Dart paints the
+// whole thing and hands the runner finished pixels (lumit/window "splash"), so
+// the three runners only have to put a bitmap on screen, and the picture and
+// the words are drawn once, here.
 //
-// The picture is replaceable: a `splash.png` beside the settings file is used in
-// place of the one Lumit ships, at the template's size (640 by 500, or a
-// multiple). The words always go in the same places, so a home-made picture
-// leaves those parts quiet.
+// Lumit's own picture is a card lit by the brand's green and blue, painted
+// here, or by the theme's accent when Appearance asks for it. A `splash.png`
+// beside the settings file is used in its place, at the template's size (640
+// by 500, or a multiple). The words always go in the same places, so a
+// home-made picture leaves those parts quiet.
 
 import 'dart:async';
 import 'dart:io';
@@ -24,12 +25,10 @@ import '../theme/brand.dart';
 import '../theme/theme.dart';
 import 'wordmark.dart';
 
-/// The picture Lumit ships.
-const String splashAsset = 'assets/splash/splash.png';
-
 /// The template, in logical pixels. The picture fills the canvas, and the card
 /// it is drawn round sits at 110, 110, 480 by 360.
 const ui.Size splashCanvas = ui.Size(640, 500);
+const ui.Rect _card = ui.Rect.fromLTWH(110, 110, 480, 360);
 const ui.Offset _wordmarkAt = ui.Offset(144, 356);
 const double _wordmarkHeight = 46;
 const double _versionRight = 564, _versionBaseline = 144;
@@ -39,7 +38,12 @@ const double _textSize = 12;
 
 /// The splash window, while it is up.
 class BootSplash {
-  BootSplash._(this._scale, this._art, this._wordmark, this._version);
+  BootSplash._(
+      this._scale, this._art, this._wordmark, this._version, ui.Color? accent)
+      : _lightA = accent ?? brandKeyJade,
+        _lightB = accent == null
+            ? brandKeyBlueLight
+            : ui.Color.lerp(accent, brandWordmarkPaper, 0.45)!;
 
   static const _channel = MethodChannel('lumit/window');
 
@@ -50,6 +54,9 @@ class BootSplash {
   final ui.Image? _art;
   final PictureInfo? _wordmark;
   final String _version;
+
+  /// The two colours the card is lit with, and the bar fills with.
+  final ui.Color _lightA, _lightB;
 
   String _step = '';
   String _detail = '';
@@ -62,14 +69,16 @@ class BootSplash {
   /// Put the splash up, or null where the runner has no splash window (a
   /// start into the tray, or a platform that can't) and Lumit starts without
   /// one.
+  ///
+  /// [accent] lights the card in place of Lumit's own green and blue.
   static Future<BootSplash?> open(
-      {required String version, required String step}) async {
+      {required String version, required String step, ui.Color? accent}) async {
     try {
       final scale = await _channel.invokeMethod<double>('splashScale');
       if (scale == null || scale <= 0) return null;
-      final splash =
-          BootSplash._(scale, await _picture(), await _lettering(), version)
-            .._step = step;
+      final splash = BootSplash._(
+          scale, await _picture(), await _lettering(), version, accent)
+        .._step = step;
       if (!await splash._draw()) return null;
       return _current = splash;
     } catch (_) {
@@ -158,11 +167,7 @@ class BootSplash {
           ui.Offset.zero & splashCanvas,
           ui.Paint()..filterQuality = ui.FilterQuality.medium);
     } else {
-      // No picture at all: a plain card, so the words still have a ground.
-      canvas.drawRRect(
-          ui.RRect.fromRectAndRadius(const ui.Rect.fromLTWH(110, 110, 480, 360),
-              const ui.Radius.circular(14)),
-          ui.Paint()..color = LumitTheme.dark().surface1);
+      _paintCard(canvas);
     }
 
     final wordmark = _wordmark;
@@ -208,10 +213,50 @@ class BootSplash {
       canvas.drawRRect(
           ui.RRect.fromRectAndRadius(fill, round),
           ui.Paint()
-            ..shader = ui.Gradient.linear(track.centerLeft, track.centerRight,
-                const [brandKeyJade, brandKeyBlueLight]));
+            ..shader = ui.Gradient.linear(
+                track.centerLeft, track.centerRight, [_lightA, _lightB]));
     }
     return recorder.endRecording();
+  }
+
+  /// Lumit's own picture: a dark card with a soft shadow, lit from its top
+  /// left by one colour and its bottom right by the other.
+  void _paintCard(ui.Canvas canvas) {
+    final dark = LumitTheme.dark();
+    final shape =
+        ui.RRect.fromRectAndRadius(_card, const ui.Radius.circular(14));
+    canvas.drawRRect(
+        shape.shift(const ui.Offset(0, 10)),
+        ui.Paint()
+          ..color = brandWordmarkInk.withValues(alpha: 0.55)
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 18));
+    canvas.drawRRect(
+        shape,
+        ui.Paint()
+          ..shader = ui.Gradient.linear(_card.topLeft, _card.bottomRight,
+              [dark.surface2, dark.surface0]));
+    canvas.save();
+    canvas.clipRRect(shape);
+    for (final (centre, radius, colour, alpha) in [
+      (const ui.Offset(150, 130), 380.0, _lightA, 0.30),
+      (const ui.Offset(600, 480), 420.0, _lightB, 0.26),
+    ]) {
+      canvas.drawCircle(
+          centre,
+          radius,
+          ui.Paint()
+            ..shader = ui.Gradient.radial(centre, radius, [
+              colour.withValues(alpha: alpha),
+              colour.withValues(alpha: 0),
+            ]));
+    }
+    canvas.restore();
+    canvas.drawRRect(
+        shape.deflate(0.5),
+        ui.Paint()
+          ..style = ui.PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = brandWordmarkPaper.withValues(alpha: 0.07));
   }
 
   static ui.Paragraph _text(String text, ui.Color colour, ui.FontWeight weight,
@@ -234,21 +279,17 @@ class BootSplash {
     return builder.build()..layout(ui.ParagraphConstraints(width: width));
   }
 
-  /// The person's own picture if there is one that reads, else Lumit's.
+  /// The person's own picture if there is one that reads. Null draws
+  /// Lumit's card.
   static Future<ui.Image?> _picture() async {
     final own = File('${Workspace.storeFile().parent.path}'
         '${Platform.pathSeparator}splash.png');
     try {
       if (own.existsSync()) return await _decode(await own.readAsBytes());
     } catch (_) {
-      // A file that is not a picture falls back to the shipped one.
+      // A file that is not a picture falls back to Lumit's own.
     }
-    try {
-      final data = await rootBundle.load(splashAsset);
-      return await _decode(data.buffer.asUint8List());
-    } catch (_) {
-      return null;
-    }
+    return null;
   }
 
   static Future<ui.Image> _decode(Uint8List bytes) async {

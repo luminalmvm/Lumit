@@ -217,6 +217,7 @@ void main() {
           'settings-shape-lantern',
           'settings-lantern-room',
           'settings-customise',
+          'settings-themed-splash',
           'settings-theme-duplicate',
           'settings-theme-rename',
           'settings-theme-delete',

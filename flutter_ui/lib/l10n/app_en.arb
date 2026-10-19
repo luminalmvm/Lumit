@@ -11929,6 +11929,10 @@
   "@settingsScale": {
     "description": "Settings window, Appearance: the name of the row setting how large the interface is drawn, as a percentage."
   },
+  "settingsSplashUsesThemeColour": "Splash uses theme colour",
+  "@settingsSplashUsesThemeColour": {
+    "description": "Settings window, Appearance: the name of the switch that lights the start-up splash with the theme's accent colour rather than Lumit's own green and blue."
+  },
   "settingsScopesUseThemeColour": "Scopes use theme colour",
   "@settingsScopesUseThemeColour": {
     "description": "Settings window, Appearance: the name of the switch that draws the Scopes panel in the theme's colours rather than the standard broadcast ones."
