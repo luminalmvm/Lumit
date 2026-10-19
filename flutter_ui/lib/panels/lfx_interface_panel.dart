@@ -177,6 +177,10 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
   bool _dragging = false;
   final Map<String, BridgeEffectValue> _staged = {};
 
+  /// A drag was dropped when the instance changed under it. What the page
+  /// still sets for it is refused until it ends or a new one begins.
+  bool _dropped = false;
+
   /// The values last told to the page, so only a change is told.
   String? _told;
 
@@ -213,9 +217,8 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
     target = next;
     if (next?.info.id != was?.info.id ||
         next?.layer.internallayerId != was?.layer.internallayerId) {
-      _editor.clear();
-      _dragging = false;
-      _staged.clear();
+      _dropped |= _dragging;
+      _drop();
       _told = null;
       notifyListeners();
       onEvent?.call('effect.target', {'id': next?.info.id.toString()});
@@ -330,14 +333,33 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
     ];
   }
 
+  /// Drop a drag and its preview without keeping anything.
+  void _drop() {
+    _editor.clear();
+    _dragging = false;
+    _staged.clear();
+  }
+
+  /// The page went or came, so a drag it left open is dropped.
+  @override
+  void cancel() {
+    _drop();
+    _dropped = false;
+  }
+
   @override
   void begin(String id) {
     _row(_target().info, id);
+    _dropped = false;
     _dragging = true;
   }
 
   @override
   void set(String id, Object? value) {
+    if (_dropped) {
+      throw const ExtensionRefusal(
+          'failed', 'the drag ended when the instance changed');
+    }
     final (:layer, :info) = _target();
     final row = _row(info, id);
     final written = _value(row, _stored(info, id), value);
@@ -355,6 +377,7 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
 
   @override
   void end() {
+    _dropped = false;
     _dragging = false;
     final held = target;
     if (held == null || _staged.isEmpty) return;

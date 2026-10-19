@@ -106,7 +106,10 @@ class _ExtensionViewState extends State<ExtensionView>
       },
       onUrl: (url) {
         final strayed = !url.startsWith('$_origin/');
-        if (strayed) _host.clearStatus();
+        if (strayed) {
+          _host.clearStatus();
+          widget.effect?.cancel();
+        }
         if (strayed != _strayed && mounted) setState(() => _strayed = strayed);
       },
       onReady: () {

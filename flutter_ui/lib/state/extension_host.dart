@@ -101,6 +101,10 @@ abstract class EffectChannel {
   /// The drag ends, and what it set is committed as one undo step.
   void end();
 
+  /// Drop a drag the page left open, and its preview: the page reloaded,
+  /// went elsewhere, or is gone.
+  void cancel();
+
   /// Where the panel's events go, while the page is up.
   void Function(String event, Map<String, Object?> data)? onEvent;
 }
@@ -162,6 +166,7 @@ class ExtensionHost with WidgetsBindingObserver {
 
   /// Start telling the page what it may know. Called once the page is up.
   void start() {
+    effect?.cancel();
     effect?.onEvent = _emit;
     WidgetsBinding.instance.addObserver(this);
     app.addListener(_projectMaybeChanged);
@@ -189,6 +194,7 @@ class ExtensionHost with WidgetsBindingObserver {
   }
 
   void dispose() {
+    effect?.cancel();
     effect?.onEvent = null;
     WidgetsBinding.instance.removeObserver(this);
     app.removeListener(_projectMaybeChanged);
@@ -417,6 +423,9 @@ class ExtensionHost with WidgetsBindingObserver {
     final id = message['id'];
     final method = message['method'];
     if (id is! int || method is! String) return;
+    // Call 0 is the bootstrap's, from each new page, so a reload drops a
+    // drag the old page left open.
+    if (id == 0) effect?.cancel();
     final params = message['params'];
     try {
       final result = await _call(
