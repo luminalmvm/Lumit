@@ -26,7 +26,8 @@
 //!   composition, layer, effect, export, …) plus the render worker thread.
 //! - [`autosave`] — the timer behind the rotating copies: when to write one,
 //!   and which open projects have moved enough to deserve it.
-//! - [`edits`] — the layer and asset defaults shared by every add path.
+//! - [`edits`] — the layer and asset defaults shared by every add path. They
+//!   live in `lumit_core::edits`, so every front end builds the same layers.
 //! - [`media`] — probing footage and decoding frames (`media` feature).
 //! - `render` — the composited-comp Viewer path (`render` feature): turns
 //!   `(comp, frame)` into an RGBA8 buffer through `lumit_render::headless`.
@@ -75,14 +76,11 @@ mod frb_generated;
 #[macro_use]
 mod note;
 
-// Pure defaults over lumit-core — no decoder, no GPU. It was gated on
-// media+render when it also held the v0 ops that needed them.
 #[cfg(feature = "media")]
 mod audio;
 mod autosave;
 mod beats;
 mod claim;
-mod edits;
 mod export;
 mod faults;
 mod footage;
@@ -105,6 +103,7 @@ mod streams;
 
 pub mod api;
 
+use lumit_core::edits;
 use serde_json::json;
 
 /// `{"ok":false,"error":"…"}`. serde escapes any control character, so the

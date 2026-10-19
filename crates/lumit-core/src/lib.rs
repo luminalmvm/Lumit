@@ -10,6 +10,8 @@ pub mod anim;
 pub mod camera;
 /// The node graph composition: what a comp holds instead of a layer stack.
 pub mod comp_graph;
+/// The layer and asset defaults every front end builds from.
+pub mod edits;
 pub mod expression;
 pub mod fx;
 /// The layer driver graph: the additive wiring beside the effect stack.

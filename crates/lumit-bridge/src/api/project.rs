@@ -332,19 +332,7 @@ impl ProjectReference {
     /// comp's number along and neither reads as the other's.
     #[frb(ignore)]
     fn next_comp_name_in(doc: &lumit_core::Document, node_graph: bool) -> String {
-        let existing = doc
-            .items
-            .iter()
-            .filter(|i| match i {
-                lumit_core::model::ProjectItem::Composition(c) => c.graph.is_some() == node_graph,
-                _ => false,
-            })
-            .count();
-        if node_graph {
-            format!("Node graph {}", existing + 1)
-        } else {
-            format!("Comp {}", existing + 1)
-        }
+        lumit_core::edits::next_comp_name(doc, node_graph)
     }
 
     /// Add a folder, as one undo step — the Project panel's bottom-bar Folder
@@ -450,96 +438,12 @@ impl ProjectReference {
         settings: Option<BridgeCompSettings>,
         graph: Option<lumit_core::comp_graph::CompGraph>,
     ) -> Result<(Uuid, Vec<Op>), BridgeError> {
-        use lumit_core::model::{Composition, Folder, LinearColour, MotionBlur, ProjectItem};
-        use lumit_core::ops::AutoFolderKind;
-
-        let name = if name.trim().is_empty() {
-            Self::next_comp_name_in(doc, graph.is_some())
-        } else {
-            name
-        };
-
-        let settings = settings.unwrap_or_else(BridgeCompSettings::defaults);
-        let (frame_rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
-
-        let mut ops: Vec<Op> = Vec::new();
-        let folder_id = match doc
-            .auto_folders
-            .compositions
-            .filter(|id| doc.folder(*id).is_some())
-        {
-            Some(id) => id,
-            None => {
-                let id = Uuid::now_v7();
-                ops.push(Op::AddItem {
-                    index: doc.items.len(),
-                    item: Box::new(ProjectItem::Folder(Folder {
-                        id,
-                        name: "Compositions".into(),
-                        children: Vec::new(),
-                        extra: serde_json::Map::new(),
-                    })),
-                });
-                ops.push(Op::SetAutoFolder {
-                    kind: AutoFolderKind::Compositions,
-                    folder: Some(id),
-                });
-                id
-            }
-        };
-
-        let comp = Composition {
-            graph,
-            master_volume_db: 0.0,
-            sound_mix: false,
-            groups: Vec::new(),
-            beat_grid: None,
-            id: Uuid::now_v7(),
-            name,
-            width: settings.width.clamp(16, 16384),
-            height: settings.height.clamp(16, 16384),
-            frame_rate,
-            duration,
-            // The dialog's own answers: the Background row and the
-            // Motion blur section decide these at creation, and a settings
-            // block that was never filled in carries the defaults anyway.
-            background: LinearColour(settings.background),
-            work_area: None,
-            layers: Vec::new(),
-            markers: Vec::new(),
-            motion_blur: MotionBlur {
-                shutter_angle: settings.shutter_angle,
-                samples: settings.motion_blur_samples.max(1),
-                ..MotionBlur::default()
-            },
-            extra: serde_json::Map::new(),
-        };
-        let comp_id = comp.id;
-
-        // The comp's index has to account for any AddItem already queued ahead of
-        // it in this same batch.
-        let queued = ops
-            .iter()
-            .filter(|o| matches!(o, Op::AddItem { .. }))
-            .count();
-        ops.push(Op::AddItem {
-            index: doc.items.len() + queued,
-            item: Box::new(ProjectItem::Composition(comp)),
-        });
-
-        // The folder may have been created earlier in this same batch, so it is
-        // absent from `doc` and its children start empty.
-        let mut children = doc
-            .folder(folder_id)
-            .map(|f| f.children.clone())
-            .unwrap_or_default();
-        children.push(comp_id);
-        ops.push(Op::SetFolderChildren {
-            folder: folder_id,
-            children,
-        });
-
-        Ok((comp_id, ops))
+        let settings = settings
+            .unwrap_or_else(BridgeCompSettings::defaults)
+            .to_engine()
+            .ok_or(BridgeError::InvalidFrameRate)?;
+        let settings = lumit_core::edits::CompSettings { name, ..settings };
+        Ok(lumit_core::edits::new_comp_ops(doc, settings, graph))
     }
 
     /// Bring a layered image file in as a composition, as one undo step: a
@@ -593,7 +497,8 @@ impl ProjectReference {
                 height,
                 ..BridgeCompSettings::defaults()
             };
-            let (rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+            let engine = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+            let (rate, duration) = (engine.frame_rate, engine.duration);
 
             let state = self.state()?;
             let left_out = {

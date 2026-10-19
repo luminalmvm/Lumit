@@ -6949,12 +6949,8 @@ impl LayerReference {
         self.commit(op)
     }
 
-    /// The ops that put `value` on one transform property: its animation, and
-    /// beside it what an expression knows about the property (its language,
-    /// the value underneath, its seed) whenever that changes.
-    ///
-    /// The note is worked out here and carried whole in the op, so undo puts
-    /// back the one that was there and a replayed journal writes the same seed.
+    /// The ops that put `value` on one transform property
+    /// ([`lumit_core::edits::transform_ops`]).
     #[frb(ignore)]
     fn transform_ops(
         &self,
@@ -6962,29 +6958,18 @@ impl LayerReference {
         prop: BridgeTransformProp,
         value: &BridgeScalar,
     ) -> Result<Vec<lumit_core::Op>, BridgeError> {
-        use lumit_core::expression::SLOT_KEY;
-
         let animation = value.animation_at(layer.start_offset.0)?;
-        let mut ops = vec![lumit_core::Op::SetTransformProperty {
-            comp: self.comp_id,
-            layer: self.layer_id,
-            prop: prop.core(),
-            animation: animation.clone(),
-        }];
-        if let Some(held) = layer.prop(prop.core()) {
-            let mut next = held.clone();
-            value.put(&mut next, animation);
-            let slot = next.extra.get(SLOT_KEY).cloned();
-            if slot.as_ref() != held.extra.get(SLOT_KEY) {
-                ops.push(lumit_core::Op::SetTransformExpressionSlot {
-                    comp: self.comp_id,
-                    layer: self.layer_id,
-                    prop: prop.core(),
-                    slot,
-                });
-            }
-        }
-        Ok(ops)
+        let language = match value {
+            BridgeScalar::Expression(_, language) => Some(language.read()),
+            _ => None,
+        };
+        Ok(lumit_core::edits::transform_ops(
+            self.comp_id,
+            layer,
+            prop.core(),
+            animation,
+            language,
+        ))
     }
 
     /// Set how one two-axis property is shown and edited: combined on
