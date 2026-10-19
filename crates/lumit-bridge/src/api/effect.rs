@@ -2162,7 +2162,8 @@ pub const BADGE_REASONS: &[&str] = &[
     "unknown_effect",
     "shader_failed",
     "addon_missing",
-    "plugin_struck_off",
+    "lfx_missing",
+    "lfx_struck_off",
 ];
 
 /// Why this instance is not doing its own work, if it is not.
@@ -2205,8 +2206,8 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
         let badge = |key: &str, detail| (Some(key.to_owned()), detail);
         return match status(name) {
             LfxStatus::Draws => (None, None),
-            LfxStatus::Missing { extension } => badge("plugin_missing", Some(extension)),
-            LfxStatus::SwitchedOff => badge("plugin_struck_off", None),
+            LfxStatus::Missing { extension } => badge("lfx_missing", Some(extension)),
+            LfxStatus::SwitchedOff => badge("lfx_struck_off", None),
             LfxStatus::Refused(why) | LfxStatus::WontCompile(why) => {
                 badge("shader_failed", Some(why))
             }

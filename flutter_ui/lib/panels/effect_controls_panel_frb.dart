@@ -3422,7 +3422,7 @@ Widget? effectBadgeRow(
   String? detail,
 }) {
   if (reason == null) return null;
-  final sentence = effectBadge(reason);
+  final sentence = effectBadge(reason, detail);
   if (sentence == null) return null;
   final t = ThemeScope.of(context).theme;
   return Padding(
@@ -3437,7 +3437,8 @@ Widget? effectBadgeRow(
           key: ValueKey<String>('fx-badge-reason-$id'),
           style: t.small.copyWith(color: t.accent),
         ),
-        if (detail != null && detail.isNotEmpty)
+        // A missing LFX effect's sentence names the extension already.
+        if (detail != null && detail.isNotEmpty && reason != 'lfx_missing')
           Text(
             detail,
             key: ValueKey<String>('fx-badge-detail-$id'),

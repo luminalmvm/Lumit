@@ -14037,8 +14037,17 @@
   "@badgeAddonMissing": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, when the effect asks a trained model for a reading and the machine has not got the model. The layer still composites, showing the picture unchanged, and the addon to install is named beneath it."
   },
-  "badgePluginStruckOff": "This plugin is switched off until Lumit restarts",
-  "@badgePluginStruckOff": {
+  "badgeLfxMissing": "Install the {id} extension",
+  "@badgeLfxMissing": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an extension's effect in the project when no installed extension carries it. The id is the extension's own short id from its manifest, such as tape. The effect is kept exactly as it was saved and the layer shows its picture unchanged.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "badgeLfxStruckOff": "This effect is switched off until Lumit restarts",
+  "@badgeLfxStruckOff": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an extension's shader effect that was running when the graphics card stopped responding twice. Lumit switched it off for the rest of this run; the layer still composites, showing the picture unchanged."
   },
   "badgeShaderFailed": "This shader did not compile",
