@@ -9,15 +9,18 @@
 //! WGSL shader (an LFX effect), which the engine checks before it ever runs.
 //!
 //! This crate is the folder's side of that: reading and judging a manifest,
-//! the folders extensions are found in, and installing, listing and
-//! removing. It runs nothing and shows nothing. Called from the bridge, off
-//! the UI thread for an install.
+//! the folders extensions are found in, `.lfx` packages, and installing,
+//! listing and removing. It runs nothing and shows nothing. Called from the
+//! bridge, off the UI thread for an install.
 
 use lumit_core::fx::lfx::{LfxEffect, LfxInput, LfxInputKind, LfxPass};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
+
+mod package;
+pub use package::{install_package, pack, read_package, PACKAGE_EXTENSION};
 
 /// The file that makes a folder an extension.
 pub const MANIFEST_FILE: &str = "extension.json";
@@ -496,7 +499,7 @@ pub struct Installed {
 
 /// Whether every file the manifest names is there, asking `size` for the
 /// size of a file by its path inside the extension, or None when it is not
-/// a file.
+/// a file. Shared by a folder and a package, so both are judged alike.
 fn check_files(
     manifest: &Manifest,
     size: &dyn Fn(&Path) -> Option<u64>,
@@ -797,7 +800,8 @@ mod tests {
     }
 
     /// Installing copies the folder whole, an install over another replaces
-    /// it whole, and a removed extension leaves nothing.
+    /// it whole, a package installs the same as its folder, and a removed
+    /// extension leaves nothing.
     #[test]
     fn an_extension_is_installed_listed_replaced_and_removed() {
         let root = std::env::temp_dir().join(format!("lumit-ext-test-{}", std::process::id()));
@@ -835,6 +839,14 @@ mod tests {
         let page = store.join("timer/ui/index.html");
         assert_eq!(fs::read_to_string(page).unwrap(), "two");
         assert!(!store.join("timer/ui/old.js").exists());
+
+        let made = root.join("timer.lfx");
+        fs::write(source.join("ui/index.html"), "three").unwrap();
+        assert_eq!(pack(&source, &made).unwrap().id, "timer");
+        assert_eq!(read_package(&made).unwrap().id, "timer");
+        install_package(&made, None).unwrap();
+        let page = store.join("timer/ui/index.html");
+        assert_eq!(fs::read_to_string(page).unwrap(), "three");
 
         remove("timer").unwrap();
         assert!(scan().is_empty());
