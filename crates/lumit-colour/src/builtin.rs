@@ -234,8 +234,10 @@ fn apple_log_to_linear() -> Vec<Op> {
 /// Where the vendored artefacts live at runtime, in the order a build looks:
 /// `data/colour/` beside the executable (a shipped Windows or Linux build),
 /// `../Resources/colour/` from it (a shipped macOS bundle, where nothing but
-/// executables may sit in `Contents/MacOS`), and the crate's own `vendored/`
-/// directory (a development checkout, which is also what the tests read).
+/// executables may sit in `Contents/MacOS`), `../data/colour/` (the command
+/// line, which sits in `lib` below Lumit on Windows), and the crate's own
+/// `vendored/` directory (a development checkout, which is also what the
+/// tests read).
 /// `None` when no directory exists — every vendored style then refuses by
 /// name. Same search shape as the export done-sound's, the one other data
 /// file shipped beside the binary.
@@ -253,8 +255,12 @@ fn vendored_dir() -> Option<PathBuf> {
         .as_ref()
         .and_then(|d| d.parent())
         .map(|contents| contents.join("Resources").join("colour"));
+    let above = exe_dir
+        .as_ref()
+        .and_then(|d| d.parent())
+        .map(|up| up.join("data").join("colour"));
     let dev = Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("vendored"));
-    [beside, resources, dev]
+    [beside, resources, above, dev]
         .into_iter()
         .flatten()
         .find(|d| d.is_dir())

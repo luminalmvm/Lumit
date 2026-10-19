@@ -33,6 +33,7 @@ import 'api/project.dart';
 import 'api/project_item.dart';
 import 'api/retime.dart';
 import 'api/roto.dart';
+import 'api/script.dart';
 import 'api/share.dart';
 import 'api/shell.dart';
 import 'api/solid.dart';
@@ -124,6 +125,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   LumitBridgeState
       dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLumitBridgeState(
           dynamic raw);
+
+  @protected
+  RustStreamSink<BridgeScriptEvent>
+      dco_decode_StreamSink_bridge_script_event_Sse(dynamic raw);
 
   @protected
   RustStreamSink<BridgeShareEvent> dco_decode_StreamSink_bridge_share_event_Sse(
@@ -1089,6 +1094,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeScript dco_decode_bridge_script(dynamic raw);
 
   @protected
+  BridgeScriptEvent dco_decode_bridge_script_event(dynamic raw);
+
+  @protected
   BridgeSelectorBasis dco_decode_bridge_selector_basis(dynamic raw);
 
   @protected
@@ -1695,6 +1703,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   OpenProgress dco_decode_open_progress(dynamic raw);
 
   @protected
+  RustStreamSink<BridgeScriptEvent>?
+      dco_decode_opt_StreamSink_bridge_script_event_Sse(dynamic raw);
+
+  @protected
   RustStreamSink<BridgeShareEvent>?
       dco_decode_opt_StreamSink_bridge_share_event_Sse(dynamic raw);
 
@@ -2006,6 +2018,11 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   LumitBridgeState
       sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLumitBridgeState(
+          SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<BridgeScriptEvent>
+      sse_decode_StreamSink_bridge_script_event_Sse(
           SseDeserializer deserializer);
 
   @protected
@@ -3129,6 +3146,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeScript sse_decode_bridge_script(SseDeserializer deserializer);
 
   @protected
+  BridgeScriptEvent sse_decode_bridge_script_event(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeSelectorBasis sse_decode_bridge_selector_basis(
       SseDeserializer deserializer);
 
@@ -3863,6 +3884,11 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   OpenProgress sse_decode_open_progress(SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<BridgeScriptEvent>?
+      sse_decode_opt_StreamSink_bridge_script_event_Sse(
+          SseDeserializer deserializer);
+
+  @protected
   RustStreamSink<BridgeShareEvent>?
       sse_decode_opt_StreamSink_bridge_share_event_Sse(
           SseDeserializer deserializer);
@@ -4210,6 +4236,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void
       sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerLumitBridgeState(
           LumitBridgeState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_bridge_script_event_Sse(
+      RustStreamSink<BridgeScriptEvent> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_bridge_share_event_Sse(
@@ -5438,6 +5468,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_script(BridgeScript self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_script_event(
+      BridgeScriptEvent self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_selector_basis(
       BridgeSelectorBasis self, SseSerializer serializer);
 
@@ -6211,6 +6245,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_open_progress(OpenProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_StreamSink_bridge_script_event_Sse(
+      RustStreamSink<BridgeScriptEvent>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_StreamSink_bridge_share_event_Sse(

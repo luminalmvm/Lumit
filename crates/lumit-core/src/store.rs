@@ -11,6 +11,7 @@ use crate::shared::{any_overlap, footprint, land, plan_merge, Conflict, Key};
 use arc_swap::{ArcSwap, ArcSwapOption};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
 
@@ -30,8 +31,10 @@ pub struct JournalEntry {
     /// that renamed itself the moment you undid it would be unreadable exactly
     /// when the list is being used. Not serialised: a recovery journal replays
     /// ops, and a name is for the list on screen.
+    ///
+    /// Usually the op's own name; a script's run carries the script's.
     #[serde(skip)]
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
     /// The store revision this step was made at. A shared project compares it
     /// with when someone else last changed the same part of the document.
     #[serde(skip)]
@@ -180,6 +183,9 @@ struct Journal {
     /// The redo list as it stood when the open group's first edit cleared
     /// it, so taking the group back can put it back.
     group_redo: Option<Vec<JournalEntry>>,
+    /// What the open group's step is called when it folds, when not after
+    /// its first edit.
+    group_name: Option<Cow<'static, str>>,
     /// Present while the project is shared.
     shared: Option<Shared>,
 }
@@ -229,9 +235,9 @@ impl Journal {
 /// One row of the **History** list: what the step is called, and
 /// whether it has been undone — a step that has been undone is still on the
 /// road, greyed, until a fresh commit clears the forward history.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HistoryEntry {
-    pub name: &'static str,
+    pub name: Cow<'static, str>,
     pub undone: bool,
 }
 
@@ -453,6 +459,7 @@ impl DocumentStore {
         }
         journal.depth = 1;
         journal.group = Some(Vec::new());
+        journal.group_name = None;
         true
     }
 
@@ -483,11 +490,12 @@ impl DocumentStore {
     /// Put the open group onto the history as one step.
     fn fold_group(journal: &mut Journal) {
         journal.group_redo = None;
+        let named = journal.group_name.take();
         let Some(held) = journal.group.take() else {
             return;
         };
         let mut held = held;
-        let entry = match held.len() {
+        let mut entry = match held.len() {
             0 => return,
             1 => held.remove(0),
             _ => {
@@ -495,7 +503,9 @@ impl DocumentStore {
                 inverses.reverse();
                 // The gesture is named after the first thing it did, which is
                 // what `Op::name` says of any batch.
-                let name = held.first().map_or("Several changes", |e| e.name);
+                let name = held
+                    .first()
+                    .map_or(Cow::Borrowed("Several changes"), |e| e.name.clone());
                 let at = held.first().map_or(0, |e| e.at);
                 JournalEntry {
                     op: Op::Batch {
@@ -507,6 +517,9 @@ impl DocumentStore {
                 }
             }
         };
+        if let Some(name) = named {
+            entry.name = name;
+        }
         Self::push_step(journal, entry);
     }
 
@@ -565,6 +578,7 @@ impl DocumentStore {
         }
         // Back where it was before the group, so what could be redone then
         // can be again.
+        journal.group_name = None;
         let redo = journal.group_redo.take();
         if let Some(redo) = redo.filter(|_| moved.len() == held.len()) {
             journal.redo = redo;
@@ -604,7 +618,7 @@ impl DocumentStore {
         };
 
         let observed = op.clone();
-        let name = op.name();
+        let name = op.name().into();
         journal.moved_locally(&op, &inverse);
         let at = self.revision() + 1;
         let entry = JournalEntry {
@@ -1111,11 +1125,11 @@ impl DocumentStore {
             .undo
             .iter()
             .map(|e| HistoryEntry {
-                name: e.name,
+                name: e.name.clone(),
                 undone: false,
             })
             .chain(journal.redo.iter().rev().map(|e| HistoryEntry {
-                name: e.name,
+                name: e.name.clone(),
                 undone: true,
             }))
             .collect()
@@ -1154,6 +1168,16 @@ impl DocumentStore {
             }
         }
         Ok(())
+    }
+
+    /// Call the step the open undo group folds into `name` in the History
+    /// list, as a script's run is called after the script rather than after
+    /// the first thing it did. Does nothing when no group is open.
+    pub fn name_undo_group(&self, name: impl Into<Cow<'static, str>>) {
+        let mut journal = self.journal.lock();
+        if journal.group.is_some() {
+            journal.group_name = Some(name.into());
+        }
     }
 
     pub fn can_undo(&self) -> bool {
@@ -2915,7 +2939,7 @@ mod tests {
             store.commit(op).unwrap();
         }
 
-        let listed: Vec<&'static str> = store.history().iter().map(|e| e.name).collect();
+        let listed: Vec<String> = store.history().iter().map(|e| e.name.to_string()).collect();
         assert_eq!(listed, expected, "one named row per committed op, in order");
         assert!(store.history().iter().all(|e| !e.undone));
         assert_eq!(store.applied_steps(), expected.len());
@@ -2927,7 +2951,7 @@ mod tests {
             expected.len(),
             "an undone step is still listed"
         );
-        assert_eq!(after.last().map(|e| e.name), expected.last().copied());
+        assert_eq!(after.last().map(|e| &*e.name), expected.last().copied());
         assert!(after.last().is_some_and(|e| e.undone));
         assert_eq!(store.applied_steps(), expected.len() - 1);
 
@@ -2939,7 +2963,7 @@ mod tests {
             .unwrap();
         let listed = store.history();
         assert_eq!(listed.len(), expected.len());
-        assert_eq!(listed.last().map(|e| e.name), Some("Set anti-aliasing"));
+        assert_eq!(listed.last().map(|e| &*e.name), Some("Set anti-aliasing"));
     }
 
     /// Jumping lands on exactly the document that stood at that point on the

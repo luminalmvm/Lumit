@@ -2224,7 +2224,6 @@ impl CompositionReference {
         row: Option<u32>,
         arrival: Option<crate::api::streams::BridgeStreamsArrival>,
     ) -> Result<(), BridgeError> {
-        use lumit_core::sequence::{Clip, ClipSource};
         let arrival = arrival.unwrap_or(crate::api::streams::BridgeStreamsArrival::First);
         let proj = self.project()?;
         let comp = self.composition()?;
@@ -2232,108 +2231,15 @@ impl CompositionReference {
         let (layer, beside) = {
             let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
             let doc = p.store.snapshot();
-
-            let item = footage.id();
-            let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(item) else {
-                return Err(BridgeError::InvalidItem);
-            };
-
-            let (out, nat_w, nat_h) = Self::footage_span_and_size(&p, f, &comp);
-            // Media with no picture at all can only ever be an Audio layer, so
-            // it becomes one whichever route placed it — the caller does not
-            // have to know what the file turned out to hold. A deliberate
-            // "sound only" placement says so instead.
-            let audio_only = audio_only || !Self::has_picture(&p, f);
-            let runs = Self::runs_as_video(&p, f);
-            let sequenced = as_sequence && !audio_only && runs;
-
-            // The stretch marked on the source side, when a video has one: the
-            // layer starts on its In and lasts to its Out, in whole frames.
-            let zero = lumit_core::time::Rational::ZERO;
-            let marked = doc
-                .footage_trims
-                .get(&item)
-                .filter(|_| runs)
-                .and_then(|trim| trim.span(out))
-                .and_then(|(start, end)| {
-                    let length = lumit_core::time::CompTime(end.checked_sub(start).ok()?);
-                    let frames = comp.frame_rate.nearest_frame_at(length).max(1);
-                    let length = comp.frame_rate.time_of_frame(frames).ok()?.0;
-                    Some((start, start.checked_add(length).ok()?, length))
-                });
-            let (source_in, source_out, out) = marked.unwrap_or((zero, out, out));
-
-            // What the layer sounds, and what each row split off beside it
-            // does: nothing beside it unless the file has several streams and
-            // they were asked for apart.
-            let streams = crate::streams::of_item(&p, f);
-            let sounds = arrival.sounds(streams.len());
-            let (first, rest) = match sounds.split_first() {
-                Some((first, rest)) => (first.clone(), rest),
-                None => (Default::default(), &[][..]),
-            };
-            // A stream on a row of its own is the same stretch of the file
-            // as the picture, so the two are linked as a cut's are.
-            let link = (sequenced && !rest.is_empty()).then(Uuid::now_v7);
-            let clip_of = |plays: &lumit_core::model::AudioStreams| {
-                let mut clip =
-                    Clip::new(ClipSource::Footage(item), source_in, source_out, zero, out);
-                clip.audio_streams = plays.clone();
-                clip.link = link;
-                clip
-            };
-
-            let kind = if sequenced {
-                lumit_core::model::LayerKind::Sequence {
-                    clips: vec![clip_of(&first)],
-                }
-            } else {
-                lumit_core::model::LayerKind::Footage { item }
-            };
-
-            let mut layer = crate::edits::base_layer(
-                f.name.clone(),
-                kind,
-                out,
-                crate::edits::centred_transform(nat_w, nat_h, comp.width, comp.height),
-            );
-            layer.audio_only = audio_only;
-            if !sequenced {
-                layer.audio_streams = first;
-                // Layer time is source time, so the In lands on comp 0.
-                if let Ok(back) = source_in.checked_neg() {
-                    layer.start_offset = lumit_core::time::CompTime(back);
-                }
-            }
-            crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
-
-            let beside: Vec<lumit_core::model::Layer> = rest
-                .iter()
-                .map(|plays| {
-                    let mut sound = layer.clone();
-                    sound.id = Uuid::now_v7();
-                    sound.audio_only = true;
-                    if let [place] = plays.places() {
-                        sound.name = crate::streams::split_name(&f.name, *place, &streams);
-                    }
-                    if sequenced {
-                        sound.kind = lumit_core::model::LayerKind::Sequence {
-                            clips: vec![clip_of(plays)],
-                        };
-                        // The label an Audio layer starts on, as a sound row
-                        // made by a cut wears.
-                        sound.label = 1;
-                    } else {
-                        sound.audio_streams = plays.clone();
-                    }
-                    // Asked again, as an Audio layer: it counts every solo in
-                    // the comp, where a layer with a picture counts the ones
-                    // that draw.
-                    crate::edits::solo_on_arrival(&mut sound, comp.layers.iter());
-                    sound
-                })
-                .collect();
-            (layer, beside)
+            Self::footage_layers(
+                &p,
+                &doc,
+                &comp,
+                footage.id(),
+                as_sequence,
+                audio_only,
+                arrival,
+            )?
         };
 
         // The layer, and directly below it each row split off beside it.
@@ -2357,6 +2263,121 @@ impl CompositionReference {
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.commit(op).map_err(BridgeError::OpError)?;
         Ok(())
+    }
+
+    /// The layers placing footage item `item` in `comp` makes, before anything
+    /// is added: the layer itself, and each sound row split off beside it.
+    /// What [`Self::add_footage_layer`] adds, and what a script adds too.
+    #[frb(ignore)]
+    pub(crate) fn footage_layers(
+        p: &LumitBridgeState,
+        doc: &lumit_core::Document,
+        comp: &lumit_core::model::Composition,
+        item: Uuid,
+        as_sequence: bool,
+        audio_only: bool,
+        arrival: crate::api::streams::BridgeStreamsArrival,
+    ) -> Result<(lumit_core::model::Layer, Vec<lumit_core::model::Layer>), BridgeError> {
+        use lumit_core::sequence::{Clip, ClipSource};
+        let Some(lumit_core::model::ProjectItem::Footage(f)) = doc.item(item) else {
+            return Err(BridgeError::InvalidItem);
+        };
+
+        let (out, nat_w, nat_h) = Self::footage_span_and_size(&p, f, &comp);
+        // Media with no picture at all can only ever be an Audio layer, so
+        // it becomes one whichever route placed it — the caller does not
+        // have to know what the file turned out to hold. A deliberate
+        // "sound only" placement says so instead.
+        let audio_only = audio_only || !Self::has_picture(&p, f);
+        let runs = Self::runs_as_video(&p, f);
+        let sequenced = as_sequence && !audio_only && runs;
+
+        // The stretch marked on the source side, when a video has one: the
+        // layer starts on its In and lasts to its Out, in whole frames.
+        let zero = lumit_core::time::Rational::ZERO;
+        let marked = doc
+            .footage_trims
+            .get(&item)
+            .filter(|_| runs)
+            .and_then(|trim| trim.span(out))
+            .and_then(|(start, end)| {
+                let length = lumit_core::time::CompTime(end.checked_sub(start).ok()?);
+                let frames = comp.frame_rate.nearest_frame_at(length).max(1);
+                let length = comp.frame_rate.time_of_frame(frames).ok()?.0;
+                Some((start, start.checked_add(length).ok()?, length))
+            });
+        let (source_in, source_out, out) = marked.unwrap_or((zero, out, out));
+
+        // What the layer sounds, and what each row split off beside it
+        // does: nothing beside it unless the file has several streams and
+        // they were asked for apart.
+        let streams = crate::streams::of_item(&p, f);
+        let sounds = arrival.sounds(streams.len());
+        let (first, rest) = match sounds.split_first() {
+            Some((first, rest)) => (first.clone(), rest),
+            None => (Default::default(), &[][..]),
+        };
+        // A stream on a row of its own is the same stretch of the file
+        // as the picture, so the two are linked as a cut's are.
+        let link = (sequenced && !rest.is_empty()).then(Uuid::now_v7);
+        let clip_of = |plays: &lumit_core::model::AudioStreams| {
+            let mut clip = Clip::new(ClipSource::Footage(item), source_in, source_out, zero, out);
+            clip.audio_streams = plays.clone();
+            clip.link = link;
+            clip
+        };
+
+        let kind = if sequenced {
+            lumit_core::model::LayerKind::Sequence {
+                clips: vec![clip_of(&first)],
+            }
+        } else {
+            lumit_core::model::LayerKind::Footage { item }
+        };
+
+        let mut layer = crate::edits::base_layer(
+            f.name.clone(),
+            kind,
+            out,
+            crate::edits::centred_transform(nat_w, nat_h, comp.width, comp.height),
+        );
+        layer.audio_only = audio_only;
+        if !sequenced {
+            layer.audio_streams = first;
+            // Layer time is source time, so the In lands on comp 0.
+            if let Ok(back) = source_in.checked_neg() {
+                layer.start_offset = lumit_core::time::CompTime(back);
+            }
+        }
+        crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
+
+        let beside: Vec<lumit_core::model::Layer> = rest
+            .iter()
+            .map(|plays| {
+                let mut sound = layer.clone();
+                sound.id = Uuid::now_v7();
+                sound.audio_only = true;
+                if let [place] = plays.places() {
+                    sound.name = crate::streams::split_name(&f.name, *place, &streams);
+                }
+                if sequenced {
+                    sound.kind = lumit_core::model::LayerKind::Sequence {
+                        clips: vec![clip_of(plays)],
+                    };
+                    // The label an Audio layer starts on, as a sound row
+                    // made by a cut wears.
+                    sound.label = 1;
+                } else {
+                    sound.audio_streams = plays.clone();
+                }
+                // Asked again, as an Audio layer: it counts every solo in
+                // the comp, where a layer with a picture counts the ones
+                // that draw.
+                crate::edits::solo_on_arrival(&mut sound, comp.layers.iter());
+                sound
+            })
+            .collect();
+        Ok((layer, beside))
     }
 
     /// Whether this media is something to cut: a video stream that runs for
