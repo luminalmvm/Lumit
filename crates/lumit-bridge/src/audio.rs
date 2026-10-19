@@ -116,6 +116,11 @@ struct AudioState {
     /// The monitor mute, kept here so it outlives the engine: a changed
     /// output opens a fresh stream, and a muted user must not get sound back.
     muted: bool,
+    /// How late this machine's output is heard, in milliseconds, from the
+    /// Audio settings. The picture follows the clock less this, so it lands
+    /// with the sound as it reaches the ears. Below zero the picture is the
+    /// late one, as on a television that holds frames back.
+    offset_ms: i32,
     /// Where a fresh load should start, in seconds — set by `audio_play` when
     /// the wanted comp is not loaded yet.
     pending_start: Option<f64>,
@@ -173,6 +178,7 @@ impl AudioState {
             loaded_sig: None,
             playing: false,
             muted: false,
+            offset_ms: 0,
             pending_start: None,
             worker_busy: false,
             wanted_preview: None,
@@ -817,6 +823,16 @@ pub(crate) fn muted() -> bool {
     lock().muted
 }
 
+pub(crate) fn set_offset_ms(ms: i32) {
+    lock().offset_ms = ms;
+}
+
+/// The same, in seconds: what playback adds when it puts the sound under a
+/// picture, so the two still meet once the sound is heard.
+pub(crate) fn offset_seconds() -> f64 {
+    f64::from(lock().offset_ms) / 1000.0
+}
+
 /// Start the sound again where it stopped, with no re-bake and no seek — the
 /// other half of [`pause`].
 ///
@@ -1020,8 +1036,15 @@ pub(crate) fn clock() -> (f64, bool, bool) {
     let (answer, starved) = match &st.device {
         Device::Ready { clock, .. } => {
             let loaded = st.loaded_comp.is_some();
+            let playing = clock.is_playing();
+            // Only while playing: a stopped clock is where the playhead sits.
+            let late = if playing {
+                f64::from(st.offset_ms) / 1000.0
+            } else {
+                0.0
+            };
             (
-                (clock.seconds(), clock.is_playing(), loaded),
+                (clock.seconds() - late, playing, loaded),
                 clock.starved_frames(),
             )
         }

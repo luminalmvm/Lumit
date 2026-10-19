@@ -29,7 +29,7 @@ import 'package:lumit_flutter/shell/welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
 import 'package:lumit_flutter/src/rust/api/audio.dart'
-    show audioSetMuted, setAudioDevice;
+    show audioSetMuted, audioSetOffsetMs, setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -2508,6 +2508,7 @@ class LumitUiState extends ChangeNotifier {
     // rather than made with an empty id, so nothing happens on a fresh install.
     final device = this.workspace.audioDevice;
     if (device != null) setAudioDevice(id: device);
+    audioSetOffsetMs(ms: this.workspace.audioOffsetMs);
     // How often a spare copy of the work is written, and how many are kept.
     // Always handed over rather than skipped when it matches the default: this
     // is what starts the engine's timer, so a fresh install with no settings

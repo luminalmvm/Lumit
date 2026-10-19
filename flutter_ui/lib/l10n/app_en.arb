@@ -11781,6 +11781,10 @@
   "@settingsAudioNoDevice": {
     "description": "Settings window, Audio: the line under the output device row when the machine offers no sound output at all, so nothing can be played."
   },
+  "settingsAudioOffset": "Audio offset",
+  "@settingsAudioOffset": {
+    "description": "Settings window, Audio: the name of the row that sets how many milliseconds late the sound is heard on this setup, so playback can line the picture up with it. Above zero holds the picture back for late sound, such as through Bluetooth headphones; below zero holds the sound back."
+  },
   "settingsKeymapAfterEffects": "After Effects shortcuts",
   "@settingsKeymapAfterEffects": {
     "description": "Settings window, Shortcuts: the name of the row whose button reads the shortcuts out of a file saved by Adobe After Effects. After Effects is a product name."
