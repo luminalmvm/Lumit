@@ -492,6 +492,8 @@
         this._id = id;
         this._at = undefined;
         this._props = {};
+        // Effect controls set in this run, written with the keys.
+        this._fx = [];
         this._removed = false;
         this._kind = undefined;
         return guard(this, 'Layer');
@@ -579,6 +581,13 @@
         },
         transform: { get: function () { return this.property('ADBE Transform Group'); } },
         cameraOption: { get: function () { return this.property('ADBE Camera Options Group'); } },
+        Effects: { get: function () { return new EffectGroup(this); } },
+        effect: {
+            get: function () {
+                var group = new EffectGroup(this);
+                return function (which) { return group.property(which); };
+            },
+        },
     });
     // After Effects keeps the layer where it is unless told to jump, which
     // changes its transform. So the keys made so far go in first, and what
@@ -607,6 +616,7 @@
     var GROUPS = {
         'ADBE Transform Group': 'transform', 'Transform': 'transform',
         'ADBE Camera Options Group': 'camera', 'Camera Options': 'camera',
+        'ADBE Effect Parade': 'effects', 'Effects': 'effects',
     };
     var TRANSFORM = {
         'ADBE Anchor Point': 'anchor', 'Anchor Point': 'anchor', 'Point of Interest': 'anchor',
@@ -649,6 +659,7 @@
         var group = GROUPS[name];
         if (group === 'transform') return new PropertyGroup(this, TRANSFORM, 'Transform');
         if (group === 'camera') return new PropertyGroup(this, CAMERA, 'Camera Options');
+        if (group === 'effects') return new EffectGroup(this);
         // After Effects finds a transform property from the layer too.
         var own = TRANSFORM[name] || CAMERA[name];
         if (own) return this._property(own);
@@ -1272,6 +1283,10 @@
             writeProp(layer, prop);
         });
         Object.keys(layer._props).forEach(function (name) { layer._props[name]._changed = false; });
+        layer._fx.forEach(function (prop) {
+            if (prop._changed) writeControl(prop);
+            prop._changed = false;
+        });
     }
 
     function finish() {
@@ -1280,6 +1295,152 @@
         now.forEach(writeLayer);
     }
     N.finish = finish;
+
+    // ---- Effects ----
+
+    var effects = {};
+    function effectFor(layer, info) {
+        var made = effects[info.id] || (effects[info.id] = new Effect(layer, info.id));
+        // The After Effects effect it stands for names its controls.
+        if (!made._ae) made._ae = info.after_effects || null;
+        return made;
+    }
+
+    function EffectGroup(layer) {
+        this._layer = layer;
+        this._at = function (n) { return this.property(n); };
+        return guard(this, 'Effects');
+    }
+    EffectGroup.prototype._list = function () {
+        return command('effect.list', { comp: this._layer._comp._id, layer: this._layer._id }).effects;
+    };
+    Object.defineProperties(EffectGroup.prototype, {
+        name: { value: 'Effects' },
+        matchName: { value: 'ADBE Effect Parade' },
+        numProperties: { get: function () { return this._list().length; } },
+    });
+    EffectGroup.prototype.addProperty = function (name) {
+        var made = command('effect.add', { comp: this._layer._comp._id, layer: this._layer._id, effect: String(name) });
+        return effectFor(this._layer, made);
+    };
+    EffectGroup.prototype.property = function (which) {
+        var list = this._list(), found;
+        if (typeof which === 'number') {
+            found = list[which - 1];
+        } else {
+            found = list.filter(function (e) {
+                return e.name === which || e.effect === which || e.after_effects === which;
+            })[0];
+        }
+        return found ? effectFor(this._layer, found) : null;
+    };
+
+    function Effect(layer, id) {
+        this._layer = layer;
+        this._id = id;
+        this._ae = null;
+        this._props = {};
+        this._at = function (n) { return this.property(n); };
+        return guard(this, 'Effect');
+    }
+    Effect.prototype._info = function () {
+        var id = this._id;
+        var found = new EffectGroup(this._layer)._list().filter(function (e) { return e.id === id; })[0];
+        if (!found) throw new Error('That effect is no longer on the layer.');
+        return found;
+    };
+    Effect.prototype._set = function (args) {
+        args.comp = this._layer._comp._id;
+        args.layer = this._layer._id;
+        args.effect = this._id;
+        return command('effect.set', args);
+    };
+    var switchedOn = {
+        get: function () { return this._info().enabled; },
+        set: function (v) { this._set({ enabled: !!v }); },
+    };
+    Object.defineProperties(Effect.prototype, {
+        name: {
+            get: function () { return this._info().name; },
+            set: function (v) { this._set({ name: String(v) }); },
+        },
+        matchName: { get: function () { return this._ae || this._info().effect; } },
+        enabled: switchedOn,
+        active: switchedOn,
+        numProperties: { get: function () { return this._info().params.length; } },
+        propertyIndex: { get: function () { return this._info().index + 1; } },
+    });
+    // After Effects counts an effect's controls from one and names them after
+    // the effect, which is how one is found by number.
+    Effect.prototype.property = function (which) {
+        var key = which;
+        if (typeof which === 'number') {
+            if (this._ae) {
+                key = this._ae + '-' + ('000' + which).slice(-4);
+            } else {
+                var own = this._info().params[which - 1];
+                if (!own) throw new Error(this.name + ' has no control ' + which + '.');
+                key = own.id;
+            }
+        }
+        key = String(key);
+        return this._props[key] || (this._props[key] = new EffectProperty(this, key));
+    };
+
+    // One of an effect's controls. Named the way After Effects names it, it
+    // takes After Effects' values, which Lumit converts as importing does.
+    function EffectProperty(effect, key) {
+        Property.call(this, effect._layer, key);
+        this._effect = effect;
+        return guard(this, 'Property');
+    }
+    EffectProperty.prototype = Object.create(Property.prototype);
+    EffectProperty.prototype.constructor = EffectProperty;
+    // Lumit's own control by this name, if it is one.
+    EffectProperty.prototype._own = function () {
+        var name = this._name, lower = name.toLowerCase();
+        return this._effect._info().params.filter(function (p) {
+            return p.id === name || p.label.toLowerCase() === lower;
+        })[0];
+    };
+    // An After Effects control starts empty, as Lumit cannot read its value
+    // back in After Effects' units.
+    EffectProperty.prototype._load = function () {
+        if (this._keys !== null) return;
+        this._keys = [];
+        var own = this._own();
+        if (!own) return;
+        if (own.kind === 'float') fill(this, [own.value], function (values) { return values[0]; });
+        else if (own.kind === 'point' || own.kind === 'colour') fill(this, own.value, function (values) { return values; });
+        else this._value = own.value;
+    };
+    EffectProperty.prototype._checked = function (v) {
+        if (v instanceof Array) return Array.prototype.map.call(v, Number);
+        return typeof v === 'boolean' ? (v ? 1 : 0) : Number(v);
+    };
+    EffectProperty.prototype._dirty = function () {
+        Property.prototype._dirty.call(this);
+        if (this._layer._fx.indexOf(this) < 0) this._layer._fx.push(this);
+    };
+    Object.defineProperties(EffectProperty.prototype, {
+        name: {
+            get: function () {
+                var own = this._own();
+                return own ? own.label : this._name;
+            },
+        },
+        matchName: { get: function () { return this._name; } },
+        isSpatial: { value: false },
+    });
+
+    function writeControl(prop) {
+        var args = { param: prop._name };
+        if (prop._exprOn) args.expression = prop._expr;
+        else if (prop._keys.length) args.keys = keyList(prop._layer, prop._keys, function (v) { return v; });
+        else if (prop._value !== null) args.value = prop._value;
+        else return;
+        prop._effect._set(args);
+    }
 
     // ---- The project, app and the globals ----
 

@@ -47,7 +47,9 @@ pub mod report;
 
 pub use aep::open_aep;
 pub use capture::{Capture, Manifest, Report};
-pub use map::{linear_colour, map_capture, map_preset, other_names_of};
+pub use map::{
+    ae_match_name, ae_match_name_of, linear_colour, map_capture, map_preset, other_names_of,
+};
 pub use report::{ImportReport, ItemPath, Outcome, Reason, ReportRow, Summary};
 
 use std::fs::{self, File};

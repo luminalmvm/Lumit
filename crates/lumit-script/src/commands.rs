@@ -1,5 +1,7 @@
 //! The commands themselves: the table, and one function each.
 
+mod effects;
+
 use std::path::{Path, PathBuf};
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp, TangentMode};
@@ -289,6 +291,43 @@ pub const COMMANDS: &[Command] = &[
         ),
     },
     Command {
+        name: "effect.list",
+        summary: "The effects on a layer, top first, with their controls",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#"},"required":["comp","layer"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "effect.add",
+        summary: "Add an effect to the bottom of a layer's stack, by Lumit's name for it or After Effects'",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","effect":{"type":"string","description":"Lumit's id or name for the effect, or After Effects' match name or name, such as ADBE Gaussian Blur 2"},"name":{"type":"string","description":"The name it shows"}},"required":["comp","layer","effect"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "effect.set",
+        summary: "Switch an effect on or off, rename it, or set one of its controls: a value, a list of keys, or an expression",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","effect":{"description":"The effect's id or name, or its place in the stack, 0 the top","oneOf":[{"type":"string"},{"type":"integer","minimum":0}]},"enabled":{"type":"boolean"},"name":{"type":["string","null"],"description":"The name it shows, or null for the effect's own"},"param":{"type":"string","description":"A control's id or name. After Effects' match name for one, such as ADBE Gaussian Blur 2-0001, takes After Effects' values and converts them as importing does"},"value":{"description":"A number, a list for a point or a colour, true or false for a switch, or an option's number"},"keys":{"type":"array","minItems":1,"items":"#,
+            key!(r#"{"oneOf":[{"type":"number"},{"type":"array","items":{"type":"number"},"minItems":1,"maxItems":4}]}"#),
+            r#"},"expression":"#,
+            expression!(),
+            r#"},"required":["comp","layer","effect"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
         name: "footage.import",
         summary: "Import files as footage items",
         schema: r#"{"type":"object","properties":{"paths":{"type":"array","items":{"type":"string"},"minItems":1}},"required":["paths"],"additionalProperties":false}"#,
@@ -341,6 +380,9 @@ pub(crate) fn run(
         "layer.delete" => layer_delete(host, parse(args)?),
         "layer.keys" => layer_keys(host, parse(args)?),
         "markers.set" => markers_set(host, parse(args)?),
+        "effect.list" => effects::list(host, parse(args)?),
+        "effect.add" => effects::add(host, parse(args)?),
+        "effect.set" => effects::set(host, parse(args)?),
         "footage.import" => footage_import(host, reach, parse(args)?),
         "export.start" => export_start(host, reach, parse(args)?),
         "export.status" => export_status(host, parse(args)?),

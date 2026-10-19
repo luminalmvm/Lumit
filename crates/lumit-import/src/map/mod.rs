@@ -55,7 +55,7 @@ use crate::capture::{Capture, Comp, Item};
 use crate::report::{ImportReport, ItemPath, Outcome, Reason};
 
 pub use effects::{map_effect, MappedEffect};
-pub use table::other_names_of;
+pub use table::{ae_match_name, ae_match_name_of, other_names_of};
 
 use props::{ae_extra, ae_map};
 use time::{TimeBase, DEFAULT_DURATION, DEFAULT_FPS};
