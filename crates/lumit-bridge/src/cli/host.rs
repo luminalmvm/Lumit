@@ -246,7 +246,7 @@ impl Headless {
             return;
         }
         note!("Looking for plugins");
-        crate::api::effect::rescan_plugins();
+        crate::api::effect::rescan_plugins(None);
     }
 
     /// The project as the bridge's own placement code reads it, with no

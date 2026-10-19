@@ -89,8 +89,8 @@ pub use describe::{
     PortInfo, Ports, Refusal, Rejection, ScanReport, STEREO,
 };
 pub use discover::{
-    clap_search_paths, scan, scan_brokered, scan_dir, search_paths, vst3_search_paths,
-    DiscoveredPlugin, ScanOptions, ScanOutcome,
+    clap_search_paths, scan, scan_brokered, scan_brokered_reporting, scan_dir, search_paths,
+    vst3_search_paths, DiscoveredPlugin, ScanOptions, ScanOutcome,
 };
 pub use instance::{HostError, HostFlags, Instance};
 pub use ipc::broker::{

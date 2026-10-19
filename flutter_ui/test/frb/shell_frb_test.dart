@@ -11,7 +11,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/shell/command_palette_frb.dart';
-import 'package:lumit_flutter/shell/splash.dart' show bootLines;
 import 'package:lumit_flutter/shell/export_dialog_frb.dart';
 import 'package:lumit_flutter/shell/export_queue_frb.dart';
 import 'package:lumit_flutter/shell/recovery_dialog_frb.dart';
@@ -218,6 +217,7 @@ void main() {
           'settings-shape-lantern',
           'settings-lantern-room',
           'settings-customise',
+          'settings-themed-splash',
           'settings-theme-duplicate',
           'settings-theme-rename',
           'settings-theme-delete',
@@ -514,7 +514,7 @@ void main() {
       final state = p.state;
       // The welcome screen is the window, and the question opens over it.
       await tester.pumpWidget(hostPanel(
-        child: const BootGate(splash: false),
+        child: const BootGate(),
         state: state,
         uiState: p.uiState,
       ));
@@ -1203,12 +1203,11 @@ void main() {
 
   }, skip: !engineAvailable);
 
-  /// The boot splash is the window until boot ends, and the welcome screen is
-  /// the window after it: the shell must not be in the tree behind either, or
-  /// the first-run question would open underneath a screen nothing can be
-  /// clicked through.
-  group('The boot splash', () {
-    testWidgets('is the whole window, and hands over to the welcome screen',
+  /// The welcome screen is the window when Lumit opens: the shell must not be
+  /// in the tree behind it, or the first-run question would open underneath a
+  /// screen nothing can be clicked through.
+  group('The welcome screen', () {
+    testWidgets('is the whole window, and hands over to the shell',
         (tester) async {
       tester.view.physicalSize = const Size(1800, 1100);
       tester.view.devicePixelRatio = 1.0;
@@ -1220,22 +1219,10 @@ void main() {
         state: p.state,
         uiState: p.uiState,
       ));
-      await tester.pump(const Duration(milliseconds: 250));
-
-      expect(find.text('Lumit'), findsOneWidget, reason: 'the splash is up');
-      expect(find.byType(WelcomeScreenFrb), findsNothing);
-      expect(find.byType(LumitAppView), findsNothing,
-          reason: 'and nothing of the application is behind it');
-      // The engine's own first line, not the canned fallback: with a bridge
-      // loaded the log is what the splash streams.
-      expect(find.text(bootLines.first), findsNothing);
-      expect(find.text(bootLog().first), findsOneWidget);
-
       await tester.pumpAndSettle();
-      expect(find.byType(WelcomeScreenFrb), findsOneWidget,
-          reason: 'boot over, the welcome screen takes the window');
+      expect(find.byType(WelcomeScreenFrb), findsOneWidget);
       expect(find.byType(LumitAppView), findsNothing,
-          reason: 'and the shell is still not behind it');
+          reason: 'and the shell is not behind it');
 
       // New project is the way straight through.
       await tester.tap(find.byKey(const ValueKey('welcome-card-new')));

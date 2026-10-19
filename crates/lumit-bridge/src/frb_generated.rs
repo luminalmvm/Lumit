@@ -20870,10 +20870,17 @@ fn wire__crate__api__effect__rescan_plugins_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_progress = <Option<
+                StreamSink<
+                    crate::api::effect::BridgeScanProgress,
+                    flutter_rust_bridge::for_generated::SseCodec,
+                >,
+            >>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, ()>((move || {
-                    let output_ok = Result::<_, ()>::Ok(crate::api::effect::rescan_plugins())?;
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::effect::rescan_plugins(api_progress))?;
                     Ok(output_ok)
                 })())
             }
@@ -22711,6 +22718,19 @@ impl SseDecode
 impl SseDecode
     for StreamSink<
         crate::api::script::BridgeLiveEvent,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
+impl SseDecode
+    for StreamSink<
+        crate::api::effect::BridgeScanProgress,
         flutter_rust_bridge::for_generated::SseCodec,
     >
 {
@@ -27075,6 +27095,37 @@ impl SseDecode for crate::api::effect::BridgeScalar {
     }
 }
 
+impl SseDecode for crate::api::effect::BridgeScanProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_stage = <crate::api::effect::BridgeScanStage>::sse_decode(deserializer);
+        let mut var_bundle = <String>::sse_decode(deserializer);
+        let mut var_effect = <String>::sse_decode(deserializer);
+        let mut var_done = <u32>::sse_decode(deserializer);
+        let mut var_total = <u32>::sse_decode(deserializer);
+        return crate::api::effect::BridgeScanProgress {
+            stage: var_stage,
+            bundle: var_bundle,
+            effect: var_effect,
+            done: var_done,
+            total: var_total,
+        };
+    }
+}
+
+impl SseDecode for crate::api::effect::BridgeScanStage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::effect::BridgeScanStage::Extensions,
+            1 => crate::api::effect::BridgeScanStage::Effects,
+            2 => crate::api::effect::BridgeScanStage::Audio,
+            _ => unreachable!("Invalid variant for BridgeScanStage: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::state::BridgeScopeTrace {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -30387,6 +30438,27 @@ impl SseDecode
         if (<bool>::sse_decode(deserializer)) {
             return Some(<StreamSink<
                 crate::api::script::BridgeLiveEvent,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode
+    for Option<
+        StreamSink<
+            crate::api::effect::BridgeScanProgress,
+            flutter_rust_bridge::for_generated::SseCodec,
+        >,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<StreamSink<
+                crate::api::effect::BridgeScanProgress,
                 flutter_rust_bridge::for_generated::SseCodec,
             >>::sse_decode(deserializer));
         } else {
@@ -37957,6 +38029,52 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeScalar>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeScanProgress {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.stage.into_into_dart().into_dart(),
+            self.bundle.into_into_dart().into_dart(),
+            self.effect.into_into_dart().into_dart(),
+            self.done.into_into_dart().into_dart(),
+            self.total.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::effect::BridgeScanProgress
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeScanProgress>
+    for crate::api::effect::BridgeScanProgress
+{
+    fn into_into_dart(self) -> crate::api::effect::BridgeScanProgress {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeScanStage {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Extensions => 0.into_dart(),
+            Self::Effects => 1.into_dart(),
+            Self::Audio => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::effect::BridgeScanStage
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeScanStage>
+    for crate::api::effect::BridgeScanStage
+{
+    fn into_into_dart(self) -> crate::api::effect::BridgeScanStage {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::state::BridgeScopeTrace {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -40270,6 +40388,18 @@ impl SseEncode
 impl SseEncode
     for StreamSink<
         crate::api::script::BridgeLiveEvent,
+        flutter_rust_bridge::for_generated::SseCodec,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
+impl SseEncode
+    for StreamSink<
+        crate::api::effect::BridgeScanProgress,
         flutter_rust_bridge::for_generated::SseCodec,
     >
 {
@@ -43558,6 +43688,34 @@ impl SseEncode for crate::api::effect::BridgeScalar {
     }
 }
 
+impl SseEncode for crate::api::effect::BridgeScanProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::effect::BridgeScanStage>::sse_encode(self.stage, serializer);
+        <String>::sse_encode(self.bundle, serializer);
+        <String>::sse_encode(self.effect, serializer);
+        <u32>::sse_encode(self.done, serializer);
+        <u32>::sse_encode(self.total, serializer);
+    }
+}
+
+impl SseEncode for crate::api::effect::BridgeScanStage {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::effect::BridgeScanStage::Extensions => 0,
+                crate::api::effect::BridgeScanStage::Effects => 1,
+                crate::api::effect::BridgeScanStage::Audio => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::state::BridgeScopeTrace {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -46061,6 +46219,26 @@ impl SseEncode
         if let Some(value) = self {
             <StreamSink<
                 crate::api::script::BridgeLiveEvent,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode
+    for Option<
+        StreamSink<
+            crate::api::effect::BridgeScanProgress,
+            flutter_rust_bridge::for_generated::SseCodec,
+        >,
+    >
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <StreamSink<
+                crate::api::effect::BridgeScanProgress,
                 flutter_rust_bridge::for_generated::SseCodec,
             >>::sse_encode(value, serializer);
         }

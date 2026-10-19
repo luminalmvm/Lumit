@@ -595,6 +595,11 @@ class Workspace extends ChangeNotifier {
   /// (docs/15-DESIGN §8, §2.1). On, because it does look good.
   bool themedScopes = false;
 
+  /// Whether the start-up splash lights its card with the theme's accent
+  /// rather than Lumit's own green and blue. Off by default, so the splash
+  /// looks like Lumit whatever the chrome.
+  bool themedSplash = false;
+
   /// The effects and presets the owner has starred in Effects & presets
   /// (owner, desk test), by the panel's own key — an effect's match name, or
   /// `preset:` and the preset's name.
@@ -1436,6 +1441,11 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  void setThemedSplash(bool on) {
+    themedSplash = on;
+    settingsChanged();
+  }
+
   void setThemedEffectGraphs(bool on) {
     themedEffectGraphs = on;
     settingsChanged();
@@ -1979,6 +1989,7 @@ class Workspace extends ChangeNotifier {
         'custom_themes': [for (final t in customThemes) t.toJson()],
         'custom_theme': customThemeName,
         'themed_scopes': themedScopes,
+        'themed_splash': themedSplash,
         'favourite_effects': favouriteEffects.toList()..sort(),
         'saved_expressions': savedExpressions,
         'saved_expression_languages': _encodedExpressionLanguages(),
@@ -2164,6 +2175,7 @@ class Workspace extends ChangeNotifier {
     customThemeName =
         j['custom_theme'] is String ? j['custom_theme'] as String : null;
     themedScopes = j['themed_scopes'] == true;
+    themedSplash = j['themed_splash'] == true;
     favouriteEffects
       ..clear()
       ..addAll([

@@ -38,6 +38,22 @@
       }
     }
   },
+  "bootLoadingAudioPlugins": "Loading audio plugins",
+  "@bootLoadingAudioPlugins": {
+    "description": "Step on the start-up splash, left of the progress bar, while the CLAP and VST3 audio plugins on this machine are opened one by one. The plugin being opened is named at the other end of the line."
+  },
+  "bootLoadingExtensions": "Loading extensions",
+  "@bootLoadingExtensions": {
+    "description": "Step on the start-up splash, left of the progress bar, while the effects that installed extensions add are read in."
+  },
+  "bootLoadingPlugins": "Loading plugins",
+  "@bootLoadingPlugins": {
+    "description": "Step on the start-up splash, left of the progress bar, while the OFX effect plugins on this machine are opened one by one. The plugin being opened is named at the other end of the line."
+  },
+  "bootStartingUp": "Starting up",
+  "@bootStartingUp": {
+    "description": "Step on the start-up splash once everything is loaded, in the moment before the main window appears."
+  },
   "brushShapeRound": "Round",
   "@brushShapeRound": {
     "description": "Brush shape choice in the paint tool options and on a stroke's Timeline row: a circular brush tip."
@@ -7900,10 +7916,6 @@
   "@sourceZoom": {
     "description": "Field label: how much a still is scaled as it is read in."
   },
-  "splashSubtitle": "Motion graphics and compositing",
-  "@splashSubtitle": {
-    "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
-  },
   "swatchForget": "Forget this colour",
   "@swatchForget": {
     "description": "Row of the right-click menu on a colour kept on the project's shelf, inside the colour picker. Takes the colour off the shelf."
@@ -11916,6 +11928,10 @@
   "settingsScale": "Scale",
   "@settingsScale": {
     "description": "Settings window, Appearance: the name of the row setting how large the interface is drawn, as a percentage."
+  },
+  "settingsSplashUsesThemeColour": "Splash uses theme colour",
+  "@settingsSplashUsesThemeColour": {
+    "description": "Settings window, Appearance: the name of the switch that lights the start-up splash with the theme's accent colour rather than Lumit's own green and blue."
   },
   "settingsScopesUseThemeColour": "Scopes use theme colour",
   "@settingsScopesUseThemeColour": {
