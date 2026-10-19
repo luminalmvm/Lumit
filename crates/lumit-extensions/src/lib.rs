@@ -217,6 +217,8 @@ pub enum ExtensionError {
     Busy,
     #[error("no extension of that name is installed")]
     Missing,
+    #[error("this extension is in a folder Lumit doesn't own, so it stays there")]
+    NotOurs,
     #[error("the extension's files could not be copied: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -707,18 +709,21 @@ pub fn install(folder: &Path) -> Result<Installed, ExtensionError> {
     })
 }
 
-/// Remove the extension `id` and its folder, from the first folder that
-/// has it.
+/// Remove the extension `id` and its folder. Only from Lumit's own folder:
+/// one found first in the machine's or an added folder is someone else's to
+/// remove, and is left as it is.
 pub fn remove(id: &str) -> Result<(), ExtensionError> {
     if !is_id(id) {
         return Err(ExtensionError::Missing);
     }
-    let place = dirs()
+    let found = dirs()
         .into_iter()
-        .map(|dir| dir.join(id))
-        .find(|place| place.join(MANIFEST_FILE).is_file())
+        .find(|dir| dir.join(id).join(MANIFEST_FILE).is_file())
         .ok_or(ExtensionError::Missing)?;
-    fs::remove_dir_all(place)?;
+    if dir().as_ref() != Some(&found) {
+        return Err(ExtensionError::NotOurs);
+    }
+    fs::remove_dir_all(found.join(id))?;
     Ok(())
 }
 

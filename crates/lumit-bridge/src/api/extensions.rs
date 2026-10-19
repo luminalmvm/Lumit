@@ -219,9 +219,12 @@ fn outcome(done: Result<Installed, ExtensionError>) -> BridgeExtensionOutcome {
         Err(ExtensionError::Newer(version)) => BridgeExtensionOutcome::Newer { version },
         Err(ExtensionError::TooLarge) => BridgeExtensionOutcome::TooLarge,
         Err(ExtensionError::Busy) => BridgeExtensionOutcome::Busy,
-        Err(ExtensionError::NoFolder | ExtensionError::Missing | ExtensionError::Io(_)) => {
-            BridgeExtensionOutcome::Failed
-        }
+        Err(
+            ExtensionError::NoFolder
+            | ExtensionError::Missing
+            | ExtensionError::NotOurs
+            | ExtensionError::Io(_),
+        ) => BridgeExtensionOutcome::Failed,
     }
 }
 
