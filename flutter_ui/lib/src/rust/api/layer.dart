@@ -447,6 +447,10 @@ class BridgeClip {
   /// clip on its own.
   final UuidValue? link;
 
+  /// Whether the clip is heard. Off on a picture clip whose sound has been
+  /// detached onto a clip of its own.
+  final bool audible;
+
   /// The trim into the source, in seconds of source time: the first moment
   /// the clip shows and the moment it stops before.
   final BridgeRational sourceIn;
@@ -483,6 +487,7 @@ class BridgeClip {
     required this.gainDb,
     required this.sourceName,
     this.link,
+    required this.audible,
     required this.sourceIn,
     required this.sourceOut,
     required this.sourceIsComp,
@@ -510,6 +515,7 @@ class BridgeClip {
       gainDb.hashCode ^
       sourceName.hashCode ^
       link.hashCode ^
+      audible.hashCode ^
       sourceIn.hashCode ^
       sourceOut.hashCode ^
       sourceIsComp.hashCode ^
@@ -539,6 +545,7 @@ class BridgeClip {
           gainDb == other.gainDb &&
           sourceName == other.sourceName &&
           link == other.link &&
+          audible == other.audible &&
           sourceIn == other.sourceIn &&
           sourceOut == other.sourceOut &&
           sourceIsComp == other.sourceIsComp &&
@@ -2673,6 +2680,14 @@ class LayerReference {
   BridgeAudioStreams clipAudioStreams({required UuidValue clip}) =>
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceClipAudioStreams(that: this, clip: clip);
+
+  /// Whether a clip on this layer plays something with a picture: false
+  /// for a clip of a file with no video stream, which a picture row plays
+  /// as sound. Probing costs an FFmpeg open the first time, so the Cut
+  /// timeline asks once a clip, off the build, and remembers.
+  Future<bool> clipHasPicture({required UuidValue clip}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceClipHasPicture(that: this, clip: clip);
 
   /// A thumbnail of the **first frame this clip shows**.
   ///

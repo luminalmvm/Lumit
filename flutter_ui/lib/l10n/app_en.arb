@@ -7808,6 +7808,38 @@
   "@streamsArrivalSplit": {
     "description": "A choice for the setting Several audio streams arrive as: every audio stream of the file gets a layer of its own."
   },
+  "cutDetachAudio": "Detach audio",
+  "@cutDetachAudio": {
+    "description": "Cut timeline, right-click menu of a picture clip that plays its own sound: put the sound on a clip of its own on a sound track below, linked to the picture, and make the picture clip silent."
+  },
+  "cutAttachAudio": "Attach audio",
+  "@cutAttachAudio": {
+    "description": "Cut timeline, right-click menu of a picture clip whose sound was detached: the way back from Detach audio. The linked sound clip goes back into the picture clip, if it still covers the same stretch."
+  },
+  "cutNoSoundToDetach": "That clip has no sound to detach.",
+  "@cutNoSoundToDetach": {
+    "description": "One line in the status bar, after Detach audio in the Cut timeline found no picture clip with sound of its own among those picked. Calm, not an error."
+  },
+  "cutNoSoundToAttach": "No sound clip still lines up with that clip.",
+  "@cutNoSoundToAttach": {
+    "description": "One line in the status bar, after Attach audio in the Cut timeline found no linked sound clip covering the same stretch as the picked picture clip, because it was trimmed or moved. Calm, not an error."
+  },
+  "settingsCutTracksInAnyOrder": "Cut tracks in any order",
+  "@settingsCutTracksInAnyOrder": {
+    "description": "Settings window, Timeline, Editing: a switch. On, the Cut timeline shows its tracks in the composition's layer order, sound tracks among picture tracks, with no dividing line between them. Off, picture tracks stand above the line and sound tracks below it."
+  },
+  "settingsVideoSoundInCut": "Video sound in Cut",
+  "@settingsVideoSoundInCut": {
+    "description": "Settings window, Timeline, Editing: the name of the row choosing where a video's sound goes when the video is placed in the Cut timeline. The two choices follow it in a dropdown."
+  },
+  "cutSoundOnItsOwnTrack": "On its own track",
+  "@cutSoundOnItsOwnTrack": {
+    "description": "A choice for the setting Video sound in Cut: the sound goes on a linked clip on a sound track below the picture. What a fresh install has."
+  },
+  "cutSoundWithPicture": "With the picture",
+  "@cutSoundWithPicture": {
+    "description": "A choice for the setting Video sound in Cut: the sound stays on the picture clip, on the same track, and is cut with it."
+  },
   "settingsViewerBars": "Viewer bars",
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."

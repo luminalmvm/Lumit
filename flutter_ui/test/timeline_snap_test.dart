@@ -60,6 +60,7 @@ void main() {
           clips: [
             BridgeClip(
               id: id,
+              audible: true,
               placeStart: const BridgeRational(num: 1, den: 1),
               placeDuration: const BridgeRational(num: 1, den: 1),
               gainDb: 0,

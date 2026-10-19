@@ -209,6 +209,11 @@ pub struct Clip {
     /// otherwise, and left out of the file until then.
     #[serde(default, skip_serializing_if = "crate::model::AudioStreams::is_first")]
     pub audio_streams: crate::model::AudioStreams,
+    /// Whether the clip is heard. Off on a picture clip whose sound has been
+    /// detached onto a clip of its own, which is then the one heard. Left out
+    /// of the file while on.
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub audible: bool,
     /// The clip's own blend mode, used in place of the layer's while this
     /// clip is the one showing. Unset is "the layer's", and is left out of
     /// the file.
@@ -245,6 +250,7 @@ impl Clip {
             gain_db: 0.0,
             link: None,
             audio_streams: crate::model::AudioStreams::default(),
+            audible: true,
             blend: None,
             extra: serde_json::Map::new(),
         }
@@ -719,6 +725,7 @@ impl Clip {
             gain_db: self.gain_db,
             link: self.link,
             audio_streams: self.audio_streams.clone(),
+            audible: self.audible,
             blend: self.blend,
             extra: self.extra.clone(),
         };
@@ -746,6 +753,7 @@ impl Clip {
             gain_db: self.gain_db,
             link: self.link,
             audio_streams: self.audio_streams.clone(),
+            audible: self.audible,
             blend: self.blend,
             extra: self.extra.clone(),
         };

@@ -211,6 +211,7 @@ void main() {
   /// A clip with only the fields the geometry reads filled in.
   BridgeClip clipAt(String id, int start, int end) => BridgeClip(
         id: UuidValue.fromString(id),
+        audible: true,
         placeStart: const BridgeRational(num: 0, den: 1),
         placeDuration: const BridgeRational(num: 1, den: 1),
         startFrame: start,
@@ -270,6 +271,7 @@ void main() {
     );
     final sound = BridgeClip(
       id: clipId,
+      audible: true,
       placeStart: const BridgeRational(num: 0, den: 1),
       placeDuration: const BridgeRational(num: 1, den: 1),
       startFrame: 0,

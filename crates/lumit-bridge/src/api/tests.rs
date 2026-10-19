@@ -4375,7 +4375,17 @@ fn a_linked_ripple_delete_closes_both_layers_in_one_step() {
         .expect("imported");
     let span = |n: i64| BridgeRational { num: n, den: 1 };
     let place = |target: Option<LayerReference>, at: i64| {
-        let done = comp.cut_place(target, &footage, span(0), span(2), at, false, true, None);
+        let done = comp.cut_place(
+            target,
+            &footage,
+            span(0),
+            span(2),
+            at,
+            false,
+            true,
+            false,
+            None,
+        );
         assert_eq!(done.expect("placed"), BridgeCutResult::Done);
     };
 
@@ -4383,8 +4393,8 @@ fn a_linked_ripple_delete_closes_both_layers_in_one_step() {
     place(None, 0);
     let top = comp.get_layers().expect("layers").remove(0);
     assert!(
-        !top.get_switches().expect("switches").audible,
-        "a picture row made here is silent, so its sound is heard once"
+        top.get_switches().expect("switches").audible,
+        "a picture row made here is heard, and its clips say whether they are"
     );
     let below = comp.add_sequence_layer(Some(1)).expect("a second row");
     place(Some(below), 0);
@@ -4461,7 +4471,17 @@ fn cut_row(clips: i64) -> (ProjectReference, CompositionReference, LayerReferenc
         .expect("imported");
     let span = |n: i64| BridgeRational { num: n, den: 1 };
     let place = |target: Option<LayerReference>, at: i64| {
-        let done = comp.cut_place(target, &footage, span(1), span(3), at, false, true, None);
+        let done = comp.cut_place(
+            target,
+            &footage,
+            span(1),
+            span(3),
+            at,
+            false,
+            true,
+            false,
+            None,
+        );
         assert_eq!(done.expect("placed"), BridgeCutResult::Done);
     };
     place(None, 0);
@@ -10241,7 +10261,17 @@ fn a_cut_places_splits_and_merges_a_recordings_streams_as_linked_clips() {
     };
     let span = |n: i64| BridgeRational { num: n, den: 1 };
     let arrival = Some(BridgeStreamsArrival::Split);
-    let placed = comp.cut_place(None, &footage, span(0), span(4), 0, false, true, arrival);
+    let placed = comp.cut_place(
+        None,
+        &footage,
+        span(0),
+        span(4),
+        0,
+        false,
+        true,
+        false,
+        arrival,
+    );
     assert_eq!(placed.expect("placed"), BridgeCutResult::Done);
 
     // The picture's track, silent, over a sound track to each stream.

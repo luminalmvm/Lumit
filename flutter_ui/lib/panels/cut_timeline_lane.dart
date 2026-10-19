@@ -91,6 +91,10 @@ class CutTrackPainter extends CustomPainter {
   final Map<String, ui.Image?> thumbs;
   final Map<String, BridgeAudioPeaks> peaks;
 
+  /// The clips on picture tracks that play something with no picture, by
+  /// id. They draw as sound clips do.
+  final Set<String> soundOnPicture;
+
   /// The composition glyph, or null until the panel has made it.
   final CutGlyph? compGlyph;
 
@@ -125,6 +129,7 @@ class CutTrackPainter extends CustomPainter {
     required this.hover,
     required this.thumbs,
     required this.peaks,
+    required this.soundOnPicture,
     required this.compGlyph,
     required this.nameOf,
     required this.handles,
@@ -160,12 +165,20 @@ class CutTrackPainter extends CustomPainter {
     final to = axis.frameAtExact(viewLeft + viewWidth).ceil() + slack;
     // A move across tracks: the travelling clips of the grabbed clip's kind
     // leave their own track and are drawn on the one they will land on.
-    final crossing = held != null &&
+    // Sound crossing between a sound track and a picture track takes the
+    // grabbed clip's track alone.
+    final moving = held != null &&
         held.trackShift != 0 &&
         held.grab == BarGrab.move &&
         held.tool != CutTool.slide &&
-        held.track != null &&
-        tracks[held.track!].kind == track.kind;
+        held.track != null;
+    final kinds = {CutTrackKind.picture, CutTrackKind.sound};
+    final crossing = moving && tracks[held.track!].kind == track.kind;
+    final across = moving &&
+        !crossing &&
+        index - held.trackShift == held.track &&
+        kinds.contains(track.kind) &&
+        kinds.contains(tracks[held.track!].kind);
     final mark = hover.value;
     if (track.clips.isEmpty) {
       _plainBar(canvas, size, held, locked);
@@ -183,11 +196,12 @@ class CutTrackPainter extends CustomPainter {
         }
         final span = cutDraggedSpan(clip, held, locked: locked);
         spans.add(span);
-        final (left, width) = _boxOf(clip, span, held, sound: track.sound);
+        final sound = _isSound(track, clip);
+        final (left, width) = _boxOf(clip, span, held, sound: sound);
         if (left > viewLeft + viewWidth || left + width < viewLeft) continue;
         final box = Rect.fromLTWH(
             left, cutClipInset, width, size.height - cutClipInset * 2);
-        _clipBox(canvas, clip, box, held, mark, sound: track.sound);
+        _clipBox(canvas, clip, box, held, mark, sound: sound);
       }
       // Where two clips overlap the overlap is the transition, a dissolve
       // on a picture track and a crossfade on a sound track: the join,
@@ -208,7 +222,7 @@ class CutTrackPainter extends CustomPainter {
       }
       _fades(canvas, size, lo, hi, spans, held, mark);
     }
-    if (!crossing) return;
+    if (!crossing && !across) return;
     final source = index - held.trackShift;
     if (source < 0 || source >= tracks.length) return;
     final other = tracks[source];
@@ -216,14 +230,20 @@ class CutTrackPainter extends CustomPainter {
     for (var i = lo; i < hi; i++) {
       final clip = other.clips[i];
       if (!held.clips.contains(clip.id.toString())) continue;
+      final sound = _isSound(other, clip);
       final (left, width) =
-          _boxOf(clip, cutDraggedSpan(clip, held), held, sound: other.sound);
+          _boxOf(clip, cutDraggedSpan(clip, held), held, sound: sound);
       if (left > viewLeft + viewWidth || left + width < viewLeft) continue;
       final box = Rect.fromLTWH(
           left, cutClipInset, width, size.height - cutClipInset * 2);
-      _clipBox(canvas, clip, box, held, null, sound: other.sound);
+      _clipBox(canvas, clip, box, held, null, sound: sound);
     }
   }
+
+  /// Whether [clip] on [on] draws as sound: every clip on a sound track,
+  /// and one that plays no picture on a picture track.
+  bool _isSound(CutTrack on, BridgeClip clip) =>
+      on.sound || soundOnPicture.contains(clip.id.toString());
 
   /// A clip's box for its dragged [span]. A sound clip may sit between two
   /// frames, so its box is drawn where it is to the part of a frame, and a
@@ -483,11 +503,24 @@ class CutTrackPainter extends CustomPainter {
               from: clipEdgeWidth + 4, band: header > 0 ? header : null));
       return;
     }
+    // A picture clip that is heard has its sound in a band along the foot
+    // of the box, and its picture and name above it.
+    final band = _bandOf(clip, box);
+    if (band > 0) {
+      _wave(
+          canvas,
+          clip,
+          Rect.fromLTRB(box.left, box.bottom - band, box.right, box.bottom),
+          held,
+          header: false);
+    }
+    final above =
+        Rect.fromLTRB(box.left, box.top, box.right, box.bottom - band);
     // The frame the clip opens on, at the head of the box, then the name.
     var from = clipEdgeWidth + 4;
     final image = thumbs[cutThumbKey(clip)];
     if (image != null && image.height > 0) {
-      final inner = box.height - 2;
+      final inner = above.height - 2;
       // The whole frame on a track of the usual height. On a tall one it
       // would fill the box, so it keeps to the head of it and shows the
       // middle of the frame, and the name still has its room.
@@ -495,7 +528,7 @@ class CutTrackPainter extends CustomPainter {
       final wide = min(whole, box.width * 0.6);
       final shown = image.width * wide / whole;
       canvas.save();
-      canvas.clipRect(box.deflate(1));
+      canvas.clipRect(above.deflate(1));
       canvas.drawImageRect(
         image,
         Rect.fromLTWH((image.width - shown) / 2, 0, shown,
@@ -506,9 +539,23 @@ class CutTrackPainter extends CustomPainter {
       canvas.restore();
       from += wide + 2;
     }
-    final chips = _chips(canvas, clip, box);
+    final chips = _chips(canvas, clip, box, band: above.height);
     _name(canvas, clip.sourceName, box,
-        room: chips, from: _glyph(canvas, clip, box, from: from));
+        band: above.height,
+        room: chips,
+        from: _glyph(canvas, clip, box, from: from, band: above.height));
+  }
+
+  /// How tall the band a picture clip's sound is drawn in stands: none for a
+  /// clip that is not heard, or has no sound, or on a track too short.
+  double _bandOf(BridgeClip clip, Rect box) {
+    if (!track.entry.info.switches.audible || !clip.audible || clip.retimed) {
+      return 0;
+    }
+    final summary = peaks[clip.id.toString()];
+    if (summary == null || summary.buckets == 0) return 0;
+    if (box.height < audioClipHeader * 2) return 0;
+    return (box.height * 0.4).roundToDouble();
   }
 
   /// What a clip carries of its own, said at the right of its name line: its
@@ -579,7 +626,8 @@ class CutTrackPainter extends CustomPainter {
   /// The clip's own sound across its box. The peaks are bucketed on the
   /// clip's placed clock, which starts at its place start, so a slid clip
   /// carries its wave along with nothing refetched.
-  void _wave(Canvas canvas, BridgeClip clip, Rect box, CutDrag? held) {
+  void _wave(Canvas canvas, BridgeClip clip, Rect box, CutDrag? held,
+      {bool header = true}) {
     final summary = peaks[clip.id.toString()];
     if (summary == null || axis.perFrame <= 0 || fps <= 0) return;
     // A head being trimmed moves the box over a wave that stays put, and a
@@ -592,18 +640,18 @@ class CutTrackPainter extends CustomPainter {
     final slip = mine && held.tool == CutTool.slip;
     final origin = rationalSeconds(clip.placeStart) +
         (trimIn || slip ? held.shift / fps : 0);
-    _waveAt(canvas, summary, origin, box);
+    _waveAt(canvas, summary, origin, box, header: header);
   }
 
   /// A wave across [box], whose left edge is [origin] on the peaks' clock.
-  void _waveAt(
-      Canvas canvas, BridgeAudioPeaks summary, double origin, Rect box) {
+  void _waveAt(Canvas canvas, BridgeAudioPeaks summary, double origin, Rect box,
+      {bool header = true}) {
     // Under the name's header, so the wave never runs through the name.
-    final header = _soundHeader(box);
-    final tall = box.height - header;
+    final top = header ? _soundHeader(box) : 0.0;
+    final tall = box.height - top;
     canvas.save();
     canvas.clipRect(box.deflate(1));
-    canvas.translate(box.left, box.top + header);
+    canvas.translate(box.left, box.top + top);
     WaveformPainter(
       peaks: summary,
       originSeconds: origin,
@@ -626,6 +674,7 @@ class CutTrackPainter extends CustomPainter {
       old.axis.width != axis.width ||
       old.fps != fps ||
       old.selected != selected ||
+      old.soundOnPicture != soundOnPicture ||
       old.compGlyph != compGlyph ||
       old.handles != handles ||
       old.blendNames != blendNames ||

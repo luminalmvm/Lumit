@@ -167,6 +167,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   BigInt? _tracksRevision;
   CompositionReference? _tracksComp;
 
+  /// Whether the tracks stand in stack order with no dividing line, as
+  /// Settings says. Read with the tracks, and part of their key.
+  bool _anyOrder = false;
+
+  /// While a track's header is dragged: the track in hand, how far it has
+  /// travelled, and the track it would land on.
+  int? _reorderFrom;
+  double _reorderTravel = 0;
+  final ValueNotifier<int?> _reorderTo = ValueNotifier(null);
+
   /// Whether each uncut footage layer's file carries sound, by layer id:
   /// what gives the layer a sound row below the line. A probe of the file,
   /// so asked once per layer and kept.
@@ -179,6 +189,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// carrying its sound, which select and travel together while the strip's
   /// Linked switch is on.
   Map<String, Set<String>> _mates = const {};
+
+  /// Whether each clip on a picture track plays something with a picture,
+  /// by clip id, asked once a clip and off the build. The ones that do not
+  /// are sound on that track, and draw as sound clips do.
+  final Map<String, bool> _pictured = {};
+  Set<String> _soundOnPicture = const {};
 
   /// The tool armed on the strip, other than the razor, which rides the
   /// shell's own tool state so the toolbar and its chord arm it too.
@@ -314,6 +330,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _settle.dispose();
     _edge.dispose();
     _dropOn.dispose();
+    _reorderTo.dispose();
     _zoomMotion.dispose();
     _vOutline.dispose();
     _vLane.dispose();
@@ -1194,18 +1211,22 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// The tracks, once per document revision. The selection is pruned to the
   /// clips that are still there, and the thumbnails of clips that have gone
   /// are let go.
-  void _refreshTracks(CompModel model, CompositionReference comp) {
+  void _refreshTracks(CompModel model, CompositionReference comp,
+      {required bool anyOrder}) {
     final revision = model.revision;
     // The revision is the document's, so fronting another composition
     // without an edit between keeps it: the composition is part of the key.
     if (revision != null &&
         revision == _tracksRevision &&
-        comp == _tracksComp) {
+        comp == _tracksComp &&
+        anyOrder == _anyOrder) {
       return;
     }
     _tracksRevision = revision;
     _tracksComp = comp;
-    _tracks = cutTimelineTracks(model.layers, hasAudio: _hasAudio);
+    _anyOrder = anyOrder;
+    _tracks = cutTimelineTracks(model.layers,
+        hasAudio: _hasAudio, anyOrder: anyOrder);
     final of = <String, int>{};
     final keys = <String>{};
     final byLink = <String, Set<String>>{};
@@ -1220,6 +1241,31 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       }
     }
     _trackOfClip = of;
+    _pictured.removeWhere((id, _) => !of.containsKey(id));
+    final sounding = <String>{};
+    for (final track in _tracks) {
+      if (track.kind != CutTrackKind.picture) continue;
+      for (final clip in track.clips) {
+        if (clip.sourceIsComp) continue;
+        final id = clip.id.toString();
+        switch (_pictured[id]) {
+          case false:
+            sounding.add(id);
+          case null:
+            // Claimed first, so a rebuild mid-probe does not ask twice.
+            _pictured[id] = true;
+            track.entry.layer.clipHasPicture(clip: clip.id).then((has) {
+              if (!mounted || has) return;
+              setState(() {
+                _pictured[id] = false;
+                _tracksRevision = null;
+              });
+            }, onError: (Object _) {});
+          case true:
+        }
+      }
+    }
+    _soundOnPicture = sounding;
     // A row that has gone takes its height with it, or it would be written
     // back out with the project for ever.
     // A layer's own sound row arrives after its file has been asked about
@@ -1358,11 +1404,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final (lo, hi) = track.window(from, to);
       for (var k = lo; k < hi; k++) {
         final clip = track.clips[k];
-        if (!track.sound) {
-          _wantThumb(track, clip);
-          continue;
-        }
         final id = clip.id.toString();
+        if (!track.sound && !_soundOnPicture.contains(id)) {
+          _wantThumb(track, clip);
+          // A picture clip that is heard brings its sound as well, for the
+          // band along the foot of its box.
+          final heard = track.entry.info.switches.audible &&
+              clip.audible &&
+              !clip.retimed &&
+              !clip.sourceIsComp;
+          if (!heard) continue;
+        }
         live.add(id);
         final (left, width) =
             cutClipBox(axis, clip.startFrame.toInt(), clip.endFrame.toInt());
@@ -2262,6 +2314,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final across = cutClipAcross(track, clip, endEdge: endEdge) != null;
     final dissolved = across && cutEdgeOverlaps(track, clip, endEdge: endEdge);
     final second = _secondFrames(ui);
+    final heard = track.entry.info.switches.audible;
     // The audio streams of the clip's file, for the rows that choose among
     // them. The item was probed when it was placed, so this opens nothing.
     BridgeAudioStreams? streams;
@@ -2387,13 +2440,37 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               Expanded(child: Text(l10n.cutBypassEffects)),
             ]),
           ),
+        // A picture clip's sound, taken off onto a sound track of its own, or
+        // brought back from the clip it was taken onto.
+        if (track.kind == CutTrackKind.picture &&
+            !clip.retimed &&
+            !clip.sourceIsComp) ...[
+          if (heard && clip.audible)
+            MenuRow(
+              key: const ValueKey('ctl-menu-detach-audio'),
+              onPressed: () {
+                close(null);
+                _sound(comp, detach: true);
+              },
+              child: Text(l10n.cutDetachAudio),
+            )
+          else if (_mates[id]?.isNotEmpty ?? false)
+            MenuRow(
+              key: const ValueKey('ctl-menu-attach-audio'),
+              onPressed: () {
+                close(null);
+                _sound(comp, detach: false);
+              },
+              child: Text(l10n.cutAttachAudio),
+            ),
+        ],
         // A file with several audio streams: which of them this clip plays,
         // a linked clip to each on a track of its own, and back onto one.
-        // The list is for a clip that is heard. A picture clip on a silent
-        // track has its sound on the clip linked to it, and the two commands
-        // under the list follow the link there.
+        // The list is for a clip that is heard. A silent picture clip has its
+        // sound on the clip linked to it, and the two commands under the list
+        // follow the link there.
         if (streams != null && streams.streams.length > 1) ...[
-          if (track.entry.info.switches.audible)
+          if (heard && clip.audible)
             audioStreamsSubmenu(
               key: const ValueKey('ctl-menu-audio-streams'),
               closeParent: () => close(null),
@@ -2488,6 +2565,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _afterCut(result);
   }
 
+  /// Detach or attach the sound of the selected picture clips. The engine
+  /// passes over the clips each cannot be asked of, the sound clips among
+  /// them say.
+  void _sound(CompositionReference comp, {required bool detach}) {
+    final clips = _selectedIds();
+    final result = _cut(() => detach
+        ? comp.cutDetachAudio(clips: clips)
+        : comp.cutAttachAudio(clips: clips));
+    if (!mounted) return;
+    if (result == BridgeCutResult.nothing) {
+      Provider.of<LumitState>(context, listen: false).postNotice(
+          detach ? l10n.cutNoSoundToDetach : l10n.cutNoSoundToAttach);
+      return;
+    }
+    _afterCut(result);
+  }
+
   /// Where [global] falls on the lanes' own scrolled content.
   Offset? _pointOnLanes(Offset global) {
     final box = _laneContent.currentContext?.findRenderObject();
@@ -2543,6 +2637,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             atFrame: frame,
             insert: false,
             linked: _linked,
+            withPicture: ui.workspace.interface.cutSoundWithPicture,
             arrival: ui.streamsArrival,
           ));
       _afterCut(result);
@@ -2606,7 +2701,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final frames = ui.model.durationFrames;
     final fps = ui.model.fps;
     _bindTools(ui);
-    _refreshTracks(ui.model, comp);
+    _refreshTracks(ui.model, comp,
+        anyOrder: ui.workspace.interface.cutTracksAnyOrder);
     _setNameStyle(t.small.copyWith(color: t.textSecondary));
     _trackHeight = t.density.laneRow * 2;
     final heights = [for (final track in _tracks) _heightOf(track)];
@@ -2921,8 +3017,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                               ),
                             ),
                           ),
-                          if (_tracks.any((track) => track.below))
+                          if (!_anyOrder && _tracks.any((track) => track.below))
                             _divider(t, divider - scrolled),
+                          // Where a track whose header is in hand would land.
+                          ValueListenableBuilder<int?>(
+                            valueListenable: _reorderTo,
+                            builder: (context, to, _) {
+                              final from = _reorderFrom;
+                              if (to == null || from == null || to == from) {
+                                return const SizedBox.shrink();
+                              }
+                              final y = to > from ? _tops[to + 1] : _tops[to];
+                              return Positioned(
+                                left: 0,
+                                right: 0,
+                                top: y - scrolled - 1,
+                                height: 2,
+                                child: ColoredBox(color: t.accent),
+                              );
+                            },
+                          ),
                         ]);
                       },
                     ),
@@ -2945,6 +3059,50 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         height: 2,
         child: IgnorePointer(child: ColoredBox(color: t.hairlineStrong)),
       );
+
+  void _reorderStart(CutTrack track) {
+    _reorderFrom = _tracks.indexOf(track);
+    _reorderTravel = 0;
+    _reorderTo.value = _reorderFrom;
+  }
+
+  /// The track the one in hand would land on: one on its own side of the
+  /// line while there is a line, and never a layer's own sound row.
+  void _reorderBy(double dy) {
+    final from = _reorderFrom;
+    if (from == null) return;
+    _reorderTravel += dy;
+    final y = (_tops[from] + _tops[from + 1]) / 2 + _reorderTravel;
+    final last = _tops.last - 1;
+    final over = cutTrackAt(_tracks, y.clamp(0, last < 0 ? 0 : last), _tops);
+    if (over == null) return;
+    final to = _tracks[over];
+    final fits = to.kind != CutTrackKind.layerSound &&
+        (_anyOrder || to.below == _tracks[from].below);
+    if (fits) _reorderTo.value = over;
+  }
+
+  /// Let the header go: the layer takes the place in the stack of the one it
+  /// landed on. One undo step, and none where it landed where it started.
+  void _reorderEnd() {
+    final from = _reorderFrom;
+    final to = _reorderTo.value;
+    _reorderFrom = null;
+    _reorderTo.value = null;
+    if (from == null || to == null || from == to) return;
+    final ui = _ui;
+    if (ui == null) return;
+    final id = _tracks[to].entry.layer.internallayerId;
+    final index =
+        ui.model.heldLayers.indexWhere((e) => e.layer.internallayerId == id);
+    if (index < 0) return;
+    try {
+      _tracks[from].entry.layer.reorder(newIndex: BigInt.from(index));
+    } catch (_) {
+      // A locked layer refuses, and quietly.
+    }
+    _afterWrite();
+  }
 
   /// One switch cell, written as the other timelines write theirs: one
   /// `setSwitchOnLayers`, and so one undo step.
@@ -3059,7 +3217,20 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           ),
           const SizedBox(width: outlineGap),
           Expanded(
-            child: Listener(
+            child: GestureDetector(
+              // Dragged up or down, the track moves in the stack. A layer's
+              // own sound row moves with its bar and is not dragged itself.
+              onVerticalDragStart: track.kind == CutTrackKind.layerSound
+                  ? null
+                  : (_) => _reorderStart(track),
+              onVerticalDragUpdate: track.kind == CutTrackKind.layerSound
+                  ? null
+                  : (d) => _reorderBy(d.delta.dy),
+              onVerticalDragEnd: track.kind == CutTrackKind.layerSound
+                  ? null
+                  : (_) => _reorderEnd(),
+              onVerticalDragCancel: () => _reorderTo.value = null,
+              child: Listener(
               behavior: HitTestBehavior.opaque,
               // The track itself: its clips are let go, so Effect controls
               // shows the track's own stack.
@@ -3081,7 +3252,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                 ),
               ),
             ),
+            ),
           ),
+          // A picture track may carry sound, and is muted as a sound track is.
+          if (track.kind == CutTrackKind.picture)
+            _switch(t, comp, track, 'audible', s.audible,
+                BridgeLayerSwitch.audible,
+                mark: LumitIcons.audio,
+                offMark: LumitIcons.muted,
+                height: height,
+                tip: s.audible ? l10n.switchAudible : l10n.switchMuted),
           if (track.below) ...[
             _switch(t, comp, track, 'audible', s.audible,
                 BridgeLayerSwitch.audible,
@@ -3312,6 +3492,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                       hover: _hover,
                                       thumbs: _thumbs,
                                       peaks: _peaks,
+                                      soundOnPicture: _soundOnPicture,
                                       compGlyph: _compGlyph,
                                       nameOf: _nameOf,
                                       handles: _toolOf(ui) == CutTool.select,
@@ -3348,7 +3529,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                   ),
                                 ),
                               ),
-                              if (_tracks.any((track) => track.below))
+                              if (!_anyOrder &&
+                                  _tracks.any((track) => track.below))
                                 _divider(t, divider),
                               // The box a marquee sweeps, over the clips.
                               ValueListenableBuilder<Rect?>(
