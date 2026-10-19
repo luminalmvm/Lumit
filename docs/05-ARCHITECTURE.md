@@ -116,7 +116,7 @@ file's own.
   bundle. Frames cross in shared memory. A crashed or hung broker is restarted and the
   node draws as an error placeholder.
 - LFX effects run in-process on the GPU, checked by naga before they run, with no broker.
-  One running when the device is lost twice is switched off for the session.
+  One running when the device is lost twice is switched off until Lumit restarts.
 - A plugin node declares its region, its temporal needs and whether it's thread-safe. A
   plugin that isn't serialises on its own broker only.
 - Expressions run in-process with no IO, no clock and seeded randomness. Results match per

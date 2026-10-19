@@ -39,7 +39,7 @@ pub mod lens_flare;
 /// The bundled lens prescription library: 1303 .lens files as
 /// embedded text, generated from the FlareSim / PhotonsToPhotos collection.
 pub mod lens_library;
-/// The WGSL effects extensions carry: the session's table of them.
+/// The WGSL effects extensions carry: the table of them.
 pub mod lfx;
 mod markers;
 mod maths;

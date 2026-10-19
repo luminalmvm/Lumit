@@ -177,7 +177,7 @@ static REGISTERING: Mutex<()> = Mutex::new(());
 
 /// Register every installed extension's effects, and take out the ones no
 /// extension carries any more, so they read as missing. A changed shader is
-/// picked up at once. Answers the labels of the effects new to this session
+/// picked up at once. Answers the labels of the effects new since Lumit started
 /// and one line per effect turned away, for the plugin scan's report.
 #[frb(ignore)]
 pub(crate) fn register_effects() -> (Vec<String>, Vec<String>) {

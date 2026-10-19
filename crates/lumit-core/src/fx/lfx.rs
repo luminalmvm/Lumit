@@ -4,7 +4,7 @@
 //! shader written to the Custom shader's contract, plus a few facts from the
 //! extension's manifest: its name, its category, how many passes it draws in.
 //! `lumit-extensions` reads the package; what the engine keeps of it is an
-//! [`LfxEffect`], and this module is the table of those for the session.
+//! [`LfxEffect`], and this module is the table of those while Lumit runs.
 //!
 //! The table is replaceable. A rescan installs every effect again, and an
 //! effect whose shader changed picks up the new one at once, with no restart.
@@ -34,7 +34,7 @@ pub const MAX_PASSES: usize = 8;
 /// The one pass an effect that lists none draws in.
 pub const DEFAULT_PASS: &str = "shade";
 
-/// How many lost graphics devices switch an effect off for the session.
+/// How many lost graphics devices switch an effect off until Lumit restarts.
 pub const STRIKES_OFF: u32 = 2;
 
 /// One effect an extension carries, as the engine needs it.
@@ -155,13 +155,13 @@ fn pass_list(effect: &LfxEffect) -> Vec<(&str, f32)> {
         .collect()
 }
 
-/// The session's installed effects, by match name.
+/// The installed effects, by match name.
 static TABLE: RwLock<BTreeMap<&'static str, Arc<Installed>>> = RwLock::new(BTreeMap::new());
 
 /// Every shader built, by key hash. Never shrinks, as the programs are leaked.
 static BUILT: RwLock<BTreeMap<u64, &'static Built>> = RwLock::new(BTreeMap::new());
 
-/// Every def made this session, installed or not. Never shrinks.
+/// Every def made since Lumit started, installed or not. Never shrinks.
 static DEFS: Mutex<BTreeMap<&'static str, &'static LfxDef>> = Mutex::new(BTreeMap::new());
 
 /// `lfx:<extension>/<effect>`.
