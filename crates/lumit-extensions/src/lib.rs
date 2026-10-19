@@ -754,9 +754,28 @@ mod tests {
 
     /// An extension can ask only for what this Lumit knows how to refuse,
     /// can name only pages and shaders inside its own folder and sites by
-    /// name, and carries only effects this Lumit can draw.
+    /// name, and carries only effects this Lumit can draw. The Tape sample
+    /// in examples/ has to stay one of those.
     #[test]
     fn a_manifest_that_reaches_past_its_folder_is_refused() {
+        let tape = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/extensions/tape");
+        let installed = Installed {
+            manifest: inspect(&tape).unwrap(),
+            path: tape,
+            broken: false,
+        };
+        let carried = effects(&installed);
+        assert_eq!(carried.len(), 1);
+        for effect in carried {
+            let passes: Vec<&str> = effect.passes.iter().map(|p| p.name.as_str()).collect();
+            let program = lumit_core::fx::shader::build_passes(&effect.shader, &passes).unwrap();
+            for (_, text) in &program.passes {
+                if let Err(why) = lumit_gpu::fx::validate(text) {
+                    panic!("{}", program.remap_error(&why));
+                }
+            }
+        }
+
         assert!(parse(&manifest(|_| {})).is_ok());
         let effects_only = manifest(|m| {
             m.as_object_mut().unwrap().remove("entry");

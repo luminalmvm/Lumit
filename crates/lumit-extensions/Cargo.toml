@@ -22,5 +22,9 @@ thiserror = "2"
 # A package is a zip of the extension's folder.
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
+[dev-dependencies]
+# The check a render makes of a shader, for the Tape sample's.
+lumit-gpu = { path = "../lumit-gpu" }
+
 [lints]
 workspace = true
