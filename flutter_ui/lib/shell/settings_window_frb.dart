@@ -2449,11 +2449,11 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ValueKey<String>('settings-extension-remove-${extension.id}'),
               small: true,
               frameless: true,
-              onPressed: () {
+              onPressed: () async {
                 if (ui.extensionShown(extension.id)) {
                   ui.toggleExtension(extension.id);
                 }
-                ui.extensions.remove(extension.id);
+                await ui.extensions.remove(extension.id);
               },
               child: Text(l10n.settingsAddonsRemove, style: t.small),
             ),
@@ -2557,7 +2557,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             key: ValueKey<String>('settings-extension-folder-remove-$folder'),
             small: true,
             frameless: true,
-            onPressed: () => service.removeFolder(folder),
+            onPressed: () async {
+              await service.removeFolder(folder);
+            },
             child: Text(l10n.settingsAddonsRemove, style: t.small),
           ),
         ),
@@ -2569,7 +2571,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           small: true,
           onPressed: () async {
             final folder = await pickFolder();
-            if (folder != null) service.addFolder(folder);
+            if (folder != null) await service.addFolder(folder);
           },
           child: Text(l10n.chooseEllipsis, style: t.small),
         ),

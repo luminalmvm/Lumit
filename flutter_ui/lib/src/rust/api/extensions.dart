@@ -22,7 +22,10 @@ BridgeExtensionOutcome extensionInspect({required String folder}) =>
 
 /// What the `.lfx` package at `path` holds and asks to be allowed, for the
 /// install dialogue. Nothing is unpacked.
-BridgeExtensionOutcome extensionInspectPackage({required String path}) =>
+///
+/// Not sync: a large package takes a moment to read.
+Future<BridgeExtensionOutcome> extensionInspectPackage(
+        {required String path}) =>
     BridgeLib.instance.api
         .crateApiExtensionsExtensionInspectPackage(path: path);
 
@@ -54,10 +57,11 @@ Future<BridgeExtensionOutcome> extensionMakePackage(
     BridgeLib.instance.api
         .crateApiExtensionsExtensionMakePackage(folder: folder, out: out);
 
-/// Remove an extension and its folder. False when none of that id is
-/// installed or its folder would not delete. Its effects stay in any project
-/// that uses them, as missing.
-bool extensionRemove({required String id}) =>
+/// Remove an extension and its folder, from Lumit's own folder only. Its
+/// effects stay in any project that uses them, as missing.
+///
+/// Not sync: a folder of pictures takes a moment to delete.
+Future<BridgeExtensionRemoval> extensionRemove({required String id}) =>
     BridgeLib.instance.api.crateApiExtensionsExtensionRemove(id: id);
 
 /// The folders extensions are found in.
@@ -66,19 +70,18 @@ BridgeExtensionFolders extensionFolders() =>
 
 /// Scan `folder` for extensions too, and register what it carries. False
 /// when it is scanned already or would not be remembered.
-bool extensionAddFolder({required String folder}) =>
+///
+/// Not sync: registering reads every extension's shaders.
+Future<bool> extensionAddFolder({required String folder}) =>
     BridgeLib.instance.api.crateApiExtensionsExtensionAddFolder(folder: folder);
 
 /// Stop scanning a folder the person added. Nothing in it is deleted, and
 /// its effects read as missing. False when it was not one of theirs.
-bool extensionRemoveFolder({required String folder}) => BridgeLib.instance.api
-    .crateApiExtensionsExtensionRemoveFolder(folder: folder);
-
-/// The interface page of the LFX effect `match_name`, or None when it has
-/// none or is not installed. Reads the folders, so it is asked when a panel
-/// opens, never per rebuild.
-BridgeLfxInterface? lfxInterface({required String matchName}) =>
-    BridgeLib.instance.api.crateApiExtensionsLfxInterface(matchName: matchName);
+///
+/// Not sync: registering reads every extension's shaders.
+Future<bool> extensionRemoveFolder({required String folder}) =>
+    BridgeLib.instance.api
+        .crateApiExtensionsExtensionRemoveFolder(folder: folder);
 
 /// Where the extension `id` keeps what its page stores, which outlives an
 /// update of the extension. `None` when the platform has no home directory.
@@ -184,16 +187,34 @@ class BridgeExtensionEffect {
   /// Whether it has an interface page of its own.
   final bool interface_;
 
+  /// That page, as a path inside the extension's folder with forward
+  /// slashes. Empty when it has none.
+  final String entry;
+
+  /// The interface panel's opening size in logical pixels. Nought when it
+  /// has none.
+  final int width;
+  final int height;
+
   const BridgeExtensionEffect({
     required this.id,
     required this.name,
     required this.matchName,
     required this.interface_,
+    required this.entry,
+    required this.width,
+    required this.height,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ name.hashCode ^ matchName.hashCode ^ interface_.hashCode;
+      id.hashCode ^
+      name.hashCode ^
+      matchName.hashCode ^
+      interface_.hashCode ^
+      entry.hashCode ^
+      width.hashCode ^
+      height.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -203,7 +224,10 @@ class BridgeExtensionEffect {
           id == other.id &&
           name == other.name &&
           matchName == other.matchName &&
-          interface_ == other.interface_;
+          interface_ == other.interface_ &&
+          entry == other.entry &&
+          width == other.width &&
+          height == other.height;
 }
 
 /// The folders extensions are found in, in the order they are scanned. The
@@ -289,44 +313,17 @@ enum BridgeExtensionPermission {
   ;
 }
 
-/// What an LFX effect's own panel shows: the page and the panel's opening
-/// size in logical pixels.
-class BridgeLfxInterface {
-  /// The extension that carries it, which the page is allowed as.
-  final String extension_;
+/// How removing an extension went.
+enum BridgeExtensionRemoval {
+  removed,
 
-  /// The extension's folder, which the page is served from.
-  final String folder;
+  /// None of that id is installed.
+  missing,
 
-  /// The page, as a path inside `folder` with forward slashes.
-  final String entry;
-  final int width;
-  final int height;
+  /// It is in the machine's or an added folder, which Lumit leaves alone.
+  notOurs,
 
-  const BridgeLfxInterface({
-    required this.extension_,
-    required this.folder,
-    required this.entry,
-    required this.width,
-    required this.height,
-  });
-
-  @override
-  int get hashCode =>
-      extension_.hashCode ^
-      folder.hashCode ^
-      entry.hashCode ^
-      width.hashCode ^
-      height.hashCode;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is BridgeLfxInterface &&
-          runtimeType == other.runtimeType &&
-          extension_ == other.extension_ &&
-          folder == other.folder &&
-          entry == other.entry &&
-          width == other.width &&
-          height == other.height;
+  /// Its folder would not delete.
+  failed,
+  ;
 }

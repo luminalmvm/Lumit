@@ -72,6 +72,13 @@ pub struct BridgeExtensionEffect {
     pub match_name: String,
     /// Whether it has an interface page of its own.
     pub interface: bool,
+    /// That page, as a path inside the extension's folder with forward
+    /// slashes. Empty when it has none.
+    pub entry: String,
+    /// The interface panel's opening size in logical pixels. Nought when it
+    /// has none.
+    pub width: u32,
+    pub height: u32,
 }
 
 /// The folders extensions are found in, in the order they are scanned. The
@@ -86,21 +93,6 @@ pub struct BridgeExtensionFolders {
     pub machine: Vec<String>,
     /// The ones the person added.
     pub extra: Vec<String>,
-}
-
-/// What an LFX effect's own panel shows: the page and the panel's opening
-/// size in logical pixels.
-#[frb(non_opaque)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BridgeLfxInterface {
-    /// The extension that carries it, which the page is allowed as.
-    pub extension: String,
-    /// The extension's folder, which the page is served from.
-    pub folder: String,
-    /// The page, as a path inside `folder` with forward slashes.
-    pub entry: String,
-    pub width: u32,
-    pub height: u32,
 }
 
 /// How reading or installing an extension went.
@@ -144,6 +136,13 @@ fn flatten(manifest: Manifest, folder: &Path, broken: bool) -> BridgeExtension {
             name: effect.name.clone(),
             match_name: lfx::match_name(&manifest.id, &effect.id),
             interface: effect.interface.is_some(),
+            entry: effect
+                .interface
+                .as_ref()
+                .map(|page| page.entry.replace('\\', "/"))
+                .unwrap_or_default(),
+            width: effect.interface.as_ref().map_or(0, |page| page.width),
+            height: effect.interface.as_ref().map_or(0, |page| page.height),
         })
         .collect();
     BridgeExtension {
@@ -248,7 +247,8 @@ pub fn extension_inspect(folder: String) -> BridgeExtensionOutcome {
 
 /// What the `.lfx` package at `path` holds and asks to be allowed, for the
 /// install dialogue. Nothing is unpacked.
-#[frb(sync)]
+///
+/// Not sync: a large package takes a moment to read.
 #[must_use]
 pub fn extension_inspect_package(path: String) -> BridgeExtensionOutcome {
     read(lumit_extensions::read_package(Path::new(&path)))
@@ -296,13 +296,31 @@ pub fn extension_make_package(folder: String, out: String) -> BridgeExtensionOut
     done
 }
 
-/// Remove an extension and its folder. False when none of that id is
-/// installed or its folder would not delete. Its effects stay in any project
-/// that uses them, as missing.
-#[frb(sync)]
+/// How removing an extension went.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeExtensionRemoval {
+    Removed,
+    /// None of that id is installed.
+    Missing,
+    /// It is in the machine's or an added folder, which Lumit leaves alone.
+    NotOurs,
+    /// Its folder would not delete.
+    Failed,
+}
+
+/// Remove an extension and its folder, from Lumit's own folder only. Its
+/// effects stay in any project that uses them, as missing.
+///
+/// Not sync: a folder of pictures takes a moment to delete.
 #[must_use]
-pub fn extension_remove(id: String) -> bool {
-    let removed = lumit_extensions::remove(&id).is_ok();
+pub fn extension_remove(id: String) -> BridgeExtensionRemoval {
+    let removed = match lumit_extensions::remove(&id) {
+        Ok(()) => BridgeExtensionRemoval::Removed,
+        Err(ExtensionError::Missing) => BridgeExtensionRemoval::Missing,
+        Err(ExtensionError::NotOurs) => BridgeExtensionRemoval::NotOurs,
+        Err(_) => BridgeExtensionRemoval::Failed,
+    };
     register_effects();
     removed
 }
@@ -327,7 +345,8 @@ pub fn extension_folders() -> BridgeExtensionFolders {
 
 /// Scan `folder` for extensions too, and register what it carries. False
 /// when it is scanned already or would not be remembered.
-#[frb(sync)]
+///
+/// Not sync: registering reads every extension's shaders.
 #[must_use]
 pub fn extension_add_folder(folder: String) -> bool {
     let added = lumit_extensions::add_dir(Path::new(&folder)).unwrap_or(false);
@@ -337,34 +356,13 @@ pub fn extension_add_folder(folder: String) -> bool {
 
 /// Stop scanning a folder the person added. Nothing in it is deleted, and
 /// its effects read as missing. False when it was not one of theirs.
-#[frb(sync)]
+///
+/// Not sync: registering reads every extension's shaders.
 #[must_use]
 pub fn extension_remove_folder(folder: String) -> bool {
     let removed = lumit_extensions::remove_dir(Path::new(&folder));
     register_effects();
     removed
-}
-
-/// The interface page of the LFX effect `match_name`, or None when it has
-/// none or is not installed. Reads the folders, so it is asked when a panel
-/// opens, never per rebuild.
-#[frb(sync)]
-#[must_use]
-pub fn lfx_interface(match_name: String) -> Option<BridgeLfxInterface> {
-    let extension = lfx::extension_of(&match_name)?;
-    let (_, id) = match_name.split_once('/')?;
-    let installed = lumit_extensions::scan()
-        .into_iter()
-        .find(|e| e.manifest.id == extension)?;
-    let effect = installed.manifest.effects.iter().find(|e| e.id == id)?;
-    let page = effect.interface.as_ref()?;
-    Some(BridgeLfxInterface {
-        extension: extension.to_owned(),
-        folder: installed.path.to_string_lossy().into_owned(),
-        entry: page.entry.replace('\\', "/"),
-        width: page.width,
-        height: page.height,
-    })
 }
 
 /// Where the extension `id` keeps what its page stores, which outlives an

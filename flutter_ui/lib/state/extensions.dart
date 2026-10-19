@@ -127,9 +127,9 @@ class ExtensionService extends ChangeNotifier {
 
   /// What the `.lfx` package at [path] holds and asks to be allowed.
   /// Nothing is unpacked.
-  BridgeExtensionOutcome inspectPackage(String path) {
+  Future<BridgeExtensionOutcome> inspectPackage(String path) async {
     try {
-      return extensionInspectPackage(path: path);
+      return await extensionInspectPackage(path: path);
     } catch (_) {
       return const BridgeExtensionOutcome.failed();
     }
@@ -171,9 +171,9 @@ class ExtensionService extends ChangeNotifier {
   }
 
   /// Scan [folder] for extensions too.
-  void addFolder(String folder) {
+  Future<void> addFolder(String folder) async {
     try {
-      extensionAddFolder(folder: folder);
+      await extensionAddFolder(folder: folder);
     } catch (_) {
       // Nothing was added.
     }
@@ -181,9 +181,9 @@ class ExtensionService extends ChangeNotifier {
   }
 
   /// Stop scanning a folder the person added. Nothing in it is deleted.
-  void removeFolder(String folder) {
+  Future<void> removeFolder(String folder) async {
     try {
-      extensionRemoveFolder(folder: folder);
+      await extensionRemoveFolder(folder: folder);
     } catch (_) {
       // Nothing was taken off.
     }
@@ -192,10 +192,10 @@ class ExtensionService extends ChangeNotifier {
 
   /// Remove an extension. What its page stored, and the folders picked for
   /// it, stay for if it is installed again.
-  bool remove(String id) {
-    var removed = false;
+  Future<BridgeExtensionRemoval> remove(String id) async {
+    var removed = BridgeExtensionRemoval.failed;
     try {
-      removed = extensionRemove(id: id);
+      removed = await extensionRemove(id: id);
     } catch (_) {
       // Nothing was removed.
     }

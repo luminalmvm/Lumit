@@ -69,7 +69,8 @@ Future<void> installExtensionFromPackage(
 /// dropped package comes here too.
 Future<void> installExtensionPackage(BuildContext context, LumitState app,
     ExtensionService service, String path) async {
-  final read = service.inspectPackage(path);
+  final read = await service.inspectPackage(path);
+  if (!context.mounted) return;
   if (read is! BridgeExtensionOutcome_Ready) {
     return app.postNotice(extensionOutcomeText(read), error: true);
   }

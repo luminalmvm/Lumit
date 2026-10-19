@@ -26,20 +26,15 @@ import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 final Set<String> _open = {};
 
 /// Open the interface of the LFX effect [matchName], titled [title], unless
-/// it is open already. Reads the extension's folder, so it is asked on the
-/// press and never in a build.
+/// it is open already. The page and its size come from the extension list
+/// already held.
 Future<void> showLfxInterface(BuildContext context,
     {required String matchName, required String title}) async {
   if (_open.contains(matchName)) return;
   final ui = context.read<LumitUiState>();
-  final owner = ui.extensions.carrying(matchName)?.$1;
-  BridgeLfxInterface? page;
-  try {
-    page = lfxInterface(matchName: matchName);
-  } catch (_) {
-    // No engine to ask, as in a widget test.
-  }
-  if (owner == null || page == null) return;
+  final carried = ui.extensions.carrying(matchName);
+  if (carried == null || carried.$2.entry.isEmpty) return;
+  final (owner, page) = carried;
   // The extension as the page host knows it, showing this page.
   final extension = BridgeExtension(
     id: owner.id,
@@ -48,7 +43,7 @@ Future<void> showLfxInterface(BuildContext context,
     summary: owner.summary,
     author: owner.author,
     homepage: owner.homepage,
-    folder: page.folder,
+    folder: owner.folder,
     panel: true,
     entry: page.entry,
     permissions: owner.permissions,
