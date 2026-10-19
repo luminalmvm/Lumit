@@ -139,13 +139,15 @@ The rest of the comment is the label, or the field's name when there is none. A
   restarts.
 
 Installing an extension again reads its shaders again, and an open project draws with the
-new ones straight away.
+new ones straight away. An extension another Lumit installed is picked up when
+**Settings ▸ Addons** opens, or at the next start.
 
 ## The interface page
 
 An effect with an `interface` has an **Interface** button on its heading in Effect
-controls. It opens the page in a floating panel of its own, which follows the selected
-layer's instance of the effect. The page is an extension page, with `window.lumit` as in
+controls. It opens the page in a floating panel of its own, which follows the instance
+picked in Effect controls, or the selected layer's first one. With none, the page stays open
+and draws its own empty state. The page is an extension page, with `window.lumit` as in
 [Extensions](/use/extensions/#the-page), and these calls besides. Any other page is refused
 them with `not-allowed`.
 
@@ -164,7 +166,11 @@ them with `not-allowed`.
 A value is in the row's own units: a number, `true` or `false` for a checkbox, the option's
 index for a menu, `[r, g, b, a]` for a colour. A point is its `_x` and `_y` rows. A
 keyframed row is set at the playhead. A row an expression drives reads `null`, and writing
-it is refused. Lumit clamps every value. Layer, file and text rows are not listed.
+it is refused. A row with a hard range is held to it. Layer, file and text rows are not
+listed.
+
+A drag still open when the panel follows another instance is dropped, and `effect.set` for
+it is refused until `effect.end` or the next `effect.begin`. A reload drops it too.
 
 Tape's deck turns a knob like this:
 
@@ -189,8 +195,8 @@ In this order. Of two with the same id, the first is used.
 
 | Folder | Where |
 | --- | --- |
-| Lumit's own | Where installs go unless another folder is chosen. Windows `%LOCALAPPDATA%\Lumit\Lumit\data\extensions`, macOS `~/Library/Application Support/dev.Lumit.Lumit/extensions`, Linux `~/.local/share/lumit/extensions`. |
-| Machine-wide | Windows `%CommonProgramFiles%\Lumit\Extensions`, macOS `/Library/Application Support/Lumit/Extensions`, Linux `/usr/share/lumit/extensions`. For an author's own installer. |
+| Lumit's own | Where installs go unless another folder is chosen. Windows `%LOCALAPPDATA%\Lumit\Lumit\data\extensions`, macOS `~/Library/Application Support/dev.Lumit.Lumit/extensions`, Linux `~/.local/share/lumit/extensions`, Flatpak `~/.var/app/io.github.luminalmvm.Lumit/data/lumit/extensions`. |
+| Machine-wide | Windows `%CommonProgramFiles%\Lumit\Extensions`, macOS `/Library/Application Support/Lumit/Extensions`, Linux `/usr/share/lumit/extensions`. For an author's own installer. The Flatpak cannot see it; add the folder instead. |
 | Added | Folders added under **Settings ▸ Addons ▸ Extension folders**, or chosen when installing. |
 
 ## Related
