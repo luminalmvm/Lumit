@@ -2450,10 +2450,14 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               small: true,
               frameless: true,
               onPressed: () async {
+                final app = context.read<LumitState>();
                 if (ui.extensionShown(extension.id)) {
                   ui.toggleExtension(extension.id);
                 }
-                await ui.extensions.remove(extension.id);
+                final removed = await ui.extensions.remove(extension.id);
+                if (removed == BridgeExtensionRemoval.notOurs) {
+                  app.postNotice(l10n.extensionNotOurs(extension.name));
+                }
               },
               child: Text(l10n.settingsAddonsRemove, style: t.small),
             ),

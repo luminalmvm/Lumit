@@ -17162,6 +17162,15 @@
       }
     }
   },
+  "extensionNotOurs": "{name} is in a folder Lumit doesn't own",
+  "@extensionNotOurs": {
+    "description": "Bottom-strip notice after Remove is pressed on an extension in Settings that sits in the machine-wide folder or a folder the person added. Lumit leaves those folders alone, so the extension stays. The name is the extension's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "extensionCanEffects": "Add effects: {names}",
   "@extensionCanEffects": {
     "description": "One line in the install window's It can list: the effects the extension adds to Lumit, by name, separated by commas.",
