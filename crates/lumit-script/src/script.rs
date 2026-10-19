@@ -9,6 +9,7 @@
 //! folder or one it was given or that was chosen (`lumit.readText`,
 //! `lumit.readJson`), and turn another program's seconds into a frame of a
 //! comp (`lumit.frameAt`). `print` and `console.log` go to the run's log.
+//! After Effects' `File` can also write text files in the script's own folder.
 //!
 //! The engine is QuickJS with none of its own file, network or process
 //! modules, so a script reaches the project and the files above and nothing
@@ -23,6 +24,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::fmt;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -37,6 +39,7 @@ use rquickjs::{CatchResultExt, CaughtError, Context, Ctx, Exception, FromJs, Fun
 use rquickjs::{Runtime, Value as JsValue};
 use serde_json::{json, Value};
 
+use crate::include;
 use crate::reach::{self, Reach};
 use crate::{commands, one_step, Host, ScriptError, COMMANDS};
 
@@ -44,6 +47,8 @@ use crate::{commands, one_step, Host, ScriptError, COMMANDS};
 const LUMIT_JS: &str = include_str!("lumit.js");
 /// After Effects' scripting objects, built over `lumit`.
 const AE_JS: &str = include_str!("ae.js");
+/// After Effects' ScriptUI windows, which the interface draws.
+const SCRIPTUI_JS: &str = include_str!("scriptui.js");
 
 /// The most memory a script's values may take. Stop is what ends a script
 /// that runs away; this keeps one nobody is watching, on the command line,
@@ -51,6 +56,8 @@ const AE_JS: &str = include_str!("ae.js");
 const MAX_MEMORY: usize = 1 << 30;
 /// The most a script may read from one file.
 const MAX_READ_BYTES: u64 = 64 << 20;
+/// The most a script may write to files in one run.
+const MAX_WRITE_BYTES: u64 = 64 << 20;
 /// The most entries a script is told of in one folder.
 const MAX_LISTED: usize = 100_000;
 /// Lines of `print` kept. A loop printing for ever stops being heard here.
@@ -59,6 +66,8 @@ const MAX_LOG_LINES: usize = 10_000;
 /// holds, so a script cannot fill the interface or a reply with text.
 const MAX_LINE_BYTES: usize = 4 << 10;
 const MAX_LOG_BYTES: usize = 1 << 20;
+/// The most a window's description may come to.
+const MAX_DIALOG_BYTES: usize = 1 << 20;
 /// The script thread's stack, and how much of it the engine may use, which
 /// leaves room for the runner's own frames under a deeply recursive script.
 const STACK_BYTES: usize = 16 << 20;
@@ -84,6 +93,11 @@ pub struct RunOptions<'a> {
     /// Show the person a message, as After Effects' `alert` does. With none
     /// the message goes to the log.
     pub alert: Option<&'a dyn Fn(&str)>,
+    /// Show the person a ScriptUI window, described as JSON, or show it again
+    /// as it now is, and answer what they did next as JSON, or `None` when
+    /// they closed it. Handed `None`, take it down. With none, as on the
+    /// command line, a window is cancelled as soon as it is shown.
+    pub dialog: Option<&'a Dialog<'a>>,
     /// How far the script's saves, footage and exports may go.
     pub limits: Limits,
 }
@@ -102,6 +116,9 @@ pub enum Limits {
     Off,
 }
 
+/// What shows a script's window. See [`RunOptions::dialog`].
+pub type Dialog<'a> = dyn Fn(Option<&str>) -> Option<String> + 'a;
+
 fn nobody_to_ask(_: &str, _: &[String]) -> Option<PathBuf> {
     None
 }
@@ -116,6 +133,7 @@ impl Default for RunOptions<'_> {
             choose_file: &nobody_to_ask,
             path: None,
             alert: None,
+            dialog: None,
             limits: Limits::default(),
         }
     }
@@ -160,6 +178,7 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
         host,
         choose_file: options.choose_file,
         alert: options.alert,
+        dialog: options.dialog,
         log: log.clone(),
         reach: RefCell::new(Reach {
             folder: options.path.as_deref().and_then(reach::script_folder),
@@ -172,6 +191,8 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
         }),
         limited: options.limits != Limits::Off,
         edited: Cell::new(false),
+        written: Cell::new(0),
+        step: RefCell::new(None),
     };
     let name = if options.name.is_empty() {
         "Script".to_owned()
@@ -186,17 +207,34 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
             .as_deref()
             .and_then(|p| std::path::absolute(p).ok()),
     };
+    let source = match include::expand(
+        source,
+        setup.path.as_deref(),
+        desk.reach.borrow().folder.as_deref(),
+    ) {
+        Ok(source) => source,
+        Err((error, line)) => {
+            return RunReport {
+                log: Vec::new(),
+                result: Err(RunError {
+                    error,
+                    line: Some(line),
+                    column: None,
+                }),
+            }
+        }
+    };
     let stop = options.stop;
     let mut at = None;
     let result = one_step(host.store(), || {
         std::thread::scope(|s| {
             let (ask, asked) = mpsc::sync_channel(0);
             let lumit = Lumit { ask };
-            let (setup, stop, log) = (&setup, &stop, &log);
+            let (setup, stop, log, text) = (&setup, &stop, &log, source.text.as_str());
             let worker = std::thread::Builder::new()
                 .name("script".into())
                 .stack_size(STACK_BYTES)
-                .spawn_scoped(s, move || evaluate(source, setup, lumit, stop, log))
+                .spawn_scoped(s, move || evaluate(text, setup, lumit, stop, log))
                 .map_err(|e| ScriptError::Failed(format!("The script could not start: {e}.")))?;
             desk.serve(asked);
             let out = match worker.join() {
@@ -215,9 +253,12 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
                 return Err(ScriptError::Stopped);
             }
             // The run goes onto the History list as one step, which reads
-            // better named after the script than after its first edit.
+            // better named after the script than after its first edit, or
+            // after what the script called its undo group.
             if out.is_ok() && desk.edited.get() {
-                host.store().name_undo_group(setup.name.clone());
+                let step = desk.step.borrow_mut().take();
+                host.store()
+                    .name_undo_group(step.unwrap_or_else(|| setup.name.clone()));
             }
             out
         })
@@ -225,10 +266,21 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
     let log = log.lock().map(|l| l.lines.clone()).unwrap_or_default();
     RunReport {
         log,
-        result: result.map_err(|error| RunError {
-            error,
-            line: at.map(|(line, _)| line),
-            column: at.map(|(_, column)| column),
+        result: result.map_err(|error| match at {
+            Some((line, column)) => {
+                let (error, own, included) = source.locate(error, line);
+                RunError {
+                    error,
+                    line: Some(own),
+                    // A column on the include line would mean nothing.
+                    column: (!included).then_some(column),
+                }
+            }
+            None => RunError {
+                error,
+                line: None,
+                column: None,
+            },
         }),
     }
 }
@@ -249,6 +301,7 @@ struct Desk<'a> {
     host: &'a dyn Host,
     choose_file: &'a dyn Fn(&str, &[String]) -> Option<PathBuf>,
     alert: Option<&'a dyn Fn(&str)>,
+    dialog: Option<&'a Dialog<'a>>,
     log: Arc<Mutex<Log>>,
     /// What the script may read, and where its saves, footage and exports
     /// may go.
@@ -257,6 +310,10 @@ struct Desk<'a> {
     limited: bool,
     /// Whether a command changed the document.
     edited: Cell<bool>,
+    /// What the script has written to files so far, in bytes.
+    written: Cell<u64>,
+    /// The first name the script gave its undo group.
+    step: RefCell<Option<String>>,
 }
 
 impl Desk<'_> {
@@ -300,6 +357,105 @@ impl Desk<'_> {
             Some(full) => json!({ "exists": true, "folder": full.is_dir() }),
             None => json!({ "exists": false, "folder": false }),
         }
+    }
+
+    /// Where the script may write `path`: in its own folder, and never over
+    /// the project. Asked before the file system is, as for reading.
+    fn may_write(&self, path: &Path) -> Result<PathBuf, ScriptError> {
+        let reach = self.reach.borrow();
+        if reach.folder.is_none() {
+            return Err(ScriptError::BadArgs(
+                "This script has no folder of its own, so it cannot write files.".into(),
+            ));
+        }
+        let full = reach.writable(reach::plain(path)?).ok_or_else(|| {
+            ScriptError::BadArgs(format!(
+                "A script can only write files in its own folder, and {} is not in it.",
+                path.display()
+            ))
+        })?;
+        let project = self.host.path().and_then(|p| p.canonicalize().ok());
+        if project.is_some() && full.canonicalize().ok() == project {
+            return Err(ScriptError::BadArgs(
+                "A script cannot write over the project.".into(),
+            ));
+        }
+        Ok(full)
+    }
+
+    /// Write `text` to `path`, after what is there when `append`.
+    fn write(&self, path: &Path, text: &str, append: bool) -> Result<Value, ScriptError> {
+        let full = self.may_write(path)?;
+        let total = self.written.get() + text.len() as u64;
+        if total > MAX_WRITE_BYTES {
+            return Err(ScriptError::Failed(format!(
+                "A script writes at most {} MB of files.",
+                MAX_WRITE_BYTES >> 20
+            )));
+        }
+        let failed = |e: std::io::Error| {
+            ScriptError::Failed(format!("{} could not be written: {e}.", path.display()))
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(append)
+            .truncate(!append)
+            .open(&full)
+            .map_err(failed)?;
+        file.write_all(text.as_bytes()).map_err(failed)?;
+        self.written.set(total);
+        Ok(Value::Null)
+    }
+
+    /// Make folder `path`, and any above it that are missing.
+    fn make_folder(&self, path: &Path) -> Result<Value, ScriptError> {
+        let full = self.may_write(path)?;
+        std::fs::create_dir_all(&full).map_err(|e| {
+            ScriptError::Failed(format!("{} could not be made: {e}.", path.display()))
+        })?;
+        Ok(Value::Null)
+    }
+
+    /// Show the script's window as `tree` describes it and answer what the
+    /// person did, or take it down when `tree` is empty. Null is closed.
+    fn dialog(&self, tree: &str) -> Result<Value, ScriptError> {
+        let Some(dialog) = self.dialog else {
+            if !tree.is_empty() {
+                keep(
+                    &self.log,
+                    "No window can be shown here, so the dialog was cancelled.".into(),
+                );
+            }
+            return Ok(Value::Null);
+        };
+        if tree.is_empty() {
+            dialog(None);
+            return Ok(Value::Null);
+        }
+        if tree.len() > MAX_DIALOG_BYTES {
+            return Err(ScriptError::Failed(
+                "That window is too big to show.".into(),
+            ));
+        }
+        Ok(dialog(Some(tree))
+            .and_then(|heard| serde_json::from_str(&heard).ok())
+            .unwrap_or(Value::Null))
+    }
+
+    /// Delete file `path`. A folder is left alone.
+    fn remove(&self, path: &Path) -> Result<Value, ScriptError> {
+        let full = self.may_write(path)?;
+        if !full.symlink_metadata().is_ok_and(|m| m.is_file()) {
+            return Err(ScriptError::NotFound(format!(
+                "{} is not a file.",
+                path.display()
+            )));
+        }
+        std::fs::remove_file(&full).map_err(|e| {
+            ScriptError::Failed(format!("{} could not be deleted: {e}.", path.display()))
+        })?;
+        Ok(Value::Null)
     }
 
     /// The names in folder `path`, folders marked, in name order.
@@ -416,7 +572,6 @@ fn evaluate(
     let stop = stop.clone();
     runtime.set_interrupt_handler(Some(Box::new(move || stop.load(Ordering::Relaxed))));
     let context = Context::full(&runtime).map_err(broken)?;
-    let source = without_directives(source)?;
     context.with(|ctx| {
         // The command error a native call last threw, so a script that lets
         // it fly comes back with the error it was rather than its text.
@@ -436,7 +591,9 @@ fn evaluate(
                 .as_ref()
                 .map(|p| p.to_string_lossy().into_owned());
             prelude.call::<_, ()>((n.clone(), path, cfg!(windows)))?;
-            let value: JsValue = ctx.eval_with_options(source.as_str(), options(&setup.name))?;
+            let prelude: Function = ctx.eval_with_options(SCRIPTUI_JS, options("<scriptui>"))?;
+            prelude.call::<_, ()>((n.clone(),))?;
+            let value: JsValue = ctx.eval_with_options(source, options(&setup.name))?;
             if let Ok(finish) = n.get::<_, Function>("finish") {
                 finish.call::<_, ()>(())?;
             }
@@ -523,12 +680,56 @@ fn natives<'js>(
         asking(|lumit, path, _| lumit.ask(move |desk| desk.list(Path::new(&path))))?,
     )?;
     n.set(
+        "mayWrite",
+        asking(|lumit, path, _| {
+            lumit.ask(move |desk| desk.may_write(Path::new(&path)).map(|_| Value::Null))
+        })?,
+    )?;
+    n.set(
+        "writeText",
+        asking(|lumit, path, text| {
+            lumit.ask(move |desk| desk.write(Path::new(&path), &text, false))
+        })?,
+    )?;
+    n.set(
+        "appendText",
+        asking(|lumit, path, text| {
+            lumit.ask(move |desk| desk.write(Path::new(&path), &text, true))
+        })?,
+    )?;
+    n.set(
+        "makeFolder",
+        asking(|lumit, path, _| lumit.ask(move |desk| desk.make_folder(Path::new(&path))))?,
+    )?;
+    n.set(
+        "removeFile",
+        asking(|lumit, path, _| lumit.ask(move |desk| desk.remove(Path::new(&path))))?,
+    )?;
+    n.set(
         "alert",
         asking(|lumit, text, _| {
             lumit.ask(move |desk| {
                 match desk.alert {
                     Some(alert) => alert(&cut(text)),
                     None => keep(&desk.log, text),
+                }
+                Ok(Value::Null)
+            })
+        })?,
+    )?;
+
+    n.set(
+        "dialog",
+        asking(|lumit, tree, _| lumit.ask(move |desk| desk.dialog(&tree)))?,
+    )?;
+    n.set(
+        "nameStep",
+        asking(|lumit, name, _| {
+            lumit.ask(move |desk| {
+                let name = cut(name.trim().to_owned());
+                let mut step = desk.step.borrow_mut();
+                if step.is_none() && !name.is_empty() {
+                    *step = Some(name);
                 }
                 Ok(Value::Null)
             })
@@ -580,36 +781,6 @@ fn frame_on(seconds: f64, num: u32, den: u32) -> Result<i64, ScriptError> {
     let t = Rational::from_f64_on_grid(seconds, Rational::FLICK_DEN)
         .map_err(|_| ScriptError::BadArgs("That time is out of range.".into()))?;
     Ok(rate.nearest_frame_at(CompTime(t)))
-}
-
-/// `source` with After Effects' `#target` lines and their like blanked, as
-/// they are not JavaScript, so the line numbers stay the script's own.
-/// `#include` pulls in another file, which a run does not.
-fn without_directives(source: &str) -> Result<String, (ScriptError, Place)> {
-    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-    let mut out = String::with_capacity(source.len());
-    for (n, line) in source.split_inclusive('\n').enumerate() {
-        let word = line
-            .trim_start()
-            .strip_prefix('#')
-            .and_then(|rest| rest.split_whitespace().next());
-        match word {
-            Some("target" | "targetengine" | "strict" | "script" | "engine") => {
-                out.push_str(&line[line.trim_end_matches(['\r', '\n']).len()..]);
-            }
-            Some("include" | "includepath") => {
-                return Err((
-                    ScriptError::BadArgs(
-                        "#include is not supported in Lumit, which runs a script as one file."
-                            .into(),
-                    ),
-                    Some((n + 1, 1)),
-                ));
-            }
-            _ => out.push_str(line),
-        }
-    }
-    Ok(out)
 }
 
 /// Throw `error` into the script as an `Error` carrying its `code`.

@@ -794,18 +794,20 @@ class ProjectReference {
           that: this, projectPath: projectPath, onProgress: onProgress);
 
   /// Run the script at `path` on this project, on a thread of its own.
-  /// Answers at once, false when a script is running already. `events`
-  /// hears the rest, and the edits arrive on the change stream as usual.
-  /// `args` is what the script reads as `lumit.args`.
+  /// Answers at once, false when a script is running already. `comp` is
+  /// the one open in the Viewer, if any. `events` hears the rest, and the
+  /// edits arrive on the change stream as usual. `args` is what the script
+  /// reads as `lumit.args`.
   ///
   /// The interface must not edit until it hears `Finished`, since the
   /// whole run is one undo step and an edit made meanwhile would join it.
   bool runScript(
           {required String path,
+          CompositionReference? comp,
           required Map<String, String> args,
           RustStreamSink<BridgeScriptEvent>? events}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceRunScript(
-          that: this, path: path, args: args, events: events);
+          that: this, path: path, comp: comp, args: args, events: events);
 
   /// Save to `path`, or to wherever the project was last saved when `path` is
   /// empty. Answers the path actually written, so Dart can show it and stop

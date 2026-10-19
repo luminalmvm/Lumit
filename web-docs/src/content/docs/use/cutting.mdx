@@ -26,6 +26,10 @@ the same composition opens in the [Timeline](/panels/timeline/) and the Audio ti
 - A footage layer with sound also draws its sound on a track below the line. Both tracks are
   the same layer.
 
+With **Settings ▸ Timeline ▸ Cut tracks in any order** on, the tracks stand in the
+composition's layer order and there is no line. Drag a track's name up or down to move it.
+With the setting off, a track moves only among the tracks on its side of the line.
+
 Drag the lower edge of a track's header to make the track taller or shorter. Double-click
 the edge to put it back. Heights are saved with the project.
 
@@ -67,9 +71,17 @@ Footage with picture and sound is placed as two **linked clips**: the picture on
 track, its sound on a sound track. While **Linked** is on they select, move, trim and cut
 together. `Alt`+click selects one alone. `Shift`+`L` turns **Linked** on and off.
 
-A picture track made in the Cut workspace has its audible switch off, and its sound is
-heard from the linked clips. Footage placed on a picture track whose audible switch is on
-makes a picture clip only.
+The picture clip is silent, and its sound is heard from the linked clip. With **Settings ▸
+Timeline ▸ Video sound in Cut** set to **With the picture**, the sound stays on the picture
+clip and is drawn along its foot. A picture track whose audible switch is off keeps its sound
+on linked clips either way.
+
+Right-click a picture clip for **Detach audio**, which puts its sound on a sound track as a
+linked clip, and **Attach audio**, which puts it back. **Attach audio** needs the sound clip
+to cover the same stretch as the picture.
+
+A sound file dropped on a picture track plays on that track, and sound clips move between
+sound tracks and picture tracks. A picture clip never goes on a sound track.
 
 Footage with several [audio streams](/use/audio/#audio-streams) places every stream, mixed,
 unless the **Several audio streams arrive as** setting says otherwise. Right-click a clip

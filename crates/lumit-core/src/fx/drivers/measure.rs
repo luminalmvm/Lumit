@@ -238,12 +238,7 @@ fn to_comp(
     context: &ExpressionContext,
     rect: [f64; 4],
 ) -> [f64; 4] {
-    let mut world = placement(layer, t, context);
-    for id in crate::model::layer_parent_chain(comp, layer.id) {
-        if let Some(parent) = comp.layers.iter().find(|l| l.id == id) {
-            world = world.then(&placement(parent, t, context));
-        }
-    }
+    let world = world(comp, layer, t, context);
     let corners = [
         (rect[0], rect[1]),
         (rect[2], rect[1]),
@@ -251,6 +246,23 @@ fn to_comp(
         (rect[2], rect[3]),
     ];
     bounds(corners.into_iter().map(|c| world.apply(c))).unwrap_or(rect)
+}
+
+/// `layer`'s pixels to the comp's at comp time `t`, through its transform and
+/// its parents', flat as [`to_comp`] reads them.
+pub(crate) fn world(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    context: &ExpressionContext,
+) -> Affine {
+    let mut world = placement(layer, t, context);
+    for id in crate::model::layer_parent_chain(comp, layer.id) {
+        if let Some(parent) = comp.layers.iter().find(|l| l.id == id) {
+            world = world.then(&placement(parent, t, context));
+        }
+    }
+    world
 }
 
 /// `layer`'s own flat placement at comp time `t`, in the renderer's order:

@@ -1,10 +1,13 @@
 //! The commands themselves: the table, and one function each.
 
+mod effects;
+
 use std::path::{Path, PathBuf};
 
-use lumit_core::anim::{Animation, Keyframe, Property, SideInterp};
+use lumit_core::anim::{Animation, Keyframe, Property, SideInterp, TangentMode};
 use lumit_core::edits;
-use lumit_core::markers::MarkerEdit;
+use lumit_core::expression::{Language, Slot, SLOT_KEY};
+use lumit_core::markers::{Marker, MarkerEdit, MarkerKind};
 use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, TransformProp};
 use lumit_core::ops::Op;
 use lumit_core::time::{CompTime, FrameRate, Rational};
@@ -39,6 +42,45 @@ macro_rules! time {
         r#"{"oneOf":[{"type":"integer","description":"A frame on the comp's rate"},{"type":"object","properties":{"num":{"type":"integer"},"den":{"type":"integer","minimum":1}},"required":["num","den"],"additionalProperties":false,"description":"Exact seconds"}]}"#
     };
 }
+// How a key meets the curve on one side, and an ease as After Effects gives
+// one.
+macro_rules! ease {
+    () => {
+        r#"{"type":"object","properties":{"speed":{"type":"number","description":"Units a second"},"influence":{"type":"number","minimum":0.1,"maximum":100,"description":"Per cent of the span"}},"additionalProperties":false}"#
+    };
+}
+macro_rules! side {
+    () => {
+        concat!(
+            r#"{"description":"Linear, hold, auto or clamped, or an ease, or a list with an ease for each value","oneOf":[{"enum":["linear","hold","auto","clamped"]},"#,
+            ease!(),
+            r#",{"type":"array","minItems":1,"items":"#,
+            ease!(),
+            r#"}]}"#
+        )
+    };
+}
+// One key whose value is `$value`.
+macro_rules! key {
+    ($value:literal) => {
+        concat!(
+            r#"{"type":"object","properties":{"time":"#,
+            time!(),
+            r#","value":"#,
+            $value,
+            r#","interp":{"enum":["linear","hold"]},"in":"#,
+            side!(),
+            r#","out":"#,
+            side!(),
+            r#"},"required":["time","value"],"additionalProperties":false}"#
+        )
+    };
+}
+macro_rules! expression {
+    () => {
+        r#"{"type":"string","description":"A JavaScript expression, as After Effects writes them"}"#
+    };
+}
 // One `layer.keys` form: the properties named, and the value each takes.
 macro_rules! keys_form {
     ($names:literal, $value:literal) => {
@@ -51,11 +93,11 @@ macro_rules! keys_form {
             $names,
             r#"},"value":"#,
             $value,
-            r#","keys":{"type":"array","minItems":1,"items":{"type":"object","properties":{"time":"#,
-            time!(),
-            r#","value":"#,
-            $value,
-            r#","interp":{"enum":["linear","hold"]}},"required":["time","value"],"additionalProperties":false}}},"additionalProperties":false,"oneOf":[{"required":["value"]},{"required":["keys"]}]}"#
+            r#","keys":{"type":"array","minItems":1,"items":"#,
+            key!($value),
+            r#"},"expression":"#,
+            expression!(),
+            r#"},"additionalProperties":false,"oneOf":[{"required":["value"]},{"required":["keys"]},{"required":["expression"]}]}"#
         )
     };
 }
@@ -133,12 +175,37 @@ pub const COMMANDS: &[Command] = &[
         ),
     },
     Command {
+        name: "comp.precompose",
+        summary: "Move layers into a new comp, and put that comp in their place as one layer",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layers":{"type":"array","items":{"type":"string"},"minItems":1,"description":"The layers' ids, or their names in the comp"},"name":{"type":"string","description":"The new comp's name. Pre-comp and a number if left out"},"leave_attributes":{"type":"boolean","description":"For one layer: leave its transform, effects and masks on the new layer, and move only its source"}},"required":["comp","layers"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
         name: "comp.open",
         summary: "Show a comp in the Viewer",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
             r#"},"required":["comp"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "comp.active",
+        summary: "The comp open in the Viewer, if there is one",
+        schema: none!(),
+    },
+    Command {
+        name: "comp.frame",
+        summary: "Render a frame of a comp to a PNG, and answer its path, width and height",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","time":{"description":"The frame, 0 when left out","allOf":["#,
+            time!(),
+            r#"]},"scale":{"type":"number","exclusiveMinimum":0,"maximum":1,"description":"Of the comp's size, 1 when left out"},"out":{"type":"string","description":"The .png file to write. Without it, a numbered file beside the project"}},"required":["comp"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -162,11 +229,11 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.add",
-        summary: "Add a null, camera, solid or footage layer to a comp",
+        summary: "Add a null, camera, solid, footage or precomp layer to a comp",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
-            r#","kind":{"enum":["null","camera","solid","footage"]},"item":{"type":"string","description":"For footage: the footage item's id or name"},"name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"}},"required":["comp","kind"],"additionalProperties":false}"#
+            r#","kind":{"enum":["null","camera","solid","footage","precomp"]},"item":{"type":"string","description":"For footage: the footage item's id or name. For a precomp: the comp's"},"name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"colour":{"type":"array","items":{"type":"number","minimum":0,"maximum":1},"minItems":3,"maxItems":3,"description":"For a solid: its colour as a colour picker shows it, 0 to 1. White if left out"},"width":{"type":"integer","minimum":1,"maximum":16384,"description":"For a solid, the comp's if left out"},"height":{"type":"integer","minimum":1,"maximum":16384}},"required":["comp","kind"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -210,7 +277,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.keys",
-        summary: "Set one transform or camera property's whole animation: a value, or a list of keys",
+        summary: "Set one transform or camera property's whole animation: a value, a list of keys, or an expression",
         schema: concat!(
             r#"{"type":"object","required":["comp","layer","property"],"oneOf":["#,
             keys_form!(
@@ -240,7 +307,44 @@ pub const COMMANDS: &[Command] = &[
             layer!(),
             r#","markers":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string","description":"An existing marker's id, to keep what it was"},"time":"#,
             time!(),
-            r#","label":{"type":"string"},"colour":{"type":"integer","minimum":0,"maximum":255},"duration":{"type":"integer","description":"Frames it spans"}},"required":["time"],"additionalProperties":false}}},"required":["comp","markers"],"additionalProperties":false}"#
+            r#","label":{"type":"string"},"colour":{"type":"integer","minimum":0,"maximum":255},"duration":{"type":"integer","description":"Frames it spans"},"chapter":{"type":"boolean","description":"Whether it starts a chapter"}},"required":["time"],"additionalProperties":false}}},"required":["comp","markers"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "effect.list",
+        summary: "The effects on a layer, top first, with their controls",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#"},"required":["comp","layer"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "effect.add",
+        summary: "Add an effect to the bottom of a layer's stack, by Lumit's name for it or After Effects'",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","effect":{"type":"string","description":"Lumit's id or name for the effect, or After Effects' match name or name, such as ADBE Gaussian Blur 2"},"name":{"type":"string","description":"The name it shows"}},"required":["comp","layer","effect"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "effect.set",
+        summary: "Switch an effect on or off, rename it, or set one of its controls: a value, a list of keys, or an expression",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","effect":{"description":"The effect's id or name, or its place in the stack, 0 the top","oneOf":[{"type":"string"},{"type":"integer","minimum":0}]},"enabled":{"type":"boolean"},"name":{"type":["string","null"],"description":"The name it shows, or null for the effect's own"},"param":{"type":"string","description":"A control's id or name. After Effects' match name for one, such as ADBE Gaussian Blur 2-0001, takes After Effects' values and converts them as importing does"},"value":{"description":"A number, a list for a point or a colour, true or false for a switch, or an option's number"},"keys":{"type":"array","minItems":1,"items":"#,
+            key!(r#"{"oneOf":[{"type":"number"},{"type":"array","items":{"type":"number"},"minItems":1,"maxItems":4}]}"#),
+            r#"},"expression":"#,
+            expression!(),
+            r#"},"required":["comp","layer","effect"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -285,7 +389,10 @@ pub(crate) fn run(
         "comp.get" => comp_get(host, parse(args)?),
         "comp.new" => comp_new(host, parse(args)?),
         "comp.set" => comp_set(host, parse(args)?),
+        "comp.precompose" => comp_precompose(host, parse(args)?),
         "comp.open" => comp_open(host, parse(args)?),
+        "comp.active" => comp_active(host, parse(args)?),
+        "comp.frame" => comp_frame(host, reach, parse(args)?),
         "item.list" => item_list(host, parse(args)?),
         "item.set" => item_set(host, parse(args)?),
         "folder.new" => folder_new(host, parse(args)?),
@@ -295,6 +402,9 @@ pub(crate) fn run(
         "layer.delete" => layer_delete(host, parse(args)?),
         "layer.keys" => layer_keys(host, parse(args)?),
         "markers.set" => markers_set(host, parse(args)?),
+        "effect.list" => effects::list(host, parse(args)?),
+        "effect.add" => effects::add(host, parse(args)?),
+        "effect.set" => effects::set(host, parse(args)?),
         "footage.import" => footage_import(host, reach, parse(args)?),
         "export.start" => export_start(host, reach, parse(args)?),
         "export.status" => export_status(host, parse(args)?),
@@ -531,7 +641,27 @@ fn comp_get(host: &dyn Host, a: CompArgs) -> Result<Value, ScriptError> {
     let comp = find_comp(&doc, &a.comp)?;
     let mut answer = comp_json(comp);
     answer["layers"] = comp.layers.iter().map(|l| layer_json(comp, l)).collect();
+    answer["markers"] = markers_json(&comp.markers, comp.frame_rate, Rational::ZERO);
     Ok(answer)
+}
+
+/// Markers as `comp.get` and `layer.get` answer them, on the comp's clock as
+/// `markers.set` takes them. A layer keeps its own on its clock, `offset`
+/// behind the comp's.
+fn markers_json(markers: &[Marker], rate: FrameRate, offset: Rational) -> Value {
+    markers
+        .iter()
+        .map(|m| {
+            json!({
+                "id": m.id,
+                "time": exact(m.time.0.checked_add(offset).unwrap_or(m.time.0)),
+                "label": m.label,
+                "colour": m.colour,
+                "duration": m.duration.map(|d| rate.frame_at(CompTime(d))),
+                "chapter": matches!(m.kind, MarkerKind::Chapter),
+            })
+        })
+        .collect()
 }
 
 /// A frame rate on the wire: whole frames a second, or an exact fraction.
@@ -673,10 +803,155 @@ fn comp_set(host: &dyn Host, a: CompSettingsArgs) -> Result<Value, ScriptError> 
     Ok(comp_json(comp))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrecomposeArgs {
+    comp: String,
+    layers: Vec<String>,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    leave_attributes: bool,
+}
+
+/// Pre-compose as Layer > Pre-compose does, with the new comp as long as this
+/// one, as After Effects' own `precompose` makes it.
+fn comp_precompose(host: &dyn Host, a: PrecomposeArgs) -> Result<Value, ScriptError> {
+    let store = host.store();
+    let doc = store.snapshot();
+    let comp = find_comp(&doc, &a.comp)?;
+    let layers = a
+        .layers
+        .iter()
+        .map(|key| find_layer(comp, key).map(|l| l.id))
+        .collect::<Result<Vec<_>, _>>()?;
+    if layers.is_empty() {
+        return Err(bad("comp.precompose needs a layer to move."));
+    }
+    if a.leave_attributes && layers.len() > 1 {
+        return Err(bad("Only a single layer can leave its attributes behind."));
+    }
+    let length = |layer: &Layer| {
+        host.source_length(comp.id, layer)
+            .or_else(|| match layer.kind {
+                LayerKind::Precomp { comp } => doc.comp(comp).map(|c| c.duration),
+                _ => None,
+            })
+    };
+    let (ops, id) = edits::precompose_ops(
+        &doc,
+        comp,
+        edits::Precompose {
+            layers: &layers,
+            name: a.name,
+            leave_attributes: a.leave_attributes,
+            adjust_duration: false,
+            group: None,
+            source_length: &length,
+        },
+    )?;
+    commit(store, ops)?;
+    let doc = store.snapshot();
+    let comp = doc
+        .comp(comp.id)
+        .ok_or_else(|| ScriptError::Failed("The comp went away.".into()))?;
+    let layer = find_layer(comp, &id.to_string())?;
+    let LayerKind::Precomp { comp: made } = layer.kind else {
+        return Err(ScriptError::Failed("The new comp was not made.".into()));
+    };
+    let made = doc
+        .comp(made)
+        .ok_or_else(|| ScriptError::Failed("The new comp was not made.".into()))?;
+    Ok(json!({ "comp": comp_json(made), "layer": layer_json(comp, layer) }))
+}
+
 fn comp_open(host: &dyn Host, a: CompArgs) -> Result<Value, ScriptError> {
     let comp = find_comp(&host.store().snapshot(), &a.comp)?.id;
     host.open_comp(comp)?;
     Ok(json!({}))
+}
+
+fn comp_active(host: &dyn Host, _: NoArgs) -> Result<Value, ScriptError> {
+    let doc = host.store().snapshot();
+    let comp = host.active_comp().and_then(|id| doc.comp(id));
+    Ok(json!({ "comp": comp.map(comp_json) }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FrameArgs {
+    comp: String,
+    time: Option<Time>,
+    scale: Option<f32>,
+    out: Option<PathBuf>,
+}
+
+fn comp_frame(host: &dyn Host, reach: Option<&Reach>, a: FrameArgs) -> Result<Value, ScriptError> {
+    let doc = host.store().snapshot();
+    let comp = find_comp(&doc, &a.comp)?;
+    let rate = comp.frame_rate;
+    let at = a.time.unwrap_or(Time::Frame(0)).at(rate)?;
+    let frames = rate.frame_at(CompTime(comp.duration.0)).max(1);
+    let frame = u64::try_from(rate.frame_at(CompTime(at)))
+        .ok()
+        .filter(|f| i64::try_from(*f).is_ok_and(|f| f < frames))
+        .ok_or_else(|| bad(format!("{} has frames 0 to {}.", comp.name, frames - 1)))?;
+    let scale = a.scale.unwrap_or(1.0);
+    if !(scale > 0.0 && scale <= 1.0) {
+        return Err(bad("The scale is above 0 and at most 1."));
+    }
+    let out = a.out.as_deref().map(reach::plain).transpose()?;
+    let out = match reach {
+        Some(reach) => reach.frame(host, out)?,
+        None => out.map(|out| {
+            let mut out = out.to_path_buf();
+            if out.extension().is_none() {
+                out.set_extension("png");
+            }
+            out
+        }),
+    };
+    let out = match out {
+        Some(out) => out,
+        None => frame_path(host, reach, &comp.name, frame)?,
+    };
+    let (width, height) = host.render_frame(comp.id, frame, scale, &out)?;
+    Ok(json!({ "path": out, "width": width, "height": height }))
+}
+
+/// A new file for frame `frame` of comp `name`, numbered, beside the project
+/// or else in the script's folder.
+fn frame_path(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    name: &str,
+    frame: u64,
+) -> Result<PathBuf, ScriptError> {
+    let dir = host
+        .path()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .or_else(|| reach.and_then(|r| r.folder.clone()))
+        .ok_or_else(|| bad("The project has not been saved yet, so the frame needs a path."))?;
+    // A comp's name may hold anything, a separator included, and the file
+    // must stay in `dir`.
+    let safe: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+    let safe = safe.trim().trim_end_matches('.');
+    let safe = if safe.is_empty() { "Frame" } else { safe };
+    let stem = format!("{safe}_{frame:05}");
+    let mut path = dir.join(format!("{stem}.png"));
+    let mut n = 2;
+    while path.symlink_metadata().is_ok() {
+        path = dir.join(format!("{stem}_{n}.png"));
+        n += 1;
+    }
+    Ok(path)
 }
 
 fn find_item<'a>(doc: &'a Document, key: &str) -> Result<&'a ProjectItem, ScriptError> {
@@ -833,6 +1108,7 @@ enum AddKind {
     Camera,
     Solid,
     Footage,
+    Precomp,
 }
 
 #[derive(Deserialize)]
@@ -843,12 +1119,35 @@ struct AddArgs {
     item: Option<String>,
     name: Option<String>,
     index: Option<usize>,
+    colour: Option<[f64; 3]>,
+    width: Option<u32>,
+    height: Option<u32>,
+}
+
+/// Whether `comp`, or a comp anywhere inside it, holds comp `id`.
+fn holds(doc: &Document, comp: &Composition, id: Uuid, seen: &mut Vec<Uuid>) -> bool {
+    edits::nested_comps(doc, comp).into_iter().any(|inner| {
+        if inner == id {
+            return true;
+        }
+        if seen.contains(&inner) {
+            return false;
+        }
+        seen.push(inner);
+        doc.comp(inner)
+            .is_some_and(|inner| holds(doc, inner, id, seen))
+    })
 }
 
 fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
     let store = host.store();
     let doc = store.snapshot();
     let comp = find_comp(&doc, &a.comp)?;
+    if !matches!(a.kind, AddKind::Solid)
+        && (a.colour.is_some() || a.width.is_some() || a.height.is_some())
+    {
+        return Err(bad("Only a solid takes a colour and a size."));
+    }
     let (mut layers, mut ops) = match a.kind {
         AddKind::Null => (vec![edits::null_layer(comp)], Vec::new()),
         AddKind::Camera => (
@@ -856,8 +1155,56 @@ fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
             Vec::new(),
         ),
         AddKind::Solid => {
-            let (layer, ops) = edits::white_solid_layer(&doc, comp);
+            let width = a.width.unwrap_or(comp.width);
+            let height = a.height.unwrap_or(comp.height);
+            if !(1..=16384).contains(&width) || !(1..=16384).contains(&height) {
+                return Err(bad("A solid is 1 to 16384 pixels each way."));
+            }
+            // Lumit's new solid, as white_solid_layer makes one, in the size
+            // and colour asked for. Its item takes the layer's name, as in
+            // After Effects.
+            let (def, name, mut ops) = edits::white_solid_ops(&doc, width, height);
+            for op in &mut ops {
+                if let Op::AddItem { item, .. } = op {
+                    if let ProjectItem::Solid(solid) = item.as_mut() {
+                        if let Some(colour) = a.colour {
+                            solid.colour = lumit_import::linear_colour(Some(&colour));
+                        }
+                        if let Some(name) = &a.name {
+                            solid.name.clone_from(name);
+                        }
+                    }
+                }
+            }
+            let layer = edits::base_layer(
+                name,
+                LayerKind::Solid { def },
+                comp.duration.0,
+                edits::centred_transform(
+                    f64::from(width),
+                    f64::from(height),
+                    comp.width,
+                    comp.height,
+                ),
+            );
             (vec![layer], ops)
+        }
+        AddKind::Precomp => {
+            let key = a
+                .item
+                .as_deref()
+                .ok_or_else(|| bad("A precomp layer needs the comp it places."))?;
+            let inner = find_comp(&doc, key)?;
+            if inner.id == comp.id {
+                return Err(bad("A comp cannot go inside itself."));
+            }
+            if holds(&doc, inner, comp.id, &mut Vec::new()) {
+                return Err(bad(format!(
+                    "{} is inside {} already, so {} cannot go in it.",
+                    comp.name, inner.name, inner.name
+                )));
+            }
+            (vec![edits::precomp_layer(&doc, comp, inner)], Vec::new())
         }
         AddKind::Footage => {
             let key = a
@@ -934,10 +1281,30 @@ fn animation_json(property: &Property, offset: Rational) -> Value {
             .iter()
             .map(|k| {
                 let time = k.time.checked_add(offset).unwrap_or(k.time);
-                json!({ "time": exact(time), "value": k.value, "hold": k.is_hold() })
+                json!({
+                    "time": exact(time),
+                    "value": k.value,
+                    "hold": k.is_hold(),
+                    "in": side_json(k.interp_in),
+                    "out": side_json(k.interp_out),
+                })
             })
             .collect(),
         Animation::Expression(text) => json!({ "expression": text }),
+    }
+}
+
+/// One side of a key as `layer.keys` takes it, an ease in After Effects'
+/// terms.
+fn side_json(side: SideInterp) -> Value {
+    match side {
+        SideInterp::Hold => json!("hold"),
+        SideInterp::Linear => json!("linear"),
+        SideInterp::Auto { clamped: false, .. } => json!("auto"),
+        SideInterp::Auto { clamped: true, .. } => json!("clamped"),
+        SideInterp::Bezier { speed, influence } => {
+            json!({ "speed": speed, "influence": influence * 100.0 })
+        }
     }
 }
 
@@ -963,6 +1330,7 @@ fn layer_get(host: &dyn Host, a: LayerArgs) -> Result<Value, ScriptError> {
     }
     let mut answer = layer_json(comp, layer);
     answer["properties"] = Value::Object(properties);
+    answer["markers"] = markers_json(&layer.markers, comp.frame_rate, offset);
     Ok(answer)
 }
 
@@ -1181,6 +1549,51 @@ enum Interp {
     Hold,
 }
 
+/// How a key meets the curve on one side: by name, or eased as After
+/// Effects eases it, with one ease for every value or one for each.
+#[derive(Deserialize, Clone)]
+#[serde(untagged)]
+enum Side {
+    Named(Named),
+    Ease(Ease),
+    Eases(Vec<Ease>),
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum Named {
+    Linear,
+    Hold,
+    Auto,
+    Clamped,
+}
+
+/// A speed in units a second and an influence in per cent.
+#[derive(Deserialize, Clone, Copy)]
+#[serde(deny_unknown_fields)]
+struct Ease {
+    speed: Option<f64>,
+    influence: Option<f64>,
+}
+
+impl Side {
+    /// This side on value `axis` of a key, through the mapping importing an
+    /// After Effects project uses.
+    fn on(&self, axis: usize) -> SideInterp {
+        let eased = |e: Option<&Ease>| {
+            lumit_core::anim::ae_ease(e.and_then(|e| e.speed), e.and_then(|e| e.influence))
+        };
+        match self {
+            Side::Named(Named::Linear) => SideInterp::Linear,
+            Side::Named(Named::Hold) => SideInterp::Hold,
+            Side::Named(Named::Auto) => SideInterp::Linear.with_tangent_mode(TangentMode::Auto),
+            Side::Named(Named::Clamped) => SideInterp::Linear.with_tangent_mode(TangentMode::Clamp),
+            Side::Ease(e) => eased(Some(e)),
+            Side::Eases(list) => eased(list.get(axis).or_else(|| list.first())),
+        }
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct KeyArgs {
@@ -1188,6 +1601,9 @@ struct KeyArgs {
     value: Values,
     #[serde(default)]
     interp: Interp,
+    #[serde(rename = "in")]
+    into: Option<Side>,
+    out: Option<Side>,
 }
 
 #[derive(Deserialize)]
@@ -1198,6 +1614,78 @@ struct KeysArgs {
     property: String,
     value: Option<Values>,
     keys: Option<Vec<KeyArgs>>,
+    expression: Option<String>,
+}
+
+/// `keys` as one keyframed animation per value, on the layer's clock,
+/// `offset` behind the comp's. `axes` says how many values a key's value
+/// is, or why it is wrong.
+fn keyed(
+    keys: Vec<KeyArgs>,
+    rate: FrameRate,
+    offset: Rational,
+    axes: impl Fn(&Values) -> Result<usize, ScriptError>,
+) -> Result<Vec<Animation>, ScriptError> {
+    // One list of keys per axis, all at the same times.
+    let mut keyed: Vec<Vec<Keyframe>> = Vec::new();
+    for key in keys {
+        let time = key.time.at(rate)?;
+        let n = axes(&key.value)?;
+        let values = key.value.list();
+        if keyed.is_empty() {
+            keyed.resize_with(n, Vec::new);
+        } else if keyed.len() != n {
+            return Err(bad("Every key needs the same number of values."));
+        }
+        for (n, (axis, value)) in keyed.iter_mut().zip(values).enumerate() {
+            let made = Keyframe {
+                time,
+                value,
+                interp_in: SideInterp::Linear,
+                interp_out: SideInterp::Linear,
+            };
+            let made = match key.interp {
+                Interp::Linear => made,
+                Interp::Hold => made.to_hold(),
+            };
+            axis.push(Keyframe {
+                interp_in: key.into.as_ref().map_or(made.interp_in, |s| s.on(n)),
+                interp_out: key.out.as_ref().map_or(made.interp_out, |s| s.on(n)),
+                ..made
+            });
+        }
+    }
+    keyed
+        .into_iter()
+        .map(|keys| {
+            keys.into_iter()
+                .map(|k| edits::key_on_layer_clock(k, offset))
+                .collect::<Option<Vec<_>>>()
+                .and_then(edits::keyframed)
+                .ok_or_else(|| bad("Each key needs a time after the one before it."))
+        })
+        .collect()
+}
+
+/// What `property` holds before an expression takes it over.
+fn underneath(property: &Property) -> f64 {
+    match &property.animation {
+        Animation::Expression(_) => Slot::read(&property.extra).own().unwrap_or(0.0),
+        _ => property.value_at(0.0),
+    }
+}
+
+/// `held` driven by JavaScript expression `text`. A property with several
+/// values is a channel each in Lumit, so each is told all of `values` and
+/// which of them it is, as importing an After Effects expression does.
+fn expressed(held: &Property, text: &str, values: &[f64], axis: usize) -> Property {
+    let mut next = held.clone();
+    next.set_animation(Animation::Expression(text.to_owned()));
+    let seed = Slot::read(&next.extra).seed;
+    Slot::new(values, axis, seed)
+        .in_language(Language::JavaScript)
+        .write(&mut next.extra);
+    next
 }
 
 fn layer_keys(host: &dyn Host, a: KeysArgs) -> Result<Value, ScriptError> {
@@ -1210,9 +1698,11 @@ fn layer_keys(host: &dyn Host, a: KeysArgs) -> Result<Value, ScriptError> {
         .find(|(name, _)| *name == a.property)
         .map(|(_, channels)| *channels)
         .ok_or_else(|| bad(format!("Lumit has no property called {}.", a.property)))?;
-    if channels.iter().any(|c| layer.prop(*c).is_none()) {
-        return Err(bad(format!("{} is not on this layer.", a.property)));
-    }
+    let held: Vec<&Property> = channels
+        .iter()
+        .map(|c| layer.prop(*c))
+        .collect::<Option<_>>()
+        .ok_or_else(|| bad(format!("{} is not on this layer.", a.property)))?;
     // One number for a one-axis property, a list with one for each axis
     // otherwise, though position can leave Z alone.
     let axes = |values: &Values| -> Result<usize, ScriptError> {
@@ -1225,50 +1715,43 @@ fn layer_keys(host: &dyn Host, a: KeysArgs) -> Result<Value, ScriptError> {
         }
     };
 
-    let animations: Vec<Animation> = match (a.value, a.keys) {
-        (Some(value), None) => {
+    let animations: Vec<Animation> = match (a.value, a.keys, a.expression) {
+        (Some(value), None, None) => {
             axes(&value)?;
             value.list().into_iter().map(Animation::Static).collect()
         }
-        (None, Some(keys)) => {
-            let rate = comp.frame_rate;
-            let offset = layer.start_offset.0;
-            // One list of keys per axis, all at the same times.
-            let mut keyed: Vec<Vec<Keyframe>> = Vec::new();
-            for key in keys {
-                let time = key.time.at(rate)?;
-                let n = axes(&key.value)?;
-                let values = key.value.list();
-                if keyed.is_empty() {
-                    keyed.resize_with(n, Vec::new);
-                } else if keyed.len() != n {
-                    return Err(bad("Every key needs the same number of values."));
-                }
-                for (axis, value) in keyed.iter_mut().zip(values) {
-                    let made = Keyframe {
-                        time,
-                        value,
-                        interp_in: SideInterp::Linear,
-                        interp_out: SideInterp::Linear,
-                    };
-                    axis.push(match key.interp {
-                        Interp::Linear => made,
-                        Interp::Hold => made.to_hold(),
-                    });
-                }
+        (None, Some(keys), None) => keyed(keys, comp.frame_rate, layer.start_offset.0, axes)?,
+        (None, None, Some(text)) => {
+            // A 2D layer's point has no Z in After Effects, so its expression
+            // answers two values and Z is left as it is.
+            let flat = !layer.switches.three_d && !matches!(layer.kind, LayerKind::Camera { .. });
+            let used = if flat {
+                channels.len().min(2)
+            } else {
+                channels.len()
+            };
+            let values: Vec<f64> = held.iter().take(used).map(|p| underneath(p)).collect();
+            let mut ops = Vec::new();
+            for (axis, (channel, held)) in channels.iter().zip(&held).take(used).enumerate() {
+                let next = expressed(held, &text, &values, axis);
+                ops.push(Op::SetTransformProperty {
+                    comp: comp.id,
+                    layer: layer.id,
+                    prop: *channel,
+                    animation: next.animation,
+                });
+                ops.push(Op::SetTransformExpressionSlot {
+                    comp: comp.id,
+                    layer: layer.id,
+                    prop: *channel,
+                    slot: next.extra.get(SLOT_KEY).cloned(),
+                });
             }
-            keyed
-                .into_iter()
-                .map(|keys| {
-                    keys.into_iter()
-                        .map(|k| edits::key_on_layer_clock(k, offset))
-                        .collect::<Option<Vec<_>>>()
-                        .and_then(edits::keyframed)
-                        .ok_or_else(|| bad("Each key needs a time after the one before it."))
-                })
-                .collect::<Result<_, _>>()?
+            let id = layer.id;
+            commit(store, ops)?;
+            return layer_now(store, comp.id, id);
         }
-        _ => return Err(bad("Give either a value or keys.")),
+        _ => return Err(bad("Give a value, keys or an expression.")),
     };
 
     let mut ops = Vec::new();
@@ -1291,6 +1774,7 @@ struct MarkerArgs {
     label: String,
     colour: Option<u8>,
     duration: Option<i64>,
+    chapter: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -1310,6 +1794,7 @@ fn markers_set(host: &dyn Host, a: MarkersArgs) -> Result<Value, ScriptError> {
     // Times come in on the comp's clock, and a layer keeps its markers on
     // its own.
     let offset = layer.map_or(Rational::ZERO, |l| l.start_offset.0);
+    let chapters: Vec<Option<bool>> = a.markers.iter().map(|m| m.chapter).collect();
     let edits = a
         .markers
         .into_iter()
@@ -1327,15 +1812,26 @@ fn markers_set(host: &dyn Host, a: MarkersArgs) -> Result<Value, ScriptError> {
     let count = edits.len();
     // Merged onto what is there, so a marker named by id keeps what a script
     // cannot say, such as being a beat.
+    let held = layer.map_or(&comp.markers, |l| &l.markers);
+    let mut markers = lumit_core::markers::merge_edits(edits, held, rate);
+    for (marker, chapter) in markers.iter_mut().zip(chapters) {
+        match chapter {
+            Some(true) => marker.kind = MarkerKind::Chapter,
+            Some(false) if matches!(marker.kind, MarkerKind::Chapter) => {
+                marker.kind = MarkerKind::User;
+            }
+            _ => {}
+        }
+    }
     let op = match layer {
         Some(layer) => Op::SetLayerMarkers {
             comp: comp.id,
             layer: layer.id,
-            markers: lumit_core::markers::merge_edits(edits, &layer.markers, rate),
+            markers,
         },
         None => Op::SetCompMarkers {
             comp: comp.id,
-            markers: lumit_core::markers::merge_edits(edits, &comp.markers, rate),
+            markers,
         },
     };
     commit(store, vec![op])?;

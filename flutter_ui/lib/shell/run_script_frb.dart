@@ -17,6 +17,7 @@ import '../state/settings.dart' show ScriptEvent;
 import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'script_dialog_frb.dart';
 
 /// Run the `.js` or `.jsx` file at [path] on the open project, or one picked
 /// when there is none.
@@ -30,7 +31,8 @@ import 'dialog_frame.dart';
 /// [after] is the event an event script runs after, which it reads with the
 /// file's name in `lumit.args`.
 ///
-/// [picker] and [chooser] stand in for the file dialogues in a test.
+/// [context] is where a window the script shows opens. [picker] and
+/// [chooser] stand in for the file dialogues in a test.
 Future<void> runScriptFrb(
   BuildContext context,
   LumitState app,
@@ -42,6 +44,7 @@ Future<void> runScriptFrb(
 }) async {
   final project = app.project;
   if (project == null) return;
+  final dialogs = ScriptDialogs(context);
   path ??= await (picker ?? pickScript)();
   if (path == null) return;
   final name = _scriptName(path);
@@ -60,6 +63,7 @@ Future<void> runScriptFrb(
   try {
     started = project.runScript(
         path: path,
+        comp: ui.selectedComp,
         args: {
           if (after != null) ...{'event': after.$1.name, 'file': after.$2},
         },
@@ -80,6 +84,10 @@ Future<void> runScriptFrb(
           app.postNotice(message);
         case BridgeScriptEvent_OpenComp(:final comp):
           ui.setSelectedComp(comp);
+        case BridgeScriptEvent_ShowDialog(:final tree):
+          dialogs.show(tree);
+        case BridgeScriptEvent_CloseDialog():
+          dialogs.close();
         case BridgeScriptEvent_Finished():
           if (!ended.isCompleted) ended.complete(event);
       }
@@ -89,6 +97,7 @@ Future<void> runScriptFrb(
   }
   final end = started ? await ended.future : null;
   await listening?.cancel();
+  dialogs.close();
 
   app.busy.value = null;
   app.busyCancel.value = null;

@@ -983,6 +983,17 @@ fn feed_effect_stack(
                 }
             }
         }
+        // **A collider walk** reads every row, every wire and the collider
+        // at every frame from the in point, so all of what it reads is fed,
+        // under the name its kept walks go by.
+        if let Some((layer, target)) =
+            marker_layer.and_then(|l| Some((l, lumit_core::fx::points::stepped::target(comp, e)?)))
+        {
+            h.update(b"stepped/");
+            h.update(&lumit_core::fx::points::stepped::definition(
+                doc, comp, layer, e, target,
+            ));
+        }
         // **Beat trigger counts from the start.** Its events up to this frame
         // come from every moment before it: the keys of its rows there, and
         // every beat marker passed. So both are fed whole, as an Emit rate

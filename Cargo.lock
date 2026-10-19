@@ -2377,6 +2377,7 @@ version = "0.8.1"
 dependencies = [
  "interprocess",
  "lumit-core",
+ "lumit-import",
  "lumit-ingress",
  "lumit-peer",
  "rquickjs",
@@ -2456,6 +2457,7 @@ dependencies = [
  "lumit-share",
  "lumit-text",
  "lumit-track",
+ "png",
  "serde",
  "serde_json",
  "tempfile",
