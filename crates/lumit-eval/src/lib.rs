@@ -53,7 +53,9 @@ pub mod schedule;
 ///   renames the frames that read it; and the flare's bake snaps its
 ///   continuous iris dials to a step, which moves the picture very slightly
 ///   at every f-stop between two steps.
-pub const ALGO_VERSION: u32 = 5;
+/// * 6: a 3D layer off z = 0 or tilted in a comp with no camera now
+///   draws, where it used to be cut away.
+pub const ALGO_VERSION: u32 = 6;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4488,12 +4490,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned on the code as it stood before fades reached the picture.
+        // Pinned under ALGO_VERSION 6, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                303_821_901_826_944_988_283_012_693_430_024_403_241,
-                214_093_313_630_544_915_097_010_732_135_860_045_414
+                35_392_720_127_324_529_887_592_353_549_831_534_525,
+                120_144_721_741_177_607_960_467_825_158_708_679_524
             )
         );
 
