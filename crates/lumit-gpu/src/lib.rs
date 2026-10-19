@@ -196,12 +196,16 @@ pub struct GpuContext {
     /// the exporter's), and one of them dying says nothing about the other.
     lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Work handed to this device since its queue was last seen empty, by a
-    /// tag and when, so a lost device can be blamed on what was running.
-    /// Shared with every handle, as `lost` is.
+    /// tag, so a lost device can be blamed on what was running. Shared with
+    /// every handle, as `lost` is.
     in_flight: InFlight,
+    /// Tags noted on this handle whose work is not submitted yet. They join
+    /// `in_flight` at [`Self::submit`], so another handle seeing the queue
+    /// empty before then can't clear them.
+    noted: std::cell::RefCell<Vec<u64>>,
 }
 
-type InFlight = std::sync::Arc<std::sync::Mutex<Vec<(u64, std::time::Instant)>>>;
+type InFlight = std::sync::Arc<std::sync::Mutex<Vec<u64>>>;
 
 /// The multisample counts the composite is willing to use, highest first.
 /// Nothing outside this list is ever asked for.
@@ -541,6 +545,7 @@ impl GpuContext {
             // device goes, and never claims to.
             lost: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             in_flight: InFlight::default(),
+            noted: std::cell::RefCell::new(Vec::new()),
         }
     }
 
@@ -635,6 +640,7 @@ impl GpuContext {
             submits: std::sync::Arc::clone(&self.submits),
             lost: std::sync::Arc::clone(&self.lost),
             in_flight: std::sync::Arc::clone(&self.in_flight),
+            noted: std::cell::RefCell::new(Vec::new()),
         }
     }
 
@@ -679,6 +685,16 @@ impl GpuContext {
         let index = self.queue.submit(buffers.into_iter().inspect(|_| n += 1));
         self.submits
             .fetch_add(n, std::sync::atomic::Ordering::Relaxed);
+        let noted = std::mem::take(&mut *self.noted.borrow_mut());
+        if !noted.is_empty() {
+            if let Ok(mut flight) = self.in_flight.lock() {
+                for tag in noted {
+                    if !flight.contains(&tag) {
+                        flight.push(tag);
+                    }
+                }
+            }
+        }
         index
     }
 
@@ -752,21 +768,18 @@ impl GpuContext {
         self.forget_finished(done);
     }
 
-    /// Note that work tagged `tag` was recorded on this device, for
+    /// Note that work tagged `tag` was recorded on this handle, for
     /// [`Self::take_in_flight`] to blame if the device is lost before it
-    /// finishes.
+    /// finishes. It counts from this handle's next submit.
     pub fn note_in_flight(&self, tag: u64) {
-        if let Ok(mut noted) = self.in_flight.lock() {
-            let now = std::time::Instant::now();
-            match noted.iter_mut().find(|(t, _)| *t == tag) {
-                Some(slot) => slot.1 = now,
-                None => noted.push((tag, now)),
-            }
+        let mut noted = self.noted.borrow_mut();
+        if !noted.contains(&tag) {
+            noted.push(tag);
         }
     }
 
-    /// The tags noted since the queue was last seen empty, and when, taken.
-    pub fn take_in_flight(&self) -> Vec<(u64, std::time::Instant)> {
+    /// The tags submitted since the queue was last seen empty, taken.
+    pub fn take_in_flight(&self) -> Vec<u64> {
         self.in_flight
             .lock()
             .map(|mut noted| std::mem::take(&mut *noted))
@@ -1294,6 +1307,7 @@ impl GpuContext {
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             lost,
             in_flight: InFlight::default(),
+            noted: std::cell::RefCell::new(Vec::new()),
         })
     }
 }

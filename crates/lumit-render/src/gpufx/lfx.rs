@@ -8,7 +8,6 @@
 //! the picture as it came in, and [`status`] says which.
 
 use std::sync::Mutex;
-use std::time::Duration;
 
 use lumit_core::fx::effects::custom_shader as cs;
 use lumit_core::fx::lfx::{self, LfxEffect, LfxError};
@@ -19,11 +18,6 @@ use lumit_gpu::GpuContext;
 use super::{AuxSlot, CustomShader, GpuEffect};
 
 type Tex = wgpu::Texture;
-
-/// How long after its dispatch an effect counts as in flight when the
-/// device is lost. Longer than the drivers' own watchdogs, which stop a
-/// stuck dispatch after about two seconds.
-const IN_FLIGHT: Duration = Duration::from_secs(5);
 
 /// Install one effect and register it in both tables: its pass here first,
 /// then its def in the catalogue, so no catalogue entry is ever without its
@@ -104,10 +98,8 @@ fn compiled(key: u64, program: &lumit_core::fx::shader::ShaderProgram) -> Option
 /// frames that never finished: one of them may be why. Called when a lost
 /// device is noticed.
 pub fn strike_in_flight(ctx: &GpuContext) {
-    for (key, at) in ctx.take_in_flight() {
-        if at.elapsed() <= IN_FLIGHT {
-            lfx::strike(key);
-        }
+    for key in ctx.take_in_flight() {
+        lfx::strike(key);
     }
 }
 
