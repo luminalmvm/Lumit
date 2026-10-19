@@ -341,7 +341,7 @@ pub fn resolve_stack_temporal_named(
         e.enabled
             && matches!(
                 e.effect.namespace,
-                EffectNamespace::Builtin | EffectNamespace::Ofx
+                EffectNamespace::Builtin | EffectNamespace::Ofx | EffectNamespace::Lfx
             )
     }) {
         let lt = if e.sample_temporally {
