@@ -2372,13 +2372,16 @@ dependencies = [
 name = "lumit-script"
 version = "0.8.1"
 dependencies = [
+ "interprocess",
  "lumit-core",
  "lumit-ingress",
+ "lumit-peer",
  "rquickjs",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
  "uuid",
+ "widestring",
 ]
 
 [[package]]
