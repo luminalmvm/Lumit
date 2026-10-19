@@ -17247,7 +17247,7 @@
   "@lfxInterface": {
     "description": "Button on the heading of an extension's effect in the Effect controls panel. Opens the effect's own interface, a page the extension draws, in a floating panel."
   },
-  "tipLfxInterface": "Open its interface",
+  "tipLfxInterface": "Open interface",
   "@tipLfxInterface": {
     "description": "Tooltip on the Interface button on the heading of an extension's effect in the Effect controls panel."
   },
