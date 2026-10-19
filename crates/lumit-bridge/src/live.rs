@@ -25,8 +25,9 @@ use crate::api::{
 use crate::script::AppHost;
 
 const NO_PROJECT: &str = "No project is open in Lumit.";
-const SCRIPT_RUNNING: &str = "Lumit is running a script. Try again when it has finished.";
-const BUSY: &str = "Lumit is busy with another change. Try again in a moment.";
+pub(crate) const SCRIPT_RUNNING: &str =
+    "Lumit is running a script. Try again when it has finished.";
+pub(crate) const BUSY: &str = "Lumit is busy with another change. Try again in a moment.";
 const NOT_SHOWN: &str = "Lumit did not answer in time. Try again.";
 
 /// How long an edit waits for a change being made in the window, such as a
@@ -229,7 +230,7 @@ fn answer<'a>(
 /// Wait for a change being made in the window, such as a drag, to finish,
 /// so an edit from here does not join its undo step. False when it goes on
 /// past [`DRAG_WAIT`].
-fn drag_over(host: &AppHost) -> bool {
+pub(crate) fn drag_over(host: &AppHost) -> bool {
     let store = host.store();
     let started = Instant::now();
     // Opening a group of our own works only when none is open, and an empty

@@ -13,6 +13,339 @@ part of 'extensions.dart';
 T _$identity<T>(T value) => value;
 
 /// @nodoc
+mixin _$BridgeExtensionEdit {
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeExtensionEdit);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeExtensionEdit()';
+  }
+}
+
+/// @nodoc
+class $BridgeExtensionEditCopyWith<$Res> {
+  $BridgeExtensionEditCopyWith(
+      BridgeExtensionEdit _, $Res Function(BridgeExtensionEdit) __);
+}
+
+/// Adds pattern-matching-related methods to [BridgeExtensionEdit].
+extension BridgeExtensionEditPatterns on BridgeExtensionEdit {
+  /// A variant of `map` that fallback to returning `orElse`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(BridgeExtensionEdit_Done value)? done,
+    TResult Function(BridgeExtensionEdit_Refused value)? refused,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExtensionEdit_Done() when done != null:
+        return done(_that);
+      case BridgeExtensionEdit_Refused() when refused != null:
+        return refused(_that);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// Callbacks receives the raw object, upcasted.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case final Subclass2 value:
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(BridgeExtensionEdit_Done value) done,
+    required TResult Function(BridgeExtensionEdit_Refused value) refused,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExtensionEdit_Done():
+        return done(_that);
+      case BridgeExtensionEdit_Refused():
+        return refused(_that);
+    }
+  }
+
+  /// A variant of `map` that fallback to returning `null`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(BridgeExtensionEdit_Done value)? done,
+    TResult? Function(BridgeExtensionEdit_Refused value)? refused,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExtensionEdit_Done() when done != null:
+        return done(_that);
+      case BridgeExtensionEdit_Refused() when refused != null:
+        return refused(_that);
+      case _:
+        return null;
+    }
+  }
+
+  /// A variant of `when` that fallback to an `orElse` callback.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function(String result)? done,
+    TResult Function(String code, String message)? refused,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExtensionEdit_Done() when done != null:
+        return done(_that.result);
+      case BridgeExtensionEdit_Refused() when refused != null:
+        return refused(_that.code, _that.message);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// As opposed to `map`, this offers destructuring.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case Subclass2(:final field2):
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function(String result) done,
+    required TResult Function(String code, String message) refused,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExtensionEdit_Done():
+        return done(_that.result);
+      case BridgeExtensionEdit_Refused():
+        return refused(_that.code, _that.message);
+    }
+  }
+
+  /// A variant of `when` that fallback to returning `null`
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function(String result)? done,
+    TResult? Function(String code, String message)? refused,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeExtensionEdit_Done() when done != null:
+        return done(_that.result);
+      case BridgeExtensionEdit_Refused() when refused != null:
+        return refused(_that.code, _that.message);
+      case _:
+        return null;
+    }
+  }
+}
+
+/// @nodoc
+
+class BridgeExtensionEdit_Done extends BridgeExtensionEdit {
+  const BridgeExtensionEdit_Done({required this.result}) : super._();
+
+  final String result;
+
+  /// Create a copy of BridgeExtensionEdit
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeExtensionEdit_DoneCopyWith<BridgeExtensionEdit_Done> get copyWith =>
+      _$BridgeExtensionEdit_DoneCopyWithImpl<BridgeExtensionEdit_Done>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeExtensionEdit_Done &&
+            (identical(other.result, result) || other.result == result));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, result);
+
+  @override
+  String toString() {
+    return 'BridgeExtensionEdit.done(result: $result)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeExtensionEdit_DoneCopyWith<$Res>
+    implements $BridgeExtensionEditCopyWith<$Res> {
+  factory $BridgeExtensionEdit_DoneCopyWith(BridgeExtensionEdit_Done value,
+          $Res Function(BridgeExtensionEdit_Done) _then) =
+      _$BridgeExtensionEdit_DoneCopyWithImpl;
+  @useResult
+  $Res call({String result});
+}
+
+/// @nodoc
+class _$BridgeExtensionEdit_DoneCopyWithImpl<$Res>
+    implements $BridgeExtensionEdit_DoneCopyWith<$Res> {
+  _$BridgeExtensionEdit_DoneCopyWithImpl(this._self, this._then);
+
+  final BridgeExtensionEdit_Done _self;
+  final $Res Function(BridgeExtensionEdit_Done) _then;
+
+  /// Create a copy of BridgeExtensionEdit
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? result = null,
+  }) {
+    return _then(BridgeExtensionEdit_Done(
+      result: null == result
+          ? _self.result
+          : result // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeExtensionEdit_Refused extends BridgeExtensionEdit {
+  const BridgeExtensionEdit_Refused({required this.code, required this.message})
+      : super._();
+
+  final String code;
+  final String message;
+
+  /// Create a copy of BridgeExtensionEdit
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeExtensionEdit_RefusedCopyWith<BridgeExtensionEdit_Refused>
+      get copyWith => _$BridgeExtensionEdit_RefusedCopyWithImpl<
+          BridgeExtensionEdit_Refused>(this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeExtensionEdit_Refused &&
+            (identical(other.code, code) || other.code == code) &&
+            (identical(other.message, message) || other.message == message));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, code, message);
+
+  @override
+  String toString() {
+    return 'BridgeExtensionEdit.refused(code: $code, message: $message)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeExtensionEdit_RefusedCopyWith<$Res>
+    implements $BridgeExtensionEditCopyWith<$Res> {
+  factory $BridgeExtensionEdit_RefusedCopyWith(
+          BridgeExtensionEdit_Refused value,
+          $Res Function(BridgeExtensionEdit_Refused) _then) =
+      _$BridgeExtensionEdit_RefusedCopyWithImpl;
+  @useResult
+  $Res call({String code, String message});
+}
+
+/// @nodoc
+class _$BridgeExtensionEdit_RefusedCopyWithImpl<$Res>
+    implements $BridgeExtensionEdit_RefusedCopyWith<$Res> {
+  _$BridgeExtensionEdit_RefusedCopyWithImpl(this._self, this._then);
+
+  final BridgeExtensionEdit_Refused _self;
+  final $Res Function(BridgeExtensionEdit_Refused) _then;
+
+  /// Create a copy of BridgeExtensionEdit
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? code = null,
+    Object? message = null,
+  }) {
+    return _then(BridgeExtensionEdit_Refused(
+      code: null == code
+          ? _self.code
+          : code // ignore: cast_nullable_to_non_nullable
+              as String,
+      message: null == message
+          ? _self.message
+          : message // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
 mixin _$BridgeExtensionOutcome {
   @override
   bool operator ==(Object other) {

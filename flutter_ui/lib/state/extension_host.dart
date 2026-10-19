@@ -573,6 +573,22 @@ class ExtensionHost with WidgetsBindingObserver {
       case 'effect.end':
         _effect().end();
         return null;
+
+      case 'edit.commands':
+        _need(BridgeExtensionPermission.edit);
+        return [
+          for (final command in extensionCommands(
+              import_: _allowed(BridgeExtensionPermission.import_)))
+            {
+              'name': command.name,
+              'summary': command.summary,
+              'schema': jsonDecode(command.schema),
+            },
+        ];
+    }
+    if (method.startsWith('edit.')) {
+      _need(BridgeExtensionPermission.edit);
+      return _edit(method.substring(5), params);
     }
     throw ExtensionRefusal('unknown-method', 'Lumit has no $method');
   }
@@ -669,6 +685,26 @@ class ExtensionHost with WidgetsBindingObserver {
     }
     await app.importFootagePaths(paths);
     return {'imported': paths.length};
+  }
+
+  /// Run one of Lumit's commands on the open project, as one step in the
+  /// History named after this extension.
+  Future<Object?> _edit(String command, Map<Object?, Object?> params) async {
+    final project = app.project;
+    if (project == null) {
+      throw const ExtensionRefusal('failed', 'no project is open');
+    }
+    final done = await project.extensionEdit(
+      extension_: _oneLine(extension.name),
+      import_: _allowed(BridgeExtensionPermission.import_),
+      command: command,
+      args: jsonEncode(params),
+    );
+    return switch (done) {
+      BridgeExtensionEdit_Done(:final result) => jsonDecode(result),
+      BridgeExtensionEdit_Refused(:final code, :final message) =>
+        throw ExtensionRefusal(code, message),
+    };
   }
 
   /// Watch a folder and bring in what appears in it. With no folder named

@@ -10,6 +10,7 @@ import 'cache.dart';
 import 'colour.dart';
 import 'composition.dart';
 import 'effect.dart';
+import 'extensions.dart';
 import 'folder.dart';
 import 'footage.dart';
 import 'layer.dart';
@@ -518,6 +519,24 @@ class ProjectReference {
       BridgeLib.instance.api.crateApiProjectProjectReferenceEndedBadly(
         that: this,
       );
+
+  /// Run command `command` with `args`, JSON text, on this project for the
+  /// extension called `extension`, as one undo step named after it.
+  /// Saving, exporting, undo and redo are refused, and importing unless
+  /// `import`. Waits a moment for a drag in the window to end.
+  ///
+  /// Not sync: it may wait for that drag.
+  Future<BridgeExtensionEdit> extensionEdit(
+          {required String extension_,
+          required bool import_,
+          required String command,
+          required String args}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceExtensionEdit(
+          that: this,
+          extension_: extension_,
+          import_: import_,
+          command: command,
+          args: args);
 
   List<ItemReference> getItems() =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceGetItems(

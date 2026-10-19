@@ -58,7 +58,7 @@ my-extension/
   "homepage": "https://example.org",
   "requires": "0.7.0",
   "entry": "index.html",
-  "permissions": ["project", "activity", "export", "import", "share"],
+  "permissions": ["project", "activity", "export", "import", "share", "edit"],
   "hosts": ["example.org"]
 }
 ```
@@ -126,6 +126,8 @@ the page through it.
 | `share` | `share.host {password}` | Asks the person whether the extension may share the open project, and shares it with the name, relay and **Internet** choice they last used. Answers a new invite link, or `null` when they say no, it cannot start, no project is open, or this computer is a guest. While this computer hosts, the link at once. `password` is optional. |
 | `share` | `share.join {link}` | Opens the **Shared project** window on **Join a project** with the link in it. |
 | `share` | `share.stop` | Stops sharing, or leaves. |
+| `edit` | `edit.commands` | The commands the extension may run, as `[{name, summary, schema}]`. `schema` is a JSON Schema for the command's arguments. |
+| `edit` | `edit.<command> {...}` | Runs one of Lumit's commands on the open project, such as `edit.layer.add`, and answers what it did. |
 
 An extension never shares or joins by itself: the person presses the button.
 
@@ -135,6 +137,21 @@ project and copy its footage until sharing stops. **Don't share** is the default
 **Share** takes a press only once the question has been up for a moment. After a person
 says no, or sharing fails to start, the page is not asked again until the panel opens
 again.
+
+## Editing the project
+
+Each `edit.` call is one step in the **History** list, named after the extension, such as
+**Logo tools: Add layer**. A call made during a drag in the window waits for it to end, and
+fails after two seconds.
+
+```js
+const { comps } = await lumit.call("edit.comp.list");
+await lumit.call("edit.layer.add", { comp: comps[0].id, kind: "null", name: "Control" });
+```
+
+`project.save`, `undo`, `redo`, `comp.open` and the `export.` commands are refused.
+`footage.import` also needs `import`. A path in an answer is the file's name only, and
+`project.info` answers no `path`.
 
 ## Events
 

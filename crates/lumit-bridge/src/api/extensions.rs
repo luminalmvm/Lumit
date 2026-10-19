@@ -3,7 +3,8 @@
 //! judges and copies. The frontend shows an extension's page and answers
 //! what it asks, and reads here what that extension is allowed. The LFX
 //! effects an extension carries are registered here, after every gesture
-//! that changes what is installed.
+//! that changes what is installed. An extension that may edit runs Lumit's
+//! commands on the open project through here too.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -12,6 +13,8 @@ use std::sync::Mutex;
 use flutter_rust_bridge::frb;
 use lumit_core::fx::lfx;
 use lumit_extensions::{ExtensionError, Installed, Manifest, Permission};
+
+use crate::api::project::ProjectReference;
 
 /// One thing an extension asked to be allowed, which the person agreed to
 /// by installing it.
@@ -28,6 +31,9 @@ pub enum BridgeExtensionPermission {
     Import,
     /// Share the project, join someone else's, and see who is here.
     Share,
+    /// Edit the open project through Lumit's commands, each edit one undo
+    /// step. Never save or export it.
+    Edit,
 }
 
 /// One extension, installed or about to be.
@@ -127,6 +133,7 @@ fn flatten(manifest: Manifest, folder: &Path, broken: bool) -> BridgeExtension {
         Permission::Export => BridgeExtensionPermission::Export,
         Permission::Import => BridgeExtensionPermission::Import,
         Permission::Share => BridgeExtensionPermission::Share,
+        Permission::Edit => BridgeExtensionPermission::Edit,
     };
     let effects = manifest
         .effects
@@ -385,4 +392,52 @@ pub fn extension_data_dir(id: String) -> Option<String> {
         return None;
     }
     lumit_project::extension_data_dir(&id).map(|dir| dir.to_string_lossy().into_owned())
+}
+
+/// One of Lumit's commands, as an extension's page lists it.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeExtensionCommand {
+    pub name: String,
+    /// One line saying what it does.
+    pub summary: String,
+    /// A JSON Schema for its arguments, as JSON text.
+    pub schema: String,
+}
+
+/// What an extension's edit came to.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BridgeExtensionEdit {
+    /// It ran. `result` is the command's answer as JSON text.
+    Done { result: String },
+    /// It did nothing. `code` is one a page's refused call carries.
+    Refused { code: String, message: String },
+}
+
+/// The commands an extension with the Edit permission may run. `import` is
+/// whether it has the Import permission too.
+#[frb(sync)]
+#[must_use]
+pub fn extension_commands(import: bool) -> Vec<BridgeExtensionCommand> {
+    crate::extension_edit::commands(import)
+}
+
+impl ProjectReference {
+    /// Run command `command` with `args`, JSON text, on this project for the
+    /// extension called `extension`, as one undo step named after it.
+    /// Saving, exporting, undo and redo are refused, and importing unless
+    /// `import`. Waits a moment for a drag in the window to end.
+    ///
+    /// Not sync: it may wait for that drag.
+    #[must_use]
+    pub fn extension_edit(
+        &self,
+        extension: String,
+        import: bool,
+        command: String,
+        args: String,
+    ) -> BridgeExtensionEdit {
+        crate::extension_edit::run(self, &extension, import, &command, &args)
+    }
 }

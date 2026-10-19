@@ -60,6 +60,9 @@ pub enum Permission {
     Import,
     /// Share the project, join someone else's, and see who is here.
     Share,
+    /// Edit the open project through Lumit's commands, each edit one undo
+    /// step. Never save or export it.
+    Edit,
 }
 
 impl Permission {
@@ -72,6 +75,7 @@ impl Permission {
             Permission::Export => "export",
             Permission::Import => "import",
             Permission::Share => "share",
+            Permission::Edit => "edit",
         }
     }
 }
