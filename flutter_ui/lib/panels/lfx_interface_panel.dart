@@ -337,6 +337,8 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
   void _drop() {
     _editor.clear();
     _dragging = false;
+    // The Viewer still shows the preview until it is asked for the frame.
+    if (_staged.isNotEmpty) ui.requestFrame();
     _staged.clear();
   }
 
