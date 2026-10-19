@@ -294,11 +294,7 @@ fn side(interp: Option<&str>, ease: Option<&[Ease]>, axis: usize) -> SideInterp 
             // The DOM returns one ease per dimension — except on a spatial
             // property, which returns exactly one for all of them.
             let ease = ease.and_then(|e| e.get(axis).or_else(|| e.first()));
-            SideInterp::Bezier {
-                speed: ease.and_then(|e| e.speed).unwrap_or(0.0),
-                influence: (ease.and_then(|e| e.influence).unwrap_or(100.0 / 3.0) / 100.0)
-                    .clamp(1e-3, 1.0),
-            }
+            lumit_core::anim::ae_ease(ease.and_then(|e| e.speed), ease.and_then(|e| e.influence))
         }
         // LINEAR, and any interpolation name a later After Effects invents:
         // a straight line is the honest reading of "I do not know this".

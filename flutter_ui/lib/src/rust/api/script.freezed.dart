@@ -622,6 +622,8 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
   TResult maybeMap<TResult extends Object?>({
     TResult Function(BridgeScriptEvent_ChooseFile value)? chooseFile,
     TResult Function(BridgeScriptEvent_Alert value)? alert,
+    TResult Function(BridgeScriptEvent_ShowDialog value)? showDialog,
+    TResult Function(BridgeScriptEvent_CloseDialog value)? closeDialog,
     TResult Function(BridgeScriptEvent_OpenComp value)? openComp,
     TResult Function(BridgeScriptEvent_Finished value)? finished,
     required TResult orElse(),
@@ -632,6 +634,10 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
         return chooseFile(_that);
       case BridgeScriptEvent_Alert() when alert != null:
         return alert(_that);
+      case BridgeScriptEvent_ShowDialog() when showDialog != null:
+        return showDialog(_that);
+      case BridgeScriptEvent_CloseDialog() when closeDialog != null:
+        return closeDialog(_that);
       case BridgeScriptEvent_OpenComp() when openComp != null:
         return openComp(_that);
       case BridgeScriptEvent_Finished() when finished != null:
@@ -658,6 +664,8 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
   TResult map<TResult extends Object?>({
     required TResult Function(BridgeScriptEvent_ChooseFile value) chooseFile,
     required TResult Function(BridgeScriptEvent_Alert value) alert,
+    required TResult Function(BridgeScriptEvent_ShowDialog value) showDialog,
+    required TResult Function(BridgeScriptEvent_CloseDialog value) closeDialog,
     required TResult Function(BridgeScriptEvent_OpenComp value) openComp,
     required TResult Function(BridgeScriptEvent_Finished value) finished,
   }) {
@@ -667,6 +675,10 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
         return chooseFile(_that);
       case BridgeScriptEvent_Alert():
         return alert(_that);
+      case BridgeScriptEvent_ShowDialog():
+        return showDialog(_that);
+      case BridgeScriptEvent_CloseDialog():
+        return closeDialog(_that);
       case BridgeScriptEvent_OpenComp():
         return openComp(_that);
       case BridgeScriptEvent_Finished():
@@ -690,6 +702,8 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
   TResult? mapOrNull<TResult extends Object?>({
     TResult? Function(BridgeScriptEvent_ChooseFile value)? chooseFile,
     TResult? Function(BridgeScriptEvent_Alert value)? alert,
+    TResult? Function(BridgeScriptEvent_ShowDialog value)? showDialog,
+    TResult? Function(BridgeScriptEvent_CloseDialog value)? closeDialog,
     TResult? Function(BridgeScriptEvent_OpenComp value)? openComp,
     TResult? Function(BridgeScriptEvent_Finished value)? finished,
   }) {
@@ -699,6 +713,10 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
         return chooseFile(_that);
       case BridgeScriptEvent_Alert() when alert != null:
         return alert(_that);
+      case BridgeScriptEvent_ShowDialog() when showDialog != null:
+        return showDialog(_that);
+      case BridgeScriptEvent_CloseDialog() when closeDialog != null:
+        return closeDialog(_that);
       case BridgeScriptEvent_OpenComp() when openComp != null:
         return openComp(_that);
       case BridgeScriptEvent_Finished() when finished != null:
@@ -724,6 +742,8 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
   TResult maybeWhen<TResult extends Object?>({
     TResult Function(String title, List<String> extensions)? chooseFile,
     TResult Function(String message)? alert,
+    TResult Function(String tree)? showDialog,
+    TResult Function()? closeDialog,
     TResult Function(CompositionReference comp)? openComp,
     TResult Function(List<String> log, bool stopped, String? error, int? line)?
         finished,
@@ -735,6 +755,10 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
         return chooseFile(_that.title, _that.extensions);
       case BridgeScriptEvent_Alert() when alert != null:
         return alert(_that.message);
+      case BridgeScriptEvent_ShowDialog() when showDialog != null:
+        return showDialog(_that.tree);
+      case BridgeScriptEvent_CloseDialog() when closeDialog != null:
+        return closeDialog();
       case BridgeScriptEvent_OpenComp() when openComp != null:
         return openComp(_that.comp);
       case BridgeScriptEvent_Finished() when finished != null:
@@ -761,6 +785,8 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
   TResult when<TResult extends Object?>({
     required TResult Function(String title, List<String> extensions) chooseFile,
     required TResult Function(String message) alert,
+    required TResult Function(String tree) showDialog,
+    required TResult Function() closeDialog,
     required TResult Function(CompositionReference comp) openComp,
     required TResult Function(
             List<String> log, bool stopped, String? error, int? line)
@@ -772,6 +798,10 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
         return chooseFile(_that.title, _that.extensions);
       case BridgeScriptEvent_Alert():
         return alert(_that.message);
+      case BridgeScriptEvent_ShowDialog():
+        return showDialog(_that.tree);
+      case BridgeScriptEvent_CloseDialog():
+        return closeDialog();
       case BridgeScriptEvent_OpenComp():
         return openComp(_that.comp);
       case BridgeScriptEvent_Finished():
@@ -795,6 +825,8 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
   TResult? whenOrNull<TResult extends Object?>({
     TResult? Function(String title, List<String> extensions)? chooseFile,
     TResult? Function(String message)? alert,
+    TResult? Function(String tree)? showDialog,
+    TResult? Function()? closeDialog,
     TResult? Function(CompositionReference comp)? openComp,
     TResult? Function(List<String> log, bool stopped, String? error, int? line)?
         finished,
@@ -805,6 +837,10 @@ extension BridgeScriptEventPatterns on BridgeScriptEvent {
         return chooseFile(_that.title, _that.extensions);
       case BridgeScriptEvent_Alert() when alert != null:
         return alert(_that.message);
+      case BridgeScriptEvent_ShowDialog() when showDialog != null:
+        return showDialog(_that.tree);
+      case BridgeScriptEvent_CloseDialog() when closeDialog != null:
+        return closeDialog();
       case BridgeScriptEvent_OpenComp() when openComp != null:
         return openComp(_that.comp);
       case BridgeScriptEvent_Finished() when finished != null:
@@ -964,6 +1000,93 @@ class _$BridgeScriptEvent_AlertCopyWithImpl<$Res>
           : message // ignore: cast_nullable_to_non_nullable
               as String,
     ));
+  }
+}
+
+/// @nodoc
+
+class BridgeScriptEvent_ShowDialog extends BridgeScriptEvent {
+  const BridgeScriptEvent_ShowDialog({required this.tree}) : super._();
+
+  final String tree;
+
+  /// Create a copy of BridgeScriptEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeScriptEvent_ShowDialogCopyWith<BridgeScriptEvent_ShowDialog>
+      get copyWith => _$BridgeScriptEvent_ShowDialogCopyWithImpl<
+          BridgeScriptEvent_ShowDialog>(this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeScriptEvent_ShowDialog &&
+            (identical(other.tree, tree) || other.tree == tree));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, tree);
+
+  @override
+  String toString() {
+    return 'BridgeScriptEvent.showDialog(tree: $tree)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeScriptEvent_ShowDialogCopyWith<$Res>
+    implements $BridgeScriptEventCopyWith<$Res> {
+  factory $BridgeScriptEvent_ShowDialogCopyWith(
+          BridgeScriptEvent_ShowDialog value,
+          $Res Function(BridgeScriptEvent_ShowDialog) _then) =
+      _$BridgeScriptEvent_ShowDialogCopyWithImpl;
+  @useResult
+  $Res call({String tree});
+}
+
+/// @nodoc
+class _$BridgeScriptEvent_ShowDialogCopyWithImpl<$Res>
+    implements $BridgeScriptEvent_ShowDialogCopyWith<$Res> {
+  _$BridgeScriptEvent_ShowDialogCopyWithImpl(this._self, this._then);
+
+  final BridgeScriptEvent_ShowDialog _self;
+  final $Res Function(BridgeScriptEvent_ShowDialog) _then;
+
+  /// Create a copy of BridgeScriptEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? tree = null,
+  }) {
+    return _then(BridgeScriptEvent_ShowDialog(
+      tree: null == tree
+          ? _self.tree
+          : tree // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeScriptEvent_CloseDialog extends BridgeScriptEvent {
+  const BridgeScriptEvent_CloseDialog() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeScriptEvent_CloseDialog);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeScriptEvent.closeDialog()';
   }
 }
 

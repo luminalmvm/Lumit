@@ -6,7 +6,8 @@ sidebar:
 ---
 
 A **script** is a JavaScript file that edits the open project. After Effects scripts
-(`.jsx`) run as they are.
+(`.jsx`) run as they are. A script also runs Lumit's own commands, listed in the
+[Scripting reference](/reference/scripting/).
 
 ## Run one
 
@@ -17,8 +18,9 @@ While it runs, a card covers the window with the script's name and **Stop**. A f
 script asks for opens the system file dialogue, and a message it shows appears in the
 status line.
 
-The whole run is one undo step, named after the file. A script that fails or is stopped
-leaves the project as it was.
+The whole run is one undo step, named after the first name the script gives
+`app.beginUndoGroup()`, or after the file. A script that fails or is stopped leaves the
+project as it was.
 
 When a script fails, the status line gives the reason and the line it failed on.
 
@@ -31,45 +33,68 @@ What a script prints is not shown anywhere.
 | Object | What works |
 | --- | --- |
 | `app` | `project`, `newProject()`, `beginUndoGroup()`, `endUndoGroup()` |
-| `app.project` | `items`, `numItems`, `item()`, `rootFolder`, `file`, `importFile()`, `save()` |
+| `app.project` | `items`, `numItems`, `item()`, `rootFolder`, `activeItem`, `file`, `importFile()`, `save()` |
 | `items` | `addFolder()`, `addComp()`, `length`, `[n]` |
 | Any item | `name`, `parentFolder`, `comment` |
-| `CompItem` | `width`, `height`, `duration`, `frameRate`, `frameDuration`, `pixelAspect`, `numLayers`, `layer()`, `layers`, `openInViewer()` |
-| `layers` | `addCamera()`, `addNull()`, `add()` of footage, `byName()`, `length`, `[n]` |
-| Any layer | `name`, `index`, `enabled`, `guideLayer`, `threeDLayer`, `shy`, `solo`, `locked`, `motionBlur`, `startTime`, `inPoint`, `outPoint`, `parent`, `setParentWithJump()`, `autoOrient`, `moveToBeginning()`, `moveToEnd()`, `moveBefore()`, `moveAfter()`, `remove()`, `property()`, `transform` |
+| `CompItem` | `width`, `height`, `duration`, `frameRate`, `frameDuration`, `pixelAspect`, `numLayers`, `layer()`, `layers`, `markerProperty`, `openInViewer()`, `saveFrameToPng()` |
+| `layers` | `addCamera()`, `addNull()`, `addSolid()`, `add()` of footage or a comp, `precompose()`, `byName()`, `length`, `[n]` |
+| Any layer | `name`, `index`, `enabled`, `guideLayer`, `threeDLayer`, `shy`, `solo`, `locked`, `motionBlur`, `startTime`, `inPoint`, `outPoint`, `parent`, `setParentWithJump()`, `autoOrient`, `moveToBeginning()`, `moveToEnd()`, `moveBefore()`, `moveAfter()`, `remove()`, `property()`, `transform`, `Effects`, `marker` |
 | Properties | Anchor Point, Position, Scale, Orientation, X, Y and Z Rotation, Opacity, and a camera's Point of Interest, Zoom, Focus Distance and Aperture, by match name or by name |
-| Keys | `value`, `valueAtTime()`, `setValue()`, `setValueAtTime()`, `setValuesAtTimes()`, `addKey()`, `removeKey()`, `numKeys`, `keyTime()`, `keyValue()`, `setInterpolationTypeAtKey()` |
+| Keys | `value`, `valueAtTime()`, `setValue()`, `setValueAtTime()`, `setValuesAtTimes()`, `addKey()`, `removeKey()`, `numKeys`, `keyTime()`, `keyValue()`, `setInterpolationTypeAtKey()`, `setTemporalEaseAtKey()`, `keyInTemporalEase()`, `keyOutTemporalEase()`, `setTemporalAutoBezierAtKey()`, `setTemporalContinuousAtKey()`, `setSpatialTangentsAtKey()` |
+| Expressions | `expression`, `expressionEnabled` |
+| Effects | `addProperty()` by match name or name, `property()` by number, match name or Lumit's name, `numProperties`, `name`, `enabled` |
+| Markers | `setValueAtTime()` with a `MarkerValue`, `setValuesAtTimes()`, `numKeys`, `keyTime()`, `keyValue()`, `removeKey()` |
 | `FootageItem` | `mainSource.conformFrameRate`, `file`, `duration` |
 | `ImportOptions` | `file`, `sequence`, footage as `importAs` |
-| `File`, `Folder` | `$.fileName`, `name`, `fsName`, `parent`, `exists`, `getFiles()`, `open()`, `read()`, `readln()`, `File.openDialog()` |
-| Globals | `alert()`, `$.writeln()`, `writeLn()`, `AutoOrientType`, `KeyframeInterpolationType`, `ImportAsType` |
+| `File`, `Folder` | `$.fileName`, `name`, `fsName`, `parent`, `exists`, `getFiles()`, `open()`, `read()`, `readln()`, `write()`, `writeln()`, `close()`, `encoding`, `lineFeed`, `remove()`, `Folder.create()`, `File.openDialog()` |
+| `Window` | `"dialog"` and `"palette"`, `add()` of `group`, `panel`, `statictext`, `edittext`, `checkbox`, `radiobutton`, `dropdownlist`, `slider` and `button`, `text`, `value`, `selection`, `items`, `enabled`, `onClick`, `onChange`, `orientation`, `alignChildren`, `alignment`, `margins`, `spacing`, `show()`, `close()` |
+| Globals | `alert()`, `$.writeln()`, `writeLn()`, `AutoOrientType`, `KeyframeInterpolationType`, `KeyframeEase`, `MarkerValue`, `ImportAsType` |
 
 Anything else stops the script with a message naming it.
 
 ### Where Lumit differs
 
-- Keys are linear or hold. A Bezier key comes in as linear, and ease and curved motion
-  paths are not carried.
+- A Bezier key with no ease of its own is automatic. Spatial tangents are not carried, so
+  a point moves between keys in a straight line.
+- `valueAtTime()` reads between eased keys in a straight line.
+- Roving keys stay at their times.
 - Key times land on the nearest frame of the comp.
 - A 3D layer's X, Y and Z Rotation are turned into Lumit's rotation order. The layer
   matches After Effects on every key.
 - Orientation is set once. Keys on it stop the script.
 - A layer given a `parent` stays where it is at the comp's start.
 - `app.newProject()` answers the open project.
+- `activeItem` is the comp open in the Viewer. On the command line it is the project's only
+  comp, or null when there are more.
+- An expression is JavaScript. While it is on, the keys under it are not kept.
+- An effect Lumit does not have stops the script. Controls named by number or match name take
+  After Effects' values and convert them as importing does. By name, they take Lumit's own.
+- A marker keeps its comment, duration, label colour and whether it is a chapter. Chapter
+  text, URLs and cue points are not kept.
 - A numbered still always imports as the whole sequence.
 - A footage item's `duration` is known once it has a layer.
-- An item's `comment` and a comp's pixel aspect are not kept.
-- `#target` lines are skipped. `#include` stops the script.
+- An item's `comment` and a comp's or solid's pixel aspect are not kept.
+- `#target` lines are skipped. `#include`, `//@include` and `#includepath` read in files from
+  the script's own folder and the folders inside it, each once.
+- A script's window is drawn with Lumit's own controls. Fonts, colours and places are not
+  kept, and sizes, `margins` and `spacing` are taken roughly. A palette waits as a dialog
+  does.
+- Escape or the close mark presses a window's Cancel button, or makes `show()` answer 2.
+- On the command line and over MCP, `show()` answers 2 at once.
 - A script reads and lists files in its own folder and the folders inside it, and files you
   chose or passed to it. A script at the top of a drive or in the home folder itself has no
   folder of its own. Anywhere else `exists` is false.
+- A script writes text files, as UTF-8, only in its own folder and the folders inside it, and
+  never over the project. A run writes at most 64 MB. A script with no folder of its own, as
+  over MCP, writes nothing.
 - A script imports footage only from the files it can read. It saves the project over its own
-  file or as a new `.lum` file, and exports, only into the project's folder or its own, never
-  over a file.
+  file or as a new `.lum` file, and exports and saves frames, only into the project's folder
+  or its own, never over a file.
 - A network path or a device is refused.
 
 ## Related
 
+- [Scripting reference](/reference/scripting/)
 - [Expressions](/use/expressions/)
 - [Importing](/use/importing/)
 - [Export](/use/export/)

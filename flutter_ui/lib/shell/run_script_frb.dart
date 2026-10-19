@@ -3,6 +3,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/src/rust/api/script.dart';
 
@@ -10,6 +11,7 @@ import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../state/file_dialogs.dart';
 import '../state/ui_state.dart';
+import 'script_dialog_frb.dart';
 
 /// Pick a `.js` or `.jsx` file and run it on the open project.
 ///
@@ -17,15 +19,18 @@ import '../state/ui_state.dart';
 /// The whole run is one undo step, and an edit made from the interface
 /// meanwhile would land inside it.
 ///
-/// [picker] and [chooser] stand in for the file dialogues in a test.
+/// [context] is where a window the script shows opens. [picker] and
+/// [chooser] stand in for the file dialogues in a test.
 Future<void> runScriptFrb(
   LumitState app,
   LumitUiState ui, {
+  BuildContext? context,
   Future<String?> Function()? picker,
   Future<String?> Function(List<String> extensions, String title)? chooser,
 }) async {
   final project = app.project;
   if (project == null) return;
+  final dialogs = ScriptDialogs(context);
   final path = await (picker ?? pickScript)();
   if (path == null) return;
   final name = _scriptName(path);
@@ -40,7 +45,8 @@ Future<void> runScriptFrb(
   final ended = Completer<BridgeScriptEvent_Finished?>();
   var started = false;
   try {
-    started = project.runScript(path: path, events: events);
+    started = project.runScript(
+        path: path, comp: ui.selectedComp, events: events);
   } catch (_) {}
   StreamSubscription<BridgeScriptEvent>? listening;
   if (started) {
@@ -56,6 +62,10 @@ Future<void> runScriptFrb(
           app.postNotice(message);
         case BridgeScriptEvent_OpenComp(:final comp):
           ui.setSelectedComp(comp);
+        case BridgeScriptEvent_ShowDialog(:final tree):
+          dialogs.show(tree);
+        case BridgeScriptEvent_CloseDialog():
+          dialogs.close();
         case BridgeScriptEvent_Finished():
           if (!ended.isCompleted) ended.complete(event);
       }
@@ -65,6 +75,7 @@ Future<void> runScriptFrb(
   }
   final end = started ? await ended.future : null;
   await listening?.cancel();
+  dialogs.close();
 
   app.busy.value = null;
   app.busyCancel.value = null;

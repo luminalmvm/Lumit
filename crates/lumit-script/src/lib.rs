@@ -17,9 +17,11 @@
 //! shared project's threads do (docs/14 §1).
 
 mod commands;
+mod include;
 pub mod live;
 pub mod mcp;
 mod reach;
+mod reference;
 mod script;
 
 use std::path::{Path, PathBuf};
@@ -27,14 +29,15 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use lumit_core::model::{Composition, Layer};
-use lumit_core::time::CompTime;
+use lumit_core::time::{CompTime, Duration};
 use lumit_core::{DocumentStore, Op};
 use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
 
 pub use commands::COMMANDS;
-pub use script::{run, Limits, RunError, RunOptions, RunReport};
+pub use reference::reference_page;
+pub use script::{run, Dialog, Limits, RunError, RunOptions, RunReport};
 
 /// What a command needs from the program it runs in. Lumit has one, and the
 /// command line has its own.
@@ -67,11 +70,33 @@ pub trait Host {
     /// Stop export `job`. Stopping one that has finished does nothing.
     fn export_cancel(&self, job: u64) -> Result<(), ScriptError>;
 
+    /// Render frame `frame` of `comp` at `scale` of its size to a new PNG at
+    /// `out`, never over a file. Answers the picture's width and height. A
+    /// host that does not say otherwise renders nothing.
+    fn render_frame(
+        &self,
+        comp: Uuid,
+        frame: u64,
+        scale: f32,
+        out: &Path,
+    ) -> Result<(u32, u32), ScriptError> {
+        let _ = (comp, frame, scale, out);
+        Err(ScriptError::Failed(
+            "Frames cannot be rendered here.".into(),
+        ))
+    }
+
     /// Show `comp` in the Viewer. Where there is no Viewer, as on the command
     /// line, this does nothing.
     fn open_comp(&self, comp: Uuid) -> Result<(), ScriptError> {
         let _ = comp;
         Ok(())
+    }
+
+    /// The comp open in the Viewer, which After Effects calls the active
+    /// item. Where there is no Viewer there is none.
+    fn active_comp(&self) -> Option<Uuid> {
+        None
     }
 
     /// The ops that make `parent` the parent of `layer` in `comp`, or leave it
@@ -91,6 +116,13 @@ pub trait Host {
     /// has a Stop for it. By default nothing does.
     fn stop_flag(&self) -> Arc<AtomicBool> {
         Arc::default()
+    }
+
+    /// How long the source of `layer` in comp `comp` runs, when the host can
+    /// read it: a footage file's length. By default it is not known.
+    fn source_length(&self, comp: Uuid, layer: &Layer) -> Option<Duration> {
+        let _ = (comp, layer);
+        None
     }
 }
 
