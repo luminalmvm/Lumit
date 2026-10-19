@@ -73,8 +73,8 @@ Future<void> showLfxInterface(BuildContext context,
   }
 }
 
-/// The floating panel itself: its title strip, and the page while there is
-/// an instance to follow.
+/// The floating panel itself: its title strip, and the page once there has
+/// been an instance to follow.
 class LfxInterfaceWindow extends StatefulWidget {
   final BridgeExtension extension;
   final String matchName;
@@ -97,6 +97,9 @@ class _LfxInterfaceWindowState extends State<LfxInterfaceWindow> {
   late final LfxFollow _follow = LfxFollow(
       ui: context.read<LumitUiState>(), matchName: widget.matchName);
 
+  /// The page has been put up.
+  bool _paged = false;
+
   @override
   void dispose() {
     _follow.dispose();
@@ -115,24 +118,29 @@ class _LfxInterfaceWindowState extends State<LfxInterfaceWindow> {
         Expanded(
           child: ListenableBuilder(
             listenable: _follow,
-            builder: (context, _) => _follow.target == null
-                ? Center(
-                    child: Text(
-                      l10n.lfxInterfaceEmpty(widget.title),
-                      key: const ValueKey('lfx-interface-empty'),
-                      style: t.small.copyWith(color: t.textMuted),
-                    ),
-                  )
-                // A drag in the page is the page's own, so turning a knob in
-                // it never moves the window.
-                : GestureDetector(
-                    onPanStart: (_) {},
-                    child: ExtensionView(
-                      key: ValueKey<String>('lfx-page-${widget.matchName}'),
-                      extension: widget.extension,
-                      effect: _follow,
-                    ),
-                  ),
+            builder: (context, _) {
+              // Once the page is up it stays, and shows its own empty state
+              // when nothing is followed. Before that the panel says so.
+              _paged |= _follow.target != null;
+              return !_paged
+                  ? Center(
+                      child: Text(
+                        l10n.lfxInterfaceEmpty(widget.title),
+                        key: const ValueKey('lfx-interface-empty'),
+                        style: t.small.copyWith(color: t.textMuted),
+                      ),
+                    )
+                  // A drag in the page is the page's own, so turning a knob
+                  // in it never moves the window.
+                  : GestureDetector(
+                      onPanStart: (_) {},
+                      child: ExtensionView(
+                        key: ValueKey<String>('lfx-page-${widget.matchName}'),
+                        extension: widget.extension,
+                        effect: _follow,
+                      ),
+                    );
+            },
           ),
         ),
       ],

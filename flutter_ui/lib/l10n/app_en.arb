@@ -17226,7 +17226,7 @@
   },
   "lfxInterfaceEmpty": "Select a layer with {name}",
   "@lfxInterfaceEmpty": {
-    "description": "Quiet line in an extension effect's floating interface panel when no selected layer has that effect. The name is the effect's.",
+    "description": "Quiet line in an extension effect's floating interface panel when it opens and no selected layer has that effect. Once the extension's page is showing, the page draws its own empty state instead. The name is the effect's.",
     "placeholders": {
       "name": {
         "type": "String"
