@@ -3,6 +3,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/src/rust/api/script.dart';
@@ -13,6 +14,7 @@ import '../state/app_state.dart';
 import '../state/file_dialogs.dart';
 import '../state/ui_state.dart';
 import '../widgets/controls.dart';
+import 'dialog_frame.dart';
 
 /// Run the `.js` or `.jsx` file at [path] on the open project, or one picked
 /// when there is none.
@@ -21,8 +23,11 @@ import '../widgets/controls.dart';
 /// The whole run is one undo step, and an edit made from the interface
 /// meanwhile would land inside it.
 ///
+/// What it printed is a press away on the notice after.
+///
 /// [picker] and [chooser] stand in for the file dialogues in a test.
 Future<void> runScriptFrb(
+  BuildContext context,
   LumitState app,
   LumitUiState ui, {
   String? path,
@@ -43,6 +48,8 @@ Future<void> runScriptFrb(
 
   final events = RustStreamSink<BridgeScriptEvent>();
   final ended = Completer<BridgeScriptEvent_Finished?>();
+  // Its alerts, for the log, which has only what it printed.
+  final alerts = <String>[];
   var started = false;
   try {
     started = project.runScript(path: path, events: events);
@@ -58,6 +65,7 @@ Future<void> runScriptFrb(
           } catch (_) {}
           answerScriptFile(path: picked);
         case BridgeScriptEvent_Alert(:final message):
+          alerts.add(message);
           app.postNotice(message);
         case BridgeScriptEvent_OpenComp(:final comp):
           ui.setSelectedComp(comp);
@@ -75,17 +83,26 @@ Future<void> runScriptFrb(
   app.busyCancel.value = null;
   app.busyCancelLabel.value = null;
 
+  final log = [...?end?.log, ...alerts];
+  void say(String message, {bool error = false}) => app.postNotice(message,
+      error: error,
+      action: log.isEmpty ? null : l10n.scriptShowLog,
+      onTap: log.isEmpty
+          ? null
+          : () {
+              if (context.mounted) showScriptLog(context, name, log);
+            });
   switch (end) {
     case null:
-      app.postNotice(l10n.scriptCouldNotRun(name), error: true);
+      say(l10n.scriptCouldNotRun(name), error: true);
     case BridgeScriptEvent_Finished(stopped: true):
-      app.postNotice(l10n.scriptStopped(name));
+      say(l10n.scriptStopped(name));
     case BridgeScriptEvent_Finished(error: null):
-      app.postNotice(l10n.scriptRan(name));
+      say(l10n.scriptRan(name));
     case BridgeScriptEvent_Finished(:final error?, line: final line?):
-      app.postNotice(l10n.scriptFailedAt(name, line, error), error: true);
+      say(l10n.scriptFailedAt(name, line, error), error: true);
     case BridgeScriptEvent_Finished(:final error?):
-      app.postNotice(l10n.scriptFailed(name, error), error: true);
+      say(l10n.scriptFailed(name, error), error: true);
   }
   app.notifyDocumentChanged();
 }
@@ -128,7 +145,9 @@ Future<void> runDroppedScripts(
       builder: (close) =>
           _RunQuestion(name: _scriptName(path), onChoose: close),
     );
-    if (run == true) await runScriptFrb(app, ui, path: path);
+    if (run == true && context.mounted) {
+      await runScriptFrb(context, app, ui, path: path);
+    }
   }
 }
 
@@ -179,6 +198,82 @@ class _RunQuestion extends StatelessWidget {
           const SizedBox(height: 10),
         ],
       ),
+    );
+  }
+}
+
+/// What the script [name] printed, in a window of its own, with Copy.
+Future<void> showScriptLog(
+        BuildContext context, String name, List<String> log) =>
+    showLumitModal<void>(
+      context: context,
+      id: 'script-log',
+      initialSize: const Size(520, 360),
+      builder: (close) =>
+          _ScriptLog(name: name, log: log, onClose: () => close(null)),
+    );
+
+class _ScriptLog extends StatefulWidget {
+  final String name;
+  final List<String> log;
+  final VoidCallback onClose;
+
+  const _ScriptLog(
+      {required this.name, required this.log, required this.onClose});
+
+  @override
+  State<_ScriptLog> createState() => _ScriptLogState();
+}
+
+class _ScriptLogState extends State<_ScriptLog> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return DialogFrame(
+      children: [
+        dialogTitleBar(
+          t,
+          title: l10n.scriptLog,
+          subject: widget.name,
+          onClose: widget.onClose,
+          keyPrefix: 'script-log',
+        ),
+        Flexible(
+          child: dialogScroller(
+            context,
+            t,
+            _scroll,
+            child: ListView.builder(
+              key: const ValueKey('script-log-lines'),
+              controller: _scroll,
+              padding: const EdgeInsets.all(dialogPadding),
+              itemCount: widget.log.length,
+              itemBuilder: (_, i) => Text(widget.log[i], style: t.mono),
+            ),
+          ),
+        ),
+        dialogFooter(
+          t,
+          keyPrefix: 'script-log',
+          actions: [
+            HouseButton(
+              key: const ValueKey('script-log-copy'),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              onPressed: () => unawaited(Clipboard.setData(
+                  ClipboardData(text: widget.log.join('\n')))),
+              child: Text(l10n.scriptLogCopy),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -768,6 +768,17 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       builder: (context, notice, _) {
         if (notice == null) return _extensionStatus(t, state);
         final motion = ThemeScope.of(context).motion;
+        // A notice that leads somewhere goes there, and has then been read,
+        // unless it is one that stays.
+        final lead = switch (notice.onTap) {
+          null => null,
+          final onTap => () {
+              if (!notice.sticky && identical(state.notice.value, notice)) {
+                state.notice.value = null;
+              }
+              onTap();
+            },
+        };
         // Each notice arrives: keyed by the notice itself, so a new one
         // taking the line over plays in again rather than swapping its words.
         return Entrance(
@@ -782,18 +793,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 Flexible(
                   child: HoverMark(
                     builder: (context, lit) => GestureDetector(
-                      // A notice that leads somewhere goes there, and has
-                      // then been read, unless it is one that stays.
-                      onTap: switch (notice.onTap) {
-                        null => () => _showNotices(context, t, state),
-                        final lead => () {
-                            if (!notice.sticky &&
-                                identical(state.notice.value, notice)) {
-                              state.notice.value = null;
-                            }
-                            lead();
-                          },
-                      },
+                      onTap: lead ?? () => _showNotices(context, t, state),
                       child: Text(
                         notice.message,
                         key: const ValueKey('status-notice'),
@@ -813,6 +813,16 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                     ),
                   ),
                 ),
+                if (notice.action case final action?) ...[
+                  const SizedBox(width: 4),
+                  HouseButton(
+                    key: const ValueKey('status-notice-action'),
+                    small: true,
+                    frameless: true,
+                    onPressed: lead,
+                    child: Text(action, style: t.small),
+                  ),
+                ],
                 const SizedBox(width: 4),
                 HouseButton(
                   key: const ValueKey('status-notice-close'),

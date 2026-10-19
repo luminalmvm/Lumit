@@ -171,9 +171,12 @@ class LumitState extends ChangeNotifier {
   final List<LumitNotice> recentNotices = [];
 
   void postNotice(String message,
-      {bool error = false, bool sticky = false, VoidCallback? onTap}) {
-    final posted =
-        LumitNotice(message, error: error, sticky: sticky, onTap: onTap);
+      {bool error = false,
+      bool sticky = false,
+      String? action,
+      VoidCallback? onTap}) {
+    final posted = LumitNotice(message,
+        error: error, sticky: sticky, action: action, onTap: onTap);
     // One that stays until it is dismissed keeps the line from anything
     // quiet, which waits behind it in the list a press on the line shows.
     final kept = notice.value;
@@ -1453,6 +1456,9 @@ class LumitNotice {
 
   /// What a press on its words does, for a notice that leads somewhere.
   final VoidCallback? onTap;
+
+  /// A button beside the words that does the same, for where it leads.
+  final String? action;
   const LumitNotice(this.message,
-      {this.error = false, this.sticky = false, this.onTap});
+      {this.error = false, this.sticky = false, this.action, this.onTap});
 }

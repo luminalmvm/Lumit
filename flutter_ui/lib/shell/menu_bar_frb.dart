@@ -1061,7 +1061,7 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
-            MenuEntry.submenu(l10n.menuScripts, _scriptRows(app, ui)),
+            MenuEntry.submenu(l10n.menuScripts, _scriptRows(context, app, ui)),
             MenuEntry.divider(),
             // Sharing this project, joining somebody else's, and who is here.
             MenuEntry(
@@ -1968,7 +1968,8 @@ void togglePanel(LumitUiState ui, Panel panel) {
 /// File ▸ Scripts: each script in the Scripts folder, a submenu for each
 /// folder inside it, then Run script… and the folder itself. Read from disk
 /// as the menu opens.
-List<MenuEntry> _scriptRows(LumitState app, LumitUiState ui) {
+List<MenuEntry> _scriptRows(
+    BuildContext context, LumitState app, LumitUiState ui) {
   final folder = scriptsFolderIn(ui.workspace.scriptsFolder);
   var scripts = const <String>[];
   try {
@@ -1976,7 +1977,7 @@ List<MenuEntry> _scriptRows(LumitState app, LumitUiState ui) {
   } catch (_) {}
   VoidCallback? run(String path) => app.project == null
       ? null
-      : () => runScriptFrb(app, ui,
+      : () => runScriptFrb(context, app, ui,
           path: '$folder${Platform.pathSeparator}'
               '${path.replaceAll('/', Platform.pathSeparator)}');
 
@@ -2006,7 +2007,7 @@ List<MenuEntry> _scriptRows(LumitState app, LumitUiState ui) {
     ...rows(scripts, ''),
     if (scripts.isNotEmpty) MenuEntry.divider(),
     MenuEntry(l10n.menuRunScript,
-        app.project == null ? null : () => runScriptFrb(app, ui)),
+        app.project == null ? null : () => runScriptFrb(context, app, ui)),
     MenuEntry(l10n.menuOpenScriptsFolder,
         folder == null ? null : () => revealInFolder(path: folder)),
   ];
