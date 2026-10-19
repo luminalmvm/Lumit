@@ -409,7 +409,7 @@ fn an_after_effects_image_sequence_maps_to_a_sequence_item() {
 /// property, which is how a time-remapped camera is written.
 ///
 /// So this is the shape of a real tracked camera, keyframe for keyframe: the
-/// orientation onto the rotation lanes it exactly describes, the zoom out of
+/// orientation onto the rotation lanes in Lumit's order, the zoom out of
 /// the options group, and the After Effects expression switched off with its
 /// text kept, so what drives the camera is the motion that was tracked.
 #[test]
@@ -423,15 +423,20 @@ fn a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom() {
     assert_eq!(keys(&camera.transform.position_x)[1].value, 20.0);
     assert_eq!(keys(&camera.transform.position_z)[2].value, 300.0);
 
-    // Orientation, onto the rotation lanes â€” the layer's own rotations are
-    // zero, so the two say the same thing.
+    // Orientation, onto the rotation lanes. It turns on both X and Y, so the
+    // angles are rewritten in Lumit's order and the turn matches at every key.
+    let orientation = [[10.0, 40.0, 1.0], [20.0, 45.0, 2.0], [30.0, 50.0, 3.0]];
+    for (n, o) in orientation.into_iter().enumerate() {
+        let turn = lumit_turn(camera, keys(&camera.transform.rotation_x)[n].time.to_f64());
+        assert!(same_turn(turn, ae_turn(o, [0.0; 3])), "key {n}");
+    }
     let pitch = keys(&camera.transform.rotation_x);
     assert_eq!(pitch.len(), 3);
-    assert_eq!(pitch[0].value, 10.0);
-    assert_eq!(pitch[2].value, 30.0);
     assert_eq!(pitch[0].interp_out, SideInterp::Linear);
-    assert_eq!(keys(&camera.transform.rotation_y)[1].value, 45.0);
-    assert_eq!(keys(&camera.transform.rotation)[2].value, 3.0);
+    assert!(reported(&report, |r| matches!(
+        r,
+        Reason::RotationOrderConverted
+    )));
     // The middle key is held in After Effects, and held here.
     assert_eq!(
         keys(&camera.transform.rotation_y)[1].interp_out,
@@ -464,6 +469,104 @@ fn a_tracked_cameras_keyframes_arrive_on_the_rotation_lanes_and_the_zoom() {
             .map(|e| e.contains("thisComp")),
         Some(true)
     );
+}
+
+/// **A 3D layer turned on both X and Y faces where After Effects faces it.**
+///
+/// After Effects turns by `Rx · Ry · Rz`, with Orientation outside that, and
+/// Lumit by `Ry · Rx · Rz`, so the angles copied straight across pointed such a
+/// layer the wrong way. The matrix is the check, X at a quarter turn included,
+/// where Y and Z become one turn.
+#[test]
+fn a_3d_layer_turned_on_x_and_y_faces_where_after_effects_faces_it() {
+    let turned = |index: u32, orientation: [f64; 3], [x, y, z]: [f64; 3]| {
+        let float = |name: &str, v: f64| serde_json::json!({ "match_name": name, "value_type": "float", "value": v });
+        serde_json::json!({
+            "index": index,
+            "name": format!("Turned {index}"),
+            "kind": "null",
+            "in_point": 0.0,
+            "out_point": 4.0,
+            "switches": { "three_d": true },
+            "properties": [{
+                "match_name": "ADBE Transform Group",
+                "group": [
+                    { "match_name": "ADBE Orientation", "value_type": "point3", "value": orientation },
+                    float("ADBE Rotate X", x),
+                    float("ADBE Rotate Y", y),
+                    float("ADBE Rotate Z", z)
+                ]
+            }]
+        })
+    };
+    let cases = [
+        ([0.0, 0.0, 0.0], [30.0, 45.0, 0.0]),
+        ([0.0, 0.0, 0.0], [90.0, 45.0, 30.0]),
+        ([10.0, 0.0, 20.0], [30.0, 45.0, -15.0]),
+        // Straight down, where Lumit's Y and Z name the same turn.
+        ([90.0, 0.0, 0.0], [0.0, 0.0, 30.0]),
+    ];
+    let layers: Vec<_> = (1..)
+        .zip(cases)
+        .map(|(i, (o, r))| turned(i, o, r))
+        .collect();
+    let capture: lumit_import::capture::Capture = serde_json::from_value(serde_json::json!({
+        "items": [{ "id": 1, "kind": "comp", "name": "Turns" }],
+        "comps": [{ "id": 1, "width": 1920, "height": 1080, "fps": 25.0, "duration": 4.0, "layers": layers }]
+    }))
+    .expect("the capture parses");
+
+    let (doc, report) = map_capture(&capture);
+    for (i, (o, r)) in (1..).zip(cases) {
+        let turned = layer(comp(&doc, "Turns"), &format!("Turned {i}"));
+        assert!(
+            same_turn(lumit_turn(turned, 0.0), ae_turn(o, r)),
+            "orientation {o:?}, rotation {r:?}"
+        );
+    }
+    // Still angles convert exactly, so there is nothing to report.
+    assert!(!reported(&report, |r| matches!(
+        r,
+        Reason::RotationOrderConverted | Reason::OrientationNotCarried
+    )));
+}
+
+type Mat3 = lumit_core::camera::Mat3;
+
+/// After Effects' turn for an Orientation and an X/Y/Z Rotation.
+fn ae_turn(orientation: [f64; 3], rotation: [f64; 3]) -> Mat3 {
+    use lumit_core::camera::rotation as lumit;
+    let mul = |a: Mat3, b: Mat3| {
+        let mut out = [[0.0; 3]; 3];
+        for (r, row) in out.iter_mut().enumerate() {
+            for (c, cell) in row.iter_mut().enumerate() {
+                *cell = (0..3).map(|k| a[r][k] * b[k][c]).sum();
+            }
+        }
+        out
+    };
+    let xyz = |[x, y, z]: [f64; 3]| {
+        mul(
+            mul(lumit((x, 0.0, 0.0)), lumit((0.0, y, 0.0))),
+            lumit((0.0, 0.0, z)),
+        )
+    };
+    mul(xyz(orientation), xyz(rotation))
+}
+
+/// The turn a layer's rotation lanes make at `t`, in Lumit's own order.
+fn lumit_turn(layer: &Layer, t: f64) -> Mat3 {
+    let tr = &layer.transform;
+    lumit_core::camera::rotation((
+        tr.rotation_x.value_at(t),
+        tr.rotation_y.value_at(t),
+        tr.rotation.value_at(t),
+    ))
+}
+
+fn same_turn(a: Mat3, b: Mat3) -> bool {
+    let mut cells = a.iter().flatten().zip(b.iter().flatten());
+    cells.all(|(a, b)| (a - b).abs() < 1e-9)
 }
 
 /// A tracked camera as an exporter writes one: keyed Position, Orientation and

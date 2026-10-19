@@ -194,10 +194,13 @@ pub enum Reason {
     TextStylingNotMapped,
     /// A light kind Lumit does not have; imported as the nearest.
     LightKindApproximated { ae_kind: String },
-    /// A 3D layer that turns by Orientation *and* by X/Y/Z Rotation. Lumit has
-    /// the one trio, and two Euler triples do not add, so the rotations are
-    /// what arrives and the orientation is named here.
+    /// A 3D layer whose Orientation moves while its X/Y/Z Rotation is used too.
+    /// Lumit has the one trio, and two moving Euler triples do not add, so the
+    /// rotations are what arrives and the orientation is named here.
     OrientationNotCarried,
+    /// A 3D layer's keyed X/Y/Z Rotation rewritten in Lumit's axis order. It
+    /// matches After Effects on every key and can drift a little between them.
+    RotationOrderConverted,
     /// A 3D layer with Material Options' Casts Shadows on. Lumit's lights cast
     /// no shadows, so the layer imports without them.
     CastsShadowsNotCarried,
@@ -445,6 +448,11 @@ impl std::fmt::Display for Reason {
                 f,
                 "the layer turns by orientation as well as by rotation — the rotation is what \
                  arrives, and the orientation is not carried"
+            ),
+            Self::RotationOrderConverted => write!(
+                f,
+                "the rotation was turned into Lumit's axis order, exact on each key and close \
+                 between them"
             ),
             Self::CastsShadowsNotCarried => write!(
                 f,

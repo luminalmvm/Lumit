@@ -11255,6 +11255,10 @@
   "@aeOrientationNotCarried": {
     "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
   },
+  "aeRotationOrderConverted": "the rotation was turned into Lumit's axis order, exact on each key and close between them",
+  "@aeRotationOrderConverted": {
+    "description": "Import report row reason, lower case. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
+  },
   "aeCastsShadowsNotCarried": "the layer casts shadows, and Lumit's lights cast none, so it imported without them",
   "@aeCastsShadowsNotCarried": {
     "description": "Import report row reason, lower case. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
