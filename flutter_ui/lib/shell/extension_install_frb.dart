@@ -185,7 +185,9 @@ class _InstallQuestion extends StatelessWidget {
               dialogGroup(t, l10n.extensionCannot, [
                 point(l10n.extensionCannotFootage),
                 point(l10n.extensionCannotFiles),
-                point(l10n.extensionCannotEdit),
+                // An effect's own interface sets that effect's rows.
+                if (!extension.effects.any((e) => e.interface_))
+                  point(l10n.extensionCannotEdit),
               ]),
               if (into case final into?)
                 ValueListenableBuilder<String?>(

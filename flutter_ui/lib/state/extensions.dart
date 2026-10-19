@@ -82,6 +82,17 @@ class ExtensionService extends ChangeNotifier {
     return null;
   }
 
+  /// The installed extension that carries the LFX effect [matchName], and
+  /// that effect, or null when none does.
+  (BridgeExtension, BridgeExtensionEffect)? carrying(String matchName) {
+    for (final extension in installed) {
+      for (final effect in extension.effects) {
+        if (effect.matchName == matchName) return (extension, effect);
+      }
+    }
+    return null;
+  }
+
   /// The folders the person has picked for [id] to watch.
   Set<String> folders(String id) => {...?_workspace.extensionFolders[id]};
 

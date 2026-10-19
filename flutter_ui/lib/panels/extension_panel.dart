@@ -63,7 +63,10 @@ class ExtensionPanel extends StatelessWidget {
 class ExtensionView extends StatefulWidget {
   final BridgeExtension extension;
 
-  const ExtensionView({super.key, required this.extension});
+  /// The effect the page drives, for an LFX effect's interface page.
+  final EffectChannel? effect;
+
+  const ExtensionView({super.key, required this.extension, this.effect});
 
   @override
   State<ExtensionView> createState() => _ExtensionViewState();
@@ -95,6 +98,7 @@ class _ExtensionViewState extends State<ExtensionView>
       surface: this,
       approvedFolders: folders,
       onFoldersChanged: () => ui.extensions.setFolders(id, folders),
+      effect: widget.effect,
     );
     _link = ExtensionPageLink(
       onMessage: (message) {

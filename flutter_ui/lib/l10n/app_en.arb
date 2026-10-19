@@ -17216,6 +17216,23 @@
   "@effectFromExtension": {
     "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect came from an installed extension."
   },
+  "lfxInterface": "Interface",
+  "@lfxInterface": {
+    "description": "Button on the heading of an extension's effect in the Effect controls panel. Opens the effect's own interface, a page the extension draws, in a floating panel."
+  },
+  "tipLfxInterface": "Open its interface",
+  "@tipLfxInterface": {
+    "description": "Tooltip on the Interface button on the heading of an extension's effect in the Effect controls panel."
+  },
+  "lfxInterfaceEmpty": "Select a layer with {name}",
+  "@lfxInterfaceEmpty": {
+    "description": "Quiet line in an extension effect's floating interface panel when no selected layer has that effect. The name is the effect's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "profileUnnamed": "You",
   "@profileUnnamed": {
     "description": "Name shown for a profile that has not been given one, on the profile button at the left of the bottom strip and in its card."
