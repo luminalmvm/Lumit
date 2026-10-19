@@ -5,12 +5,14 @@ sidebar:
   order: 9.8
 ---
 
-An **extension** is a panel somebody else made. It is a folder holding a web page and an
-`extension.json`, and Lumit shows the page in a panel of its own.
+An **extension** is a folder somebody else made that adds a panel, effects, or both. It
+holds an `extension.json`, and Lumit shows its web page in a panel of its own. Its effects
+are [LFX effects](/use/lfx-effects/).
 
 :::note
-Extensions are installed from a folder: the addon catalogue does not list them. An
-extension is not signed, and Lumit does not limit what its page loads from the internet.
+Extensions are installed from a folder or a package: the addon catalogue does not list
+them. An extension is not signed, and Lumit does not limit what its page loads from the
+internet.
 :::
 
 ## Installing one
@@ -19,10 +21,22 @@ extension is not signed, and Lumit does not limit what its page loads from the i
 `extension.json`. Lumit lists what the extension asks to be allowed, and copies it only
 after **Install**. Installing over an extension of the same id replaces it.
 
-**Window ▸ Extensions** lists every installed extension, ticked while its panel is in the
-arrangement. The panel docks, tabs and saves with a workspace like any other.
+A package, a `.lfx` file, installs with a double-click, by dropping it on the window, or
+from **Settings ▸ Addons ▸ Extensions ▸ Install a package**. The window lists the effects
+it adds and where it goes. **Change…** puts it in another folder, which Lumit then looks in
+too.
 
-**Remove** deletes the extension's folder. What its page stored is kept.
+Double-clicking a package while Lumit is open sends it to the open Lumit on macOS, or
+anywhere Lumit is kept running in the background (**Settings ▸ General**). Otherwise a
+second Lumit opens to install it, and the first picks it up when **Settings ▸ Addons**
+opens, or at its next start.
+
+**Window ▸ Extensions** lists every installed extension with a panel, ticked while its
+panel is in the arrangement. The panel docks, tabs and saves with a workspace like any
+other. An extension's effects are in the Effects menu under their categories.
+
+**Remove** deletes the extension's folder. What its page stored is kept. An extension in the
+machine-wide folder or an added folder is left where it is.
 
 ## The folder
 
@@ -56,7 +70,8 @@ my-extension/
 | `name`, `version` | Shown in Settings, the Window menu and the panel's tab. |
 | `summary`, `author`, `homepage` | Optional. Shown before installing. |
 | `requires` | Optional. The oldest Lumit it works with. An older Lumit refuses to install it. |
-| `entry` | The page the panel shows, as a path inside the folder. |
+| `entry` | The page the panel shows, as a path inside the folder. Optional when the extension carries effects. |
+| `effects` | Optional. The [LFX effects](/use/lfx-effects/#the-manifest) it carries. |
 | `permissions` | What the page may ask. See below. |
 | `hosts` | The sites `net.fetch` and `app.openExternal` may reach, as bare names. A name covers the sites under it. |
 
@@ -127,6 +142,7 @@ An extension never shares or joins by itself: the person presses the button. Aft
 
 ## Related
 
+- [Writing LFX effects](/use/lfx-effects/)
 - [Projects](/use/projects/#shared-projects)
 - [Plugins](/use/plugins/)
 - [Settings](/use/settings/)

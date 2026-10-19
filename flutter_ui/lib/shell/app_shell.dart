@@ -14,6 +14,7 @@ import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
 import 'package:lumit_flutter/shell/flowchart_frb.dart';
+import 'package:lumit_flutter/shell/extension_install_frb.dart';
 import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
@@ -356,6 +357,12 @@ class _LumitAppViewState extends State<LumitAppView> {
           showShareFrb(context, app, invite: invite);
           return;
         }
+        final package = app.launchPackage;
+        if (package != null) {
+          app.launchPackage = null;
+          installExtensionPackage(context, app, ui.extensions, package);
+          return;
+        }
         maybeShowTourFrb(context, app, ui);
       });
     });
@@ -363,14 +370,21 @@ class _LumitAppViewState extends State<LumitAppView> {
     listenForOpenRequests(_openAsked);
   }
 
-  /// A project double-clicked in Finder, or an invite link clicked in a
-  /// browser, while Lumit is running. On macOS both come to this Lumit and
-  /// are opened as File ▸ Open and the Shared project window would.
+  /// A project or an extension package double-clicked, or an invite link
+  /// clicked in a browser, while Lumit is running. On macOS all three come to
+  /// this Lumit, and elsewhere when it is kept running in the background.
+  /// They are opened as File ▸ Open, the install window and the Shared
+  /// project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();
     final project = projectPathFromArgs(asked);
     if (project != null) app.openProject(project);
+    final package = packagePathFromArgs(asked);
+    if (package != null) {
+      installExtensionPackage(
+          context, app, context.read<LumitUiState>().extensions, package);
+    }
     final invite = inviteFromArgs(asked);
     if (invite != null) showShareFrb(context, app, invite: invite);
   }

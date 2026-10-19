@@ -455,6 +455,48 @@ pub fn reparented(
     edits
 }
 
+/// The ops that make `parent` the parent of `layer` in `comp` and keep the
+/// layer where it is at comp time `t_comp`. The parent goes first: it names
+/// the undo step, and a refused one takes the transform edits down with it.
+pub fn parent_ops(
+    doc: &Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    layer: Uuid,
+    parent: Option<Uuid>,
+    t_comp: f64,
+) -> Vec<lumit_core::Op> {
+    let mut ops = vec![lumit_core::Op::SetLayerParent {
+        comp,
+        layer,
+        parent,
+    }];
+    let Some(c) = doc.comp(comp) else {
+        return ops;
+    };
+    let Some(l) = c.layers.iter().find(|l| l.id == layer) else {
+        return ops;
+    };
+    let context = Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp),
+        layer: Some(layer),
+        comp_time: t_comp,
+        current_depth: 0,
+        inputs: None,
+    });
+    ops.extend(
+        reparented(c, l, parent, t_comp, context)
+            .into_iter()
+            .map(|(prop, animation)| lumit_core::Op::SetTransformProperty {
+                comp,
+                layer,
+                prop,
+                animation,
+            }),
+    );
+    ops
+}
+
 /// Where the composition's camera puts a particle that sits off `layer`'s own
 /// plane — the points stream's third axis, made visible.
 ///
@@ -2433,7 +2475,14 @@ fn comp_walk(
             use lumit_core::model::EffectNamespace;
             effects
                 .iter()
-                .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+                // An LFX effect's second input rides here too.
+                .filter(|e| {
+                    e.enabled
+                        && matches!(
+                            e.effect.namespace,
+                            EffectNamespace::Builtin | EffectNamespace::Lfx
+                        )
+                })
                 .filter_map(|e| {
                     let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
                     let param = def.schema().layer_input()?;
@@ -2442,6 +2491,10 @@ fn comp_walk(
                 .map(|(e, def, param)| {
                     let schema = def.schema();
                     let slot = |param: &str| {
+                        // A row read for its layer's shapes has no picture.
+                        if def.shape_inputs().contains(&param) {
+                            return LayerInputDraw::Absent;
+                        }
                         // A Depth row pointed at a Precomp with 3D layers in it
                         // reads their distance rather than its picture. A flat
                         // precomp is a picture, a depth pass made as a comp.
@@ -2796,6 +2849,40 @@ fn comp_walk(
                         text,
                         label,
                         grow,
+                        stepped: None,
+                    };
+                }
+                // **A Particulate with a collider walks on the host**, through
+                // the driver walk a wire reads, and the card only draws where
+                // it got to.
+                let walked = owner
+                    .filter(|_| lumit_core::fx::points::stepped::target(comp, e).is_some())
+                    .map(|layer| {
+                        lumit_core::fx::drivers::effect_stream_in(
+                            &layer.graph,
+                            e.id,
+                            t,
+                            context.clone(),
+                            Some(&audio),
+                            lumit_core::fx::points::Projection::FLAT,
+                            None,
+                            clone_number,
+                        )
+                        .unwrap_or_default()
+                    });
+                if walked.is_some() {
+                    return lumit_core::fx::points::PointsSchedule {
+                        schedule: lumit_core::fx::points::Schedule::default(),
+                        t,
+                        projection,
+                        late,
+                        ports_from,
+                        input,
+                        input_from,
+                        text,
+                        label,
+                        grow,
+                        stepped: walked,
                     };
                 }
                 let upto = (t / dt).floor() as i64;
@@ -2851,6 +2938,7 @@ fn comp_walk(
                     text,
                     label,
                     grow,
+                    stepped: None,
                 }
             })
             .collect()

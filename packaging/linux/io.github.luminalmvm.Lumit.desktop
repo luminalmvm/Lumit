@@ -6,5 +6,5 @@ Exec=lumit_flutter %u
 Icon=lumit
 Terminal=false
 Categories=AudioVideo;Video;Graphics;
-MimeType=application/x-lumit-project;application/x-lumit-preset;x-scheme-handler/lumit;
+MimeType=application/x-lumit-project;application/x-lumit-preset;application/x-lumit-extension;x-scheme-handler/lumit;
 StartupWMClass=lumit_flutter

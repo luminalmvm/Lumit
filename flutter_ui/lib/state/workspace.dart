@@ -793,6 +793,10 @@ class Workspace extends ChangeNotifier {
   /// default, since a project's name can be somebody else's secret.
   DiscordStatus discordStatus = DiscordStatus.app;
 
+  /// Whether other programs on this computer may drive Lumit through its
+  /// live endpoint. Off until the person turns it on.
+  bool liveEndpoint = false;
+
   /// Whether the welcome screen opens on launch.
   ///
   /// On by default. Off is for somebody who always starts from the same
@@ -965,6 +969,26 @@ class Workspace extends ChangeNotifier {
 
   void setPhonesExport(bool on) {
     phonesExport = on;
+    save();
+  }
+
+  /// Whether closing the window leaves Lumit running in the tray, so the
+  /// phones still see this computer. This machine's own, so in no profile
+  /// group, as is [openAtSignIn].
+  bool keepRunning = false;
+
+  /// Whether Lumit starts in the tray when the person signs in. Only ever on
+  /// with [keepRunning].
+  bool openAtSignIn = false;
+
+  void setKeepRunning(bool on) {
+    keepRunning = on;
+    if (!on) openAtSignIn = false;
+    save();
+  }
+
+  void setOpenAtSignIn(bool on) {
+    openAtSignIn = on && keepRunning;
     save();
   }
 
@@ -1357,6 +1381,11 @@ class Workspace extends ChangeNotifier {
 
   void setDiscordStatus(DiscordStatus status) {
     discordStatus = status;
+    settingsChanged();
+  }
+
+  void setLiveEndpoint(bool on) {
+    liveEndpoint = on;
     settingsChanged();
   }
 
@@ -1891,6 +1920,7 @@ class Workspace extends ChangeNotifier {
         'nightly_updates': nightlyUpdates,
         'nightly_icon': nightlyIcon,
         'discord_status': discordStatus.name,
+        'live_endpoint': liveEndpoint,
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
         'last_update_check_ms': lastUpdateCheckMs,
@@ -1902,6 +1932,8 @@ class Workspace extends ChangeNotifier {
         'share_relay': shareRelay,
         'share_cloud': shareCloud,
         'phones_export': phonesExport,
+        'keep_running': keepRunning,
+        'open_at_sign_in': openAtSignIn,
         'share_up_limit': shareUpLimit,
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
@@ -1999,6 +2031,7 @@ class Workspace extends ChangeNotifier {
     // By name. Absent, or a name no build wrote, is the shipped default.
     discordStatus = DiscordStatus.values.asNameMap()[j['discord_status']] ??
         DiscordStatus.app;
+    liveEndpoint = j['live_endpoint'] as bool? ?? false;
     // Absent means a settings file written before the screen could be turned
     // off, and the answer for those is the same as for a new user: show it.
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
@@ -2021,6 +2054,8 @@ class Workspace extends ChangeNotifier {
     shareRelay = relay is String && relay.isNotEmpty ? relay : null;
     shareCloud = j['share_cloud'] is! bool || j['share_cloud'] as bool;
     phonesExport = j['phones_export'] is! bool || j['phones_export'] as bool;
+    keepRunning = j['keep_running'] == true;
+    openAtSignIn = keepRunning && j['open_at_sign_in'] == true;
     final (up, down) = (j['share_up_limit'], j['share_down_limit']);
     shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
     shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;

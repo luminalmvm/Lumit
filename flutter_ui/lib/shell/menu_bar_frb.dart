@@ -82,6 +82,7 @@ import 'export_dialog_frb.dart';
 import 'export_queue_frb.dart';
 import 'recovery_dialog_frb.dart';
 import 'review_links_window.dart';
+import 'run_script_frb.dart';
 import 'project_settings_frb.dart';
 import 'settings_window_frb.dart';
 import 'share_dialog_frb.dart';
@@ -721,7 +722,7 @@ class LumitMenuBarFrb extends StatelessWidget {
     }
     // Every panel: Enter shows it if it was closed, fronts it in its group
     // and points the keyboard at it, which is what cycling to it does.
-    for (final extension in ui.extensions.installed) {
+    for (final extension in ui.extensions.panels) {
       commands.add(PaletteCommand(
         label: extension.name,
         category: l10n.palettePanels,
@@ -1058,6 +1059,8 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
+            MenuEntry(l10n.menuRunScript,
+                project == null ? null : () => runScriptFrb(app, ui)),
             MenuEntry.divider(),
             // Sharing this project, joining somebody else's, and who is here.
             MenuEntry(
@@ -1724,13 +1727,13 @@ List<MenuSection> lumitMenus(
                   checked: () => panelVisible(ui.split, panel),
                 ),
             MenuEntry.submenu(l10n.menuExtensions, [
-              for (final extension in ui.extensions.installed)
+              for (final extension in ui.extensions.panels)
                 MenuEntry.toggle(
                   extension.name,
                   () => ui.toggleExtension(extension.id),
                   checked: () => ui.extensionShown(extension.id),
                 ),
-              if (ui.extensions.installed.isNotEmpty) MenuEntry.divider(),
+              if (ui.extensions.panels.isNotEmpty) MenuEntry.divider(),
               MenuEntry(
                   l10n.menuManageExtensions,
                   () => showSettingsWindowFrb(context,
@@ -2463,6 +2466,15 @@ MenuEntry updateMenuEntry(
 List<PlatformMenuItem> platformMenusFor(
     BuildContext context, List<MenuSection> menus) {
   final keymap = context.read<LumitUiState>().keymap;
+  // The system's bar stays clickable under the busy card, so a row does
+  // nothing while the card is up, as a key does.
+  final app = context.read<LumitState>();
+  VoidCallback? guarded(VoidCallback? run) => run == null
+      ? null
+      : () {
+          if (app.opening.value || app.busy.value != null) return;
+          run();
+        };
 
   List<PlatformMenuItem> rows(List<MenuEntry> items) {
     final out = <PlatformMenuItem>[];
@@ -2497,7 +2509,7 @@ List<PlatformMenuItem> platformMenusFor(
       group.add(PlatformMenuItem(
         label: label,
         // A null callback is how the platform menu draws a row disabled.
-        onSelected: item.onPressed,
+        onSelected: guarded(item.onPressed),
         shortcut: chord == null ? null : activatorForChord(chord),
       ));
     }
@@ -2524,13 +2536,14 @@ List<PlatformMenuItem> platformMenusFor(
     PlatformMenu(label: 'Lumit', menus: [
       PlatformMenuItemGroup(members: [
         PlatformMenuItem(
-            label: l10n.menuAboutLumit, onSelected: about?.onPressed),
+            label: l10n.menuAboutLumit,
+            onSelected: guarded(about?.onPressed)),
       ]),
       PlatformMenuItemGroup(members: [
         if (settings != null)
           PlatformMenuItem(
             label: l10n.menuSettings,
-            onSelected: settings.onPressed,
+            onSelected: guarded(settings.onPressed),
             shortcut:
                 activatorForChord(keymap.rawChordFor('app.settings') ?? ''),
           ),

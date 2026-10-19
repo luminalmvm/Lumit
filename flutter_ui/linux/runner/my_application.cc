@@ -1,22 +1,205 @@
 #include "my_application.h"
 
+#include <dlfcn.h>
+#include <glib/gstdio.h>
 #include <flutter_linux/flutter_linux.h>
 
 #include "extension_views.h"
 #include "flutter/generated_plugin_registrant.h"
 #include "viewer_texture_bridge.h"
 
+// The tray, from libayatana-appindicator (or the older libappindicator it
+// came from), opened while Lumit runs so nothing new is needed to build or
+// start it. A desktop with no tray, GNOME as it ships, shows no icon, and
+// opening Lumit again brings the window back.
+typedef void* (*IndicatorNew)(const gchar* id, const gchar* icon,
+                              int category);
+typedef void (*IndicatorSetStatus)(void* indicator, int status);
+typedef void (*IndicatorSetMenu)(void* indicator, GtkMenu* menu);
+
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  GtkWindow* window;
+  FlView* view;
+  FlMethodChannel* window_channel;
+  FlMethodChannel* open_channel;
+  // Started at sign-in and not shown yet.
+  gboolean start_hidden;
+  // Settings says closing the window keeps Lumit running in the tray.
+  gboolean keep_running;
+  // What a second start passed on, until Dart takes it (lumit/open).
+  GPtrArray* open_waiting;
+  void* indicator;
+  IndicatorSetStatus indicator_set_status;
+  GtkWidget* tray_open;
+  GtkWidget* tray_quit;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// The file whose being there makes Lumit one Lumit at its next start, so a
+// second start hands its arguments over (forward_cb). Written while Lumit is
+// kept running in the background, beside the settings as own-title-bar is.
+static gchar* keep_running_file() {
+  return g_build_filename(g_get_home_dir(), ".config", "lumit", "keep-running",
+                          nullptr);
+}
+
+// Start Lumit in the tray when the person signs in, with an autostart entry
+// that passes --background, or stop doing so.
+static void set_open_at_sign_in(gboolean on) {
+  g_autofree gchar* entry = g_build_filename(
+      g_get_home_dir(), ".config", "autostart", "lumit.desktop", nullptr);
+  if (!on) {
+    g_remove(entry);
+    return;
+  }
+  g_autofree gchar* exec = nullptr;
+  if (g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS)) {
+    exec = g_strdup("flatpak run " APPLICATION_ID " --background");
+  } else {
+    g_autofree gchar* self = g_file_read_link("/proc/self/exe", nullptr);
+    if (self == nullptr) {
+      return;
+    }
+    exec = g_strdup_printf("\"%s\" --background", self);
+  }
+  g_autofree gchar* text = g_strdup_printf(
+      "[Desktop Entry]\nType=Application\nName=Lumit\nExec=%s\n"
+      "X-GNOME-Autostart-enabled=true\n",
+      exec);
+  g_autofree gchar* folder = g_path_get_dirname(entry);
+  g_mkdir_with_parents(folder, 0700);
+  g_file_set_contents(entry, text, -1, nullptr);
+}
+
+// Show the window and bring it to the front, from the tray or a second start.
+static void reveal(MyApplication* self) {
+  self->start_hidden = FALSE;
+  gtk_widget_show(GTK_WIDGET(self->window));
+  gtk_window_present(self->window);
+}
+
+static void tray_quit_cb(MyApplication* self) {
+  fl_method_channel_invoke_method(self->window_channel, "quit", nullptr,
+                                  nullptr, nullptr, nullptr);
+}
+
+// Put Lumit's icon in the tray, or take it away.
+static void show_tray(MyApplication* self, gboolean shown, const gchar* open,
+                      const gchar* quit) {
+  if (self->indicator == nullptr) {
+    if (!shown) {
+      return;
+    }
+    void* library = dlopen("libayatana-appindicator3.so.1", RTLD_LAZY);
+    if (library == nullptr) {
+      library = dlopen("libappindicator3.so.1", RTLD_LAZY);
+    }
+    if (library == nullptr) {
+      return;
+    }
+    auto make = reinterpret_cast<IndicatorNew>(
+        dlsym(library, "app_indicator_new"));
+    auto set_menu = reinterpret_cast<IndicatorSetMenu>(
+        dlsym(library, "app_indicator_set_menu"));
+    self->indicator_set_status = reinterpret_cast<IndicatorSetStatus>(
+        dlsym(library, "app_indicator_set_status"));
+    if (make == nullptr || set_menu == nullptr ||
+        self->indicator_set_status == nullptr) {
+      return;
+    }
+    GtkWidget* menu = gtk_menu_new();
+    self->tray_open = gtk_menu_item_new_with_label("");
+    self->tray_quit = gtk_menu_item_new_with_label("");
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), self->tray_open);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), self->tray_quit);
+    g_signal_connect_swapped(self->tray_open, "activate", G_CALLBACK(reveal),
+                             self);
+    g_signal_connect_swapped(self->tray_quit, "activate",
+                             G_CALLBACK(tray_quit_cb), self);
+    gtk_widget_show_all(menu);
+    // The icon the desktop entry names, which a Flatpak calls by its id.
+    const gchar* icon =
+        g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS) ? APPLICATION_ID
+                                                          : "lumit";
+    // Category 0 is an application's status, the ordinary kind.
+    self->indicator = make(APPLICATION_ID, icon, 0);
+    set_menu(self->indicator, GTK_MENU(menu));
+  }
+  gtk_menu_item_set_label(GTK_MENU_ITEM(self->tray_open), open);
+  gtk_menu_item_set_label(GTK_MENU_ITEM(self->tray_quit), quit);
+  // 1 shows the icon, 0 hides it.
+  self->indicator_set_status(self->indicator, shown ? 1 : 0);
+}
+
+// Kept running in the background, closing the window only hides it. Connected
+// before the view's own handler, which would take the close for a quit. Quit
+// in the tray goes through Dart instead.
+static gboolean window_delete_cb(GtkWidget* window, GdkEvent* event,
+                                 MyApplication* self) {
+  if (!self->keep_running) {
+    return FALSE;
+  }
+  gtk_widget_hide(window);
+  fl_method_channel_invoke_method(self->window_channel, "hidden", nullptr,
+                                  nullptr, nullptr, nullptr);
+  return TRUE;
+}
+
+// A second start's arguments, handed over by GApplication
+// (my_application_local_command_line).
+static void forward_cb(GSimpleAction* action,
+                       GVariant* parameter,
+                       gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  g_autofree const gchar** asked = g_variant_get_strv(parameter, nullptr);
+  gboolean background = FALSE;
+  const guint before = self->open_waiting->len;
+  for (const gchar** argument = asked; *argument != nullptr; argument++) {
+    if (g_strcmp0(*argument, "--background") == 0) {
+      background = TRUE;
+    } else if (**argument != '\0') {
+      g_ptr_array_add(self->open_waiting, g_strdup(*argument));
+    }
+  }
+  // Another start at sign-in has nothing to show.
+  if (!background && self->window != nullptr) {
+    reveal(self);
+  }
+  if (self->open_waiting->len > before && self->open_channel != nullptr) {
+    fl_method_channel_invoke_method(self->open_channel, "open", nullptr,
+                                    nullptr, nullptr, nullptr);
+  }
+}
+
+// Dart taking what a second start passed on, as macOS's runner does with
+// what the Finder asks for.
+static void open_method_cb(FlMethodChannel* channel,
+                           FlMethodCall* call,
+                           gpointer user_data) {
+  MyApplication* self = MY_APPLICATION(user_data);
+  if (g_strcmp0(fl_method_call_get_name(call), "take") != 0) {
+    fl_method_call_respond_not_implemented(call, nullptr);
+    return;
+  }
+  g_autoptr(FlValue) asked = fl_value_new_list();
+  for (guint i = 0; i < self->open_waiting->len; i++) {
+    fl_value_append_take(asked, fl_value_new_string(static_cast<const gchar*>(
+                                    g_ptr_array_index(self->open_waiting, i))));
+  }
+  g_ptr_array_set_size(self->open_waiting, 0);
+  fl_method_call_respond_success(call, asked, nullptr);
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(view));
-  gtk_widget_show(window);
+  // Started at sign-in, it waits in the tray until it is opened.
+  if (!self->start_hidden) {
+    gtk_widget_show(window);
+  }
   // **Maximise here, not before the view exists**.
   //
   // Lumit opens maximised on all three platforms, but asking for it during
@@ -71,8 +254,9 @@ static void start_window_move(FlView* view, GtkWindow* window) {
 static void window_method_cb(FlMethodChannel* channel,
                              FlMethodCall* call,
                              gpointer user_data) {
-  FlView* view = FL_VIEW(user_data);
-  GtkWindow* window = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+  MyApplication* self = MY_APPLICATION(user_data);
+  GtkWindow* window = self->window;
+  FlView* view = self->view;
   const gboolean maximised = gtk_window_is_maximized(window);
   g_autoptr(FlValue) answer = fl_value_new_bool(maximised);
   fl_method_call_respond_success(call, answer, nullptr);
@@ -90,6 +274,43 @@ static void window_method_cb(FlMethodChannel* channel,
     }
   } else if (g_strcmp0(method, "close") == 0) {
     gtk_window_close(window);
+  } else if (g_strcmp0(method, "background") == 0) {
+    // Settings: whether closing the window keeps Lumit running in the tray
+    // (lib/state/background.dart), and the tray menu's words.
+    FlValue* args = fl_method_call_get_args(call);
+    auto value = [args](const gchar* key, FlValueType type) -> FlValue* {
+      if (fl_value_get_type(args) != FL_VALUE_TYPE_MAP) {
+        return nullptr;
+      }
+      FlValue* found = fl_value_lookup_string(args, key);
+      return found != nullptr && fl_value_get_type(found) == type ? found
+                                                                  : nullptr;
+    };
+    auto text = [&value](const gchar* key) {
+      FlValue* found = value(key, FL_VALUE_TYPE_STRING);
+      return found != nullptr ? fl_value_get_string(found) : "";
+    };
+    FlValue* keep = value("keep", FL_VALUE_TYPE_BOOL);
+    self->keep_running = keep != nullptr && fl_value_get_bool(keep);
+    g_autofree gchar* marker = keep_running_file();
+    if (self->keep_running) {
+      g_autofree gchar* folder = g_path_get_dirname(marker);
+      g_mkdir_with_parents(folder, 0700);
+      g_file_set_contents(marker, "", 0, nullptr);
+    } else {
+      g_remove(marker);
+    }
+    show_tray(self, self->keep_running, text("open"), text("quit"));
+    FlValue* sign_in = value("signIn", FL_VALUE_TYPE_BOOL);
+    set_open_at_sign_in(self->keep_running && sign_in != nullptr &&
+                        fl_value_get_bool(sign_in));
+    // Started at sign-in with nothing now to come back from: the window is
+    // the only way back, so it shows.
+    if (!self->keep_running && self->start_hidden) {
+      reveal(self);
+    }
+  } else if (g_strcmp0(method, "show") == 0) {
+    reveal(self);
   }
 }
 
@@ -98,6 +319,9 @@ static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
+  self->window = window;
+  // Before the view connects its own, so this one is asked first.
+  g_signal_connect(window, "delete-event", G_CALLBACK(window_delete_cb), self);
 
   // Lumit's own title bar is switched on in Settings, which leaves this file
   // beside the settings (lib/shell/window_frame.dart). Without it the window
@@ -152,6 +376,7 @@ static void my_application_activate(GApplication* application) {
       project, self->dart_entrypoint_arguments);
 
   FlView* view = fl_view_new(project);
+  self->view = view;
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000
   // for transparent.
@@ -197,13 +422,18 @@ static void my_application_activate(GApplication* application) {
   extension_views_register(fl_engine_get_binary_messenger(engine),
                            GTK_OVERLAY(overlay), view);
 
-  // Lives as long as the window, which is as long as the application.
+  // These live as long as the window, which is as long as the application.
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
-  FlMethodChannel* window_channel =
+  self->window_channel =
       fl_method_channel_new(fl_engine_get_binary_messenger(engine),
                             "lumit/window", FL_METHOD_CODEC(codec));
-  fl_method_channel_set_method_call_handler(window_channel, window_method_cb,
-                                            view, nullptr);
+  fl_method_channel_set_method_call_handler(self->window_channel,
+                                            window_method_cb, self, nullptr);
+  self->open_channel =
+      fl_method_channel_new(fl_engine_get_binary_messenger(engine),
+                            "lumit/open", FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(self->open_channel, open_method_cb,
+                                            self, nullptr);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -215,11 +445,37 @@ static gboolean my_application_local_command_line(GApplication* application,
   MyApplication* self = MY_APPLICATION(application);
   // Strip out the first argument as it is the binary name.
   self->dart_entrypoint_arguments = g_strdupv(*arguments + 1);
+  // Started at sign-in, to sit in the tray until it is opened.
+  self->start_hidden = g_strv_contains(
+      const_cast<const gchar* const*>(self->dart_entrypoint_arguments),
+      "--background");
 
   g_autoptr(GError) error = nullptr;
-  if (!g_application_register(application, nullptr, &error)) {
+  gboolean registered = g_application_register(application, nullptr, &error);
+  // Kept running in the background, Lumit asks to be the one Lumit. Where
+  // that can't be had, with no session bus for instance, it starts as a Lumit
+  // of its own, as it does with the setting off.
+  if (!registered && !(g_application_get_flags(application) &
+                       G_APPLICATION_NON_UNIQUE)) {
+    g_clear_error(&error);
+    g_application_set_flags(application, G_APPLICATION_NON_UNIQUE);
+    registered = g_application_register(application, nullptr, &error);
+  }
+  if (!registered) {
     g_warning("Failed to register: %s", error->message);
     *exit_status = 1;
+    return TRUE;
+  }
+
+  // A Lumit kept running in the background has this one's name. It is the
+  // one that shows itself and opens what was asked for.
+  if (g_application_get_is_remote(application)) {
+    g_action_group_activate_action(
+        G_ACTION_GROUP(application), "forward",
+        g_variant_new_strv(
+            const_cast<const gchar* const*>(self->dart_entrypoint_arguments),
+            -1));
+    *exit_status = 0;
     return TRUE;
   }
 
@@ -251,6 +507,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_pointer(&self->open_waiting, g_ptr_array_unref);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 
@@ -263,7 +520,15 @@ static void my_application_class_init(MyApplicationClass* klass) {
   G_OBJECT_CLASS(klass)->dispose = my_application_dispose;
 }
 
-static void my_application_init(MyApplication* self) {}
+static void my_application_init(MyApplication* self) {
+  self->open_waiting = g_ptr_array_new_with_free_func(g_free);
+  // What a second start calls on this one, when this one is kept running in
+  // the background and so holds the name.
+  g_autoptr(GSimpleAction) forward =
+      g_simple_action_new("forward", G_VARIANT_TYPE_STRING_ARRAY);
+  g_signal_connect(forward, "activate", G_CALLBACK(forward_cb), self);
+  g_action_map_add_action(G_ACTION_MAP(self), G_ACTION(forward));
+}
 
 MyApplication* my_application_new() {
   // Set the program name to the application ID, which helps various systems
@@ -272,7 +537,15 @@ MyApplication* my_application_new() {
   // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
 
+  // Kept running in the background, Lumit is one Lumit and a second start
+  // hands its arguments to it. Otherwise every start is a Lumit of its own,
+  // as it always was.
+  g_autofree gchar* keep_running = keep_running_file();
+  const GApplicationFlags flags =
+      g_file_test(keep_running, G_FILE_TEST_EXISTS)
+          ? static_cast<GApplicationFlags>(0)
+          : G_APPLICATION_NON_UNIQUE;
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+                                     flags, nullptr));
 }

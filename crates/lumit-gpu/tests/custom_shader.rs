@@ -62,7 +62,9 @@ fn header(w: u32, h: u32) -> Vec<u8> {
     out.extend_from_slice(&1.0f32.to_le_bytes()); // mix_amt
     out.extend_from_slice(&0.0f32.to_le_bytes()); // matte_on
     out.extend_from_slice(&0.0f32.to_le_bytes()); // input2_on
-    out.extend_from_slice(&[0u8; 8]); // the two pads
+    for v in [w, h] {
+        out.extend_from_slice(&v.to_le_bytes()); // raster_size
+    }
     assert_eq!(out.len(), shader::HEADER_SIZE);
     out
 }

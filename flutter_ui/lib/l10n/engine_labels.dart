@@ -176,6 +176,8 @@ Map<String, String> get _built => {
       "Colour fringing": l10n.fxColourFringing,
       "Colour overlay": l10n.fxColourOverlay,
       "Colour variation": l10n.fxColourVariation,
+      "Collide": l10n.fxCollide,
+      "Collide with": l10n.fxCollideWith,
       "Combine": l10n.fxCombine,
       "Composite on original": l10n.fxCompositeOnOriginal,
       "Compressor": l10n.fxCompressor,
@@ -246,6 +248,8 @@ Map<String, String> get _built => {
       "Bottom left tangent y": l10n.fxBottomLeftTangentY,
       "Bottom right tangent x": l10n.fxBottomRightTangentX,
       "Bottom right tangent y": l10n.fxBottomRightTangentY,
+      "Bounce": l10n.fxBounce,
+      "Bounciness": l10n.fxBounciness,
       "Brightness": l10n.fxBrightness,
       "Burst": l10n.fxBurst,
       "Burst count": l10n.fxBurstCount,
@@ -273,6 +277,7 @@ Map<String, String> get _built => {
       "Forces": l10n.fxForces,
       "Forking": l10n.fxForking,
       "Frames": l10n.fxFrames,
+      "Friction": l10n.fxFriction,
       "Full frame": l10n.fxFullFrame,
       "Gate": l10n.fxGate,
       "Glass curvature": l10n.fxGlassCurvature,
@@ -359,6 +364,7 @@ Map<String, String> get _built => {
       "On original": l10n.fxOnOriginal,
       "On transparent": l10n.fxOnTransparent,
       "On trigger": l10n.fxOnTrigger,
+      "On contact": l10n.fxOnContact,
       "Once at start": l10n.fxOnceAtStart,
       "One point": l10n.fxOnePoint,
       "Opacity over life": l10n.fxOpacityOverLife,
@@ -457,6 +463,7 @@ Map<String, String> get _built => {
       "Size over life": l10n.fxSizeOverLife,
       "Slider": l10n.fxSlider,
       "Slider control": l10n.fxSliderControl,
+      "Slide": l10n.fxSlide,
       "Smooth": l10n.fxSmooth,
       "Smudges": l10n.fxSmudges,
       "Sort": l10n.fxSort,
@@ -495,6 +502,7 @@ Map<String, String> get _built => {
       "Start": l10n.fxStart,
       "Start thickness": l10n.fxStartThickness,
       "Static": l10n.fxStatic,
+      "Stick": l10n.fxStick,
       "Strike": l10n.fxStrike,
       "Stroke": l10n.fxStroke,
       "Stroke width": l10n.fxStrokeWidth,
@@ -1835,8 +1843,9 @@ bool hasColourProblem(String key) => colourProblem(key, const {}) != null;
 // reason has no case below.
 
 /// The badge sentence for [key], or null when this build has none — the caller
-/// then draws nothing rather than a raw key.
-String? effectBadge(String key) {
+/// then draws nothing rather than a raw key. [detail] is the engine's line
+/// beneath, which a missing LFX effect's sentence names instead.
+String? effectBadge(String key, [String? detail]) {
   switch (key) {
     case 'plugin_failed':
       return l10n.badgePluginFailed;
@@ -1856,6 +1865,14 @@ String? effectBadge(String key) {
     // which one to install, untranslated, because it is an addon id.
     case 'addon_missing':
       return l10n.badgeAddonMissing;
+    // An LFX effect no installed extension carries. The detail is the
+    // extension's id, said in the sentence.
+    case 'lfx_missing':
+      return l10n.badgeLfxMissing(detail ?? '');
+    // An LFX effect the graphics device was lost under twice, switched off
+    // until Lumit restarts.
+    case 'lfx_struck_off':
+      return l10n.badgeLfxStruckOff;
     default:
       return null;
   }

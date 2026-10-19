@@ -6,6 +6,7 @@
 ; Registers the .lum, .lumfx and .lumtheme associations with their document icons
 ; (assets/brand) and an open command; Lumit itself reads the document
 ; path from the command line (projectPathFromArgs in flutter_ui/lib/main.dart).
+; .lfx extension packages open the same way, with no icon of their own yet.
 
 ; Keep in step with flutter_ui/pubspec.yaml `version:` when cutting a release.
 ; The release workflow overrides this from the tag (iscc /DMyAppVersion=...).
@@ -52,6 +53,7 @@ SolidCompression=no
 ; their own: the Windows CMake
 ; install step puts them beside the runner (docs/12 §2.3), and everything
 ; beside the runner is copied here.
+; `lib\lumit-cli.exe`, the command line, comes the same way.
 ;
 ; The two exports that ask a laptop for its discrete card make the linker write
 ; lumit.lib and lumit.exp beside the exe. Neither is any use to a user.
@@ -96,6 +98,13 @@ Root: HKA; Subkey: "Software\Classes\lumit"; ValueType: string; \
 Root: HKA; Subkey: "Software\Classes\lumit\DefaultIcon"; ValueType: string; \
   ValueData: "{app}\{#MyAppExe},0"
 Root: HKA; Subkey: "Software\Classes\lumit\shell\open\command"; ValueType: string; \
+  ValueData: """{app}\{#MyAppExe}"" ""%1"""
+; .lfx: extension packages. Opening one shows its install window.
+Root: HKA; Subkey: "Software\Classes\.lfx"; ValueType: string; \
+  ValueData: "Lumit.Extension"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\Lumit.Extension"; ValueType: string; \
+  ValueData: "Lumit extension"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Lumit.Extension\shell\open\command"; ValueType: string; \
   ValueData: """{app}\{#MyAppExe}"" ""%1"""
 ; .lumfx — presets. No open verb: a preset is applied inside a project, not
 ; opened on its own, so it gets the icon and a name only.

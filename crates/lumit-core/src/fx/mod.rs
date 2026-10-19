@@ -39,6 +39,8 @@ pub mod lens_flare;
 /// The bundled lens prescription library: 1303 .lens files as
 /// embedded text, generated from the FlareSim / PhotonsToPhotos collection.
 pub mod lens_library;
+/// The WGSL effects extensions carry: the table of them.
+pub mod lfx;
 mod markers;
 mod maths;
 /// The shared procedural noise core (docs/08 §3.37): seeded 3-D value and

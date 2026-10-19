@@ -48,13 +48,14 @@ use lumit_core::model::{
     Composition, Document, Folder, FootageItem, LinearColour, MediaRef, MotionBlur, ProjectItem,
     SequenceRef, SolidDef,
 };
-use lumit_core::time::Rational;
+use lumit_core::time::{FrameRate, Rational};
 use uuid::Uuid;
 
 use crate::capture::{Capture, Comp, Item};
 use crate::report::{ImportReport, ItemPath, Outcome, Reason};
 
 pub use effects::{map_effect, MappedEffect};
+pub use table::other_names_of;
 
 use props::{ae_extra, ae_map};
 use time::{TimeBase, DEFAULT_DURATION, DEFAULT_FPS};
@@ -505,7 +506,7 @@ fn footage(report: &mut ImportReport, item: &Item, id: Uuid, name: &str) -> Foot
         sequence: (item.is_sequence == Some(true)).then(|| SequenceRef {
             frame_rate: item
                 .fps
-                .and_then(time::frame_rate_of)
+                .and_then(FrameRate::from_decimal)
                 .unwrap_or(SequenceRef::default().frame_rate),
             ..SequenceRef::default()
         }),
@@ -583,7 +584,7 @@ fn interpretation(item: &Item) -> lumit_core::interpretation::Interpretation {
             .fps_override
             .filter(|fps| *fps > 0.0 && item.is_sequence != Some(true))
             .filter(|fps| item.native_fps.is_none_or(|own| (own - fps).abs() > 1e-4))
-            .and_then(time::frame_rate_of),
+            .and_then(FrameRate::from_decimal),
         fields,
         preserve_edges: fields != FieldOrder::Off && item.high_quality_fields == Some(true),
         pulldown: match fields {

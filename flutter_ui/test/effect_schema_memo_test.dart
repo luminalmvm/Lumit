@@ -20,6 +20,7 @@ BridgeEffectInfo _entry(String name) => BridgeEffectInfo(
       namespace: '',
       inputs: const [],
       outputs: const [],
+      otherNames: const [],
     );
 
 /// A catalogue the scan can add [_plugin] to, counting what is read from it.

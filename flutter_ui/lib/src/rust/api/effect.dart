@@ -741,7 +741,8 @@ class BridgeEffectInfo {
   final String category;
   final String categoryLabel;
 
-  /// Where this entry came from: [`NAMESPACE_BUILTIN`] or [`NAMESPACE_OFX`].
+  /// Where this entry came from: [`NAMESPACE_BUILTIN`], [`NAMESPACE_OFX`],
+  /// [`NAMESPACE_AUDIO`] or [`NAMESPACE_LFX`].
   ///
   /// A discovered plugin is drawn exactly as a built-in is — same row, same
   /// star, same drag — and this is the one difference: docs/12 §2.6 asks for
@@ -764,6 +765,11 @@ class BridgeEffectInfo {
   /// [`Signature::Data`](lumit_core::fx::Signature::Data) ports for a driver.
   final List<BridgePort> outputs;
 
+  /// What other software calls the effects that become this one on import,
+  /// such as Deep Glow and S_Glow for Glow, so the effects search finds it
+  /// under those names too.
+  final List<String> otherNames;
+
   const BridgeEffectInfo({
     required this.name,
     required this.label,
@@ -772,6 +778,7 @@ class BridgeEffectInfo {
     required this.namespace,
     required this.inputs,
     required this.outputs,
+    required this.otherNames,
   });
 
   @override
@@ -782,7 +789,8 @@ class BridgeEffectInfo {
       categoryLabel.hashCode ^
       namespace.hashCode ^
       inputs.hashCode ^
-      outputs.hashCode;
+      outputs.hashCode ^
+      otherNames.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -795,7 +803,8 @@ class BridgeEffectInfo {
           categoryLabel == other.categoryLabel &&
           namespace == other.namespace &&
           inputs == other.inputs &&
-          outputs == other.outputs;
+          outputs == other.outputs &&
+          otherNames == other.otherNames;
 }
 
 /// Everything a panel draws for one effect instance, in one crossing:
@@ -1017,6 +1026,9 @@ sealed class BridgeEnabledCond with _$BridgeEnabledCond {
 
   /// Editable while the named layer reference actually names a layer.
   const factory BridgeEnabledCond.layerSet() = BridgeEnabledCond_LayerSet;
+
+  /// Editable while the named layer reference names no layer.
+  const factory BridgeEnabledCond.layerUnset() = BridgeEnabledCond_LayerUnset;
 }
 
 /// One greying rule: `param`'s row is editable only while `on` satisfies

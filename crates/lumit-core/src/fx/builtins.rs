@@ -113,6 +113,10 @@ pub fn def(match_name: &str) -> Option<&'static dyn super::EffectDef> {
 /// so the crate that writes it and the crate that reads it cannot drift.
 pub const OFX_MATCH_PREFIX: &str = "ofx:";
 
+/// What every **LFX effect's** `match_name` begins with: `lfx:<extension
+/// id>/<effect id>`, minted by [`lfx::match_name`](super::lfx::match_name).
+pub const LFX_MATCH_PREFIX: &str = "lfx:";
+
 /// What every **CLAP audio plugin's** `match_name` begins with — the
 /// host mints `clap:<plugin id>`, and this is the one place the prefix is
 /// spelled, so the crate that writes it and the crates that read it cannot
@@ -150,6 +154,8 @@ pub fn audio_plugin_id(match_name: &str) -> Option<&str> {
 fn namespace_of(match_name: &str) -> EffectNamespace {
     if match_name.starts_with(OFX_MATCH_PREFIX) {
         EffectNamespace::Ofx
+    } else if match_name.starts_with(LFX_MATCH_PREFIX) {
+        EffectNamespace::Lfx
     } else if audio_plugin_id(match_name).is_some() {
         EffectNamespace::Clap
     } else {
@@ -779,6 +785,7 @@ pub fn param_enabled(inst: &EffectInstance, id: &str) -> bool {
                 (EnabledCond::ChoiceIs(want), EffectValue::Choice(got)) => *got == want,
                 (EnabledCond::ChoiceIsNot(no), EffectValue::Choice(got)) => *got != no,
                 (EnabledCond::LayerSet, EffectValue::Layer(layer)) => layer.is_some(),
+                (EnabledCond::LayerUnset, EffectValue::Layer(layer)) => layer.is_none(),
                 // A rule pointed at the wrong kind of parameter is a schema
                 // mistake, not a reason to grey a row the owner can then never
                 // reach. `every_enablement_rule_names_a_parameter_of_its_kind`

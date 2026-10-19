@@ -118,6 +118,7 @@ Not interchangeable.
 | **Node graph effect** | Applies a node graph to a layer |
 | **Wire**, **port** | A connection on the Graph panel, and the typed socket it plugs into |
 | **Points stream** | Per-frame particle data an effect produces. Never stored |
+| **Collide with** | A layer whose shapes and masks Particulate's particles hit. With one set, each frame's particles are worked out from the frame before |
 | **Working space** | Scene-linear, premultiplied, fp16 (fp32 opt-in) |
 | **OCIO config** | An OpenColorIO config a project can name |
 
@@ -151,12 +152,13 @@ Not interchangeable.
 | Term | Meaning |
 |---|---|
 | **OFX** | OpenFX. Lumit hosts it |
-| **LFX** | Lumit's own planned plugin API |
+| **LFX** | An effect an extension carries: a WGSL shader and an optional interface page |
 | **CLAP**, **VST3** | Audio plugin standards Lumit hosts. No VST2 |
 | **Addon** | An optional download from Settings: the model runtime and model packs. Analysis only, never generation |
 | **Model pack** | One addon holding one model |
-| **Extension** | A panel somebody else made: a folder with a web page and an `extension.json`, shown in the dock. It reaches Lumit only through what its manifest asked to be allowed. Not *plugin*, which is an effect |
+| **Extension** | A folder somebody else made, with an `extension.json`, that adds panels or effects. Its panel is shown in the dock. It reaches Lumit only through what its manifest asked to be allowed. Not *plugin*, which is an effect |
 | **Preset** | Saved effects, properties or animation |
+| **Script** | A JavaScript file that edits a project through the same commands the command line and MCP use. After Effects `.jsx` scripts run as they are |
 
 ## 9. Words we don't use
 

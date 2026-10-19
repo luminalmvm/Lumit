@@ -3437,7 +3437,39 @@
   },
   "fxKill": "Kill",
   "@fxKill": {
-    "description": "Effect controls — an Edge setting on Particulate: a particle dies the first time it leaves the frame."
+    "description": "Effect controls — an Edge and an On contact setting on Particulate: a particle dies, at the edge of the frame or when it hits a shape."
+  },
+  "fxCollide": "Collide",
+  "@fxCollide": {
+    "description": "Effect controls — a group heading on Particulate: the controls for particles hitting the shapes of another layer."
+  },
+  "fxCollideWith": "Collide with",
+  "@fxCollideWith": {
+    "description": "Effect controls — a control on Particulate: the layer whose shapes and masks the particles hit."
+  },
+  "fxOnContact": "On contact",
+  "@fxOnContact": {
+    "description": "Effect controls — a control on Particulate: what a particle does when it hits a shape."
+  },
+  "fxBounce": "Bounce",
+  "@fxBounce": {
+    "description": "Effect controls — an On contact setting on Particulate: the particle comes off the shape the other way."
+  },
+  "fxSlide": "Slide",
+  "@fxSlide": {
+    "description": "Effect controls — an On contact setting on Particulate: the particle carries on along the shape's surface."
+  },
+  "fxStick": "Stick",
+  "@fxStick": {
+    "description": "Effect controls — an On contact setting on Particulate: the particle stays where it hit the shape."
+  },
+  "fxBounciness": "Bounciness",
+  "@fxBounciness": {
+    "description": "Effect controls — a control on Particulate: how much of its speed a particle keeps as it bounces off a shape, as a percentage."
+  },
+  "fxFriction": "Friction",
+  "@fxFriction": {
+    "description": "Effect controls — a control on Particulate: how much a particle slows along the surface of a shape it hits, as a percentage."
   },
   "fxVariation": "Variation",
   "@fxVariation": {
@@ -7779,6 +7811,22 @@
   "settingsViewerBars": "Viewer bars",
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."
+  },
+  "settingsKeepRunning": "Keep running in the background",
+  "@settingsKeepRunning": {
+    "description": "Settings window, General page: the name of the switch that keeps Lumit running in the system tray (the menu bar on macOS) when its window is closed, so the account's paired phones still see this computer and its exports."
+  },
+  "settingsOpenAtSignIn": "Open Lumit when you sign in",
+  "@settingsOpenAtSignIn": {
+    "description": "Settings window, General page: the name of the switch, shown only while Keep running in the background is on, that starts Lumit in the system tray (the menu bar on macOS) when the person signs in to the computer."
+  },
+  "trayOpen": "Open Lumit",
+  "@trayOpen": {
+    "description": "Row on the menu of Lumit's icon in the system tray (the menu bar on macOS), shown while Lumit keeps running in the background: brings the window back."
+  },
+  "trayQuit": "Quit Lumit",
+  "@trayQuit": {
+    "description": "Row on the menu of Lumit's icon in the system tray (the menu bar on macOS): ends Lumit, asking first about unsaved work as closing the window would."
   },
   "settingsWelcomeOnLaunch": "Welcome screen on launch",
   "@settingsWelcomeOnLaunch": {
@@ -14081,6 +14129,19 @@
   "@badgeAddonMissing": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, when the effect asks a trained model for a reading and the machine has not got the model. The layer still composites, showing the picture unchanged, and the addon to install is named beneath it."
   },
+  "badgeLfxMissing": "Install the {id} extension",
+  "@badgeLfxMissing": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an extension's effect in the project when no installed extension carries it. The id is the extension's own short id from its manifest, such as tape. The effect is kept exactly as it was saved and the layer shows its picture unchanged.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "badgeLfxStruckOff": "This effect is switched off until Lumit restarts",
+  "@badgeLfxStruckOff": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an extension's shader effect that was running when the graphics card stopped responding twice. Lumit switched it off for the rest of this run; the layer still composites, showing the picture unchanged."
+  },
   "badgeShaderFailed": "This shader did not compile",
   "@badgeShaderFailed": {
     "description": "Calm badge at the top of a Custom shader's card in the Effect controls panel, when the WGSL the user wrote or loaded will not compile. The layer still composites, showing the picture unchanged, and the compiler's own message appears beneath it with its line numbers counted from the user's own text."
@@ -17210,6 +17271,113 @@
   "@extensionBack": {
     "description": "Button on the warning strip of an extension's dock panel. Loads the extension's own page again."
   },
+  "extensionInstalledPlain": "{name} installed",
+  "@extensionInstalledPlain": {
+    "description": "Bottom-strip notice after an extension that has no panel of its own (only effects) is installed.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionNotOurs": "{name} is in a folder Lumit doesn't own",
+  "@extensionNotOurs": {
+    "description": "Bottom-strip notice after Remove is pressed on an extension in Settings that sits in the machine-wide folder or a folder the person added. Lumit leaves those folders alone, so the extension stays. The name is the extension's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionRemoveFailed": "Couldn't remove {name}",
+  "@extensionRemoveFailed": {
+    "description": "Bottom-strip notice after Remove is pressed on an extension in Settings and its folder would not delete, so it is still installed. The name is the extension's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionCanEffects": "Add effects: {names}",
+  "@extensionCanEffects": {
+    "description": "One line in the install window's It can list: the effects the extension adds to Lumit, by name, separated by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionInstallsTo": "Installs to",
+  "@extensionInstallsTo": {
+    "description": "Heading of the box in the install window that shows the folder an extension package will be installed into, beside a Change button."
+  },
+  "changeEllipsis": "Change…",
+  "@changeEllipsis": {
+    "description": "Button that opens a dialogue to pick something other than what is shown beside it."
+  },
+  "extensionPackageMade": "{name} package saved",
+  "@extensionPackageMade": {
+    "description": "Bottom-strip notice after Settings has saved an extension as a .lfx package file.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "fileTypeExtensionPackage": "Lumit extension",
+  "@fileTypeExtensionPackage": {
+    "description": "File dialogue: the name of the .lfx file type, an extension packed as one file."
+  },
+  "settingsExtensionsInstallPackage": "Install a package",
+  "@settingsExtensionsInstallPackage": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a file picker for a .lfx package."
+  },
+  "settingsExtensionsMakePackage": "Make a package",
+  "@settingsExtensionsMakePackage": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Choose button: pick an extension's folder, then where to save it as one .lfx file to share."
+  },
+  "settingsExtensionEffects": "Effects: {names}",
+  "@settingsExtensionEffects": {
+    "description": "Line under an installed extension's row in Settings: the effects it adds, by name, separated by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGroupExtensionFolders": "Extension folders",
+  "@settingsGroupExtensionFolders": {
+    "description": "Section heading on the Addons page of Settings: the folders Lumit looks in for extensions."
+  },
+  "settingsExtensionsMachineFolder": "Machine-wide folder",
+  "@settingsExtensionsMachineFolder": {
+    "description": "Row title in the Extension folders section of Settings: the folder shared by every account on this computer, where an extension's own installer may put it. Its path is shown underneath."
+  },
+  "settingsExtensionsAddFolder": "Add a folder",
+  "@settingsExtensionsAddFolder": {
+    "description": "Row title in the Extension folders section of Settings, beside a Choose button: pick another folder for Lumit to look in for extensions."
+  },
+  "effectFromExtension": "From an extension",
+  "@effectFromExtension": {
+    "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect came from an installed extension."
+  },
+  "lfxInterface": "Interface",
+  "@lfxInterface": {
+    "description": "Button on the heading of an extension's effect in the Effect controls panel. Opens the effect's own interface, a page the extension draws, in a floating panel."
+  },
+  "tipLfxInterface": "Open interface",
+  "@tipLfxInterface": {
+    "description": "Tooltip on the Interface button on the heading of an extension's effect in the Effect controls panel."
+  },
+  "lfxInterfaceEmpty": "Select a layer with {name}",
+  "@lfxInterfaceEmpty": {
+    "description": "Quiet line in an extension effect's floating interface panel when it opens and no selected layer has that effect. Once the extension's page is showing, the page draws its own empty state instead. The name is the effect's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "profileUnnamed": "You",
   "@profileUnnamed": {
     "description": "Name shown for a profile that has not been given one, on the profile button at the left of the bottom strip and in its card."
@@ -20220,5 +20388,109 @@
         "type": "String"
       }
     }
+  },
+  "menuRunScript": "Run script…",
+  "@menuRunScript": {
+    "description": "Item in the File menu. Opens a file chooser for a script, then runs it on the open project."
+  },
+  "fileTypeScript": "Script",
+  "@fileTypeScript": {
+    "description": "A file type in the system's Open dialogue for File › Run script: a JavaScript .js file or an After Effects .jsx script."
+  },
+  "scriptRunning": "Running {name}",
+  "@scriptRunning": {
+    "description": "On the card over the window while a script runs. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptStop": "Stop",
+  "@scriptStop": {
+    "description": "Button on the card over the window while a script runs. Stops the script and takes back what it did."
+  },
+  "scriptRan": "Ran {name}",
+  "@scriptRan": {
+    "description": "Bottom-strip notice after a script ran to the end. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptStopped": "Stopped {name}",
+  "@scriptStopped": {
+    "description": "Bottom-strip notice after Stop ended a script. What it did was taken back. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptFailed": "{name}: {error}",
+  "@scriptFailed": {
+    "description": "Bottom-strip notice when a script failed. {name} is the script's file name without its extension, {error} is the reason in English, as the script engine gives it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptFailedAt": "{name}, line {line}: {error}",
+  "@scriptFailedAt": {
+    "description": "Bottom-strip notice when a script failed at a line of its own. {name} is the script's file name without its extension, {line} the line number in the script, {error} the reason in English, as the script engine gives it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptCouldNotRun": "{name} could not run",
+  "@scriptCouldNotRun": {
+    "description": "Bottom-strip notice when a script could not be started at all. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsLiveEndpoint": "Let other programs drive Lumit",
+  "@settingsLiveEndpoint": {
+    "description": "Settings window: a switch, off by default. On, a program on this computer, such as an MCP client through lumit-cli, can edit the open project."
+  },
+  "liveDrivenBy": "{name} is driving Lumit",
+  "@liveDrivenBy": {
+    "description": "Bottom strip, while another program is connected and can edit the open project. {name} is the name the program gives itself.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "liveDrivenByProgram": "A program is driving Lumit",
+  "@liveDrivenByProgram": {
+    "description": "Bottom strip, while another program is connected and can edit the open project, and it has not given its name."
+  },
+  "liveDisconnect": "Disconnect",
+  "@liveDisconnect": {
+    "description": "Button on the bottom strip beside liveDrivenBy. Cuts the connected program off."
+  },
+  "liveCouldNotStart": "Other programs could not be let in",
+  "@liveCouldNotStart": {
+    "description": "Bottom-strip notice when turning on settingsLiveEndpoint failed."
+  },
+  "liveScript": "a script",
+  "@liveScript": {
+    "description": "Stands for {name} in scriptRunning when a connected program runs a script without naming it: Running a script."
   }
 }

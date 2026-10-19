@@ -20,6 +20,19 @@ class AppDelegate: FlutterAppDelegate {
   // found it running.
   override func application(_ application: NSApplication, open urls: [URL]) {
     opens.open(urls)
+    // Kept running in the background with the window closed, it comes back.
+    if let window = mainFlutterWindow as? MainFlutterWindow, !window.isVisible {
+      window.reveal()
+    }
+  }
+
+  // Opening Lumit again from the Finder or the Dock while it runs with its
+  // window closed.
+  override func applicationShouldHandleReopen(
+    _ sender: NSApplication, hasVisibleWindows flag: Bool
+  ) -> Bool {
+    if !flag { (mainFlutterWindow as? MainFlutterWindow)?.reveal() }
+    return true
   }
 }
 
