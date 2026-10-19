@@ -2458,6 +2458,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 final removed = await ui.extensions.remove(extension.id);
                 if (removed == BridgeExtensionRemoval.notOurs) {
                   app.postNotice(l10n.extensionNotOurs(extension.name));
+                } else if (removed == BridgeExtensionRemoval.failed) {
+                  app.postNotice(l10n.extensionRemoveFailed(extension.name),
+                      error: true);
                 }
               },
               child: Text(l10n.settingsAddonsRemove, style: t.small),

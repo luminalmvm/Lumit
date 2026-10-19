@@ -17171,6 +17171,15 @@
       }
     }
   },
+  "extensionRemoveFailed": "Couldn't remove {name}",
+  "@extensionRemoveFailed": {
+    "description": "Bottom-strip notice after Remove is pressed on an extension in Settings and its folder would not delete, so it is still installed. The name is the extension's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "extensionCanEffects": "Add effects: {names}",
   "@extensionCanEffects": {
     "description": "One line in the install window's It can list: the effects the extension adds to Lumit, by name, separated by commas.",
