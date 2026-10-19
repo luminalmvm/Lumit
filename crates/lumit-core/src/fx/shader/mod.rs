@@ -78,11 +78,21 @@ const OWN_PIXELS: &[(&str, &str)] = &[
     ),
 ];
 
-/// `text` with the [`OWN_PIXELS`] swaps made.
-fn in_own_pixels(text: &str) -> String {
-    OWN_PIXELS
-        .iter()
-        .fold(text.to_owned(), |text, (from, to)| text.replace(from, to))
+/// The prologue and epilogue an LFX pass is built from, with the
+/// [`OWN_PIXELS`] swaps made. Refused when a swap, or the call to `shade`,
+/// no longer matches exactly once, since the module would read the wrong
+/// pixels.
+fn in_own_pixels() -> Result<(String, String), ShaderRefusal> {
+    let once = |from: &str| PROLOGUE.matches(from).count() + EPILOGUE.matches(from).count() == 1;
+    if !OWN_PIXELS.iter().all(|(from, _)| once(from)) || !once(SHADE_CALL) {
+        return Err(ShaderRefusal::HostOutOfStep);
+    }
+    let swap = |text: &str| {
+        OWN_PIXELS
+            .iter()
+            .fold(text.to_owned(), |text, (from, to)| text.replace(from, to))
+    };
+    Ok((swap(PROLOGUE), swap(EPILOGUE)))
 }
 
 /// The binding the first pass picture takes; the rest follow it.
@@ -263,6 +273,8 @@ pub enum ShaderRefusal {
     /// An LFX shader declares a name starting `pass_`, which the pass
     /// pictures use.
     PassPrefix(String),
+    /// This build's own wrapper no longer fits the pass swaps.
+    HostOutOfStep,
     /// A `vec3<f32>` parameter — sixteen bytes wearing twelve bytes' name.
     Vec3Field(String),
     /// A parameter field of a type the grammar does not carry.
@@ -301,6 +313,9 @@ impl std::fmt::Display for ShaderRefusal {
                 f,
                 "a shader needs `fn {name}(uv: vec2<f32>) -> vec4<f32>` for its {name} pass"
             ),
+            ShaderRefusal::HostOutOfStep => {
+                write!(f, "this Lumit can't wrap shaders in passes")
+            }
             ShaderRefusal::PassPrefix(n) => write!(
                 f,
                 "`{n}` starts with {PASS_PREFIX}, which is kept for the pass pictures"
@@ -596,10 +611,10 @@ fn build_with(source: &str, passes: &[&str]) -> Result<ShaderProgram, ShaderRefu
             )
         })
         .collect();
-    let prologue = if passes.is_empty() {
-        PROLOGUE.to_owned()
+    let (prologue, epilogue) = if passes.is_empty() {
+        (PROLOGUE.to_owned(), EPILOGUE.to_owned())
     } else {
-        in_own_pixels(PROLOGUE)
+        in_own_pixels()?
     };
     let mut assembled = prologue
         .replace(PARAMS_MARKER, &struct_text)
@@ -617,14 +632,13 @@ fn build_with(source: &str, passes: &[&str]) -> Result<ShaderProgram, ShaderRefu
         .iter()
         .map(|name| {
             let call = format!("var c = {name}(uv);");
-            let epilogue = in_own_pixels(EPILOGUE).replace(SHADE_CALL, &call);
-            let text = format!("{assembled}{epilogue}");
+            let text = format!("{assembled}{}", epilogue.replace(SHADE_CALL, &call));
             (hash64(text.as_bytes()), text)
         })
         .collect();
     match passes.first() {
         Some((_, first)) => assembled.clone_from(first),
-        None => assembled.push_str(EPILOGUE),
+        None => assembled.push_str(&epilogue),
     }
 
     Ok(ShaderProgram {

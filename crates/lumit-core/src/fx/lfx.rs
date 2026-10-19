@@ -485,3 +485,74 @@ impl EffectDef for LfxDef {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    const TWO_PASS: &str = "struct Params {\n    /// Amount\n    amount: f32,\n}\n\
+        fn bleed(uv: vec2<f32>) -> vec4<f32> { return lumit_sample(uv) * p.amount; }\n\
+        fn shade(uv: vec2<f32>) -> vec4<f32> { return lumit_read(pass_bleed, uv); }\n";
+
+    fn effect(shader: &str) -> LfxEffect {
+        let pass = |name: &str, scale: f32| LfxPass {
+            name: name.into(),
+            scale,
+        };
+        LfxEffect {
+            extension: "core-test".into(),
+            id: "two-pass".into(),
+            label: "Two pass".into(),
+            category: "Stylise".into(),
+            version: 1,
+            api: API,
+            passes: vec![pass("bleed", 0.5), pass("shade", 1.0)],
+            input: None,
+            shader: shader.into(),
+            interface: false,
+        }
+    }
+
+    /// Every pass swap lands, the manifest facts this build can't take are
+    /// refused, and a changed shader installed over the old one brings its
+    /// own rows and a new key hash. Guards wrong pixels and old frames after
+    /// an update.
+    #[test]
+    fn an_lfx_effect_builds_refuses_and_reinstalls() {
+        let program = shader::build_passes(TWO_PASS, &["bleed", "shade"]).expect("swaps land");
+        assert_eq!(program.passes.len(), 2);
+
+        let refused = |change: fn(&mut LfxEffect)| {
+            let mut e = effect(TWO_PASS);
+            change(&mut e);
+            check(&e).expect_err("refused")
+        };
+        assert_eq!(refused(|e| e.api = API + 1), LfxError::NewerApi(API + 1));
+        assert!(matches!(
+            refused(|e| e.category = "Sparkles".into()),
+            LfxError::UnknownCategory(_)
+        ));
+        assert!(matches!(
+            refused(|e| e.passes[1].scale = 0.5),
+            LfxError::LastPassScaled(_)
+        ));
+        assert!(matches!(
+            refused(|e| e.passes = vec![e.passes[1].clone(); MAX_PASSES + 1]),
+            LfxError::TooManyPasses(_)
+        ));
+
+        let inst = crate::fx::instantiate("custom_shader").expect("a built-in");
+        let rows = |def: &dyn EffectDef| -> Vec<&str> {
+            def.derived(&inst).iter().map(|row| row.id).collect()
+        };
+        let def = install(effect(TWO_PASS)).expect("it installs");
+        let name = def.schema().match_name;
+        let (old_rows, old_key) = (rows(def), render_term(name));
+        let def = install(effect(&TWO_PASS.replace("amount", "strength"))).expect("again");
+        assert_eq!(old_rows, ["amount"]);
+        assert_eq!(rows(def), ["strength"]);
+        assert_ne!(render_term(name), old_key);
+        assert_ne!(old_key, 0);
+    }
+}
