@@ -968,6 +968,26 @@ class Workspace extends ChangeNotifier {
     save();
   }
 
+  /// Whether closing the window leaves Lumit running in the tray, so the
+  /// phones still see this computer. This machine's own, so in no profile
+  /// group, as is [openAtSignIn].
+  bool keepRunning = false;
+
+  /// Whether Lumit starts in the tray when the person signs in. Only ever on
+  /// with [keepRunning].
+  bool openAtSignIn = false;
+
+  void setKeepRunning(bool on) {
+    keepRunning = on;
+    if (!on) openAtSignIn = false;
+    save();
+  }
+
+  void setOpenAtSignIn(bool on) {
+    openAtSignIn = on && keepRunning;
+    save();
+  }
+
   /// The relay a shared project keeps a room at, as `host` or `host:port`,
   /// or null for none. Somebody's own server, which Lumit only uses once it
   /// has been typed here.
@@ -1902,6 +1922,8 @@ class Workspace extends ChangeNotifier {
         'share_relay': shareRelay,
         'share_cloud': shareCloud,
         'phones_export': phonesExport,
+        'keep_running': keepRunning,
+        'open_at_sign_in': openAtSignIn,
         'share_up_limit': shareUpLimit,
         'share_down_limit': shareDownLimit,
         'share_give': shareGive,
@@ -2021,6 +2043,8 @@ class Workspace extends ChangeNotifier {
     shareRelay = relay is String && relay.isNotEmpty ? relay : null;
     shareCloud = j['share_cloud'] is! bool || j['share_cloud'] as bool;
     phonesExport = j['phones_export'] is! bool || j['phones_export'] as bool;
+    keepRunning = j['keep_running'] == true;
+    openAtSignIn = keepRunning && j['open_at_sign_in'] == true;
     final (up, down) = (j['share_up_limit'], j['share_down_limit']);
     shareUpLimit = up is int ? up.clamp(0, 10000000) : 0;
     shareDownLimit = down is int ? down.clamp(0, 10000000) : 0;

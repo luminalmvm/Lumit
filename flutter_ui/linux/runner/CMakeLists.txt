@@ -25,6 +25,8 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
+# dlopen, for the tray (my_application.cc). Part of libc on newer systems.
+target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
 
 # The zero-copy Viewer bridge (viewer_texture_bridge.cc) imports engine
 # DMA-BUF frames into GL external textures via EGLImage, so it links EGL + GLESv2.

@@ -5,7 +5,6 @@
 import 'dart:async';
 import 'dart:io' show Directory, File, exit;
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
@@ -84,15 +83,17 @@ String? inviteFromArgs(List<String> args) {
 }
 
 /// The macOS runner's end of this is `OpenRequests` in AppDelegate.swift.
+/// The Windows and Linux runners answer it too, for a Lumit kept running in
+/// the background that a second start hands its arguments to.
 const _openRequests = MethodChannel('lumit/open');
 
 /// What macOS has asked Lumit to open and nobody has taken yet: a project
 /// double-clicked in Finder as its path, an invite link clicked in a browser
 /// as it was written. macOS hands these over as events and never as
 /// arguments, so they are read as arguments once they are here, by
-/// [projectPathFromArgs] and [inviteFromArgs]. Empty on every other system.
+/// [projectPathFromArgs] and [inviteFromArgs]. Elsewhere it is what a second
+/// start passed on, and empty at start-up.
 Future<List<String>> takeOpenRequests() async {
-  if (defaultTargetPlatform != TargetPlatform.macOS) return const [];
   try {
     return await _openRequests.invokeListMethod<String>('take') ?? const [];
   } catch (_) {
@@ -101,11 +102,10 @@ Future<List<String>> takeOpenRequests() async {
   }
 }
 
-/// Hand [open] whatever macOS asks Lumit to open from here on. A click that
-/// finds Lumit running comes to it there, where another system would start a
-/// second one.
+/// Hand [open] whatever Lumit is asked to open from here on. A click that
+/// finds Lumit running comes to it on macOS, and on the other systems when
+/// it is kept running in the background.
 void listenForOpenRequests(void Function(List<String> asked) open) {
-  if (defaultTargetPlatform != TargetPlatform.macOS) return;
   Future<void> take() async {
     final asked = await takeOpenRequests();
     if (asked.isNotEmpty) open(asked);
