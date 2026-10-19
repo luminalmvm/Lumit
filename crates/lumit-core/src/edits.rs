@@ -272,6 +272,65 @@ pub fn white_solid_layer(
     (layer, ops)
 }
 
+/// A fresh Precomp layer placing comp `inner` into comp `outer`, centred and
+/// as long as `outer`. The layer is left for the caller to add.
+pub fn precomp_layer(
+    doc: &lumit_core::model::Document,
+    outer: &lumit_core::model::Composition,
+    inner: &lumit_core::model::Composition,
+) -> Layer {
+    let mut layer = base_layer(
+        inner.name.clone(),
+        LayerKind::Precomp { comp: inner.id },
+        outer.duration.0,
+        centred_transform(
+            f64::from(inner.width),
+            f64::from(inner.height),
+            outer.width,
+            outer.height,
+        ),
+    );
+    // The comp's own markers come with it as the layer's: a
+    // composition dropped into another is a piece of material, and its
+    // beats are part of what you are placing. Copied, not referenced —
+    // from here they are this layer's, and editing them never reaches back
+    // into the composition they came from. New ids for the same reason.
+    layer.markers = inner
+        .markers
+        .iter()
+        .map(|m| lumit_core::markers::Marker {
+            id: Uuid::now_v7(),
+            ..m.clone()
+        })
+        .collect();
+    // Placing a node graph places its Inputs with it
+    // (docs/impl/node-graph-comp.md §5.3), so the layer's rows are there
+    // to be edited from the moment it lands.
+    layer.graph_inputs = graph_inputs_for(doc, inner.id);
+    layer
+}
+
+/// A fresh `node_graph` instance bound to the node graph `comp`, the Inputs a
+/// Precomp layer of it carries (docs/impl/node-graph-comp.md §5.3).
+///
+/// Seeded at the **graph's own** frame size rather than the placing comp's: the
+/// picture the Inputs feed is made in the graph's frame, which is where a
+/// positional default belongs. `None` when `comp` is not a node graph.
+pub fn graph_inputs_for(
+    doc: &lumit_core::model::Document,
+    comp: Uuid,
+) -> Option<lumit_core::model::EffectInstance> {
+    let placed = doc.comp(comp)?;
+    let graph = placed.graph.as_ref()?;
+    let mut instance = lumit_core::fx::instantiate_for_raster(
+        lumit_core::comp_graph::NODE_GRAPH,
+        f64::from(placed.width),
+        f64::from(placed.height),
+    )?;
+    lumit_core::fx::effects::node_graph::bind(&mut instance, comp, graph);
+    Some(instance)
+}
+
 /// A stable machine key for a [`FxCategory`] (the variant in snake_case) — the
 /// grouping key the Dart Effects browser sorts and headers by.
 ///

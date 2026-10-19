@@ -55,25 +55,6 @@ pub(crate) fn placed_graph_of(doc: &lumit_core::Document, layer: &Layer) -> Opti
     doc.comp(comp)?.graph.as_ref().map(|_| comp)
 }
 
-/// A fresh `node_graph` instance bound to the node graph `comp`, the Inputs a
-/// Precomp layer of it carries (docs/impl/node-graph-comp.md §5.3).
-///
-/// Seeded at the **graph's own** frame size rather than the placing comp's: the
-/// picture the Inputs feed is made in the graph's frame, which is where a
-/// positional default belongs. `None` when `comp` is not a node graph.
-#[frb(ignore)]
-pub(crate) fn graph_inputs_for(doc: &lumit_core::Document, comp: Uuid) -> Option<EffectInstance> {
-    let placed = doc.comp(comp)?;
-    let graph = placed.graph.as_ref()?;
-    let mut instance = lumit_core::fx::instantiate_for_raster(
-        lumit_core::comp_graph::NODE_GRAPH,
-        f64::from(placed.width),
-        f64::from(placed.height),
-    )?;
-    lumit_core::fx::effects::node_graph::bind(&mut instance, comp, graph);
-    Some(instance)
-}
-
 /// Whether `instance` is `layer`'s node graph **Inputs**
 /// (docs/impl/node-graph-comp.md §5.3).
 ///
@@ -7608,7 +7589,7 @@ impl LayerReference {
         let Some(graph_comp) = placed_graph_of(&doc, &layer) else {
             return Ok(None);
         };
-        Ok(graph_inputs_for(&doc, graph_comp)
+        Ok(crate::edits::graph_inputs_for(&doc, graph_comp)
             .map(|instance| BridgeEffectInstance::new(instance, layer.start_offset.0)))
     }
 

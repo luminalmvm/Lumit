@@ -1115,36 +1115,8 @@ impl CompositionReference {
         }
         let inner = comp.composition()?;
         let outer = self.composition()?;
-
-        let mut layer = crate::edits::base_layer(
-            inner.name.clone(),
-            lumit_core::model::LayerKind::Precomp { comp: inner.id },
-            outer.duration.0,
-            crate::edits::centred_transform(
-                f64::from(inner.width),
-                f64::from(inner.height),
-                outer.width,
-                outer.height,
-            ),
-        );
-        // The comp's own markers come with it as the layer's: a
-        // composition dropped into another is a piece of material, and its
-        // beats are part of what you are placing. Copied, not referenced —
-        // from here they are this layer's, and editing them never reaches back
-        // into the composition they came from. New ids for the same reason.
-        layer.markers = inner
-            .markers
-            .iter()
-            .map(|m| lumit_core::markers::Marker {
-                id: Uuid::now_v7(),
-                ..m.clone()
-            })
-            .collect();
-        // Placing a node graph places its Inputs with it
-        // (docs/impl/node-graph-comp.md §5.3), so the layer's rows are there
-        // to be edited from the moment it lands.
         let doc = self.document()?;
-        layer.graph_inputs = crate::api::layer::graph_inputs_for(&doc, inner.id);
+        let layer = crate::edits::precomp_layer(&doc, &outer, &inner);
         self.add_at(layer, row)
     }
 
