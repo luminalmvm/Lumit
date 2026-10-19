@@ -831,11 +831,23 @@ impl OpenClaim {
                 .access_mode(GENERIC_WRITE | DELETE)
                 .custom_flags(FILE_FLAG_DELETE_ON_CLOSE);
         }
-        let mut file = match options.open(&path) {
-            Ok(file) => file,
-            // ERROR_SHARING_VIOLATION, which is the holder's handle saying no.
-            Err(e) if cfg!(windows) && e.raw_os_error() == Some(32) => return Err(holder()),
-            Err(_) => return Ok(None),
+        let mut tries = 0;
+        let mut file = loop {
+            match options.open(&path) {
+                Ok(file) => break file,
+                // ERROR_SHARING_VIOLATION, which is the holder's handle saying
+                // no. A claim being let go has no holder to read for a moment,
+                // so that one is asked again.
+                Err(e) if cfg!(windows) && e.raw_os_error() == Some(32) => {
+                    let holder = holder();
+                    if holder != 0 || tries == 3 {
+                        return Err(holder);
+                    }
+                    tries += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                Err(_) => return Ok(None),
+            }
         };
         #[cfg(not(windows))]
         match file.try_lock() {
