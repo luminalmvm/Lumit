@@ -1,0 +1,200 @@
+---
+title: Writing LFX effects
+description: The manifest, the shader and its passes, the interface page, and making a package.
+sidebar:
+  order: 9.85
+---
+
+An **LFX effect** is an effect an extension carries: a WGSL shader and an optional
+interface page. Lumit checks the shader before it runs, then runs it on the GPU in its own
+pipeline. The same files work on Windows, macOS and Linux.
+
+The worked example is **Tape**, in the repository at
+[`examples/extensions/tape`](https://github.com/luminalmvm/Lumit/tree/main/examples/extensions/tape):
+a worn video tape in two passes, with a cassette deck for its interface.
+
+```
+tape/
+  extension.json
+  tape.wgsl
+  ui/
+    index.html
+    deck.js
+```
+
+## The manifest
+
+An extension lists its effects under `effects`. `entry` is optional, so an extension can
+hold effects, a panel, or both. The other fields are as in
+[Extensions](/use/extensions/#the-folder).
+
+```json
+{
+  "format": 1,
+  "id": "tape",
+  "name": "Tape",
+  "version": "1.0.0",
+  "effects": [
+    {
+      "id": "tape",
+      "name": "Tape",
+      "category": "Stylise",
+      "version": 1,
+      "api": 1,
+      "shader": "tape.wgsl",
+      "passes": [{ "name": "bleed", "scale": 0.5 }, { "name": "shade" }],
+      "interface": { "entry": "ui/index.html", "width": 420, "height": 260 }
+    }
+  ]
+}
+```
+
+| Field | What it is |
+| --- | --- |
+| `id` | Lower-case letters, digits and hyphens, unique in the extension. A project saves the effect as `lfx:<extension id>/<effect id>`. |
+| `name` | The effect's name in the Effects menu and Effect controls. |
+| `category` | `Blur & sharpen`, `Colour`, `Distortion`, `Generate`, `Stylise`, `Temporal`, `Transition` or `Utility`. |
+| `version` | A whole number, raised when the pixels change. |
+| `api` | The shader contract, `1`. |
+| `shader` | The `.wgsl` file, inside the folder. |
+| `passes` | Optional. Up to 8, each `{name, scale}`, drawn in order. `scale` is `1`, `0.5` or `0.25`, and the last pass is `1`. With none, there is one pass called `shade`. |
+| `input` | Optional. `{label, kind}`: a second picture, as a layer row called `label`. `kind` is `image` or `depth`. A `depth` input is a Depth socket in the node graph. |
+| `interface` | Optional. `{entry, width, height}`: the interface page, and the panel's opening size in pixels, 100 to 4096 each way. |
+
+A manifest with an unknown category, a higher `api`, a bad pass or a file outside the folder
+is refused before anything is copied. An extension carries at most 64 effects.
+
+## The shader
+
+The file has one function per pass, named after it:
+
+```wgsl
+fn bleed(uv: vec2<f32>) -> vec4<f32> { ... }
+fn shade(uv: vec2<f32>) -> vec4<f32> { ... }
+```
+
+`uv` runs from 0 to 1 across the frame, whatever size the pass is drawn at. A function
+returns a premultiplied, scene-linear colour. The last pass is the effect's result, mixed
+with its input by the **Mix** row.
+
+| Name | What it is |
+| --- | --- |
+| `lumit_sample(uv)` | The effect's input. |
+| `lumit_sample2(uv)` | The second input. |
+| `lumit_orig(uv)` | The layer before any of its effects. |
+| `lumit_read(pass_<name>, uv)` | A pass's picture, at any scale. Transparent until that pass has run. |
+| `lumit_load(xy)` | One pixel of the input, `xy` in the frame's pixels. |
+| `lumit_size()` | The frame's size in pixels. |
+| `lumit_px(uv)` | `uv` in composition pixels, the same at every preview resolution. |
+| `lumit_premult(c)`, `lumit_unpremult(c)` | Premultiply or unpremultiply a colour. |
+| `lumit.time` | The layer's time in seconds. |
+| `lumit.seed` | A number of the instance's own, fixed for its life. |
+| `lumit.comp_scale` | Frame pixels per composition pixel: 1 at Full, 0.5 at Half. |
+
+`lumit.time` and `lumit.seed` are the only values that vary. A shader may not declare
+`@group` or `@binding`, the names `src`, `orig`, `dst`, `matte`, `input2`, `lumit` and `p`,
+or a name starting `lumit_` or `pass_`.
+
+### Rows
+
+A `struct Params` in the shader becomes the effect's rows in Effect controls, in the order
+declared, and the shader reads them as `p.<field>`. The `///` comment above a field sets
+the row's kind, default and label:
+
+```wgsl
+struct Params {
+    /// @slider(0, 20) @default(3) @unit(px) Wobble
+    wobble: f32,
+    /// @bounded(0, 100) @default(25) Noise
+    noise: f32,
+    /// @choice("PAL", "NTSC") @default("PAL") Style
+    style: u32,
+};
+```
+
+| Type | Annotation | Row |
+| --- | --- | --- |
+| `f32` | `@slider(lo, hi)` | A number, its slider from `lo` to `hi`. 0 to 1 without one. |
+| `f32` | `@bounded(lo, hi)` | A number held between `lo` and `hi`. |
+| `f32` | `@dial` | An angle in degrees. |
+| `i32` | `@counter(lo, hi)` | A whole number. |
+| `u32` | `@toggle` | A checkbox: 0 or 1. |
+| `u32` | `@choice("A", "B", …)` | A menu. The shader reads the option's index. |
+| `u32` | `@seed` | A seed. |
+| `u32` | none | A whole number from 0. |
+| `vec4<f32>` | | A colour. `@default(r, g, b, a)`. |
+| `vec2<f32>` | | A point: two rows, `<field>_x` and `<field>_y`, in pixels. |
+
+`@default(v)` is the starting value, and `@unit(px)`, `@unit(deg)` or `@unit(s)` the unit.
+The rest of the comment is the label, or the field's name when there is none. A
+`vec3<f32>` field is refused. An annotation that cannot be read loses its own row only.
+
+### When it does not draw
+
+- A shader that is refused or does not compile leaves the picture as it came in. Effect
+  controls says why, with line numbers in the shader's own file.
+- A project naming an LFX effect that is not installed opens, leaves the picture alone and
+  keeps every value. The effect's heading names the extension to install.
+- An effect running when the graphics device was lost twice is switched off until Lumit
+  restarts.
+
+Installing an extension again reads its shaders again, and an open project draws with the
+new ones straight away.
+
+## The interface page
+
+An effect with an `interface` has an **Interface** button on its heading in Effect
+controls. It opens the page in a floating panel of its own, which follows the selected
+layer's instance of the effect. The page is an extension page, with `window.lumit` as in
+[Extensions](/use/extensions/#the-page), and these calls besides. Any other page is refused
+them with `not-allowed`.
+
+| Call | What it does |
+| --- | --- |
+| `effect.rows` | Every row at the playhead, as `[{id, label, kind, min, max, choices, value}]`. `kind` is `float`, `int`, `angle`, `slider`, `bool`, `choice`, `seed` or `colour`. |
+| `effect.begin {id}` | A drag on the row starts. What `effect.set` writes is previewed until `effect.end`. |
+| `effect.set {id, value}` | Writes a value. Without `effect.begin`, it is kept at once. |
+| `effect.end` | The drag ends, and what it wrote is kept as one undo step. |
+
+| Event | When |
+| --- | --- |
+| `effect.changed` | Values change: an undo, keyframes at a new playhead, Effect controls. `{values: {id: value}}`. |
+| `effect.target` | The panel follows another instance, or none. `{id}`, `null` for none. |
+
+A value is in the row's own units: a number, `true` or `false` for a checkbox, the option's
+index for a menu, `[r, g, b, a]` for a colour. A point is its `_x` and `_y` rows. A
+keyframed row is set at the playhead. A row an expression drives reads `null`, and writing
+it is refused. Lumit clamps every value. Layer, file and text rows are not listed.
+
+Tape's deck turns a knob like this:
+
+```js
+const rows = await lumit.call("effect.rows");
+lumit.call("effect.begin", { id: "bleed" });
+lumit.call("effect.set", { id: "bleed", value: 20 });
+lumit.call("effect.end");
+lumit.on("effect.changed", ({ values }) => redraw(values));
+```
+
+## Making a package
+
+A package is one `.lfx` file: the extension's folder as a zip, with `extension.json` at its
+root. **Settings ▸ Addons ▸ Extensions ▸ Make a package** takes the folder, checks it as an
+install would, and saves `<id>.lfx`. A package is held to the same limits as a folder. One
+holding a link, or a path outside its root, is refused.
+
+## Where extensions are found
+
+In this order. Of two with the same id, the first is used.
+
+| Folder | Where |
+| --- | --- |
+| Lumit's own | Where installs go unless another folder is chosen. Windows `%LOCALAPPDATA%\Lumit\Lumit\data\extensions`, macOS `~/Library/Application Support/dev.Lumit.Lumit/extensions`, Linux `~/.local/share/lumit/extensions`. |
+| Machine-wide | Windows `%CommonProgramFiles%\Lumit\Extensions`, macOS `/Library/Application Support/Lumit/Extensions`, Linux `/usr/share/lumit/extensions`. For an author's own installer. |
+| Added | Folders added under **Settings ▸ Addons ▸ Extension folders**, or chosen when installing. |
+
+## Related
+
+- [Extensions](/use/extensions/)
+- [Custom shader](/effects/utility/custom-shader/)
+- [Effects](/use/effects/)
