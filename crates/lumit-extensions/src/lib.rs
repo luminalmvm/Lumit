@@ -568,13 +568,14 @@ pub fn inspect(folder: &Path) -> Result<Manifest, ExtensionError> {
 /// manifest names another id, is not one and is not listed.
 #[must_use]
 pub fn scan() -> Vec<Installed> {
-    // What an install left half done, but never under one running now.
+    // What an install left half done, but never under one running now, and
+    // only in Lumit's own folder: the others aren't ours to tidy.
     let idle = SLOT.try_lock().is_ok();
+    if let Some(own) = dir().filter(|_| idle) {
+        let _ = fs::remove_dir_all(own.join(STAGING));
+    }
     let mut found: Vec<Installed> = Vec::new();
     for dir in dirs() {
-        if idle {
-            let _ = fs::remove_dir_all(dir.join(STAGING));
-        }
         for entry in fs::read_dir(&dir).into_iter().flatten().flatten() {
             let path = entry.path();
             let Ok(manifest) = read_manifest(&path) else {
