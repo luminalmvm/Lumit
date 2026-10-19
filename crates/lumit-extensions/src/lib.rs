@@ -570,8 +570,7 @@ pub fn inspect(folder: &Path) -> Result<Manifest, ExtensionError> {
 pub fn scan() -> Vec<Installed> {
     // What an install left half done, but never under one running now, and
     // only in Lumit's own folder: the others aren't ours to tidy.
-    let idle = SLOT.try_lock().is_ok();
-    if let Some(own) = dir().filter(|_| idle) {
+    if let (Ok(_slot), Some(own)) = (SLOT.try_lock(), dir()) {
         let _ = fs::remove_dir_all(own.join(STAGING));
     }
     let mut found: Vec<Installed> = Vec::new();
