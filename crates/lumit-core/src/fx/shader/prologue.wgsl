@@ -6,7 +6,9 @@
 // The one generated line in here is the `Params` struct, spliced in at the
 // marker below from the annotated block the user declared (§1.4) — lifted to
 // the top so every binding and every helper is visible to every line the user
-// writes, in a language where a declaration must precede its use.
+// writes, in a language where a declaration must precede its use. An LFX
+// effect's pass pictures, `pass_<name>`, go in at the second marker; the
+// Custom shader has none.
 
 struct LumitHeader {
     roi_offset: vec2<u32>,
@@ -17,8 +19,7 @@ struct LumitHeader {
     mix_amt: f32,
     matte_on: f32,
     input2_on: f32,
-    _pad0: u32,
-    _pad1: u32,
+    raster_size: vec2<u32>,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -29,6 +30,7 @@ struct LumitHeader {
 @group(0) @binding(5) var input2: texture_2d<f32>;
 //__LUMIT_PARAMS__
 @group(0) @binding(6) var<uniform> p: Params;
+//__LUMIT_PASSES__
 
 // The frame's size. On a node graph box whose picture reaches past the
 // frame, the raster is bigger and `lumit.roi_offset` says where the frame is
@@ -47,10 +49,20 @@ fn lumit_load(xy: vec2<i32>) -> vec4<f32> {
     return textureLoad(src, lumit_clamp_xy(xy + vec2<i32>(lumit.roi_offset)), 0);
 }
 
+// The whole raster's size, which a pass drawn smaller is measured against.
+// A header that left it at nought means the input's own size.
+fn lumit_raster() -> vec2<f32> {
+    let r = vec2<f32>(lumit.raster_size);
+    return select(r, vec2<f32>(textureDimensions(src)), r == vec2<f32>(0.0, 0.0));
+}
+
 // Bilinear from a texture there is no sampler for: the four loads and the two
 // lerps, written once so that no two shaders disagree about the half-texel.
+// Clamped to the texture's own size. In an LFX shader `f` is measured in the
+// texture's own pixels too, so a pass drawn at half size is read with the
+// same uv as the full-size picture.
 fn lumit_bilinear(t: texture_2d<f32>, uv: vec2<f32>) -> vec4<f32> {
-    let last = vec2<i32>(textureDimensions(src)) - vec2<i32>(1, 1);
+    let last = vec2<i32>(textureDimensions(t)) - vec2<i32>(1, 1);
     let hi = max(last, vec2<i32>(0, 0));
     let f = uv * vec2<f32>(lumit.roi_size) + vec2<f32>(lumit.roi_offset) - vec2<f32>(0.5, 0.5);
     let base = floor(f);
@@ -62,6 +74,11 @@ fn lumit_bilinear(t: texture_2d<f32>, uv: vec2<f32>) -> vec4<f32> {
     let c01 = textureLoad(t, vec2<i32>(i0.x, i1.y), 0);
     let c11 = textureLoad(t, vec2<i32>(i1.x, i1.y), 0);
     return mix(mix(c00, c10, frac.x), mix(c01, c11, frac.x), frac.y);
+}
+
+// Any texture at uv, whatever its size: a pass's own picture is read this way.
+fn lumit_read(t: texture_2d<f32>, uv: vec2<f32>) -> vec4<f32> {
+    return lumit_bilinear(t, uv);
 }
 
 fn lumit_sample(uv: vec2<f32>) -> vec4<f32> {

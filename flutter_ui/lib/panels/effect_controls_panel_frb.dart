@@ -71,6 +71,7 @@ import 'planar_track_display_frb.dart';
 import 'levels_display_frb.dart';
 import 'roto_display_frb.dart';
 import 'lens_window.dart';
+import 'lfx_interface_panel.dart';
 import 'shader_editor.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
@@ -1484,6 +1485,9 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
     // Every row this instance draws, which is also what says whether it lists
     // the comp's layers.
     final params = [...cachedListParameters(fx.name), ...fx.derivedParams];
+    // An LFX effect with a page of its own, which the heading opens.
+    final interface =
+        !style && (ui.extensions.carrying(fx.name)?.$2.interface_ ?? false);
     return _SameCard(
       key: ValueKey<String>('fx-card-${style ? 'style-' : ''}${fx.id}'),
       // Everything the card draws from. Read [_SameCard] before adding to the
@@ -1510,6 +1514,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
         open,
         renaming,
         style,
+        interface,
         playhead,
         _actionPressed,
         _folds,
@@ -1592,6 +1597,10 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                 effectName: fx.customName ?? effectLabelOf(fx.name));
           }
         },
+        onOpenInterface: interface
+            ? () => showLfxInterface(context,
+                matchName: fx.name, title: effectLabelOf(fx.name))
+            : null,
         onOpenShaderGraph: fx.name == 'custom_shader' && !style
             ? () => ui.enterShaderGraph(layer, fx.id,
                 effectName: fx.customName ?? effectLabelOf(fx.name))
@@ -2105,6 +2114,9 @@ class _EffectSection extends StatelessWidget {
   /// draws no button for it.
   final VoidCallback? onOpenShaderGraph;
 
+  /// Open this LFX effect's interface. Null on every effect without one.
+  final VoidCallback? onOpenInterface;
+
   /// A camera following this layer's Camera track has been nudged —
   /// drawn as a dot on the status row. From the read model, like everything
   /// else this card draws.
@@ -2153,6 +2165,7 @@ class _EffectSection extends StatelessWidget {
     required this.onAction,
     required this.pressed,
     this.onOpenShaderGraph,
+    this.onOpenInterface,
     this.trackCorrected = false,
     this.themedGraphs = false,
     this.curvePlotSize = curvePlotSizeDefault,
@@ -2389,6 +2402,18 @@ class _EffectSection extends StatelessWidget {
         ),
       ),
       actions: [
+        if (onOpenInterface case final open?)
+          fxTextAction(
+            context,
+            label: l10n.lfxInterface,
+            tip: l10n.tipLfxInterface,
+            keyName: 'fx-interface-$id',
+            onPressed: () {
+              // The panel follows the picked instance, so this one first.
+              onSelect();
+              open();
+            },
+          ),
         fxTextAction(
           context,
           label: l10n.reset,
@@ -3397,7 +3422,7 @@ Widget? effectBadgeRow(
   String? detail,
 }) {
   if (reason == null) return null;
-  final sentence = effectBadge(reason);
+  final sentence = effectBadge(reason, detail);
   if (sentence == null) return null;
   final t = ThemeScope.of(context).theme;
   return Padding(
@@ -3412,7 +3437,8 @@ Widget? effectBadgeRow(
           key: ValueKey<String>('fx-badge-reason-$id'),
           style: t.small.copyWith(color: t.accent),
         ),
-        if (detail != null && detail.isNotEmpty)
+        // A missing LFX effect's sentence names the extension already.
+        if (detail != null && detail.isNotEmpty && reason != 'lfx_missing')
           Text(
             detail,
             key: ValueKey<String>('fx-badge-detail-$id'),

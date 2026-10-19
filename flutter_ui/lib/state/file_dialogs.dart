@@ -330,6 +330,29 @@ Future<String?> pickAddonManifest() async {
   return file?.path;
 }
 
+/// An extension packed as one file.
+XTypeGroup _extensionPackageGroup() => XTypeGroup(
+    label: l10n.fileTypeExtensionPackage, extensions: const ['lfx']);
+
+/// Pick a `.lfx` package to install, or null when cancelled.
+Future<String?> pickExtensionPackage() async {
+  final file = await openFile(acceptedTypeGroups: [_extensionPackageGroup()]);
+  return file?.path;
+}
+
+/// Choose where to save a package, named [suggestedName] to begin with, or
+/// null when cancelled.
+Future<String?> pickExtensionPackageSaveLocation(String suggestedName) async {
+  final location = await getSaveLocation(
+    acceptedTypeGroups: [_extensionPackageGroup()],
+    suggestedName: suggestedName,
+  );
+  final path = location?.path;
+  if (path == null) return null;
+  // The Windows dialogue hands back a typed name as it is.
+  return path.toLowerCase().endsWith('.lfx') ? path : '$path.lfx';
+}
+
 /// Choose where to write a keymap, or null when cancelled.
 Future<String?> pickKeymapSaveLocation() async {
   final location = await getSaveLocation(

@@ -151,11 +151,11 @@ Not interchangeable.
 | Term | Meaning |
 |---|---|
 | **OFX** | OpenFX. Lumit hosts it |
-| **LFX** | Lumit's own planned plugin API |
+| **LFX** | An effect an extension carries: a WGSL shader and an optional interface page |
 | **CLAP**, **VST3** | Audio plugin standards Lumit hosts. No VST2 |
 | **Addon** | An optional download from Settings: the model runtime and model packs. Analysis only, never generation |
 | **Model pack** | One addon holding one model |
-| **Extension** | A panel somebody else made: a folder with a web page and an `extension.json`, shown in the dock. It reaches Lumit only through what its manifest asked to be allowed. Not *plugin*, which is an effect |
+| **Extension** | A folder somebody else made, with an `extension.json`, that adds panels or effects. Its panel is shown in the dock. It reaches Lumit only through what its manifest asked to be allowed. Not *plugin*, which is an effect |
 | **Preset** | Saved effects, properties or animation |
 | **Script** | A JavaScript file that edits a project through the same commands the command line and MCP use. After Effects `.jsx` scripts run as they are |
 

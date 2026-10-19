@@ -2509,7 +2509,14 @@ fn comp_walk(
             use lumit_core::model::EffectNamespace;
             effects
                 .iter()
-                .filter(|e| e.enabled && e.effect.namespace == EffectNamespace::Builtin)
+                // An LFX effect's second input rides here too.
+                .filter(|e| {
+                    e.enabled
+                        && matches!(
+                            e.effect.namespace,
+                            EffectNamespace::Builtin | EffectNamespace::Lfx
+                        )
+                })
                 .filter_map(|e| {
                     let def = lumit_core::fx::BUILTIN_DEFS.get(&e.effect.match_name)?;
                     let param = def.schema().layer_input()?;

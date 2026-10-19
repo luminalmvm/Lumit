@@ -143,6 +143,9 @@ Future<bool> importDroppedPaths(LumitState state, List<String> dropped) async {
       case 'aep':
       case 'zip':
         isAe = true;
+      // An extension package, which the window offers to install.
+      case 'lfx':
+        break;
       default:
         media.add(path);
         bins.add('');

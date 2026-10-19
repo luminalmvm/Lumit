@@ -1240,7 +1240,7 @@ class EffectParamRowFrb extends StatelessWidget {
         .rangeSliders;
     if (!rangeSliders || !sliderTrack) return field;
 
-    return Row(
+    final both = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         field,
@@ -1272,6 +1272,11 @@ class EffectParamRowFrb extends StatelessWidget {
         ),
       ],
     );
+    // Without room for both, the number stands alone rather than the track
+    // being cut off.
+    return LayoutBuilder(
+        builder: (context, box) =>
+            box.maxWidth < effectCellWidth + 6 + 78 ? field : both);
   }
 
   /// A number in degrees with the dial under it (docs/07 §6).
@@ -2327,13 +2332,19 @@ class EffectSchemaMemo {
       return await scan();
     } finally {
       _scanning = false;
-      _effects = null;
-      _parameters.clear();
-      _groups.clear();
-      // And the point pairs, which were read as none for a plugin the scan
-      // had not reached and would stay none until Lumit was started again.
-      _pairSchema.clear();
+      forget();
     }
+  }
+
+  /// Drop everything read, so the next question asks the engine again. An
+  /// extension installed or removed changes which effects there are.
+  void forget() {
+    _effects = null;
+    _parameters.clear();
+    _groups.clear();
+    // And the point pairs, which were read as none for a plugin the scan
+    // had not reached and would stay none until Lumit was started again.
+    _pairSchema.clear();
   }
 
   /// Whether [effect] may only be missing because the scan has not reached it.

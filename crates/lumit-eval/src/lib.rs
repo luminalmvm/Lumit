@@ -825,6 +825,16 @@ fn feed_effect_stack(
         if !e.sample_temporally {
             h.update(b"no-temporal-sample/");
         }
+        // **An LFX effect's own files**: its shader, passes and version live
+        // in the extension, not the document, so editing the plugin must
+        // rename its frames. It is handed the layer time and its instance's
+        // seed as the Custom shader is, so both join the key too.
+        if e.effect.namespace == lumit_core::model::EffectNamespace::Lfx {
+            h.update(b"lfx/");
+            h.update(&lumit_core::fx::lfx::render_term(&e.effect.match_name).to_le_bytes());
+            h.update(e.id.as_bytes());
+            feed_f64(h, lt);
+        }
         // **The Custom shader's own text** (custom-shader.md §2.4). The
         // loop below hashes every stored parameter, which covers a shader's
         // derived controls for free; what it does not cover is the shader

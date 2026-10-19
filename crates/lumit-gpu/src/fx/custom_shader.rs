@@ -36,6 +36,10 @@ use super::{work_texture, FxEngine};
 /// actually build.
 const CACHE_ENTRIES: usize = 32;
 
+/// How many LFX pipelines are kept: one per pass, so enough for eight
+/// eight-pass effects on screen at once.
+const LFX_CACHE_ENTRIES: usize = 64;
+
 /// How many "last pipeline that compiled" fallbacks are kept, one per effect
 /// instance.
 ///
@@ -49,6 +53,10 @@ const LAST_GOOD_ENTRIES: usize = 32;
 
 /// The compute entry point the assembled module declares (the epilogue's).
 const ENTRY_POINT: &str = "lumit_shade";
+
+/// How many pass pictures an LFX layout carries, after the Custom shader's
+/// seven bindings. Lumit's own limit on passes.
+pub const LFX_PASS_SLOTS: u32 = 8;
 
 /// The Custom shader's own bind group layout and its compiled pipelines.
 ///
@@ -73,6 +81,16 @@ pub struct CustomShaderPipelines {
     /// How many compiles this engine has run, for the tests that assert one
     /// pipeline per source rather than one per instance.
     compiles: Mutex<u64>,
+    /// The LFX effects' layout: the same seven, then a picture per pass.
+    lfx_layout: wgpu::BindGroupLayout,
+    lfx_pipeline_layout: wgpu::PipelineLayout,
+    /// LFX pipelines, most recently used last, keyed by the module's hash.
+    lfx_cache: Mutex<Vec<(u64, Arc<wgpu::ComputePipeline>)>>,
+    /// LFX modules that would not compile, with the compiler's message, so a
+    /// broken shader is checked once rather than every frame.
+    lfx_failed: Mutex<Vec<(u64, String)>>,
+    /// One transparent pixel, bound for a pass that has not run yet.
+    blank: wgpu::Texture,
 }
 
 impl CustomShaderPipelines {
@@ -97,43 +115,73 @@ impl CustomShaderPipelines {
             },
             count: None,
         };
+        let mut entries = vec![
+            texture(0),
+            texture(1),
+            wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::StorageTexture {
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                    format: ctx.working(),
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                },
+                count: None,
+            },
+            uniform(3),
+            texture(4),
+            texture(5),
+            uniform(6),
+        ];
         let layout = ctx
             .device
             .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("fx-custom-shader-layout"),
-                entries: &[
-                    texture(0),
-                    texture(1),
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: ctx.working(),
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                        },
-                        count: None,
-                    },
-                    uniform(3),
-                    texture(4),
-                    texture(5),
-                    uniform(6),
-                ],
+                entries: &entries,
             });
-        let pipeline_layout = ctx
+        entries.extend((0..LFX_PASS_SLOTS).map(|i| texture(7 + i)));
+        let lfx_layout = ctx
             .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("fx-custom-shader-pl"),
-                bind_group_layouts: &[&layout],
-                push_constant_ranges: &[],
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("fx-lfx-layout"),
+                entries: &entries,
             });
+        let pipeline_layout_of = |layout: &wgpu::BindGroupLayout, label: &str| {
+            ctx.device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some(label),
+                    bind_group_layouts: &[layout],
+                    push_constant_ranges: &[],
+                })
+        };
+        // Its own texture rather than one from the pool, so it is never drawn
+        // over and stays the zeros wgpu clears a new texture to.
+        let blank = ctx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("fx-lfx-blank"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: ctx.working(),
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
         Self {
+            pipeline_layout: pipeline_layout_of(&layout, "fx-custom-shader-pl"),
             layout,
-            pipeline_layout,
             cache: Mutex::new(Vec::new()),
             last_good: Mutex::new(Vec::new()),
             stale_ok: AtomicBool::new(false),
             compiles: Mutex::new(0),
+            lfx_pipeline_layout: pipeline_layout_of(&lfx_layout, "fx-lfx-pl"),
+            lfx_layout,
+            lfx_cache: Mutex::new(Vec::new()),
+            lfx_failed: Mutex::new(Vec::new()),
+            blank,
         }
     }
 
@@ -150,6 +198,12 @@ impl CustomShaderPipelines {
             .store(false, std::sync::atomic::Ordering::Relaxed);
         if let Ok(mut compiles) = self.compiles.lock() {
             *compiles = 0;
+        }
+        if let Ok(mut cache) = self.lfx_cache.lock() {
+            cache.clear();
+        }
+        if let Ok(mut failed) = self.lfx_failed.lock() {
+            failed.clear();
         }
     }
 }
@@ -287,6 +341,27 @@ impl FxEngine {
         source_hash: u64,
         assembled: &str,
     ) -> Result<Arc<wgpu::ComputePipeline>, String> {
+        let cs = &self.custom_shader;
+        self.compile_into(
+            ctx,
+            source_hash,
+            assembled,
+            &cs.pipeline_layout,
+            &cs.cache,
+            CACHE_ENTRIES,
+        )
+    }
+
+    /// Validate, compile and file one module under `key` in `cache`.
+    fn compile_into(
+        &self,
+        ctx: &GpuContext,
+        key: u64,
+        assembled: &str,
+        layout: &wgpu::PipelineLayout,
+        cache: &Mutex<Vec<(u64, Arc<wgpu::ComputePipeline>)>>,
+        limit: usize,
+    ) -> Result<Arc<wgpu::ComputePipeline>, String> {
         // naga first, always: it is the only road that produces a *message*
         // rather than a device error nobody can read, and it is the same road
         // the shipped kernels take.
@@ -300,7 +375,7 @@ impl FxEngine {
         let pipeline = Arc::new(ctx.device.create_compute_pipeline(
             &wgpu::ComputePipelineDescriptor {
                 label: Some("fx-custom-shader"),
-                layout: Some(&self.custom_shader.pipeline_layout),
+                layout: Some(layout),
                 module: &module,
                 entry_point: Some(ENTRY_POINT),
                 compilation_options: Default::default(),
@@ -310,13 +385,92 @@ impl FxEngine {
         if let Ok(mut n) = self.custom_shader.compiles.lock() {
             *n += 1;
         }
-        if let Ok(mut cache) = self.custom_shader.cache.lock() {
-            if cache.len() >= CACHE_ENTRIES {
+        if let Ok(mut cache) = cache.lock() {
+            if cache.len() >= limit {
                 cache.remove(0);
             }
-            cache.push((source_hash, pipeline.clone()));
+            cache.push((key, pipeline.clone()));
         }
         Ok(pipeline)
+    }
+
+    /// The pipeline for one LFX pass's module, cached by its text's hash.
+    /// No stale fallback: an LFX shader is not typed into live.
+    ///
+    /// # Errors
+    /// The compiler's message, when the module does not compile.
+    pub fn lfx_pipeline(
+        &self,
+        ctx: &GpuContext,
+        key: u64,
+        assembled: &str,
+    ) -> Result<Arc<wgpu::ComputePipeline>, String> {
+        let cs = &self.custom_shader;
+        if let Ok(mut cache) = cs.lfx_cache.lock() {
+            if let Some(i) = cache.iter().position(|(h, _)| *h == key) {
+                let hit = cache.remove(i);
+                let pipeline = hit.1.clone();
+                cache.push(hit);
+                return Ok(pipeline);
+            }
+        }
+        if let Some((_, why)) = cs
+            .lfx_failed
+            .lock()
+            .ok()
+            .and_then(|failed| failed.iter().find(|(k, _)| *k == key).cloned())
+        {
+            return Err(why);
+        }
+        let made = self.compile_into(
+            ctx,
+            key,
+            assembled,
+            &cs.lfx_pipeline_layout,
+            &cs.lfx_cache,
+            LFX_CACHE_ENTRIES,
+        );
+        if let (Err(why), Ok(mut failed)) = (&made, cs.lfx_failed.lock()) {
+            if failed.len() >= LFX_CACHE_ENTRIES {
+                failed.remove(0);
+            }
+            failed.push((key, why.clone()));
+        }
+        made
+    }
+
+    /// One dispatch of an LFX pass, writing a `w` by `h` picture. `passes`
+    /// holds each pass's picture in pass order, `None` for one that has not
+    /// run, which reads as the transparent pixel.
+    #[allow(clippy::too_many_arguments)]
+    pub fn lfx_pass(
+        &self,
+        ctx: &GpuContext,
+        pipeline: &wgpu::ComputePipeline,
+        src: &wgpu::Texture,
+        matte: Option<&wgpu::Texture>,
+        input2: Option<&wgpu::Texture>,
+        passes: &[Option<&wgpu::Texture>],
+        w: u32,
+        h: u32,
+        header: &[u8],
+        params: &[u8],
+    ) -> wgpu::Texture {
+        let cs = &self.custom_shader;
+        let slots: Vec<&wgpu::Texture> = (0..LFX_PASS_SLOTS as usize)
+            .map(|i| passes.get(i).copied().flatten().unwrap_or(&cs.blank))
+            .collect();
+        self.dispatch_shader(
+            ctx,
+            &cs.lfx_layout,
+            pipeline,
+            [src, src, matte.unwrap_or(src), input2.unwrap_or(src)],
+            &slots,
+            w,
+            h,
+            header,
+            params,
+        )
     }
 
     /// One dispatch of a compiled custom shader.
@@ -341,7 +495,36 @@ impl FxEngine {
         header: &[u8],
         params: &[u8],
     ) -> wgpu::Texture {
+        self.dispatch_shader(
+            ctx,
+            &self.custom_shader.layout,
+            pipeline,
+            [src, orig, matte.unwrap_or(src), input2.unwrap_or(src)],
+            &[],
+            w,
+            h,
+            header,
+            params,
+        )
+    }
+
+    /// The bind and the dispatch both shader kinds share: `inputs` are
+    /// `src`, `orig`, `matte` and `input2`, and `passes` follow binding 6.
+    #[allow(clippy::too_many_arguments)]
+    fn dispatch_shader(
+        &self,
+        ctx: &GpuContext,
+        layout: &wgpu::BindGroupLayout,
+        pipeline: &wgpu::ComputePipeline,
+        inputs: [&wgpu::Texture; 4],
+        passes: &[&wgpu::Texture],
+        w: u32,
+        h: u32,
+        header: &[u8],
+        params: &[u8],
+    ) -> wgpu::Texture {
         use wgpu::util::DeviceExt;
+        let [src, orig, matte, input2] = inputs;
         let out = work_texture(ctx, w, h, "fx-custom-shader-out");
         let head = ctx
             .device
@@ -357,40 +540,32 @@ impl FxEngine {
                 contents: params,
                 usage: wgpu::BufferUsages::UNIFORM,
             });
-        let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+        // The pictures at 0, 1, 2, 4 and 5, then one per pass from 7.
+        let views: Vec<(u32, wgpu::TextureView)> = [0, 1, 2, 4, 5]
+            .into_iter()
+            .zip([src, orig, &out, matte, input2])
+            .chain((7..).zip(passes.iter().copied()))
+            .map(|(binding, t)| (binding, t.create_view(&Default::default())))
+            .collect();
+        let mut entries: Vec<wgpu::BindGroupEntry> = views
+            .iter()
+            .map(|(binding, v)| wgpu::BindGroupEntry {
+                binding: *binding,
+                resource: wgpu::BindingResource::TextureView(v),
+            })
+            .collect();
+        entries.push(wgpu::BindGroupEntry {
+            binding: 3,
+            resource: head.as_entire_binding(),
+        });
+        entries.push(wgpu::BindGroupEntry {
+            binding: 6,
+            resource: user.as_entire_binding(),
+        });
         let bind = ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("fx-custom-shader-bind"),
-            layout: &self.custom_shader.layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&view(src)),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&view(orig)),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&view(&out)),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: head.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::TextureView(&view(matte.unwrap_or(src))),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::TextureView(&view(input2.unwrap_or(src))),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: user.as_entire_binding(),
-                },
-            ],
+            layout,
+            entries: &entries,
         });
         let mut enc = ctx.encoder("fx-custom-shader-enc");
         {

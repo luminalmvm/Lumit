@@ -28,6 +28,7 @@ use lumit_gpu::GpuContext;
 
 use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
+pub mod lfx;
 pub mod ofx;
 
 type Tex = wgpu::Texture;
@@ -780,6 +781,7 @@ impl CustomShader {
     fn header(
         roi_offset: [u32; 2],
         roi_size: [u32; 2],
+        raster_size: [u32; 2],
         comp_scale: f32,
         lt: f64,
         seed: u32,
@@ -796,8 +798,7 @@ impl CustomShader {
             mix_amt: mix,
             matte_on: f32::from(u8::from(matte_on)),
             input2_on: f32::from(u8::from(input2_on)),
-            _pad0: 0,
-            _pad1: 0,
+            raster_size,
         };
         // Field by field rather than `bytes_of`: the header has padding, and a
         // byte of uninitialised memory in a uniform is the kind of difference
@@ -817,8 +818,8 @@ impl CustomShader {
         out.extend_from_slice(&head.mix_amt.to_le_bytes());
         out.extend_from_slice(&head.matte_on.to_le_bytes());
         out.extend_from_slice(&head.input2_on.to_le_bytes());
-        out.extend_from_slice(&head._pad0.to_le_bytes());
-        out.extend_from_slice(&head._pad1.to_le_bytes());
+        out.extend_from_slice(&head.raster_size[0].to_le_bytes());
+        out.extend_from_slice(&head.raster_size[1].to_le_bytes());
         out
     }
 }
@@ -873,6 +874,7 @@ impl GpuEffect for CustomShader {
         let header = Self::header(
             [fx0 as u32, fy0 as u32],
             [fw as u32, fh as u32],
+            [w, h],
             p.float(cs::COMP_SCALE, 1.0),
             lt,
             seed,

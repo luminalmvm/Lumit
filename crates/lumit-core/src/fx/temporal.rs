@@ -339,7 +339,7 @@ pub fn accumulation_shutter_offsets(layers: &[Layer], t_comp: f64) -> Vec<Vec<f6
 fn is_catalogued(e: &EffectInstance) -> bool {
     matches!(
         e.effect.namespace,
-        EffectNamespace::Builtin | EffectNamespace::Ofx
+        EffectNamespace::Builtin | EffectNamespace::Ofx | EffectNamespace::Lfx
     )
 }
 

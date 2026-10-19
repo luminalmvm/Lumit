@@ -36,6 +36,10 @@ import 'motion.dart';
 /// the workspace store, so it opens where it was last put, this session and the
 /// next. Windows without an id always open centred at their natural
 /// size, which is what a one-question confirmation wants.
+///
+/// A [modeless] window is a panel that floats over the work instead: no
+/// scrim, so a click beside it reaches the panels, and neither Escape nor the
+/// keyboard is taken from them. Only its own close mark closes it.
 Future<T?> showLumitModal<T>({
   required BuildContext context,
   required Widget Function(void Function(T?) close) builder,
@@ -43,6 +47,7 @@ Future<T?> showLumitModal<T>({
   Size? initialSize,
   Size minSize = const Size(320, 240),
   bool dimBackground = true,
+  bool modeless = false,
 }) {
   final overlay = Overlay.of(context);
   final completer = Completer<T?>();
@@ -72,27 +77,30 @@ Future<T?> showLumitModal<T>({
       final motion = scope.motion;
       return Stack(
         children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => close(null),
-              // The wash comes up with the window rather than cutting in ahead
-              // of it. It takes the click from its first frame either way.
-              child: Entrance.fade(
-                spec: takesOver ? MotionSpec.still : motion.scrim,
-                child: ColoredBox(
-                  color: dimBackground
-                      ? scope.theme.scrim
-                      : const Color(0x00000000),
+          if (!modeless)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => close(null),
+                // The wash comes up with the window rather than cutting in
+                // ahead of it. It takes the click from its first frame either
+                // way.
+                child: Entrance.fade(
+                  spec: takesOver ? MotionSpec.still : motion.scrim,
+                  child: ColoredBox(
+                    color: dimBackground
+                        ? scope.theme.scrim
+                        : const Color(0x00000000),
+                  ),
                 ),
               ),
             ),
-          ),
           _MovableWindow(
             id: id,
             initialSize: initialSize,
             minSize: minSize,
-            onDismiss: () => close(null),
+            modeless: modeless,
+            onDismiss: modeless ? null : () => close(null),
             // The window arrives once and leaves at once (docs/15 §8): what
             // was dismissed is gone, and the caller's next window never opens
             // over one still fading out.
@@ -169,12 +177,17 @@ class _MovableWindow extends StatefulWidget {
   /// What Escape means here, or null for a window that cannot be dismissed.
   final VoidCallback? onDismiss;
 
+  /// A floating panel rather than a dialogue, which the panels go on working
+  /// beside.
+  final bool modeless;
+
   const _MovableWindow({
     required this.id,
     required this.initialSize,
     required this.minSize,
     required this.child,
     this.onDismiss,
+    this.modeless = false,
   });
 
   @override
@@ -188,7 +201,7 @@ class _MovableWindowState extends State<_MovableWindow> {
   @override
   void initState() {
     super.initState();
-    _openModals++;
+    if (!widget.modeless) _openModals++;
     final dismiss = widget.onDismiss;
     if (dismiss != null) {
       _escapeRelease = EscapeLadder.register(EscapeRung.dialog, () {
@@ -209,7 +222,7 @@ class _MovableWindowState extends State<_MovableWindow> {
 
   @override
   void dispose() {
-    _openModals--;
+    if (!widget.modeless) _openModals--;
     _escapeRelease?.call();
     _escapeRelease = null;
     super.dispose();
