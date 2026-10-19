@@ -16,6 +16,7 @@ import '../l10n/strings.dart';
 import '../shell/dialog_frame.dart';
 import '../state/comp_time.dart';
 import '../state/extension_host.dart';
+import '../state/extensions.dart';
 import '../widgets/controls.dart';
 import 'effect_param_row_frb.dart';
 import 'extension_panel.dart';
@@ -35,22 +36,7 @@ Future<void> showLfxInterface(BuildContext context,
   final carried = ui.extensions.carrying(matchName);
   if (carried == null || carried.$2.entry.isEmpty) return;
   final (owner, page) = carried;
-  // The extension as the page host knows it, showing this page.
-  final extension = BridgeExtension(
-    id: owner.id,
-    name: owner.name,
-    version: owner.version,
-    summary: owner.summary,
-    author: owner.author,
-    homepage: owner.homepage,
-    folder: owner.folder,
-    panel: true,
-    entry: page.entry,
-    permissions: owner.permissions,
-    hosts: owner.hosts,
-    broken: false,
-    effects: owner.effects,
-  );
+  final extension = _showing(owner, page);
   _open.add(matchName);
   try {
     await showLumitModal<void>(
@@ -73,8 +59,27 @@ Future<void> showLfxInterface(BuildContext context,
   }
 }
 
+/// The extension as the page host knows it, showing [page].
+BridgeExtension _showing(BridgeExtension owner, BridgeExtensionEffect page) =>
+    BridgeExtension(
+      id: owner.id,
+      name: owner.name,
+      version: owner.version,
+      summary: owner.summary,
+      author: owner.author,
+      homepage: owner.homepage,
+      folder: owner.folder,
+      panel: true,
+      entry: page.entry,
+      permissions: owner.permissions,
+      hosts: owner.hosts,
+      broken: false,
+      effects: owner.effects,
+    );
+
 /// The floating panel itself: its title strip, and the page once there has
-/// been an instance to follow.
+/// been an instance to follow. It closes when its extension is removed and
+/// loads the page again when it is updated.
 class LfxInterfaceWindow extends StatefulWidget {
   final BridgeExtension extension;
   final String matchName;
@@ -97,11 +102,28 @@ class _LfxInterfaceWindowState extends State<LfxInterfaceWindow> {
   late final LfxFollow _follow = LfxFollow(
       ui: context.read<LumitUiState>(), matchName: widget.matchName);
 
+  late final ExtensionService _extensions =
+      context.read<LumitUiState>().extensions;
+  late BridgeExtension _extension = widget.extension;
+
   /// The page has been put up.
   bool _paged = false;
 
   @override
+  void initState() {
+    super.initState();
+    _extensions.addListener(_extensionsChanged);
+  }
+
+  void _extensionsChanged() {
+    final carried = _extensions.carrying(widget.matchName);
+    if (carried == null || carried.$2.entry.isEmpty) return widget.onClose();
+    setState(() => _extension = _showing(carried.$1, carried.$2));
+  }
+
+  @override
   void dispose() {
+    _extensions.removeListener(_extensionsChanged);
     _follow.dispose();
     super.dispose();
   }
@@ -135,8 +157,11 @@ class _LfxInterfaceWindowState extends State<LfxInterfaceWindow> {
                   : GestureDetector(
                       onPanStart: (_) {},
                       child: ExtensionView(
-                        key: ValueKey<String>('lfx-page-${widget.matchName}'),
-                        extension: widget.extension,
+                        // A new page for a new version, or one installed
+                        // over itself.
+                        key: ValueKey<String>('lfx-page-${widget.matchName}:'
+                            '${_extension.version}:${_extensions.generation}'),
+                        extension: _extension,
                         effect: _follow,
                       ),
                     );
