@@ -166,6 +166,16 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   BigInt? _tracksRevision;
   CompositionReference? _tracksComp;
 
+  /// Whether the tracks stand in stack order with no dividing line, as
+  /// Settings says. Read with the tracks, and part of their key.
+  bool _anyOrder = false;
+
+  /// While a track's header is dragged: the track in hand, how far it has
+  /// travelled, and the track it would land on.
+  int? _reorderFrom;
+  double _reorderTravel = 0;
+  final ValueNotifier<int?> _reorderTo = ValueNotifier(null);
+
   /// Whether each uncut footage layer's file carries sound, by layer id:
   /// what gives the layer a sound row below the line. A probe of the file,
   /// so asked once per layer and kept.
@@ -319,6 +329,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     _settle.dispose();
     _edge.dispose();
     _dropOn.dispose();
+    _reorderTo.dispose();
     _zoomMotion.dispose();
     _vOutline.dispose();
     _vLane.dispose();
@@ -1198,18 +1209,22 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// The tracks, once per document revision. The selection is pruned to the
   /// clips that are still there, and the thumbnails of clips that have gone
   /// are let go.
-  void _refreshTracks(CompModel model, CompositionReference comp) {
+  void _refreshTracks(CompModel model, CompositionReference comp,
+      {required bool anyOrder}) {
     final revision = model.revision;
     // The revision is the document's, so fronting another composition
     // without an edit between keeps it: the composition is part of the key.
     if (revision != null &&
         revision == _tracksRevision &&
-        comp == _tracksComp) {
+        comp == _tracksComp &&
+        anyOrder == _anyOrder) {
       return;
     }
     _tracksRevision = revision;
     _tracksComp = comp;
-    _tracks = cutTimelineTracks(model.layers, hasAudio: _hasAudio);
+    _anyOrder = anyOrder;
+    _tracks = cutTimelineTracks(model.layers,
+        hasAudio: _hasAudio, anyOrder: anyOrder);
     final of = <String, int>{};
     final keys = <String>{};
     final byLink = <String, Set<String>>{};
@@ -2638,7 +2653,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final frames = ui.model.durationFrames;
     final fps = ui.model.fps;
     _bindTools(ui);
-    _refreshTracks(ui.model, comp);
+    _refreshTracks(ui.model, comp,
+        anyOrder: ui.workspace.interface.cutTracksAnyOrder);
     _setNameStyle(t.small.copyWith(color: t.textSecondary));
     _trackHeight = t.density.laneRow * 2;
     final heights = [for (final track in _tracks) _heightOf(track)];
@@ -2953,8 +2969,26 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                               ),
                             ),
                           ),
-                          if (_tracks.any((track) => track.below))
+                          if (!_anyOrder && _tracks.any((track) => track.below))
                             _divider(t, divider - scrolled),
+                          // Where a track whose header is in hand would land.
+                          ValueListenableBuilder<int?>(
+                            valueListenable: _reorderTo,
+                            builder: (context, to, _) {
+                              final from = _reorderFrom;
+                              if (to == null || from == null || to == from) {
+                                return const SizedBox.shrink();
+                              }
+                              final y = to > from ? _tops[to + 1] : _tops[to];
+                              return Positioned(
+                                left: 0,
+                                right: 0,
+                                top: y - scrolled - 1,
+                                height: 2,
+                                child: ColoredBox(color: t.accent),
+                              );
+                            },
+                          ),
                         ]);
                       },
                     ),
@@ -2977,6 +3011,50 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         height: 2,
         child: IgnorePointer(child: ColoredBox(color: t.hairlineStrong)),
       );
+
+  void _reorderStart(CutTrack track) {
+    _reorderFrom = _tracks.indexOf(track);
+    _reorderTravel = 0;
+    _reorderTo.value = _reorderFrom;
+  }
+
+  /// The track the one in hand would land on: one on its own side of the
+  /// line while there is a line, and never a layer's own sound row.
+  void _reorderBy(double dy) {
+    final from = _reorderFrom;
+    if (from == null) return;
+    _reorderTravel += dy;
+    final y = (_tops[from] + _tops[from + 1]) / 2 + _reorderTravel;
+    final last = _tops.last - 1;
+    final over = cutTrackAt(_tracks, y.clamp(0, last < 0 ? 0 : last), _tops);
+    if (over == null) return;
+    final to = _tracks[over];
+    final fits = to.kind != CutTrackKind.layerSound &&
+        (_anyOrder || to.below == _tracks[from].below);
+    if (fits) _reorderTo.value = over;
+  }
+
+  /// Let the header go: the layer takes the place in the stack of the one it
+  /// landed on. One undo step, and none where it landed where it started.
+  void _reorderEnd() {
+    final from = _reorderFrom;
+    final to = _reorderTo.value;
+    _reorderFrom = null;
+    _reorderTo.value = null;
+    if (from == null || to == null || from == to) return;
+    final ui = _ui;
+    if (ui == null) return;
+    final id = _tracks[to].entry.layer.internallayerId;
+    final index =
+        ui.model.heldLayers.indexWhere((e) => e.layer.internallayerId == id);
+    if (index < 0) return;
+    try {
+      _tracks[from].entry.layer.reorder(newIndex: BigInt.from(index));
+    } catch (_) {
+      // A locked layer refuses, and quietly.
+    }
+    _afterWrite();
+  }
 
   /// One switch cell, written as the other timelines write theirs: one
   /// `setSwitchOnLayers`, and so one undo step.
@@ -3091,7 +3169,20 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           ),
           const SizedBox(width: outlineGap),
           Expanded(
-            child: Listener(
+            child: GestureDetector(
+              // Dragged up or down, the track moves in the stack. A layer's
+              // own sound row moves with its bar and is not dragged itself.
+              onVerticalDragStart: track.kind == CutTrackKind.layerSound
+                  ? null
+                  : (_) => _reorderStart(track),
+              onVerticalDragUpdate: track.kind == CutTrackKind.layerSound
+                  ? null
+                  : (d) => _reorderBy(d.delta.dy),
+              onVerticalDragEnd: track.kind == CutTrackKind.layerSound
+                  ? null
+                  : (_) => _reorderEnd(),
+              onVerticalDragCancel: () => _reorderTo.value = null,
+              child: Listener(
               behavior: HitTestBehavior.opaque,
               // The track itself: its clips are let go, so Effect controls
               // shows the track's own stack.
@@ -3112,6 +3203,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+            ),
             ),
           ),
           // A picture track may carry sound, and is muted as a sound track is.
@@ -3389,7 +3481,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                   ),
                                 ),
                               ),
-                              if (_tracks.any((track) => track.below))
+                              if (!_anyOrder &&
+                                  _tracks.any((track) => track.below))
                                 _divider(t, divider),
                               // The box a marquee sweeps, over the clips.
                               ValueListenableBuilder<Rect?>(

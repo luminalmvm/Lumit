@@ -116,11 +116,35 @@ class CutTrack {
 /// sound rows of the uncut footage layers [hasAudio] says carry sound, by
 /// layer id: after the sound tracks, so those stay next to each other and a
 /// clip crosses between them as it always did.
+///
+/// With [anyOrder] there is no dividing line: every track stands in stack
+/// order, and an uncut footage layer's sound row stands under its bar.
 List<CutTrack> cutTimelineTracks(List<BridgeLayerEntry> layers,
-    {Map<String, bool> hasAudio = const {}}) {
+    {Map<String, bool> hasAudio = const {}, bool anyOrder = false}) {
   final above = <CutTrack>[];
   final below = <CutTrack>[];
   final own = <CutTrack>[];
+  if (anyOrder) {
+    final all = <CutTrack>[];
+    for (final entry in layers) {
+      final info = entry.info;
+      final id = entry.layer.internallayerId.toString();
+      final clips = [...info.clips]
+        ..sort((a, b) => a.startFrame.compareTo(b.startFrame));
+      if (info.kind == BridgeLayerKind.audio) {
+        all.add(CutTrack._(entry, id, CutTrackKind.sound, clips));
+      } else if (clips.isNotEmpty || info.kind == BridgeLayerKind.sequence) {
+        all.add(CutTrack._(entry, id, CutTrackKind.picture, clips));
+      } else {
+        all.add(CutTrack._(entry, id, CutTrackKind.plain, clips));
+        if (info.kind == BridgeLayerKind.footage && (hasAudio[id] ?? false)) {
+          all.add(
+              CutTrack._(entry, '$id-sound', CutTrackKind.layerSound, clips));
+        }
+      }
+    }
+    return all;
+  }
   for (final entry in layers) {
     final info = entry.info;
     final id = entry.layer.internallayerId.toString();

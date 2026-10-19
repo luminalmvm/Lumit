@@ -909,6 +909,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.videoAsSequenceLayer = shipped.videoAsSequenceLayer;
         settings.streamsArrival = shipped.streamsArrival;
         settings.cutSoundWithPicture = shipped.cutSoundWithPicture;
+        settings.cutTracksAnyOrder = shipped.cutTracksAnyOrder;
         settings.pasteLayersAtOriginalTime = shipped.pasteLayersAtOriginalTime;
         settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
         settings.transformInEffectControls = shipped.transformInEffectControls;
@@ -1969,6 +1970,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               }),
             ),
           ),
+          _flag(t, 'settings-cut-tracks-any-order',
+              l10n.settingsCutTracksInAnyOrder,
+              value: settings.cutTracksAnyOrder, set: (on) {
+            settings.cutTracksAnyOrder = on;
+            changed();
+          }),
           _flag(t, 'settings-paste-at-original-time',
               l10n.settingsPasteLayersAtTheirOriginal,
               value: settings.pasteLayersAtOriginalTime, set: (on) {

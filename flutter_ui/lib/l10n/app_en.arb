@@ -7760,6 +7760,10 @@
   "@cutNoSoundToAttach": {
     "description": "One line in the status bar, after Attach audio in the Cut timeline found no linked sound clip covering the same stretch as the picked picture clip, because it was trimmed or moved. Calm, not an error."
   },
+  "settingsCutTracksInAnyOrder": "Cut tracks in any order",
+  "@settingsCutTracksInAnyOrder": {
+    "description": "Settings window, Timeline, Editing: a switch. On, the Cut timeline shows its tracks in the composition's layer order, sound tracks among picture tracks, with no dividing line between them. Off, picture tracks stand above the line and sound tracks below it."
+  },
   "settingsVideoSoundInCut": "Video sound in Cut",
   "@settingsVideoSoundInCut": {
     "description": "Settings window, Timeline, Editing: the name of the row choosing where a video's sound goes when the video is placed in the Cut timeline. The two choices follow it in a dropdown."
