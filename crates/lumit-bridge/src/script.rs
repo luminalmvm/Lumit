@@ -11,6 +11,7 @@
 //! nothing else commits into the run's undo step.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,12 +42,14 @@ struct Running {
 static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
 
 /// Run the script at `path` on `project`, on a thread of its own, with
-/// `comp` open in the Viewer. False when one is running already. `tell` hears
-/// what it does, and answers false when nobody is listening.
+/// `comp` open in the Viewer and `args` as its `lumit.args`. False when one
+/// is running already. `tell` hears what it does, and answers false when
+/// nobody is listening.
 pub(crate) fn start(
     project: ProjectReference,
     path: PathBuf,
     comp: Option<Uuid>,
+    args: BTreeMap<String, String>,
     tell: impl Fn(BridgeScriptEvent) -> bool + Send + 'static,
 ) -> Result<bool, BridgeError> {
     let store = {
@@ -69,7 +72,7 @@ pub(crate) fn start(
         .name("script".into())
         .spawn(move || {
             let end = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_file(project, store, &path, comp, stop, &tell)
+                run_file(project, store, &path, comp, args, stop, &tell)
             }))
             .unwrap_or_else(|_| finished(Vec::new(), "The script stopped unexpectedly.", None));
             // Free before saying so, so the next run can start straight away.
@@ -138,6 +141,7 @@ fn run_file(
     store: Arc<DocumentStore>,
     path: &Path,
     comp: Option<Uuid>,
+    args: BTreeMap<String, String>,
     stop: Arc<AtomicBool>,
     tell: &dyn Fn(BridgeScriptEvent) -> bool,
 ) -> BridgeScriptEvent {
@@ -170,6 +174,7 @@ fn run_file(
             path: Some(path.to_path_buf()),
             alert: Some(&alert),
             dialog: Some(&dialog),
+            args,
             ..Default::default()
         },
     );
@@ -503,6 +508,46 @@ impl Host for AppHost<'_> {
     }
 }
 
+/// The most scripts File > Scripts lists, and how many folders deep it looks.
+const MAX_LISTED: usize = 500;
+const MAX_DEPTH: usize = 4;
+
+/// The `.js` and `.jsx` files in `folder` and the folders inside it, as paths
+/// under it with `/` between the parts. Each folder's names are in order, with
+/// its folders among its files. Hidden ones are left out.
+pub(crate) fn list(folder: &Path) -> Vec<String> {
+    fn walk(folder: &Path, under: &str, depth: usize, out: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(folder) else {
+            return;
+        };
+        let mut names: Vec<(String, PathBuf)> = entries
+            .flatten()
+            .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+            .filter(|(name, _)| !name.starts_with('.'))
+            .collect();
+        names.sort_by_cached_key(|(name, _)| name.to_lowercase());
+        for (name, path) in names {
+            if out.len() >= MAX_LISTED {
+                return;
+            }
+            let at = format!("{under}{name}");
+            if path.is_dir() {
+                if depth < MAX_DEPTH {
+                    walk(&path, &format!("{at}/"), depth + 1, out);
+                }
+            } else if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("js") || e.eq_ignore_ascii_case("jsx"))
+            {
+                out.push(at);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(folder, "", 1, &mut out);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc;
@@ -532,8 +577,10 @@ mod tests {
             std::fs::write(&path, script).expect("script written");
             let project = LumitBridgeState::new_project(None).expect("a new project");
             let (heard, hearing) = mpsc::channel();
-            let started = start(project, path, None, move |event| heard.send(event).is_ok())
-                .expect("started");
+            let started = start(project, path, None, BTreeMap::new(), move |event| {
+                heard.send(event).is_ok()
+            })
+            .expect("started");
             assert!(started);
             let wait = Duration::from_secs(20);
             let asked = hearing.recv_timeout(wait).expect("asked");

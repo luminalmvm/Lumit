@@ -1,6 +1,6 @@
 ---
 title: Scripts
-description: Run a JavaScript or After Effects script on the open project from File ▸ Run script.
+description: Run a JavaScript or After Effects script on the open project from File ▸ Scripts.
 sidebar:
   order: 16.5
 ---
@@ -11,8 +11,10 @@ A **script** is a JavaScript file that edits the open project. After Effects scr
 
 ## Run one
 
-1. Choose **File ▸ Run script…**.
+1. Choose **File ▸ Scripts ▸ Run script…**.
 2. Pick the `.js` or `.jsx` file.
+
+A script dropped on the window runs after one question.
 
 While it runs, a card covers the window with the script's name and **Stop**. A file the
 script asks for opens the system file dialogue, and a message it shows appears in the
@@ -24,9 +26,42 @@ project as it was.
 
 When a script fails, the status line gives the reason and the line it failed on.
 
-:::note[Not built yet]
-What a script prints is not shown anywhere.
-:::
+When a script prints with `$.writeln()` or shows an `alert()`, **Show log** on the status
+line lists the lines, with **Copy**. Alerts come after the printed lines.
+
+## The Scripts folder
+
+**File ▸ Scripts** lists the `.js` and `.jsx` files in the Scripts folder, with a submenu
+for each folder inside it. **Open scripts folder** shows it in the file manager.
+
+| | |
+|---|---|
+| Windows | `%LOCALAPPDATA%\Lumit\Lumit\data\scripts\` |
+| macOS | `~/Library/Application Support/dev.Lumit.Lumit/scripts/` |
+| Linux | `~/.local/share/lumit/scripts/` |
+
+**Settings ▸ General ▸ Scripts folder** lists another folder instead. **Clear** goes back.
+
+## Event scripts
+
+The **Scripts** rows in **Settings ▸ General** run a script from the Scripts folder after an
+event. Each is **None** until set.
+
+| Row | Runs after |
+| --- | --- |
+| **Export finished** | each export from the export queue |
+| **Project opened** | a project opens |
+| **Project saved** | the project is saved |
+
+It runs as from the menu, and the status line names it after.
+
+| | |
+| --- | --- |
+| `lumit.args.event` | `"export"`, `"open"` or `"save"` |
+| `lumit.args.file` | the exported file's or the project's file name, without its folder |
+
+An event script is skipped while another script runs. A script's own saves and exports, and
+the save made before a project closes, run none.
 
 ## After Effects scripts
 

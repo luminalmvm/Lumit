@@ -21,6 +21,7 @@ import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share;
 import 'package:lumit_flutter/src/rust/api/share.dart'
     hide joinSharedProject, shareDefaultPort, shareLinkIn, shareRelayPort;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/workspace.dart';
@@ -171,9 +172,12 @@ class LumitState extends ChangeNotifier {
   final List<LumitNotice> recentNotices = [];
 
   void postNotice(String message,
-      {bool error = false, bool sticky = false, VoidCallback? onTap}) {
-    final posted =
-        LumitNotice(message, error: error, sticky: sticky, onTap: onTap);
+      {bool error = false,
+      bool sticky = false,
+      String? action,
+      VoidCallback? onTap}) {
+    final posted = LumitNotice(message,
+        error: error, sticky: sticky, action: action, onTap: onTap);
     // One that stays until it is dismissed keeps the line from anything
     // quiet, which waits behind it in the list a press on the line shows.
     final kept = notice.value;
@@ -191,6 +195,10 @@ class LumitState extends ChangeNotifier {
   /// How the shell offers back the edits a crash left behind, for the project
   /// at a path. Null until there is a window to ask in.
   Future<void> Function(String path)? offerRecovery;
+
+  /// How the shell runs the script chosen for [ScriptEvent], told the file
+  /// the event was about. Null until there is a window to run it in.
+  void Function(ScriptEvent event, String path)? runEventScript;
 
   bool _askingUnsaved = false;
 
@@ -1081,8 +1089,26 @@ class LumitState extends ChangeNotifier {
       } catch (_) {
         // Closed again already.
       }
-      if (crashed) unawaited(offerRecovery?.call(path));
+      if (crashed) {
+        unawaited(offerRecovery?.call(path));
+        return;
+      }
     }
+    _tellOpened(opened, path);
+  }
+
+  /// Run the project-opened script once [opened] is in and its card has
+  /// gone, if it is still the open project then.
+  void _tellOpened(ProjectReference opened, String path) {
+    void check() {
+      if (opening.value) return;
+      opening.removeListener(check);
+      if (identical(project, opened)) {
+        runEventScript?.call(ScriptEvent.open, path);
+      }
+    }
+
+    opening.addListener(check);
   }
 
   /// Import an After Effects project and make it the open one (docs/11) —
@@ -1453,6 +1479,9 @@ class LumitNotice {
 
   /// What a press on its words does, for a notice that leads somewhere.
   final VoidCallback? onTap;
+
+  /// A button beside the words that does the same, for where it leads.
+  final String? action;
   const LumitNotice(this.message,
-      {this.error = false, this.sticky = false, this.onTap});
+      {this.error = false, this.sticky = false, this.action, this.onTap});
 }

@@ -1012,6 +1012,13 @@ pub fn extensions_dir() -> Option<PathBuf> {
     Some(dirs.data_local_dir().join("extensions"))
 }
 
+/// The Scripts folder File > Scripts lists, unless the person chose another.
+/// Beside the extensions, since nothing here could be rebuilt either.
+pub fn scripts_dir() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_local_dir().join("scripts"))
+}
+
 /// Where the extension `id` keeps what its page stores, such as a sign-in.
 /// Not in its own folder, which an update replaces whole.
 pub fn extension_data_dir(id: &str) -> Option<PathBuf> {
