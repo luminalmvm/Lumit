@@ -123,16 +123,48 @@
         Entry.call(this, path === undefined ? '' : path, 'File');
         this._text = null;
         this._read = 0;
+        // What has been written since the file was opened to write, and
+        // whether it goes after what is there.
+        this._out = null;
+        this._append = false;
         this._at = undefined;
         this.encoding = 'UTF-8';
+        this.lineFeed = windows ? 'Windows' : 'Unix';
         return guard(this, 'File');
     }
     File.prototype = Object.create(Entry.prototype);
     File.prototype.constructor = File;
     File.prototype.open = function (mode) {
-        if (mode && String(mode).charAt(0) !== 'r') unsupported('File.open("' + mode + '")');
+        var m = String(mode || 'r').charAt(0);
+        if (m === 'w' || m === 'a') {
+            if (!/^utf-?8$/i.test(this.encoding)) {
+                throw new Error('A script writes text as UTF-8 only, so ' + this.encoding + ' is not supported in Lumit.');
+            }
+            // Refused here rather than at close, so the script hears it on
+            // the line that asked.
+            N.mayWrite(this._path);
+            this._out = '';
+            this._append = m === 'a';
+            if (writing.indexOf(this) < 0) writing.push(this);
+            return true;
+        }
+        if (m !== 'r') unsupported('File.open("' + mode + '")');
         this._text = JSON.parse(N.readText(this._path));
         this._read = 0;
+        return true;
+    };
+    File.prototype.write = function () {
+        if (this._out === null) throw new Error(this.name + ' is not open for writing.');
+        this._out += Array.prototype.map.call(arguments, String).join('');
+        return true;
+    };
+    File.prototype.writeln = function () {
+        this.write.apply(this, arguments);
+        this._out += { Windows: '\r\n', Macintosh: '\r' }[this.lineFeed] || '\n';
+        return true;
+    };
+    File.prototype.remove = function () {
+        N.removeFile(this._path);
         return true;
     };
     File.prototype.read = function () {
@@ -152,7 +184,23 @@
     Object.defineProperty(File.prototype, 'eof', {
         get: function () { return this._text === null || this._read >= this._text.length; },
     });
-    File.prototype.close = function () { this._text = null; return true; };
+    File.prototype.close = function () {
+        this._text = null;
+        flush(this);
+        return true;
+    };
+
+    // Files open to write. What was written goes to disk when each is
+    // closed, or when the script ends.
+    var writing = [];
+    function flush(file) {
+        if (file._out === null) return;
+        var text = file._out;
+        file._out = null;
+        writing.splice(writing.indexOf(file), 1);
+        if (file._append) N.appendText(file._path, text);
+        else N.writeText(file._path, text);
+    }
     File.openDialog = function (prompt, filter) {
         var extensions = [];
         String(filter || '').replace(/\*\.(\w+)/g, function (_, e) { extensions.push(e); });
@@ -168,6 +216,10 @@
     }
     Folder.prototype = Object.create(Entry.prototype);
     Folder.prototype.constructor = Folder;
+    Folder.prototype.create = function () {
+        N.makeFolder(this._path);
+        return true;
+    };
     Folder.prototype.getFiles = function (mask) {
         var test = function () { return true; };
         if (typeof mask === 'function') {
@@ -1298,7 +1350,12 @@
         dirty = [];
         now.forEach(writeLayer);
     }
-    N.finish = finish;
+    // At the end of the script the keys are written, and so are files it did
+    // not close.
+    N.finish = function () {
+        finish();
+        writing.slice().forEach(flush);
+    };
 
     // ---- Effects ----
 

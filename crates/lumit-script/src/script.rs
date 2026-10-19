@@ -9,6 +9,7 @@
 //! folder or one it was given or that was chosen (`lumit.readText`,
 //! `lumit.readJson`), and turn another program's seconds into a frame of a
 //! comp (`lumit.frameAt`). `print` and `console.log` go to the run's log.
+//! After Effects' `File` can also write text files in the script's own folder.
 //!
 //! The engine is QuickJS with none of its own file, network or process
 //! modules, so a script reaches the project and the files above and nothing
@@ -23,6 +24,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::fmt;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -51,6 +53,8 @@ const AE_JS: &str = include_str!("ae.js");
 const MAX_MEMORY: usize = 1 << 30;
 /// The most a script may read from one file.
 const MAX_READ_BYTES: u64 = 64 << 20;
+/// The most a script may write to files in one run.
+const MAX_WRITE_BYTES: u64 = 64 << 20;
 /// The most entries a script is told of in one folder.
 const MAX_LISTED: usize = 100_000;
 /// Lines of `print` kept. A loop printing for ever stops being heard here.
@@ -172,6 +176,7 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
         }),
         limited: options.limits != Limits::Off,
         edited: Cell::new(false),
+        written: Cell::new(0),
     };
     let name = if options.name.is_empty() {
         "Script".to_owned()
@@ -257,6 +262,8 @@ struct Desk<'a> {
     limited: bool,
     /// Whether a command changed the document.
     edited: Cell<bool>,
+    /// What the script has written to files so far, in bytes.
+    written: Cell<u64>,
 }
 
 impl Desk<'_> {
@@ -300,6 +307,79 @@ impl Desk<'_> {
             Some(full) => json!({ "exists": true, "folder": full.is_dir() }),
             None => json!({ "exists": false, "folder": false }),
         }
+    }
+
+    /// Where the script may write `path`: in its own folder, and never over
+    /// the project. Asked before the file system is, as for reading.
+    fn may_write(&self, path: &Path) -> Result<PathBuf, ScriptError> {
+        let reach = self.reach.borrow();
+        if reach.folder.is_none() {
+            return Err(ScriptError::BadArgs(
+                "This script has no folder of its own, so it cannot write files.".into(),
+            ));
+        }
+        let full = reach.writable(reach::plain(path)?).ok_or_else(|| {
+            ScriptError::BadArgs(format!(
+                "A script can only write files in its own folder, and {} is not in it.",
+                path.display()
+            ))
+        })?;
+        let project = self.host.path().and_then(|p| p.canonicalize().ok());
+        if project.is_some() && full.canonicalize().ok() == project {
+            return Err(ScriptError::BadArgs(
+                "A script cannot write over the project.".into(),
+            ));
+        }
+        Ok(full)
+    }
+
+    /// Write `text` to `path`, after what is there when `append`.
+    fn write(&self, path: &Path, text: &str, append: bool) -> Result<Value, ScriptError> {
+        let full = self.may_write(path)?;
+        let total = self.written.get() + text.len() as u64;
+        if total > MAX_WRITE_BYTES {
+            return Err(ScriptError::Failed(format!(
+                "A script writes at most {} MB of files.",
+                MAX_WRITE_BYTES >> 20
+            )));
+        }
+        let failed = |e: std::io::Error| {
+            ScriptError::Failed(format!("{} could not be written: {e}.", path.display()))
+        };
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(append)
+            .truncate(!append)
+            .open(&full)
+            .map_err(failed)?;
+        file.write_all(text.as_bytes()).map_err(failed)?;
+        self.written.set(total);
+        Ok(Value::Null)
+    }
+
+    /// Make folder `path`, and any above it that are missing.
+    fn make_folder(&self, path: &Path) -> Result<Value, ScriptError> {
+        let full = self.may_write(path)?;
+        std::fs::create_dir_all(&full).map_err(|e| {
+            ScriptError::Failed(format!("{} could not be made: {e}.", path.display()))
+        })?;
+        Ok(Value::Null)
+    }
+
+    /// Delete file `path`. A folder is left alone.
+    fn remove(&self, path: &Path) -> Result<Value, ScriptError> {
+        let full = self.may_write(path)?;
+        if !full.symlink_metadata().is_ok_and(|m| m.is_file()) {
+            return Err(ScriptError::NotFound(format!(
+                "{} is not a file.",
+                path.display()
+            )));
+        }
+        std::fs::remove_file(&full).map_err(|e| {
+            ScriptError::Failed(format!("{} could not be deleted: {e}.", path.display()))
+        })?;
+        Ok(Value::Null)
     }
 
     /// The names in folder `path`, folders marked, in name order.
@@ -521,6 +601,32 @@ fn natives<'js>(
     n.set(
         "list",
         asking(|lumit, path, _| lumit.ask(move |desk| desk.list(Path::new(&path))))?,
+    )?;
+    n.set(
+        "mayWrite",
+        asking(|lumit, path, _| {
+            lumit.ask(move |desk| desk.may_write(Path::new(&path)).map(|_| Value::Null))
+        })?,
+    )?;
+    n.set(
+        "writeText",
+        asking(|lumit, path, text| {
+            lumit.ask(move |desk| desk.write(Path::new(&path), &text, false))
+        })?,
+    )?;
+    n.set(
+        "appendText",
+        asking(|lumit, path, text| {
+            lumit.ask(move |desk| desk.write(Path::new(&path), &text, true))
+        })?,
+    )?;
+    n.set(
+        "makeFolder",
+        asking(|lumit, path, _| lumit.ask(move |desk| desk.make_folder(Path::new(&path))))?,
+    )?;
+    n.set(
+        "removeFile",
+        asking(|lumit, path, _| lumit.ask(move |desk| desk.remove(Path::new(&path))))?,
     )?;
     n.set(
         "alert",

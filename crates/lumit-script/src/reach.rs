@@ -11,7 +11,8 @@
 //! to it for reading, the project's folder and the script's for saves and
 //! exports, and over MCP the project's folder for everything. A save goes over
 //! the project's own file or makes a new `.lum`, and an export never writes
-//! over a file.
+//! over a file. A script writes text files only in its own folder, so one run
+//! with no folder, as over MCP, writes none.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -153,6 +154,13 @@ impl Reach {
         };
         let chosen = path.canonicalize().is_ok_and(|p| self.files.contains(&p));
         chosen || inside(&path, self.folder.as_slice())
+    }
+
+    /// `path` made whole when a script may write a file there: in its own
+    /// folder or one inside it.
+    pub(crate) fn writable(&self, path: &Path) -> Option<PathBuf> {
+        let path = std::path::absolute(path).ok().and_then(|p| whole(&p))?;
+        inside(&path, self.folder.as_slice()).then_some(path)
     }
 
     /// `path` made whole, a relative one read from the script's folder or
