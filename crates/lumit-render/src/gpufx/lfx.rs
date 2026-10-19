@@ -8,7 +8,7 @@
 //! the picture as it came in, and [`status`] says which.
 
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use lumit_core::fx::effects::custom_shader as cs;
 use lumit_core::fx::lfx::{self, LfxEffect, LfxError};
@@ -24,9 +24,6 @@ type Tex = wgpu::Texture;
 /// device is lost. Longer than the drivers' own watchdogs, which stop a
 /// stuck dispatch after about two seconds.
 const IN_FLIGHT: Duration = Duration::from_secs(5);
-
-/// The LFX effects dispatched lately, and when.
-static LATELY: Mutex<Vec<(&'static str, Instant)>> = Mutex::new(Vec::new());
 
 /// Install one effect and register it in both tables: its pass here first,
 /// then its def in the catalogue, so no catalogue entry is ever without its
@@ -66,9 +63,6 @@ pub enum LfxStatus {
 /// Custom shader. Compiles once per distinct shader.
 #[must_use]
 pub fn status(match_name: &str) -> LfxStatus {
-    if lfx::is_off(match_name) {
-        return LfxStatus::SwitchedOff;
-    }
     let Some(entry) = lfx::installed(match_name) else {
         return LfxStatus::Missing {
             extension: lfx::extension_of(match_name)
@@ -76,6 +70,9 @@ pub fn status(match_name: &str) -> LfxStatus {
                 .to_owned(),
         };
     };
+    if entry.built.is_off() {
+        return LfxStatus::SwitchedOff;
+    }
     let program = match &entry.built.program {
         Ok(program) => *program,
         Err(refusal) => return LfxStatus::Refused(refusal.to_string()),
@@ -103,28 +100,13 @@ fn compiled(key: u64, program: &lumit_core::fx::shader::ShaderProgram) -> Option
     why
 }
 
-/// Strike every LFX effect dispatched in the last few seconds: the device
-/// was lost, and one of them may be why. Called once when a lost device is
-/// noticed; answers the effects this switched off.
-pub fn strike_in_flight() -> Vec<&'static str> {
-    let Ok(mut lately) = LATELY.lock() else {
-        return Vec::new();
-    };
-    let now = Instant::now();
-    let hit: Vec<&'static str> = lately
-        .drain(..)
-        .filter(|(_, at)| now.duration_since(*at) <= IN_FLIGHT)
-        .map(|(name, _)| name)
-        .collect();
-    hit.into_iter().filter(|name| lfx::strike(name)).collect()
-}
-
-fn note_dispatch(name: &'static str) {
-    if let Ok(mut lately) = LATELY.lock() {
-        let now = Instant::now();
-        match lately.iter_mut().find(|(n, _)| *n == name) {
-            Some(slot) => slot.1 = now,
-            None => lately.push((name, now)),
+/// Strike every LFX shader this device was running when it was lost, in
+/// frames that never finished: one of them may be why. Called when a lost
+/// device is noticed.
+pub fn strike_in_flight(ctx: &GpuContext) {
+    for (key, at) in ctx.take_in_flight() {
+        if at.elapsed() <= IN_FLIGHT {
+            lfx::strike(key);
         }
     }
 }
@@ -149,12 +131,15 @@ impl GpuEffect for LfxPass {
     ) -> Tex {
         // Missing or switched off at resolve (no hash), off since, a lost
         // device or a refused shader: the input unchanged, never a fault.
-        if lfx::is_off(self.0) || ctx.device_lost() {
+        if ctx.device_lost() {
             return tex.clone();
         }
         // The shader the frame was resolved with, not whatever a rescan has
         // installed since, so the program always matches the bag's rows.
-        let Some(built) = cs::hash_in(p).and_then(lfx::built) else {
+        let Some(key) = cs::hash_in(p) else {
+            return tex.clone();
+        };
+        let Some(built) = lfx::built(key).filter(|b| !b.is_off()) else {
             return tex.clone();
         };
         let Ok(program) = built.program.as_ref().map(|p| *p) else {
@@ -178,7 +163,7 @@ impl GpuEffect for LfxPass {
         let mix = (p.float(lumit_core::fx::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
         let params = program.pack(p);
         let passes = built.passes();
-        note_dispatch(self.0);
+        ctx.note_in_flight(key);
         let mut done: Vec<Tex> = Vec::with_capacity(passes.len());
         for (i, ((_, scale), pipeline)) in passes.iter().zip(&pipelines).enumerate() {
             let last = i + 1 == passes.len();

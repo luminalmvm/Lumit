@@ -195,7 +195,13 @@ pub struct GpuContext {
     /// static because a process may hold more than one device (the Viewer's and
     /// the exporter's), and one of them dying says nothing about the other.
     lost: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Work handed to this device since its queue was last seen empty, by a
+    /// tag and when, so a lost device can be blamed on what was running.
+    /// Shared with every handle, as `lost` is.
+    in_flight: InFlight,
 }
+
+type InFlight = std::sync::Arc<std::sync::Mutex<Vec<(u64, std::time::Instant)>>>;
 
 /// The multisample counts the composite is willing to use, highest first.
 /// Nothing outside this list is ever asked for.
@@ -534,6 +540,7 @@ impl GpuContext {
             // this stays down: a context built this way does not know when its
             // device goes, and never claims to.
             lost: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            in_flight: InFlight::default(),
         }
     }
 
@@ -627,6 +634,7 @@ impl GpuContext {
             last_overdrawn: std::cell::Cell::new(0),
             submits: std::sync::Arc::clone(&self.submits),
             lost: std::sync::Arc::clone(&self.lost),
+            in_flight: std::sync::Arc::clone(&self.in_flight),
         }
     }
 
@@ -740,7 +748,38 @@ impl GpuContext {
     /// cheap enough to call on every turn of the worker's loop, which is
     /// exactly what it is for.
     pub fn reclaim(&self) {
-        self.device.poll(wgpu::Maintain::Poll);
+        let done = self.device.poll(wgpu::Maintain::Poll);
+        self.forget_finished(done);
+    }
+
+    /// Note that work tagged `tag` was recorded on this device, for
+    /// [`Self::take_in_flight`] to blame if the device is lost before it
+    /// finishes.
+    pub fn note_in_flight(&self, tag: u64) {
+        if let Ok(mut noted) = self.in_flight.lock() {
+            let now = std::time::Instant::now();
+            match noted.iter_mut().find(|(t, _)| *t == tag) {
+                Some(slot) => slot.1 = now,
+                None => noted.push((tag, now)),
+            }
+        }
+    }
+
+    /// The tags noted since the queue was last seen empty, and when, taken.
+    pub fn take_in_flight(&self) -> Vec<(u64, std::time::Instant)> {
+        self.in_flight
+            .lock()
+            .map(|mut noted| std::mem::take(&mut *noted))
+            .unwrap_or_default()
+    }
+
+    /// An empty queue on a live device means everything noted finished.
+    fn forget_finished(&self, done: wgpu::MaintainResult) {
+        if done.is_queue_empty() && !self.device_lost() {
+            if let Ok(mut noted) = self.in_flight.lock() {
+                noted.clear();
+            }
+        }
     }
 
     /// Wait for the card to finish what it has been given, *then* reclaim —
@@ -763,7 +802,8 @@ impl GpuContext {
     /// **Never on a frame path.** It blocks until the card is done, which on a
     /// busy one is exactly the stall the non-blocking version exists to avoid.
     pub fn settle(&self) {
-        self.device.poll(wgpu::Maintain::Wait);
+        let done = self.device.poll(wgpu::Maintain::Wait);
+        self.forget_finished(done);
     }
 
     /// Start batching: from here until the matching [`Self::end_frame`], every
@@ -1253,6 +1293,7 @@ impl GpuContext {
             last_overdrawn: std::cell::Cell::new(0),
             submits: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             lost,
+            in_flight: InFlight::default(),
         })
     }
 }

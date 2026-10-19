@@ -14,6 +14,7 @@
 //! that was never installed here.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use super::effects::custom_shader::{self as cs, CustomShader};
@@ -124,6 +125,8 @@ pub struct Built {
     /// input unchanged.
     pub program: Result<&'static ShaderProgram, ShaderRefusal>,
     passes: Vec<(String, f32)>,
+    /// Lost devices counted against this shader. An edited one starts clean.
+    strikes: AtomicU32,
 }
 
 impl Built {
@@ -132,6 +135,12 @@ impl Built {
     #[must_use]
     pub fn passes(&self) -> Vec<(&str, f32)> {
         self.passes.iter().map(|(n, s)| (n.as_str(), *s)).collect()
+    }
+
+    /// Whether two lost devices have switched this shader off.
+    #[must_use]
+    pub fn is_off(&self) -> bool {
+        self.strikes.load(Ordering::Relaxed) >= STRIKES_OFF
     }
 }
 
@@ -154,9 +163,6 @@ static BUILT: RwLock<BTreeMap<u64, &'static Built>> = RwLock::new(BTreeMap::new(
 
 /// Every def made this session, installed or not. Never shrinks.
 static DEFS: Mutex<BTreeMap<&'static str, &'static LfxDef>> = Mutex::new(BTreeMap::new());
-
-/// Lost devices counted against each effect.
-static STRIKES: Mutex<BTreeMap<String, u32>> = Mutex::new(BTreeMap::new());
 
 /// `lfx:<extension>/<effect>`.
 #[must_use]
@@ -194,7 +200,11 @@ pub fn install(effect: LfxEffect) -> Result<&'static dyn EffectDef, LfxError> {
             let program =
                 shader::build_passes(&effect.shader, &names).map(|p| &*Box::leak(Box::new(p)));
             let passes = passes.iter().map(|(n, s)| ((*n).to_owned(), *s)).collect();
-            let built: &'static Built = Box::leak(Box::new(Built { program, passes }));
+            let built: &'static Built = Box::leak(Box::new(Built {
+                program,
+                passes,
+                strikes: AtomicU32::new(0),
+            }));
             match BUILT.write() {
                 Ok(mut all) => *all.entry(key_hash).or_insert(built),
                 Err(_) => built,
@@ -263,29 +273,17 @@ pub fn all() -> Vec<Arc<Installed>> {
 /// then it draws nothing.
 #[must_use]
 pub fn render_term(match_name: &str) -> u64 {
-    if is_off(match_name) {
-        return 1;
+    match installed(match_name) {
+        None => 0,
+        Some(e) if e.built.is_off() => 1,
+        Some(e) => e.key_hash,
     }
-    installed(match_name).map_or(0, |e| e.key_hash)
 }
 
-/// Count a lost graphics device against an effect. `true` when this strike
-/// switched it off.
-pub fn strike(match_name: &str) -> bool {
-    let Ok(mut strikes) = STRIKES.lock() else {
-        return false;
-    };
-    let n = strikes.entry(match_name.to_owned()).or_insert(0);
-    *n += 1;
-    *n == STRIKES_OFF
-}
-
-/// Whether two lost devices have switched an effect off for the session.
-#[must_use]
-pub fn is_off(match_name: &str) -> bool {
-    STRIKES
-        .lock()
-        .is_ok_and(|s| s.get(match_name).is_some_and(|n| *n >= STRIKES_OFF))
+/// Count a lost graphics device against the shader under `key_hash`. `true`
+/// when this strike switched it off.
+pub fn strike(key_hash: u64) -> bool {
+    built(key_hash).is_some_and(|b| b.strikes.fetch_add(1, Ordering::Relaxed) + 1 == STRIKES_OFF)
 }
 
 /// The manifest facts, checked. Answers the category. Also what

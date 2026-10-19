@@ -2046,13 +2046,14 @@ impl HeadlessRenderer {
     /// renderer and build another. The render worker asks once a turn and does
     /// exactly that; see [`lumit_gpu::GpuContext::device_lost`].
     ///
-    /// The first time it is true, every LFX effect that ran in the moments
-    /// before takes a strike ([`crate::gpufx::lfx::strike_in_flight`]).
+    /// The first time it is true, every LFX effect in a frame of this
+    /// renderer's that never finished takes a strike
+    /// ([`crate::gpufx::lfx::strike_in_flight`]).
     #[must_use]
     pub fn device_lost(&self) -> bool {
         let lost = self.gpu.device_lost();
         if lost {
-            crate::gpufx::lfx::strike_in_flight();
+            crate::gpufx::lfx::strike_in_flight(&self.gpu);
         }
         lost
     }
