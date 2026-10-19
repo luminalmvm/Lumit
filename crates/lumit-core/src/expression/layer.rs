@@ -50,7 +50,7 @@ fn transform_property(
     pick: impl Fn(&model::TransformGroup) -> &crate::anim::Property,
 ) -> f64 {
     with_layer(call, this, |context, layer| {
-        let t = context.comp_time - layer.in_point.0.to_f64();
+        let t = crate::time::layer_time(context.comp_time, layer.start_offset.0);
         let mut deeper = context.increase_depth();
         deeper.layer = Some(layer.id);
         pick(&layer.transform).value_at_with_context(t, Arc::new(deeper))
