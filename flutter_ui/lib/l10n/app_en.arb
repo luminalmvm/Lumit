@@ -20362,5 +20362,34 @@
         "type": "String"
       }
     }
+  },
+  "settingsLiveEndpoint": "Let other programs drive Lumit",
+  "@settingsLiveEndpoint": {
+    "description": "Settings window: a switch, off by default. On, a program on this computer, such as an MCP client through lumit-cli, can edit the open project."
+  },
+  "liveDrivenBy": "{name} is driving Lumit",
+  "@liveDrivenBy": {
+    "description": "Bottom strip, while another program is connected and can edit the open project. {name} is the name the program gives itself.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "liveDrivenByProgram": "A program is driving Lumit",
+  "@liveDrivenByProgram": {
+    "description": "Bottom strip, while another program is connected and can edit the open project, and it has not given its name."
+  },
+  "liveDisconnect": "Disconnect",
+  "@liveDisconnect": {
+    "description": "Button on the bottom strip beside liveDrivenBy. Cuts the connected program off."
+  },
+  "liveCouldNotStart": "Other programs could not be let in",
+  "@liveCouldNotStart": {
+    "description": "Bottom-strip notice when turning on settingsLiveEndpoint failed."
+  },
+  "liveScript": "a script",
+  "@liveScript": {
+    "description": "Stands for {name} in scriptRunning when a connected program runs a script without naming it: Running a script."
   }
 }

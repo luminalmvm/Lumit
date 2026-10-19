@@ -90,6 +90,7 @@ mod footage;
 mod framecache;
 #[cfg(feature = "media")]
 mod layered;
+mod live;
 mod media;
 mod names;
 mod packing;

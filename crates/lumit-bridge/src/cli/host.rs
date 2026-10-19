@@ -9,6 +9,7 @@
 use std::cell::{Cell, RefCell};
 use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -29,6 +30,9 @@ use crate::api::BridgeError;
 /// How long `export.status` waits for news of a running export, so a
 /// script asking in a loop is not spinning.
 const STATUS_WAIT: Duration = Duration::from_millis(100);
+/// How long a script sent over MCP may run. Nobody is there to press Stop,
+/// so one that loops for ever stops here instead of holding the program.
+const SCRIPT_TIME: Duration = Duration::from_secs(60);
 
 pub struct Headless {
     store: Arc<DocumentStore>,
@@ -458,6 +462,18 @@ impl Host for Headless {
     fn parent_ops(&self, comp: Uuid, layer: Uuid, parent: Option<Uuid>, at: CompTime) -> Vec<Op> {
         let doc = self.store.snapshot();
         lumit_render::build::parent_ops(&doc, comp, layer, parent, at.0.to_f64())
+    }
+
+    fn stop_flag(&self) -> Arc<AtomicBool> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = stop.clone();
+        let _ = std::thread::Builder::new()
+            .name("script time".into())
+            .spawn(move || {
+                std::thread::sleep(SCRIPT_TIME);
+                flag.store(true, Ordering::Relaxed);
+            });
+        stop
     }
 }
 

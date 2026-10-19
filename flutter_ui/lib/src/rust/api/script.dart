@@ -10,7 +10,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'package:uuid/uuid.dart';
 part 'script.freezed.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`
 
 /// Stop the running script at its next step. Harmless when none is.
 void stopScript() => BridgeLib.instance.api.crateApiScriptStopScript();
@@ -19,6 +19,58 @@ void stopScript() => BridgeLib.instance.api.crateApiScriptStopScript();
 /// cancelled.
 void answerScriptFile({String? path}) =>
     BridgeLib.instance.api.crateApiScriptAnswerScriptFile(path: path);
+
+/// Let other programs on this computer drive Lumit: listen on a local
+/// socket, never a network port, for one program at a time that holds the
+/// secret written beside it. `events` hears who connects and what they do,
+/// and edits arrive on the change stream as usual. False when it could not
+/// start.
+Future<bool> startLiveEndpoint({RustStreamSink<BridgeLiveEvent>? events}) =>
+    BridgeLib.instance.api.crateApiScriptStartLiveEndpoint(events: events);
+
+/// Stop listening and let go of the program connected. Harmless when off.
+Future<void> stopLiveEndpoint() =>
+    BridgeLib.instance.api.crateApiScriptStopLiveEndpoint();
+
+/// The busy card for a program's script is up, after `ScriptStarted`. The
+/// script waits for this, so nothing from the window lands in its undo step.
+void liveScriptShown() =>
+    BridgeLib.instance.api.crateApiScriptLiveScriptShown();
+
+/// Let go of the program connected. It may connect again.
+void disconnectLiveProgram() =>
+    BridgeLib.instance.api.crateApiScriptDisconnectLiveProgram();
+
+@freezed
+sealed class BridgeLiveEvent with _$BridgeLiveEvent {
+  const BridgeLiveEvent._();
+
+  /// A program has connected and proved it holds the secret. `name` is
+  /// what it calls itself, empty until it says.
+  const factory BridgeLiveEvent.attached({
+    required String name,
+  }) = BridgeLiveEvent_Attached;
+
+  /// It has gone, or was let go.
+  const factory BridgeLiveEvent.detached() = BridgeLiveEvent_Detached;
+
+  /// It is running a script, `name`, as one undo step. The interface must
+  /// not edit until `ScriptEnded`, as for File > Run script.
+  const factory BridgeLiveEvent.scriptStarted({
+    required String name,
+  }) = BridgeLiveEvent_ScriptStarted;
+  const factory BridgeLiveEvent.scriptEnded() = BridgeLiveEvent_ScriptEnded;
+
+  /// It opens `comp` in the Viewer.
+  const factory BridgeLiveEvent.openComp({
+    required CompositionReference comp,
+  }) = BridgeLiveEvent_OpenComp;
+
+  /// Its script shows `message`.
+  const factory BridgeLiveEvent.alert({
+    required String message,
+  }) = BridgeLiveEvent_Alert;
+}
 
 @freezed
 sealed class BridgeScriptEvent with _$BridgeScriptEvent {

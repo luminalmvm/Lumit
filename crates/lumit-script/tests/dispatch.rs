@@ -342,3 +342,121 @@ impl Mat {
         Mat(m)
     }
 }
+
+/// MCP clients stop at the first field out of place, so the handshake, the
+/// tool list and a call are pinned here.
+#[test]
+fn mcp_answers_in_the_shape_clients_expect() {
+    let host = Bare(DocumentStore::new(Document::new()));
+    call(&host, "comp.new", json!({ "name": "Main" }));
+    let ask = |line: Value| -> Value {
+        let reply = lumit_script::mcp::answer(&line.to_string(), &host).unwrap();
+        assert!(!reply.contains('\n'));
+        serde_json::from_str(&reply).unwrap()
+    };
+
+    let hello = ask(
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {},
+        "clientInfo": { "name": "test", "version": "1" } } }),
+    );
+    assert_eq!(hello["id"], json!(1));
+    assert_eq!(hello["result"]["protocolVersion"], json!("2025-06-18"));
+    assert_eq!(hello["result"]["capabilities"], json!({ "tools": {} }));
+    assert_eq!(hello["result"]["serverInfo"]["name"], json!("lumit"));
+    let initialized = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
+    assert_eq!(
+        lumit_script::mcp::answer(&initialized.to_string(), &host),
+        None
+    );
+
+    let list = ask(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }));
+    let tools = list["result"]["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), COMMANDS.len() + 1);
+    for tool in tools {
+        let name = tool["name"].as_str().unwrap();
+        assert!(name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'));
+        assert_eq!(tool["inputSchema"]["type"], json!("object"), "{name}");
+        assert!(tool["description"].is_string());
+    }
+
+    let added = ask(
+        json!({ "jsonrpc": "2.0", "id": "a", "method": "tools/call", "params": {
+        "name": "layer_add", "arguments": { "comp": "Main", "kind": "camera" } } }),
+    );
+    assert_eq!(added["result"]["isError"], json!(false));
+    let text = added["result"]["content"][0]["text"].as_str().unwrap();
+    let layer: Value = serde_json::from_str(text).unwrap();
+    assert!(layer["id"].is_string(), "{text}");
+
+    // A command that fails is the tool's answer, an unknown method the
+    // protocol's.
+    let missing = ask(
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+        "name": "comp_get", "arguments": { "comp": "Nowhere" } } }),
+    );
+    assert_eq!(missing["result"]["isError"], json!(true));
+    let unknown = ask(json!({ "jsonrpc": "2.0", "id": 4, "method": "resources/list" }));
+    assert_eq!(unknown["error"]["code"], json!(-32601));
+}
+
+// The live endpoint is the one way in from another program, so a program
+// without the secret must get nothing, and one with it a working MCP.
+#[test]
+fn the_live_endpoint_answers_only_a_program_holding_the_secret() {
+    use lumit_script::live;
+    use std::io::{BufRead, Write};
+
+    let dir = std::env::var_os("LUMIT_USER_DIRS")
+        .map_or_else(std::env::temp_dir, PathBuf::from)
+        .join(format!("live-{}", Uuid::now_v7()));
+    let file = dir.join("endpoint");
+    let (listener, secret) = live::open(&file).unwrap();
+    let host = Bare(DocumentStore::new(Document::new()));
+    let (stop, leave) = (AtomicBool::new(false), AtomicBool::new(false));
+
+    // Stops the endpoint however the checks end, or a failed one would
+    // leave the scope waiting on it for ever.
+    struct Stop<'a>(&'a AtomicBool);
+    impl Drop for Stop<'_> {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            live::serve(
+                &listener,
+                &secret,
+                &stop,
+                &leave,
+                &mut |_| {},
+                &mut |line| lumit_script::mcp::answer(line, &host),
+            );
+        });
+        let _stop = Stop(&stop);
+
+        // The right name with a secret of its own is let go after its proof.
+        let text = std::fs::read_to_string(&file).unwrap();
+        let name = text.lines().next().unwrap();
+        let wrong = dir.join("wrong");
+        let other = lumit_peer::Secret::generate().unwrap().to_handover();
+        std::fs::write(&wrong, format!("{name}\n{other}")).unwrap();
+        assert_eq!(live::connect(&wrong).err(), Some(live::Unreached::Denied));
+
+        let mut link = live::connect(&file).unwrap();
+        writeln!(
+            link.to,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"2025-06-18","capabilities":{{}},"clientInfo":{{"name":"test","version":"1"}}}}}}"#
+        )
+        .unwrap();
+        let mut reply = String::new();
+        link.from.read_line(&mut reply).unwrap();
+        let reply: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(reply["result"]["serverInfo"]["name"], json!("lumit"));
+    });
+    let _ = std::fs::remove_dir_all(&dir);
+}

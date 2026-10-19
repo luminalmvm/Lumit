@@ -95,6 +95,8 @@ pub enum Limits {
     /// footage from the files the script may read, as File > Run script.
     #[default]
     Script,
+    /// The project's folder only, footage included, as over MCP.
+    Project,
     /// Wherever the script says, as on the command line, whose caller is
     /// the person.
     Off,
@@ -166,6 +168,7 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
                 .iter()
                 .filter_map(|p| p.canonicalize().ok())
                 .collect(),
+            project: options.limits == Limits::Project,
         }),
         limited: options.limits != Limits::Off,
         edited: Cell::new(false),
