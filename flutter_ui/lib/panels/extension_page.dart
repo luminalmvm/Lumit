@@ -403,20 +403,48 @@ class _GtkPageState extends State<_GtkPage> {
   }
 
   /// Whether anything Flutter draws is over the panel: a menu, a dialogue,
-  /// a tooltip or a dragged panel, which all go in the shell's overlay
-  /// above the one entry the shell itself is, or something of the shell's
-  /// own that takes the pointer where the panel is.
-  bool _coveredAt(RenderBox box, Offset centre) {
-    var entries = 0;
-    Overlay.maybeOf(context)
-        ?.context
-        .findRenderObject()
-        ?.visitChildren((_) => entries++);
-    if (entries > 1) return true;
+  /// a tooltip, a floating panel or a dragged panel, which all go in the
+  /// shell's overlay in an entry above the one this page is in, or something
+  /// of the shell's own that takes the pointer where the panel is.
+  bool _coveredAt(RenderBox box, Rect rect) {
+    final theatre = Overlay.maybeOf(context)?.context.findRenderObject();
+    // The entry this page is in: the overlay's child it sits under. The
+    // overlay lists its entries bottom first.
+    RenderObject? mine = box;
+    while (mine != null && mine.parent != theatre) {
+      mine = mine.parent;
+    }
+    var above = false;
+    var over = false;
+    theatre?.visitChildren((entry) {
+      if (above && !over) over = _drawsOver(entry, rect);
+      if (identical(entry, mine)) above = true;
+    });
+    if (over) return true;
     final result = HitTestResult();
     WidgetsBinding.instance
-        .hitTestInView(result, centre, View.of(context).viewId);
+        .hitTestInView(result, rect.center, View.of(context).viewId);
     return !result.path.any((entry) => entry.target == box);
+  }
+
+  /// Whether [node], or anything in it, is drawn over [rect]. A box clear of
+  /// it is passed over with all it holds, so a floating panel beside the page
+  /// does not hide it, and a leaf that reaches it does.
+  static bool _drawsOver(RenderObject node, Rect rect) {
+    if (node is RenderOffstage && node.offstage) return false;
+    if (node is RenderBox) {
+      if (!node.attached || !node.hasSize) return false;
+      final at = MatrixUtils.transformRect(
+          node.getTransformTo(null), Offset.zero & node.size);
+      if (!at.overlaps(rect)) return false;
+    }
+    var leaf = true;
+    var over = false;
+    node.visitChildren((child) {
+      leaf = false;
+      if (!over) over = _drawsOver(child, rect);
+    });
+    return leaf || over;
   }
 
   /// Tell the runner where the view is now, if that has changed. Called
@@ -434,7 +462,7 @@ class _GtkPageState extends State<_GtkPage> {
       // The interface is drawn at a scale of the person's choosing, and the
       // page is drawn at the same one.
       if (shown) scale = rect.width / box.size.width;
-      _cover(shown && _coveredAt(box, rect.center));
+      _cover(shown && _coveredAt(box, rect));
     }
     shown = shown && !_hidden;
     if (rect == _sentRect && scale == _sentScale && shown == _sentShown) {
