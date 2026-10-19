@@ -7259,10 +7259,6 @@
   "@sourceZoom": {
     "description": "Field label: how much a still is scaled as it is read in."
   },
-  "splashSubtitle": "Motion Graphics und Compositing",
-  "@splashSubtitle": {
-    "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
-  },
   "stretchAnchor": "Der In-Point bleibt; das Ende der Ebene bewegt sich.",
   "@stretchAnchor": {
     "description": "Stretch dialogue: a note under the wells saying which end of the layer stays put when it is stretched."
