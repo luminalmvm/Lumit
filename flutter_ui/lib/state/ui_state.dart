@@ -25,6 +25,7 @@ import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
+import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
@@ -459,6 +460,10 @@ class LumitUiState extends ChangeNotifier {
     }
     pushDiscordStatus();
   }
+
+  /// Let other programs drive Lumit, or stop, as Settings says.
+  void applyLiveEndpoint() =>
+      applyLiveEndpointFrb(workspace.liveEndpoint, _app, this);
 
   /// Tell Discord what Lumit is open on, as far as Settings allows. Called
   /// where the project's path or the fronted comp can have changed.
@@ -2477,6 +2482,9 @@ class LumitUiState extends ChangeNotifier {
         } catch (_) {
           // Closed already.
         }
+        // The endpoint's file goes with it, so nothing names a Lumit that
+        // has gone.
+        if (this.workspace.liveEndpoint) await stopLiveEndpointFrb();
         return AppExitResponse.exit;
       },
     );
@@ -2504,6 +2512,7 @@ class LumitUiState extends ChangeNotifier {
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
     setHardwareDecode(on_: perf.hardwareDecode);
     pushDiscordStatus();
+    if (this.workspace.liveEndpoint) applyLiveEndpoint();
     // Which output Lumit is heard through. Same arrangement as the budgets: the
     // engine holds the live choice with no store behind it, so the settings
     // file carries it and hands it back here. Null means the system default,
