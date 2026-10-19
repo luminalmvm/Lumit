@@ -9,6 +9,9 @@ publish = false
 
 [dependencies]
 lumit-core = { path = "../lumit-core" }
+# After Effects' effects and their controls, converted as importing a
+# project converts them.
+lumit-import = { path = "../lumit-import" }
 lumit-ingress = { path = "../lumit-ingress" }
 # The live endpoint: the local socket Lumit listens on while the person lets
 # other programs drive it, and the challenge both ends answer on it.

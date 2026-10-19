@@ -21,6 +21,7 @@ void main() {
   }) =>
       BridgeClip(
         id: UuidValue.fromString(const Uuid().v4()),
+        audible: true,
         placeStart: const BridgeRational(num: 0, den: 1),
         placeDuration: const BridgeRational(num: 1, den: 1),
         gainDb: 0,

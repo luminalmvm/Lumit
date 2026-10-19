@@ -262,10 +262,10 @@ app.endUndoGroup();
         }
     };
     faces(p, [(10.0, 40.0, 5.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)]);
-    // The whole run is one step, named after the script.
+    // The whole run is one step, named after its undo group.
     let history = host.store().history();
     assert_eq!(history.len(), 1);
-    assert_eq!(history[0].name, "Camera.jsx");
+    assert_eq!(history[0].name, "Camera");
 
     // X and Y keyed apart from Z, as Lumit can leave them. A second run
     // reads every axis at every key, and reads the rotation back in After
@@ -307,6 +307,204 @@ read"#;
         &cam["properties"],
         [(10.0, 40.0, 15.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)],
     );
+}
+
+/// The After Effects pieces past keys and cameras: includes, eased keys, a
+/// solid, a precomp, a precompose, an effect with a keyed control, markers,
+/// an expression and a file written in the script's folder, with one outside
+/// it refused.
+#[test]
+fn an_after_effects_script_eases_adds_effects_and_writes_a_file() {
+    use lumit_core::anim::{Animation, SideInterp};
+    use lumit_core::markers::MarkerKind;
+    use lumit_core::model::{EffectValue, LayerKind, ProjectItem, TransformProp};
+
+    let dir = std::env::var_os("LUMIT_USER_DIRS")
+        .map_or_else(std::env::temp_dir, PathBuf::from)
+        .join(format!("ae-{}", Uuid::now_v7()));
+    let folder = dir.join("script");
+    std::fs::create_dir_all(&folder).unwrap();
+    let path = folder.join("edit.jsx");
+    std::fs::create_dir_all(folder.join("lib")).unwrap();
+    std::fs::write(
+        folder.join("lib").join("names.jsx"),
+        "#include \"count.jsx\"\nfunction red() { return \"Red\"; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        folder.join("lib").join("count.jsx"),
+        "var counted = (typeof counted === \"number\" ? counted : 0) + 1;\n",
+    )
+    .unwrap();
+    let script = r#"#include "lib/names.jsx"
+//@include "lib/count.jsx"
+app.beginUndoGroup("");
+app.beginUndoGroup("Edit pass");
+var comp = app.project.items.addComp("Edit", 1920, 1080, 1, 4, 30);
+var inner = app.project.items.addComp("Inner", 640, 360, 1, 2, 30);
+var solid = comp.layers.addSolid([1, 0, 0], red(), 800, 600, 1);
+var nest = comp.layers.add(inner);
+var fade = solid.property("ADBE Transform Group").property("ADBE Opacity");
+fade.setValuesAtTimes([0, 1], [0, 100]);
+fade.setTemporalEaseAtKey(2, [new KeyframeEase(0, 75)]);
+var turn = solid.transform.rotation;
+turn.setValuesAtTimes([0, 1], [0, 90]);
+turn.setInterpolationTypeAtKey(1, KeyframeInterpolationType.BEZIER);
+var blur = solid.property("ADBE Effect Parade").addProperty("ADBE Gaussian Blur 2");
+blur.property(1).setValueAtTime(0, 0);
+blur.property(1).setValueAtTime(2, 40);
+blur.enabled = false;
+comp.markerProperty.setValueAtTime(1, new MarkerValue("Hit"));
+nest.property("Marker").setValueAtTime(0.5, new MarkerValue("In", "In"));
+nest.transform.position.expression = "wiggle(2, 10)";
+var here = new File($.fileName).parent;
+new Folder(here.fsName + "/out").create();
+var log = new File(here.fsName + "/out/log.txt");
+log.open("w");
+log.writeln("layers " + comp.numLayers);
+log.close();
+var refused = "";
+try {
+    new File(here.parent.fsName + "/outside.txt").open("w");
+} catch (e) {
+    refused = e.message;
+}
+var pack = app.project.items.addComp("Pack", 640, 360, 1, 2, 30);
+var moved = pack.layers.addNull();
+pack.layers.addNull();
+var packed = pack.layers.precompose([1, 2], "Packed", true);
+moved.transform.opacity.setValueAtTime(1, 25);
+[app.project.activeItem, refused, fade.keyInTemporalEase(2)[0].influence, counted, packed.numLayers, pack.layer(1).name]
+"#;
+    std::fs::write(&path, script).unwrap();
+    let host = Bare(DocumentStore::new(Document::new()));
+    let report = run(
+        &host,
+        script,
+        RunOptions {
+            name: "edit.jsx".into(),
+            path: Some(path),
+            ..RunOptions::default()
+        },
+    );
+    let read = report.result.unwrap();
+    assert_eq!(read[0], Value::Null);
+    assert!(read[1].as_str().unwrap().contains("own folder"), "{read}");
+    assert_eq!(read[2].as_f64(), Some(75.0));
+    // Each file comes in once, however often it is named.
+    assert_eq!(read[3].as_f64(), Some(1.0));
+    assert_eq!(
+        (read[4].as_f64(), read[5].as_str()),
+        (Some(2.0), Some("Packed"))
+    );
+    // The History step takes the first name the script gave its undo group.
+    assert_eq!(host.store().history()[0].name, "Edit pass");
+
+    let doc = host.store().snapshot();
+    let comp = |name: &str| {
+        doc.items
+            .iter()
+            .find_map(|i| match i {
+                ProjectItem::Composition(c) if c.name == name => Some(c),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let (edit, inner) = (comp("Edit"), comp("Inner"));
+    // A key made after the precompose lands on the layer in its new comp.
+    assert!(comp("Packed").layers.iter().any(|l| matches!(
+        l.prop(TransformProp::Opacity).unwrap().animation,
+        Animation::Keyframed(_)
+    )));
+    let layer = |name: &str| edit.layers.iter().find(|l| l.name == name).unwrap();
+    let keys = |l: &Layer, p: TransformProp| match &l.prop(p).unwrap().animation {
+        Animation::Keyframed(keys) => keys.clone(),
+        other => panic!("{other:?}"),
+    };
+
+    // A red solid 800 by 600, with its fade eased in and its turn automatic.
+    let red = layer("Red");
+    let LayerKind::Solid { def } = red.kind else {
+        panic!("{:?}", red.kind)
+    };
+    let Some(ProjectItem::Solid(solid)) = doc.item(def) else {
+        panic!("no solid")
+    };
+    assert_eq!((solid.width, solid.height), (800, 600));
+    assert_eq!(solid.colour.0, [1.0, 0.0, 0.0, 1.0]);
+    assert_eq!(
+        keys(red, TransformProp::Opacity)[1].interp_in,
+        SideInterp::Bezier {
+            speed: 0.0,
+            influence: 0.75
+        }
+    );
+    assert!(matches!(
+        keys(red, TransformProp::Rotation)[0].interp_out,
+        SideInterp::Auto { clamped: false, .. }
+    ));
+
+    // The blur came across as importing brings it, its radius keyed and the
+    // effect off.
+    let blur = &red.effects[0];
+    assert_eq!(blur.effect.match_name, "blur");
+    assert!(!blur.enabled);
+    let radius = blur.params.iter().find(|p| p.id == "radius").unwrap();
+    let EffectValue::Float(radius) = &radius.value else {
+        panic!("{radius:?}")
+    };
+    let Animation::Keyframed(radius) = &radius.animation else {
+        panic!("{radius:?}")
+    };
+    assert_eq!(radius.len(), 2);
+    assert_eq!(radius[1].value, 40.0);
+    assert_eq!(
+        radius[1].time,
+        lumit_core::time::Rational::new(2, 1).unwrap()
+    );
+
+    // The precomp, its chapter marker, and the comp's own marker.
+    let nest = layer("Inner");
+    assert_eq!(nest.kind, LayerKind::Precomp { comp: inner.id });
+    assert_eq!(nest.markers[0].label, "In");
+    assert!(matches!(nest.markers[0].kind, MarkerKind::Chapter));
+    assert_eq!(edit.markers[0].label, "Hit");
+
+    // One expression on each axis of the position, each told which it is.
+    for (axis, prop) in [TransformProp::PositionX, TransformProp::PositionY]
+        .into_iter()
+        .enumerate()
+    {
+        let p = nest.prop(prop).unwrap();
+        assert_eq!(p.animation, Animation::Expression("wiggle(2, 10)".into()));
+        let slot = lumit_core::expression::Slot::read(&p.extra);
+        assert_eq!(usize::from(slot.axis), axis);
+        assert_eq!(slot.language, lumit_core::expression::Language::JavaScript);
+    }
+
+    // The file inside the folder, and nothing outside it.
+    let written = std::fs::read_to_string(folder.join("out").join("log.txt")).unwrap();
+    assert_eq!(written.trim_end(), "layers 2");
+    assert!(!dir.join("outside.txt").exists());
+
+    // An error in an included file names it and its line, on the script's
+    // include line.
+    std::fs::write(folder.join("lib").join("bad.jsx"), "var a = 1;\nnope();\n").unwrap();
+    let failed = run(
+        &host,
+        "var b = 2;\n#include \"lib/bad.jsx\"\n",
+        RunOptions {
+            name: "bad-run.jsx".into(),
+            path: Some(folder.join("bad-run.jsx")),
+            ..RunOptions::default()
+        },
+    )
+    .result
+    .unwrap_err();
+    assert_eq!(failed.line, Some(2));
+    let said = failed.error.to_string();
+    assert!(said.contains("bad.jsx, line 2"), "{said}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 struct Mat([[f64; 3]; 3]);

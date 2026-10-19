@@ -177,6 +177,47 @@ pub(crate) fn thumbnail(
     .flatten()
 }
 
+/// Frame `frame` of `comp` at `scale`, written to a new PNG at `out`, never
+/// over a file. Answers its width and height. The thumbnail's renderer draws
+/// it, so a script's frame neither waits behind the Viewer nor holds it up.
+pub(crate) fn save_frame(
+    doc: &std::sync::Arc<lumit_core::model::Document>,
+    comp: Uuid,
+    frame: u64,
+    scale: f32,
+    out: &std::path::Path,
+) -> Result<(u32, u32), String> {
+    use std::io::Write;
+    let (rgba, width, height) =
+        thumbnail(doc, comp, frame, scale).ok_or("The frame could not be rendered.")?;
+    let mut bytes = Vec::new();
+    let mut encoder = png::Encoder::new(&mut bytes, width, height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .and_then(|mut writer| {
+            writer
+                .write_image_data(&rgba)
+                .and_then(|()| writer.finish())
+        })
+        .map_err(|e| format!("The frame could not be made into a PNG: {e}."))?;
+    // Made new, so a file that appeared since the name was chosen is kept.
+    std::fs::File::options()
+        .write(true)
+        .create_new(true)
+        .open(out)
+        .and_then(|mut file| file.write_all(&bytes))
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::AlreadyExists => format!(
+                "{} is already there, and a frame never writes over a file.",
+                out.display()
+            ),
+            _ => format!("{} could not be written: {e}.", out.display()),
+        })?;
+    Ok((width, height))
+}
+
 /// Build the footage/audio inputs and a GPU export context for `comp` through
 /// the headless seam, so the export driver can hand them to the exact
 /// egui exporter (`lumit_render::export::start`). `None` when the machine has no GPU

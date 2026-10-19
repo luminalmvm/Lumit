@@ -628,6 +628,14 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   /// in rather than stretching the one it was given first.
   void _wantPicture(BridgeClip clip, double left, double width) {
     final id = clip.id.toString();
+    // A clip whose sound was detached is heard from the clip that took it,
+    // and draws no wave of its own.
+    if (!clip.audible) {
+      _peaks.remove(id);
+      _spectra.remove(id);
+      _keys.remove(id);
+      return;
+    }
     final axis = widget.axis;
     if (axis.perFrame <= 0 || widget.fps <= 0 || width <= 0) return;
     final secondsPerPixel = 1 / (axis.perFrame * widget.fps);

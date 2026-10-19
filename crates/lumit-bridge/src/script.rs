@@ -11,6 +11,7 @@
 //! nothing else commits into the run's undo step.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,20 +33,23 @@ use crate::api::{
 pub(crate) const MAX_SOURCE_BYTES: u64 = 16 << 20;
 
 /// The script that is running, if one is: how to stop it, and where the
-/// file it is waiting for goes.
+/// answer it is waiting for goes, a file or what was done in its window.
 struct Running {
     stop: Arc<AtomicBool>,
-    answer: Option<SyncSender<Option<PathBuf>>>,
+    answer: Option<SyncSender<Option<String>>>,
 }
 
 static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
 
-/// Run the script at `path` on `project`, on a thread of its own. False when
-/// one is running already. `tell` hears what it does, and answers false
-/// when nobody is listening.
+/// Run the script at `path` on `project`, on a thread of its own, with
+/// `comp` open in the Viewer and `args` as its `lumit.args`. False when one
+/// is running already. `tell` hears what it does, and answers false when
+/// nobody is listening.
 pub(crate) fn start(
     project: ProjectReference,
     path: PathBuf,
+    comp: Option<Uuid>,
+    args: BTreeMap<String, String>,
     tell: impl Fn(BridgeScriptEvent) -> bool + Send + 'static,
 ) -> Result<bool, BridgeError> {
     let store = {
@@ -68,7 +72,7 @@ pub(crate) fn start(
         .name("script".into())
         .spawn(move || {
             let end = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_file(project, store, &path, stop, &tell)
+                run_file(project, store, &path, comp, args, stop, &tell)
             }))
             .unwrap_or_else(|_| finished(Vec::new(), "The script stopped unexpectedly.", None));
             // Free before saying so, so the next run can start straight away.
@@ -86,7 +90,7 @@ pub(crate) fn start(
     Ok(true)
 }
 
-/// Stop the running script at its next step, and let go of a file it is
+/// Stop the running script at its next step, and let go of an answer it is
 /// waiting for.
 pub(crate) fn stop() {
     if let Ok(mut running) = RUNNING.lock() {
@@ -120,15 +124,15 @@ impl Drop for Holding {
     }
 }
 
-/// The file the running script asked for, or `None` when the person
+/// The answer the running script is waiting for, or `None` when the person
 /// cancelled.
-pub(crate) fn answer(path: Option<PathBuf>) {
+pub(crate) fn answer(answer: Option<String>) {
     let waiting = RUNNING
         .lock()
         .ok()
         .and_then(|mut running| running.as_mut()?.answer.take());
     if let Some(waiting) = waiting {
-        let _ = waiting.send(path);
+        let _ = waiting.send(answer);
     }
 }
 
@@ -136,6 +140,8 @@ fn run_file(
     project: ProjectReference,
     store: Arc<DocumentStore>,
     path: &Path,
+    comp: Option<Uuid>,
+    args: BTreeMap<String, String>,
     stop: Arc<AtomicBool>,
     tell: &dyn Fn(BridgeScriptEvent) -> bool,
 ) -> BridgeScriptEvent {
@@ -149,13 +155,15 @@ fn run_file(
     if read.is_err() || source.len() as u64 > MAX_SOURCE_BYTES {
         return finished(Vec::new(), "The script could not be read.", None);
     }
-    let host = AppHost::new(project, store, stop.clone(), tell);
+    let mut host = AppHost::new(project, store, stop.clone(), tell);
+    host.active = comp;
     let choose = |title: &str, extensions: &[String]| host.choose_file(title, extensions);
     let alert = |message: &str| {
         host.say(BridgeScriptEvent::Alert {
             message: message.into(),
         });
     };
+    let dialog = |tree: Option<&str>| host.dialog(tree);
     let report = lumit_script::run(
         &host,
         &source,
@@ -165,6 +173,8 @@ fn run_file(
             choose_file: &choose,
             path: Some(path.to_path_buf()),
             alert: Some(&alert),
+            dialog: Some(&dialog),
+            args,
             ..Default::default()
         },
     );
@@ -202,6 +212,8 @@ pub(crate) struct AppHost<'a> {
     stop: Arc<AtomicBool>,
     /// The interface, which hears [`BridgeScriptEvent`]s.
     tell: &'a dyn Fn(BridgeScriptEvent) -> bool,
+    /// The comp open in the Viewer when the run started.
+    pub(crate) active: Option<Uuid>,
 }
 
 impl<'a> AppHost<'a> {
@@ -219,6 +231,7 @@ impl<'a> AppHost<'a> {
             export: RefCell::new(None),
             stop,
             tell,
+            active: None,
         }
     }
 
@@ -228,9 +241,9 @@ impl<'a> AppHost<'a> {
         (self.tell)(event)
     }
 
-    /// Ask the interface for a file and wait for the answer, which Stop also
+    /// Ask the interface `question` and wait for the answer, which Stop also
     /// gives, as `None`.
-    fn choose_file(&self, title: &str, extensions: &[String]) -> Option<PathBuf> {
+    fn wait(&self, question: BridgeScriptEvent) -> Option<String> {
         let (answer, answered) = mpsc::sync_channel(1);
         {
             let mut running = RUNNING.lock().ok()?;
@@ -240,14 +253,31 @@ impl<'a> AppHost<'a> {
             }
             running.as_mut()?.answer = Some(answer);
         }
-        let asked = self.say(BridgeScriptEvent::ChooseFile {
-            title: title.into(),
-            extensions: extensions.to_vec(),
-        });
-        if !asked {
+        if !self.say(question) {
             return None;
         }
         answered.recv().ok().flatten()
+    }
+
+    /// Ask the interface for a file.
+    fn choose_file(&self, title: &str, extensions: &[String]) -> Option<PathBuf> {
+        self.wait(BridgeScriptEvent::ChooseFile {
+            title: title.into(),
+            extensions: extensions.to_vec(),
+        })
+        .map(PathBuf::from)
+    }
+
+    /// Show the script's window as `tree` describes it and wait for what the
+    /// person does, or take it down.
+    fn dialog(&self, tree: Option<&str>) -> Option<String> {
+        match tree {
+            Some(tree) => self.wait(BridgeScriptEvent::ShowDialog { tree: tree.into() }),
+            None => {
+                self.say(BridgeScriptEvent::CloseDialog);
+                None
+            }
+        }
     }
 }
 
@@ -434,6 +464,19 @@ impl Host for AppHost<'_> {
         Ok(())
     }
 
+    // On the script's own thread, from a snapshot, so the project's lock is
+    // not held while it renders.
+    fn render_frame(
+        &self,
+        comp: Uuid,
+        frame: u64,
+        scale: f32,
+        out: &Path,
+    ) -> Result<(u32, u32), ScriptError> {
+        crate::render::save_frame(&self.store.snapshot(), comp, frame, scale, out)
+            .map_err(ScriptError::Failed)
+    }
+
     fn open_comp(&self, comp: Uuid) -> Result<(), ScriptError> {
         self.say(BridgeScriptEvent::OpenComp {
             comp: CompositionReference::new(self.project.id, comp),
@@ -443,6 +486,14 @@ impl Host for AppHost<'_> {
 
     fn stop_flag(&self) -> Arc<AtomicBool> {
         self.stop.clone()
+    }
+
+    fn active_comp(&self) -> Option<Uuid> {
+        self.active
+    }
+
+    fn source_length(&self, comp: Uuid, layer: &Layer) -> Option<lumit_core::time::Duration> {
+        crate::api::layer::LayerReference::new(self.project.id, comp, layer.id).source_length(layer)
     }
 
     fn parent_ops(
@@ -457,6 +508,46 @@ impl Host for AppHost<'_> {
     }
 }
 
+/// The most scripts File > Scripts lists, and how many folders deep it looks.
+const MAX_LISTED: usize = 500;
+const MAX_DEPTH: usize = 4;
+
+/// The `.js` and `.jsx` files in `folder` and the folders inside it, as paths
+/// under it with `/` between the parts. Each folder's names are in order, with
+/// its folders among its files. Hidden ones are left out.
+pub(crate) fn list(folder: &Path) -> Vec<String> {
+    fn walk(folder: &Path, under: &str, depth: usize, out: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(folder) else {
+            return;
+        };
+        let mut names: Vec<(String, PathBuf)> = entries
+            .flatten()
+            .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+            .filter(|(name, _)| !name.starts_with('.'))
+            .collect();
+        names.sort_by_cached_key(|(name, _)| name.to_lowercase());
+        for (name, path) in names {
+            if out.len() >= MAX_LISTED {
+                return;
+            }
+            let at = format!("{under}{name}");
+            if path.is_dir() {
+                if depth < MAX_DEPTH {
+                    walk(&path, &format!("{at}/"), depth + 1, out);
+                }
+            } else if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("js") || e.eq_ignore_ascii_case("jsx"))
+            {
+                out.push(at);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(folder, "", 1, &mut out);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc;
@@ -465,33 +556,53 @@ mod tests {
     use super::*;
     use crate::api::state::LumitBridgeState;
 
-    // Stop pressed while a script waits for a file must end the run, not
-    // leave it waiting for an answer that never comes.
+    // Stop pressed while a script waits for a file, or in its window, must
+    // end the run, not leave it waiting for an answer that never comes. One
+    // test, as only one script runs at a time.
     #[test]
     #[allow(clippy::expect_used)]
-    fn stop_ends_a_script_waiting_for_a_file() {
+    fn stop_ends_a_script_waiting_for_a_file_or_in_its_window() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let path = dir.path().join("wait.js");
-        std::fs::write(
-            &path,
-            "lumit.chooseFile(\"Pick\", [\"json\"]);
-while (true) {}
-",
-        )
-        .expect("script written");
-        let project = LumitBridgeState::new_project(None).expect("a new project");
-        let (heard, hearing) = mpsc::channel();
-        let started =
-            start(project, path, move |event| heard.send(event).is_ok()).expect("started");
-        assert!(started);
-        let wait = Duration::from_secs(20);
-        let asked = hearing.recv_timeout(wait).expect("asked for a file");
-        assert!(matches!(asked, BridgeScriptEvent::ChooseFile { .. }));
-        stop();
-        let ended = hearing.recv_timeout(wait).expect("the run ended");
-        assert!(matches!(
-            ended,
-            BridgeScriptEvent::Finished { stopped: true, .. }
-        ));
+        for (name, script) in [
+            (
+                "wait.js",
+                "lumit.chooseFile(\"Pick\", [\"json\"]);\nwhile (true) {}\n",
+            ),
+            (
+                "window.jsx",
+                "var w = new Window(\"dialog\", \"Options\");\nw.show();\nwhile (true) {}\n",
+            ),
+        ] {
+            let path = dir.path().join(name);
+            std::fs::write(&path, script).expect("script written");
+            let project = LumitBridgeState::new_project(None).expect("a new project");
+            let (heard, hearing) = mpsc::channel();
+            let started = start(project, path, None, BTreeMap::new(), move |event| {
+                heard.send(event).is_ok()
+            })
+            .expect("started");
+            assert!(started);
+            let wait = Duration::from_secs(20);
+            let asked = hearing.recv_timeout(wait).expect("asked");
+            assert!(
+                matches!(
+                    asked,
+                    BridgeScriptEvent::ChooseFile { .. } | BridgeScriptEvent::ShowDialog { .. }
+                ),
+                "{asked:?}"
+            );
+            stop();
+            // The window is taken down on the way out.
+            let ended = loop {
+                match hearing.recv_timeout(wait).expect("the run ended") {
+                    BridgeScriptEvent::CloseDialog => {}
+                    ended => break ended,
+                }
+            };
+            assert!(
+                matches!(ended, BridgeScriptEvent::Finished { stopped: true, .. }),
+                "{ended:?}"
+            );
+        }
     }
 }

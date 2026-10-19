@@ -36,6 +36,8 @@ import 'package:lumit_flutter/src/rust/api/beats.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
+import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
 import 'package:uuid/uuid.dart' show UuidValue;
 
 import '../icons/icon_style.dart';
@@ -57,7 +59,7 @@ import '../state/dock.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
-import '../state/settings.dart' show ToolBarPosition;
+import '../state/settings.dart' show ScriptEvent, ToolBarPosition;
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show UserWorkspace, Workspace;
 import '../theme/theme.dart';
@@ -1059,8 +1061,7 @@ List<MenuSection> lumitMenus(
             MenuEntry(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
-            MenuEntry(l10n.menuRunScript,
-                project == null ? null : () => runScriptFrb(app, ui)),
+            MenuEntry.submenu(l10n.menuScripts, _scriptRows(context, app, ui)),
             MenuEntry.divider(),
             // Sharing this project, joining somebody else's, and who is here.
             MenuEntry(
@@ -1964,6 +1965,54 @@ void togglePanel(LumitUiState ui, Panel panel) {
   ui.workspace.touch();
 }
 
+/// File ▸ Scripts: each script in the Scripts folder, a submenu for each
+/// folder inside it, then Run script… and the folder itself. Read from disk
+/// as the menu opens.
+List<MenuEntry> _scriptRows(
+    BuildContext context, LumitState app, LumitUiState ui) {
+  final folder = scriptsFolderIn(ui.workspace.scriptsFolder);
+  var scripts = const <String>[];
+  try {
+    if (folder != null) scripts = listScripts(folder: folder);
+  } catch (_) {}
+  VoidCallback? run(String path) => app.project == null
+      ? null
+      : () => runScriptFrb(context, app, ui,
+          path: '$folder${Platform.pathSeparator}'
+              '${path.replaceAll('/', Platform.pathSeparator)}');
+
+  // A folder's scripts come together in the list, so each run of paths
+  // under one name is that folder's submenu.
+  List<MenuEntry> rows(List<String> paths, String under) {
+    final out = <MenuEntry>[];
+    for (var i = 0; i < paths.length;) {
+      final slash = paths[i].indexOf('/');
+      if (slash < 0) {
+        out.add(MenuEntry(paths[i], run('$under${paths[i]}')));
+        i++;
+        continue;
+      }
+      final name = paths[i].substring(0, slash + 1);
+      final inside = <String>[];
+      for (; i < paths.length && paths[i].startsWith(name); i++) {
+        inside.add(paths[i].substring(name.length));
+      }
+      out.add(MenuEntry.submenu(
+          name.substring(0, slash), rows(inside, '$under$name')));
+    }
+    return out;
+  }
+
+  return [
+    ...rows(scripts, ''),
+    if (scripts.isNotEmpty) MenuEntry.divider(),
+    MenuEntry(l10n.menuRunScript,
+        app.project == null ? null : () => runScriptFrb(context, app, ui)),
+    MenuEntry(l10n.menuOpenScriptsFolder,
+        folder == null ? null : () => revealInFolder(path: folder)),
+  ];
+}
+
 Future<void> openProjectFrb(LumitState app,
     {Future<String?> Function()? picker}) async {
   final path = await (picker ?? pickProjectToOpen)();
@@ -2340,12 +2389,16 @@ Future<void> unpackProjectFrb(LumitState app, LumitUiState ui) async {
 /// [pack] is Pack project file: the same save, with every footage item's file
 /// written into the `.lum`. A project that packs already, or packs
 /// automatically, takes the packing road without being asked.
+///
+/// [leaving] is a save on the way out of the project, which runs no
+/// project-saved script.
 Future<void> saveProjectFrb(
   LumitState app,
   LumitUiState ui, {
   bool forcePicker = false,
   Future<String?> Function()? picker,
   bool pack = false,
+  bool leaving = false,
 }) async {
   final project = app.project;
   if (project == null) return;
@@ -2396,6 +2449,7 @@ Future<void> saveProjectFrb(
     ui.pushDiscordStatus();
     // Told and not waited for: sending the save is no part of making it.
     ui.backup.saved(written);
+    if (!leaving) app.runEventScript?.call(ScriptEvent.save, written);
     // The welcome screen's picture of this project, taken *after* the save and
     // never in front of it: the save is done, the notice is posted, and taking
     // the picture happens on its own time. The fronted composition at the
@@ -2604,10 +2658,15 @@ class _SystemMenuBarState extends State<_SystemMenuBar> {
   /// three times over is read once.
   bool _stale = false;
 
+  /// Coming back to Lumit, which may be from putting a script in the Scripts
+  /// folder.
+  late final AppLifecycleListener _back;
+
   @override
   void initState() {
     super.initState();
     _watch(widget.bar.app);
+    _back = AppLifecycleListener(onResume: _markStale);
     // The selection and the updater each speak for themselves, and neither
     // tells the shell state.
     for (final each in [_ui, _ui.selectedLayers, _ui.updates]) {
@@ -2650,6 +2709,7 @@ class _SystemMenuBarState extends State<_SystemMenuBar> {
     for (final each in [_ui, _ui.selectedLayers, _ui.updates]) {
       each.removeListener(_markStale);
     }
+    _back.dispose();
     super.dispose();
   }
 

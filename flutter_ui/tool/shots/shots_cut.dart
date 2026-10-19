@@ -126,6 +126,7 @@ Future<void> main() async {
         atFrame: frames(5),
         insert: true,
         linked: true,
+        withPicture: false,
       ));
   ui.model.refresh();
   var clips = main.getClips();
@@ -156,6 +157,7 @@ Future<void> main() async {
         atFrame: frames(1.5),
         insert: false,
         linked: false,
+        withPicture: false,
       ));
   ui.model.refresh();
   final over = layerOf(BridgeLayerKind.sequence);
@@ -169,6 +171,7 @@ Future<void> main() async {
         atFrame: frames(11),
         insert: false,
         linked: false,
+        withPicture: false,
       ));
   final made = comp.cutClipToComposition(clip: over.getClips().last.id);
   say('clip to composition: ${made != null}');
@@ -183,6 +186,7 @@ Future<void> main() async {
         atFrame: 0,
         insert: false,
         linked: false,
+        withPicture: false,
       ));
   ui.model.refresh();
   comp.audioPrepare();
@@ -231,6 +235,7 @@ Future<void> main() async {
         atFrame: frames(15),
         insert: false,
         linked: false,
+        withPicture: false,
       ));
   ui.model.refresh();
   clips = main.getClips();

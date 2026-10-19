@@ -125,6 +125,18 @@ impl Headless {
         Ok(target)
     }
 
+    /// Every comp in the project, in the Project panel's order.
+    pub fn comps(&self) -> Vec<(Uuid, String)> {
+        let doc = self.store.snapshot();
+        doc.items
+            .iter()
+            .filter_map(|item| match item {
+                ProjectItem::Composition(c) => Some((c.id, c.name.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The comp called `key`, by id or name. With no key, the project's only
     /// comp.
     pub fn find_comp(&self, key: Option<&str>) -> Result<(Uuid, String), String> {
@@ -175,6 +187,47 @@ impl Headless {
         for export in self.exports.borrow().iter() {
             export.handle.cancel();
         }
+    }
+
+    /// Start exporting `comp` to `out` with `spec`. Answers a number to ask
+    /// after it with, as [`Host::export_start`] does.
+    pub fn start_export(
+        &self,
+        comp: Uuid,
+        out: PathBuf,
+        spec: ExportSpec,
+    ) -> Result<u64, ScriptError> {
+        if self.exporting() {
+            return Err(ScriptError::Failed(
+                "Another export is still running. One runs at a time.".into(),
+            ));
+        }
+        let doc = self.store.snapshot();
+        if doc.comp(comp).is_none() {
+            return Err(ScriptError::NotFound("There is no such comp.".into()));
+        }
+        self.load_plugins(&doc);
+        // The sound comes from what is delivered, as in Lumit: a guide
+        // layer's is no more exported than its picture.
+        let delivery = lumit_render::export::apply_render_overrides(&doc, &spec.render_options());
+        let doc = delivery.unwrap_or(doc);
+        let audio = doc
+            .comp(comp)
+            .map(|c| lumit_render::headless::AudioJobsBuilder::new().audio_jobs(&doc, c))
+            .unwrap_or_default();
+        let handle = lumit_render::export::start(doc, comp, audio, out.clone(), spec);
+        let mut exports = self.exports.borrow_mut();
+        exports.push(Export {
+            handle,
+            status: ExportStatus {
+                state: ExportState::Running,
+                done: 0,
+                total: 0,
+                path: out,
+                message: None,
+            },
+        });
+        Ok(exports.len() as u64)
     }
 
     /// Scan for plugin effects once, when the project uses an effect Lumit
@@ -402,13 +455,9 @@ impl Host for Headless {
     }
 
     fn export_start(&self, comp: Uuid, out: Option<&Path>) -> Result<u64, ScriptError> {
-        if self.exporting() {
-            return Err(ScriptError::Failed(
-                "Another export is still running. One runs at a time.".into(),
-            ));
-        }
-        let doc = self.store.snapshot();
-        let name = doc
+        let name = self
+            .store
+            .snapshot()
             .comp(comp)
             .map(|c| c.name.clone())
             .ok_or_else(|| ScriptError::NotFound("There is no such comp.".into()))?;
@@ -422,29 +471,7 @@ impl Host for Headless {
             }
             None => self.export_path(&name),
         };
-        self.load_plugins(&doc);
-        let spec = ExportSpec::default();
-        // The sound comes from what is delivered, as in Lumit: a guide
-        // layer's is no more exported than its picture.
-        let delivery = lumit_render::export::apply_render_overrides(&doc, &spec.render_options());
-        let doc = delivery.unwrap_or(doc);
-        let audio = doc
-            .comp(comp)
-            .map(|c| lumit_render::headless::AudioJobsBuilder::new().audio_jobs(&doc, c))
-            .unwrap_or_default();
-        let handle = lumit_render::export::start(doc, comp, audio, out.clone(), spec);
-        let mut exports = self.exports.borrow_mut();
-        exports.push(Export {
-            handle,
-            status: ExportStatus {
-                state: ExportState::Running,
-                done: 0,
-                total: 0,
-                path: out,
-                message: None,
-            },
-        });
-        Ok(exports.len() as u64)
+        self.start_export(comp, out, ExportSpec::default())
     }
 
     fn export_status(&self, job: u64) -> Result<ExportStatus, ScriptError> {
@@ -457,6 +484,18 @@ impl Host for Headless {
         let mut exports = self.exports.borrow_mut();
         job_of(&mut exports, job)?.handle.cancel();
         Ok(())
+    }
+
+    fn render_frame(
+        &self,
+        comp: Uuid,
+        frame: u64,
+        scale: f32,
+        out: &Path,
+    ) -> Result<(u32, u32), ScriptError> {
+        let doc = self.store.snapshot();
+        self.load_plugins(&doc);
+        crate::render::save_frame(&doc, comp, frame, scale, out).map_err(ScriptError::Failed)
     }
 
     fn parent_ops(&self, comp: Uuid, layer: Uuid, parent: Option<Uuid>, at: CompTime) -> Vec<Op> {
@@ -474,6 +513,19 @@ impl Host for Headless {
                 flag.store(true, Ordering::Relaxed);
             });
         stop
+    }
+
+    /// There is no Viewer here, so a project with one comp has that one open.
+    fn active_comp(&self) -> Option<Uuid> {
+        let doc = self.store.snapshot();
+        let mut comps = doc.items.iter().filter_map(|i| match i {
+            ProjectItem::Composition(c) => Some(c.id),
+            _ => None,
+        });
+        match (comps.next(), comps.next()) {
+            (Some(only), None) => Some(only),
+            _ => None,
+        }
     }
 }
 
@@ -548,5 +600,31 @@ mod tests {
         )
         .unwrap();
         assert_eq!(restored, (1, Vec::new()));
+    }
+
+    /// `comp.frame` writes a PNG at the size asked for, and never over a
+    /// file already there.
+    #[test]
+    fn a_frame_is_a_png_of_the_size_asked_for() {
+        let dir = tempfile::tempdir().unwrap();
+        let host = Headless::new_project();
+        let args = serde_json::json!({ "name": "Shot", "width": 64, "height": 32 });
+        let made = lumit_script::dispatch(&host, "comp.new", args).unwrap();
+        let comp = Uuid::try_parse(made["id"].as_str().unwrap()).unwrap();
+        if crate::render::thumbnail(&host.store.snapshot(), comp, 0, 1.0).is_none() {
+            eprintln!("no graphics adapter; skipping");
+            return;
+        }
+        let out = dir.path().join("shot.png");
+        let args = serde_json::json!({ "comp": "Shot", "scale": 0.5, "out": out });
+        let answer = lumit_script::dispatch(&host, "comp.frame", args.clone()).unwrap();
+        assert_eq!(
+            (answer["width"].as_u64(), answer["height"].as_u64()),
+            (Some(32), Some(16))
+        );
+        let bytes = std::io::Cursor::new(std::fs::read(&out).unwrap());
+        let png = png::Decoder::new(bytes).read_info().unwrap();
+        assert_eq!((png.info().width, png.info().height), (32, 16));
+        assert!(lumit_script::dispatch(&host, "comp.frame", args).is_err());
     }
 }

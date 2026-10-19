@@ -60,7 +60,7 @@ Future<bool> askUnsavedChangesFrb(
     }
     return true;
   }
-  await saveProjectFrb(app, ui, picker: savePicker);
+  await saveProjectFrb(app, ui, picker: savePicker, leaving: true);
   try {
     return !(app.project?.isDirty() ?? false);
   } catch (_) {

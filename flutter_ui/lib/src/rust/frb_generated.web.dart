@@ -107,6 +107,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           dynamic raw);
 
   @protected
+  Map<String, String> dco_decode_Map_String_String_None(dynamic raw);
+
+  @protected
   BridgeEffectInstance
       dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           dynamic raw);
@@ -1724,6 +1727,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<(String, String)> dco_decode_list_record_string_string(dynamic raw);
+
+  @protected
   LumitMediaStatus dco_decode_lumit_media_status(dynamic raw);
 
   @protected
@@ -1975,6 +1981,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   ProjectReference dco_decode_project_reference(dynamic raw);
 
   @protected
+  (String, String) dco_decode_record_string_string(dynamic raw);
+
+  @protected
   ScopedChange dco_decode_scoped_change(dynamic raw);
 
   @protected
@@ -2033,6 +2042,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeEffectInstance
       sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           SseDeserializer deserializer);
+
+  @protected
+  Map<String, String> sse_decode_Map_String_String_None(
+      SseDeserializer deserializer);
 
   @protected
   BridgeEffectInstance
@@ -3944,6 +3957,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<(String, String)> sse_decode_list_record_string_string(
+      SseDeserializer deserializer);
+
+  @protected
   LumitMediaStatus sse_decode_lumit_media_status(SseDeserializer deserializer);
 
   @protected
@@ -4231,6 +4248,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   ProjectReference sse_decode_project_reference(SseDeserializer deserializer);
 
   @protected
+  (String, String) sse_decode_record_string_string(
+      SseDeserializer deserializer);
+
+  @protected
   ScopedChange sse_decode_scoped_change(SseDeserializer deserializer);
 
   @protected
@@ -4290,6 +4311,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void
       sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeEffectInstance(
           BridgeEffectInstance self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_Map_String_String_None(
+      Map<String, String> self, SseSerializer serializer);
 
   @protected
   void
@@ -6347,6 +6372,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       Uint8List self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_record_string_string(
+      List<(String, String)> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_lumit_media_status(
       LumitMediaStatus self, SseSerializer serializer);
 
@@ -6630,6 +6659,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_project_reference(
       ProjectReference self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_string_string(
+      (String, String) self, SseSerializer serializer);
 
   @protected
   void sse_encode_scoped_change(ScopedChange self, SseSerializer serializer);

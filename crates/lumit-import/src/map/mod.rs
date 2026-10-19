@@ -55,7 +55,7 @@ use crate::capture::{Capture, Comp, Item};
 use crate::report::{ImportReport, ItemPath, Outcome, Reason};
 
 pub use effects::{map_effect, MappedEffect};
-pub use table::other_names_of;
+pub use table::{ae_match_name, ae_match_name_of, other_names_of};
 
 use props::{ae_extra, ae_map};
 use time::{TimeBase, DEFAULT_DURATION, DEFAULT_FPS};
@@ -824,7 +824,7 @@ fn motion_blur(ae: &Comp) -> MotionBlur {
 
 /// After Effects reports a colour as three or four 0–1 numbers in the
 /// project's display space; Lumit stores scene-linear light.
-pub(crate) fn linear_colour(c: Option<&[f64]>) -> LinearColour {
+pub fn linear_colour(c: Option<&[f64]>) -> LinearColour {
     let c = c.unwrap_or(&[]);
     let ch = |i: usize| c.get(i).copied().unwrap_or(0.0);
     LinearColour([

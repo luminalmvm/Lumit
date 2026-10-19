@@ -272,6 +272,65 @@ pub fn white_solid_layer(
     (layer, ops)
 }
 
+/// A fresh Precomp layer placing comp `inner` into comp `outer`, centred and
+/// as long as `outer`. The layer is left for the caller to add.
+pub fn precomp_layer(
+    doc: &lumit_core::model::Document,
+    outer: &lumit_core::model::Composition,
+    inner: &lumit_core::model::Composition,
+) -> Layer {
+    let mut layer = base_layer(
+        inner.name.clone(),
+        LayerKind::Precomp { comp: inner.id },
+        outer.duration.0,
+        centred_transform(
+            f64::from(inner.width),
+            f64::from(inner.height),
+            outer.width,
+            outer.height,
+        ),
+    );
+    // The comp's own markers come with it as the layer's: a
+    // composition dropped into another is a piece of material, and its
+    // beats are part of what you are placing. Copied, not referenced —
+    // from here they are this layer's, and editing them never reaches back
+    // into the composition they came from. New ids for the same reason.
+    layer.markers = inner
+        .markers
+        .iter()
+        .map(|m| lumit_core::markers::Marker {
+            id: Uuid::now_v7(),
+            ..m.clone()
+        })
+        .collect();
+    // Placing a node graph places its Inputs with it
+    // (docs/impl/node-graph-comp.md §5.3), so the layer's rows are there
+    // to be edited from the moment it lands.
+    layer.graph_inputs = graph_inputs_for(doc, inner.id);
+    layer
+}
+
+/// A fresh `node_graph` instance bound to the node graph `comp`, the Inputs a
+/// Precomp layer of it carries (docs/impl/node-graph-comp.md §5.3).
+///
+/// Seeded at the **graph's own** frame size rather than the placing comp's: the
+/// picture the Inputs feed is made in the graph's frame, which is where a
+/// positional default belongs. `None` when `comp` is not a node graph.
+pub fn graph_inputs_for(
+    doc: &lumit_core::model::Document,
+    comp: Uuid,
+) -> Option<lumit_core::model::EffectInstance> {
+    let placed = doc.comp(comp)?;
+    let graph = placed.graph.as_ref()?;
+    let mut instance = lumit_core::fx::instantiate_for_raster(
+        lumit_core::comp_graph::NODE_GRAPH,
+        f64::from(placed.width),
+        f64::from(placed.height),
+    )?;
+    lumit_core::fx::effects::node_graph::bind(&mut instance, comp, graph);
+    Some(instance)
+}
+
 /// A stable machine key for a [`FxCategory`] (the variant in snake_case) — the
 /// grouping key the Dart Effects browser sorts and headers by.
 ///
@@ -389,6 +448,404 @@ pub fn link_copies(layers: &[Layer], moving: &[Uuid]) -> LinkCopies {
         }
     }
     out
+}
+
+/// What a Pre-compose packs, and how. See [`precompose_ops`].
+pub struct Precompose<'a> {
+    /// The layers to pack, in any order.
+    pub layers: &'a [Uuid],
+    /// The new comp's name. Blank names it "Pre-comp" and a number.
+    pub name: String,
+    pub leave_attributes: bool,
+    pub adjust_duration: bool,
+    /// The layer group being packed, when there is one.
+    pub group: Option<Uuid>,
+    /// How long a layer's source runs, where it can be known: a nested comp's
+    /// length, or a footage file's once probed.
+    pub source_length: &'a dyn Fn(&Layer) -> Option<lumit_core::time::Duration>,
+}
+
+/// The ops that pack layers of `comp` into a new comp and put a Precomp layer
+/// in their place, and that layer's id. Committed as one [`Op::Batch`], one
+/// undo step puts the layers back.
+///
+/// `leave_attributes` is the dialogue's first choice, and only ever offered
+/// for a single layer: the layer moves into the new comp stripped back to
+/// its source, and its transform, effects, masks, retime, blend and
+/// switches stay behind on the Precomp layer, so the picture is unchanged
+/// but the attributes now act on the nested comp. Asking for it with more
+/// than one layer is refused rather than half-applied. Without it every
+/// layer moves whole, and the Precomp layer is a plain centred one.
+///
+/// `adjust_duration` trims the new comp to the selection's own span: its
+/// duration becomes `max(out) - min(in)`, every packed layer shifts back by
+/// `min(in)`, and the Precomp layer spans that same stretch with a start
+/// offset that lines inner time zero up with it. Without it the new comp is
+/// as long as this one and nothing moves in time at all: every packed layer
+/// keeps the times it had, and the Precomp layer spans the whole comp.
+///
+/// The layers go in at the depth of the topmost one, so a precompose in
+/// the middle of a stack does not send it to the front. The comp auto-files
+/// into the Compositions folder however it was made.
+///
+/// A parent or matte link that would cross the new comp's edge is kept by
+/// a hidden copy of the layer at the far end, made on the near side with
+/// its parent chain ([`link_copies`]), so the picture does not change.
+/// `group` names the layer group being pre-composed, when the command came
+/// from a group header's *Pre-compose group*: the header's
+/// effect stack moves onto the new Precomp layer — where it means exactly
+/// what it meant, because a live group renders as that precompose already —
+/// and the emptied band is ungrouped in the same batch, so one undo puts
+/// the band, its wardrobe and the layers all back.
+///
+/// Refused with `UnknownLayer` when none of the layers is in the comp or
+/// more than one leaves its attributes, `UnknownGroup` for a group the comp
+/// does not have, and `InvalidSpan` when a time falls out of range.
+pub fn precompose_ops(
+    doc: &lumit_core::model::Document,
+    comp: &lumit_core::model::Composition,
+    asked: Precompose<'_>,
+) -> Result<(Vec<Op>, Uuid), lumit_core::OpError> {
+    use lumit_core::model::{Composition, MotionBlur};
+    use lumit_core::OpError;
+
+    let Precompose {
+        layers: layer_ids,
+        name,
+        leave_attributes,
+        adjust_duration,
+        group,
+        source_length,
+    } = asked;
+
+    // The group whose header stack rides across. Resolved up front so a
+    // dangling id refuses before anything is committed.
+    let carried = match group {
+        Some(id) => Some(
+            comp.groups
+                .iter()
+                .find(|g| g.id == id)
+                .cloned()
+                .ok_or(OpError::UnknownGroup)?,
+        ),
+        None => None,
+    };
+
+    // Read in stack order, not selection order, so the packed comp holds
+    // the layers the way the timeline showed them. What is actually packed
+    // is what was actually found: an id belonging to some other comp would
+    // otherwise fail the batch on its way through `RemoveLayer` and lose
+    // the whole precompose with it.
+    let packed: Vec<Layer> = comp
+        .layers
+        .iter()
+        .filter(|l| layer_ids.contains(&l.id))
+        .cloned()
+        .collect();
+    if packed.is_empty() {
+        return Err(OpError::UnknownLayer);
+    }
+    // Leaving the attributes behind means there is one layer for them to
+    // act on. Asked for a stack, the dialogue offers Move instead, and the
+    // engine refuses rather than picking a layer for the user.
+    if leave_attributes && packed.len() > 1 {
+        return Err(OpError::UnknownLayer);
+    }
+
+    // Every packed layer sits at or below this index, so the slot is still
+    // a valid one once the batch's removals have run.
+    let index = comp
+        .layers
+        .iter()
+        .position(|l| packed.iter().any(|p| p.id == l.id))
+        .unwrap_or(0);
+
+    // The selection's own span, and the shift that brings it back to zero
+    // inside the new comp. Without `adjust_duration` the shift is nothing
+    // and the span is the whole comp, which is what leaves timing alone.
+    let min_in = packed
+        .iter()
+        .map(|l| l.in_point)
+        .min()
+        .unwrap_or(CompTime::ZERO);
+    let max_out = packed
+        .iter()
+        .map(|l| l.out_point)
+        .max()
+        .unwrap_or(CompTime(comp.duration.0));
+    let span = max_out.delta(min_in).map_err(|_| OpError::InvalidSpan)?;
+    let (duration, shift, precomp_in, precomp_out) =
+        if adjust_duration && !span.0.is_zero() && !span.0.is_negative() {
+            (span, min_in, min_in, max_out)
+        } else {
+            (
+                comp.duration,
+                CompTime::ZERO,
+                CompTime::ZERO,
+                CompTime(comp.duration.0),
+            )
+        };
+    // Time moves as a whole: a layer's in point, out point and start
+    // offset all step back by the same amount, so a packed layer plays the
+    // same footage at the same moment of the Precomp layer as before.
+    let shift_back = |t: CompTime| -> Result<CompTime, OpError> {
+        t.sub_dur(lumit_core::time::Duration(shift.0))
+            .map_err(|_| OpError::InvalidSpan)
+    };
+
+    let name = if name.trim().is_empty() {
+        let existing = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i, ProjectItem::Composition(c) if c.name.starts_with("Pre-comp ")))
+            .count();
+        format!("Pre-comp {}", existing + 1)
+    } else {
+        name.trim().to_string()
+    };
+
+    // A retimed layer that leaves its attributes behind leaves its Retime
+    // too, and its place in time goes with that: the Retime reads the
+    // layer's own clock, so the Precomp layer has to keep that clock. The
+    // layer inside then starts at nought and runs the whole of the new
+    // comp, which is made long enough to hold all of its source.
+    let retimed = leave_attributes && packed.iter().any(|l| l.retime.is_some());
+    let duration = if retimed {
+        let source = packed.first().and_then(source_length);
+        duration.max(source.unwrap_or(duration))
+    } else {
+        duration
+    };
+
+    let mut inner_layers = Vec::with_capacity(packed.len());
+    for src in &packed {
+        let mut layer = src.clone();
+        if leave_attributes {
+            // An id of its own. The Precomp layer takes this one's, and
+            // with it everything in the comp that points here: a child, a
+            // matte, an effect's layer row.
+            layer.id = Uuid::now_v7();
+            // Stripped back to its source: the attributes are staying
+            // behind on the Precomp layer, and a copy on both would apply
+            // each of them twice.
+            layer.transform = centred_transform(
+                f64::from(comp.width),
+                f64::from(comp.height),
+                comp.width,
+                comp.height,
+            );
+            layer.effects.clear();
+            layer.masks.clear();
+            layer.retime = None;
+            layer.blend = Default::default();
+            layer.switches = Default::default();
+            layer.parent = None;
+            layer.matte = None;
+        }
+        if retimed {
+            layer.in_point = CompTime::ZERO;
+            layer.out_point = CompTime(duration.0);
+            layer.start_offset = CompTime::ZERO;
+        } else {
+            layer.in_point = shift_back(src.in_point)?;
+            layer.out_point = shift_back(src.out_point)?;
+            layer.start_offset = shift_back(src.start_offset)?;
+        }
+        inner_layers.push(layer);
+    }
+
+    // A parent or matte link that would cross the new comp's edge is kept
+    // by a hidden copy of the layer at the far end, on the near side.
+    let ids: Vec<Uuid> = packed.iter().map(|l| l.id).collect();
+    let copies = if leave_attributes {
+        LinkCopies::default()
+    } else {
+        link_copies(&comp.layers, &ids)
+    };
+    for layer in &mut inner_layers {
+        if let Some(copy) = layer.parent.and_then(|p| copies.inside_ids.get(&p)) {
+            layer.parent = Some(*copy);
+        }
+        if let Some(matte) = &mut layer.matte {
+            if let Some(copy) = copies.inside_ids.get(&matte.layer) {
+                matte.layer = *copy;
+            }
+        }
+    }
+    for copy in &copies.inside {
+        let mut copy = copy.clone();
+        copy.in_point = shift_back(copy.in_point)?;
+        copy.out_point = shift_back(copy.out_point)?;
+        copy.start_offset = shift_back(copy.start_offset)?;
+        inner_layers.push(copy);
+    }
+
+    let inner = Composition {
+        graph: None,
+        master_volume_db: 0.0,
+        sound_mix: false,
+        groups: Vec::new(),
+        beat_grid: None,
+        id: Uuid::now_v7(),
+        name: name.clone(),
+        width: comp.width,
+        height: comp.height,
+        frame_rate: comp.frame_rate,
+        duration,
+        background: comp.background,
+        work_area: None,
+        layers: inner_layers,
+        // The comp's markers go in with the layers. They are part
+        // of how the work is laid out, and a packed section that loses its
+        // cues has lost the map to itself. Shifted with everything else
+        // when `adjust_duration` moves time back to zero, and any that fall
+        // outside the new comp's span are left behind rather than parked
+        // where nothing can reach them.
+        markers: comp
+            .markers
+            .iter()
+            .filter_map(|m| {
+                let time = shift_back(m.time).ok()?;
+                (!time.0.is_negative() && time.0 <= duration.0).then(|| {
+                    lumit_core::markers::Marker {
+                        id: Uuid::now_v7(),
+                        time,
+                        ..m.clone()
+                    }
+                })
+            })
+            .collect(),
+        motion_blur: MotionBlur::default(),
+        extra: serde_json::Map::new(),
+    };
+    let inner_id = inner.id;
+
+    // Comps auto-file into the Compositions folder, however they are made —
+    // a precomp that landed at the project root would be the one comp the
+    // habit missed.
+    let (folder, mut ops) = ensure_auto_folder_ops(doc, AutoFolderKind::Compositions);
+    let queued = ops
+        .iter()
+        .filter(|o| matches!(o, Op::AddItem { .. }))
+        .count();
+    ops.push(Op::AddItem {
+        index: doc.items.len() + queued,
+        item: Box::new(ProjectItem::Composition(inner)),
+    });
+    ops.push(file_into_folder_op(doc, folder, inner_id));
+
+    // The band goes before its members do: a batch inverts in
+    // reverse, so ungrouping first is what lets the undo put the layers
+    // back before `GroupLayers` checks that they are a contiguous run.
+    if let Some(g) = &carried {
+        ops.push(Op::UngroupLayers {
+            comp: comp.id,
+            group: g.id,
+        });
+    }
+    for layer in &packed {
+        ops.push(Op::RemoveLayer {
+            comp: comp.id,
+            layer: layer.id,
+        });
+    }
+
+    let mut layer = base_layer(
+        name,
+        LayerKind::Precomp { comp: inner_id },
+        precomp_out.0,
+        if leave_attributes {
+            packed[0].transform.clone()
+        } else {
+            centred_transform(
+                f64::from(comp.width),
+                f64::from(comp.height),
+                comp.width,
+                comp.height,
+            )
+        },
+    );
+    layer.in_point = precomp_in;
+    layer.out_point = precomp_out;
+    // Inner time zero is the moment the new comp starts in this one, so a
+    // trimmed comp needs the offset to line the two up; an untrimmed one
+    // starts at zero and needs none.
+    layer.start_offset = shift;
+    if leave_attributes {
+        let src = &packed[0];
+        layer.effects = src.effects.clone();
+        layer.masks = src.masks.clone();
+        layer.retime = src.retime.clone();
+        layer.blend = src.blend;
+        layer.switches = src.switches;
+        // It stands where the layer stood: under the same id, with the
+        // same parent and the same matte.
+        layer.id = src.id;
+        layer.parent = src.parent;
+        layer.matte = src.matte;
+        if retimed {
+            layer.in_point = src.in_point;
+            layer.out_point = src.out_point;
+            layer.start_offset = src.start_offset;
+        }
+    }
+    if let Some(g) = &carried {
+        // The header's stack lands after any attributes the layer kept —
+        // the order the live group already ran them in: each member's own
+        // effects first, the header's on the composite. The picture does
+        // not change across the conversion, which is §2's whole argument
+        // and test 8's assertion. The band itself was ungrouped above,
+        // before the removals.
+        layer.effects.extend(g.effects.iter().cloned());
+    }
+    // Asked of the layers that are staying: the soloed ones being packed
+    // away are about to leave, and a Precomp layer soloed on their account
+    // would isolate itself against a comp that has no solo left.
+    solo_on_arrival(
+        &mut layer,
+        comp.layers
+            .iter()
+            .filter(|l| !packed.iter().any(|p| p.id == l.id)),
+    );
+    let layer_id = layer.id;
+    ops.push(Op::AddLayer {
+        comp: comp.id,
+        index,
+        layer: Box::new(layer),
+    });
+
+    // The copies left behind go to the bottom of the stack, and what
+    // pointed at a packed layer points at its copy.
+    let bottom = comp.layers.len() - packed.len() + 1;
+    for (n, copy) in copies.outside.into_iter().enumerate() {
+        ops.push(Op::AddLayer {
+            comp: comp.id,
+            index: bottom + n,
+            layer: Box::new(copy),
+        });
+    }
+    for layer in comp.layers.iter().filter(|l| !ids.contains(&l.id)) {
+        if let Some(copy) = layer.parent.and_then(|p| copies.outside_ids.get(&p)) {
+            ops.push(Op::SetLayerParent {
+                comp: comp.id,
+                layer: layer.id,
+                parent: Some(*copy),
+            });
+        }
+        if let Some(matte) = &layer.matte {
+            if let Some(copy) = copies.outside_ids.get(&matte.layer) {
+                ops.push(Op::SetLayerMatte {
+                    comp: comp.id,
+                    layer: layer.id,
+                    matte: Some(lumit_core::model::MatteRef {
+                        layer: *copy,
+                        ..*matte
+                    }),
+                });
+            }
+        }
+    }
+    Ok((ops, layer_id))
 }
 
 /// Hand `f` every composition id `comp` names: a Precomp layer's, a Sequence

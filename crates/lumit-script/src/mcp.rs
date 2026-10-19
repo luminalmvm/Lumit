@@ -10,8 +10,9 @@
 //!
 //! Both ways a client can start are answered: the `initialize` handshake of
 //! the 2025 revisions, and the 2026 one where every request names its
-//! version. Nothing here reads, writes or waits, so the command line's
-//! standard input and Lumit's own endpoint can share it.
+//! version. Nothing here reads, writes or waits, beyond the frame a client
+//! asks to see, so the command line's standard input and Lumit's own
+//! endpoint can share it.
 
 use serde_json::{json, Value};
 
@@ -26,6 +27,8 @@ const VERSION_KEY: &str = "io.modelcontextprotocol/protocolVersion";
 const CAPABILITIES_KEY: &str = "io.modelcontextprotocol/clientCapabilities";
 /// How long a client may keep the tool list. It only changes with Lumit.
 const KEEP_MS: u64 = 3_600_000;
+/// The largest frame sent back as a picture. A bigger one is only named.
+const MAX_PICTURE: u64 = 2 << 20;
 
 const SCRIPT_TOOL: &str = "script_run";
 const SCRIPT_SCHEMA: &str = r#"{"type":"object","properties":{"source":{"type":"string","description":"The script, as lumit-cli run takes it, with the lumit object and After Effects' objects"},"name":{"type":"string","description":"What its undo step is called"}},"required":["source"],"additionalProperties":false}"#;
@@ -152,7 +155,7 @@ fn server_info() -> Value {
 }
 
 /// `layer.add` as a tool name: letters, digits, `_` and `-` only.
-fn tool_name(command: &str) -> String {
+pub(crate) fn tool_name(command: &str) -> String {
     command.replace('.', "_")
 }
 
@@ -192,13 +195,53 @@ fn call(params: &Value, host: Result<&dyn Host, &str>) -> Result<Value, Failure>
         }
         (Ok(host), None) => script(host, &args),
     };
+    // A frame comes with its picture, so the client can look at it.
+    let picture = match (&done, command) {
+        (Ok(value), Some(command)) if command.name == "comp.frame" => picture(value),
+        _ => None,
+    };
     // A command that did nothing is the tool's answer, not the protocol's,
     // so the client reads why and can try again.
     let (text, failed) = match done {
         Ok(value) => (value.to_string(), false),
         Err(why) => (why, true),
     };
-    Ok(json!({ "content": [{ "type": "text", "text": text }], "isError": failed }))
+    let content: Vec<Value> = std::iter::once(json!({ "type": "text", "text": text }))
+        .chain(picture)
+        .collect();
+    Ok(json!({ "content": content, "isError": failed }))
+}
+
+/// The PNG `comp.frame` answered with, as an image for the client, when it
+/// is no bigger than [`MAX_PICTURE`].
+fn picture(answer: &Value) -> Option<Value> {
+    let path = std::path::Path::new(answer.get("path")?.as_str()?);
+    if std::fs::metadata(path).ok()?.len() > MAX_PICTURE {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    Some(json!({ "type": "image", "data": base64(&bytes), "mimeType": "image/png" }))
+}
+
+/// `bytes` in standard base64, with padding.
+fn base64(bytes: &[u8]) -> String {
+    const LETTERS: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, b)| n | (u32::from(*b) << (16 - 8 * i)));
+        for i in 0..4 {
+            let letter = LETTERS[((n >> (18 - 6 * i)) & 63) as usize];
+            out.push(if i <= chunk.len() {
+                char::from(letter)
+            } else {
+                '='
+            });
+        }
+    }
+    out
 }
 
 /// Run `script_run`'s source. Nobody is there to choose a file, and the

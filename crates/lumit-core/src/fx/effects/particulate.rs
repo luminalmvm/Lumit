@@ -125,6 +125,10 @@ pub const PARTICULATE_GROUPS: &[ParamGroup] = &[
     ),
     group("Edges", &["edge", "edge_margin"]),
     group(
+        "Collide",
+        &["collide_with", "on_contact", "bounciness", "friction"],
+    ),
+    group(
         "Render",
         &[
             "mode",
@@ -187,6 +191,54 @@ pub const PARTICULATE_ENABLED_WHEN: &[EnabledWhen] = &[
         param: "mask_path",
         on: "path_from",
         cond: EnabledCond::ChoiceIsNot(1),
+    },
+    // The step reads no pictures, so a collider leaves births even, and its
+    // particles are drawn over the picture one by one.
+    EnabledWhen {
+        param: "particle_blend",
+        on: "collide_with",
+        cond: EnabledCond::LayerUnset,
+    },
+    EnabledWhen {
+        param: "density_layer",
+        on: "collide_with",
+        cond: EnabledCond::LayerUnset,
+    },
+    EnabledWhen {
+        param: "density_layer_placement",
+        on: "collide_with",
+        cond: EnabledCond::LayerUnset,
+    },
+    EnabledWhen {
+        param: "on_contact",
+        on: "collide_with",
+        cond: EnabledCond::LayerSet,
+    },
+    EnabledWhen {
+        param: "bounciness",
+        on: "collide_with",
+        cond: EnabledCond::LayerSet,
+    },
+    EnabledWhen {
+        param: "bounciness",
+        on: "on_contact",
+        cond: EnabledCond::ChoiceIs(0),
+    },
+    EnabledWhen {
+        param: "friction",
+        on: "collide_with",
+        cond: EnabledCond::LayerSet,
+    },
+    // Only a particle that carries on along the surface slows on it.
+    EnabledWhen {
+        param: "friction",
+        on: "on_contact",
+        cond: EnabledCond::ChoiceIsNot(2),
+    },
+    EnabledWhen {
+        param: "friction",
+        on: "on_contact",
+        cond: EnabledCond::ChoiceIsNot(3),
     },
 ];
 
@@ -564,6 +616,39 @@ pub struct Particulate {
     )]
     pub edge_margin: f32,
 
+    /// A layer whose shapes and masks the particles hit, or its rectangle
+    /// when it has neither. With one set, each frame's particles are worked
+    /// out from the frame before ([`points::stepped`]), so they remember
+    /// where they have been. Unset, nothing changes.
+    #[layer(label = "Collide with")]
+    pub collide_with: bool,
+
+    /// What a particle does when it hits.
+    #[choice(label = "On contact", options = *points::Contact::OPTIONS, default = 0)]
+    pub on_contact: u32,
+
+    /// How much of its speed a particle keeps as it comes off, per cent.
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 60.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub bounciness: f32,
+
+    /// How much a particle slows along the surface it hits, per cent.
+    #[slider(
+        min = 0.0,
+        max = 100.0,
+        default = 10.0,
+        hard_min = 0.0,
+        hard_max = 100.0,
+        unit = Percent
+    )]
+    pub friction: f32,
+
     /// What a particle is drawn as. All three are the same instanced quad with
     /// a different coverage inside it ([`points::RenderMode`]).
     ///
@@ -808,6 +893,10 @@ impl EffectDef for ParticulateDef {
             inputs: &[],
             extra: POINTS_OUT,
         }
+    }
+
+    fn shape_inputs(&self) -> &'static [&'static str] {
+        &["collide_with"]
     }
 
     /// The raster factor, so a Mask path emitter's px@comp vertices reach the
