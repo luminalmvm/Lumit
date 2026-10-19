@@ -28,6 +28,7 @@ use lumit_gpu::GpuContext;
 
 use crate::fxops::{ColourTable, LoadedLut, LoadedOcio};
 
+pub mod lfx;
 pub mod ofx;
 
 type Tex = wgpu::Texture;
