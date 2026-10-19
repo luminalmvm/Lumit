@@ -983,10 +983,15 @@ ParentPlacement? parentPlacement(
     final tf = transformOf(up);
     double at(BridgeScalar s) => read(s, up.layer);
     double turn(BridgeScalar s) => at(s) * math.pi / 180;
+    // A 2D parent's hidden z and X/Y rotation count as 0, as the engine
+    // places it. Cameras and lights have no 3D switch, so theirs count.
+    final flat = !up.info.switches.threeD &&
+        up.info.kind != BridgeLayerKind.camera &&
+        up.info.kind != BridgeLayerKind.light;
     final own = Matrix4.translationValues(
-        at(tf.positionX), at(tf.positionY), at(tf.positionZ))
-      ..rotateY(turn(tf.rotationY))
-      ..rotateX(turn(tf.rotationX))
+        at(tf.positionX), at(tf.positionY), flat ? 0 : at(tf.positionZ))
+      ..rotateY(flat ? 0 : turn(tf.rotationY))
+      ..rotateX(flat ? 0 : turn(tf.rotationX))
       ..rotateZ(turn(tf.rotation))
       ..scaleByDouble(at(tf.scaleX) / 100, at(tf.scaleY) / 100, 1, 1)
       ..translateByDouble(-at(tf.anchorX), -at(tf.anchorY), 0, 1);

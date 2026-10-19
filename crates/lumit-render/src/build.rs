@@ -323,6 +323,15 @@ fn own_placement(
     t_comp: f64,
     context: &Arc<ExpressionContext>,
 ) -> [[f32; 4]; 4] {
+    // A 2D layer draws as if its hidden z and X/Y rotation were 0, and so does
+    // its part in a parent chain. Cameras and lights have no 3D switch, so
+    // theirs always count.
+    let flat = !layer.switches.three_d
+        && !matches!(
+            layer.kind,
+            lumit_core::model::LayerKind::Camera { .. }
+                | lumit_core::model::LayerKind::Light { .. }
+        );
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let tr = &layer.transform;
     // A layer's own expressions are about that layer: `layer()`, `cut_in` and
@@ -332,6 +341,13 @@ fn own_placement(
         layer: Some(layer.id),
         ..(**context).clone()
     });
+    let hidden = |p: &lumit_core::anim::Property| {
+        if flat {
+            0.0
+        } else {
+            p.value_at_with_context(lt, context.clone()) as f32
+        }
+    };
     lumit_gpu::place_matrix(
         (
             tr.position_x.value_at_with_context(lt, context.clone()) as f32,
@@ -346,9 +362,9 @@ fn own_placement(
             tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
         ),
         tr.rotation.value_at_with_context(lt, context.clone()) as f32,
-        tr.position_z.value_at_with_context(lt, context.clone()) as f32,
-        tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
-        tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
+        hidden(&tr.position_z),
+        hidden(&tr.rotation_x),
+        hidden(&tr.rotation_y),
     )
 }
 
@@ -446,12 +462,15 @@ pub fn reparented(
     let along = |axis: usize| Some(f64::from(carry[axis][axis]));
     edit(P::PositionX, to.position.0, false, along(0));
     edit(P::PositionY, to.position.1, false, along(1));
-    edit(P::PositionZ, to.z, false, along(2));
     edit(P::ScaleX, sx, false, None);
     edit(P::ScaleY, sy, false, None);
     edit(P::Rotation, rz, true, Some(1.0));
-    edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
-    edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+    // A 2D layer's hidden 3D values are kept for when it goes 3D again.
+    if layer.switches.three_d {
+        edit(P::PositionZ, to.z, false, along(2));
+        edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
+        edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+    }
     edits
 }
 
@@ -3445,24 +3464,8 @@ fn comp_walk(
                     );
                     visited.pop();
 
-                    let own = lumit_gpu::place_matrix(
-                        (
-                            tr.position_x.value_at_with_context(lt, context.clone()) as f32,
-                            tr.position_y.value_at_with_context(lt, context.clone()) as f32,
-                        ),
-                        (
-                            tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
-                            tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
-                        ),
-                        (
-                            tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
-                            tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
-                        ),
-                        tr.rotation.value_at_with_context(lt, context.clone()) as f32,
-                        tr.position_z.value_at_with_context(lt, context.clone()) as f32,
-                        tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
-                        tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
-                    );
+                    // A 2D collapsed Precomp is placed flat too.
+                    let own = own_placement(layer, t_comp, &context);
                     // If the collapsed precomp is itself parented, its parent's
                     // world placement wraps its own before it wraps the inner
                     // draws.
@@ -5959,6 +5962,13 @@ mod parent_placement_tests {
                 .unwrap();
         let expected = lumit_gpu::concat_place(place_of(&gp), place_of(&parent));
         assert_eq!(world, expected);
+        // A 2D grandparent's hidden z and tilt leave the chain as it was.
+        let mut tilted = gp.clone();
+        tilted.transform.position_z = Property::fixed(-50.0);
+        tilted.transform.rotation_x = Property::fixed(60.0);
+        let c = comp(vec![tilted, parent, child.clone()]);
+        let flat = parent_world_placement(&c, &child, 0.0, Arc::new(ExpressionContext::detached()));
+        assert_eq!(flat, Some(expected));
     }
 
     #[test]
@@ -5990,6 +6000,9 @@ mod parent_placement_tests {
             child.transform.rotation_x = Property::fixed(tilt);
             child.transform.scale_x = Property::fixed(80.0);
             child.transform.scale_y = Property::fixed(-80.0);
+            // A tilt only counts on a 3D layer.
+            gp.switches.three_d = tilted;
+            child.switches.three_d = tilted;
 
             let before = world(&comp(vec![child.clone()]), &child);
             for new_parent in [Some(parent.id), None] {
