@@ -61,6 +61,7 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../shell/interpret_footage_frb.dart';
 import '../shell/menu_bar_frb.dart' show importFootageFrb;
+import '../shell/run_script_frb.dart' show isScriptFile, runDroppedScripts;
 import '../state/file_dialogs.dart';
 import '../state/timecode.dart';
 import '../theme/theme.dart';
@@ -715,7 +716,9 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   Future<void> _dropped(List<String> paths) async {
     final state = Provider.of<LumitState>(context, listen: false);
-    if (await importDroppedPaths(state, paths)) _documentChanged();
+    final footage = paths.where((path) => !isScriptFile(path)).toList();
+    if (await importDroppedPaths(state, footage)) _documentChanged();
+    if (mounted) await runDroppedScripts(context, paths);
   }
 
   Widget _build(BuildContext context, double width) {

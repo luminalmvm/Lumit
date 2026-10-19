@@ -47,6 +47,7 @@ import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/extensions.dart';
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
+import 'package:lumit_flutter/src/rust/api/script.dart' show listScripts;
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 import 'package:lumit_flutter/src/rust/api/system.dart';
 import 'package:provider/provider.dart';
@@ -86,6 +87,7 @@ import 'export_dialog_frb.dart'
         exportTokenDate;
 import 'keymap_keyboard.dart';
 import 'menu_bar_frb.dart';
+import 'run_script_frb.dart' show scriptsFolderIn;
 import 'settings_account.dart';
 import 'settings_rows.dart';
 import 'theme_editor_frb.dart';
@@ -1132,6 +1134,72 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             }),
           ],
         ),
+        (
+          l10n.settingsGroupScripts,
+          [
+            // The folder File ▸ Scripts lists. Clear goes back to Lumit's own.
+            _row(
+              t,
+              l10n.settingsScriptsFolder,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('settings-scripts-folder'),
+                    small: true,
+                    onPressed: () async {
+                      final folder = await pickFolder();
+                      if (folder == null || !mounted) return;
+                      setState(() => ui.workspace.setScriptsFolder(folder));
+                    },
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                  if (ui.workspace.scriptsFolder.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    HouseButton(
+                      key: const ValueKey('settings-scripts-folder-clear'),
+                      small: true,
+                      onPressed: () =>
+                          setState(() => ui.workspace.setScriptsFolder('')),
+                      child: Text(l10n.clear, style: t.small),
+                    ),
+                  ],
+                ],
+              ),
+              description: ui.workspace.scriptsFolder.isEmpty
+                  ? _ownScriptsFolder
+                  : ui.workspace.scriptsFolder,
+            ),
+            // The script each event runs, from the Scripts folder. None is
+            // what a fresh install has.
+            for (final (event, title) in [
+              (ScriptEvent.export, l10n.settingsScriptAfterExport),
+              (ScriptEvent.open, l10n.settingsScriptAfterOpen),
+              (ScriptEvent.save, l10n.settingsScriptAfterSave),
+            ])
+              _row(
+                t,
+                title,
+                _dropdown<String?>(
+                  key: 'settings-event-script-${event.name}',
+                  value: ui.workspace.eventScripts[event],
+                  options: [
+                    null,
+                    ..._scriptsIn(ui.workspace.scriptsFolder),
+                    // One set before the folder changed stays until replaced.
+                    if (ui.workspace.eventScripts[event] case final set?
+                        when !_scriptsIn(ui.workspace.scriptsFolder)
+                            .contains(set))
+                      set,
+                  ],
+                  width: _ddWide,
+                  label: (script) => script ?? l10n.none,
+                  onChanged: (script) => setState(
+                      () => ui.workspace.setEventScript(event, script)),
+                ),
+              ),
+          ],
+        ),
         // The same updater the Help menu drives, seen from the other side: one
         // service, two views, so they can never disagree about whether a check
         // is running or an update is waiting.
@@ -1178,7 +1246,8 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                                       ?.isDirty() ??
                                   false,
                               saveProject: () => saveProjectFrb(
-                                  context.read<LumitState>(), ui),
+                                  context.read<LumitState>(), ui,
+                                  leaving: true),
                             ),
                     child: Text(ui.updates.menuLabel, style: t.small),
                   ),
@@ -1200,6 +1269,25 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// every update-service notification, and the installed version cannot
   /// change under a running process.
   late final String _installed = lumitProductVersion();
+
+  /// Lumit's own Scripts folder, read once like the version above.
+  late final String _ownScriptsFolder = scriptsFolderIn('') ?? '';
+
+  /// The scripts in the Scripts folder, read from disk once for each folder
+  /// the window shows.
+  (String, List<String>)? _scripts;
+  List<String> _scriptsIn(String chosen) {
+    if (_scripts case (final folder, final scripts) when folder == chosen) {
+      return scripts;
+    }
+    var scripts = const <String>[];
+    try {
+      final folder = scriptsFolderIn(chosen);
+      if (folder != null) scripts = listScripts(folder: folder);
+    } catch (_) {}
+    _scripts = (chosen, scripts);
+    return scripts;
+  }
 
   /// The line under "This version": what is installed, and what the last check
   /// made of it. Rebuilt with the row, so it follows the service too.

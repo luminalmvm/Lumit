@@ -36,6 +36,7 @@ import 'package:lumit_flutter/src/rust/api/audio.dart'
     show BridgeAudioMeter, audioMeters;
 
 import '../state/reviews.dart' show isReviewExport;
+import '../state/settings.dart' show ScriptEvent;
 import 'package:lumit_flutter/src/rust/api/script.dart'
     show disconnectLiveProgram;
 
@@ -93,6 +94,10 @@ class StatusLineFrb extends StatefulWidget {
 
 class _StatusLineFrbState extends State<StatusLineFrb> {
   BridgeExportState _export = const BridgeExportState.idle();
+
+  /// The queue's finished exports as last seen, so the export-finished
+  /// script runs once for each. Null while no such script is set.
+  Set<int>? _landed;
   BridgeProxyState _proxy = const BridgeProxyState.idle();
   Timer? _timer;
 
@@ -122,6 +127,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     // One poll up front: a strip mounted over a running export (a hot reload
     // mid-export, say) has to pick it up without waiting for a start signal.
     _export = (widget.poll ?? exportPoll)();
+    _exportsLanded();
     _proxy = (widget.proxyPollFn ?? proxyPoll)();
     statusLineExportStarted.addListener(_tick);
     proxyJobChanged.addListener(_tick);
@@ -139,7 +145,9 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
   /// numbers are all sync reads of a few held values, and the strip is 20
   /// pixels of mostly text.
   void _tick() {
+    final exportWas = _export;
     _export = (widget.poll ?? exportPoll)();
+    if (_export != exportWas) _exportsLanded();
     final was = _proxy is BridgeProxyState_Running;
     _proxy = (widget.proxyPollFn ?? proxyPoll)();
     _outputPeakDb = _readOutputPeak();
@@ -151,6 +159,32 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
     // repaint, and only on the edge, so a panel listening does one re-read per
     // job rather than one per tick.
     if (was && _proxy is! BridgeProxyState_Running) proxyJobChanged.value++;
+  }
+
+  /// Run the export-finished script for each export the queue has finished
+  /// since the last look. A script's own exports are not in the queue.
+  void _exportsLanded() {
+    if (_ui.workspace.eventScripts[ScriptEvent.export] == null) {
+      _landed = null;
+      return;
+    }
+    final Map<int, String> done;
+    try {
+      done = {
+        for (final item in exportQueueList())
+          if (item.state is BridgeExportQueueState_Done) item.id: item.path,
+      };
+    } catch (_) {
+      return;
+    }
+    final seen = _landed;
+    _landed = done.keys.toSet();
+    if (seen == null) return;
+    for (final MapEntry(:key, :value) in done.entries) {
+      if (!seen.contains(key) && !isReviewExport(value)) {
+        _app.runEventScript?.call(ScriptEvent.export, value);
+      }
+    }
   }
 
   /// Whatever plugins asked Lumit to say since the last tick, as calm notices
@@ -768,6 +802,17 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       builder: (context, notice, _) {
         if (notice == null) return _extensionStatus(t, state);
         final motion = ThemeScope.of(context).motion;
+        // A notice that leads somewhere goes there, and has then been read,
+        // unless it is one that stays.
+        final lead = switch (notice.onTap) {
+          null => null,
+          final onTap => () {
+              if (!notice.sticky && identical(state.notice.value, notice)) {
+                state.notice.value = null;
+              }
+              onTap();
+            },
+        };
         // Each notice arrives: keyed by the notice itself, so a new one
         // taking the line over plays in again rather than swapping its words.
         return Entrance(
@@ -782,18 +827,7 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                 Flexible(
                   child: HoverMark(
                     builder: (context, lit) => GestureDetector(
-                      // A notice that leads somewhere goes there, and has
-                      // then been read, unless it is one that stays.
-                      onTap: switch (notice.onTap) {
-                        null => () => _showNotices(context, t, state),
-                        final lead => () {
-                            if (!notice.sticky &&
-                                identical(state.notice.value, notice)) {
-                              state.notice.value = null;
-                            }
-                            lead();
-                          },
-                      },
+                      onTap: lead ?? () => _showNotices(context, t, state),
                       child: Text(
                         notice.message,
                         key: const ValueKey('status-notice'),
@@ -813,6 +847,16 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
                     ),
                   ),
                 ),
+                if (notice.action case final action?) ...[
+                  const SizedBox(width: 4),
+                  HouseButton(
+                    key: const ValueKey('status-notice-action'),
+                    small: true,
+                    frameless: true,
+                    onPressed: lead,
+                    child: Text(action, style: t.small),
+                  ),
+                ],
                 const SizedBox(width: 4),
                 HouseButton(
                   key: const ValueKey('status-notice-close'),

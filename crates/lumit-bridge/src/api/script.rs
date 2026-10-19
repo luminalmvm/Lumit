@@ -1,6 +1,8 @@
 //! File > Run script, and other programs driving Lumit: work on the open
 //! project from outside the interface.
 
+use std::collections::HashMap;
+
 use flutter_rust_bridge::frb;
 
 use crate::api::{composition::CompositionReference, project::ProjectReference, BridgeError};
@@ -43,7 +45,8 @@ impl ProjectReference {
     /// Run the script at `path` on this project, on a thread of its own.
     /// Answers at once, false when a script is running already. `comp` is
     /// the one open in the Viewer, if any. `events` hears the rest, and the
-    /// edits arrive on the change stream as usual.
+    /// edits arrive on the change stream as usual. `args` is what the script
+    /// reads as `lumit.args`.
     ///
     /// The interface must not edit until it hears `Finished`, since the
     /// whole run is one undo step and an edit made meanwhile would join it.
@@ -52,10 +55,12 @@ impl ProjectReference {
         &self,
         path: String,
         comp: Option<CompositionReference>,
+        args: HashMap<String, String>,
         events: Option<StreamSink<BridgeScriptEvent>>,
     ) -> Result<bool, BridgeError> {
         let comp = comp.map(|c| c.id);
-        crate::script::start(self.clone(), path.into(), comp, move |event| {
+        let args = args.into_iter().collect();
+        crate::script::start(self.clone(), path.into(), comp, args, move |event| {
             events.as_ref().is_some_and(|sink| sink.add(event).is_ok())
         })
     }
@@ -80,6 +85,23 @@ pub fn answer_script_file(path: Option<String>) {
 #[frb(sync)]
 pub fn answer_script_dialog(event: Option<String>) {
     crate::script::answer(event);
+}
+
+/// Lumit's own Scripts folder, made the first time it is asked for. `None`
+/// when this machine has nowhere for it.
+#[frb(sync)]
+pub fn scripts_folder() -> Option<String> {
+    let folder = lumit_project::scripts_dir()?;
+    std::fs::create_dir_all(&folder).ok()?;
+    Some(folder.to_string_lossy().into_owned())
+}
+
+/// What File > Scripts lists from `folder`: each `.js` and `.jsx` file in it
+/// and the folders inside it, as a path under `folder` with `/` between the
+/// parts, in name order.
+#[frb(sync)]
+pub fn list_scripts(folder: String) -> Vec<String> {
+    crate::script::list(std::path::Path::new(&folder))
 }
 
 /// What happens on the endpoint other programs drive Lumit through.
