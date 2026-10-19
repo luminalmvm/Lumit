@@ -213,7 +213,7 @@ fn is_audio_match_name(match_name: &str) -> bool {
 /// built-in answers by the family it declared, which is the whole reason
 /// `FxCategory::Audio` exists.
 #[frb(ignore)]
-fn is_audio_effect(match_name: &str) -> bool {
+pub(crate) fn is_audio_effect(match_name: &str) -> bool {
     is_audio_match_name(match_name)
         || lumit_core::fx::BUILTIN_DEFS
             .get(match_name)
