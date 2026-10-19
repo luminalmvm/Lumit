@@ -4755,6 +4755,9 @@ impl LayerReference {
         let mut converted = layer.clone();
         converted.kind = LayerKind::Footage { item };
         converted.audio_streams = clip.audio_streams.clone();
+        // A clip whose sound was detached is heard from that other clip, so
+        // the layer it becomes stays as quiet as it was.
+        converted.switches.audible &= clip.audible;
         converted.interpolation = clip.interpolation.clone();
         // The clip's own map becomes the layer's, which is exact: the clip
         // spans the whole layer, so clip time and layer time are the same
@@ -5050,6 +5053,7 @@ impl LayerReference {
                 gain_db: 0.0,
                 link: None,
                 audio_streams: layer.audio_streams.clone(),
+                audible: true,
                 blend: None,
                 extra: serde_json::Map::new(),
             }],

@@ -3418,6 +3418,9 @@ impl AudioJobsBuilder {
         visited: &mut Vec<Uuid>,
         jobs: &mut Vec<AudioJob>,
     ) {
+        // A clip whose sound was detached onto a clip of its own is left out
+        // whole, so it neither sounds nor ramps a neighbour it overlaps.
+        let clips: Vec<&lumit_core::sequence::Clip> = clips.iter().filter(|c| c.audible).collect();
         // The row read left to right, so the jobs come out in the order the
         // clips are heard. Clips are stored in no required order.
         let mut order: Vec<usize> = (0..clips.len()).collect();
@@ -5290,6 +5293,7 @@ mod tests {
             gain_db: 0.0,
             link: None,
             audio_streams: Default::default(),
+            audible: true,
             blend: None,
             extra: serde_json::Map::new(),
         };
