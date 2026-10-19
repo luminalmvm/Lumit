@@ -323,6 +323,10 @@ enum BridgeExtensionPermission {
 
   /// Share the project, join someone else's, and see who is here.
   share,
+
+  /// Edit the open project through Lumit's commands, each edit one undo
+  /// step. Never save or export it.
+  edit,
   ;
 }
 

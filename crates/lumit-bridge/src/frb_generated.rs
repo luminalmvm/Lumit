@@ -24113,6 +24113,7 @@ impl SseDecode for crate::api::extensions::BridgeExtensionPermission {
             2 => crate::api::extensions::BridgeExtensionPermission::Export,
             3 => crate::api::extensions::BridgeExtensionPermission::Import,
             4 => crate::api::extensions::BridgeExtensionPermission::Share,
+            5 => crate::api::extensions::BridgeExtensionPermission::Edit,
             _ => unreachable!("Invalid variant for BridgeExtensionPermission: {}", inner),
         };
     }
@@ -34057,6 +34058,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::extensions::BridgeExtensionPe
             Self::Export => 2.into_dart(),
             Self::Import => 3.into_dart(),
             Self::Share => 4.into_dart(),
+            Self::Edit => 5.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -41053,6 +41055,7 @@ impl SseEncode for crate::api::extensions::BridgeExtensionPermission {
                 crate::api::extensions::BridgeExtensionPermission::Export => 2,
                 crate::api::extensions::BridgeExtensionPermission::Import => 3,
                 crate::api::extensions::BridgeExtensionPermission::Share => 4,
+                crate::api::extensions::BridgeExtensionPermission::Edit => 5,
                 _ => {
                     unimplemented!("");
                 }

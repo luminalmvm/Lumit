@@ -17104,6 +17104,10 @@
   "@extensionCanShare": {
     "description": "One line of the It can list in the extension install question."
   },
+  "extensionCanEdit": "Edit your project",
+  "@extensionCanEdit": {
+    "description": "One line of the It can list in the extension install question. Each edit it makes is one step in History."
+  },
   "extensionCanHosts": "Send to and fetch from {hosts} through Lumit",
   "@extensionCanHosts": {
     "description": "One line of the It can list in the extension install question. {hosts} is one or more site names separated by commas, such as example.org.",
@@ -17128,6 +17132,10 @@
   "extensionCannotEdit": "Change your project, apart from importing files when allowed",
   "@extensionCannotEdit": {
     "description": "One line of the It cannot list in the extension install question."
+  },
+  "extensionCannotSave": "Save or export your project",
+  "@extensionCannotSave": {
+    "description": "One line of the It cannot list in the extension install question, shown in place of extensionCannotEdit for an extension that may edit the project."
   },
   "extensionWebNote": "Only install extensions from people you trust.",
   "@extensionWebNote": {

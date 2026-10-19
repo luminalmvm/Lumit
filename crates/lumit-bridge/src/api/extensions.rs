@@ -28,6 +28,9 @@ pub enum BridgeExtensionPermission {
     Import,
     /// Share the project, join someone else's, and see who is here.
     Share,
+    /// Edit the open project through Lumit's commands, each edit one undo
+    /// step. Never save or export it.
+    Edit,
 }
 
 /// One extension, installed or about to be.
@@ -127,6 +130,7 @@ fn flatten(manifest: Manifest, folder: &Path, broken: bool) -> BridgeExtension {
         Permission::Export => BridgeExtensionPermission::Export,
         Permission::Import => BridgeExtensionPermission::Import,
         Permission::Share => BridgeExtensionPermission::Share,
+        Permission::Edit => BridgeExtensionPermission::Edit,
     };
     let effects = manifest
         .effects
