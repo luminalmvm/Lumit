@@ -85,6 +85,7 @@ mod beats;
 mod claim;
 mod cli;
 mod export;
+mod extension_edit;
 mod faults;
 mod footage;
 mod framecache;

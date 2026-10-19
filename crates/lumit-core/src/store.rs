@@ -1180,6 +1180,15 @@ impl DocumentStore {
         }
     }
 
+    /// What the open undo group will be called in the History list: the name
+    /// it was given, or else the first thing done in it. `None` when no group
+    /// is open or nothing has been done in it yet.
+    pub fn undo_group_name(&self) -> Option<Cow<'static, str>> {
+        let journal = self.journal.lock();
+        let first = journal.group.as_ref()?.first().map(|e| e.name.clone());
+        journal.group_name.clone().or(first)
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.journal.lock().undo.is_empty()
     }

@@ -20,6 +20,7 @@ String extensionPermissionText(BridgeExtensionPermission permission) =>
       BridgeExtensionPermission.export_ => l10n.extensionCanExport,
       BridgeExtensionPermission.import_ => l10n.extensionCanImport,
       BridgeExtensionPermission.share => l10n.extensionCanShare,
+      BridgeExtensionPermission.edit => l10n.extensionCanEdit,
     };
 
 /// Why an extension could not be read or installed, as a sentence.
@@ -187,8 +188,11 @@ class _InstallQuestion extends StatelessWidget {
               dialogGroup(t, l10n.extensionCannot, [
                 point(l10n.extensionCannotFootage),
                 point(l10n.extensionCannotFiles),
+                if (extension.permissions
+                    .contains(BridgeExtensionPermission.edit))
+                  point(l10n.extensionCannotSave)
                 // An effect's own interface sets that effect's rows.
-                if (!extension.effects.any((e) => e.interface_))
+                else if (!extension.effects.any((e) => e.interface_))
                   point(l10n.extensionCannotEdit),
               ]),
               if (into case final into?)
