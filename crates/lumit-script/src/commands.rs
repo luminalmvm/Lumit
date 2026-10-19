@@ -207,11 +207,11 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.add",
-        summary: "Add a null, camera, solid or footage layer to a comp",
+        summary: "Add a null, camera, solid, footage or precomp layer to a comp",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
-            r#","kind":{"enum":["null","camera","solid","footage"]},"item":{"type":"string","description":"For footage: the footage item's id or name"},"name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"}},"required":["comp","kind"],"additionalProperties":false}"#
+            r#","kind":{"enum":["null","camera","solid","footage","precomp"]},"item":{"type":"string","description":"For footage: the footage item's id or name. For a precomp: the comp's"},"name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"colour":{"type":"array","items":{"type":"number","minimum":0,"maximum":1},"minItems":3,"maxItems":3,"description":"For a solid: its colour as a colour picker shows it, 0 to 1. White if left out"},"width":{"type":"integer","minimum":1,"maximum":16384,"description":"For a solid, the comp's if left out"},"height":{"type":"integer","minimum":1,"maximum":16384}},"required":["comp","kind"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -885,6 +885,7 @@ enum AddKind {
     Camera,
     Solid,
     Footage,
+    Precomp,
 }
 
 #[derive(Deserialize)]
@@ -895,12 +896,35 @@ struct AddArgs {
     item: Option<String>,
     name: Option<String>,
     index: Option<usize>,
+    colour: Option<[f64; 3]>,
+    width: Option<u32>,
+    height: Option<u32>,
+}
+
+/// Whether `comp`, or a comp anywhere inside it, holds comp `id`.
+fn holds(doc: &Document, comp: &Composition, id: Uuid, seen: &mut Vec<Uuid>) -> bool {
+    edits::nested_comps(doc, comp).into_iter().any(|inner| {
+        if inner == id {
+            return true;
+        }
+        if seen.contains(&inner) {
+            return false;
+        }
+        seen.push(inner);
+        doc.comp(inner)
+            .is_some_and(|inner| holds(doc, inner, id, seen))
+    })
 }
 
 fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
     let store = host.store();
     let doc = store.snapshot();
     let comp = find_comp(&doc, &a.comp)?;
+    if !matches!(a.kind, AddKind::Solid)
+        && (a.colour.is_some() || a.width.is_some() || a.height.is_some())
+    {
+        return Err(bad("Only a solid takes a colour and a size."));
+    }
     let (mut layers, mut ops) = match a.kind {
         AddKind::Null => (vec![edits::null_layer(comp)], Vec::new()),
         AddKind::Camera => (
@@ -908,8 +932,56 @@ fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
             Vec::new(),
         ),
         AddKind::Solid => {
-            let (layer, ops) = edits::white_solid_layer(&doc, comp);
+            let width = a.width.unwrap_or(comp.width);
+            let height = a.height.unwrap_or(comp.height);
+            if !(1..=16384).contains(&width) || !(1..=16384).contains(&height) {
+                return Err(bad("A solid is 1 to 16384 pixels each way."));
+            }
+            // Lumit's new solid, as white_solid_layer makes one, in the size
+            // and colour asked for. Its item takes the layer's name, as in
+            // After Effects.
+            let (def, name, mut ops) = edits::white_solid_ops(&doc, width, height);
+            for op in &mut ops {
+                if let Op::AddItem { item, .. } = op {
+                    if let ProjectItem::Solid(solid) = item.as_mut() {
+                        if let Some(colour) = a.colour {
+                            solid.colour = lumit_import::linear_colour(Some(&colour));
+                        }
+                        if let Some(name) = &a.name {
+                            solid.name.clone_from(name);
+                        }
+                    }
+                }
+            }
+            let layer = edits::base_layer(
+                name,
+                LayerKind::Solid { def },
+                comp.duration.0,
+                edits::centred_transform(
+                    f64::from(width),
+                    f64::from(height),
+                    comp.width,
+                    comp.height,
+                ),
+            );
             (vec![layer], ops)
+        }
+        AddKind::Precomp => {
+            let key = a
+                .item
+                .as_deref()
+                .ok_or_else(|| bad("A precomp layer needs the comp it places."))?;
+            let inner = find_comp(&doc, key)?;
+            if inner.id == comp.id {
+                return Err(bad("A comp cannot go inside itself."));
+            }
+            if holds(&doc, inner, comp.id, &mut Vec::new()) {
+                return Err(bad(format!(
+                    "{} is inside {} already, so {} cannot go in it.",
+                    comp.name, inner.name, inner.name
+                )));
+            }
+            (vec![edits::precomp_layer(&doc, comp, inner)], Vec::new())
         }
         AddKind::Footage => {
             let key = a

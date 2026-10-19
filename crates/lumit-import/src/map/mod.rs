@@ -824,7 +824,7 @@ fn motion_blur(ae: &Comp) -> MotionBlur {
 
 /// After Effects reports a colour as three or four 0–1 numbers in the
 /// project's display space; Lumit stores scene-linear light.
-pub(crate) fn linear_colour(c: Option<&[f64]>) -> LinearColour {
+pub fn linear_colour(c: Option<&[f64]>) -> LinearColour {
     let c = c.unwrap_or(&[]);
     let ch = |i: usize| c.get(i).copied().unwrap_or(0.0);
     LinearColour([

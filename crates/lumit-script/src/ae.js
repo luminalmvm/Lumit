@@ -457,11 +457,33 @@
         return layer;
     };
     LayerCollection.prototype.add = function (item, duration) {
-        if (!(item instanceof FootageItem)) unsupported('layers.add of a ' + (item && item.typeName));
-        var layer = this._add('footage', undefined, item._id);
-        var info = layer._info();
-        item._duration = seconds(info.out) - seconds(info.in);
+        var layer;
+        if (item instanceof CompItem) {
+            layer = this._add('precomp', undefined, item._id);
+        } else if (item instanceof FootageItem) {
+            layer = this._add('footage', undefined, item._id);
+            var info = layer._info();
+            item._duration = seconds(info.out) - seconds(info.in);
+        } else {
+            unsupported('layers.add of a ' + (item && item.typeName));
+        }
         if (duration !== undefined) layer.outPoint = layer.inPoint + Number(duration);
+        return layer;
+    };
+    LayerCollection.prototype.addSolid = function (color, name, width, height, pixelAspect, duration) {
+        if (pixelAspect !== undefined && Math.abs(Number(pixelAspect) - 1) > 1e-3) {
+            note('Lumit solids have square pixels, so a pixel aspect of ' + pixelAspect + ' was left out.');
+        }
+        var made = command('layer.add', {
+            comp: this._comp._id,
+            kind: 'solid',
+            name: String(name),
+            colour: [0, 1, 2].map(function (n) { return Math.min(1, Math.max(0, Number(color[n]))); }),
+            width: Math.round(width),
+            height: Math.round(height),
+        });
+        var layer = layerFor(this._comp, made.id);
+        if (duration !== undefined) layer.outPoint = Number(duration);
         return layer;
     };
 
