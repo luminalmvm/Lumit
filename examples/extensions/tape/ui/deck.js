@@ -89,7 +89,11 @@ function listen() {
     draw();
   });
   window.lumit.on('effect.target', ({ id }) => {
+    // Lumit dropped the drag; end it here too, or the next set is refused,
+    // and keep a value still waiting to go from landing on the new one.
+    if (held) call('effect.end').catch(() => {});
     held = null;
+    queued = null;
     if (id == null) {
       rows = null;
       draw();
