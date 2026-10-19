@@ -35,22 +35,35 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use host::Headless;
+use lumit_core::time::CompTime;
+use lumit_render::export::ExportSpec;
 use lumit_script::{ExportState, Host, Limits, RunOptions};
+use uuid::Uuid;
+
+use crate::api::export::BridgeExportSpec;
 
 const HELP: &str = "\
 Lumit on the command line.
 
 Usage:
-  lumit-cli export <project.lum> [--comp <name>] [--out <file>]
+  lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>]
+                   [--range <in>-<out>] [--out <file>]
   lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>]
                 [--arg <key>=<value>]...
   lumit-cli mcp [--project <project.lum>]
   lumit-cli --help
   lumit-cli --version
 
-export     Export a comp of a project as an H.264 mp4 with sound.
-  --comp     The comp, by name or id. Needed when the project has more than one.
-  --out      The file to write. Without it, the comp's name beside the project.
+export     Export comps of a project, by default as an H.264 mp4 with sound.
+  --comp       The comp, by name or id. Needed when the project has more than one.
+               Repeat it for more comps, each to its own file.
+  --all-comps  Every comp in the project.
+  --preset     A saved export preset, by the name Lumit's Export window shows.
+  --range      The frames to export, first and last, such as 0-119. Without it,
+               the work area, or the whole comp when there is none.
+  --out        The file to write. With several comps, the folder they go in.
+               Without it, beside the project, named as Lumit's Export window
+               names them, never over a file.
 
 run        Run a JavaScript or After Effects (.jsx) script on a project, or on a
            new empty one.
@@ -76,8 +89,7 @@ enum Command {
     Version,
     Export {
         project: PathBuf,
-        comp: Option<String>,
-        out: Option<PathBuf>,
+        how: Export,
     },
     Run {
         script: PathBuf,
@@ -89,6 +101,19 @@ enum Command {
         /// `None` for the project open in Lumit.
         project: Option<PathBuf>,
     },
+}
+
+/// Which comps `export` writes, and how.
+#[derive(Debug, Default, PartialEq)]
+struct Export {
+    /// By name or id. None and not `all` is the project's only comp.
+    comps: Vec<String>,
+    all: bool,
+    preset: Option<String>,
+    /// First and last frame, both exported.
+    range: Option<(u64, u64)>,
+    /// The file, or with several comps the folder.
+    out: Option<PathBuf>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -125,7 +150,7 @@ fn main() -> i32 {
             out!("lumit-cli {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        Command::Export { project, comp, out } => export(&project, comp.as_deref(), out),
+        Command::Export { project, how } => export(&project, how),
         Command::Run {
             script,
             project,
@@ -222,8 +247,7 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
         value.ok_or_else(|| format!("{flag} needs a value after it."))
     };
     let mut positional: Vec<PathBuf> = Vec::new();
-    let mut comp = None;
-    let mut out = None;
+    let mut how = Export::default();
     let mut project = None;
     let mut save = Save::No;
     let mut script_args = BTreeMap::new();
@@ -231,8 +255,21 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
     while let Some(arg) = rest.pop() {
         let flag = arg.to_str().unwrap_or_default().to_owned();
         match (first.as_str(), flag.as_str()) {
-            ("export", "--comp") => comp = Some(text(wants(&flag, rest.pop())?)?),
-            ("export", "--out") => out = Some(PathBuf::from(wants(&flag, rest.pop())?)),
+            ("export", "--comp") => how.comps.push(text(wants(&flag, rest.pop())?)?),
+            ("export", "--all-comps") => how.all = true,
+            ("export", "--preset") => how.preset = Some(text(wants(&flag, rest.pop())?)?),
+            ("export", "--range") => {
+                let range = text(wants(&flag, rest.pop())?)?;
+                let frames = range
+                    .split_once('-')
+                    .and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)))
+                    .filter(|(a, b)| a <= b)
+                    .ok_or_else(|| {
+                        format!("--range takes a first and last frame, such as 0-119, not {range}.")
+                    })?;
+                how.range = Some(frames);
+            }
+            ("export", "--out") => how.out = Some(PathBuf::from(wants(&flag, rest.pop())?)),
             ("run" | "mcp", "--project") => {
                 project = Some(PathBuf::from(wants(&flag, rest.pop())?))
             }
@@ -261,11 +298,15 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
         _ => Err(format!("{first} takes one {what}.")),
     };
     match first.as_str() {
-        "export" => Ok(Command::Export {
-            project: one("a project")?,
-            comp,
-            out,
-        }),
+        "export" => {
+            if how.all && !how.comps.is_empty() {
+                return Err("--all-comps and --comp go one at a time.".into());
+            }
+            Ok(Command::Export {
+                project: one("a project")?,
+                how,
+            })
+        }
         "run" => {
             if save == Save::Over && project.is_none() {
                 return Err("--save needs --project. A new project saves with --save-as.".into());
@@ -297,18 +338,135 @@ fn open(path: &Path) -> Result<Headless, String> {
     Ok(host)
 }
 
-fn export(project: &Path, comp: Option<&str>, out: Option<PathBuf>) -> Result<(), String> {
+fn export(project: &Path, how: Export) -> Result<(), String> {
     let stop = interrupt::stop_flag();
+    // The preset first, so a misspelt name is heard before the project opens.
+    let settings = match &how.preset {
+        Some(name) => crate::export::preset_get(name).ok_or_else(|| {
+            let names: Vec<String> = crate::export::preset_list()
+                .into_iter()
+                .map(|p| p.name)
+                .collect();
+            format!(
+                "There is no export preset called \"{name}\". The presets are: {}.",
+                names.join(", ")
+            )
+        })?,
+        None => crate::export::from_export_spec(&ExportSpec::default())
+            .ok_or("This build of Lumit cannot export.")?,
+    };
     let host = open(project)?;
-    let (comp, name) = host.find_comp(comp)?;
+    let comps = if how.all {
+        host.comps()
+    } else if how.comps.is_empty() {
+        vec![host.find_comp(None)?]
+    } else {
+        how.comps
+            .iter()
+            .map(|key| host.find_comp(Some(key)))
+            .collect::<Result<_, _>>()?
+    };
+    if comps.is_empty() {
+        return Err("The project has no comp.".into());
+    }
+    let beside = host
+        .path()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .unwrap_or_default();
+    // With several comps, --out is where they all go.
+    let folder = match &how.out {
+        Some(out) if comps.len() > 1 => {
+            if !out.is_dir() {
+                return Err(format!(
+                    "With several comps, --out is the folder they go in, and {} is not one.",
+                    out.display()
+                ));
+            }
+            std::path::absolute(out).unwrap_or_else(|_| out.clone())
+        }
+        _ => beside,
+    };
+    let mut failed = 0;
+    for (comp, name) in &comps {
+        if stop.load(Ordering::Relaxed) {
+            return Err("Export stopped.".into());
+        }
+        let file = match &how.out {
+            Some(out) if comps.len() == 1 => {
+                let out = std::path::absolute(out).unwrap_or_else(|_| out.clone());
+                PathBuf::from(crate::export::with_format_extension(
+                    &out.to_string_lossy(),
+                    &settings.codec,
+                ))
+            }
+            _ => export_name(&folder, &settings, name),
+        };
+        match export_one(&host, &stop, *comp, &settings, how.range, file) {
+            Ok(path) => out!("{}", path.display()),
+            // One comp's failure is the program's.
+            Err(why) if comps.len() == 1 => return Err(why),
+            Err(why) => {
+                note!("{name}: {why}");
+                failed += 1;
+            }
+        }
+    }
+    match failed {
+        0 => Ok(()),
+        n => Err(format!("{n} of {} exports failed.", comps.len())),
+    }
+}
+
+/// Where comp `name` exports to in `dir` when nobody says: named as the
+/// Export window names it, from the file name set in Settings > Export or
+/// else the comp's name, and never over a file already there.
+fn export_name(dir: &Path, settings: &BridgeExportSpec, name: &str) -> PathBuf {
+    let template = crate::export::defaults_get().filename_template;
+    let template = if template.trim().is_empty() {
+        "{comp}".to_owned()
+    } else {
+        template
+    };
+    let file = crate::api::export::export_preset(settings.preset.clone(), name.into(), template)
+        .default_name;
+    let stem = file.strip_suffix(".mp4").unwrap_or(&file);
+    let path = dir.join(stem).to_string_lossy().into_owned();
+    let path = crate::export::with_format_extension(&path, &settings.codec);
+    if crate::export::path_taken(&path, &settings.codec) {
+        PathBuf::from(crate::export::free_path(&path, &settings.codec))
+    } else {
+        PathBuf::from(path)
+    }
+}
+
+/// Export `comp` to `file` with `settings` over frames `range`, and wait for
+/// it. Answers the file written.
+fn export_one(
+    host: &Headless,
+    stop: &AtomicBool,
+    comp: Uuid,
+    settings: &BridgeExportSpec,
+    range: Option<(u64, u64)>,
+    file: PathBuf,
+) -> Result<PathBuf, String> {
+    let doc = host.store().snapshot();
+    let found = doc.comp(comp).ok_or("The comp has gone.")?;
+    let mut settings = settings.clone();
+    if let Some((first, last)) = range {
+        let frames = found.frame_rate.frame_at(CompTime(found.duration.0));
+        if first >= u64::try_from(frames).unwrap_or(0) {
+            return Err(format!("The comp has {frames} frames."));
+        }
+        settings.range_start_frame = i64::try_from(first).unwrap_or(i64::MAX);
+        // The exporter's range stops short of its end.
+        settings.range_end_frame = i64::try_from(last).map_or(i64::MAX, |l| l.saturating_add(1));
+    }
+    let spec = crate::export::to_export_spec(&settings, found.width, found.height)?;
+    note!("Exporting {} to {}", found.name, file.display());
     let job = host
-        .export_start(comp, out.as_deref())
+        .start_export(comp, file, spec)
         .map_err(|e| e.to_string())?;
-    let path = host.export_status(job).map(|s| s.path).unwrap_or_default();
-    note!("Exporting {name} to {}", path.display());
-    let path = wait_for(&host, job, &stop)?;
-    out!("{}", path.display());
-    Ok(())
+    wait_for(host, job, stop)
 }
 
 /// Wait for export `job` to finish, showing how far it has got. Ctrl+C

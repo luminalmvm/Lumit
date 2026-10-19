@@ -125,6 +125,18 @@ impl Headless {
         Ok(target)
     }
 
+    /// Every comp in the project, in the Project panel's order.
+    pub fn comps(&self) -> Vec<(Uuid, String)> {
+        let doc = self.store.snapshot();
+        doc.items
+            .iter()
+            .filter_map(|item| match item {
+                ProjectItem::Composition(c) => Some((c.id, c.name.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The comp called `key`, by id or name. With no key, the project's only
     /// comp.
     pub fn find_comp(&self, key: Option<&str>) -> Result<(Uuid, String), String> {
@@ -175,6 +187,47 @@ impl Headless {
         for export in self.exports.borrow().iter() {
             export.handle.cancel();
         }
+    }
+
+    /// Start exporting `comp` to `out` with `spec`. Answers a number to ask
+    /// after it with, as [`Host::export_start`] does.
+    pub fn start_export(
+        &self,
+        comp: Uuid,
+        out: PathBuf,
+        spec: ExportSpec,
+    ) -> Result<u64, ScriptError> {
+        if self.exporting() {
+            return Err(ScriptError::Failed(
+                "Another export is still running. One runs at a time.".into(),
+            ));
+        }
+        let doc = self.store.snapshot();
+        if doc.comp(comp).is_none() {
+            return Err(ScriptError::NotFound("There is no such comp.".into()));
+        }
+        self.load_plugins(&doc);
+        // The sound comes from what is delivered, as in Lumit: a guide
+        // layer's is no more exported than its picture.
+        let delivery = lumit_render::export::apply_render_overrides(&doc, &spec.render_options());
+        let doc = delivery.unwrap_or(doc);
+        let audio = doc
+            .comp(comp)
+            .map(|c| lumit_render::headless::AudioJobsBuilder::new().audio_jobs(&doc, c))
+            .unwrap_or_default();
+        let handle = lumit_render::export::start(doc, comp, audio, out.clone(), spec);
+        let mut exports = self.exports.borrow_mut();
+        exports.push(Export {
+            handle,
+            status: ExportStatus {
+                state: ExportState::Running,
+                done: 0,
+                total: 0,
+                path: out,
+                message: None,
+            },
+        });
+        Ok(exports.len() as u64)
     }
 
     /// Scan for plugin effects once, when the project uses an effect Lumit
@@ -402,13 +455,9 @@ impl Host for Headless {
     }
 
     fn export_start(&self, comp: Uuid, out: Option<&Path>) -> Result<u64, ScriptError> {
-        if self.exporting() {
-            return Err(ScriptError::Failed(
-                "Another export is still running. One runs at a time.".into(),
-            ));
-        }
-        let doc = self.store.snapshot();
-        let name = doc
+        let name = self
+            .store
+            .snapshot()
             .comp(comp)
             .map(|c| c.name.clone())
             .ok_or_else(|| ScriptError::NotFound("There is no such comp.".into()))?;
@@ -422,29 +471,7 @@ impl Host for Headless {
             }
             None => self.export_path(&name),
         };
-        self.load_plugins(&doc);
-        let spec = ExportSpec::default();
-        // The sound comes from what is delivered, as in Lumit: a guide
-        // layer's is no more exported than its picture.
-        let delivery = lumit_render::export::apply_render_overrides(&doc, &spec.render_options());
-        let doc = delivery.unwrap_or(doc);
-        let audio = doc
-            .comp(comp)
-            .map(|c| lumit_render::headless::AudioJobsBuilder::new().audio_jobs(&doc, c))
-            .unwrap_or_default();
-        let handle = lumit_render::export::start(doc, comp, audio, out.clone(), spec);
-        let mut exports = self.exports.borrow_mut();
-        exports.push(Export {
-            handle,
-            status: ExportStatus {
-                state: ExportState::Running,
-                done: 0,
-                total: 0,
-                path: out,
-                message: None,
-            },
-        });
-        Ok(exports.len() as u64)
+        self.start_export(comp, out, ExportSpec::default())
     }
 
     fn export_status(&self, job: u64) -> Result<ExportStatus, ScriptError> {
