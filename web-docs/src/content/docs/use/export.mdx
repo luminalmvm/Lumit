@@ -83,6 +83,8 @@ limit*, *Needs alpha*, *Audio off*, *No picture*, *No sound* or *No metadata*.
 | **M4A (AAC)** | No | Yes | — | 16 bit | Yes | — | Yes |
 | **WAV** | No | Yes | — | 16 or 24 bit | No | — | Yes |
 
+HEVC is tagged `hvc1`, so Apple's players open it.
+
 An image sequence writes one numbered file per frame beside the name you chose. A sequence
 has no container to carry metadata, so that section is disabled.
 
@@ -110,7 +112,9 @@ Two rows in the Composition group decide what the export reads:
 - **Guide layers** — *All off*.
 
 **Motion blur** and **Retime blend** in the Time section are overrides on the export's own
-copy of the composition.
+copy of the composition. Motion blur offers **Current settings**, **On for checked layers**
+or **Off for all layers**; Retime blend offers **Current settings** or **Off for all
+layers**.
 
 ## The queue
 

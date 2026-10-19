@@ -47,10 +47,10 @@ An effect after one of these works on the grown layer. Its points and mask paths
 where they were on the layer. A **Matte** is black past the layer's edges. On an
 adjustment layer nothing reaches past the frame.
 
-## Apply one effect to many layers
+## Several layers
 
-Select several layers and apply an effect, and each of them gets its own copy — from the
-Effect menu, the Effects console or the Effects & presets panel alike.
+With several layers selected, an effect from the Effect menu, the Effects console or the
+Effects & presets panel goes on the primary layer only.
 
 Effects on **adjustment layers** apply to the composite of everything
 below them. See [Layers](/use/layers/).
@@ -101,7 +101,10 @@ and its range, default and units.
 | [Temporal](/effects/#temporal) | Effects that read frames at other times, or change which frame is drawn. |
 | [Transition](/effects/#transition) | Wipes, driven by a completion parameter you keyframe. |
 | [Utility](/effects/#utility) | Keying, mattes, transform, and other useful effects. |
+| [Audio](/effects/#audio) | Effects that change a layer's sound. They draw nothing. |
 | [Compositing](/effects/#compositing) | Merge, Switch and Time offset. They exist only inside a [node graph composition](/use/node-graphs/), and the Effect menu never offers them. |
+| [Controls](/effects/#controls) | Values for expressions to read. |
+| [Drivers](/effects/#drivers) | Values other effects follow, wired on a graph. The Effect menu files them under Controls. |
 
 ### The three kinds of motion blur
 
@@ -115,10 +118,10 @@ These are easy to confuse:
 
 ## Plugins
 
-OFX and LFX plugins will appear beside the built-in effects.
+OpenFX plugins appear beside the built-in effects. See [Plugins](/use/plugins/).
 
-:::caution[Not implemented yet]
-Plugin hosting is specified but not built.
+:::note[Not built yet]
+LFX, Lumit's own plugin type.
 :::
 
 ## Related

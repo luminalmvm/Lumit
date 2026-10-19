@@ -18,11 +18,13 @@ The graph editor draws a property as a line of value, or rate of change, against
 | **Value graph** | The value against time. |
 | **Speed graph** | The rate of change against time. |
 
-Both views show the same underlying data. Editing either affects the other.
+Both views show the same underlying data. Editing either affects the other. **Value** and
+**Speed** at the bottom of the graph editor switch between them.
 
-The scope button at the bottom shows the selected properties, every animated property of the
-selected layers, or every animated property in the composition. Unselected curves are dashed;
-click one to select it.
+The scope button at the bottom steps through **Selected curves**, **Layer curves** and
+**Composition curves**: the selected properties, every animated property of the selected
+layers, or every animated property in the composition. Unselected curves are dashed; click
+one to select it, or `Shift`-click or `Ctrl`-click to add it.
 
 ## Edit a curve
 
@@ -32,22 +34,25 @@ click one to select it.
   that were apart.
 - **Join handles**, on a keyframe's right-click menu, joins handles that were apart.
 - Turn on **Break handles** at the bottom of the graph editor to move one handle at a time
-  with no key held.
+  with no key held. It is off each time Lumit starts.
 - Select several keyframes to move them together. Dragging a handle on one moves the same
   handle on each by the same amount.
 
-To change a keyframe to linear, easy ease, or hold, press the relevant button at the
-bottom of the graph editor. The default shortcut for easy ease is `F9`.
+To change a keyframe to linear, easy ease, or hold, press **Linear**, **Easy ease** or
+**Hold** at the bottom of the graph editor. The default shortcut for easy ease is `F9`.
+**Easing…**, on the value graph only, opens the easing editor. **Auto**, **Clamp** and
+**Free** set the selected keyframes' tangents.
+
+Right-click a keyframe for **Linear**, **Easy ease**, **Hold**, **Keyframe speed…**, **Copy
+ease**, **Paste ease**, **Join handles** and **Delete key**. Paste ease is listed once an ease
+has been copied.
 
 **Edit ▸ Settings ▸ Shortcuts ▸ Dragging** changes `Alt` to `Ctrl`.
 
 ## Retime in the graph editor
 
-The Retime graph displays the layer's exact time value by default. Toggle **Edit ▸
-Settings ▸ Interface ▸ Retime opens to Speed** to display speed as the y axis instead, as
-a percentage. Speed starts at 100% and can be edited, including to negative values.
-
-See [Retiming and speed](/use/retime/).
+A Retime curve opens on the value graph. With **Edit ▸ Settings ▸ Timeline ▸ Editing ▸
+Retime opens to Speed** on, it opens on the speed graph. See [Retiming and speed](/use/retime/).
 
 ## Related
 

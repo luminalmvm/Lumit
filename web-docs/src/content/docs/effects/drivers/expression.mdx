@@ -13,11 +13,11 @@ Expression is a **Drivers** effect.
 
 ## What it does
 
-Type an expression - `time * 2`, `sin(time) * 50`, `[comp_width / 2, comp_height / 2]`,
-`[1, 0.5, 0]` - and the box hands out its answer on a wire, so a parameter can follow a
-line of arithmetic instead of its keyframes. It is the same language a property's own
-expression is written in, with the same names in scope: `time`, the comp's size and
-frame rate, `layer("…")` and `comp("…")`.
+Type an expression and the box hands out its answer on a wire, so a parameter can follow a
+line of arithmetic instead of its keyframes. It is written in JavaScript or Rhai, picked in
+the dropdown under **Edit expression…**, with the names a property's own expression has in
+that language. A box with no text starts in the language new expressions are written in.
+In Rhai: `time * 2`, `sin(time) * 50`, `[comp_width / 2, comp_height / 2]`, `[1, 0.5, 0]`.
 
 The box can take numbers in as well. **Add input** gives it a number input named
 `input_1`, then `input_2`, and so on. Each input is a socket on the box and a row in the

@@ -1,0 +1,55 @@
+---
+title: Extract channels
+description: "Reads channels an OpenEXR file holds beyond its RGB into the layer's red, green, blue and alpha."
+---
+
+Extract channels is a **Utility** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Four dropdowns, one per output channel, each naming a channel of the layer's OpenEXR file:
+a depth pass, normals, an object id, a light group. The channel list is read off the file
+when the effect is added, and again only on **Reload channels**. On a layer that is not an
+OpenEXR every dropdown offers None alone.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Reload channels** | Button | - | - | - |
+| **Bypass** | Checkbox | On or off | Off | - |
+| **Matte** | Layer | Any layer in the composition | None | - |
+| **Invert** | Checkbox | On or off | Off | - |
+| **Channel** | Dropdown | Luminance · Alpha · Red · Green · Blue | Luminance | - |
+
+In the Effect Controls panel:
+
+- **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Red from**, **Green from**, **Blue from**, **Alpha from**: which of the file's channels
+  each output channel is read from. **None** is 0, and 1 for alpha. With all four at None
+  the layer is the picture the file opens as.
+- **Reload channels**: read the file's channel list again and rebuild the four dropdowns.
+  The stored choices keep their place in the list.
+- **Bypass**: show the picture the file opens as, keeping the four choices.
+- **Matte** and **Invert** drive the strength of the effect from another layer's
+  brightness; see [Effects](/use/effects/).
+
+## Related
+
+- [Set channels](/effects/utility/set-channels/)
+- [Depth](/effects/utility/depth/)
+- [Utility](/effects/#utility)
+- [Effects](/use/effects/)

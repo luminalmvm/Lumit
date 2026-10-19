@@ -1,0 +1,52 @@
+---
+title: Wah
+description: "A narrow band of the sound swept up and down, by an oscillator or by the sound's own level."
+---
+
+Wah is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+A resonant band-pass filter. Mode picks what moves it: an oscillator, or the level of the
+sound, which is an auto-wah.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mode** | Slider, whole numbers | 0 to 1 | 0 | - |
+| **Rate** | Slider | 0.01 to 10 | 1.5 | - |
+| **Depth** | Slider | 0 to 100 | 70 | Per cent |
+| **Frequency** | Slider | 100 to 3000 | 500 | - |
+| **Resonance** | Slider | 0.5 to 20 | 6 | - |
+| **Sensitivity** | Slider | 0 to 100 | 50 | Per cent |
+| **Wet** | Slider | 0 to 100 | 100 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mode**: 0 sweeps with an oscillator, 1 with the level of the sound.
+- **Rate**: cycles a second, with Mode at 0.
+- **Depth**: how far the sweep travels. At 100 the band moves two octaves either side of
+  Frequency.
+- **Frequency**: where the band rests, in Hz. The oscillator sweeps either side of it; the
+  level sweeps up from it.
+- **Resonance**: how narrow the band is.
+- **Sensitivity**: how hard the level pushes the sweep, with Mode at 1.
+- **Wet**: how much of the filtered sound is heard.
+
+## Related
+
+- [Phaser](/effects/audio/phaser/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

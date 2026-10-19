@@ -16,7 +16,11 @@ Switch is a **Compositing** effect.
 Switch shows the picture on the socket its **Index** names, counting from **in0**. It is a
 box in a [node graph composition](/use/node-graphs/) and is not offered on a layer's
 stack. There is always one spare socket beyond the last one wired. An unwired socket, or
-an index past the last socket, shows nothing.
+an index past the last socket, shows nothing. A bypassed Switch shows its first socket.
+
+Only the picked socket's picture is decoded and drawn, unless something else reads the
+others. With a wire or an expression on **Index**, every socket is decoded and only the
+picked one drawn.
 
 ## Parameters
 

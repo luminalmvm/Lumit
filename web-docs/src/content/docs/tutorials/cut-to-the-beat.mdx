@@ -1,0 +1,45 @@
+---
+title: Cutting to the beat
+description: Place a marker on every beat of a song, then cut footage on them.
+sidebar:
+  order: 5
+---
+
+import Clip from "../../../components/Clip.astro";
+
+Lumit places a [beat marker](/use/markers/) on each beat of a composition's music. Cuts snap
+to the markers.
+
+**1. Put the music in the composition.** Drag the song from the
+[Project panel](/panels/project/) into the Timeline. It becomes an Audio layer.
+
+**2. Open the Audio panel.** Switch to the **Audio** workspace on the strip at the right of
+the toolbar. The [Audio panel](/panels/audio/) is in the right-hand column.
+
+**3. Choose what to listen to.** In **Beats**, set **Source** to the song's layer, or leave it
+on **This comp** to hear the whole mix.
+
+**4. Set how keen the detection is.** Raise **Sensitivity** for more beats, lower it for
+fewer. To fix the tempo instead, type it into **BPM**, or press **Tap** in time with the song.
+
+**5. Place the markers.** Press **Generate beat markers**. The status line says how many were
+placed, and the markers appear on the ruler. Press it again after a change to replace them.
+
+<Clip name="beat-markers" caption="Generate beat markers: the markers land on the ruler and the status line counts them."/>
+
+**6. Move the playhead to a beat.** Switch back to the **Edit** workspace. Hold `Shift` and
+drag along the Timeline ruler, and the playhead lands on the nearest marker.
+
+**7. Cut the footage there.** Select the footage layer and press `Ctrl+Shift+D` to split it
+at the playhead. Or press `C` for the razor and click the footage bar near a marker: with
+the **magnet** on, the cut lands on the marker.
+
+In the [Cut workspace](/use/cutting/) the razor snaps to the same markers with **Snap** on,
+and `Ctrl+K` cuts at the playhead.
+
+## Related
+
+- [Markers](/use/markers/)
+- [Audio](/use/audio/)
+- [Audio, Mixer and Audio timeline](/panels/audio/)
+- [Cutting](/use/cutting/)

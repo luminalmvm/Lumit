@@ -28,12 +28,12 @@ In the Timeline, a Footage layer draws its audio waveform in its lane, and clips
 [Sequence layer](/use/sequence-layers/) draw theirs inside their own box. The drawing is
 trimmed and retimed along with the layer.
 
-There are several options in **Edit ▸ Settings ▸ Interface** for how to display waveforms.
+**Settings ▸ Appearance ▸ Waveforms** sets how waveforms are drawn.
 
-| Setting | What it does |
+| Setting | Choices |
 | --- | --- |
-| **Waveform frequency stack** | Splits the waveform into low, mid, and high frequency bands. |
-| **Waveforms from the bottom** | Draws the waveform from the bottom of the row instead of centred. |
+| **Style** | **Plain** draws one wave. **Frequency** splits it into low, mid and high bands. |
+| **Anchor** | **Centre** draws the wave about the middle of the row. **Bottom** draws it up from the bottom. |
 
 ## Audio streams
 
@@ -79,9 +79,10 @@ first stream, or every stream mixed for either of the other two choices.
 
 ## Scrubbing
 
-Hold `Ctrl` and drag along the Timeline ruler to hear the composition as the playhead
-moves. Each frame the playhead lands on plays a twelfth of a second of the mix from that
-frame. `Ctrl`+click on the ruler plays the frame under the pointer.
+Hold `Ctrl` and drag along the ruler of the Timeline, the Cut timeline or the Audio
+timeline to hear the composition as the playhead moves. Each frame the playhead lands on
+plays a twelfth of a second of the mix from that frame. `Ctrl`+click on the ruler plays the
+frame under the pointer.
 
 ## Beat markers
 
@@ -90,11 +91,21 @@ Lumit can read a composition's audio and place a **beat marker** on each detecte
 - **Composition ▸ Detect beats** runs the detection.
 - **Composition ▸ Clear beat markers** removes all beat markers in the composition.
 
-:::note[Partially built]
-Neither sensitivity tuning nor tapping beats in by hand is built yet.
+The [Audio panel](/panels/audio/)'s **Beats** section runs the same detection with a
+source, a sensitivity, a range and a tempo.
+
+:::note[Not built yet]
+Placing markers by tapping during playback.
 :::
+
+## Audio offset
+
+**Settings ▸ Audio ▸ Audio offset** lines the picture up with sound that is heard late on
+this machine, from −1000 to 1000 ms. Above zero holds the picture back; below zero holds
+the sound back. It applies while playing, and not to export.
 
 ## Related
 
+- [Audio, Mixer and Audio timeline](/panels/audio/)
 - [Markers](/use/markers/)
 - [Exporting](/use/export/)

@@ -143,6 +143,7 @@ The **Emitter** group, where particles come from and travel:
 - **Map placement**: where the Density layer's picture sits on this layer. **As placed in
   comp** reads it where that layer sits in the composition. **Stretch to fit** stretches
   it over this layer. **Centre** centres it at its own size.
+  An effect saved before this row existed stays on Stretch to fit.
 - **Emit rate**: new particles per second.
 - **Direction**: which way particles travel.
 - **Direction z**: how far they lean out of that plane.
@@ -225,10 +226,10 @@ The **Render** group, how they are drawn:
 - **Particle blend**: how particles combine with each other where they overlap, by the layer
   blend modes. They then go over the picture together, as Normal particles do.
 - **Max particles**: the most particles that may be alive at once.
-- **Seed**: Changes randomness.
 
 The remaining properties:
 
+- **Seed**: changes the randomness.
 - **Mix**: how much of the result replaces the picture underneath.
 - **Blend**: how the particles composite with the layer they are drawn over.
 - **Matte** and **Invert** drive the strength of the effect from another layer's brightness.

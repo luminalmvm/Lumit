@@ -1248,8 +1248,9 @@ pub(crate) fn bridge_unit(unit: lumit_core::fx::Unit) -> BridgeUnit {
         U::Seconds => BridgeUnit::Seconds,
         U::Frames => BridgeUnit::Frames,
         // See [`BridgeUnit`]: neither can reach a shipped parameter, and
-        // "no rider" is what a panel should draw if one ever did.
-        U::Raw | U::Unset | U::PctDiag => BridgeUnit::Raw,
+        // "no rider" is what a panel should draw if one ever did. A share of
+        // the frame runs 0 to 1, so a "%" beside it would be wrong.
+        U::Raw | U::Unset | U::PctDiag | U::FrameWidth | U::FrameHeight => BridgeUnit::Raw,
     }
 }
 

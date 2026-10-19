@@ -1,0 +1,49 @@
+---
+title: Reverb
+description: "A room's reflections added to the sound."
+---
+
+Reverb is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+The room is Freeverb, tuned to the sample rate it runs at.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Room size** | Slider | 0 to 100 | 50 | Per cent |
+| **Damping** | Slider | 0 to 100 | 50 | Per cent |
+| **Width** | Slider | 0 to 100 | 100 | Per cent |
+| **Pre-delay** | Slider | 0 to 200 | 20 | - |
+| **High cut** | Slider | 500 to 20000 | 12000 | - |
+| **Dry** | Slider | 0 to 100 | 100 | Per cent |
+| **Wet** | Slider | 0 to 100 | 30 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Room size**: how long the room holds on to the sound.
+- **Damping**: how much top end each reflection loses.
+- **Width**: how far apart the two channels' rooms are heard. At 0 the tail is mono.
+- **Pre-delay**: the gap between the sound and the room answering it, in milliseconds.
+- **High cut**: a low pass over the tail alone, in Hz.
+- **Dry**: how much of the sound itself reaches the output.
+- **Wet**: how much of the room reaches it.
+
+## Related
+
+- [Delay](/effects/audio/delay/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

@@ -9,8 +9,9 @@ Lumit is layer-based, in the manner of After Effects, with a few additions to he
 coming from Vegas, Premiere Pro or Resolve, such as the Sequence layer, which is where 
 cutting and speed ramping happen. Most of what you already know can be transferred.
 
-On its first run Lumit asks which of the three you are coming from. Each answer sets a
-few preferences, all of them ordinary rows in **Settings** afterwards.
+On its first run Lumit asks which of the three you are coming from, under **Editing
+style**. Each answer sets a few preferences, all of them ordinary rows in **Settings**
+afterwards.
 
 ## After Effects to Lumit
 
@@ -28,13 +29,13 @@ bezier with speed and influence.
 
 If you aren't used to all of Lumit's keybinds, an After Effects keymap 
 preset ships in Settings, which you can access via **Edit ▸ Settings ▸ Shortcuts**.
-Choosing **After Effects** when Lumit asks *How do you edit?* on its first run, with
+Choosing **After Effects** under **Editing style** on the first run, with
 **Use the After Effects shortcuts** ticked, loads it.
 
-Whole projects come across too. **File ▸ Import ▸ After Effects project**, and a 
-report will appear telling you what was carried across with or without adjustments. 
-This cannot port across third-party effects at this time, but it will still import the rest of 
-a project which uses these.
+Whole projects come across too. **File ▸ Import ▸ After Effects project…**, and a
+report will appear telling you what was carried across with or without adjustments.
+Common third-party effects become the maker's own OFX plugin when it is installed. See
+[Importing](/use/importing/).
 
 Expressions written for After Effects run as written, and an animation preset (`.ffx`)
 is applied from **Animation ▸ Apply animation preset**. See
@@ -46,17 +47,19 @@ is applied from **Animation ▸ Apply animation preset**. See
 | --- | --- |
 | Event | **Clip**, inside a [Sequence layer](/use/sequence-layers/) |
 | Track | **Layer**; the Sequence layer is the Vegas-style row you can cut on |
-| Velocity envelope | **Retime**, edited through the Speed lens of the graph editor, or within a Sequence layer |
+| Velocity envelope | The **speed envelope** under a Sequence layer's clips. See [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/) |
+| Playback rate | **Speed…** on a clip's right-click menu |
 | Cursor | **Playhead** |
-| Split | **Layer ▸ Split layer**, or the **razor** tool on the [toolbar](/panels/toolbar/) |
+| Split | **Edit ▸ Split layer**, or the **razor** tool on the [toolbar](/panels/toolbar/) |
 | Event FX | A clip's own [effects](/use/cutting/#effects-and-blend-mode-on-a-clip) |
 | Auto ripple | **Auto ripple**, on the [Cut timeline](/use/cutting/#switches) |
 | Automatic crossfades | **Auto crossfade**, on the Cut timeline |
 | Quantize to frames | **Quantise**, on the Cut timeline |
 
 Choosing **Vegas** on the first run makes video arrive as a Sequence layer and opens the
-Retime graph to speed. Tick **Use the Vegas shortcuts** to load those too. They are also the
-**Vegas** preset in [Settings ▸ Shortcuts](/use/settings/).
+Retime graph to speed. **Only change default Retime graph** leaves video arriving as footage
+layers. Tick **Use the Vegas shortcuts** to load those too. They are also the **Vegas**
+preset in [Settings ▸ Shortcuts](/use/settings/).
 
 ## Premiere Pro or Resolve to Lumit
 
@@ -81,3 +84,4 @@ The next step is your [first composition](/start/first-composition/).
 - [Your first composition](/start/first-composition/)
 - [Sequence layers](/use/sequence-layers/)
 - [Retiming and speed](/use/retime/)
+- [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/)

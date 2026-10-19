@@ -20,8 +20,13 @@ shows its value in red.
 | | |
 | --- | --- |
 | **Enter** | A new line |
+| **Tab** | Four spaces |
+| **Shift+Tab** | Up to four spaces off the start of each line the selection touches |
 | Click away, or **Ctrl+Enter** | Keep the expression |
 | **Escape** | Put back what was there |
+
+**Tab** and **Shift+Tab** do the same in the Expressions panel, the
+**Animation ▸ Add expression** editor and the shader editor.
 
 The row then shows the expression and its value, and a click on either opens the editor
 again. In the Timeline the expression is written along the property's lane, and a click
@@ -34,8 +39,9 @@ plain value. The property keeps the number it was showing. The same menu lists
 **Animation ▸ Add expression** opens the same editor for the property rows selected in the
 Timeline, and puts the expression on every one of them.
 
-Transform properties and effect parameters both take one. Anything made of several
-numbers — a point, a colour — does not yet, and the menu simply does not offer it there.
+Transform properties and effect parameters both take one. An effect's point takes one on
+each half, and is then drawn as two rows. A colour does not yet, and the menu does not offer
+it there.
 
 ## Choose the language
 
@@ -53,8 +59,8 @@ choice.
 | **Window ▸ Expressions** | In the dropdown at the right of the bottom bar |
 | An Expression box in the node graph | In the same dropdown, under **Edit expression…** |
 
-A new expression starts in Rhai. **Edit ▸ Settings ▸ Interface ▸ New expressions are
-written in** changes that. An expression imported from After Effects arrives as JavaScript.
+A new expression starts in Rhai. **Edit ▸ Settings ▸ Timeline ▸ Editing ▸ New expressions
+are written in** changes that. An expression imported from After Effects arrives as JavaScript.
 
 The text is coloured for the language it is set to, and run in that language whatever it
 says. `7 / 2` is `3` in Rhai and `3.5` in JavaScript.
@@ -148,7 +154,7 @@ back to following.
 ## Notes
 
 - **A Rhai expression that fails reads as −1.** A JavaScript expression that fails leaves
-  the property at `value`. Nothing is reported yet.
+  the property at `value`. The editor shows why, and the row turns red.
 - **A text layer's expression is Rhai.**
 
 - **One property reading another that reads it back** stops after a hundred cycles 

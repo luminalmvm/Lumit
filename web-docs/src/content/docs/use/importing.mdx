@@ -13,10 +13,14 @@ as well as how to interpret what it finds there.
 
 ## Import files
 
-1. Choose **File ▸ Import**.
+1. Choose **File ▸ Import footage…**.
 2. Select one or more files.
 
-Dragging files from your file manager onto the Lumit window works as well.
+Dragging files from your file manager onto the Lumit window works as well. An empty editor
+offers **Import footage** beside **Open**.
+
+**File ▸ Import folder…** imports the footage in a folder and every folder inside it. Each
+folder becomes a project folder of the same name.
 
 ## What Lumit opens
 
@@ -152,9 +156,12 @@ the project, with everything it uses. A `.lum` dragged onto the window is not im
 ## After Effects projects
 
 A whole After Effects project can be imported via **File ▸ Import ▸ After Effects
-project**, with support for compositions, markers, layers, keyframes, and built-in
-effects. Third-party effects are not imported, but do not stop the rest of the project
-importing. A text layer keeps its font, spacing, outline, alignment, and box width.
+project…**, with support for compositions, markers, layers, keyframes, and built-in
+effects. A text layer keeps its font, spacing, outline, alignment, and box width.
+
+A common third-party effect becomes the maker's own OFX plugin where one is installed, with
+its controls carried across by name. Any other third-party effect arrives as a placeholder
+that keeps its values and draws nothing. Neither stops the rest of the project importing.
 
 Expressions come across as JavaScript and run as written, and a pseudo effect arrives as
 [Custom controls](/effects/controls/custom-controls/). A property with both keyframes and

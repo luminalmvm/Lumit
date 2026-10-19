@@ -744,6 +744,8 @@ pub mod double_types {
     pub const Y_ABSOLUTE: &str = "OfxParamDoubleTypeYAbsolute";
     pub const XY: &str = "OfxParamDoubleTypeXY";
     pub const XY_ABSOLUTE: &str = "OfxParamDoubleTypeXYAbsolute";
+    pub const NORMALISED_X: &str = "OfxParamDoubleTypeNormalisedX";
+    pub const NORMALISED_Y: &str = "OfxParamDoubleTypeNormalisedY";
 }
 
 /// `kOfxParamPropStringMode`.

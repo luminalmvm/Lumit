@@ -1,0 +1,44 @@
+---
+title: Vibrato
+description: "The pitch moved up and down by an oscillator."
+---
+
+Vibrato is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+The sound is played from a delay line whose length an oscillator moves, with none of the
+untouched sound kept. A slow, deep setting stops deepening at the longest sweep the line
+holds.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Rate** | Slider | 0.1 to 20 | 5 | - |
+| **Depth** | Slider | 0 to 100 | 20 | - |
+| **Shape** | Slider, whole numbers | 0 to 2 | 0 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Rate**: cycles a second.
+- **Depth**: how far the pitch moves either way, in cents. 100 is a semitone.
+- **Shape**: 0 sine, 1 triangle, 2 square.
+
+## Related
+
+- [Tremolo](/effects/audio/tremolo/)
+- [Chorus](/effects/audio/chorus/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

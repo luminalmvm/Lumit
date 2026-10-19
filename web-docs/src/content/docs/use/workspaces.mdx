@@ -34,6 +34,9 @@ arrangement. Toggling one adds or drops it.
 | **Expressions** | Saved [expressions](/use/expressions/), and an editor that applies one. |
 | **Hierarchy** | The open composition's layers as a tree, precomps expandable. |
 | **Debug view** | Engine readouts. Off unless you turn it on from the Help menu. |
+| **Mixer** | A strip per audible layer, and the Master strip. See [Mixer](/panels/audio/#mixer). |
+| **Audio** | Output levels, beats, and the selected layer's sound. See [Audio panel](/panels/audio/#audio-panel). |
+| **Audio timeline** | A row per layer that makes a sound, with its wave on the lane. See [Audio timeline](/panels/audio/#audio-timeline). |
 
 ## Rearrange
 
@@ -78,7 +81,7 @@ first and then your own. Each button's tooltip gives its name and its shortcut.
 | **Effects** | Effect controls promoted to a column of its own, Effects & presets widened. |
 | **Nodes** | The [Node graph](/use/nodes/) across most of the window, a short Timeline under it, a small Viewer and the Node panel down the right. |
 | **Colour** | Scopes given a wide right-hand column, Viewer dominant. |
-| **Audio** | A taller Timeline with waveforms open, Viewer reduced. |
+| **Audio** | Mixer in front of Project and Effect controls on the left, Viewer centre, the Audio panel with Effects & presets behind it on the right, and the Audio timeline across the bottom. |
 | **Retiming** | The Easing panel taking the right-hand column outright. |
 | **Cut** | Project left, a Viewer showing a source view beside the composition, and the [Cut timeline](/use/cutting/) across the bottom. |
 
@@ -109,7 +112,7 @@ A project opened on another machine is the same edit under that machine's panel 
 | --- | --- |
 | Which panels are open, where, size | Which compositions are open, and which is in front |
 | Timeline column visibility and widths | Per-composition Viewer state: resolution, magnification, channel, guides |
-| Interface scale, tooltips, motion | Per-composition Timeline state: twirls, work area, playhead, zoom |
+| Interface scale, tooltips, motion | Per-composition Timeline state: twirls, work area, playhead, zoom, horizontal and vertical scroll |
 | Where a settings or export window was left | Guides, markers, the region of interest |
 
 Switching workspace never closes, reloads or re-renders anything. It only moves panels.
@@ -141,6 +144,14 @@ Nine menus: **File, Edit, Composition, Layer, Effect, Animation, View, Window, H
 menu item that needs something you have not selected appears disabled. A command that is
 not built yet is left off its menu.
 
+On Windows the menu bar is the window's top line, with **Minimise**, **Maximise** (or
+**Restore**) and **Close** at its right. Dragging the empty part of the line moves the
+window, and a double-click maximises it or puts it back. On Linux the same line replaces
+the system's title bar when **Settings ▸ Appearance ▸ Lumit's own title bar** is on, from
+the next start. macOS keeps its own title bar.
+
+The window is at least 840 × 560.
+
 **Edit ▸ Undo** and **Redo** name the step they would take, as **Edit ▸ History** lists it.
 
 ## The status line
@@ -149,11 +160,18 @@ The strip along the bottom of the window. Left to right:
 
 | Part | Shows |
 | --- | --- |
-| **Unsaved changes** | The project has edits that are not saved. |
+| **Profile** | The profile button. See [Profiles](/use/profiles/). |
+| **Update** | Where the updater has got to. A press checks, downloads or restarts. See [Updating](/start/install/#updating). |
+| **Nightly** | A pill, on a nightly build only. |
+| **Previews** | Comments nobody has looked at, or a ring while a composition uploads. It opens the Previews window. See [Review links](/use/review-links/). |
+| **Saved state** | **No project**, **Not saved yet**, **Saved** or **Unsaved changes**. |
+| **Backup** | The open project's backup, with Pro. See [Backup](/use/backup/#the-mark-on-the-bottom-strip). |
 | **Cache** | How full the RAM, VRAM and disk tiers are. Click it to clear them. |
 | **Hourglass** | Turns render-time measuring on and off. See [the Timeline](/panels/timeline/#render-times). |
+| **Shared** | While a project is shared, who is in it. It opens the **Shared project** window. See [Shared projects](/use/projects/#shared-projects). |
 | **Notice** | The latest message. Click it to list the last twenty. |
 | **Jobs** | A running export or proxy, with its progress and a **Cancel**. |
+| **Output peak** | While playing, what the sound output peaked at, in dB. |
 | **Hint** | What the armed tool's modifier keys do, at the right-hand end. |
 
 ## Related

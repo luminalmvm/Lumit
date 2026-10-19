@@ -1,0 +1,56 @@
+---
+title: Delay
+description: "Repeats the sound after a set time, each repeat quieter and duller."
+---
+
+Delay is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+The sound comes back a **Time** later, and each repeat goes round again through a low pass
+until it falls silent. The repeats ring on past the end of the layer's sound.
+
+:::note[Not built yet]
+Following the composition's beat grid. **Time** sets the repeat whatever **Sync** says.
+:::
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Time** | Slider | 1 to 2000 | 250 | - |
+| **Note** | Slider, whole numbers | 0 to 6 | 2 | - |
+| **Sync** | Slider, whole numbers | 0 to 1 | 0 | - |
+| **Feedback** | Slider | 0 to 95 | 35 | Per cent |
+| **Damping** | Slider | 200 to 20000 | 6000 | - |
+| **Ping-pong** | Slider | 0 to 100 | 0 | Per cent |
+| **Wet** | Slider | 0 to 100 | 35 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Time**: how far behind the sound the first repeat lands, in milliseconds.
+- **Note**: the beat division the repeat would land on. It does nothing yet.
+- **Sync**: 1 would follow the beat grid instead of Time. It does nothing yet.
+- **Feedback**: how much of each repeat goes round again.
+- **Damping**: where the low pass in the feedback sits, in Hz.
+- **Ping-pong**: how much of one channel's return crosses into the other. At 100 the repeats
+  walk left, right, left.
+- **Wet**: how much of the output is repeats.
+
+## Related
+
+- [Reverb](/effects/audio/reverb/)
+- [Chorus](/effects/audio/chorus/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

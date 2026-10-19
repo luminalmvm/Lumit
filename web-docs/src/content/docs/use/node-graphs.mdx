@@ -42,7 +42,9 @@ box's rows.
 A Read box places its item centred at its natural size, as a fresh layer would.
 
 A box keeps the picture that reaches past the composition's frame, up to one frame width
-or height past each edge. A Read keeps all of an item bigger than the frame, a
+or height past each edge. **File ▸ Project settings… ▸ Node graph overscan** sets how far:
+**One frame**, **Two frames** or **Maximum**, the largest picture the graphics card can
+hold. On Maximum a line under it says how much memory each box can use. A Read keeps all of an item bigger than the frame, a
 [Transform](/effects/utility/transform/) keeps what it moves out, and
 [Lens distort](/effects/distortion/lens-distort/) with **Reverse** on keeps the corners it
 pushes out. Only the Output is cut to the frame.
@@ -124,7 +126,8 @@ of field pro and Lens flare take one. Depth of field pro's **Focus distance (m)*
 and **Glass curvature** outputs are numbers.
 
 An effect with a view dropdown has an output socket for each view beside **Output**:
-Depth of field's **Rendered**, **Depth map** and **Focus map**, Motion blur's four views
+Depth of field's **Rendered**, **Depth map** and **Focus map**, Depth of field pro's
+**Final** and **Depth**, Lens dirt's **Final** and **Dirt alone**, Motion blur's four views
 and Matte key's three. A view socket draws that view whatever the dropdown says, so the
 picture and a map can be wired at once. **Output** follows the dropdown.
 

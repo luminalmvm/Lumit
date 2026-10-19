@@ -49,8 +49,19 @@ Precompose when you want to:
 - Apply one effect to several layers at once.
 - Retime a whole group of layers together.
 
-Select the layers and choose **Layer ▸ Precompose**, or right-click one of them in the
-timeline and choose **Precompose**. The shortcut by default is `Ctrl+Shift+C`.
+Select the layers and choose **Layer ▸ Pre-compose…**, or right-click one of them in the
+timeline and choose **Pre-compose…**. The shortcut by default is `Ctrl+Shift+C`. Each
+opens the **Pre-compose** dialogue.
+
+| Option | Does |
+| --- | --- |
+| **New composition name** | The new composition's name. |
+| **Leave all attributes in '*composition*'** | Moves the one layer in as its bare source, and keeps its transform, effects, masks, Retime, blend mode and switches on the Precomp layer. One layer only. |
+| **Move all attributes into the new composition** | Puts the selected layers and everything on them in the new composition. |
+| **Adjust the duration to the span of the selected layers** | Makes the new composition as long as the selection instead of the composition. |
+| **Open the new composition** | Opens it once it is made. |
+
+The choices are kept for next time. The row menu leaves locked layers out.
 
 When a parent or track matte links the selected layers to layers left outside, Lumit asks
 first, then duplicates the layer at the other end of each link, hidden, so both sides keep

@@ -21,12 +21,17 @@ A [packed project](#packed-projects) also carries the files themselves.
 - **File ▸ Save as…** saves to a new path. If already saved, it creates a new copy at the location.
 - **File ▸ Open project…** opens a `.lum` file, **Open recent** lists the last few.
 - **File ▸ New** starts an empty project, or a copy of the template chosen in
-  [Settings](/use/settings/). Footage packed inside a template is not unpacked.
+  [Settings](/use/settings/). Footage packed inside a template is not unpacked. The copy is
+  unsaved and is a new project of its own. A template that cannot be read gives an empty
+  project and the notice *The project template would not open, so the new project is
+  empty*. **Close project** never uses the template.
+
+Opening a project that another Lumit has open brings that Lumit's window forward.
 
 With unsaved changes, Lumit asks before the project goes: on **New**, **Open project…**,
-**Open recent**, **Close project**, an After Effects import, and on quitting. **Save** saves
-first, **Discard** drops the changes, and **Cancel** keeps the project open. If the save is
-cancelled or fails, the project stays open.
+**Open recent**, **Close project**, an After Effects import, joining a shared project, and on
+quitting. **Save** saves first, **Discard** drops the changes, and **Cancel** keeps the
+project open. If the save is cancelled or fails, the project stays open.
 
 ## Packed projects
 
@@ -65,7 +70,10 @@ shared project can also be [kept online](#keeping-a-shared-project-online).
   place of the open one.
 
 A click on an invite link in a browser opens Lumit on **Join a project** with the link
-filled in. On macOS the link is pasted by hand.
+filled in.
+
+The host and its guests run the same version of Lumit. A nightly and a stable build cannot
+share a project. A shared project holds at most 16 people, the host included.
 
 While a project is shared, a **Shared** button sits on the bottom strip and opens the same
 window. It lists everyone in the project. The host can **Remove** a guest, and **Stop
@@ -77,9 +85,9 @@ asks before it shows one, and **Copy link** copies it without showing it. The pa
 after the `#` is not sent to lumitlab.com.
 
 **Password** on **Share this project** sets a password that every guest types as well as
-having the link. **Join a project** shows a **Password** row for a link that needs one. A
-wrong password and a host that is not there give the same message. A project shared again
-keeps its password unless another is typed.
+having the link. It is drawn as dots until **Show** is pressed. **Join a project** shows a
+**Password** row for a link that needs one. A wrong password and a host that is not there
+give the same message. A project shared again keeps its password unless another is typed.
 
 A guest tries every address in the link at once and keeps the one that answers with the
 key. The line under the link says who it works for.
@@ -93,7 +101,7 @@ key. The line under the link says who it works for.
 
 - **Internet**: when ticked, Lumit asks the host's router to open the port when sharing
   starts, and to close it when sharing stops. It is ticked by default.
-- **Port**: the port the host listens on.
+- **Port**: the port the host listens on, 47856 by default.
 - **Relay**: the address of a relay, for guests the router does not let in. It is set
   before sharing starts.
 - **Extra address**, while sharing: one more address of the host's computer to add to the
@@ -156,8 +164,8 @@ passes it on to a guest who asks. A stand-in is kept and is not sent twice. A tr
 that is cut off carries on from where it stopped.
 
 On a footage row nobody here has, the menu has **Get a stand-in** and **Fetch the
-original**, which fetches the file itself. A fetched original is checked against the
-project's record of the file.
+original**, which fetches the file itself and gives its size. A fetched original is checked
+against the project's record of the file.
 
 **Advanced** in the Shared project window holds the rest. The two limits are also in
 **Settings ▸ General ▸ Shared projects**.
@@ -166,8 +174,9 @@ project's record of the file.
   computer sends none of its own footage.
 - **Get stand-ins of missing footage**: when unticked, nothing is fetched until it
   is asked for from the menu.
-- **Stand-in size** and **Stand-in frames**: how much smaller than the footage the
-  stand-ins this computer makes are. A frame left out shows the one before it. A smaller
+- **Stand-in size** (**Full**, **Half**, **Quarter**) and **Stand-in frames** (**All**,
+  **Half**, **Quarter**): how much smaller than the footage the stand-ins this computer
+  makes are. A frame left out shows the one before it. A smaller
   stand-in is still read at the original's size and length. Interlaced footage keeps its
   size.
 - **Upload limit** and **Download limit**: the fastest footage is sent and fetched, in
@@ -202,6 +211,10 @@ A guest's saved copy that is closed while the host is away is still a guest when
 opened again. It opens with the edits made while away that were saved, or all of them if
 Lumit crashed, looks for the host, and merges when it finds it. **Leave** ends that. A
 conflict not settled before the copy is closed is listed again when it is opened.
+
+Only the file a copy was last saved as opens as part of the shared project. Another file
+with the same history, such as the project saved under another name or copied by hand,
+opens as a project of its own.
 
 A host that closes the project, or Lumit, without **Stop sharing** keeps its invite. When
 it opens the project and shares it again on the same port, the guests who are waiting come

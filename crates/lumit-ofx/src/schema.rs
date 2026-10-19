@@ -16,10 +16,10 @@
 //! * **Units.** A double whose `kOfxParamPropDoubleType` is one of the
 //!   *absolute* spatial kinds — `X`/`Y`/`XY`, absolute or not — is a distance,
 //!   and every distance in Lumit is px@comp ([`Unit::Px`]). An angle is
-//!   [`Unit::Degrees`]. **Everything else is [`Unit::Raw`]**, including the
-//!   normalised spatial types: a normalised coordinate runs 0 to 1 where
-//!   Lumit's per cent runs 0 to 100, so drawing a "%" beside it would be a
-//!   wrong unit rider rather than a missing one.
+//!   [`Unit::Degrees`]. A normalised X or Y is a share of the frame,
+//!   [`Unit::FrameWidth`] or [`Unit::FrameHeight`]: it runs 0 to 1 where
+//!   Lumit's per cent runs 0 to 100, so it is not [`Unit::Percent`].
+//!   **Everything else is [`Unit::Raw`]**.
 //! * **A 2-D or 3-D parameter becomes two or three rows**, `foo_x` / `foo_y` /
 //!   `foo_z`. Lumit has no point *kind*: a point is two adjacent number rows
 //!   the panel folds into one, which is why
@@ -608,6 +608,8 @@ fn unit_of(props: &PropertySet) -> Unit {
         | double_types::Y_ABSOLUTE
         | double_types::XY
         | double_types::XY_ABSOLUTE => Unit::Px,
+        double_types::NORMALISED_X => Unit::FrameWidth,
+        double_types::NORMALISED_Y => Unit::FrameHeight,
         _ => Unit::Raw,
     }
 }

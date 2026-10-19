@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import Shot from "../../../components/Shot.astro";
+import Clip from "../../../components/Clip.astro";
 
 The **Cut** workspace arranges Lumit for cutting footage: a **source view** beside the
 composition in the Viewer, and the **Cut timeline** across the bottom.
@@ -52,8 +53,23 @@ With no marks set, the whole item is placed. The clip lands on the selected pict
 or the lowest one, or a new track when the composition has none. The playhead moves to the
 end of the placed clip.
 
+In and Out are kept on the footage item and saved with the project. Setting them is one
+undo step, **Mark In and Out**. An Out that is not after the In is **refused**.
+
+A video with marks brings only its marked stretch wherever it is placed. Dropped in the
+Timeline, its In lands on the composition's start. Dropped on a track, the clip holds the
+marked stretch, and several files dropped together are spaced by their marked lengths.
+
 `I` and `O` mark the source while the source view has the keyboard. With the Cut timeline
 active they set the start and end of the work area at the playhead.
+
+With the source view in front and the Viewer active, the transport keys play and step the
+clip instead of the composition: `Space` plays it, `Page Up` and `Page Down` or `Ctrl+←`
+and `Ctrl+→` step a frame, `Shift+Page Up` and `Shift+Page Down` step ten, and `Home` and
+`End` go to its start and end.
+
+Choosing any workspace other than Cut takes the source view away. **One view** in the Viewer
+keeps the composition.
 
 Footage dragged from the Project panel onto a track makes a clip where it is dropped.
 Dropped on empty ground it makes a new track. Several files dropped together land one after
@@ -62,8 +78,8 @@ another. A still takes five seconds.
 A clip placed past the end of the composition lengthens the composition to fit.
 
 `F` loads the footage of the clip under the playhead into the source view, on the frame the
-composition is showing. Double-clicking a clip does the same and marks the clip's own
-stretch.
+composition is showing. Double-clicking a clip does the same and shows the clip's own
+stretch as In and Out. Neither changes the marks kept on the item.
 
 ## Linked clips
 
@@ -89,6 +105,8 @@ for **Split audio streams**, which puts each stream on a sound track of its own 
 clip, and **Merge audio streams**, which puts them back on one clip.
 
 ## Tools
+
+<Clip name="cut-razor-ripple" caption="Two cuts with the razor through a picture clip and its linked sound, then Ripple delete on the piece between."/>
 
 A tap of a tool's key arms it. Holding the key arms it for one gesture and goes back to the
 tool before on release.
@@ -144,6 +162,8 @@ the Audio timeline and Audio layers in the Timeline follow it.
 
 - `Delete` removes the selected clips and leaves a gap. `Shift`+`Delete` removes them and
   closes it.
+- A clip's menu has **Delete clip**, which leaves a gap, and **Ripple delete**, which closes
+  it.
 - Right-click a gap for **Close gap**.
 - `;` lifts the work area: everything inside it is removed and the gap is left. `'` extracts
   it: the gap is closed.

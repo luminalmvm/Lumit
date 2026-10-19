@@ -194,6 +194,8 @@ const fn unit_name(unit: Unit) -> &'static str {
         Unit::Degrees => "degrees",
         Unit::Seconds => "seconds",
         Unit::Frames => "frames",
+        Unit::FrameWidth => "frame_width",
+        Unit::FrameHeight => "frame_height",
     }
 }
 

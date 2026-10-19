@@ -26,8 +26,8 @@ windows were left. Those stay with the machine.
 ## Lumit account
 
 An account is optional. **Sign in** in the profile card opens the sign-in window, which
-takes an email and a password, or a Discord or Google account. A Discord or Google sign-in
-finishes in the browser.
+takes an email and a password, or **Continue with Apple**, Google or Discord where the
+server offers them. An Apple, Google or Discord sign-in finishes in the browser.
 
 - **Create an account** asks for a name, an email, and a password of at least 10
   characters, and emails a six-digit code that confirms the address.
@@ -44,12 +44,41 @@ Lumit Pro is a subscription on a Lumit account. It adds:
 
 - Shared projects through Lumit's relay. See [Relays](/use/projects/#relays).
 - [Sync](#sync).
+- [Projects kept online](/use/projects/#keeping-a-shared-project-online).
 - [Previews](/use/review-links/).
 - [Backup and history](/use/backup/).
+- [Devices](#devices).
 
 **See what is in Pro** in the profile card opens the **Lumit Pro** window. **Get Lumit Pro**
 opens the payment page in the browser, and the window changes when the payment completes.
-**Manage subscription** opens the page that changes or cancels it.
+**Manage subscription** opens the page that changes or cancels it. A subscription bought in
+the iPhone app shows **Managed on your iPhone** on **Settings ▸ Account** instead.
+
+## Devices
+
+With Lumit Pro, **Settings ▸ Account ▸ Devices** lists **This computer** and the phones
+paired with the account.
+
+| Control | What it does |
+| --- | --- |
+| **Rename…** | Renames the computer or phone, up to 40 characters. |
+| **Remove** | Unpairs the phone. |
+| **Add a phone** | Shows a QR code for the iPhone camera or the Lumit app, with the time it has left. **New code** replaces one that has run out. The window closes once a phone has paired, and Lumit names the phone. |
+| **Phones can start exports** | On by default. Off, a phone can follow the export queue and change nothing. |
+
+A paired phone follows this computer's export queue, by name: the project's name and each
+export's file, never a path. It can:
+
+- start the queue
+- cancel or remove an item
+- queue a composition with a saved export preset, over the work area or the whole
+  composition, and start it
+- send a finished export as a [preview](/use/review-links/)
+
+A phone's request is refused when **Phones can start exports** is off, when no project is
+open, when **Settings ▸ Export ▸ Destination** is **Ask every time**, **Beside the
+project** with an unsaved project, or **A folder I choose** with none chosen, and while a
+preview is already being sent. An export a phone starts never overwrites a file.
 
 ## Sync
 
@@ -69,13 +98,16 @@ is a switch for each kind of setting.
 | **Appearance and themes** | Theme, accent, shape, and custom themes. |
 | **Shortcuts** | The whole keymap. |
 | **Panel layout and workspaces** | The arrangement in force and saved workspaces. |
-| **Preferences** | The options on the other Settings pages, apart from interface scale. |
+| **Preferences** | The options on the other Settings pages, apart from those below. |
 | **Easings, expressions and favourites** | Saved easings and expressions, favourite effects, and recent colours. |
 | **Effect presets** | The files in the presets folder. |
 
 :::note[Not synced]
-Interface scale, cache budgets and location, the audio device, and recent projects. Effect
-presets are left out while they come to more than 900 KB together.
+Interface scale, cache budgets and location, the audio device, **Audio offset**, recent
+projects, **Nightly builds**, **Nightly icon**, **Discord status**, the **New project
+template**, the shared projects **Upload limit**, **Download limit**, **Stand-in size** and
+**Stand-in frames**, **Phones can start exports**, and **Keyframes in Effect controls**.
+Effect presets are left out while they come to more than 900 KB together.
 :::
 
 ## Related

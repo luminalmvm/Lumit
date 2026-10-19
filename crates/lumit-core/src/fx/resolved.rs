@@ -565,7 +565,9 @@ pub(super) fn resolve_into_arena(
                 | Unit::Percent
                 | Unit::Degrees
                 | Unit::Seconds
-                | Unit::Frames => v,
+                | Unit::Frames
+                | Unit::FrameWidth
+                | Unit::FrameHeight => v,
             }
         };
         let value = match p.kind {

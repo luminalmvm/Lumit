@@ -315,25 +315,35 @@ impl CompositeLayer<'_> {
         // divides by the region's size rather than the comp's. The camera
         // matrix is untouched: it projects comp space, and this maps a window
         // onto the result — which is why a region cannot change perspective.
+        // Depth always comes out as 0, since layers stack in timeline order and
+        // a z in pixels would fall outside the GPU's 0..1 range and cut the
+        // layer away (a 3D layer off z = 0 or tilted with no camera).
         let ndc_from_comp = match region {
             Some(r) => {
                 Mat4::from_translation(glam::vec3(-1.0, 1.0, 0.0))
-                    * Mat4::from_scale(glam::vec3(2.0 / r.w, -2.0 / r.h, 1.0))
+                    * Mat4::from_scale(glam::vec3(2.0 / r.w, -2.0 / r.h, 0.0))
                     * Mat4::from_translation(glam::vec3(-r.x, -r.y, 0.0))
             }
             None => {
                 Mat4::from_translation(glam::vec3(-1.0, 1.0, 0.0))
-                    * Mat4::from_scale(glam::vec3(2.0 / comp_w, -2.0 / comp_h, 1.0))
+                    * Mat4::from_scale(glam::vec3(2.0 / comp_w, -2.0 / comp_h, 0.0))
             }
+        };
+        // A 2D layer keeps the z and X/Y rotation it had while 3D, hidden, and
+        // draws as if they were 0, like After Effects.
+        let (z, rx, ry) = if self.three_d {
+            (self.z, self.rotation_x_deg, self.rotation_y_deg)
+        } else {
+            (0.0, 0.0, 0.0)
         };
         let mut place = Mat4::from_cols_array_2d(&place_matrix(
             self.position,
             self.anchor,
             self.scale,
             self.rotation_deg,
-            self.z,
-            self.rotation_x_deg,
-            self.rotation_y_deg,
+            z,
+            rx,
+            ry,
         ));
         if let Some(pre) = &self.pre {
             place = Mat4::from_cols_array_2d(pre) * place;
@@ -2680,6 +2690,62 @@ mod tests {
             a > 0.65,
             "must gate by encoded (perceptual) luma, not linear ~0.5; got {a}"
         );
+    }
+
+    /// A layer off z = 0 or tilted still draws in a comp with no camera, and a
+    /// 2D layer holding a z still draws under one, rather than falling outside
+    /// the GPU's depth range and vanishing. A 2D layer draws flat whatever
+    /// X rotation it kept from being 3D.
+    #[test]
+    fn a_layer_off_the_depth_range_still_draws() {
+        let Some(ctx) = crate::test_support::lease() else {
+            crate::no_adapter();
+            return;
+        };
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let white = solid_linear(&ctx, colour, [255, 255, 255, 255], 8, 8);
+        let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
+        let count_white = |z: f32, rotation_x_deg: f32, three_d: bool, camera: Option<Mat4>| {
+            let layer = CompositeLayer {
+                texture: &white,
+                size: (8.0, 8.0),
+                position: (16.0, 16.0),
+                anchor: (4.0, 4.0),
+                scale: (100.0, 100.0),
+                rotation_deg: 0.0,
+                opacity: 100.0,
+                matte: None,
+                blend: Blend::Normal,
+                z,
+                rotation_x_deg,
+                rotation_y_deg: 0.0,
+                three_d,
+                layer_mask: None,
+                pre: None,
+            };
+            let linear = compositor.composite_with_camera(
+                &ctx,
+                32,
+                32,
+                [0.0, 0.0, 0.0, 1.0],
+                &[layer],
+                camera,
+            );
+            let shown = colour.display(&ctx, &linear, crate::DisplayParams::NEUTRAL);
+            let back = colour.readback8(&ctx, &shown).unwrap();
+            back.chunks_exact(4).filter(|p| p[0] > 200).count() as f64
+        };
+        for (what, z, rx, three_d, camera, area) in [
+            ("pushed back, no camera", 50.0, 0.0, true, None, 64.0),
+            ("pulled forward, no camera", -50.0, 0.0, true, None, 64.0),
+            ("tilted 60 degrees, no camera", 0.0, 60.0, true, None, 32.0),
+            ("2D with a z, camera", -50.0, 0.0, false, Some(cam), 64.0),
+            ("2D still tilted from 3D", 0.0, 60.0, false, None, 64.0),
+        ] {
+            let got = count_white(z, rx, three_d, camera);
+            assert!((got - area).abs() <= 8.0, "{what}: area {got} (≈{area})");
+        }
     }
 
     /// The AE camera model: the default camera sits `zoom` behind the comp
