@@ -199,10 +199,12 @@ class UpdateRelease {
     if (tag is! String || tag.isEmpty) return null;
     // Draft releases are not published and pre-releases are not what `latest`
     // returns, but both are cheap to refuse and expensive to ship by accident.
-    // The nightly channel takes nightlies and nothing else that is unfinished:
-    // a release candidate is a rehearsal, not a build anybody follows.
+    // The nightly channel takes nightlies and nothing else: not a release
+    // candidate, which is a rehearsal, and not a stable release either. A
+    // stable 0.8.1 outranks 0.8.1-nightly but is cut from older code, so a
+    // nightly that took it would lose a day's features until the next one.
     if (json['draft'] == true) return null;
-    if (json['prerelease'] == true && !(nightly && isNightlyVersion(tag))) {
+    if (nightly ? !isNightlyVersion(tag) : json['prerelease'] == true) {
       return null;
     }
 
@@ -386,7 +388,8 @@ List<String> assetSuffixesFor(String platform,
       return const ['.exe'];
     case 'macos':
       return kind == InstallKind.bundle && replaceable
-          ? const ['macos-arm64.zip', 'macos-x64.zip', 'macos.zip', '.dmg']
+          // `.app.zip`: the name builds before 0.8.0 don't match (release.yml).
+          ? const ['macos-arm64.app.zip', 'macos-x64.app.zip', '.dmg']
           : const ['.dmg'];
     default:
       return const ['linux-x64.tar.gz', '.tar.gz', '.flatpak'];
@@ -675,8 +678,8 @@ class UpdateService extends ChangeNotifier {
       final nightly = followsNightly;
       final json = await _fetch(recentReleasesUrl);
       // The newest release this machine can install, out of the recent ones.
-      // Off the nightly channel [UpdateRelease.parse] refuses every
-      // pre-release, so a stable build only ever sees stable releases.
+      // [UpdateRelease.parse] keeps each channel to its own: stable builds
+      // only see stable releases, nightly builds only see nightlies.
       UpdateRelease? found;
       final seen = <UpdateRelease>[];
       _said = const [];

@@ -2013,6 +2013,26 @@ pub enum LayerKind {
     },
 }
 
+impl LayerKind {
+    /// The label colour a new layer of this kind starts on, so a fresh stack is
+    /// easy to tell apart. Anything that adds a layer uses it, the user's own
+    /// pick overwrites it, and 0 (no colour) stays a real choice.
+    pub fn default_label(&self) -> u8 {
+        match self {
+            Self::Footage { .. } => 1,
+            Self::Solid { .. } => 2,
+            Self::Precomp { .. } => 3,
+            Self::Text { .. } => 4,
+            Self::Camera { .. } => 5,
+            Self::Sequence { .. } => 6,
+            Self::Adjustment => 7,
+            Self::Null => 8,
+            Self::Shape { .. } => 9,
+            Self::Light { .. } => 10,
+        }
+    }
+}
+
 /// What kind of light a [`LayerKind::Light`] is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]

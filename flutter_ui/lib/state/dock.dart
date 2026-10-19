@@ -652,6 +652,17 @@ void setPanelVisible(DockSplit root, Panel panel, bool visible) {
   root.shares.insert(0, 0.2);
 }
 
+/// Whether [panel] is the tab in front of a group that also holds [behind].
+/// A stack shows every pane it has open, so nothing in one is behind.
+bool frontedOver(DockNode node, Panel panel, Panel behind) => switch (node) {
+      DockPane() => false,
+      DockTabs(:final children) => !node.stacked &&
+          node.activePane.panel == panel &&
+          children.any((c) => c.panel == behind),
+      DockSplit(:final children) =>
+        children.any((c) => frontedOver(c, panel, behind)),
+    };
+
 /// The first tab group in visit order, or null when every panel sits alone.
 /// With [stacked], the first group drawn as a stack.
 DockTabs? _firstTabs(DockNode node, {bool stacked = false}) {

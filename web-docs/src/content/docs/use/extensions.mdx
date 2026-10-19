@@ -108,10 +108,11 @@ the page through it.
 | `share` | `share.state` | `{role, away, open, people}`. `role` is `none`, `host` or `guest`. |
 | `share` | `share.link` | The invite link while this computer hosts, otherwise `null`. |
 | `share` | `share.start {relay}` | Opens the **Shared project** window on **Share this project**, with `relay` offered if given. |
+| `share` | `share.host {password}` | Asks the person whether the extension may share the open project, and shares it the way they last set sharing up. The new invite link, or `null` when they say no or it cannot start. While this computer hosts, the link at once. `password` is optional. |
 | `share` | `share.join {link}` | Opens the **Shared project** window on **Join a project** with the link in it. |
 | `share` | `share.stop` | Stops sharing, or leaves. |
 
-An extension never shares or joins by itself: the person presses the button in the window.
+An extension never shares or joins by itself: the person presses the button. After a person says no to `share.host`, it is not asked again until the panel opens again.
 
 ## Events
 

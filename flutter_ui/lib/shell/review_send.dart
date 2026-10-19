@@ -12,6 +12,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -183,6 +184,10 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
   ({int start, int end, bool whole}) _area = (start: 0, end: 0, whole: true);
   bool _lacking = false;
 
+  // The address stands aside for a second after it is clicked.
+  bool _copied = false;
+  Timer? _copiedFor;
+
   ReviewsState get _reviews => widget.ui.reviews;
 
   @override
@@ -219,9 +224,19 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
 
   @override
   void dispose() {
+    _copiedFor?.cancel();
     _title.dispose();
     _note.dispose();
     super.dispose();
+  }
+
+  void _copy(String url) {
+    unawaited(Clipboard.setData(ClipboardData(text: url)));
+    _copiedFor?.cancel();
+    _copiedFor = Timer(const Duration(seconds: 1), () {
+      if (mounted) setState(() => _copied = false);
+    });
+    setState(() => _copied = true);
   }
 
   (int, int) get _span =>
@@ -608,7 +623,18 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
             style: t.heading.copyWith(fontSize: 20, height: 1.2),
           ),
           const SizedBox(height: 14),
-          reviewLinkWell(t, review.url, centred: true),
+          // Clicking the address copies it again, and says so in its place.
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              key: const ValueKey('review-send-copy'),
+              onTap: () => _copy(review.url),
+              child: reviewLinkWell(t, review.url,
+                  centred: true,
+                  standIn: _copied ? l10n.reviewCopiedToClipboard : null,
+                  fade: scope.motion.swap.duration),
+            ),
+          ),
           const SizedBox(height: 18),
           Row(
             children: [
@@ -627,8 +653,12 @@ class _ReviewSendFaceState extends State<ReviewSendFace> {
   }
 }
 
-/// A link's address, in mono, in a well of its own.
-Widget reviewLinkWell(LumitTheme t, String url, {bool centred = false}) =>
+/// A link's address, in mono, in a well of its own. [standIn] takes the
+/// address's place for a moment, fading over [fade].
+Widget reviewLinkWell(LumitTheme t, String url,
+        {bool centred = false,
+        String? standIn,
+        Duration fade = Duration.zero}) =>
     Container(
       height: 26,
       alignment: centred ? Alignment.center : Alignment.centerLeft,
@@ -638,12 +668,23 @@ Widget reviewLinkWell(LumitTheme t, String url, {bool centred = false}) =>
         borderRadius: BorderRadius.circular(t.tokens.controlRadius),
         border: Border.all(color: t.hairline),
       ),
-      child: Text(
-        url,
-        key: const ValueKey('review-link'),
-        style: t.mono.copyWith(fontSize: 11, color: t.textPrimary),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+      child: AnimatedSwitcher(
+        duration: fade,
+        child: standIn == null
+            ? Text(
+                url,
+                key: const ValueKey('review-link'),
+                style: t.mono.copyWith(fontSize: 11, color: t.textPrimary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              )
+            : Text(
+                standIn,
+                key: const ValueKey('review-link-stand-in'),
+                textAlign: TextAlign.center,
+                style: t.small.copyWith(color: t.textPrimary),
+                maxLines: 1,
+              ),
       ),
     );
 

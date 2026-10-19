@@ -140,6 +140,9 @@ class AudioFadeLayer extends StatefulWidget {
 
 class _AudioFadeLayerState extends State<AudioFadeLayer> {
   _FadeGrab? _grab;
+
+  /// Whether the pointer is on the track, which is when the corners show.
+  bool _over = false;
   final DragEscape _escape = DragEscape();
 
   @override
@@ -272,7 +275,13 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
     if (bare && !audioTrackTakesClips(widget.track.entry.info)) {
       return const SizedBox.shrink();
     }
-    return Stack(children: [
+    // The corners only show while the pointer is on the track, as a clip's
+    // trim handles do elsewhere: at rest a lane of diamonds reads as keys.
+    return MouseRegion(
+      hitTestBehavior: HitTestBehavior.translucent,
+      onEnter: (_) => setState(() => _over = true),
+      onExit: (_) => setState(() => _over = false),
+      child: Stack(children: [
       Positioned.fill(
         child: IgnorePointer(
           child: CustomPaint(
@@ -293,7 +302,8 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
       // Keyed, and last: a child that comes and goes mid-gesture must be, or
       // the element holding the drag is rebuilt underneath it.
       if (held != null && !held.trim) _readout(t, held),
-    ]);
+    ]),
+    );
   }
 
   /// Every ramp the lane draws, with the strip's drag carried into the dragged
@@ -320,6 +330,7 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
 
   /// One top corner's handle, standing where the fade at that end ends.
   Widget _handle(LumitTheme t, BridgeClip? clip, {required bool into}) {
+    final motion = ThemeScope.of(context).motion;
     final id = clip?.id.toString() ?? widget.track.id;
     final held = _grab;
     final moving = held != null &&
@@ -350,7 +361,11 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
             _escape.end();
             setState(() => _grab = null);
           },
-          child: Align(
+          child: AnimatedOpacity(
+            opacity: _over || moving ? 1 : 0,
+            duration: (_over ? motion.hoverIn : motion.hoverOut).duration,
+            curve: (_over ? motion.hoverIn : motion.hoverOut).curve,
+            child: Align(
             alignment: Alignment.topCenter,
             child: Padding(
               padding: const EdgeInsets.only(top: 3),
@@ -366,6 +381,7 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
                 ),
               ),
             ),
+          ),
           ),
         ),
       ),

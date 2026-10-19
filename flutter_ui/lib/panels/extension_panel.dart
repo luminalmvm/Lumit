@@ -132,6 +132,13 @@ class _ExtensionViewState extends State<ExtensionView>
   }
 
   @override
+  Future<String?> shareNow({String? password}) async => mounted
+      ? shareForExtension(
+          context, context.read<LumitState>(), widget.extension.name,
+          password: password)
+      : null;
+
+  @override
   Future<String?> chooseFolder() => pickFolder();
 
   @override

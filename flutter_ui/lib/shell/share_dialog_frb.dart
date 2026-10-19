@@ -215,6 +215,59 @@ Future<bool> askStopKeeping(BuildContext context,
     ) ==
     true;
 
+/// The relay to share through: the person's [own], or with none and Pro,
+/// Lumit's, which is reached through a door that has to be open first.
+Future<String?> shareRelayFor(LumitUiState ui, String own) async {
+  if (own.isNotEmpty) return own;
+  if (ui.workspace.shareCloud &&
+      ui.account.pro &&
+      await ui.relayDoor.open()) {
+    return shareCloudRelay();
+  }
+  return null;
+}
+
+/// Share the open project for the extension called [extension], once the
+/// person agrees, and answer the invite. It is shared the way the person
+/// last set up: their name, relay and router choice. The invite is a new
+/// one that is not kept, so whoever the extension sends it to is out once
+/// sharing stops. Null when the person said no or it could not start.
+Future<String?> shareForExtension(
+    BuildContext context, LumitState app, String extension,
+    {String? password}) async {
+  // Share only takes a press once the question has been up a moment, so a
+  // click the page lined up lands on nothing.
+  final ready = Future<void>.delayed(const Duration(milliseconds: 600));
+  final yes = await showLumitModal<bool>(
+        context: context,
+        id: 'share-extension-ask',
+        builder: (close) => FutureBuilder<void>(
+          future: ready,
+          builder: (context, wait) => _Question(
+            title: l10n.shareExtensionTitle(extension),
+            body: l10n.shareExtensionBody(extension),
+            no: l10n.shareExtensionNo,
+            yes: l10n.shareExtensionYes,
+            keyPrefix: 'share-extension-ask',
+            yesLive: wait.connectionState == ConnectionState.done,
+            onChoose: close,
+          ),
+        ),
+      ) ==
+      true;
+  if (!yes || !context.mounted) return null;
+  final ui = context.read<LumitUiState>();
+  final prefs = ui.workspace;
+  final relay = await shareRelayFor(ui, prefs.shareRelay ?? '');
+  final started = app.startSharing(
+      name: prefs.shareName ?? l10n.shareDefaultName,
+      port: shareDefaultPort(),
+      password: password,
+      outside: prefs.shareOutside,
+      relay: relay);
+  return started is BridgeShareStarted_Sharing ? app.share.link() : null;
+}
+
 /// Ask the host whether to move a project kept online forward to this
 /// Lumit, which cannot be taken back. [version] is the Lumit that keeps it.
 Future<bool> askForward(BuildContext context, String version) async =>
@@ -842,18 +895,11 @@ class _ShareDialogState extends State<_ShareDialog> {
     // Anything that is not a port number asks for the usual one.
     final asked =
         (int.tryParse(_port.text.trim()) ?? _defaultPort).clamp(0, 65535);
-    var relay = _relay.text.trim();
-    if (relay != (_prefs.shareRelay ?? '')) {
-      _prefs.setShareRelay(relay.isEmpty ? null : relay);
+    final own = _relay.text.trim();
+    if (own != (_prefs.shareRelay ?? '')) {
+      _prefs.setShareRelay(own.isEmpty ? null : own);
     }
-    // With no relay of the person's own, an account with Pro uses Lumit's,
-    // which is reached through a door that has to be open first.
-    if (relay.isEmpty &&
-        _prefs.shareCloud &&
-        _ui.account.pro &&
-        await _ui.relayDoor.open()) {
-      relay = shareCloudRelay();
-    }
+    final relay = await shareRelayFor(_ui, own);
     if (!mounted) return;
     final started = widget.app.startSharing(
         name: _nameNow(),
@@ -861,7 +907,7 @@ class _ShareDialogState extends State<_ShareDialog> {
         key: _keptKey,
         password: _passwordNow(),
         outside: _outside,
-        relay: relay.isEmpty ? null : relay);
+        relay: relay);
     if (started case BridgeShareStarted_Sharing(:final port, :final key)) {
       // Kept until sharing is stopped, so the same project shared again after
       // a restart is found by the invite people already hold.
@@ -3286,6 +3332,7 @@ class _Question extends StatelessWidget {
   final String no;
   final String yes;
   final String keyPrefix;
+  final bool yesLive;
   final ValueChanged<bool?> onChoose;
 
   const _Question({
@@ -3294,6 +3341,7 @@ class _Question extends StatelessWidget {
     required this.no,
     required this.yes,
     required this.keyPrefix,
+    this.yesLive = true,
     required this.onChoose,
   });
 
@@ -3332,7 +3380,7 @@ class _Question extends StatelessWidget {
                 HouseButton(
                   key: ValueKey<String>('$keyPrefix-yes'),
                   small: true,
-                  onPressed: () => onChoose(true),
+                  onPressed: yesLive ? () => onChoose(true) : null,
                   child: Text(yes, style: t.small),
                 ),
               ],

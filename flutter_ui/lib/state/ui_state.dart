@@ -2179,7 +2179,13 @@ class LumitUiState extends ChangeNotifier {
     // Not while a project is being restored — the session's own selection is
     // put back there, and the Project panel is what an opened project fronts
     // (item 6.35).
-    if (primary != null && !_restoring) frontPanel(Panel.effectControls);
+    // Except over the Mixer: picking a track there is mixing, and taking the
+    // faders away for its effects is the one thing nobody asked for.
+    if (primary != null &&
+        !_restoring &&
+        !frontedOver(split, Panel.mixer, Panel.effectControls)) {
+      frontPanel(Panel.effectControls);
+    }
     if (primary == null) {
       if (selectedLayers.value.isNotEmpty) selectedLayers.value = const [];
       return;

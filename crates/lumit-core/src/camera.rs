@@ -48,20 +48,52 @@ pub fn rotation(deg: (f64, f64, f64)) -> Mat3 {
 /// `M[1][2] = -sin x`, `M[0][2] = sin y cos x`, `M[2][2] = cos y cos x`,
 /// `M[1][0] = cos x sin z`, `M[1][1] = cos x cos z`. At `cos x = 0` the camera
 /// looks straight along its own y axis, y and z name the same turn, and the
-/// whole of it is spent on y.
+/// whole of it is spent on y: there `M[0][0] = cos y` and `M[2][0] = -sin y`.
 #[must_use]
 pub fn euler_yxz(m: &Mat3) -> (f64, f64, f64) {
     let sin_x = (-m[1][2]).clamp(-1.0, 1.0);
     let rx = sin_x.asin();
     let cos_x = (1.0 - sin_x * sin_x).max(0.0).sqrt();
     if cos_x < 1e-9 {
-        return (rx.to_degrees(), m[2][0].atan2(m[0][0]).to_degrees(), 0.0);
+        return (rx.to_degrees(), (-m[2][0]).atan2(m[0][0]).to_degrees(), 0.0);
     }
     (
         rx.to_degrees(),
         m[0][2].atan2(m[2][2]).to_degrees(),
         m[1][0].atan2(m[1][1]).to_degrees(),
     )
+}
+
+/// Lumit's angles for a turn After Effects writes as Orientation and X, Y and
+/// Z Rotation, all in degrees.
+///
+/// After Effects builds each of the two as `Rx · Ry · Rz` and puts Orientation
+/// outside the rotations, where Lumit turns by `Ry · Rx · Rz`, so the angles
+/// only match when X or Y is zero. Every turn can be written two ways in
+/// Lumit's order, and the one nearer `near` comes back, wound on by whole turns,
+/// so a run of keys read one after the other doesn't spin between them.
+#[must_use]
+pub fn from_after_effects(
+    orientation: (f64, f64, f64),
+    rotation: (f64, f64, f64),
+    near: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let ae = |deg: (f64, f64, f64)| mul(&mul(&rot_x(deg.0), &rot_y(deg.1)), &rot_z(deg.2));
+    let one = euler_yxz(&mul(&ae(orientation), &ae(rotation)));
+    let other = (180.0 - one.0, one.1 + 180.0, one.2 + 180.0);
+    let wound = |v: (f64, f64, f64)| {
+        let wind = |a: f64, n: f64| a - ((a - n) / 360.0).round() * 360.0;
+        (wind(v.0, near.0), wind(v.1, near.1), wind(v.2, near.2))
+    };
+    let gap = |v: (f64, f64, f64)| {
+        (v.0 - near.0).powi(2) + (v.1 - near.1).powi(2) + (v.2 - near.2).powi(2)
+    };
+    let (one, other) = (wound(one), wound(other));
+    if gap(other) < gap(one) {
+        other
+    } else {
+        one
+    }
 }
 
 /// The camera's own axes for a rotation in degrees: the columns of
@@ -295,6 +327,17 @@ mod tests {
         assert!(close3(f, (d.0 / len, d.1 / len, d.2 / len)));
         // The eye-behind inverse lands the eye back where it was.
         assert!(close3(eye_behind(poi, deg, len), eye));
+
+        // Looking straight up or down, y and z are one turn, and the roll on
+        // top still has to come out the right way round.
+        for (poi, pitch) in [((0.0, -100.0, 0.0), 90.0), ((0.0, 100.0, 0.0), -90.0)] {
+            let roll = (0.0, 0.0, 30.0);
+            let deg = look_at((0.0, 0.0, 0.0), poi, roll).unwrap();
+            let want = mul(&rot_x(pitch), &rotation(roll));
+            let got = rotation(deg);
+            let mut cells = got.iter().flatten().zip(want.iter().flatten());
+            assert!(cells.all(|(a, b)| close(*a, *b)), "{deg:?}");
+        }
     }
 
     #[test]

@@ -78,21 +78,7 @@ pub fn base_layer(
     out: Rational,
     transform: TransformGroup,
 ) -> Layer {
-    // Each kind starts on its own label colour: the label drives both
-    // the outline's swatch and the bar's fill, so a fresh stack is tellable
-    // apart at a glance. The user's own pick simply overwrites it.
-    let label = match &kind {
-        LayerKind::Footage { .. } => 1,
-        LayerKind::Solid { .. } => 2,
-        LayerKind::Precomp { .. } => 3,
-        LayerKind::Text { .. } => 4,
-        LayerKind::Camera { .. } => 5,
-        LayerKind::Sequence { .. } => 6,
-        LayerKind::Adjustment => 7,
-        LayerKind::Null => 8,
-        LayerKind::Shape { .. } => 9,
-        LayerKind::Light { .. } => 10,
-    };
+    let label = kind.default_label();
     Layer {
         markers: Vec::new(),
         graph: Default::default(),
