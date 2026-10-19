@@ -131,6 +131,10 @@ class _WebView2PageState extends State<_WebView2Page> {
   final List<StreamSubscription<Object?>> _listening = [];
   bool _up = false;
 
+  /// Whether [_view] was asked to initialise. One closed before then has
+  /// nothing to dispose of.
+  bool _started = false;
+
   @override
   void initState() {
     super.initState();
@@ -146,6 +150,8 @@ class _WebView2PageState extends State<_WebView2Page> {
         return link.onFailed(l10n.extensionNoRuntime);
       }
       await _ensureEnvironment();
+      if (!mounted) return;
+      _started = true;
       await _view.initialize();
       if (!mounted) return;
       // No window of its own, and its files are its own: a page from
@@ -174,7 +180,7 @@ class _WebView2PageState extends State<_WebView2Page> {
     for (final subscription in _listening) {
       subscription.cancel();
     }
-    _view.dispose();
+    if (_started) _view.dispose();
     super.dispose();
   }
 
