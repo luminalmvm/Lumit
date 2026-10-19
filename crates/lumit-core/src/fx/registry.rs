@@ -485,6 +485,12 @@ pub trait EffectDef: Sync + Send + 'static {
         &[]
     }
 
+    /// The layer-reference rows read for the layer's shapes rather than its
+    /// picture. Nothing renders them, and a node graph gives them no socket.
+    fn shape_inputs(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// Whether those rows also take a grey depth pass, which the effect places
     /// between distances of its own. A node graph then lets a picture wire into
     /// the depth socket too.

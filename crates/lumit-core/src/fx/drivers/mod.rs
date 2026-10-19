@@ -652,6 +652,109 @@ impl Eval<'_> {
         result
     }
 
+    /// What the wires into `effect`'s rows carry at time `t` — the same shape
+    /// `resolve_drivers` uses for the whole stack, scoped to one effect.
+    fn wires_into(&self, effect: Uuid, t: f64, depth: u32) -> ResolvedDrivers {
+        let mut subs = Vec::new();
+        for edge in &self.graph.edges {
+            let (
+                OutputRef::Driver {
+                    node: src,
+                    port: src_port,
+                },
+                InputRef::Param {
+                    node: NodeRef::Effect(dest),
+                    port: socket,
+                },
+            ) = (&edge.from, &edge.to)
+            else {
+                continue;
+            };
+            if *dest != effect {
+                continue;
+            }
+            if let Some(v) = self.output(*src, src_port, t, depth + 1) {
+                subs.push((NodeRef::Effect(effect), ParamId::new(socket), v));
+            }
+        }
+        subs.sort_by_key(|s| (s.0, s.1));
+        subs.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
+        ResolvedDrivers {
+            subs,
+            source_matte: Vec::new(),
+        }
+    }
+
+    /// Particulate's particles at layer time `t` on `layer`, walked from the
+    /// in point against `target` ([`points::stepped`]). Each step is a fresh
+    /// walk of the wires at that step's own time, so nothing this walk has
+    /// kept for `t` is read at another.
+    #[allow(clippy::too_many_arguments)]
+    fn stepped(
+        &self,
+        effect: Uuid,
+        inst: &EffectInstance,
+        def: &'static dyn super::EffectDef,
+        layer: &crate::model::Layer,
+        target: &crate::model::Layer,
+        t: f64,
+        depth: u32,
+    ) -> Option<PointsStream> {
+        use points::stepped::{definition, stream_at, Collider, Inputs};
+        let doc = &self.context.document;
+        let comp = doc.comp(self.context.comp?)?;
+        let dt = 1.0 / comp.frame_rate.fps().max(1.0);
+        let at = |lt: f64| -> Option<Inputs> {
+            let tc = lt + layer.start_offset.0.to_f64();
+            let context = Arc::new(ExpressionContext {
+                comp_time: tc,
+                ..(*self.context).clone()
+            });
+            let ev = Eval {
+                graph: self.graph,
+                context: Arc::clone(&context),
+                audio: self.audio,
+                projection: points::Projection::FLAT,
+                budget: Cell::new(EVAL_BUDGET),
+                streams: RefCell::new(Vec::new()),
+                arenas: RefCell::new(ArenaPool::default()),
+                cross: self.cross,
+                stack: self.stack,
+                clone: self.clone,
+            };
+            let wired = ev.wires_into(effect, lt, depth);
+            let rows = ev.with_arena(|bag| {
+                resolve_into_arena(
+                    def,
+                    inst,
+                    NodeRef::Effect(effect),
+                    lt,
+                    0.0,
+                    1.0,
+                    &MarkerContext::NONE,
+                    bag,
+                    Arc::clone(&context),
+                    &wired,
+                );
+                bag.get(0)
+                    .map(|b| super::effects::particulate::Particulate::read(b.params))
+            })?;
+            let path = match def.schema().mask_path() {
+                Some((param, self_default)) => {
+                    crate::mask::effect_path_at(inst, param, self_default, Some(layer), lt)
+                }
+                None => crate::mask::MaskPolyline::default(),
+            };
+            let frame = measure::layer_rect(doc, comp, layer, tc, &context)
+                .map_or([comp.width as f32, comp.height as f32], |r| {
+                    [(r[2] - r[0]) as f32, (r[3] - r[1]) as f32]
+                });
+            let collider = Collider::of(doc, comp, layer, target, tc, &context);
+            Some(Inputs::new(rows, frame, path, collider))
+        };
+        stream_at(definition(doc, comp, layer, inst, target), t, dt, &at)
+    }
+
     /// What driver `node` puts out of `port` at time `t`.
     fn output(&self, node: Uuid, port: &str, t: f64, depth: u32) -> Option<Value> {
         if depth >= MAX_DEPTH || self.budget.get() == 0 {
@@ -1010,36 +1113,21 @@ impl Eval<'_> {
             return None;
         }
 
-        // The producer's own incoming wires, evaluated first — the same shape
-        // `resolve_drivers` uses for the whole stack, scoped to this effect.
-        let mut subs = Vec::new();
-        for edge in &self.graph.edges {
-            let (
-                OutputRef::Driver {
-                    node: src,
-                    port: src_port,
-                },
-                InputRef::Param {
-                    node: NodeRef::Effect(dest),
-                    port: socket,
-                },
-            ) = (&edge.from, &edge.to)
-            else {
-                continue;
-            };
-            if *dest != effect {
-                continue;
-            }
-            if let Some(v) = self.output(*src, src_port, t, depth + 1) {
-                subs.push((NodeRef::Effect(effect), ParamId::new(socket), v));
-            }
+        // **Particulate with a collider walks** instead, each step reading
+        // its rows and wires at its own time.
+        if let Some((layer, target)) = layer
+            .filter(|_| inst.effect.match_name == "particulate")
+            .and_then(|l| Some((l, points::stepped::target(comp, inst)?)))
+        {
+            let mut stream = self.stepped(effect, inst, def, layer, target, t, depth)?;
+            stream.projection = self.projection;
+            let stream = Rc::new(stream);
+            self.streams.borrow_mut().push((effect, Rc::clone(&stream)));
+            return Some(stream);
         }
-        subs.sort_by_key(|s| (s.0, s.1));
-        subs.dedup_by(|a, b| a.0 == b.0 && a.1 == b.1);
-        let wired = ResolvedDrivers {
-            subs,
-            source_matte: Vec::new(),
-        };
+
+        // The producer's own incoming wires, evaluated first.
+        let wired = self.wires_into(effect, t, depth);
 
         // A Bake points reading its bake hands that out and asks nothing of
         // the wire. So a stream that is only made during the render can be

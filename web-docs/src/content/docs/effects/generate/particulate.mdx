@@ -73,6 +73,10 @@ A particle system.
 | **Turbulence speed** | Slider | 0 to 5; higher | 0.3 | - |
 | **Edge** | Dropdown | None · Kill · Wrap | None | - |
 | **Edge margin** | Slider | 0 to 500; higher | 20 | Pixels at composition size |
+| **Collide with** | Layer | Any layer in the composition | None | - |
+| **On contact** | Dropdown | Bounce · Slide · Stick · Kill | Bounce | - |
+| **Bounciness** | Slider | 0 to 100 | 60 | Per cent |
+| **Friction** | Slider | 0 to 100 | 10 | Per cent |
 | **Mode** | Dropdown | Disc · Sprite · Streak | Disc | - |
 | **Feather** | Slider | 0 to 100 | 100 | Per cent |
 | **Sprite layer** | Layer | Any layer in the composition | None | - |
@@ -94,6 +98,7 @@ In the Effect Controls panel:
 - **Variation** groups **Size by**, **Opacity by**, **Colour by**, **Speed min**, **Speed max**.
 - **Forces** groups **Gravity**, **Wind x**, **Wind y**, **Wind z**, **Drag**, **Turbulence amount**, **Turbulence scale**, **Turbulence speed**.
 - **Edges** groups **Edge**, **Edge margin**.
+- **Collide** groups **Collide with**, **On contact**, **Bounciness**, **Friction**.
 - **Render** groups **Mode**, **Feather**, **Sprite layer**, **Streak length**, **Particle blend**, **Max particles**.
 - **Feather** is editable while **Mode** is set to Disc.
 - **Sprite layer** is editable while **Mode** is set to Sprite.
@@ -103,6 +108,15 @@ In the Effect Controls panel:
 - **Trigger** is editable while **Burst** is set to On trigger.
 - **Edge margin** is editable while **Edge** is anything but None.
 - **Mask path** is editable while **Follow** is anything but Shape.
+- **Particle blend** is editable while **Collide with** names no layer.
+- **Density layer** is editable while **Collide with** names no layer.
+- **Map placement** is editable while **Collide with** names no layer.
+- **On contact** is editable while **Collide with** names a layer.
+- **Bounciness** is editable while **Collide with** names a layer.
+- **Bounciness** is editable while **On contact** is set to Bounce.
+- **Friction** is editable while **Collide with** names a layer.
+- **Friction** is editable while **On contact** is anything but Stick.
+- **Friction** is editable while **On contact** is anything but Kill.
 - **Matte** is an input to an effect, scaling the strength. **Invert** inverts the mattes for calculating strength.
 
 {/* END GENERATED */}
@@ -186,6 +200,21 @@ The **Edges** group, what happens at the edge of the layer's frame:
   time it leaves the frame, and it does not come back. **Wrap** brings it back in on the
   opposite side.
 - **Edge margin**: how far past the frame a particle goes before Edge acts.
+
+The **Collide** group, what particles hit:
+
+- **Collide with**: a layer whose shapes and masks particles hit. A layer with neither is
+  hit at its rectangle. While it is set, each frame's particles are worked out from the
+  frame before. A particle keeps the place it was born when the emitter moves, and a
+  change of force acts from the frame it happens on. Density layer and Particle blend are
+  not read, and at most 100,000 particles are alive at once.
+- **On contact**: **Bounce** sends a particle off the other way. **Slide** carries it on
+  along the surface. **Stick** holds it where it hit, moving with that layer. **Kill**
+  ends it.
+- **Bounciness**: how much of its speed a particle keeps as it bounces.
+- **Friction**: how much a particle slows along the surface.
+
+Particles hit shapes across and down. Depth does not change what they hit.
 
 The **Render** group, how they are drawn:
 

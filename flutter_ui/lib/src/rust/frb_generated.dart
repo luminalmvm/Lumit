@@ -21927,6 +21927,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         );
       case 3:
         return BridgeEnabledCond_LayerSet();
+      case 4:
+        return BridgeEnabledCond_LayerUnset();
       default:
         throw Exception("unreachable");
     }
@@ -28370,6 +28372,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         return BridgeEnabledCond_ChoiceIsNot(var_field0);
       case 3:
         return BridgeEnabledCond_LayerSet();
+      case 4:
+        return BridgeEnabledCond_LayerUnset();
       default:
         throw UnimplementedError('');
     }
@@ -35885,6 +35889,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_u_32(field0, serializer);
       case BridgeEnabledCond_LayerSet():
         sse_encode_i_32(3, serializer);
+      case BridgeEnabledCond_LayerUnset():
+        sse_encode_i_32(4, serializer);
     }
   }
 
