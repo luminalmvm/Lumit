@@ -309,9 +309,10 @@ read"#;
     );
 }
 
-/// The After Effects pieces past keys and cameras: eased keys, a solid, a
-/// precomp, an effect with a keyed control, markers, an expression and a file
-/// written in the script's folder, with one outside it refused.
+/// The After Effects pieces past keys and cameras: includes, eased keys, a
+/// solid, a precomp, a precompose, an effect with a keyed control, markers,
+/// an expression and a file written in the script's folder, with one outside
+/// it refused.
 #[test]
 fn an_after_effects_script_eases_adds_effects_and_writes_a_file() {
     use lumit_core::anim::{Animation, SideInterp};
@@ -324,9 +325,24 @@ fn an_after_effects_script_eases_adds_effects_and_writes_a_file() {
     let folder = dir.join("script");
     std::fs::create_dir_all(&folder).unwrap();
     let path = folder.join("edit.jsx");
-    let script = r#"var comp = app.project.items.addComp("Edit", 1920, 1080, 1, 4, 30);
+    std::fs::create_dir_all(folder.join("lib")).unwrap();
+    std::fs::write(
+        folder.join("lib").join("names.jsx"),
+        "#include \"count.jsx\"\nfunction red() { return \"Red\"; }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        folder.join("lib").join("count.jsx"),
+        "var counted = (typeof counted === \"number\" ? counted : 0) + 1;\n",
+    )
+    .unwrap();
+    let script = r#"#include "lib/names.jsx"
+//@include "lib/count.jsx"
+app.beginUndoGroup("");
+app.beginUndoGroup("Edit pass");
+var comp = app.project.items.addComp("Edit", 1920, 1080, 1, 4, 30);
 var inner = app.project.items.addComp("Inner", 640, 360, 1, 2, 30);
-var solid = comp.layers.addSolid([1, 0, 0], "Red", 800, 600, 1);
+var solid = comp.layers.addSolid([1, 0, 0], red(), 800, 600, 1);
 var nest = comp.layers.add(inner);
 var fade = solid.property("ADBE Transform Group").property("ADBE Opacity");
 fade.setValuesAtTimes([0, 1], [0, 100]);
@@ -353,7 +369,12 @@ try {
 } catch (e) {
     refused = e.message;
 }
-[app.project.activeItem, refused, fade.keyInTemporalEase(2)[0].influence]
+var pack = app.project.items.addComp("Pack", 640, 360, 1, 2, 30);
+var moved = pack.layers.addNull();
+pack.layers.addNull();
+var packed = pack.layers.precompose([1, 2], "Packed", true);
+moved.transform.opacity.setValueAtTime(1, 25);
+[app.project.activeItem, refused, fade.keyInTemporalEase(2)[0].influence, counted, packed.numLayers, pack.layer(1).name]
 "#;
     std::fs::write(&path, script).unwrap();
     let host = Bare(DocumentStore::new(Document::new()));
@@ -370,6 +391,14 @@ try {
     assert_eq!(read[0], Value::Null);
     assert!(read[1].as_str().unwrap().contains("own folder"), "{read}");
     assert_eq!(read[2].as_f64(), Some(75.0));
+    // Each file comes in once, however often it is named.
+    assert_eq!(read[3].as_f64(), Some(1.0));
+    assert_eq!(
+        (read[4].as_f64(), read[5].as_str()),
+        (Some(2.0), Some("Packed"))
+    );
+    // The History step takes the first name the script gave its undo group.
+    assert_eq!(host.store().history()[0].name, "Edit pass");
 
     let doc = host.store().snapshot();
     let comp = |name: &str| {
@@ -382,6 +411,11 @@ try {
             .unwrap()
     };
     let (edit, inner) = (comp("Edit"), comp("Inner"));
+    // A key made after the precompose lands on the layer in its new comp.
+    assert!(comp("Packed").layers.iter().any(|l| matches!(
+        l.prop(TransformProp::Opacity).unwrap().animation,
+        Animation::Keyframed(_)
+    )));
     let layer = |name: &str| edit.layers.iter().find(|l| l.name == name).unwrap();
     let keys = |l: &Layer, p: TransformProp| match &l.prop(p).unwrap().animation {
         Animation::Keyframed(keys) => keys.clone(),
@@ -452,6 +486,24 @@ try {
     let written = std::fs::read_to_string(folder.join("out").join("log.txt")).unwrap();
     assert_eq!(written.trim_end(), "layers 2");
     assert!(!dir.join("outside.txt").exists());
+
+    // An error in an included file names it and its line, on the script's
+    // include line.
+    std::fs::write(folder.join("lib").join("bad.jsx"), "var a = 1;\nnope();\n").unwrap();
+    let failed = run(
+        &host,
+        "var b = 2;\n#include \"lib/bad.jsx\"\n",
+        RunOptions {
+            name: "bad-run.jsx".into(),
+            path: Some(folder.join("bad-run.jsx")),
+            ..RunOptions::default()
+        },
+    )
+    .result
+    .unwrap_err();
+    assert_eq!(failed.line, Some(2));
+    let said = failed.error.to_string();
+    assert!(said.contains("bad.jsx, line 2"), "{said}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
