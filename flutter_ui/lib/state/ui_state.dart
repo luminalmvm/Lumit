@@ -59,6 +59,7 @@ import 'package:lumit_flutter/src/rust/api/share.dart'
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/app_icon.dart';
 import 'package:lumit_flutter/state/backup.dart';
+import 'package:lumit_flutter/state/background.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
@@ -2469,9 +2470,11 @@ class LumitUiState extends ChangeNotifier {
       onExitRequested: () async {
         rememberSession();
         // The window stays open while the question is up. The platform waits
-        // for this answer, and closes only when it is told to exit.
-        if (_app.unsavedNeedsAsking && !await _app.askBeforeLeaving()) {
-          return AppExitResponse.cancel;
+        // for this answer, and closes only when it is told to exit. Quit in
+        // the tray can come with no window up, so it is shown first.
+        if (_app.unsavedNeedsAsking) {
+          if (this.workspace.keepRunning) await showWindow();
+          if (!await _app.askBeforeLeaving()) return AppExitResponse.cancel;
         }
         // A quit is a clean way out, so the next open doesn't read what is
         // left in the journal as a crash.

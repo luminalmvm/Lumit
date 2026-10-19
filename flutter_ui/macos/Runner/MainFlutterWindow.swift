@@ -13,6 +13,81 @@ class MainFlutterWindow: NSWindow {
   /// way the Windows runner does.
   private static let savedFrameName = "LumitMainWindow"
 
+  /// Settings says closing the window keeps Lumit running in the menu bar
+  /// (lib/state/background.dart).
+  private var keepRunning = false
+
+  /// Started at sign-in and not shown yet.
+  private var startedHidden = false
+
+  private var statusItem: NSStatusItem?
+  private var windowChannel: FlutterMethodChannel?
+
+  /// Kept running in the background, closing the window only hides it, and
+  /// the Dock icon goes with it. Quit in the menu bar is an ordinary quit.
+  override func performClose(_ sender: Any?) {
+    guard keepRunning else { return super.performClose(sender) }
+    orderOut(nil)
+    NSApp.setActivationPolicy(.accessory)
+    windowChannel?.invokeMethod("hidden", arguments: nil)
+  }
+
+  /// Show the window and bring Lumit to the front, from the menu bar, the
+  /// Dock or a second start.
+  @objc func reveal() {
+    startedHidden = false
+    NSApp.setActivationPolicy(.regular)
+    makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+  }
+
+  /// Start Lumit in the menu bar when the person signs in, with a LaunchAgent
+  /// that passes --background, or stop doing so.
+  private func setOpenAtSignIn(_ on: Bool) {
+    let agents = FileManager.default.homeDirectoryForCurrentUser
+      .appendingPathComponent("Library/LaunchAgents")
+    let label = Bundle.main.bundleIdentifier ?? "io.github.luminalmvm.lumitFlutter"
+    let plist = agents.appendingPathComponent("\(label).plist")
+    guard on, let exe = Bundle.main.executablePath else {
+      try? FileManager.default.removeItem(at: plist)
+      return
+    }
+    try? FileManager.default.createDirectory(at: agents, withIntermediateDirectories: true)
+    let agent: NSDictionary = [
+      "Label": label, "ProgramArguments": [exe, "--background"], "RunAtLoad": true,
+    ]
+    try? agent.write(to: plist)
+  }
+
+  private func setBackground(_ args: [String: Any]) {
+    keepRunning = args["keep"] as? Bool ?? false
+    setOpenAtSignIn(keepRunning && args["signIn"] as? Bool == true)
+    guard keepRunning else {
+      if let item = statusItem {
+        NSStatusBar.system.removeStatusItem(item)
+        statusItem = nil
+      }
+      // Started at sign-in with nothing now to come back from: the window is
+      // the only way back, so it shows.
+      if startedHidden { reveal() }
+      return
+    }
+    let item = statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    if let icon = NSApp.applicationIconImage.copy() as? NSImage {
+      icon.size = NSSize(width: 18, height: 18)
+      item.button?.image = icon
+    }
+    let menu = NSMenu()
+    menu.addItem(withTitle: args["open"] as? String ?? "", action: #selector(reveal), keyEquivalent: "")
+      .target = self
+    menu.addItem(
+      withTitle: args["quit"] as? String ?? "",
+      action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""
+    ).target = NSApp
+    item.menu = menu
+    statusItem = item
+  }
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -41,6 +116,34 @@ class MainFlutterWindow: NSWindow {
         NSImage(contentsOfFile: $0)
       }
       result(nil)
+    }
+
+    // macOS draws the window's buttons itself, so this channel only carries
+    // what Settings says about running in the background, and Dart asking
+    // for the window back.
+    let window = FlutterMethodChannel(
+      name: "lumit/window",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+    window.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "background":
+        self?.setBackground(call.arguments as? [String: Any] ?? [:])
+      case "show":
+        self?.reveal()
+      default:
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(nil)
+    }
+    windowChannel = window
+
+    // Started at sign-in, it waits in the menu bar with no window and no Dock
+    // icon until it is opened.
+    if CommandLine.arguments.contains("--background") {
+      startedHidden = true
+      NSApp.setActivationPolicy(.accessory)
+      DispatchQueue.main.async { self.orderOut(nil) }
     }
 
     // Open where the last run left the window, and zoomed — macOS's word for
