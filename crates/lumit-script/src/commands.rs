@@ -175,6 +175,15 @@ pub const COMMANDS: &[Command] = &[
         ),
     },
     Command {
+        name: "comp.precompose",
+        summary: "Move layers into a new comp, and put that comp in their place as one layer",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layers":{"type":"array","items":{"type":"string"},"minItems":1,"description":"The layers' ids, or their names in the comp"},"name":{"type":"string","description":"The new comp's name. Pre-comp and a number if left out"},"leave_attributes":{"type":"boolean","description":"For one layer: leave its transform, effects and masks on the new layer, and move only its source"}},"required":["comp","layers"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
         name: "comp.open",
         summary: "Show a comp in the Viewer",
         schema: concat!(
@@ -369,6 +378,7 @@ pub(crate) fn run(
         "comp.get" => comp_get(host, parse(args)?),
         "comp.new" => comp_new(host, parse(args)?),
         "comp.set" => comp_set(host, parse(args)?),
+        "comp.precompose" => comp_precompose(host, parse(args)?),
         "comp.open" => comp_open(host, parse(args)?),
         "comp.active" => comp_active(host, parse(args)?),
         "item.list" => item_list(host, parse(args)?),
@@ -779,6 +789,68 @@ fn comp_set(host: &dyn Host, a: CompSettingsArgs) -> Result<Value, ScriptError> 
         .comp(comp.id)
         .ok_or_else(|| ScriptError::Failed("The comp went away.".into()))?;
     Ok(comp_json(comp))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrecomposeArgs {
+    comp: String,
+    layers: Vec<String>,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    leave_attributes: bool,
+}
+
+/// Pre-compose as Layer > Pre-compose does, with the new comp as long as this
+/// one, as After Effects' own `precompose` makes it.
+fn comp_precompose(host: &dyn Host, a: PrecomposeArgs) -> Result<Value, ScriptError> {
+    let store = host.store();
+    let doc = store.snapshot();
+    let comp = find_comp(&doc, &a.comp)?;
+    let layers = a
+        .layers
+        .iter()
+        .map(|key| find_layer(comp, key).map(|l| l.id))
+        .collect::<Result<Vec<_>, _>>()?;
+    if layers.is_empty() {
+        return Err(bad("comp.precompose needs a layer to move."));
+    }
+    if a.leave_attributes && layers.len() > 1 {
+        return Err(bad("Only a single layer can leave its attributes behind."));
+    }
+    let length = |layer: &Layer| {
+        host.source_length(comp.id, layer)
+            .or_else(|| match layer.kind {
+                LayerKind::Precomp { comp } => doc.comp(comp).map(|c| c.duration),
+                _ => None,
+            })
+    };
+    let (ops, id) = edits::precompose_ops(
+        &doc,
+        comp,
+        edits::Precompose {
+            layers: &layers,
+            name: a.name,
+            leave_attributes: a.leave_attributes,
+            adjust_duration: false,
+            group: None,
+            source_length: &length,
+        },
+    )?;
+    commit(store, ops)?;
+    let doc = store.snapshot();
+    let comp = doc
+        .comp(comp.id)
+        .ok_or_else(|| ScriptError::Failed("The comp went away.".into()))?;
+    let layer = find_layer(comp, &id.to_string())?;
+    let LayerKind::Precomp { comp: made } = layer.kind else {
+        return Err(ScriptError::Failed("The new comp was not made.".into()));
+    };
+    let made = doc
+        .comp(made)
+        .ok_or_else(|| ScriptError::Failed("The new comp was not made.".into()))?;
+    Ok(json!({ "comp": comp_json(made), "layer": layer_json(comp, layer) }))
 }
 
 fn comp_open(host: &dyn Host, a: CompArgs) -> Result<Value, ScriptError> {

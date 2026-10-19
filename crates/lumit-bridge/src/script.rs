@@ -455,6 +455,10 @@ impl Host for AppHost<'_> {
         self.active
     }
 
+    fn source_length(&self, comp: Uuid, layer: &Layer) -> Option<lumit_core::time::Duration> {
+        crate::api::layer::LayerReference::new(self.project.id, comp, layer.id).source_length(layer)
+    }
+
     fn parent_ops(
         &self,
         comp: Uuid,

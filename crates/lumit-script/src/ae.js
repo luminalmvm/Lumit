@@ -523,6 +523,30 @@
         if (duration !== undefined) layer.outPoint = layer.inPoint + Number(duration);
         return layer;
     };
+    // Layers by After Effects' numbers, from 1. Every attribute moves with
+    // them unless told otherwise, which only a single layer may be.
+    LayerCollection.prototype.precompose = function (indices, name, moveAllAttributes) {
+        var list = this._list(), comp = this._comp;
+        var ids = Array.prototype.map.call(indices, function (n) {
+            var l = list[n - 1];
+            if (!l) throw new Error('There is no layer ' + n + ' in ' + comp.name + '.');
+            return l.id;
+        });
+        // The keys made so far go in while the layers are still here.
+        finish();
+        var made = command('comp.precompose', {
+            comp: comp._id,
+            layers: ids,
+            name: name === undefined ? '' : String(name),
+            leave_attributes: moveAllAttributes === false,
+        });
+        var inner = itemFor({ id: made.comp.id, kind: 'comp' });
+        // Moved whole, a layer keeps its id in the new comp.
+        if (moveAllAttributes !== false) {
+            ids.forEach(function (id) { if (layers[id]) layers[id]._comp = inner; });
+        }
+        return inner;
+    };
     LayerCollection.prototype.addSolid = function (color, name, width, height, pixelAspect, duration) {
         if (pixelAspect !== undefined && Math.abs(Number(pixelAspect) - 1) > 1e-3) {
             note('Lumit solids have square pixels, so a pixel aspect of ' + pixelAspect + ' was left out.');

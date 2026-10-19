@@ -28,7 +28,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use lumit_core::model::{Composition, Layer};
-use lumit_core::time::CompTime;
+use lumit_core::time::{CompTime, Duration};
 use lumit_core::{DocumentStore, Op};
 use serde::Serialize;
 use serde_json::Value;
@@ -98,6 +98,13 @@ pub trait Host {
     /// has a Stop for it. By default nothing does.
     fn stop_flag(&self) -> Arc<AtomicBool> {
         Arc::default()
+    }
+
+    /// How long the source of `layer` in comp `comp` runs, when the host can
+    /// read it: a footage file's length. By default it is not known.
+    fn source_length(&self, comp: Uuid, layer: &Layer) -> Option<Duration> {
+        let _ = (comp, layer);
+        None
     }
 }
 
