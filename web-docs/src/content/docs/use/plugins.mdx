@@ -21,14 +21,16 @@ The standard OpenFX locations, scanned once at start-up:
 | --- | --- |
 | Windows | `C:\Program Files\Common Files\OFX\Plugins` |
 | macOS | `/Library/OFX/Plugins` |
+| Linux | `/usr/OFX/Plugins` |
 
 Anything on the `OFX_PLUGIN_PATH` environment variable is scanned too.
 
 The scan runs in the background. Install a plugin while Lumit is running and it appears
 the next time you launch.
 
-A plugin Lumit cannot use is reported. The other plugins in the
-folder are unaffected.
+A plugin Lumit cannot use is turned away, and the reason is written to `plugin-scan.txt`
+beside `plugins.json`; see [Troubleshooting](/reference/troubleshooting/#a-plugin-is-missing).
+The other plugins in the folder are unaffected. Retimer and paint plugins are turned away.
 
 ## Where they appear
 
@@ -36,6 +38,9 @@ In the [Effects & presets](/panels/effects-presets/) panel, under the plugin's o
 grouping as a heading of its own. A plugin declaring no grouping goes under **Plugins**.
 
 From there it groups, folds, searches, stars and drags exactly like a built-in effect.
+
+A filter works on the layer's picture. A transition takes the layer to transparent through
+the plugin's **Transition** row. A generator replaces the layer's picture.
 
 ## Switch one off
 
@@ -53,6 +58,14 @@ and renders as if it were not there.
 Each plugin bundle runs in a **process of its own**, so a plugin that crashes takes down
 its own process and nothing else. The frame it was in the middle of comes back unchanged,
 and Lumit carries on.
+
+| A plugin has | To |
+| --- | --- |
+| 2 minutes | Describe itself at the scan |
+| 2 minutes | Draw its first frame in a fresh process |
+| 10 seconds | Draw each frame after that |
+
+Three failures in a row switch the plugin off until Lumit is next started.
 
 The effect's card in [Effect Controls](/panels/effect-controls/) says which of four things
 happened:

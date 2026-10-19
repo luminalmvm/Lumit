@@ -42,11 +42,15 @@ The panel's name sits at the left. Three pickers sit at the right.
 The snapshot photographs **what is on screen**, at the resolution it is drawn at. Holding
 Show puts it back over exactly the part of the picture it came from.
 
+While a frame takes long enough to notice, a slim bar left of the reading fills as it
+is made, with a word for what the engine is doing. It goes when the frame arrives, and
+shows nothing during playback.
+
 ### When the Viewer is narrow
 
 A Viewer docked into a sidebar has less width than the bar wants, so pieces leave in
-order: the reading, the loop mark, the ways of looking, then the clock. The five transport
-buttons are the last items remaining.
+order: the reading, then the loop mark. The ways of looking then fold into one overflow
+mark, and the clock goes last. The five transport buttons are the last items remaining.
 
 The two strips can also be gathered into one, at the top or at the bottom, under
 **Edit ▸ Settings ▸ Appearance ▸ Viewer**.
@@ -56,6 +60,9 @@ The two strips can also be gathered into one, at the top or at the bottom, under
 Select a layer and the Viewer draws its wireframe with a transform gizmo. The handles move,
 scale and rotate it. See [Transforming layers](/use/transform/). The tag at the top left
 names what is selected.
+
+The outline, the handles and the motion path follow the layer's parents. A keyed shape path
+is outlined where it is at the playhead.
 
 ### Moving a layer
 
@@ -74,6 +81,17 @@ of the composition and, with **View ▸ Snap to grid** ticked, on the grid. A li
 marks what it landed on. `Ctrl` suspends snapping.
 
 A layer whose position is keyframed does not move under a drag or a nudge.
+
+### Effect points
+
+With an effect selected, or one of a point's rows, each of its points is marked on the
+picture. Only points in pixels or per cent get a mark. **Guides ▸ Layer controls** hides
+the marks.
+
+- Only the Selection tool drags a mark. **Shift** keeps it to one axis.
+- A point with a wire on either half does not drag.
+- A keyed half takes a key at the playhead.
+- The drag is one undo step.
 
 ### The right-click menu
 

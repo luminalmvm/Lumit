@@ -67,26 +67,36 @@ a group can sit inside another.
 | `Ctrl+G`, or **Group** in the toolbar | Frames the picked boxes and starts typing the group's name. Boxes picked inside a group are framed inside it, and whole groups picked together are framed as one. |
 | Click a group's bar | Picks every box in it. |
 | Drag the bar | Moves the group. |
-| Double-click the bar, or `F2` | Renames it. |
-| Right-click the bar | Opens its menu: **Rename**, **Colour**, **Save group** and **Ungroup**. |
+| Double-click the bar, or `F2` or `Enter` with it picked | Renames it. |
+| Right-click the bar | Opens its menu: **Rename**, **Colour…**, **Save group…** and **Ungroup**. |
 | Drop boxes on a frame | Moves them into that group. |
 | `Ctrl+Shift+G` | Takes the picked boxes out of the innermost group they are in. With a group's bar picked, removes that frame and leaves its boxes. |
 
 The two shortcuts are the ones set for grouping layers in the Timeline. Zoomed out, a
 group's name keeps its size on screen.
 
-**Save group** asks for a name, a description, a colour and whether to show the group on
-the shelf, and writes it to the preset library as a `.lumgrp` file: its effects and drivers, the wires among them and their layout. Source and Layer out
-are never saved, and the groups inside it are. Picked boxes that are not a group become one
-under that name. A saved group is listed in the node search under **Group**. Inserting one adds its effects to the
+**Save group…** asks for a name, a description, a colour and whether to show the group on
+the shelf, and writes it to the preset library as a `.lumgrp` file: its effects and drivers,
+the wires among them and their layout. Source and Layer out are never saved, and the groups
+inside it are. Picked boxes that are not a group become one under that name. A name already
+in the library asks whether to replace that group, and **Replace** writes over it. A saved
+group is listed in the node search under **Group**. Inserting one adds its effects to the
 end of the layer's stack and puts its drivers where the search was opened.
 
 A group shown on the **shelf** sits in a strip above the canvas, and a click there inserts
 it.
 
-The folder button beside **Save group** opens **Saved groups**. Click a group there to
-insert it. Each row has a pin for the shelf, an edit mark and a delete mark, and **Show
-folder** opens the library in the file manager.
+The folder button beside **Save group…** opens **Saved groups**. Click a group there to
+insert it. Each row shows how many boxes it holds and has three marks:
+
+| Mark | What it does |
+| --- | --- |
+| **Show on shelf** | Pins the group to the shelf, or takes it off. |
+| **Edit group** | Changes its name, description, colour and shelf tick. |
+| **Delete** | Asks, then deletes the group's file. Groups already on a canvas are not touched. |
+
+**Show folder** opens the library in the file manager, and **Close** shuts the window.
+With nothing saved it reads **No saved groups**.
 
 ## Notes
 
@@ -107,21 +117,26 @@ parameter's socket makes that parameter follow the value.
 | Driver | Hands out |
 | --- | --- |
 | [**Wiggle**](/effects/drivers/wiggle/) | A random continuous number changing by an Amount at a Frequency. |
-| [**Audio level**](/effects/drivers/audio-level/) | The loudness of a named layer's sound at this moment. |
+| [**Audio level**](/effects/drivers/audio-level/) | The loudness of the composition, a layer or a clip at this moment. |
 | [**Colour cycle**](/effects/drivers/colour-cycle/) | A colour whose hue turns at a Rate. |
 | [**Math**](/effects/drivers/math/) | Two numbers and an operation. |
 | [**Remap**](/effects/drivers/remap/) | Maps a number from one range onto another, with a clamp. |
 | [**Smooth**](/effects/drivers/smooth/) | Its input, softened over Time. |
+| [**Split**](/effects/drivers/split/) | A colour taken apart into its four numbers. |
+| [**Combine**](/effects/drivers/combine/) | Four numbers put together as a colour. |
 | [**Points sample**](/effects/drivers/points-sample/) | Reads a points stream: how many points are alive, and how far the nearest one is from a position. |
 | [**Layer points**](/effects/drivers/layer-points/) | Another layer's points, brought into this graph. |
+| [**Expression**](/effects/drivers/expression/) | Whatever an expression returns: a number, a point or a colour. |
 | [**Clone index**](/effects/drivers/clone-index/) | Which copy Clone to points is stamping a layer as. |
+| [**Measure**](/effects/drivers/measure/) | The size and edges of a layer's content. |
+| [**Beat trigger**](/effects/drivers/beat-trigger/) | Events from beats and loud moments. |
 
-Add one from the effect console, `ctrl+space`, where they are grouped under **Drivers**,
+Add one from the effect console, `ctrl+space`, where they are grouped under **Controls**,
 and wire its output to a parameter's socket.
 
-Wires don't cross between layers. The two drivers that read another layer name it instead:
-Audio level has an **Audio** row and Layer points a **Points layer** row, both ordinary
-layer pickers.
+Wires don't cross between layers. The drivers that read another layer name it instead, with
+an ordinary layer picker: Audio level's and Beat trigger's **Audio** row, Layer points'
+**Points layer** row and Measure's **Layer** row.
 
 A driven parameter's row in Effect Controls names the driver in place of a value. Its
 keyframes are overridden while the wire is there, and come back when it is pulled.
@@ -168,6 +183,10 @@ The **Nodes** workspace puts the node graph in the centre of your view, to allow
 dedicated to nodes. It also keeps the timeline visible to change the selected layer or the 
 current frame. As well as the viewer to the right and the **Node panel**, which lists the 
 picked box's parameter rows.
+
+The Node panel's header shows the picked box's name and, when wires drive any of its rows,
+how many: **2 driven**. With no box picked it reads **Pick a node on the graph.**, and on a
+box with no rows **This box has nothing to set.**
 
 :::note[What the graph does not draw]
 A layer's graph draws no branch and no merge: it is the layer's effect stack, seen as boxes.
