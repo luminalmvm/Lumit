@@ -741,7 +741,8 @@ class BridgeEffectInfo {
   final String category;
   final String categoryLabel;
 
-  /// Where this entry came from: [`NAMESPACE_BUILTIN`] or [`NAMESPACE_OFX`].
+  /// Where this entry came from: [`NAMESPACE_BUILTIN`], [`NAMESPACE_OFX`],
+  /// [`NAMESPACE_AUDIO`] or [`NAMESPACE_LFX`].
   ///
   /// A discovered plugin is drawn exactly as a built-in is — same row, same
   /// star, same drag — and this is the one difference: docs/12 §2.6 asks for

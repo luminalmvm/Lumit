@@ -1854,6 +1854,10 @@ String? effectBadge(String key) {
     // which one to install, untranslated, because it is an addon id.
     case 'addon_missing':
       return l10n.badgeAddonMissing;
+    // An LFX effect the graphics device was lost under twice, switched off
+    // until Lumit restarts.
+    case 'plugin_struck_off':
+      return l10n.badgePluginStruckOff;
     default:
       return null;
   }

@@ -258,6 +258,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeLensRays dco_decode_box_autoadd_bridge_lens_rays(dynamic raw);
 
   @protected
+  BridgeLfxInterface dco_decode_box_autoadd_bridge_lfx_interface(dynamic raw);
+
+  @protected
   BridgeMask dco_decode_box_autoadd_bridge_mask(dynamic raw);
 
   @protected
@@ -671,6 +674,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExtension dco_decode_bridge_extension(dynamic raw);
 
   @protected
+  BridgeExtensionEffect dco_decode_bridge_extension_effect(dynamic raw);
+
+  @protected
+  BridgeExtensionFolders dco_decode_bridge_extension_folders(dynamic raw);
+
+  @protected
   BridgeExtensionOutcome dco_decode_bridge_extension_outcome(dynamic raw);
 
   @protected
@@ -858,6 +867,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRow dco_decode_bridge_lens_row(dynamic raw);
+
+  @protected
+  BridgeLfxInterface dco_decode_bridge_lfx_interface(dynamic raw);
 
   @protected
   BridgeLinearLight dco_decode_bridge_linear_light(dynamic raw);
@@ -1418,6 +1430,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeExtension> dco_decode_list_bridge_extension(dynamic raw);
 
   @protected
+  List<BridgeExtensionEffect> dco_decode_list_bridge_extension_effect(
+      dynamic raw);
+
+  @protected
   List<BridgeExtensionPermission> dco_decode_list_bridge_extension_permission(
       dynamic raw);
 
@@ -1772,6 +1788,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRays? dco_decode_opt_box_autoadd_bridge_lens_rays(dynamic raw);
+
+  @protected
+  BridgeLfxInterface? dco_decode_opt_box_autoadd_bridge_lfx_interface(
+      dynamic raw);
 
   @protected
   BridgeMatchFrame? dco_decode_opt_box_autoadd_bridge_match_frame(dynamic raw);
@@ -2163,6 +2183,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRays sse_decode_box_autoadd_bridge_lens_rays(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeLfxInterface sse_decode_box_autoadd_bridge_lfx_interface(
       SseDeserializer deserializer);
 
   @protected
@@ -2655,6 +2679,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExtension sse_decode_bridge_extension(SseDeserializer deserializer);
 
   @protected
+  BridgeExtensionEffect sse_decode_bridge_extension_effect(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExtensionFolders sse_decode_bridge_extension_folders(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeExtensionOutcome sse_decode_bridge_extension_outcome(
       SseDeserializer deserializer);
 
@@ -2870,6 +2902,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeLensRow sse_decode_bridge_lens_row(SseDeserializer deserializer);
+
+  @protected
+  BridgeLfxInterface sse_decode_bridge_lfx_interface(
+      SseDeserializer deserializer);
 
   @protected
   BridgeLinearLight sse_decode_bridge_linear_light(
@@ -3513,6 +3549,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  List<BridgeExtensionEffect> sse_decode_list_bridge_extension_effect(
+      SseDeserializer deserializer);
+
+  @protected
   List<BridgeExtensionPermission> sse_decode_list_bridge_extension_permission(
       SseDeserializer deserializer);
 
@@ -3956,6 +3996,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeLfxInterface? sse_decode_opt_box_autoadd_bridge_lfx_interface(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMatchFrame? sse_decode_opt_box_autoadd_bridge_match_frame(
       SseDeserializer deserializer);
 
@@ -4368,6 +4412,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_lens_rays(
       BridgeLensRays self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_lfx_interface(
+      BridgeLfxInterface self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_mask(
@@ -4898,6 +4946,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeExtension self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_extension_effect(
+      BridgeExtensionEffect self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_extension_folders(
+      BridgeExtensionFolders self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_extension_outcome(
       BridgeExtensionOutcome self, SseSerializer serializer);
 
@@ -5143,6 +5199,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_bridge_lens_row(BridgeLensRow self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_lfx_interface(
+      BridgeLfxInterface self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_linear_light(
@@ -5852,6 +5912,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeExtension> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_bridge_extension_effect(
+      List<BridgeExtensionEffect> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_bridge_extension_permission(
       List<BridgeExtensionPermission> self, SseSerializer serializer);
 
@@ -6302,6 +6366,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_lens_rays(
       BridgeLensRays? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_lfx_interface(
+      BridgeLfxInterface? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_match_frame(

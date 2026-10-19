@@ -8,8 +8,8 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'extensions.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `flatten`, `outcome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `flatten`, `outcome`, `read`, `register_effects`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Every extension installed, by id.
 List<BridgeExtension> extensionList() =>
@@ -20,17 +20,65 @@ List<BridgeExtension> extensionList() =>
 BridgeExtensionOutcome extensionInspect({required String folder}) =>
     BridgeLib.instance.api.crateApiExtensionsExtensionInspect(folder: folder);
 
+/// What the `.lfx` package at `path` holds and asks to be allowed, for the
+/// install dialogue. Nothing is unpacked.
+BridgeExtensionOutcome extensionInspectPackage({required String path}) =>
+    BridgeLib.instance.api
+        .crateApiExtensionsExtensionInspectPackage(path: path);
+
 /// Install the extension in `folder`, over one of the same id if there is
-/// one. Its files are copied, so the folder can go afterwards.
+/// one. Its files are copied, so the folder can go afterwards. Its effects
+/// are registered.
 ///
 /// Not sync: a folder of pictures takes a moment to copy.
 Future<BridgeExtensionOutcome> extensionInstall({required String folder}) =>
     BridgeLib.instance.api.crateApiExtensionsExtensionInstall(folder: folder);
 
+/// Install the `.lfx` package at `path` into `folder`, or Lumit's own
+/// folder when None, over one of the same id there. A folder Lumit does not
+/// scan already is added to the extra folders. Its effects are registered.
+///
+/// Not sync: a package of pictures takes a moment to unpack.
+Future<BridgeExtensionOutcome> extensionInstallPackage(
+        {required String path, String? folder}) =>
+    BridgeLib.instance.api
+        .crateApiExtensionsExtensionInstallPackage(path: path, folder: folder);
+
+/// Make a package of the extension in `folder` at `out`, checked by the
+/// same reader an install uses. `Ready` carries what it holds. The effects
+/// are rescanned, so an author's changed shader is picked up.
+///
+/// Not sync: a folder of pictures takes a moment to pack.
+Future<BridgeExtensionOutcome> extensionMakePackage(
+        {required String folder, required String out}) =>
+    BridgeLib.instance.api
+        .crateApiExtensionsExtensionMakePackage(folder: folder, out: out);
+
 /// Remove an extension and its folder. False when none of that id is
-/// installed or its folder would not delete.
+/// installed or its folder would not delete. Its effects stay in any project
+/// that uses them, as missing.
 bool extensionRemove({required String id}) =>
     BridgeLib.instance.api.crateApiExtensionsExtensionRemove(id: id);
+
+/// The folders extensions are found in.
+BridgeExtensionFolders extensionFolders() =>
+    BridgeLib.instance.api.crateApiExtensionsExtensionFolders();
+
+/// Scan `folder` for extensions too, and register what it carries. False
+/// when it is scanned already or would not be remembered.
+bool extensionAddFolder({required String folder}) =>
+    BridgeLib.instance.api.crateApiExtensionsExtensionAddFolder(folder: folder);
+
+/// Stop scanning a folder the person added. Nothing in it is deleted, and
+/// its effects read as missing. False when it was not one of theirs.
+bool extensionRemoveFolder({required String folder}) => BridgeLib.instance.api
+    .crateApiExtensionsExtensionRemoveFolder(folder: folder);
+
+/// The interface page of the LFX effect `match_name`, or None when it has
+/// none or is not installed. Reads the folders, so it is asked when a panel
+/// opens, never per rebuild.
+BridgeLfxInterface? lfxInterface({required String matchName}) =>
+    BridgeLib.instance.api.crateApiExtensionsLfxInterface(matchName: matchName);
 
 /// Where the extension `id` keeps what its page stores, which outlives an
 /// update of the extension. `None` when the platform has no home directory.
@@ -52,8 +100,12 @@ class BridgeExtension {
   /// The folder its page is served from. Empty for one not installed yet.
   final String folder;
 
+  /// Whether it has a panel of its own. An extension may carry only
+  /// effects.
+  final bool panel;
+
   /// The page its panel shows, as a path inside `folder` with forward
-  /// slashes.
+  /// slashes. Empty when it has no panel.
   final String entry;
   final List<BridgeExtensionPermission> permissions;
 
@@ -61,9 +113,12 @@ class BridgeExtension {
   /// the sites under it too.
   final List<String> hosts;
 
-  /// The page its manifest names is missing. It lists so it can be
-  /// installed again or removed.
+  /// A page or shader its manifest names is missing. It lists so it can
+  /// be installed again or removed.
   final bool broken;
+
+  /// The LFX effects it carries.
+  final List<BridgeExtensionEffect> effects;
 
   const BridgeExtension({
     required this.id,
@@ -73,10 +128,12 @@ class BridgeExtension {
     required this.author,
     required this.homepage,
     required this.folder,
+    required this.panel,
     required this.entry,
     required this.permissions,
     required this.hosts,
     required this.broken,
+    required this.effects,
   });
 
   @override
@@ -88,10 +145,12 @@ class BridgeExtension {
       author.hashCode ^
       homepage.hashCode ^
       folder.hashCode ^
+      panel.hashCode ^
       entry.hashCode ^
       permissions.hashCode ^
       hosts.hashCode ^
-      broken.hashCode;
+      broken.hashCode ^
+      effects.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -105,10 +164,78 @@ class BridgeExtension {
           author == other.author &&
           homepage == other.homepage &&
           folder == other.folder &&
+          panel == other.panel &&
           entry == other.entry &&
           permissions == other.permissions &&
           hosts == other.hosts &&
-          broken == other.broken;
+          broken == other.broken &&
+          effects == other.effects;
+}
+
+/// One LFX effect an extension carries.
+class BridgeExtensionEffect {
+  /// Its id within the extension.
+  final String id;
+  final String name;
+
+  /// `lfx:<extension>/<effect>`, what adding it takes.
+  final String matchName;
+
+  /// Whether it has an interface page of its own.
+  final bool interface_;
+
+  const BridgeExtensionEffect({
+    required this.id,
+    required this.name,
+    required this.matchName,
+    required this.interface_,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ name.hashCode ^ matchName.hashCode ^ interface_.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExtensionEffect &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          matchName == other.matchName &&
+          interface_ == other.interface_;
+}
+
+/// The folders extensions are found in, in the order they are scanned. The
+/// first extension of an id wins.
+class BridgeExtensionFolders {
+  /// Lumit's own, where an install goes unless another is picked. None
+  /// when the machine has no home folder.
+  final String? own;
+
+  /// The machine-wide ones, for authors who ship their own installer.
+  final List<String> machine;
+
+  /// The ones the person added.
+  final List<String> extra;
+
+  const BridgeExtensionFolders({
+    this.own,
+    required this.machine,
+    required this.extra,
+  });
+
+  @override
+  int get hashCode => own.hashCode ^ machine.hashCode ^ extra.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExtensionFolders &&
+          runtimeType == other.runtimeType &&
+          own == other.own &&
+          machine == other.machine &&
+          extra == other.extra;
 }
 
 @freezed
@@ -160,4 +287,46 @@ enum BridgeExtensionPermission {
   /// Share the project, join someone else's, and see who is here.
   share,
   ;
+}
+
+/// What an LFX effect's own panel shows: the page and the panel's opening
+/// size in logical pixels.
+class BridgeLfxInterface {
+  /// The extension that carries it, which the page is allowed as.
+  final String extension_;
+
+  /// The extension's folder, which the page is served from.
+  final String folder;
+
+  /// The page, as a path inside `folder` with forward slashes.
+  final String entry;
+  final int width;
+  final int height;
+
+  const BridgeLfxInterface({
+    required this.extension_,
+    required this.folder,
+    required this.entry,
+    required this.width,
+    required this.height,
+  });
+
+  @override
+  int get hashCode =>
+      extension_.hashCode ^
+      folder.hashCode ^
+      entry.hashCode ^
+      width.hashCode ^
+      height.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeLfxInterface &&
+          runtimeType == other.runtimeType &&
+          extension_ == other.extension_ &&
+          folder == other.folder &&
+          entry == other.entry &&
+          width == other.width &&
+          height == other.height;
 }
