@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp, TangentMode};
 use lumit_core::edits;
 use lumit_core::expression::{Language, Slot, SLOT_KEY};
-use lumit_core::markers::MarkerEdit;
+use lumit_core::markers::{Marker, MarkerEdit, MarkerKind};
 use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, TransformProp};
 use lumit_core::ops::Op;
 use lumit_core::time::{CompTime, FrameRate, Rational};
@@ -287,7 +287,7 @@ pub const COMMANDS: &[Command] = &[
             layer!(),
             r#","markers":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string","description":"An existing marker's id, to keep what it was"},"time":"#,
             time!(),
-            r#","label":{"type":"string"},"colour":{"type":"integer","minimum":0,"maximum":255},"duration":{"type":"integer","description":"Frames it spans"}},"required":["time"],"additionalProperties":false}}},"required":["comp","markers"],"additionalProperties":false}"#
+            r#","label":{"type":"string"},"colour":{"type":"integer","minimum":0,"maximum":255},"duration":{"type":"integer","description":"Frames it spans"},"chapter":{"type":"boolean","description":"Whether it starts a chapter"}},"required":["time"],"additionalProperties":false}}},"required":["comp","markers"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -619,7 +619,27 @@ fn comp_get(host: &dyn Host, a: CompArgs) -> Result<Value, ScriptError> {
     let comp = find_comp(&doc, &a.comp)?;
     let mut answer = comp_json(comp);
     answer["layers"] = comp.layers.iter().map(|l| layer_json(comp, l)).collect();
+    answer["markers"] = markers_json(&comp.markers, comp.frame_rate, Rational::ZERO);
     Ok(answer)
+}
+
+/// Markers as `comp.get` and `layer.get` answer them, on the comp's clock as
+/// `markers.set` takes them. A layer keeps its own on its clock, `offset`
+/// behind the comp's.
+fn markers_json(markers: &[Marker], rate: FrameRate, offset: Rational) -> Value {
+    markers
+        .iter()
+        .map(|m| {
+            json!({
+                "id": m.id,
+                "time": exact(m.time.0.checked_add(offset).unwrap_or(m.time.0)),
+                "label": m.label,
+                "colour": m.colour,
+                "duration": m.duration.map(|d| rate.frame_at(CompTime(d))),
+                "chapter": matches!(m.kind, MarkerKind::Chapter),
+            })
+        })
+        .collect()
 }
 
 /// A frame rate on the wire: whole frames a second, or an exact fraction.
@@ -1149,6 +1169,7 @@ fn layer_get(host: &dyn Host, a: LayerArgs) -> Result<Value, ScriptError> {
     }
     let mut answer = layer_json(comp, layer);
     answer["properties"] = Value::Object(properties);
+    answer["markers"] = markers_json(&layer.markers, comp.frame_rate, offset);
     Ok(answer)
 }
 
@@ -1592,6 +1613,7 @@ struct MarkerArgs {
     label: String,
     colour: Option<u8>,
     duration: Option<i64>,
+    chapter: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -1611,6 +1633,7 @@ fn markers_set(host: &dyn Host, a: MarkersArgs) -> Result<Value, ScriptError> {
     // Times come in on the comp's clock, and a layer keeps its markers on
     // its own.
     let offset = layer.map_or(Rational::ZERO, |l| l.start_offset.0);
+    let chapters: Vec<Option<bool>> = a.markers.iter().map(|m| m.chapter).collect();
     let edits = a
         .markers
         .into_iter()
@@ -1628,15 +1651,26 @@ fn markers_set(host: &dyn Host, a: MarkersArgs) -> Result<Value, ScriptError> {
     let count = edits.len();
     // Merged onto what is there, so a marker named by id keeps what a script
     // cannot say, such as being a beat.
+    let held = layer.map_or(&comp.markers, |l| &l.markers);
+    let mut markers = lumit_core::markers::merge_edits(edits, held, rate);
+    for (marker, chapter) in markers.iter_mut().zip(chapters) {
+        match chapter {
+            Some(true) => marker.kind = MarkerKind::Chapter,
+            Some(false) if matches!(marker.kind, MarkerKind::Chapter) => {
+                marker.kind = MarkerKind::User;
+            }
+            _ => {}
+        }
+    }
     let op = match layer {
         Some(layer) => Op::SetLayerMarkers {
             comp: comp.id,
             layer: layer.id,
-            markers: lumit_core::markers::merge_edits(edits, &layer.markers, rate),
+            markers,
         },
         None => Op::SetCompMarkers {
             comp: comp.id,
-            markers: lumit_core::markers::merge_edits(edits, &comp.markers, rate),
+            markers,
         },
     };
     commit(store, vec![op])?;

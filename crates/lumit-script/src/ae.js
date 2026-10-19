@@ -395,6 +395,7 @@
         },
         layers: { get: function () { return new LayerCollection(this); } },
         numLayers: { get: function () { return this._get().layers.length; } },
+        markerProperty: { get: function () { return new MarkerProperty(this, null); } },
     });
     CompItem.prototype.layer = function (which) {
         return typeof which === 'string' ? this.layers.byName(which) : this.layers.byIndex(which);
@@ -588,6 +589,7 @@
                 return function (which) { return group.property(which); };
             },
         },
+        marker: { get: function () { return new MarkerProperty(this._comp, this); } },
     });
     // After Effects keeps the layer where it is unless told to jump, which
     // changes its transform. So the keys made so far go in first, and what
@@ -617,6 +619,7 @@
         'ADBE Transform Group': 'transform', 'Transform': 'transform',
         'ADBE Camera Options Group': 'camera', 'Camera Options': 'camera',
         'ADBE Effect Parade': 'effects', 'Effects': 'effects',
+        'ADBE Marker': 'marker', 'Marker': 'marker',
     };
     var TRANSFORM = {
         'ADBE Anchor Point': 'anchor', 'Anchor Point': 'anchor', 'Point of Interest': 'anchor',
@@ -660,6 +663,7 @@
         if (group === 'transform') return new PropertyGroup(this, TRANSFORM, 'Transform');
         if (group === 'camera') return new PropertyGroup(this, CAMERA, 'Camera Options');
         if (group === 'effects') return new EffectGroup(this);
+        if (group === 'marker') return new MarkerProperty(this._comp, this);
         // After Effects finds a transform property from the layer too.
         var own = TRANSFORM[name] || CAMERA[name];
         if (own) return this._property(own);
@@ -1442,6 +1446,104 @@
         prop._effect._set(args);
     }
 
+    // ---- Markers ----
+
+    function MarkerValue(comment, chapter, url, frameTarget, cuePointName, params) {
+        if (!(this instanceof MarkerValue)) return new MarkerValue(comment, chapter, url, frameTarget, cuePointName, params);
+        function text(v) { return v === undefined ? '' : String(v); }
+        this.comment = text(comment);
+        this.chapter = text(chapter);
+        this.url = text(url);
+        this.frameTarget = text(frameTarget);
+        this.cuePointName = text(cuePointName);
+        this.eventCuePoint = false;
+        this.duration = 0;
+        this.label = 0;
+        this.protectedRegion = false;
+        this._params = params || {};
+        this._at = undefined;
+        return guard(this, 'MarkerValue');
+    }
+    MarkerValue.prototype.getParameters = function () { return this._params; };
+    MarkerValue.prototype.setParameters = function (params) { this._params = params || {}; };
+
+    // A comp's markers, or a layer's when there is one, written as they are
+    // set.
+    function MarkerProperty(comp, layer) {
+        this._comp = comp;
+        this._layer = layer;
+        this._at = undefined;
+        return guard(this, 'Marker');
+    }
+    MarkerProperty.prototype._list = function () {
+        return (this._layer ? this._layer._info() : this._comp._get()).markers;
+    };
+    MarkerProperty.prototype._write = function (list) {
+        var comp = this._comp;
+        function at(m) { return typeof m.time === 'number' ? m.time * comp.frameDuration : seconds(m.time); }
+        list.sort(function (a, b) { return at(a) - at(b); });
+        var args = { comp: comp._id, markers: list };
+        if (this._layer) args.layer = this._layer._id;
+        command('markers.set', args);
+    };
+    MarkerProperty.prototype._marker = function (k) {
+        var m = this._list()[k - 1];
+        if (!m) throw new Error('There is no marker ' + k + '.');
+        return m;
+    };
+    Object.defineProperties(MarkerProperty.prototype, {
+        name: { value: 'Marker' },
+        matchName: { value: 'ADBE Marker' },
+        numKeys: { get: function () { return this._list().length; } },
+        isTimeVarying: { get: function () { return this.numKeys > 0; } },
+    });
+    MarkerProperty.prototype.keyTime = function (k) { return seconds(this._marker(k).time); };
+    // Lumit keeps a marker's comment as its label, and a chapter marker as
+    // one, without text of its own.
+    MarkerProperty.prototype.keyValue = function (k) {
+        var m = this._marker(k);
+        var value = new MarkerValue(m.label, m.chapter ? m.label : '');
+        if (m.duration) value.duration = m.duration * this._comp.frameDuration;
+        value.label = m.colour || 0;
+        return value;
+    };
+    MarkerProperty.prototype.nearestKeyIndex = function (t) {
+        var list = this._list(), best = 0;
+        for (var i = 1; i < list.length; i++) {
+            if (Math.abs(seconds(list[i].time) - t) < Math.abs(seconds(list[best].time) - t)) best = i;
+        }
+        return list.length ? best + 1 : 0;
+    };
+    MarkerProperty.prototype.setValueAtTime = function (t, value) {
+        if (!(value instanceof MarkerValue)) throw new Error('A marker is set with a MarkerValue.');
+        if (value.url || value.frameTarget || value.cuePointName || value.eventCuePoint
+            || (value.chapter && value.chapter !== value.comment)) {
+            note('A marker keeps its comment and whether it starts a chapter. Lumit markers have no chapter text, URL or cue point.');
+        }
+        var comp = this._comp, frame = comp._frame(t);
+        var list = this._list().filter(function (m) { return comp._frame(seconds(m.time)) !== frame; });
+        var made = { time: frame, label: value.comment, chapter: value.chapter !== '' };
+        if (value.label > 0) made.colour = Math.round(value.label);
+        var span = comp._frame(value.duration);
+        if (span > 0) made.duration = span;
+        list.push(made);
+        this._write(list);
+    };
+    MarkerProperty.prototype.setValuesAtTimes = function (times, values) {
+        if (times.length !== values.length) throw new Error('setValuesAtTimes needs a value for each time.');
+        for (var i = 0; i < times.length; i++) this.setValueAtTime(times[i], values[i]);
+    };
+    MarkerProperty.prototype.addKey = function (t) {
+        this.setValueAtTime(t, new MarkerValue(''));
+        return this.nearestKeyIndex(t);
+    };
+    MarkerProperty.prototype.removeKey = function (k) {
+        this._marker(k);
+        var list = this._list();
+        list.splice(k - 1, 1);
+        this._write(list);
+    };
+
     // ---- The project, app and the globals ----
 
     var project = guard({
@@ -1522,4 +1624,5 @@
     globalThis.KeyframeInterpolationType = KeyframeInterpolationType;
     globalThis.ImportAsType = ImportAsType;
     globalThis.KeyframeEase = KeyframeEase;
+    globalThis.MarkerValue = MarkerValue;
 })
