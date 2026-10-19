@@ -92,7 +92,7 @@ fn flatten(manifest: Manifest, folder: &Path, broken: bool) -> BridgeExtension {
         author: manifest.author,
         homepage: manifest.homepage,
         folder: folder.to_string_lossy().into_owned(),
-        entry: manifest.entry.replace('\\', "/"),
+        entry: manifest.entry.unwrap_or_default().replace('\\', "/"),
         permissions: manifest.permissions.iter().map(permission).collect(),
         hosts: manifest.hosts,
         broken,

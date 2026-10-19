@@ -262,8 +262,13 @@ pub fn is_off(match_name: &str) -> bool {
         .is_ok_and(|s| s.get(match_name).is_some_and(|n| *n >= STRIKES_OFF))
 }
 
-/// The manifest facts, checked. Answers the category.
-fn check(effect: &LfxEffect) -> Result<FxCategory, LfxError> {
+/// The manifest facts, checked. Answers the category. Also what
+/// `lumit-extensions` asks when it reads a manifest, so a bad one is caught
+/// before anything is installed.
+///
+/// # Errors
+/// The facts this build cannot take.
+pub fn check(effect: &LfxEffect) -> Result<FxCategory, LfxError> {
     for id in [&effect.extension, &effect.id] {
         if id.is_empty() || id.contains('/') || id.chars().any(char::is_whitespace) {
             return Err(LfxError::BadId(id.clone()));

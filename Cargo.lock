@@ -2126,6 +2126,7 @@ name = "lumit-extensions"
 version = "0.8.1"
 dependencies = [
  "getrandom 0.4.3",
+ "lumit-core",
  "lumit-project",
  "serde",
  "serde_json",

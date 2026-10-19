@@ -1,4 +1,5 @@
-//! Which installed plugins the user has switched off (docs/12 §2.6).
+//! Which installed plugins the user has switched off (docs/12 §2.6), and
+//! the folders of extensions they added.
 //!
 //! # In plain terms
 //!
@@ -38,6 +39,9 @@ pub struct PluginPrefs {
     /// Plugin identifiers to skip, sorted — a set rather than a list so the
     /// file cannot grow a duplicate and the order cannot drift between saves.
     pub disabled: BTreeSet<String>,
+    /// Folders of extensions the person added, scanned after Lumit's own
+    /// and the machine's.
+    pub extension_folders: Vec<PathBuf>,
 }
 
 impl PluginPrefs {
@@ -117,6 +121,7 @@ mod tests {
         let mut prefs = PluginPrefs::default();
         assert!(prefs.set_enabled("com.vendor.nagware", false));
         assert!(!prefs.set_enabled("com.vendor.nagware", false), "no change");
+        prefs.extension_folders.push(dir.path().join("effects"));
         prefs.save(&path).unwrap();
 
         let read = PluginPrefs::load(&path);

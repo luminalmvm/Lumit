@@ -8,7 +8,9 @@ license = "GPL-3.0-only"
 publish = false
 
 [dependencies]
-# The extensions folder, and nothing else from it.
+# The LFX effect an extension carries, and the engine's own check of it.
+lumit-core = { path = "../lumit-core" }
+# The extensions folder and the extra folders the person added.
 lumit-project = { path = "../lumit-project" }
 # A folder being put together is named with a number nobody else has. Already
 # in the lock.
