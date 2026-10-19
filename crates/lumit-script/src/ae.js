@@ -55,6 +55,16 @@
     var KeyframeInterpolationType = enumOf('KeyframeInterpolationType', ['LINEAR', 'BEZIER', 'HOLD'], 6612);
     var ImportAsType = enumOf('ImportAsType', ['COMP_CROPPED_LAYERS', 'FOOTAGE', 'COMP', 'PROJECT'], 3812);
 
+    // One side of a key's ease: a speed in units a second, and how far the
+    // handle reaches as a per cent of the span.
+    function KeyframeEase(speed, influence) {
+        if (!(this instanceof KeyframeEase)) return new KeyframeEase(speed, influence);
+        this.speed = Number(speed);
+        this.influence = Number(influence);
+        this._at = undefined;
+        return guard(this, 'KeyframeEase');
+    }
+
     // Seconds as After Effects gives them, from Lumit's exact times.
     function seconds(t) {
         return t.num / t.den;
@@ -663,11 +673,63 @@
         return v.slice(0, 2);
     }
 
+    var T = KeyframeInterpolationType;
+
     function Key(t, v, frame) {
         this.t = t;
         this.v = v;
         this.f = frame;
-        this.hold = false;
+        this.inType = T.LINEAR;
+        this.outType = T.LINEAR;
+        // Lists of KeyframeEase, once the script or the document gives some.
+        this.inEase = null;
+        this.outEase = null;
+        // Temporal auto-Bezier, and continuous, which is kept only to be read.
+        this.auto = false;
+        this.cont = false;
+    }
+    // Held means held leaving the key, and Lumit then holds both sides.
+    Object.defineProperty(Key.prototype, 'hold', {
+        get: function () { return this.outType === T.HOLD; },
+        set: function (on) {
+            if (on) this.inType = this.outType = T.HOLD;
+            else if (this.outType === T.HOLD) this.inType = this.outType = T.LINEAR;
+        },
+    });
+    // How `from` meets the curve, given to this key.
+    Key.prototype._sides = function (from) {
+        this.inType = from.inType;
+        this.outType = from.outType;
+        this.inEase = from.inEase;
+        this.outEase = from.outEase;
+        this.auto = from.auto;
+        this.cont = from.cont;
+    };
+
+    // A key's sides as the document holds them: the first axis with a key at
+    // `t` gives the interpolation, and each axis its own ease.
+    function sidesFrom(k, channels, t) {
+        var at = channels.map(function (c) {
+            return c instanceof Array ? c.filter(function (x) { return seconds(x.time) === t; })[0] : undefined;
+        });
+        var first = at.filter(Boolean)[0];
+        if (!first) return;
+        function type(side) {
+            if (side === 'hold') return T.HOLD;
+            return side === 'linear' || side === undefined ? T.LINEAR : T.BEZIER;
+        }
+        function eases(side) {
+            var list = at.map(function (x) {
+                var s = x && x[side];
+                return s && typeof s === 'object' ? new KeyframeEase(s.speed, s.influence) : null;
+            });
+            return list.some(Boolean) ? list.map(function (e) { return e || new KeyframeEase(0, 100 / 3); }) : null;
+        }
+        k.inType = type(first['in']);
+        k.outType = type(first.out);
+        k.inEase = eases('in');
+        k.outEase = eases('out');
+        k.auto = /^(auto|clamped)$/.test(first['in']) || /^(auto|clamped)$/.test(first.out);
     }
 
     function Property(layer, name) {
@@ -675,6 +737,9 @@
         this._name = name;
         this._keys = null;
         this._value = null;
+        // An expression, and whether it drives the property.
+        this._expr = '';
+        this._exprOn = false;
         this._changed = false;
         this._at = undefined;
         return guard(this, 'Property');
@@ -694,17 +759,30 @@
             loadTurns(this._layer, info, this);
             return;
         }
-        var channels = AXES[name] ? held : [held];
-        function make(values) { return aeValue(name, AXES[name] ? values : values[0]); }
-        this._value = make(channels.map(function (c) { return typeof c === 'number' ? c : 0; }));
+        fill(this, AXES[name] ? held : [held], function (values) {
+            return aeValue(name, AXES[name] ? values : values[0]);
+        });
+    };
+
+    // The value, keys and expression After Effects sees in `channels`, one
+    // for each of Lumit's axes. `make` turns their numbers into its value.
+    function fill(prop, channels, make) {
+        channels.forEach(function (c) {
+            if (c && c.expression !== undefined) {
+                prop._expr = c.expression;
+                prop._exprOn = true;
+            }
+        });
+        prop._value = make(channels.map(function (c) { return typeof c === 'number' ? c : 0; }));
         var times = channelTimes(channels);
         for (var i = 0; i < times.length; i++) {
             var t = times[i];
-            var k = new Key(t, make(channels.map(function (c) { return channelAt(c, t); })), this._layer._comp._frame(t));
+            var k = new Key(t, make(channels.map(function (c) { return channelAt(c, t); })), prop._layer._comp._frame(t));
+            sidesFrom(k, channels, t);
             k.hold = channels.every(function (c) { return heldAt(c, t); });
-            this._keys.push(k);
+            prop._keys.push(k);
         }
-    };
+    }
 
     // Lumit keeps each axis apart, with keys of its own, where After Effects'
     // keys carry every axis. So there is a key wherever any axis has one.
@@ -769,7 +847,7 @@
         for (var i = 0; i < keys.length; i++) {
             var at = keys[i].f;
             if (at === frame) {
-                key.hold = keys[i].hold;
+                key._sides(keys[i]);
                 keys[i] = key;
                 return i + 1;
             }
@@ -787,10 +865,28 @@
         isTimeVarying: { get: function () { return this.numKeys > 0; } },
         canVaryOverTime: { value: true },
         value: { get: function () { return this.valueAtTime(0); } },
+        // Setting an expression switches it on, and an empty one takes it off.
         expression: {
-            get: function () { return ''; },
-            set: function () { unsupported('Property.expression'); },
+            get: function () { this._load(); return this._expr; },
+            set: function (text) {
+                this._load();
+                this._expr = String(text);
+                this._exprOn = this._expr !== '';
+                this._dirty();
+            },
         },
+        expressionEnabled: {
+            get: function () { this._load(); return this._exprOn; },
+            set: function (on) {
+                this._load();
+                this._exprOn = !!on && this._expr !== '';
+                this._dirty();
+            },
+        },
+        canSetExpression: { value: true },
+        expressionError: { get: function () { return ''; } },
+        // After Effects moves a point property along a path.
+        isSpatial: { get: function () { return SPATIAL.indexOf(this._name) >= 0; } },
     });
     Property.prototype.setValue = function (v) {
         this._load();
@@ -833,24 +929,84 @@
         this._load();
         return valueOf(this, Number(t));
     };
+    function interpolation(type) {
+        if (type !== T.LINEAR && type !== T.BEZIER && type !== T.HOLD) {
+            throw new Error(type + ' is not a KeyframeInterpolationType.');
+        }
+        return type;
+    }
+    Property.prototype.isInterpolationTypeValid = function (type) {
+        return type === T.LINEAR || type === T.BEZIER || type === T.HOLD;
+    };
+    // A key turned Bezier with no ease of its own follows its neighbours, as
+    // an auto-Bezier key does.
     Property.prototype.setInterpolationTypeAtKey = function (k, inType, outType) {
         var key = this._key(k);
-        var out = outType === undefined ? inType : outType;
-        if (inType === KeyframeInterpolationType.BEZIER || out === KeyframeInterpolationType.BEZIER) {
-            note('Bezier keys come in as linear ones.');
-        }
-        key.hold = out === KeyframeInterpolationType.HOLD;
+        key.inType = interpolation(inType);
+        key.outType = interpolation(outType === undefined ? inType : outType);
+        if (!key.inEase && !key.outEase) key.auto = true;
         this._dirty();
     };
-    Property.prototype.keyInInterpolationType = function (k) {
+    Property.prototype.keyInInterpolationType = function (k) { return this._key(k).inType; };
+    Property.prototype.keyOutInterpolationType = function (k) { return this._key(k).outType; };
+
+    // How many eases a key's side has: one for a point that moves along a
+    // path, otherwise one for each value.
+    var SPATIAL = ['position', 'anchor', 'point_of_interest'];
+    Property.prototype._eases = function () {
+        if (SPATIAL.indexOf(this._name) >= 0) return 1;
+        var v = this._key(1).v;
+        return v instanceof Array ? v.length : 1;
+    };
+    function eases(prop, list) {
+        if (!(list instanceof Array) || !list.length) throw new Error('An ease is a list of KeyframeEase.');
+        var n = prop._eases();
+        if (list.length !== n && list.length !== 1) throw new Error(prop.name + ' takes ' + n + ' KeyframeEase.');
+        return Array.prototype.map.call(list, function (e) {
+            var influence = Number(e.influence);
+            if (!(influence >= 0.1 && influence <= 100)) throw new Error('An influence is 0.1 to 100.');
+            return new KeyframeEase(Number(e.speed), influence);
+        });
+    }
+    // An ease makes a side Bezier, as in After Effects.
+    Property.prototype.setTemporalEaseAtKey = function (k, inEase, outEase) {
+        var key = this._key(k);
+        key.inEase = eases(this, inEase);
+        key.outEase = eases(this, outEase === undefined ? inEase : outEase);
+        key.inType = key.outType = T.BEZIER;
+        key.auto = false;
+        this._dirty();
+    };
+    // A side with no ease of its own, as After Effects starts one: no speed,
+    // and a sixth of the span.
+    Property.prototype._ease = function (k, out) {
+        var key = this._key(k), list = out ? key.outEase : key.inEase;
+        var n = this._eases();
+        return Array.apply(null, Array(n)).map(function (_, i) {
+            var e = list && (list[i] || list[0]);
+            return e ? new KeyframeEase(e.speed, e.influence) : new KeyframeEase(0, 100 / 6);
+        });
+    };
+    Property.prototype.keyInTemporalEase = function (k) { return this._ease(k, false); };
+    Property.prototype.keyOutTemporalEase = function (k) { return this._ease(k, true); };
+    Property.prototype.setTemporalAutoBezierAtKey = function (k, on) {
+        var key = this._key(k);
+        key.auto = !!on;
+        if (on) key.inType = key.outType = T.BEZIER;
+        this._dirty();
+    };
+    Property.prototype.keyTemporalAutoBezier = function (k) { return this._key(k).auto; };
+    // Lumit's eases are each side's own, so continuous is only kept to be read.
+    Property.prototype.setTemporalContinuousAtKey = function (k, on) { this._key(k).cont = !!on; };
+    Property.prototype.keyTemporalContinuous = function (k) { return this._key(k).cont; };
+    Property.prototype.setRovingAtKey = function (k, on) {
         this._key(k);
-        return KeyframeInterpolationType.LINEAR;
+        if (on) note('Roving keys stay at their times in Lumit.');
     };
-    Property.prototype.keyOutInterpolationType = function (k) {
-        return this._key(k).hold ? KeyframeInterpolationType.HOLD : KeyframeInterpolationType.LINEAR;
-    };
-    // Lumit's keys run in straight lines at an even speed, which these calls
-    // can only ask for or leave as it is.
+    Property.prototype.keyRoving = function (k) { this._key(k); return false; };
+
+    // Lumit moves a point between keys in a straight line, so these calls
+    // can only ask for that or leave it as it is.
     Property.prototype.setSpatialAutoBezierAtKey = function (k, on) {
         this._key(k);
         if (on) note('Lumit moves between keys in straight lines.');
@@ -863,12 +1019,14 @@
         });
         if (curved) note('Lumit moves between keys in straight lines.');
     };
-    ['setTemporalEaseAtKey', 'setTemporalContinuousAtKey', 'setTemporalAutoBezierAtKey', 'setRovingAtKey'].forEach(function (name) {
-        Property.prototype[name] = function (k) {
-            this._key(k);
-            note('Ease on keys is not carried, so keys run at an even speed.');
-        };
-    });
+    Property.prototype._tangent = function (k) {
+        var v = this._key(k).v;
+        return v instanceof Array ? v.map(function () { return 0; }) : [0];
+    };
+    Property.prototype.keyInSpatialTangent = Property.prototype._tangent;
+    Property.prototype.keyOutSpatialTangent = Property.prototype._tangent;
+    Property.prototype.keySpatialAutoBezier = function (k) { this._key(k); return false; };
+    Property.prototype.keySpatialContinuous = function (k) { this._key(k); return false; };
 
     function valueOf(prop, t) {
         var keys = prop._keys;
@@ -888,21 +1046,45 @@
 
     // ---- Writing the keys ----
 
+    // One side of a key as Lumit's commands take it.
+    function sideOf(k, out) {
+        var type = out ? k.outType : k.inType, ease = out ? k.outEase : k.inEase;
+        if (type === T.HOLD) return 'hold';
+        if (type === T.LINEAR) return 'linear';
+        if (k.auto || !ease) return 'auto';
+        return ease.map(function (e) { return { speed: e.speed, influence: e.influence }; });
+    }
+
+    // `keys` as Lumit's commands take them, each value through `value`.
+    function keyList(layer, keys, value) {
+        var out = [];
+        keys.forEach(function (k) {
+            var key = { time: layer._comp._frame(k.t), value: value(k.v), 'in': sideOf(k, false), out: sideOf(k, true) };
+            // Two keys on one frame: the later wins, as in After Effects.
+            if (out.length && out[out.length - 1].time === key.time) out[out.length - 1] = key;
+            else out.push(key);
+        });
+        return out;
+    }
+
     function write(layer, name, value, keys) {
         var args = { comp: layer._comp._id, layer: layer._id, property: name };
         if (keys && keys.length) {
-            var out = [];
-            keys.forEach(function (k) {
-                var key = { time: layer._comp._frame(k.t), value: lumitValue(name, k.v), interp: k.hold ? 'hold' : 'linear' };
-                // Two keys on one frame: the later wins, as in After Effects.
-                if (out.length && out[out.length - 1].time === key.time) out[out.length - 1] = key;
-                else out.push(key);
-            });
-            args.keys = out;
+            args.keys = keyList(layer, keys, function (v) { return lumitValue(name, v); });
         } else {
             args.value = lumitValue(name, value);
         }
         command('layer.keys', args);
+    }
+
+    // A property's expression while it is on, as Lumit holds one or the other.
+    function writeProp(layer, prop) {
+        if (!prop._exprOn) {
+            write(layer, prop._name, prop._value, prop._keys);
+            return;
+        }
+        if (prop._keys.length) note('Keys under an expression are not kept, as a Lumit property holds one or the other.');
+        command('layer.keys', { comp: layer._comp._id, layer: layer._id, property: prop._name, expression: prop._expr });
     }
 
     function rx(a) { var c = Math.cos(a * D), s = Math.sin(a * D); return [[1, 0, 0], [0, c, -s], [0, s, c]]; }
@@ -969,6 +1151,7 @@
             var hold = channels.every(function (c) { return heldAt(c, t); });
             turned.forEach(function (v, n) {
                 var k = new Key(t, v, layer._comp._frame(t));
+                sidesFrom(k, channels, t);
                 k.hold = hold;
                 lists[n].push(k);
             });
@@ -978,6 +1161,11 @@
             if (p !== caller && p._keys !== null) return;
             p._keys = lists[n];
             p._value = still[n];
+            var c = channels[n];
+            if (c && c.expression !== undefined) {
+                p._expr = c.expression;
+                p._exprOn = true;
+            }
         });
     }
 
@@ -996,16 +1184,19 @@
         });
         var o = p.orientation;
         if (o._keys.length) unsupported('Keys on Orientation');
+        if (o._exprOn) unsupported('An expression on Orientation');
         var info = layer._info();
         var solid = info.kind === 'camera' || info.three_d;
-        if (!solid || (!used(o) && !(used(p.rotation_x) && used(p.rotation_y)))) {
-            if (used(o)) unsupported('Orientation on a 2D layer');
-            ['rotation_x', 'rotation_y', 'rotation'].forEach(function (n) {
-                if (p[n]._changed) write(layer, n, p[n]._value, p[n]._keys);
+        var trio = [p.rotation_x, p.rotation_y, p.rotation];
+        // An expression is written as it is, so its rotation is not turned.
+        var expressed = trio.some(function (q) { return q._exprOn; });
+        if (!solid || expressed || (!used(o) && !(used(p.rotation_x) && used(p.rotation_y)))) {
+            if (used(o)) unsupported(solid ? 'Orientation beside an expression on a rotation' : 'Orientation on a 2D layer');
+            trio.forEach(function (q) {
+                if (q._changed) writeProp(layer, q);
             });
             return;
         }
-        var trio = [p.rotation_x, p.rotation_y, p.rotation];
         var times = [];
         trio.forEach(function (q) { q._keys.forEach(function (k) { times.push(k.t); }); });
         times.sort(function (a, b) { return a - b; });
@@ -1030,8 +1221,19 @@
                 q._keys.forEach(function (k) { if (k.t <= t) held = k.hold; });
                 return q._keys.length === 0 || held;
             });
+            // The turn is split again, so a key's ease, which was for the
+            // old angles, is not carried. A Bezier key follows its neighbours.
+            var from = null;
+            trio.forEach(function (q) {
+                q._keys.forEach(function (k) { if (!from && k.f === frame) from = k; });
+            });
             turned.forEach(function (v, n) {
                 var k = new Key(t, v, frame);
+                if (from) {
+                    k.inType = from.inType;
+                    k.outType = from.outType;
+                    k.auto = true;
+                }
                 k.hold = hold;
                 lists[n].push(k);
             });
@@ -1045,7 +1247,7 @@
         Object.keys(layer._props).forEach(function (name) {
             var prop = layer._props[name];
             if (!prop._changed || /^(rotation|rotation_x|rotation_y|orientation)$/.test(name)) return;
-            write(layer, name, prop._value, prop._keys);
+            writeProp(layer, prop);
         });
         Object.keys(layer._props).forEach(function (name) { layer._props[name]._changed = false; });
     }
@@ -1131,4 +1333,5 @@
     globalThis.AutoOrientType = AutoOrientType;
     globalThis.KeyframeInterpolationType = KeyframeInterpolationType;
     globalThis.ImportAsType = ImportAsType;
+    globalThis.KeyframeEase = KeyframeEase;
 })
