@@ -35,7 +35,7 @@ What a script prints is not shown anywhere.
 | `app.project` | `items`, `numItems`, `item()`, `rootFolder`, `activeItem`, `file`, `importFile()`, `save()` |
 | `items` | `addFolder()`, `addComp()`, `length`, `[n]` |
 | Any item | `name`, `parentFolder`, `comment` |
-| `CompItem` | `width`, `height`, `duration`, `frameRate`, `frameDuration`, `pixelAspect`, `numLayers`, `layer()`, `layers`, `markerProperty`, `openInViewer()` |
+| `CompItem` | `width`, `height`, `duration`, `frameRate`, `frameDuration`, `pixelAspect`, `numLayers`, `layer()`, `layers`, `markerProperty`, `openInViewer()`, `saveFrameToPng()` |
 | `layers` | `addCamera()`, `addNull()`, `addSolid()`, `add()` of footage or a comp, `precompose()`, `byName()`, `length`, `[n]` |
 | Any layer | `name`, `index`, `enabled`, `guideLayer`, `threeDLayer`, `shy`, `solo`, `locked`, `motionBlur`, `startTime`, `inPoint`, `outPoint`, `parent`, `setParentWithJump()`, `autoOrient`, `moveToBeginning()`, `moveToEnd()`, `moveBefore()`, `moveAfter()`, `remove()`, `property()`, `transform`, `Effects`, `marker` |
 | Properties | Anchor Point, Position, Scale, Orientation, X, Y and Z Rotation, Opacity, and a camera's Point of Interest, Zoom, Focus Distance and Aperture, by match name or by name |
@@ -87,8 +87,8 @@ Anything else stops the script with a message naming it.
   never over the project. A run writes at most 64 MB. A script with no folder of its own, as
   over MCP, writes nothing.
 - A script imports footage only from the files it can read. It saves the project over its own
-  file or as a new `.lum` file, and exports, only into the project's folder or its own, never
-  over a file.
+  file or as a new `.lum` file, and exports and saves frames, only into the project's folder
+  or its own, never over a file.
 - A network path or a device is refused.
 
 ## Related

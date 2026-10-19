@@ -15,19 +15,28 @@ project over MCP.
 | macOS | `Lumit.app/Contents/MacOS/lumit-cli`. |
 | Linux | `lumit-cli` beside `lumit_flutter`. In the Flatpak, `flatpak run --command=lumit-cli io.github.luminalmvm.Lumit`. |
 
-## Export a composition
+## Export compositions
 
 ```
-lumit-cli export <project.lum> [--comp <name>] [--out <file>]
+lumit-cli export <project.lum> [--comp <name>]... [--all-comps] [--preset <name>] [--range <in>-<out>] [--out <file>]
 ```
 
-- **--comp**: the composition, by name or id. Needed when the project has more than one.
-- **--out**: the file to write. Without it, the composition's name beside the project,
-  numbered when that file is already there.
+- **--comp**: a composition, by name or id. Needed when the project has more than one.
+  Repeat it for more.
+- **--all-comps**: every composition in the project.
+- **--preset**: a saved export preset, by the name the **Export** window shows.
+- **--range**: the first and last frame to export, such as `0-119`.
+- **--out**: the file to write, or with several compositions the folder they go in.
 
-The file is an H.264 mp4 with sound, at the composition's own size and rate. It covers the
-work area where one is set and the whole composition where it is not. Plugin effects the
-project uses are looked for first.
+Without **--preset**, the file is an H.264 mp4 with sound, at the composition's own size and
+rate. Without **--range**, it covers the work area where one is set and the whole
+composition where it is not. Without **--out**, each file goes beside the project, named as
+the **Export** window names it, from the file name in **Settings ▸ Export** or else the
+composition's name, and numbered when that file is already there. Plugin effects the project
+uses are looked for first.
+
+Each composition is exported in turn, to its own file. One that fails is named on standard
+error, the rest still export, and the exit status is 1.
 
 ## Run a script
 
@@ -58,7 +67,9 @@ JavaScript as one undo step. Standard output carries only the protocol's message
 - The project is saved only when `project_save` is called, over its own file or as a new
   `.lum` file in its folder.
 - Footage is imported only from the project's folder and the folders inside it.
-- Exports go only into the project's folder, never over a file already there.
+- Exports and frames go only into the project's folder, never over a file already there.
+- `comp_frame` renders a frame of a composition to a PNG, and sends the picture back with
+  its path when it is 2 MB or smaller.
 - A relative path is read from the project's folder. A network path or a device is refused.
 - `script_run` reads no files, and stops after a minute.
 - A project open in Lumit is refused, and Lumit does not open the project while **mcp** has
@@ -115,8 +126,8 @@ A program starts it the same way, with `"args": ["mcp"]`.
 
 ## What it prints
 
-Progress, the script's `print` lines and errors go to standard error. The exported file, or
-the script's last value as JSON, goes to standard output.
+Progress, the script's `print` lines and errors go to standard error. The exported files, one
+a line, or the script's last value as JSON, go to standard output.
 
 | Exit status | Meaning |
 | --- | --- |
