@@ -1358,7 +1358,13 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
         final clip = track.clips[k];
         if (!track.sound) {
           _wantThumb(track, clip);
-          continue;
+          // A picture clip that is heard brings its sound as well, for the
+          // band along the foot of its box.
+          final heard = track.entry.info.switches.audible &&
+              clip.audible &&
+              !clip.retimed &&
+              !clip.sourceIsComp;
+          if (!heard) continue;
         }
         final id = clip.id.toString();
         live.add(id);
@@ -3077,6 +3083,14 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               ),
             ),
           ),
+          // A picture track may carry sound, and is muted as a sound track is.
+          if (track.kind == CutTrackKind.picture)
+            _switch(t, comp, track, 'audible', s.audible,
+                BridgeLayerSwitch.audible,
+                mark: LumitIcons.audio,
+                offMark: LumitIcons.muted,
+                height: height,
+                tip: s.audible ? l10n.switchAudible : l10n.switchMuted),
           if (track.below) ...[
             _switch(t, comp, track, 'audible', s.audible,
                 BridgeLayerSwitch.audible,

@@ -483,11 +483,24 @@ class CutTrackPainter extends CustomPainter {
               from: clipEdgeWidth + 4, band: header > 0 ? header : null));
       return;
     }
+    // A picture clip that is heard has its sound in a band along the foot
+    // of the box, and its picture and name above it.
+    final band = _bandOf(clip, box);
+    if (band > 0) {
+      _wave(
+          canvas,
+          clip,
+          Rect.fromLTRB(box.left, box.bottom - band, box.right, box.bottom),
+          held,
+          header: false);
+    }
+    final above =
+        Rect.fromLTRB(box.left, box.top, box.right, box.bottom - band);
     // The frame the clip opens on, at the head of the box, then the name.
     var from = clipEdgeWidth + 4;
     final image = thumbs[cutThumbKey(clip)];
     if (image != null && image.height > 0) {
-      final inner = box.height - 2;
+      final inner = above.height - 2;
       // The whole frame on a track of the usual height. On a tall one it
       // would fill the box, so it keeps to the head of it and shows the
       // middle of the frame, and the name still has its room.
@@ -495,7 +508,7 @@ class CutTrackPainter extends CustomPainter {
       final wide = min(whole, box.width * 0.6);
       final shown = image.width * wide / whole;
       canvas.save();
-      canvas.clipRect(box.deflate(1));
+      canvas.clipRect(above.deflate(1));
       canvas.drawImageRect(
         image,
         Rect.fromLTWH((image.width - shown) / 2, 0, shown,
@@ -506,9 +519,23 @@ class CutTrackPainter extends CustomPainter {
       canvas.restore();
       from += wide + 2;
     }
-    final chips = _chips(canvas, clip, box);
+    final chips = _chips(canvas, clip, box, band: above.height);
     _name(canvas, clip.sourceName, box,
-        room: chips, from: _glyph(canvas, clip, box, from: from));
+        band: above.height,
+        room: chips,
+        from: _glyph(canvas, clip, box, from: from, band: above.height));
+  }
+
+  /// How tall the band a picture clip's sound is drawn in stands: none for a
+  /// clip that is not heard, or has no sound, or on a track too short.
+  double _bandOf(BridgeClip clip, Rect box) {
+    if (!track.entry.info.switches.audible || !clip.audible || clip.retimed) {
+      return 0;
+    }
+    final summary = peaks[clip.id.toString()];
+    if (summary == null || summary.buckets == 0) return 0;
+    if (box.height < audioClipHeader * 2) return 0;
+    return (box.height * 0.4).roundToDouble();
   }
 
   /// What a clip carries of its own, said at the right of its name line: its
@@ -579,7 +606,8 @@ class CutTrackPainter extends CustomPainter {
   /// The clip's own sound across its box. The peaks are bucketed on the
   /// clip's placed clock, which starts at its place start, so a slid clip
   /// carries its wave along with nothing refetched.
-  void _wave(Canvas canvas, BridgeClip clip, Rect box, CutDrag? held) {
+  void _wave(Canvas canvas, BridgeClip clip, Rect box, CutDrag? held,
+      {bool header = true}) {
     final summary = peaks[clip.id.toString()];
     if (summary == null || axis.perFrame <= 0 || fps <= 0) return;
     // A head being trimmed moves the box over a wave that stays put, and a
@@ -592,18 +620,18 @@ class CutTrackPainter extends CustomPainter {
     final slip = mine && held.tool == CutTool.slip;
     final origin = rationalSeconds(clip.placeStart) +
         (trimIn || slip ? held.shift / fps : 0);
-    _waveAt(canvas, summary, origin, box);
+    _waveAt(canvas, summary, origin, box, header: header);
   }
 
   /// A wave across [box], whose left edge is [origin] on the peaks' clock.
-  void _waveAt(
-      Canvas canvas, BridgeAudioPeaks summary, double origin, Rect box) {
+  void _waveAt(Canvas canvas, BridgeAudioPeaks summary, double origin, Rect box,
+      {bool header = true}) {
     // Under the name's header, so the wave never runs through the name.
-    final header = _soundHeader(box);
-    final tall = box.height - header;
+    final top = header ? _soundHeader(box) : 0.0;
+    final tall = box.height - top;
     canvas.save();
     canvas.clipRect(box.deflate(1));
-    canvas.translate(box.left, box.top + header);
+    canvas.translate(box.left, box.top + top);
     WaveformPainter(
       peaks: summary,
       originSeconds: origin,
