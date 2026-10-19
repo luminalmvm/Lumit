@@ -2,6 +2,7 @@
 
 #include <flutter/method_channel.h>
 #include <flutter/standard_method_codec.h>
+#include <flutter_windows.h>
 #include <shlobj.h>
 #include <wrl/client.h>
 
@@ -126,6 +127,36 @@ void RefreshShortcutIcons(const std::wstring& icon) {
     }
     ::CoTaskMemFree(folder);
   }
+}
+
+// The start-up splash's window. Any painted pixel drags it, and a see-through
+// one lets the click through to whatever is underneath.
+LRESULT CALLBACK SplashProc(HWND hwnd, UINT message, WPARAM wparam,
+                            LPARAM lparam) {
+  if (message == WM_NCHITTEST) {
+    return HTCAPTION;
+  }
+  return ::DefWindowProcW(hwnd, message, wparam, lparam);
+}
+
+// The primary monitor, which the splash is centred on.
+HMONITOR PrimaryMonitor() {
+  return ::MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+}
+
+// A whole number out of a map Dart sent, which arrives as 32 or 64 bits.
+int64_t IntArgument(const flutter::EncodableMap& args, const char* key) {
+  auto found = args.find(flutter::EncodableValue(key));
+  if (found == args.end()) {
+    return 0;
+  }
+  if (const auto* value = std::get_if<int32_t>(&found->second)) {
+    return *value;
+  }
+  if (const auto* value = std::get_if<int64_t>(&found->second)) {
+    return *value;
+  }
+  return 0;
 }
 
 }  // namespace
@@ -282,6 +313,48 @@ bool FlutterWindow::OnCreate() {
              std::unique_ptr<flutter::MethodResult<>> result) {
         const HWND hwnd = GetHandle();
         const std::string& method = call.method_name();
+        // The start-up splash (lib/shell/splash_window.dart). Nothing to
+        // show when Lumit was started into the tray.
+        if (method == "splashScale") {
+          if (start_hidden_) {
+            result->Success();
+          } else {
+            result->Success(flutter::EncodableValue(
+                FlutterDesktopGetDpiForMonitor(PrimaryMonitor()) / 96.0));
+          }
+          return;
+        }
+        if (method == "splash") {
+          const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+          const std::vector<uint8_t>* bytes = nullptr;
+          if (args) {
+            auto found = args->find(flutter::EncodableValue("bytes"));
+            if (found != args->end()) {
+              bytes = std::get_if<std::vector<uint8_t>>(&found->second);
+            }
+          }
+          const bool shown =
+              !start_hidden_ && args && bytes &&
+              ShowSplash(static_cast<int>(IntArgument(*args, "width")),
+                         static_cast<int>(IntArgument(*args, "height")),
+                         *bytes);
+          result->Success(flutter::EncodableValue(shown));
+          return;
+        }
+        if (method == "splashClose") {
+          const bool was_up = splash_ != nullptr;
+          CloseSplash();
+          if (!start_hidden_ && !::IsWindowVisible(hwnd)) {
+            Show();
+            // Its first frame was drawn while it was hidden.
+            flutter_controller_->ForceRedraw();
+          }
+          if (was_up) {
+            ::SetForegroundWindow(hwnd);
+          }
+          result->Success();
+          return;
+        }
         if (method == "drag") {
           // What a press on a title bar does. Flutter holds the mouse while a
           // button is down, and Windows will not move a window until it lets
@@ -363,7 +436,8 @@ bool FlutterWindow::OnCreate() {
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    if (!start_hidden_) {
+    // With the splash up, the window shows when the splash goes.
+    if (!start_hidden_ && !splash_) {
       this->Show();
     }
   });
@@ -383,6 +457,7 @@ void FlutterWindow::OnDestroy() {
   // engine, so it must go before the controller (and its engine) do.
   viewer_texture_bridge_ = nullptr;
   ShowTray(false);
+  CloseSplash();
 
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
@@ -421,7 +496,8 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
         // Already up is the ordinary case: the first frame arrived and showed
         // it. Only a window nobody has seen is shown from here, so one the
         // user has since minimised is left where they put it.
-        if (!::IsWindowVisible(hwnd) && !start_hidden_) {
+        // A splash still up means start-up is still going, and saying so.
+        if (!::IsWindowVisible(hwnd) && !start_hidden_ && !splash_) {
           this->Show();
         }
         return 0;
@@ -496,6 +572,92 @@ void FlutterWindow::Reveal() {
   ::SetForegroundWindow(hwnd);
   if (flutter_controller_) {
     flutter_controller_->ForceRedraw();
+  }
+}
+
+bool FlutterWindow::ShowSplash(int width, int height,
+                               const std::vector<uint8_t>& rgba) {
+  if (width <= 0 || height <= 0 ||
+      rgba.size() < static_cast<size_t>(width) * height * 4) {
+    return false;
+  }
+  const HINSTANCE instance = ::GetModuleHandle(nullptr);
+  POINT* place = nullptr;
+  POINT centre{};
+  if (!splash_) {
+    static const wchar_t kClass[] = L"LUMIT_SPLASH";
+    WNDCLASSW splash_class{};
+    splash_class.lpfnWndProc = SplashProc;
+    splash_class.hInstance = instance;
+    splash_class.lpszClassName = kClass;
+    splash_class.hCursor = ::LoadCursor(nullptr, IDC_ARROW);
+    splash_class.hIcon = ::LoadIcon(instance, MAKEINTRESOURCE(IDI_APP_ICON));
+    // Fails harmlessly once the class is there.
+    ::RegisterClassW(&splash_class);
+    // Its own taskbar button, so there is something to see Lumit by while
+    // the main window is still hidden.
+    splash_ = ::CreateWindowExW(WS_EX_LAYERED | WS_EX_APPWINDOW, kClass,
+                                L"Lumit", WS_POPUP, 0, 0, width, height,
+                                nullptr, nullptr, instance, nullptr);
+    if (!splash_) {
+      return false;
+    }
+    // Centred on the primary monitor's work area the first time only, so a
+    // splash somebody dragged stays where they put it.
+    MONITORINFO monitor{sizeof(monitor)};
+    ::GetMonitorInfoW(PrimaryMonitor(), &monitor);
+    const RECT& work = monitor.rcWork;
+    centre = POINT{work.left + (work.right - work.left - width) / 2,
+                   work.top + (work.bottom - work.top - height) / 2};
+    place = &centre;
+  }
+
+  // Dart sends premultiplied RGBA; a layered window wants premultiplied BGRA.
+  BITMAPINFO info{};
+  info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  info.bmiHeader.biWidth = width;
+  info.bmiHeader.biHeight = -height;  // top row first
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  info.bmiHeader.biCompression = BI_RGB;
+  void* bits = nullptr;
+  const HDC screen = ::GetDC(nullptr);
+  const HDC memory = ::CreateCompatibleDC(screen);
+  const HBITMAP bitmap =
+      ::CreateDIBSection(screen, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+  BOOL drawn = FALSE;
+  if (bitmap && bits) {
+    auto* out = static_cast<uint8_t*>(bits);
+    const size_t count = static_cast<size_t>(width) * height * 4;
+    for (size_t i = 0; i < count; i += 4) {
+      out[i] = rgba[i + 2];
+      out[i + 1] = rgba[i + 1];
+      out[i + 2] = rgba[i];
+      out[i + 3] = rgba[i + 3];
+    }
+    const HGDIOBJ old = ::SelectObject(memory, bitmap);
+    SIZE size{width, height};
+    POINT origin{0, 0};
+    BLENDFUNCTION blend{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    drawn = ::UpdateLayeredWindow(splash_, screen, place, &size, memory,
+                                  &origin, 0, &blend, ULW_ALPHA);
+    ::SelectObject(memory, old);
+  }
+  if (bitmap) {
+    ::DeleteObject(bitmap);
+  }
+  ::DeleteDC(memory);
+  ::ReleaseDC(nullptr, screen);
+  if (drawn && !::IsWindowVisible(splash_)) {
+    ::ShowWindow(splash_, SW_SHOW);
+  }
+  return drawn != FALSE;
+}
+
+void FlutterWindow::CloseSplash() {
+  if (splash_) {
+    ::DestroyWindow(splash_);
+    splash_ = nullptr;
   }
 }
 

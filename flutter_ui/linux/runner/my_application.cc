@@ -34,6 +34,10 @@ struct _MyApplication {
   IndicatorSetStatus indicator_set_status;
   GtkWidget* tray_open;
   GtkWidget* tray_quit;
+  // The start-up splash's window and picture while it is up. The main window
+  // waits for it to go.
+  GtkWidget* splash;
+  cairo_surface_t* splash_picture;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -196,6 +200,11 @@ static void open_method_cb(FlMethodChannel* channel,
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(view));
+  // With the splash up, the window shows and is maximised when the splash goes
+  // (close_splash).
+  if (self->splash != nullptr) {
+    return;
+  }
   // Started at sign-in, it waits in the tray until it is opened.
   if (!self->start_hidden) {
     gtk_widget_show(window);
@@ -215,6 +224,149 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   // window is briefly its default size on the way up, which is what the Windows
   // runner's own SW_MAXIMIZE-at-show does too.
   gtk_window_maximize(GTK_WINDOW(window));
+}
+
+// The start-up splash (lib/shell/splash_window.dart) is a window of its own,
+// the shape of its picture where the desktop can show see-through windows.
+// Without a compositor it is the picture on Lumit's dark ground.
+static gboolean splash_draw_cb(GtkWidget* widget, cairo_t* cr,
+                               MyApplication* self) {
+  if (gdk_screen_is_composited(gtk_widget_get_screen(widget))) {
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+  } else {
+    cairo_set_source_rgb(cr, 0x0b / 255.0, 0x0c / 255.0, 0x0e / 255.0);
+    cairo_paint(cr);
+  }
+  if (self->splash_picture != nullptr) {
+    cairo_set_source_surface(cr, self->splash_picture, 0, 0);
+    cairo_paint(cr);
+  }
+  return TRUE;
+}
+
+// Any press on the splash moves it.
+static gboolean splash_press_cb(GtkWidget* widget, GdkEventButton* event,
+                                gpointer user_data) {
+  if (event->button == GDK_BUTTON_PRIMARY) {
+    gtk_window_begin_move_drag(GTK_WINDOW(widget), event->button,
+                               static_cast<gint>(event->x_root),
+                               static_cast<gint>(event->y_root), event->time);
+  }
+  return TRUE;
+}
+
+// The primary monitor's scale, which the splash is drawn at.
+static gint splash_scale() {
+  GdkDisplay* display = gdk_display_get_default();
+  GdkMonitor* monitor = gdk_display_get_primary_monitor(display);
+  if (monitor == nullptr) {
+    monitor = gdk_display_get_monitor(display, 0);
+  }
+  return monitor != nullptr ? gdk_monitor_get_scale_factor(monitor) : 1;
+}
+
+// Put the splash on screen, or give it new pixels: premultiplied RGBA,
+// "width" by "height", in "bytes". False if it could not.
+static gboolean show_splash(MyApplication* self, FlValue* args) {
+  if (self->start_hidden || fl_value_get_type(args) != FL_VALUE_TYPE_MAP) {
+    return FALSE;
+  }
+  FlValue* width_value = fl_value_lookup_string(args, "width");
+  FlValue* height_value = fl_value_lookup_string(args, "height");
+  FlValue* bytes = fl_value_lookup_string(args, "bytes");
+  if (width_value == nullptr || height_value == nullptr || bytes == nullptr ||
+      fl_value_get_type(width_value) != FL_VALUE_TYPE_INT ||
+      fl_value_get_type(height_value) != FL_VALUE_TYPE_INT ||
+      fl_value_get_type(bytes) != FL_VALUE_TYPE_UINT8_LIST) {
+    return FALSE;
+  }
+  const int64_t width = fl_value_get_int(width_value);
+  const int64_t height = fl_value_get_int(height_value);
+  if (width <= 0 || height <= 0 || width > 16384 || height > 16384 ||
+      static_cast<int64_t>(fl_value_get_length(bytes)) < width * height * 4) {
+    return FALSE;
+  }
+  cairo_surface_t* picture = cairo_image_surface_create(
+      CAIRO_FORMAT_ARGB32, static_cast<int>(width), static_cast<int>(height));
+  if (cairo_surface_status(picture) != CAIRO_STATUS_SUCCESS) {
+    cairo_surface_destroy(picture);
+    return FALSE;
+  }
+  // Cairo keeps each pixel as one native-endian ARGB word, premultiplied.
+  cairo_surface_flush(picture);
+  const uint8_t* rgba = fl_value_get_uint8_list(bytes);
+  unsigned char* data = cairo_image_surface_get_data(picture);
+  const int stride = cairo_image_surface_get_stride(picture);
+  for (int64_t y = 0; y < height; y++) {
+    auto* row = reinterpret_cast<uint32_t*>(data + y * stride);
+    for (int64_t x = 0; x < width; x++) {
+      const uint8_t* in = rgba + (y * width + x) * 4;
+      row[x] = (static_cast<uint32_t>(in[3]) << 24) |
+               (static_cast<uint32_t>(in[0]) << 16) |
+               (static_cast<uint32_t>(in[1]) << 8) | in[2];
+    }
+  }
+  cairo_surface_mark_dirty(picture);
+  const gint scale = splash_scale();
+  cairo_surface_set_device_scale(picture, scale, scale);
+  if (self->splash_picture != nullptr) {
+    cairo_surface_destroy(self->splash_picture);
+  }
+  self->splash_picture = picture;
+
+  if (self->splash != nullptr) {
+    gtk_widget_queue_draw(self->splash);
+    return TRUE;
+  }
+  GtkWidget* splash = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_title(GTK_WINDOW(splash), "Lumit");
+  gtk_window_set_decorated(GTK_WINDOW(splash), FALSE);
+  gtk_window_set_resizable(GTK_WINDOW(splash), FALSE);
+  gtk_widget_set_app_paintable(splash, TRUE);
+  GdkScreen* screen = gtk_widget_get_screen(splash);
+  GdkVisual* visual = gdk_screen_get_rgba_visual(screen);
+  if (visual != nullptr && gdk_screen_is_composited(screen)) {
+    gtk_widget_set_visual(splash, visual);
+  }
+  gtk_window_set_default_size(GTK_WINDOW(splash),
+                              static_cast<gint>(width / scale),
+                              static_cast<gint>(height / scale));
+  gtk_window_set_position(GTK_WINDOW(splash), GTK_WIN_POS_CENTER);
+  gtk_widget_add_events(splash, GDK_BUTTON_PRESS_MASK);
+  g_signal_connect(splash, "draw", G_CALLBACK(splash_draw_cb), self);
+  g_signal_connect(splash, "button-press-event", G_CALLBACK(splash_press_cb),
+                   nullptr);
+  self->splash = splash;
+  gtk_widget_show(splash);
+  return TRUE;
+}
+
+// Take the splash down. The main window shows, and is maximised, in its
+// place: the first frame came and went while the splash was up.
+static void close_splash(MyApplication* self) {
+  const gboolean was_up = self->splash != nullptr;
+  if (self->splash != nullptr) {
+    gtk_widget_destroy(self->splash);
+    self->splash = nullptr;
+  }
+  if (self->splash_picture != nullptr) {
+    cairo_surface_destroy(self->splash_picture);
+    self->splash_picture = nullptr;
+  }
+  if (self->window == nullptr) {
+    return;
+  }
+  if (!self->start_hidden &&
+      !gtk_widget_get_visible(GTK_WIDGET(self->window))) {
+    gtk_widget_show(GTK_WIDGET(self->window));
+    gtk_window_present(self->window);
+  }
+  if (was_up) {
+    gtk_window_maximize(self->window);
+  }
 }
 
 // Hand the window to the window manager to be moved, as a press on a title bar
@@ -255,6 +407,26 @@ static void window_method_cb(FlMethodChannel* channel,
                              FlMethodCall* call,
                              gpointer user_data) {
   MyApplication* self = MY_APPLICATION(user_data);
+  const gchar* asked = fl_method_call_get_name(call);
+  // The splash's three have answers of their own.
+  if (g_strcmp0(asked, "splashScale") == 0) {
+    g_autoptr(FlValue) scale =
+        self->start_hidden ? fl_value_new_null()
+                           : fl_value_new_float(splash_scale());
+    fl_method_call_respond_success(call, scale, nullptr);
+    return;
+  }
+  if (g_strcmp0(asked, "splash") == 0) {
+    g_autoptr(FlValue) shown =
+        fl_value_new_bool(show_splash(self, fl_method_call_get_args(call)));
+    fl_method_call_respond_success(call, shown, nullptr);
+    return;
+  }
+  if (g_strcmp0(asked, "splashClose") == 0) {
+    fl_method_call_respond_success(call, nullptr, nullptr);
+    close_splash(self);
+    return;
+  }
   GtkWindow* window = self->window;
   FlView* view = self->view;
   const gboolean maximised = gtk_window_is_maximized(window);
