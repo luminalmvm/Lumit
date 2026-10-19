@@ -141,7 +141,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
     // Scanlines: a dark gap between the lines of each field. Lines closer
     // than two pixels would shimmer, so they fade to their average shade.
     let gap = pow(abs(cos(PI * uv.y * lines)), 4.0);
-    let pitch = f32(lumit.roi_size.y) / lines;
+    let pitch = lumit_size().y / lines;
     let even = mix(0.375, gap, clamp(pitch - 1.0, 0.0, 1.0));
     c = vec4<f32>(c.rgb * (1.0 - clamp(p.scanlines / 100.0, 0.0, 1.0) * 0.6 * even), c.a);
 
