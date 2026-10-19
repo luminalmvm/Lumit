@@ -129,6 +129,8 @@ Bottom right
 Bottom right tangent x
 Bottom right tangent y
 Bottom to top
+Bounce
+Bounciness
 Boundary
 Bounds
 Brightness
@@ -183,6 +185,8 @@ Clone layer 4
 Clone to points
 Closed
 Coating
+Collide
+Collide with
 Colour
 Colour 1
 Colour 2
@@ -417,6 +421,7 @@ Frame rate
 Frames
 Free
 Frequency
+Friction
 From
 From group
 Full body
@@ -695,6 +700,7 @@ Offset x
 Offset y
 Offset z
 Omni
+On contact
 On original
 On transparent
 On trigger
@@ -952,6 +958,7 @@ Size over life
 Skew
 Skew axis
 Slice repeat
+Slide
 Slider
 Slider control
 Smooth
@@ -1009,6 +1016,7 @@ Status
 Steps per second
 Stereo phase
 Stereo width
+Stick
 Stops
 Store
 Streak
