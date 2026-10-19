@@ -53,7 +53,13 @@ String? projectNameFor(String? path) {
 ///
 /// A Linux desktop hands the document over as a `file:` address, since the
 /// same launcher line also takes an invite link.
-String? projectPathFromArgs(List<String> args) {
+String? projectPathFromArgs(List<String> args) => _fileFromArgs(args, '.lum');
+
+/// The `.lfx` extension package a double-click asked Lumit to install, read
+/// as [projectPathFromArgs] reads a project.
+String? packagePathFromArgs(List<String> args) => _fileFromArgs(args, '.lfx');
+
+String? _fileFromArgs(List<String> args, String ending) {
   for (var a in args) {
     if (a.startsWith('file:')) {
       try {
@@ -62,7 +68,7 @@ String? projectPathFromArgs(List<String> args) {
         continue;
       }
     }
-    if (a.toLowerCase().endsWith('.lum') && File(a).existsSync()) return a;
+    if (a.toLowerCase().endsWith(ending) && File(a).existsSync()) return a;
   }
   return null;
 }
@@ -123,6 +129,10 @@ class LumitState extends ChangeNotifier {
   /// The invite link Lumit was started with, until the Shared project window
   /// has opened on it.
   String? launchInvite;
+
+  /// The extension package Lumit was started with, until its install
+  /// window has opened.
+  String? launchPackage;
 
   StreamSubscription? currentDocumentStream;
 
