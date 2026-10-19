@@ -205,7 +205,8 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-ml` | Installed addons: model packs and the model runtime |
 | `lumit-import` | After Effects import |
 | `lumit-keymap` | Shortcuts |
-| `lumit-script` | Commands: the named edits scripts, the command line and MCP make, all through one `dispatch` |
+| `lumit-script` | Commands: the named edits scripts, the command line and MCP make, all through one `dispatch`, and the JavaScript script runner with After Effects' scripting objects (`ae.js`) |
+| `lumit-cli` | The command line's launcher, `lumit-cli`: loads the bridge library from beside it and runs the command line in it. Ships beside the bridge, in `lib\` on Windows |
 | `lumit-ingress` | Limits for reading untrusted input |
 | `lumit-peer` | Authenticating the plugin broker pipes |
 | `lumit-share` | Shared projects: the host's end, a guest's end, the encrypted channel between them, and a member's end of a project kept online (`online.rs`). Lumit's own relay and its server are each dialled through a door the interface keeps (`state/relay_door.dart`, `state/online_door.dart`) |
@@ -215,7 +216,7 @@ One Cargo workspace. Every `crates/lumit-*` folder is a member, one job each.
 | `lumit-ofx`, `-ofx-broker`, `-ofx-testplug` | The OFX host, the process a plugin runs in, test plugins |
 | `lumit-aplug`, `-aplug-broker`, `-aplug-testplug` | The same for CLAP and VST3 audio plugins |
 | `lumit-bench` | The performance harness CI runs |
-| `lumit-bridge` | The seam Flutter calls. Package name `lumit_bridge` |
+| `lumit-bridge` | The seam Flutter calls. Also carries the command line (`cli.rs`), which exports a comp and runs a script on a project with no window. Package name `lumit_bridge` |
 
 Built-in effects live in `crates/lumit-core/src/fx/effects/`.
 

@@ -16,6 +16,7 @@ import 'layer.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 import 'project_item.dart';
+import 'script.dart';
 import 'share.dart';
 import 'shell.dart';
 import 'solid.dart';
@@ -791,6 +792,17 @@ class ProjectReference {
           {required String projectPath, RustStreamSink<double>? onProgress}) =>
       BridgeLib.instance.api.crateApiProjectProjectReferenceRestoreJournal(
           that: this, projectPath: projectPath, onProgress: onProgress);
+
+  /// Run the script at `path` on this project, on a thread of its own.
+  /// Answers at once, false when a script is running already. `events`
+  /// hears the rest, and the edits arrive on the change stream as usual.
+  ///
+  /// The interface must not edit until it hears `Finished`, since the
+  /// whole run is one undo step and an edit made meanwhile would join it.
+  bool runScript(
+          {required String path, RustStreamSink<BridgeScriptEvent>? events}) =>
+      BridgeLib.instance.api.crateApiProjectProjectReferenceRunScript(
+          that: this, path: path, events: events);
 
   /// Save to `path`, or to wherever the project was last saved when `path` is
   /// empty. Answers the path actually written, so Dart can show it and stop

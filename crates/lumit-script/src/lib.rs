@@ -17,6 +17,8 @@
 //! shared project's threads do (docs/14 §1).
 
 mod commands;
+mod reach;
+mod script;
 
 use std::path::{Path, PathBuf};
 
@@ -28,6 +30,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 pub use commands::COMMANDS;
+pub use script::{run, Limits, RunError, RunOptions, RunReport};
 
 /// What a command needs from the program it runs in. Lumit has one, and the
 /// command line has its own.
@@ -59,6 +62,13 @@ pub trait Host {
 
     /// Stop export `job`. Stopping one that has finished does nothing.
     fn export_cancel(&self, job: u64) -> Result<(), ScriptError>;
+
+    /// Show `comp` in the Viewer. Where there is no Viewer, as on the command
+    /// line, this does nothing.
+    fn open_comp(&self, comp: Uuid) -> Result<(), ScriptError> {
+        let _ = comp;
+        Ok(())
+    }
 
     /// The ops that make `parent` the parent of `layer` in `comp`, or leave it
     /// with none. By default only the parent changes, so the layer jumps with
@@ -154,9 +164,9 @@ pub struct Command {
 }
 
 /// Run command `name` with `args` (an object, or null for none) and answer
-/// what it did.
+/// what it did. Its paths go wherever they say, as the caller is the person.
 pub fn dispatch(host: &dyn Host, name: &str, args: Value) -> Result<Value, ScriptError> {
-    commands::run(host, name, args)
+    commands::run(host, None, name, args)
 }
 
 /// Run `run` as one undo step: whatever it commits is undone together, and

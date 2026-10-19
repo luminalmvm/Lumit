@@ -66,6 +66,8 @@ if ($null -eq $crt) {
     exit 1
 }
 Copy-Item "$crt\*.dll" $release -Exclude 'vccorlib140.dll' -Force
+# And beside lumit-cli in lib\, which looks for it in its own folder.
+Copy-Item "$crt\*.dll" "$release\lib" -Exclude 'vccorlib140.dll' -Force
 Write-Host "Bundled the C++ runtime from $crt"
 
 # The vendored ACES bakes are read at runtime from data\colour beside the exe

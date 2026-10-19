@@ -14,6 +14,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use crate::reach::{self, Reach};
 use crate::{Command, Host, ScriptError};
 
 // Pieces of schema the commands share. Macros rather than consts so
@@ -58,10 +59,17 @@ macro_rules! keys_form {
         )
     };
 }
+macro_rules! rate {
+    () => {
+        r#"{"description":"1 to 999 frames a second","oneOf":[{"type":"integer","minimum":1,"maximum":999},{"type":"object","properties":{"num":{"type":"integer","minimum":1},"den":{"type":"integer","minimum":1}},"required":["num","den"],"additionalProperties":false}]}"#
+    };
+}
 macro_rules! comp_settings {
     () => {
         concat!(
-            r#""name":{"type":"string"},"width":{"type":"integer","minimum":16,"maximum":16384},"height":{"type":"integer","minimum":16,"maximum":16384},"frame_rate":{"description":"1 to 999 frames a second","oneOf":[{"type":"integer","minimum":1,"maximum":999},{"type":"object","properties":{"num":{"type":"integer","minimum":1},"den":{"type":"integer","minimum":1}},"required":["num","den"],"additionalProperties":false}]},"duration":{"description":"At most 3 hours","allOf":["#,
+            r#""name":{"type":"string"},"width":{"type":"integer","minimum":16,"maximum":16384},"height":{"type":"integer","minimum":16,"maximum":16384},"frame_rate":"#,
+            rate!(),
+            r#","duration":{"description":"At most 3 hours","allOf":["#,
             time!(),
             r#"]},"background":{"type":"array","items":{"type":"number"},"minItems":4,"maxItems":4,"description":"Scene-linear RGBA"}"#
         )
@@ -110,7 +118,7 @@ pub const COMMANDS: &[Command] = &[
         schema: concat!(
             r#"{"type":"object","properties":{"#,
             comp_settings!(),
-            r#"},"additionalProperties":false}"#
+            r#","folder":{"type":["string","null"],"description":"The folder to file it in, by id or name, or null for the top of the panel. Left out, it goes in the Compositions folder"}},"additionalProperties":false}"#
         ),
     },
     Command {
@@ -123,6 +131,34 @@ pub const COMMANDS: &[Command] = &[
             comp_settings!(),
             r#"},"required":["comp"],"additionalProperties":false}"#
         ),
+    },
+    Command {
+        name: "comp.open",
+        summary: "Show a comp in the Viewer",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#"},"required":["comp"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "item.list",
+        summary: "Every item in the project panel: comps, footage, folders and solids, with the folder each is in",
+        schema: none!(),
+    },
+    Command {
+        name: "item.set",
+        summary: "Rename an item, file it in a folder, or set the rate a footage item plays at",
+        schema: concat!(
+            r#"{"type":"object","properties":{"item":{"type":"string","description":"The item's id or name"},"name":{"type":"string"},"folder":{"type":["string","null"],"description":"The folder's id or name, or null for none"},"frame_rate":{"anyOf":["#,
+            rate!(),
+            r#",{"type":"null","description":"A video's own rate"}]}},"required":["item"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "folder.new",
+        summary: "Make a folder in the project panel",
+        schema: r#"{"type":"object","properties":{"name":{"type":"string"},"parent":{"type":"string","description":"The folder to make it in, by id or name"}},"additionalProperties":false}"#,
     },
     Command {
         name: "layer.add",
@@ -146,7 +182,7 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "layer.set",
-        summary: "Change a layer's name, parent, span, switches or 3D switch",
+        summary: "Change a layer's name, parent, span, switches, 3D switch or place in the stack",
         schema: concat!(
             r#"{"type":"object","properties":{"comp":"#,
             comp!(),
@@ -158,7 +194,7 @@ pub const COMMANDS: &[Command] = &[
             time!(),
             r#","start_offset":"#,
             time!(),
-            r#","three_d":{"type":"boolean"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
+            r#","three_d":{"type":"boolean"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"two_node":{"type":"boolean","description":"For a camera, whether it aims at its point of interest"},"switches":{"type":"object","properties":{"visible":{"type":"boolean"},"audible":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"guide":{"type":"boolean"},"motion_blur":{"type":"boolean"},"fx":{"type":"boolean"},"accepts_lights":{"type":"boolean"}},"additionalProperties":false}},"required":["comp","layer"],"additionalProperties":false}"#
         ),
     },
     Command {
@@ -233,24 +269,34 @@ pub const COMMANDS: &[Command] = &[
     },
 ];
 
-pub(crate) fn run(host: &dyn Host, name: &str, args: Value) -> Result<Value, ScriptError> {
+/// `reach`, when there is one, is where the command's paths may go.
+pub(crate) fn run(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    name: &str,
+    args: Value,
+) -> Result<Value, ScriptError> {
     match name {
         "project.info" => project_info(host, parse(args)?),
-        "project.save" => project_save(host, parse(args)?),
+        "project.save" => project_save(host, reach, parse(args)?),
         "undo" => undo(host, parse(args)?, true),
         "redo" => undo(host, parse(args)?, false),
         "comp.list" => comp_list(host, parse(args)?),
         "comp.get" => comp_get(host, parse(args)?),
         "comp.new" => comp_new(host, parse(args)?),
         "comp.set" => comp_set(host, parse(args)?),
+        "comp.open" => comp_open(host, parse(args)?),
+        "item.list" => item_list(host, parse(args)?),
+        "item.set" => item_set(host, parse(args)?),
+        "folder.new" => folder_new(host, parse(args)?),
         "layer.add" => layer_add(host, parse(args)?),
         "layer.get" => layer_get(host, parse(args)?),
         "layer.set" => layer_set(host, parse(args)?),
         "layer.delete" => layer_delete(host, parse(args)?),
         "layer.keys" => layer_keys(host, parse(args)?),
         "markers.set" => markers_set(host, parse(args)?),
-        "footage.import" => footage_import(host, parse(args)?),
-        "export.start" => export_start(host, parse(args)?),
+        "footage.import" => footage_import(host, reach, parse(args)?),
+        "export.start" => export_start(host, reach, parse(args)?),
         "export.status" => export_status(host, parse(args)?),
         "export.cancel" => export_cancel(host, parse(args)?),
         _ => Err(ScriptError::UnknownCommand(name.to_owned())),
@@ -383,6 +429,10 @@ fn kind_name(kind: &LayerKind) -> &'static str {
 
 fn layer_json(comp: &Composition, layer: &Layer) -> Value {
     let s = &layer.switches;
+    let two_node = match &layer.kind {
+        LayerKind::Camera { options, .. } => Some(options.two_node),
+        _ => None,
+    };
     json!({
         "id": layer.id,
         "name": layer.name,
@@ -404,6 +454,7 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
             "fx": s.fx,
             "accepts_lights": s.accepts_lights,
         },
+        "two_node": two_node,
     })
 }
 
@@ -440,8 +491,13 @@ struct SaveArgs {
     path: Option<PathBuf>,
 }
 
-fn project_save(host: &dyn Host, a: SaveArgs) -> Result<Value, ScriptError> {
-    let path = host.save(a.path.as_deref())?;
+fn project_save(host: &dyn Host, reach: Option<&Reach>, a: SaveArgs) -> Result<Value, ScriptError> {
+    let path = a.path.as_deref().map(reach::plain).transpose()?;
+    let path = match reach {
+        Some(reach) => reach.save(host, path)?,
+        None => path.map(Path::to_path_buf),
+    };
+    let path = host.save(path.as_deref())?;
     Ok(json!({ "path": path }))
 }
 
@@ -486,6 +542,21 @@ enum Rate {
     Exact { num: u32, den: u32 },
 }
 
+impl Rate {
+    fn checked(self) -> Result<FrameRate, ScriptError> {
+        let (num, den) = match self {
+            Rate::Whole(fps) => (fps, 1),
+            Rate::Exact { num, den } => (num, den),
+        };
+        // After Effects' range, which is plenty for anything a comp shows.
+        let fps = (u64::from(num), u64::from(den));
+        if fps.0 < fps.1 || fps.0 > 999 * fps.1 {
+            return Err(bad("A frame rate is 1 to 999 frames a second."));
+        }
+        FrameRate::new(num, den).map_err(|_| bad("That frame rate is nought."))
+    }
+}
+
 /// What `comp.new` and `comp.set` can change. `comp` names the comp to change
 /// and is left out for a new one.
 #[derive(Deserialize)]
@@ -498,6 +569,8 @@ struct CompSettingsArgs {
     frame_rate: Option<Rate>,
     duration: Option<Time>,
     background: Option<[f32; 4]>,
+    #[serde(default, deserialize_with = "present")]
+    folder: Option<Option<String>>,
 }
 
 impl CompSettingsArgs {
@@ -506,18 +579,7 @@ impl CompSettingsArgs {
     fn over(self, base: edits::CompSettings) -> Result<edits::CompSettings, ScriptError> {
         let frame_rate = match self.frame_rate {
             None => base.frame_rate,
-            Some(rate) => {
-                let (num, den) = match rate {
-                    Rate::Whole(fps) => (fps, 1),
-                    Rate::Exact { num, den } => (num, den),
-                };
-                // After Effects' range, which is plenty for anything a comp shows.
-                let fps = (u64::from(num), u64::from(den));
-                if fps.0 < fps.1 || fps.0 > 999 * fps.1 {
-                    return Err(bad("A frame rate is 1 to 999 frames a second."));
-                }
-                FrameRate::new(num, den).map_err(|_| bad("That frame rate is nought."))?
-            }
+            Some(rate) => rate.checked()?,
         };
         let seconds = match self.duration {
             Some(t) => t.at(frame_rate)?,
@@ -540,13 +602,40 @@ impl CompSettingsArgs {
     }
 }
 
-fn comp_new(host: &dyn Host, a: CompSettingsArgs) -> Result<Value, ScriptError> {
+fn comp_new(host: &dyn Host, mut a: CompSettingsArgs) -> Result<Value, ScriptError> {
     if a.comp.is_some() {
         return Err(bad("comp.new makes a comp, so it takes no comp to change."));
     }
     let store = host.store();
+    let doc = store.snapshot();
+    let folder = a.folder.take();
     let settings = a.over(edits::CompSettings::default())?;
-    let (id, ops) = edits::new_comp_ops(&store.snapshot(), settings, None);
+    let (id, mut ops) = edits::new_comp_ops(&doc, settings, None);
+    if let Some(folder) = folder {
+        // Filed where asked, so of the ops only the comp itself is kept and
+        // the Compositions folder is neither made nor used.
+        let folder = folder.map(|key| find_folder(&doc, &key)).transpose()?;
+        ops = ops
+            .into_iter()
+            .filter_map(|op| match op {
+                Op::AddItem { item, .. } if matches!(*item, ProjectItem::Composition(_)) => {
+                    Some(Op::AddItem {
+                        index: doc.items.len(),
+                        item,
+                    })
+                }
+                _ => None,
+            })
+            .collect();
+        if let Some(f) = folder.and_then(|f| doc.folder(f)) {
+            let mut children = f.children.clone();
+            children.push(id);
+            ops.push(Op::SetFolderChildren {
+                folder: f.id,
+                children,
+            });
+        }
+    }
     commit(store, ops)?;
     let doc = store.snapshot();
     let comp = doc
@@ -562,6 +651,9 @@ fn comp_set(host: &dyn Host, a: CompSettingsArgs) -> Result<Value, ScriptError> 
         .comp
         .clone()
         .ok_or_else(|| bad("comp.set needs the comp to change."))?;
+    if a.folder.is_some() {
+        return Err(bad("comp.set does not file a comp. item.set does."));
+    }
     let comp = find_comp(&doc, &key)?;
     let base = edits::CompSettings {
         name: comp.name.clone(),
@@ -579,6 +671,159 @@ fn comp_set(host: &dyn Host, a: CompSettingsArgs) -> Result<Value, ScriptError> 
         .comp(comp.id)
         .ok_or_else(|| ScriptError::Failed("The comp went away.".into()))?;
     Ok(comp_json(comp))
+}
+
+fn comp_open(host: &dyn Host, a: CompArgs) -> Result<Value, ScriptError> {
+    let comp = find_comp(&host.store().snapshot(), &a.comp)?.id;
+    host.open_comp(comp)?;
+    Ok(json!({}))
+}
+
+fn find_item<'a>(doc: &'a Document, key: &str) -> Result<&'a ProjectItem, ScriptError> {
+    let id = Uuid::try_parse(key).ok();
+    doc.items
+        .iter()
+        .find(|i| Some(i.id()) == id)
+        .or_else(|| doc.items.iter().find(|i| i.name() == key))
+        .ok_or_else(|| {
+            ScriptError::NotFound(format!("There is nothing called \"{key}\" in the project."))
+        })
+}
+
+fn find_folder(doc: &Document, key: &str) -> Result<Uuid, ScriptError> {
+    match find_item(doc, key)? {
+        ProjectItem::Folder(f) => Ok(f.id),
+        _ => Err(bad(format!("\"{key}\" is not a folder."))),
+    }
+}
+
+/// The folder `id` is filed in, if any.
+fn folder_of(doc: &Document, id: Uuid) -> Option<Uuid> {
+    doc.items.iter().find_map(|i| match i {
+        ProjectItem::Folder(f) if f.children.contains(&id) => Some(f.id),
+        _ => None,
+    })
+}
+
+fn item_json(doc: &Document, item: &ProjectItem) -> Value {
+    let kind = match item {
+        ProjectItem::Footage(_) => "footage",
+        ProjectItem::Folder(_) => "folder",
+        ProjectItem::Composition(_) => "comp",
+        ProjectItem::Solid(_) => "solid",
+    };
+    let mut answer = json!({
+        "id": item.id(),
+        "name": item.name(),
+        "kind": kind,
+        "folder": folder_of(doc, item.id()),
+    });
+    if let ProjectItem::Footage(f) = item {
+        let rate = f
+            .sequence
+            .as_ref()
+            .map(|s| s.frame_rate)
+            .or(f.interpretation.frame_rate);
+        answer["sequence"] = json!(f.sequence.is_some());
+        answer["frame_rate"] = json!(rate.map(|r| json!({ "num": r.num(), "den": r.den() })));
+        answer["path"] = json!(f.media.absolute_path);
+    }
+    answer
+}
+
+fn item_list(host: &dyn Host, _: NoArgs) -> Result<Value, ScriptError> {
+    let doc = host.store().snapshot();
+    let items: Vec<Value> = doc.items.iter().map(|i| item_json(&doc, i)).collect();
+    Ok(json!({ "items": items }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ItemSetArgs {
+    item: String,
+    name: Option<String>,
+    #[serde(default, deserialize_with = "present")]
+    folder: Option<Option<String>>,
+    #[serde(default, deserialize_with = "present")]
+    frame_rate: Option<Option<Rate>>,
+}
+
+fn item_set(host: &dyn Host, a: ItemSetArgs) -> Result<Value, ScriptError> {
+    let store = host.store();
+    let doc = store.snapshot();
+    let item = find_item(&doc, &a.item)?;
+    let id = item.id();
+    let mut ops = Vec::new();
+    if let Some(name) = a.name {
+        ops.push(Op::RenameItem { id, name });
+    }
+    if let Some(rate) = a.frame_rate {
+        let ProjectItem::Footage(f) = item else {
+            return Err(bad("Only footage has a frame rate of its own."));
+        };
+        let rate = rate.map(Rate::checked).transpose()?;
+        // A run of stills keeps its rate on the run, a video on how it is read.
+        if f.sequence.is_some() {
+            ops.push(Op::SetSequenceRate {
+                id,
+                frame_rate: rate
+                    .ok_or_else(|| bad("A run of stills has no rate of its own to go back to."))?,
+            });
+        } else {
+            let mut interpretation = f.interpretation.clone();
+            interpretation.frame_rate = rate;
+            ops.push(Op::SetFootageInterpretation {
+                id,
+                interpretation: Box::new(interpretation),
+            });
+        }
+    }
+    match a.folder {
+        Some(Some(key)) => {
+            let folder = find_folder(&doc, &key)?;
+            ops.extend(
+                lumit_core::ops::move_to_folder_ops(&doc, id, folder)
+                    .ok_or_else(|| bad("A folder cannot go inside itself."))?,
+            );
+        }
+        Some(None) => {
+            // Out of whatever folder holds it, to the top of the panel.
+            if let Some(ProjectItem::Folder(f)) = folder_of(&doc, id).and_then(|f| doc.item(f)) {
+                ops.push(Op::SetFolderChildren {
+                    folder: f.id,
+                    children: f.children.iter().copied().filter(|c| *c != id).collect(),
+                });
+            }
+        }
+        None => {}
+    }
+    commit(store, ops)?;
+    let doc = store.snapshot();
+    let item = doc
+        .item(id)
+        .ok_or_else(|| ScriptError::Failed("The item went away.".into()))?;
+    Ok(item_json(&doc, item))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FolderArgs {
+    #[serde(default)]
+    name: String,
+    parent: Option<String>,
+}
+
+fn folder_new(host: &dyn Host, a: FolderArgs) -> Result<Value, ScriptError> {
+    let store = host.store();
+    let doc = store.snapshot();
+    let parent = a.parent.map(|key| find_folder(&doc, &key)).transpose()?;
+    let (id, ops) = lumit_core::ops::new_folder_ops(&doc, &a.name, parent);
+    commit(store, ops)?;
+    let doc = store.snapshot();
+    let item = doc
+        .item(id)
+        .ok_or_else(|| ScriptError::Failed("The folder was not made.".into()))?;
+    Ok(item_json(&doc, item))
 }
 
 #[derive(Deserialize, Clone, Copy)]
@@ -750,6 +995,8 @@ struct SetArgs {
     out: Option<Time>,
     start_offset: Option<Time>,
     three_d: Option<bool>,
+    index: Option<usize>,
+    two_node: Option<bool>,
     #[serde(default)]
     switches: SwitchArgs,
 }
@@ -813,6 +1060,26 @@ fn layer_set(host: &dyn Host, a: SetArgs) -> Result<Value, ScriptError> {
             comp: c,
             layer,
             three_d,
+        });
+    }
+    if let Some(index) = a.index {
+        ops.push(Op::ReorderLayer {
+            comp: c,
+            layer,
+            new_index: index.min(comp.layers.len().saturating_sub(1)),
+        });
+    }
+    if let Some(two_node) = a.two_node {
+        let LayerKind::Camera { options, .. } = &found.kind else {
+            return Err(bad("Only a camera has a point of interest to aim at."));
+        };
+        ops.push(Op::SetCameraSettings {
+            comp: c,
+            layer,
+            settings: lumit_core::model::CameraSettings {
+                two_node,
+                ..options.settings()
+            },
         });
     }
     type Switch = fn(Uuid, Uuid, bool) -> Op;
@@ -1081,8 +1348,20 @@ struct ImportArgs {
     paths: Vec<PathBuf>,
 }
 
-fn footage_import(host: &dyn Host, a: ImportArgs) -> Result<Value, ScriptError> {
-    let ids = host.import_footage(&a.paths)?;
+fn footage_import(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    a: ImportArgs,
+) -> Result<Value, ScriptError> {
+    let paths = a
+        .paths
+        .iter()
+        .map(|path| match (reach::plain(path)?, reach) {
+            (path, Some(reach)) => reach.footage(host, path),
+            (path, None) => Ok(path.to_path_buf()),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let ids = host.import_footage(&paths)?;
     let doc = host.store().snapshot();
     let items: Vec<Value> = ids
         .iter()
@@ -1104,9 +1383,18 @@ struct ExportArgs {
     out: Option<PathBuf>,
 }
 
-fn export_start(host: &dyn Host, a: ExportArgs) -> Result<Value, ScriptError> {
+fn export_start(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    a: ExportArgs,
+) -> Result<Value, ScriptError> {
     let comp = find_comp(&host.store().snapshot(), &a.comp)?.id;
-    let job = host.export_start(comp, a.out.as_deref().map(Path::new))?;
+    let out = a.out.as_deref().map(reach::plain).transpose()?;
+    let out = match reach {
+        Some(reach) => reach.export(host, out)?,
+        None => out.map(Path::to_path_buf),
+    };
+    let job = host.export_start(comp, out.as_deref())?;
     Ok(json!({ "job": job }))
 }
 
