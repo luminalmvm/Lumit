@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'extensions.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `flatten`, `outcome`, `read`, `register_effects`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Every extension installed, by id.
 ///
@@ -101,6 +101,12 @@ Future<bool> extensionRemoveFolder({required String folder}) =>
 String? extensionDataDir({required String id}) =>
     BridgeLib.instance.api.crateApiExtensionsExtensionDataDir(id: id);
 
+/// The commands an extension with the Edit permission may run. `import` is
+/// whether it has the Import permission too.
+List<BridgeExtensionCommand> extensionCommands({required bool import_}) =>
+    BridgeLib.instance.api
+        .crateApiExtensionsExtensionCommands(import_: import_);
+
 /// One extension, installed or about to be.
 class BridgeExtension {
   /// Its folder name, and what [`extension_remove`] takes.
@@ -186,6 +192,51 @@ class BridgeExtension {
           hosts == other.hosts &&
           broken == other.broken &&
           effects == other.effects;
+}
+
+/// One of Lumit's commands, as an extension's page lists it.
+class BridgeExtensionCommand {
+  final String name;
+
+  /// One line saying what it does.
+  final String summary;
+
+  /// A JSON Schema for its arguments, as JSON text.
+  final String schema;
+
+  const BridgeExtensionCommand({
+    required this.name,
+    required this.summary,
+    required this.schema,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ summary.hashCode ^ schema.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeExtensionCommand &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          summary == other.summary &&
+          schema == other.schema;
+}
+
+@freezed
+sealed class BridgeExtensionEdit with _$BridgeExtensionEdit {
+  const BridgeExtensionEdit._();
+
+  /// It ran. `result` is the command's answer as JSON text.
+  const factory BridgeExtensionEdit.done({
+    required String result,
+  }) = BridgeExtensionEdit_Done;
+
+  /// It did nothing. `code` is one a page's refused call carries.
+  const factory BridgeExtensionEdit.refused({
+    required String code,
+    required String message,
+  }) = BridgeExtensionEdit_Refused;
 }
 
 /// One LFX effect an extension carries.

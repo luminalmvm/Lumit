@@ -678,6 +678,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExtension dco_decode_bridge_extension(dynamic raw);
 
   @protected
+  BridgeExtensionCommand dco_decode_bridge_extension_command(dynamic raw);
+
+  @protected
+  BridgeExtensionEdit dco_decode_bridge_extension_edit(dynamic raw);
+
+  @protected
   BridgeExtensionEffect dco_decode_bridge_extension_effect(dynamic raw);
 
   @protected
@@ -1438,6 +1444,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeExtension> dco_decode_list_bridge_extension(dynamic raw);
+
+  @protected
+  List<BridgeExtensionCommand> dco_decode_list_bridge_extension_command(
+      dynamic raw);
 
   @protected
   List<BridgeExtensionEffect> dco_decode_list_bridge_extension_effect(
@@ -2698,6 +2708,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExtension sse_decode_bridge_extension(SseDeserializer deserializer);
 
   @protected
+  BridgeExtensionCommand sse_decode_bridge_extension_command(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExtensionEdit sse_decode_bridge_extension_edit(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeExtensionEffect sse_decode_bridge_extension_effect(
       SseDeserializer deserializer);
 
@@ -3572,6 +3590,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeExtension> sse_decode_list_bridge_extension(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeExtensionCommand> sse_decode_list_bridge_extension_command(
       SseDeserializer deserializer);
 
   @protected
@@ -4982,6 +5004,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeExtension self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_extension_command(
+      BridgeExtensionCommand self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_extension_edit(
+      BridgeExtensionEdit self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_extension_effect(
       BridgeExtensionEffect self, SseSerializer serializer);
 
@@ -5954,6 +5984,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_extension(
       List<BridgeExtension> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_extension_command(
+      List<BridgeExtensionCommand> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_extension_effect(
