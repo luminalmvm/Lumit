@@ -470,7 +470,7 @@ impl<'a> Fx<'a> {
 
 /// `value × k + c` on the still value, on every key, and on every handle's
 /// speed.
-fn affine(p: LumProperty, k: f64, c: f64) -> LumProperty {
+pub(super) fn affine(p: LumProperty, k: f64, c: f64) -> LumProperty {
     if (k - 1.0).abs() < f64::EPSILON && c.abs() < f64::EPSILON {
         return p;
     }

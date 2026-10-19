@@ -64,16 +64,16 @@ pub(crate) struct Row {
     /// (docs/11 §5).
     ///
     /// If one of them is in the catalogue this session — the user has the
-    /// plug-in installed — the effect maps straight to it rather than to
-    /// Lumit's nearest likeness, because the plug-in *is* the effect. The rule
-    /// is **equality with a discovered identifier**, never a resemblance
-    /// between labels: two products with similar names are two products. A
+    /// plug-in installed — the effect maps straight to it, because the plug-in
+    /// *is* the effect. The rule is **equality with a discovered identifier**,
+    /// never a resemblance between labels: two products with similar names are
+    /// two products. A
     /// list rather than one string because a vendor renames its identifier
     /// between eras (GenArts to Boris FX) and both eras are the same effect.
     ///
     /// An identifier this file has wrong fails the safe way: nothing matches
-    /// it, and the effect takes the `lumit`/`conversion` road below, exactly as
-    /// on a machine without the plug-in.
+    /// it, and the effect becomes a placeholder, exactly as on a machine
+    /// without the plug-in.
     #[serde(default)]
     pub ofx: Vec<String>,
     /// The match name is the famous one rather than an audited one.
@@ -178,6 +178,12 @@ mod tests {
                         row.ae
                     );
                 }
+                // A third-party effect is its own plug-in or nothing.
+                None if !row.ofx.is_empty() => assert!(
+                    row.lumit.is_empty() && row.conversion.is_empty(),
+                    "{} is somebody else's effect and must not map to one of ours",
+                    row.ae
+                ),
                 None => {
                     assert!(!row.lumit.is_empty(), "{} names no Lumit effect", row.ae);
                     assert!(

@@ -297,11 +297,6 @@ pub enum Reason {
         carried: usize,
         controls: usize,
     },
-    /// A third-party effect with no OFX build installed: the closest Lumit
-    /// effect stands in for it, at its own defaults. Nobody outside the
-    /// vendor can carry the dials across, so the effect is in the right place
-    /// in the stack and is dialled once.
-    EffectNearest { match_name: String, instead: String },
 }
 
 impl std::fmt::Display for Reason {
@@ -551,14 +546,6 @@ impl std::fmt::Display for Reason {
                 f,
                 "{match_name} imported as the {plugin} plug-in you have installed, which is the \
                  same effect — {carried} of its {controls} controls carried across by name"
-            ),
-            Self::EffectNearest {
-                match_name,
-                instead,
-            } => write!(
-                f,
-                "{match_name} is somebody else's effect — {instead} is the closest in Lumit and \
-                 imported in its place, at its own defaults"
             ),
         }
     }

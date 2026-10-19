@@ -18,28 +18,19 @@
 //! rule rather than a gap — docs/11 §5 is explicit that an unmapped match name
 //! becomes a placeholder and **never the closest guess**.
 //!
-//! **A third-party effect is the one exception, and it has two roads**
-//! (docs/11 §5). Somebody else's plug-in has internals nobody here can
-//! re-implement, so an equivalent is never on offer — but two lesser things
-//! are, and which one applies is a fact about the machine doing the import:
+//! **A third-party effect is the one exception** (docs/11 §5). Somebody
+//! else's plug-in has internals nobody here can re-implement, so it never maps
+//! to a Lumit effect. If the user has the **vendor's own OFX build** of it
+//! installed, it is that plug-in: the row names the plug-in's identifier,
+//! [`direct`] looks it up in the catalogue, and the controls carry across by
+//! name wherever the two sides agree on the type. Otherwise it becomes a
+//! placeholder with every control kept.
 //!
-//! * The user has the **vendor's own OFX build** of the same plug-in installed.
-//!   Then it is not a likeness, it is the effect: the row names the plug-in's
-//!   identifier, [`direct`] looks it up in the catalogue, and the controls carry
-//!   across by name wherever the two sides agree on the type.
-//! * They do not. Then the row names the **closest Lumit effect**, and
-//!   [`nearest`] puts it in the stack at its own defaults. No dial is guessed
-//!   across a vendor boundary, because a guessed dial is a silently wrong
-//!   picture where a default is a visible one — the report says which effect it
-//!   is standing in for, and it is dialled once. **A Sapphire dissolve is the
-//!   one exception**: its Dissolve Percent is the transition itself, so
-//!   it crosses through the owner's own curve on both roads.
-//!
-//! Both roads report. The rule that survives untouched is the one that matters:
+//! Both report. The rule that survives untouched is the one that matters:
 //! nothing is ever *silently* something else.
 
 use lumit_core::anim::{Animation, Property as LumProperty};
-use lumit_core::fx::ParamKind;
+use lumit_core::fx::{ParamKind, Unit};
 use lumit_core::model::{EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue};
 use uuid::Uuid;
 
@@ -101,17 +92,12 @@ fn claim(conv: &mut Conv<'_>, path: &ItemPath, node: &Property) -> Option<Effect
     if let Some(controls) = pseudo(conv, path, node) {
         return Some(controls);
     }
-    // The two third-party roads come first, and in this order: the vendor's own
-    // plug-in beats Lumit's nearest likeness, because it is the effect itself.
-    // Neither road can fire on a row that names neither an `ofx` identifier nor
-    // the `nearest` conversion, so Adobe's own effects reach the two halves
-    // below exactly as they always have.
+    // The vendor's own plug-in comes first. It can't fire on a row with no
+    // `ofx` identifier, so Adobe's own effects reach the two halves below
+    // exactly as they always have.
     if let Some(row) = super::table::table().row(match_name_of(node)) {
         if let Some(mapped) = direct(conv, path, node, row) {
             return Some(mapped);
-        }
-        if row.conversion == "nearest" {
-            return nearest(conv, path, node, row);
         }
     }
     if let Some(mapped) = super::fx_colour::claim(conv, path, node) {
@@ -254,8 +240,8 @@ fn flatten<'a>(nodes: &'a [Property], out: &mut Vec<&'a Property>) {
 /// session or does not. Nothing here compares labels or looks for a
 /// resemblance — two products with similar names are two products, and a
 /// resemblance mapped to a render is somebody else's picture with our name on
-/// it. An identifier the table has wrong therefore matches nothing, and the row
-/// takes [`nearest`] instead, exactly as on a machine without the plug-in.
+/// it. An identifier the table has wrong therefore matches nothing, and the
+/// effect becomes a placeholder, exactly as on a machine without the plug-in.
 fn direct(
     conv: &mut Conv<'_>,
     path: &ItemPath,
@@ -361,6 +347,17 @@ fn carry(
                 | ParamKind::Angle { .. },
             ) => {
                 let p = from_node(conv, at, leaf, 0, 0.0);
+                // After Effects keeps a share of the frame in the layer's
+                // pixels: Sapphire's X Rand Amp of 0.1 is 192 there.
+                let p = match param.unit {
+                    Unit::FrameWidth => {
+                        super::fx_colour::affine(p, 1.0 / conv.size.0.max(1.0), 0.0)
+                    }
+                    Unit::FrameHeight => {
+                        super::fx_colour::affine(p, 1.0 / conv.size.1.max(1.0), 0.0)
+                    }
+                    _ => p,
+                };
                 EffectValue::Float(if dissolve && folded(name) == DISSOLVE_AMOUNT {
                     curved(conv, here, schema.label, p)
                 } else {
@@ -415,20 +412,6 @@ fn is_dissolve(row: &Row) -> bool {
 /// Sapphire's Dissolve Percent, [`folded`].
 const DISSOLVE_AMOUNT: &str = "dissolvepercent";
 
-/// Every Lumit transition's amount is called Completion (docs/08 §3.46, §3.47,
-/// §3.70, §3.72), so the nearest road has one place to put the curve's answer.
-const COMPLETION: &str = "completion";
-
-/// The Dissolve Percent leaf of a Sapphire dissolve, wherever it sits.
-fn amount_leaf(node: &Property) -> Option<&Property> {
-    node.children().iter().find_map(|leaf| {
-        if leaf.group.is_some() {
-            return amount_leaf(leaf);
-        }
-        (folded(display_name(leaf, match_name_of(leaf))) == DISSOLVE_AMOUNT).then_some(leaf)
-    })
-}
-
 /// **The owner's dissolve curve** (docs/11 §5a).
 ///
 /// A Sapphire dissolve's Dissolve Percent is not our amount and copying it
@@ -474,55 +457,6 @@ fn curved(conv: &mut Conv<'_>, here: &ItemPath, effect: &str, p: LumProperty) ->
         },
     );
     p
-}
-
-/// **The closest Lumit effect, at its own defaults** (docs/11 §5).
-///
-/// For a third-party effect with no OFX build installed. The effect arrives in
-/// the stack, in the right place, switched on or off as it was — and dialled to
-/// Lumit's defaults, because the vendor's numbers mean the vendor's algorithm
-/// and carrying them over would be a picture that looks deliberate and is not.
-/// The report names both sides so the one dial-in is somewhere the reader can
-/// find it.
-///
-/// **A Sapphire dissolve is the one exception**: its Dissolve Percent
-/// *is* the transition rather than a dial on one, so it comes across through
-/// [`dissolve_curve`] rather than being left behind at Completion's default.
-fn nearest(
-    conv: &mut Conv<'_>,
-    path: &ItemPath,
-    node: &Property,
-    row: &Row,
-) -> Option<EffectInstance> {
-    let mut inst = lumit_core::fx::instantiate(&row.lumit)?;
-    inst.enabled = node.enabled.unwrap_or(true);
-    let here = path.property(display_name(node, match_name_of(node)));
-
-    // The one dial a nearest road carries, and the owner's ruling rather than a
-    // guess across the vendor boundary: a Sapphire dissolve is *only* its
-    // Dissolve Percent, so a transition standing in with none of it would sit
-    // at half-complete for the whole shot instead of doing the cut.
-    if is_dissolve(row) {
-        if let Some(leaf) = amount_leaf(node) {
-            let label = lumit_core::fx::schema(&row.lumit).map_or(row.lumit.as_str(), |s| s.label);
-            let p = from_node(conv, path, leaf, 0, 0.0);
-            let p = curved(conv, &here, label, p);
-            if let Some(target) = inst.params.iter_mut().find(|p| p.id == COMPLETION) {
-                target.value = EffectValue::Float(p);
-            }
-        }
-    }
-
-    conv.report.row(
-        here,
-        Outcome::Adjusted,
-        Reason::EffectNearest {
-            match_name: match_name_of(node).to_string(),
-            instead: lumit_core::fx::schema(&row.lumit)
-                .map_or_else(|| row.lumit.clone(), |s| s.label.to_string()),
-        },
-    );
-    Some(inst)
 }
 
 /// An inert instance that keeps everything (docs/11 §6).

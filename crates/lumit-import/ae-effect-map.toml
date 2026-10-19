@@ -31,14 +31,8 @@
 #                  maps straight to it — the plug-in IS the effect — and its
 #                  controls carry across by name where the types agree. Equality
 #                  with a discovered identifier, never a resemblance between
-#                  labels. A wrong identifier matches nothing and the row's
-#                  `lumit`/`conversion` road is taken instead.
-#   conversion =   The row maps to the CLOSEST Lumit effect rather than to an
-#     "nearest"    equivalent: a third-party effect whose internals are
-#                  the vendor's. The Lumit effect arrives in the right place in
-#                  the stack at its own defaults and the report says so — no
-#                  control is guessed across, because a guessed dial is a
-#                  silently wrong picture where a default is a visible one.
+#                  labels. A wrong identifier matches nothing, and the effect
+#                  becomes a placeholder as it does without the plug-in.
 #   pending_audit  The match name is the famous one but was not in the audited
 #                  set. Safe to ship: a match name this table has wrong
 #                  is a name nothing claims, and an unclaimed name becomes a
@@ -507,90 +501,43 @@ suggest = "Retime with flow frame interpolation does the same job"
 
 # --- Third-party effects (docs/11 §5) --------------------------------------
 #
-# The vendor's internals are the vendor's, so none of these is an equivalent.
-# Each row says where the effect goes: to the vendor's own OFX build of it when
-# the user has that installed (`ofx`, the plug-in IS the effect), and otherwise
-# to the closest Lumit effect at its defaults (`conversion = "nearest"`), in the
-# right place in the stack with the report saying what it is. Every row here is
-# `pending_audit`: the After Effects match names come from the 2026-08-20 audit
-# where the audited machine had the plug-in, and the OFX identifiers are read
-# off the vendor's builds rather than from a sitting of our own.
+# The vendor's internals are the vendor's, so none of these maps to a Lumit
+# effect. With the vendor's own OFX build installed (`ofx`) the effect is that
+# plug-in, and without it the effect becomes a placeholder with every control
+# kept. The After Effects match names come from the 2026-08-20 audit and a count
+# of 309 editors' projects (2026-10-14). The Magic Bullet Looks and Universe
+# identifiers were read off an installed copy, and the Sapphire ones follow
+# Sapphire's own shape with the category the audit records.
 
 [[effect]]
 ae = "S_Glow"
 name = "S_Glow"
-lumit = "glow"
-conversion = "nearest"
 ofx = ["com.genarts.sapphire.Lighting.S_Glow", "com.borisfx.sapphire.Lighting.S_Glow"]
 pending_audit = true
 
 [[effect]]
 ae = "S_Shake"
 name = "S_Shake"
-lumit = "shake"
-conversion = "nearest"
 ofx = ["com.genarts.sapphire.Distort.S_Shake", "com.borisfx.sapphire.Distort.S_Shake"]
 pending_audit = true
 
 [[effect]]
 ae = "S_DistortChroma"
 name = "S_DistortChroma"
-lumit = "chromatic_aberration"
-conversion = "nearest"
 ofx = [
   "com.genarts.sapphire.Distort.S_DistortChroma",
   "com.borisfx.sapphire.Distort.S_DistortChroma",
 ]
 pending_audit = true
 
-# Sapphire's dissolve transitions. The reference project uses exactly
-# one of the family — S_DissolveLuma, whose Dissolve Percent is keyframed on
-# every instance — so that is the row seeded here; a sibling is one more row and
-# no code, the curve being keyed off the `S_Dissolve` prefix rather than off a
-# list. Lumit's nearest is Linear wipe: Completion is the same sweep, and the
-# Matte row makes it a gradient wipe, which is what a luma dissolve is.
-#
-# The identifiers are the two rows above's own shape with the Sapphire category
-# the 2026-08-20 audit records for this effect ("Sapphire Transitions") in the
-# group position — evidence rather than the Lenscare rows' blank, and still
-# `pending_audit`. If it is wrong it matches nothing and the row takes the
-# nearest road, which is the road it takes on every machine without Sapphire.
 [[effect]]
 ae = "S_DissolveLuma"
 name = "S_DissolveLuma"
-lumit = "linear_wipe"
-conversion = "nearest"
 ofx = [
   "com.genarts.sapphire.Transitions.S_DissolveLuma",
   "com.borisfx.sapphire.Transitions.S_DissolveLuma",
 ]
 pending_audit = true
-
-# Lenscare's two defocus effects. No `ofx` line: the OFX build's identifier was
-# not read off a live installation, and a guessed identifier that matched
-# nothing would read as one that had been checked. Add it here — the identifier
-# is the one Effects & presets shows beside the plug-in (docs/12 §2.6) — and the
-# direct road opens with no rebuild.
-[[effect]]
-ae = "DRFL Depth Of Field"
-name = "FL Depth of Field"
-lumit = "dof"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
-ae = "DRFL Out Of Focus"
-name = "FL Out of Focus"
-lumit = "dof"
-conversion = "nearest"
-pending_audit = true
-
-# The third-party effects editors use most, from a count of 309 editors'
-# projects (2026-10-14). The match names are as those projects store them.
-# The Magic Bullet Looks and Universe identifiers were read off an installed
-# copy. The Sapphire ones are the shape of the rows above, with the category
-# the audit records. RE:Vision's and Twixtor's OFX identifiers were not read
-# off an install, so they are left out, as Lenscare's are.
 
 [[effect]]
 ae = "MB LookSuite3"
@@ -600,85 +547,18 @@ ofx = ["com.redgiant.magicbullet.looks.x64"]
 pending_audit = true
 
 [[effect]]
-ae = "Videocopilot Twitch"
-name = "Twitch"
-lumit = "shake"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
-ae = "VIDEOCOPILOT OpticalFlares"
-name = "Optical Flares"
-lumit = "lens_flare"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
-ae = "tc Shine"
-name = "Shine"
-lumit = "glow"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
 ae = "S_Flicker"
 name = "S_Flicker"
-lumit = "flash"
-conversion = "nearest"
 ofx = ["com.genarts.sapphire.Time.S_Flicker", "com.borisfx.sapphire.Time.S_Flicker"]
-pending_audit = true
-
-[[effect]]
-ae = "Smart Motion Blur 3.x"
-name = "RSMB"
-lumit = "motion_blur"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
-ae = "RS Motion Blur Pro A 3.x"
-name = "RSMB Pro"
-lumit = "motion_blur"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
-ae = "tc Particular"
-name = "Particular"
-lumit = "particulate"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
-ae = "tc Form"
-name = "Form"
-lumit = "particulate"
-conversion = "nearest"
 pending_audit = true
 
 [[effect]]
 ae = "S_FilmDamage"
 name = "S_FilmDamage"
-lumit = "add_grain"
-conversion = "nearest"
 ofx = [
   "com.genarts.sapphire.Stylize.S_FilmDamage",
   "com.borisfx.sapphire.Stylize.S_FilmDamage",
 ]
-pending_audit = true
-
-[[effect]]
-ae = "Red Giant MisFire Flicker"
-name = "MisFire Flicker"
-lumit = "flash"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
-ae = "Magic Bullet MisFire Flicker"
-name = "MisFire Flicker"
-lumit = "flash"
-conversion = "nearest"
 pending_audit = true
 
 [[effect]]
@@ -688,17 +568,8 @@ suggest = "Retime with flow frame interpolation does the same job"
 pending_audit = true
 
 [[effect]]
-ae = "VIDEOCOPILOT VIBRANCE"
-name = "VC Color Vibrance"
-lumit = "vibrancy"
-conversion = "nearest"
-pending_audit = true
-
-[[effect]]
 ae = "S_WarpChroma"
 name = "S_WarpChroma"
-lumit = "chromatic_aberration"
-conversion = "nearest"
 ofx = [
   "com.genarts.sapphire.Distort.S_WarpChroma",
   "com.borisfx.sapphire.Distort.S_WarpChroma",
@@ -708,23 +579,12 @@ pending_audit = true
 [[effect]]
 ae = "S_QuadTone"
 name = "S_QuadTone"
-lumit = "tritone"
-conversion = "nearest"
 ofx = ["com.genarts.sapphire.Adjust.S_QuadTone", "com.borisfx.sapphire.Adjust.S_QuadTone"]
-pending_audit = true
-
-[[effect]]
-ae = "PEDG"
-name = "Deep Glow"
-lumit = "glow"
-conversion = "nearest"
 pending_audit = true
 
 [[effect]]
 ae = "S_Vignette"
 name = "S_Vignette"
-lumit = "vignette"
-conversion = "nearest"
 ofx = [
   "com.genarts.sapphire.Stylize.S_Vignette",
   "com.borisfx.sapphire.Stylize.S_Vignette",
@@ -734,15 +594,11 @@ pending_audit = true
 [[effect]]
 ae = "Universe_Stylize_Carousel"
 name = "uni.Carousel"
-lumit = "tile"
-conversion = "nearest"
 ofx = ["com.redgiantsoftware.Universe_Stylize_Carousel_OFX"]
 pending_audit = true
 
 [[effect]]
 ae = "S_TimeWarpRGB"
 name = "S_TimeWarpRGB"
-lumit = "rgb_split"
-conversion = "nearest"
 ofx = ["com.genarts.sapphire.Time.S_TimeWarpRGB", "com.borisfx.sapphire.Time.S_TimeWarpRGB"]
 pending_audit = true

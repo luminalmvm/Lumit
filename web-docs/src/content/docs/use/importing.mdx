@@ -160,19 +160,8 @@ project…**, with support for compositions, markers, layers, keyframes, and bui
 effects. A text layer keeps its font, spacing, outline, alignment, and box width.
 
 A common third-party effect becomes the maker's own OFX plugin where one is installed, with
-its controls carried across by name. Otherwise it becomes the nearest Lumit effect, at that
-effect's defaults.
-
-| After Effects effect | Nearest Lumit effect |
-| --- | --- |
-| Optical Flares | [Lens flare](/effects/stylise/lens-flare/) |
-| Twitch, Sapphire S_Shake | [Shake](/effects/distortion/shake/) |
-| Shine, Deep Glow, Sapphire S_Glow | [Glow](/effects/stylise/glow/) |
-| RSMB, RSMB Pro | [Motion blur](/effects/temporal/motion-blur/) |
-| Particular, Form | [Particulate](/effects/generate/particulate/) |
-
-Any other third-party effect arrives as a placeholder that keeps its values and draws
-nothing. Neither stops the rest of the project importing.
+its controls carried across by name. Any other third-party effect arrives as a placeholder
+that keeps its values and draws nothing. Neither stops the rest of the project importing.
 
 Expressions come across as JavaScript and run as written, and a pseudo effect arrives as
 [Custom controls](/effects/controls/custom-controls/). A property with both keyframes and

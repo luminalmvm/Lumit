@@ -34,8 +34,8 @@ Choosing **After Effects** under **Editing style** on the first run, with
 
 Whole projects come across too. **File ▸ Import ▸ After Effects project…**, and a
 report will appear telling you what was carried across with or without adjustments.
-Common third-party effects become the maker's own OFX plugin when it is installed, or the
-nearest Lumit effect. See [Importing](/use/importing/).
+Common third-party effects become the maker's own OFX plugin when it is installed. See
+[Importing](/use/importing/).
 
 Expressions written for After Effects run as written, and an animation preset (`.ffx`)
 is applied from **Animation ▸ Apply animation preset**. See
