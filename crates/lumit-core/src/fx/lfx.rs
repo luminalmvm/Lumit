@@ -112,17 +112,26 @@ pub struct Installed {
     /// The shader, its passes and its version, hashed: what the frame key
     /// folds, so an edited plugin never serves old frames.
     pub key_hash: u64,
+    /// What that shader built into, kept under its key hash.
+    pub built: &'static Built,
+}
+
+/// One shader as it was built, kept for good under its key hash, so a frame
+/// resolved before a rescan still draws the shader it was resolved with.
+#[derive(Debug)]
+pub struct Built {
     /// The program, or why the shader was refused. A refused one renders its
     /// input unchanged.
     pub program: Result<&'static ShaderProgram, ShaderRefusal>,
+    passes: Vec<(String, f32)>,
 }
 
-impl Installed {
+impl Built {
     /// The passes in order as (name, scale), with the default when none
     /// are listed.
     #[must_use]
     pub fn passes(&self) -> Vec<(&str, f32)> {
-        pass_list(&self.effect)
+        self.passes.iter().map(|(n, s)| (n.as_str(), *s)).collect()
     }
 }
 
@@ -139,6 +148,9 @@ fn pass_list(effect: &LfxEffect) -> Vec<(&str, f32)> {
 
 /// The session's installed effects, by match name.
 static TABLE: RwLock<BTreeMap<&'static str, Arc<Installed>>> = RwLock::new(BTreeMap::new());
+
+/// Every shader built, by key hash. Never shrinks, as the programs are leaked.
+static BUILT: RwLock<BTreeMap<u64, &'static Built>> = RwLock::new(BTreeMap::new());
 
 /// Every def made this session, installed or not. Never shrinks.
 static DEFS: Mutex<BTreeMap<&'static str, &'static LfxDef>> = Mutex::new(BTreeMap::new());
@@ -174,12 +186,19 @@ pub fn install(effect: LfxEffect) -> Result<&'static dyn EffectDef, LfxError> {
     let category = check(&effect)?;
     let name = match_name(&effect.extension, &effect.id);
     let key_hash = key_of(&effect);
-    let had = installed(&name);
-    let program = match &had {
-        Some(had) if had.key_hash == key_hash => had.program.clone(),
-        _ => {
-            let names: Vec<&str> = pass_list(&effect).iter().map(|(n, _)| *n).collect();
-            shader::build_passes(&effect.shader, &names).map(|p| &*Box::leak(Box::new(p)))
+    let built = match built(key_hash) {
+        Some(built) => built,
+        None => {
+            let passes = pass_list(&effect);
+            let names: Vec<&str> = passes.iter().map(|(n, _)| *n).collect();
+            let program =
+                shader::build_passes(&effect.shader, &names).map(|p| &*Box::leak(Box::new(p)));
+            let passes = passes.iter().map(|(n, s)| ((*n).to_owned(), *s)).collect();
+            let built: &'static Built = Box::leak(Box::new(Built { program, passes }));
+            match BUILT.write() {
+                Ok(mut all) => *all.entry(key_hash).or_insert(built),
+                Err(_) => built,
+            }
         }
     };
     let def = def_for(&name, &effect, category);
@@ -187,7 +206,7 @@ pub fn install(effect: LfxEffect) -> Result<&'static dyn EffectDef, LfxError> {
         effect,
         match_name: def.match_name,
         key_hash,
-        program,
+        built,
     });
     match TABLE.write() {
         Ok(mut table) => {
@@ -213,6 +232,13 @@ pub fn uninstall(match_name: &str) -> bool {
 #[must_use]
 pub fn installed(match_name: &str) -> Option<Arc<Installed>> {
     TABLE.read().ok()?.get(match_name).cloned()
+}
+
+/// The shader built under `key_hash`, the hash a resolved bag carries, even
+/// when a rescan has since installed another.
+#[must_use]
+pub fn built(key_hash: u64) -> Option<&'static Built> {
+    BUILT.read().ok()?.get(&key_hash).copied()
 }
 
 /// Whether an LFX effect is installed: the panel's "is this missing?".
@@ -434,7 +460,7 @@ impl EffectDef for LfxDef {
 
     fn derived(&self, _inst: &EffectInstance) -> &'static [ParamSchema] {
         installed(self.match_name)
-            .and_then(|e| e.program.as_ref().ok().copied())
+            .and_then(|e| e.built.program.as_ref().ok().copied())
             .map_or(&[], |p| p.params)
     }
 

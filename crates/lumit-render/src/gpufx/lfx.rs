@@ -76,7 +76,7 @@ pub fn status(match_name: &str) -> LfxStatus {
                 .to_owned(),
         };
     };
-    let program = match &entry.program {
+    let program = match &entry.built.program {
         Ok(program) => *program,
         Err(refusal) => return LfxStatus::Refused(refusal.to_string()),
     };
@@ -149,13 +149,15 @@ impl GpuEffect for LfxPass {
     ) -> Tex {
         // Missing or switched off at resolve (no hash), off since, a lost
         // device or a refused shader: the input unchanged, never a fault.
-        if cs::hash_in(p).is_none() || lfx::is_off(self.0) || ctx.device_lost() {
+        if lfx::is_off(self.0) || ctx.device_lost() {
             return tex.clone();
         }
-        let Some(entry) = lfx::installed(self.0) else {
+        // The shader the frame was resolved with, not whatever a rescan has
+        // installed since, so the program always matches the bag's rows.
+        let Some(built) = cs::hash_in(p).and_then(lfx::built) else {
             return tex.clone();
         };
-        let Ok(program) = entry.program.as_ref().map(|p| *p) else {
+        let Ok(program) = built.program.as_ref().map(|p| *p) else {
             return tex.clone();
         };
         // Every pipeline before any dispatch, so a pass that will not compile
@@ -175,7 +177,7 @@ impl GpuEffect for LfxPass {
             lumit_core::fx::frame_rect(p).unwrap_or([0.0, 0.0, w as f32, h as f32]);
         let mix = (p.float(lumit_core::fx::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
         let params = program.pack(p);
-        let passes = entry.passes();
+        let passes = built.passes();
         note_dispatch(self.0);
         let mut done: Vec<Tex> = Vec::with_capacity(passes.len());
         for (i, ((_, scale), pipeline)) in passes.iter().zip(&pipelines).enumerate() {

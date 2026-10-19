@@ -36,6 +36,10 @@ use super::{work_texture, FxEngine};
 /// actually build.
 const CACHE_ENTRIES: usize = 32;
 
+/// How many LFX pipelines are kept: one per pass, so enough for eight
+/// eight-pass effects on screen at once.
+const LFX_CACHE_ENTRIES: usize = 64;
+
 /// How many "last pipeline that compiled" fallbacks are kept, one per effect
 /// instance.
 ///
@@ -82,6 +86,9 @@ pub struct CustomShaderPipelines {
     lfx_pipeline_layout: wgpu::PipelineLayout,
     /// LFX pipelines, most recently used last, keyed by the module's hash.
     lfx_cache: Mutex<Vec<(u64, Arc<wgpu::ComputePipeline>)>>,
+    /// LFX modules that would not compile, with the compiler's message, so a
+    /// broken shader is checked once rather than every frame.
+    lfx_failed: Mutex<Vec<(u64, String)>>,
     /// One transparent pixel, bound for a pass that has not run yet.
     blank: wgpu::Texture,
 }
@@ -173,6 +180,7 @@ impl CustomShaderPipelines {
             lfx_pipeline_layout: pipeline_layout_of(&lfx_layout, "fx-lfx-pl"),
             lfx_layout,
             lfx_cache: Mutex::new(Vec::new()),
+            lfx_failed: Mutex::new(Vec::new()),
             blank,
         }
     }
@@ -193,6 +201,9 @@ impl CustomShaderPipelines {
         }
         if let Ok(mut cache) = self.lfx_cache.lock() {
             cache.clear();
+        }
+        if let Ok(mut failed) = self.lfx_failed.lock() {
+            failed.clear();
         }
     }
 }
@@ -331,7 +342,14 @@ impl FxEngine {
         assembled: &str,
     ) -> Result<Arc<wgpu::ComputePipeline>, String> {
         let cs = &self.custom_shader;
-        self.compile_into(ctx, source_hash, assembled, &cs.pipeline_layout, &cs.cache)
+        self.compile_into(
+            ctx,
+            source_hash,
+            assembled,
+            &cs.pipeline_layout,
+            &cs.cache,
+            CACHE_ENTRIES,
+        )
     }
 
     /// Validate, compile and file one module under `key` in `cache`.
@@ -342,6 +360,7 @@ impl FxEngine {
         assembled: &str,
         layout: &wgpu::PipelineLayout,
         cache: &Mutex<Vec<(u64, Arc<wgpu::ComputePipeline>)>>,
+        limit: usize,
     ) -> Result<Arc<wgpu::ComputePipeline>, String> {
         // naga first, always: it is the only road that produces a *message*
         // rather than a device error nobody can read, and it is the same road
@@ -367,7 +386,7 @@ impl FxEngine {
             *n += 1;
         }
         if let Ok(mut cache) = cache.lock() {
-            if cache.len() >= CACHE_ENTRIES {
+            if cache.len() >= limit {
                 cache.remove(0);
             }
             cache.push((key, pipeline.clone()));
@@ -395,7 +414,29 @@ impl FxEngine {
                 return Ok(pipeline);
             }
         }
-        self.compile_into(ctx, key, assembled, &cs.lfx_pipeline_layout, &cs.lfx_cache)
+        if let Some((_, why)) = cs
+            .lfx_failed
+            .lock()
+            .ok()
+            .and_then(|failed| failed.iter().find(|(k, _)| *k == key).cloned())
+        {
+            return Err(why);
+        }
+        let made = self.compile_into(
+            ctx,
+            key,
+            assembled,
+            &cs.lfx_pipeline_layout,
+            &cs.lfx_cache,
+            LFX_CACHE_ENTRIES,
+        );
+        if let (Err(why), Ok(mut failed)) = (&made, cs.lfx_failed.lock()) {
+            if failed.len() >= LFX_CACHE_ENTRIES {
+                failed.remove(0);
+            }
+            failed.push((key, why.clone()));
+        }
+        made
     }
 
     /// One dispatch of an LFX pass, writing a `w` by `h` picture. `passes`
