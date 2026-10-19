@@ -3437,7 +3437,39 @@
   },
   "fxKill": "Kill",
   "@fxKill": {
-    "description": "Effect controls — an Edge setting on Particulate: a particle dies the first time it leaves the frame."
+    "description": "Effect controls — an Edge and an On contact setting on Particulate: a particle dies, at the edge of the frame or when it hits a shape."
+  },
+  "fxCollide": "Collide",
+  "@fxCollide": {
+    "description": "Effect controls — a group heading on Particulate: the controls for particles hitting the shapes of another layer."
+  },
+  "fxCollideWith": "Collide with",
+  "@fxCollideWith": {
+    "description": "Effect controls — a control on Particulate: the layer whose shapes and masks the particles hit."
+  },
+  "fxOnContact": "On contact",
+  "@fxOnContact": {
+    "description": "Effect controls — a control on Particulate: what a particle does when it hits a shape."
+  },
+  "fxBounce": "Bounce",
+  "@fxBounce": {
+    "description": "Effect controls — an On contact setting on Particulate: the particle comes off the shape the other way."
+  },
+  "fxSlide": "Slide",
+  "@fxSlide": {
+    "description": "Effect controls — an On contact setting on Particulate: the particle carries on along the shape's surface."
+  },
+  "fxStick": "Stick",
+  "@fxStick": {
+    "description": "Effect controls — an On contact setting on Particulate: the particle stays where it hit the shape."
+  },
+  "fxBounciness": "Bounciness",
+  "@fxBounciness": {
+    "description": "Effect controls — a control on Particulate: how much of its speed a particle keeps as it bounces off a shape, as a percentage."
+  },
+  "fxFriction": "Friction",
+  "@fxFriction": {
+    "description": "Effect controls — a control on Particulate: how much a particle slows along the surface of a shape it hits, as a percentage."
   },
   "fxVariation": "Variation",
   "@fxVariation": {

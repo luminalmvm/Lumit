@@ -779,6 +779,7 @@ pub fn param_enabled(inst: &EffectInstance, id: &str) -> bool {
                 (EnabledCond::ChoiceIs(want), EffectValue::Choice(got)) => *got == want,
                 (EnabledCond::ChoiceIsNot(no), EffectValue::Choice(got)) => *got != no,
                 (EnabledCond::LayerSet, EffectValue::Layer(layer)) => layer.is_some(),
+                (EnabledCond::LayerUnset, EffectValue::Layer(layer)) => layer.is_none(),
                 // A rule pointed at the wrong kind of parameter is a schema
                 // mistake, not a reason to grey a row the owner can then never
                 // reach. `every_enablement_rule_names_a_parameter_of_its_kind`

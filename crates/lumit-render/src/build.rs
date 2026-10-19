@@ -2442,6 +2442,10 @@ fn comp_walk(
                 .map(|(e, def, param)| {
                     let schema = def.schema();
                     let slot = |param: &str| {
+                        // A row read for its layer's shapes has no picture.
+                        if def.shape_inputs().contains(&param) {
+                            return LayerInputDraw::Absent;
+                        }
                         // A Depth row pointed at a Precomp with 3D layers in it
                         // reads their distance rather than its picture. A flat
                         // precomp is a picture, a depth pass made as a comp.
@@ -2796,6 +2800,40 @@ fn comp_walk(
                         text,
                         label,
                         grow,
+                        stepped: None,
+                    };
+                }
+                // **A Particulate with a collider walks on the host**, through
+                // the driver walk a wire reads, and the card only draws where
+                // it got to.
+                let walked = owner
+                    .filter(|_| lumit_core::fx::points::stepped::target(comp, e).is_some())
+                    .map(|layer| {
+                        lumit_core::fx::drivers::effect_stream_in(
+                            &layer.graph,
+                            e.id,
+                            t,
+                            context.clone(),
+                            Some(&audio),
+                            lumit_core::fx::points::Projection::FLAT,
+                            None,
+                            clone_number,
+                        )
+                        .unwrap_or_default()
+                    });
+                if walked.is_some() {
+                    return lumit_core::fx::points::PointsSchedule {
+                        schedule: lumit_core::fx::points::Schedule::default(),
+                        t,
+                        projection,
+                        late,
+                        ports_from,
+                        input,
+                        input_from,
+                        text,
+                        label,
+                        grow,
+                        stepped: walked,
                     };
                 }
                 let upto = (t / dt).floor() as i64;
@@ -2851,6 +2889,7 @@ fn comp_walk(
                     text,
                     label,
                     grow,
+                    stepped: None,
                 }
             })
             .collect()

@@ -2543,6 +2543,11 @@ Set<String> disabledParams(
         BridgeEffectValue_Layer(field0: final v)
       ) =>
         v != null,
+      (
+        BridgeEnabledCond_LayerUnset(),
+        BridgeEffectValue_Layer(field0: final v)
+      ) =>
+        v == null,
       // A rule pointed at the wrong kind of parameter is a schema mistake the
       // Rust-side test fails the build for; here it leaves the row live rather
       // than locking one the owner can never reach.

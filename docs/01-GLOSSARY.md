@@ -118,6 +118,7 @@ Not interchangeable.
 | **Node graph effect** | Applies a node graph to a layer |
 | **Wire**, **port** | A connection on the Graph panel, and the typed socket it plugs into |
 | **Points stream** | Per-frame particle data an effect produces. Never stored |
+| **Collide with** | A layer whose shapes and masks Particulate's particles hit. With one set, each frame's particles are worked out from the frame before |
 | **Working space** | Scene-linear, premultiplied, fp16 (fp32 opt-in) |
 | **OCIO config** | An OpenColorIO config a project can name |
 
