@@ -57,6 +57,11 @@ Future<void> runScriptFrb(
           app.postNotice(message);
         case BridgeScriptEvent_OpenComp(:final comp):
           ui.setSelectedComp(comp);
+        // No window is drawn yet, so it is closed as it opens.
+        case BridgeScriptEvent_ShowDialog():
+          answerScriptDialog();
+        case BridgeScriptEvent_CloseDialog():
+          break;
         case BridgeScriptEvent_Finished():
           if (!ended.isCompleted) ended.complete(event);
       }

@@ -47,6 +47,8 @@ use crate::{commands, one_step, Host, ScriptError, COMMANDS};
 const LUMIT_JS: &str = include_str!("lumit.js");
 /// After Effects' scripting objects, built over `lumit`.
 const AE_JS: &str = include_str!("ae.js");
+/// After Effects' ScriptUI windows, which the interface draws.
+const SCRIPTUI_JS: &str = include_str!("scriptui.js");
 
 /// The most memory a script's values may take. Stop is what ends a script
 /// that runs away; this keeps one nobody is watching, on the command line,
@@ -64,6 +66,8 @@ const MAX_LOG_LINES: usize = 10_000;
 /// holds, so a script cannot fill the interface or a reply with text.
 const MAX_LINE_BYTES: usize = 4 << 10;
 const MAX_LOG_BYTES: usize = 1 << 20;
+/// The most a window's description may come to.
+const MAX_DIALOG_BYTES: usize = 1 << 20;
 /// The script thread's stack, and how much of it the engine may use, which
 /// leaves room for the runner's own frames under a deeply recursive script.
 const STACK_BYTES: usize = 16 << 20;
@@ -89,6 +93,11 @@ pub struct RunOptions<'a> {
     /// Show the person a message, as After Effects' `alert` does. With none
     /// the message goes to the log.
     pub alert: Option<&'a dyn Fn(&str)>,
+    /// Show the person a ScriptUI window, described as JSON, or show it again
+    /// as it now is, and answer what they did next as JSON, or `None` when
+    /// they closed it. Handed `None`, take it down. With none, as on the
+    /// command line, a window is cancelled as soon as it is shown.
+    pub dialog: Option<&'a Dialog<'a>>,
     /// How far the script's saves, footage and exports may go.
     pub limits: Limits,
 }
@@ -107,6 +116,9 @@ pub enum Limits {
     Off,
 }
 
+/// What shows a script's window. See [`RunOptions::dialog`].
+pub type Dialog<'a> = dyn Fn(Option<&str>) -> Option<String> + 'a;
+
 fn nobody_to_ask(_: &str, _: &[String]) -> Option<PathBuf> {
     None
 }
@@ -121,6 +133,7 @@ impl Default for RunOptions<'_> {
             choose_file: &nobody_to_ask,
             path: None,
             alert: None,
+            dialog: None,
             limits: Limits::default(),
         }
     }
@@ -165,6 +178,7 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
         host,
         choose_file: options.choose_file,
         alert: options.alert,
+        dialog: options.dialog,
         log: log.clone(),
         reach: RefCell::new(Reach {
             folder: options.path.as_deref().and_then(reach::script_folder),
@@ -243,7 +257,8 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
             // after what the script called its undo group.
             if out.is_ok() && desk.edited.get() {
                 let step = desk.step.borrow_mut().take();
-                host.store().name_undo_group(step.unwrap_or_else(|| setup.name.clone()));
+                host.store()
+                    .name_undo_group(step.unwrap_or_else(|| setup.name.clone()));
             }
             out
         })
@@ -286,6 +301,7 @@ struct Desk<'a> {
     host: &'a dyn Host,
     choose_file: &'a dyn Fn(&str, &[String]) -> Option<PathBuf>,
     alert: Option<&'a dyn Fn(&str)>,
+    dialog: Option<&'a Dialog<'a>>,
     log: Arc<Mutex<Log>>,
     /// What the script may read, and where its saves, footage and exports
     /// may go.
@@ -399,6 +415,32 @@ impl Desk<'_> {
             ScriptError::Failed(format!("{} could not be made: {e}.", path.display()))
         })?;
         Ok(Value::Null)
+    }
+
+    /// Show the script's window as `tree` describes it and answer what the
+    /// person did, or take it down when `tree` is empty. Null is closed.
+    fn dialog(&self, tree: &str) -> Result<Value, ScriptError> {
+        let Some(dialog) = self.dialog else {
+            if !tree.is_empty() {
+                keep(
+                    &self.log,
+                    "No window can be shown here, so the dialog was cancelled.".into(),
+                );
+            }
+            return Ok(Value::Null);
+        };
+        if tree.is_empty() {
+            dialog(None);
+            return Ok(Value::Null);
+        }
+        if tree.len() > MAX_DIALOG_BYTES {
+            return Err(ScriptError::Failed(
+                "That window is too big to show.".into(),
+            ));
+        }
+        Ok(dialog(Some(tree))
+            .and_then(|heard| serde_json::from_str(&heard).ok())
+            .unwrap_or(Value::Null))
     }
 
     /// Delete file `path`. A folder is left alone.
@@ -549,6 +591,8 @@ fn evaluate(
                 .as_ref()
                 .map(|p| p.to_string_lossy().into_owned());
             prelude.call::<_, ()>((n.clone(), path, cfg!(windows)))?;
+            let prelude: Function = ctx.eval_with_options(SCRIPTUI_JS, options("<scriptui>"))?;
+            prelude.call::<_, ()>((n.clone(),))?;
             let value: JsValue = ctx.eval_with_options(source, options(&setup.name))?;
             if let Ok(finish) = n.get::<_, Function>("finish") {
                 finish.call::<_, ()>(())?;
@@ -674,6 +718,10 @@ fn natives<'js>(
         })?,
     )?;
 
+    n.set(
+        "dialog",
+        asking(|lumit, tree, _| lumit.ask(move |desk| desk.dialog(&tree)))?,
+    )?;
     n.set(
         "nameStep",
         asking(|lumit, name, _| {

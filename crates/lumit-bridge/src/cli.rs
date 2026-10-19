@@ -396,6 +396,8 @@ fn run(
             // Absolute, so a bare file name still gives the script its folder.
             path: std::path::absolute(script).ok(),
             alert: Some(&alert),
+            // No window here, so a script's dialog is cancelled.
+            dialog: None,
             // The person running this is the one aiming it.
             limits: Limits::Off,
         },

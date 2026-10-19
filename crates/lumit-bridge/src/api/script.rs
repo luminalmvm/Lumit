@@ -18,6 +18,13 @@ pub enum BridgeScriptEvent {
     },
     /// It shows `message`, and carries on without waiting.
     Alert { message: String },
+    /// It shows an After Effects ScriptUI window, or shows it again as it now
+    /// is. `tree` is the window as JSON: controls with ids, kinds, texts and
+    /// values, groups and panels holding more. [`answer_script_dialog`] says
+    /// what the person did next.
+    ShowDialog { tree: String },
+    /// It has closed its window.
+    CloseDialog,
     /// It opens `comp` in the Viewer.
     OpenComp { comp: CompositionReference },
     /// It has ended, and its edits are one undo step, or none when it failed
@@ -64,7 +71,15 @@ pub fn stop_script() {
 /// cancelled.
 #[frb(sync)]
 pub fn answer_script_file(path: Option<String>) {
-    crate::script::answer(path.map(Into::into));
+    crate::script::answer(path);
+}
+
+/// What the person did in a script's window: `{"id": the control pressed or
+/// changed, "values": {id: value}}` as JSON, each value a text, a tick, a
+/// number or a list's chosen place. `None` when they closed the window.
+#[frb(sync)]
+pub fn answer_script_dialog(event: Option<String>) {
+    crate::script::answer(event);
 }
 
 /// What happens on the endpoint other programs drive Lumit through.

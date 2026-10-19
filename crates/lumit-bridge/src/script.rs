@@ -32,10 +32,10 @@ use crate::api::{
 pub(crate) const MAX_SOURCE_BYTES: u64 = 16 << 20;
 
 /// The script that is running, if one is: how to stop it, and where the
-/// file it is waiting for goes.
+/// answer it is waiting for goes, a file or what was done in its window.
 struct Running {
     stop: Arc<AtomicBool>,
-    answer: Option<SyncSender<Option<PathBuf>>>,
+    answer: Option<SyncSender<Option<String>>>,
 }
 
 static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
@@ -87,7 +87,7 @@ pub(crate) fn start(
     Ok(true)
 }
 
-/// Stop the running script at its next step, and let go of a file it is
+/// Stop the running script at its next step, and let go of an answer it is
 /// waiting for.
 pub(crate) fn stop() {
     if let Ok(mut running) = RUNNING.lock() {
@@ -121,15 +121,15 @@ impl Drop for Holding {
     }
 }
 
-/// The file the running script asked for, or `None` when the person
+/// The answer the running script is waiting for, or `None` when the person
 /// cancelled.
-pub(crate) fn answer(path: Option<PathBuf>) {
+pub(crate) fn answer(answer: Option<String>) {
     let waiting = RUNNING
         .lock()
         .ok()
         .and_then(|mut running| running.as_mut()?.answer.take());
     if let Some(waiting) = waiting {
-        let _ = waiting.send(path);
+        let _ = waiting.send(answer);
     }
 }
 
@@ -159,6 +159,7 @@ fn run_file(
             message: message.into(),
         });
     };
+    let dialog = |tree: Option<&str>| host.dialog(tree);
     let report = lumit_script::run(
         &host,
         &source,
@@ -168,6 +169,7 @@ fn run_file(
             choose_file: &choose,
             path: Some(path.to_path_buf()),
             alert: Some(&alert),
+            dialog: Some(&dialog),
             ..Default::default()
         },
     );
@@ -234,9 +236,9 @@ impl<'a> AppHost<'a> {
         (self.tell)(event)
     }
 
-    /// Ask the interface for a file and wait for the answer, which Stop also
+    /// Ask the interface `question` and wait for the answer, which Stop also
     /// gives, as `None`.
-    fn choose_file(&self, title: &str, extensions: &[String]) -> Option<PathBuf> {
+    fn wait(&self, question: BridgeScriptEvent) -> Option<String> {
         let (answer, answered) = mpsc::sync_channel(1);
         {
             let mut running = RUNNING.lock().ok()?;
@@ -246,14 +248,31 @@ impl<'a> AppHost<'a> {
             }
             running.as_mut()?.answer = Some(answer);
         }
-        let asked = self.say(BridgeScriptEvent::ChooseFile {
-            title: title.into(),
-            extensions: extensions.to_vec(),
-        });
-        if !asked {
+        if !self.say(question) {
             return None;
         }
         answered.recv().ok().flatten()
+    }
+
+    /// Ask the interface for a file.
+    fn choose_file(&self, title: &str, extensions: &[String]) -> Option<PathBuf> {
+        self.wait(BridgeScriptEvent::ChooseFile {
+            title: title.into(),
+            extensions: extensions.to_vec(),
+        })
+        .map(PathBuf::from)
+    }
+
+    /// Show the script's window as `tree` describes it and wait for what the
+    /// person does, or take it down.
+    fn dialog(&self, tree: Option<&str>) -> Option<String> {
+        match tree {
+            Some(tree) => self.wait(BridgeScriptEvent::ShowDialog { tree: tree.into() }),
+            None => {
+                self.say(BridgeScriptEvent::CloseDialog);
+                None
+            }
+        }
     }
 }
 
@@ -479,33 +498,51 @@ mod tests {
     use super::*;
     use crate::api::state::LumitBridgeState;
 
-    // Stop pressed while a script waits for a file must end the run, not
-    // leave it waiting for an answer that never comes.
+    // Stop pressed while a script waits for a file, or in its window, must
+    // end the run, not leave it waiting for an answer that never comes. One
+    // test, as only one script runs at a time.
     #[test]
     #[allow(clippy::expect_used)]
-    fn stop_ends_a_script_waiting_for_a_file() {
+    fn stop_ends_a_script_waiting_for_a_file_or_in_its_window() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let path = dir.path().join("wait.js");
-        std::fs::write(
-            &path,
-            "lumit.chooseFile(\"Pick\", [\"json\"]);
-while (true) {}
-",
-        )
-        .expect("script written");
-        let project = LumitBridgeState::new_project(None).expect("a new project");
-        let (heard, hearing) = mpsc::channel();
-        let started =
-            start(project, path, None, move |event| heard.send(event).is_ok()).expect("started");
-        assert!(started);
-        let wait = Duration::from_secs(20);
-        let asked = hearing.recv_timeout(wait).expect("asked for a file");
-        assert!(matches!(asked, BridgeScriptEvent::ChooseFile { .. }));
-        stop();
-        let ended = hearing.recv_timeout(wait).expect("the run ended");
-        assert!(matches!(
-            ended,
-            BridgeScriptEvent::Finished { stopped: true, .. }
-        ));
+        for (name, script) in [
+            (
+                "wait.js",
+                "lumit.chooseFile(\"Pick\", [\"json\"]);\nwhile (true) {}\n",
+            ),
+            (
+                "window.jsx",
+                "var w = new Window(\"dialog\", \"Options\");\nw.show();\nwhile (true) {}\n",
+            ),
+        ] {
+            let path = dir.path().join(name);
+            std::fs::write(&path, script).expect("script written");
+            let project = LumitBridgeState::new_project(None).expect("a new project");
+            let (heard, hearing) = mpsc::channel();
+            let started = start(project, path, None, move |event| heard.send(event).is_ok())
+                .expect("started");
+            assert!(started);
+            let wait = Duration::from_secs(20);
+            let asked = hearing.recv_timeout(wait).expect("asked");
+            assert!(
+                matches!(
+                    asked,
+                    BridgeScriptEvent::ChooseFile { .. } | BridgeScriptEvent::ShowDialog { .. }
+                ),
+                "{asked:?}"
+            );
+            stop();
+            // The window is taken down on the way out.
+            let ended = loop {
+                match hearing.recv_timeout(wait).expect("the run ended") {
+                    BridgeScriptEvent::CloseDialog => {}
+                    ended => break ended,
+                }
+            };
+            assert!(
+                matches!(ended, BridgeScriptEvent::Finished { stopped: true, .. }),
+                "{ended:?}"
+            );
+        }
     }
 }
