@@ -1355,6 +1355,17 @@ fn feed_effect_stack(
         // key for exactly these effects; everything else keeps its
         // time-free keys (a blurred solid still shares one cached
         // frame across its whole span).
+        // An OFX plug-in can't say whether it moves with time, and Sapphire's
+        // Shake does on a still frame, so its key always takes the time. So
+        // does whether it is registered yet: a frame drawn before the plug-in
+        // scan reached it went through untouched.
+        if e.effect.namespace == lumit_core::model::EffectNamespace::Ofx {
+            h.update(b"ofx-time");
+            feed_f64(h, lt);
+            h.update(&[u8::from(
+                lumit_core::fx::schema(&e.effect.match_name).is_some(),
+            )]);
+        }
         if e.effect.namespace == lumit_core::model::EffectNamespace::Builtin {
             if let Some(s) = lumit_core::fx::schema(&e.effect.match_name) {
                 if s.traits.seeded {
