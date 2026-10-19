@@ -325,6 +325,14 @@ pub fn extension_remove(id: String) -> BridgeExtensionRemoval {
     removed
 }
 
+/// Register what the folders carry now, so an extension another Lumit
+/// installed is picked up without a restart.
+///
+/// Not sync: registering reads every extension's shaders.
+pub fn extension_rescan() {
+    register_effects();
+}
+
 /// The folders extensions are found in.
 #[frb(sync)]
 #[must_use]

@@ -64,6 +64,13 @@ Future<BridgeExtensionOutcome> extensionMakePackage(
 Future<BridgeExtensionRemoval> extensionRemove({required String id}) =>
     BridgeLib.instance.api.crateApiExtensionsExtensionRemove(id: id);
 
+/// Register what the folders carry now, so an extension another Lumit
+/// installed is picked up without a restart.
+///
+/// Not sync: registering reads every extension's shaders.
+Future<void> extensionRescan() =>
+    BridgeLib.instance.api.crateApiExtensionsExtensionRescan();
+
 /// The folders extensions are found in.
 BridgeExtensionFolders extensionFolders() =>
     BridgeLib.instance.api.crateApiExtensionsExtensionFolders();

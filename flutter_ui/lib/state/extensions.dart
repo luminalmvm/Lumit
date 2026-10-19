@@ -170,6 +170,17 @@ class ExtensionService extends ChangeNotifier {
     return outcome;
   }
 
+  /// Register what the folders carry now and read them again, so an
+  /// extension another Lumit installed is picked up.
+  Future<void> rescan() async {
+    try {
+      await extensionRescan();
+    } catch (_) {
+      // No engine to ask, as in a widget test.
+    }
+    _effectsChanged();
+  }
+
   /// Scan [folder] for extensions too.
   Future<void> addFolder(String folder) async {
     try {

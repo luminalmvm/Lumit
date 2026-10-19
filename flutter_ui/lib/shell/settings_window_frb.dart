@@ -2398,14 +2398,15 @@ class _SettingsWindowState extends State<_SettingsWindow> {
     // The page's one engine read: the scan, the runtime and the folder. Every
     // other reading it draws came with this one.
     service.refresh();
-    // The extensions are listed on the same page, from their own service.
+    // The extensions are listed on the same page, from their own service,
+    // registered again in case another Lumit installed one.
     final extensions = context.read<LumitUiState>().extensions;
     if (!identical(_extensions, extensions)) {
       _extensions?.removeListener(_addonsChanged);
       extensions.addListener(_addonsChanged);
       _extensions = extensions;
     }
-    extensions.refresh();
+    unawaited(extensions.rescan());
   }
 
   ExtensionService? _extensions;
