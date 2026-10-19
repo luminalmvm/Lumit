@@ -58,7 +58,7 @@ times.
 | Column | Holds |
 | --- | --- |
 | **Switches** | Visibility, mute, solo, lock, shy, guide. |
-| **Layer** | Twirl, label colour, layer number, name. The one column that stretches. |
+| **Layer** | Twirl, layer number, label colour, name. The one column that stretches. |
 | **Modes** | Disable effects, 3D, motion blur, adjustment, flow, collapse. |
 | **Compose** | Matte and blend mode. |
 | **Parent** | The parent picker. |
@@ -88,15 +88,27 @@ keeps that number while a search or the shy filter hides other layers.
 Each layer has a bar showing when it draws. Drag the bar to move it, and either end to
 trim it. A trimmed layer keeps a faint outline of its full source extent. While the bar is
 moved or trimmed, a readout beside the pointer gives its in frame, its out frame and its
-length.
+length. A still placed in a composition lasts the whole composition, and both ends of its bar
+drag freely.
 
 Twirl a layer open and its transform, masks, effects, flow options, paint strokes and shape
-contents appear beneath it, each on a lane of its own.
+contents appear beneath it, each on a lane of its own. An effect's parameter rows show the
+value box without its slider. A click on an effect's name selects the effect, and the arrow
+beside it twirls it open.
 
 A [Sequence layer](/use/sequence-layers/) draws its clips on one row.
 
 On a [node graph composition](/use/node-graphs/) the Timeline draws one row per box, with a
 lane per parameter once the box is twirled open. A box has no span, so there is no bar.
+
+### Sound mix
+
+Once a composition has been edited in the [Audio timeline](/panels/audio/#audio-timeline),
+its Audio layers fold into a **Sound mix** row pinned at the foot of the Timeline. The row
+draws the composition's mix, and its dB well sets the master fader. Its twirl opens the
+fold. A double-click opens the **Audio** workspace, and the right-click menu offers **Open
+Audio workspace** and **Convert to precomp**, which moves the Audio layers into a nested
+composition and takes the row away.
 
 ### Right-click menus
 
@@ -119,10 +131,14 @@ lane per parameter once the box is twirled open. A box has no span, so there is 
 - **`F`** in Layers mode zooms time to the keyframes of the selected layers, or of every
   layer with none selected.
 - **Shift** while dragging the playhead on the ruler lands it on the nearest marker, layer
-  end, keyframe or work-area edge.
-- **Minimap under the lanes**, in [Settings ▸ Timeline](/use/settings/), draws every layer's
+  end, edit point, keyframe or work-area edge.
+- **Dragging a key** near either end of the lanes scrolls them.
+- **Minimap under the lanes**, in **Settings ▸ Appearance ▸ Panels**, draws every layer's
   bar as a thin line in a strip under the lanes. The part in view is a window on it, and
   dragging the window scrolls. It is on by default in the Lantern shape.
+
+Each composition keeps its own playhead, zoom and scroll, across and down, between launches
+too.
 
 ## Editing keyframes in bulk
 
@@ -136,6 +152,7 @@ badge reading how many keys it holds and how many frames it spans.
 - Drag an **end handle** to stretch the whole block — the keys inside keep their
   proportions.
 - The **magnet** on the bottom bar decides whether a dragged key snaps to whole frames.
+- A block whose keys all sit on one frame has no end handles. Drag its keys to move them.
 
 The strip along the bottom bar acts on whatever keys are selected: **Interpolation** —
 Linear, Easy ease, Hold, Ease.

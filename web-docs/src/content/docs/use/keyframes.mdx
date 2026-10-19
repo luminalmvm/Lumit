@@ -38,7 +38,13 @@ Rotation, Opacity and Anchor point on the selected layers.
 or on every layer when none is selected.
 
 Pasted keyframes start at the playhead. With layers selected and no property rows, each layer
-takes them on its own matching property, and gains a copy of any effect it lacks.
+takes them on its own matching property. Masks and shape items are matched by name, then by
+position; effects by kind. A layer lacking the effect gets a copy of it, and anything else a
+layer lacks is skipped. The paste is one undo step.
+
+Right-click a keyframe in the Timeline's lanes for **Linear**, **Easy ease**, **Hold**,
+**Ease…**, **Copy ease**, **Paste ease** and **Delete key**. On a selected keyframe the menu
+acts on the whole selection.
 
 ## Interpolation
 

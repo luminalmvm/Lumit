@@ -20,6 +20,7 @@ dragging a marker on top of another does the same.
 | Action | How |
 | --- | --- |
 | Add at the playhead | **Composition ▸ Add marker at playhead**, or `*`, `Shift+NUMBER`, or `Shift+M` |
+| Add anywhere | Double-click empty ruler. *Edit marker…* opens on the new marker. |
 | Move | Drag the marker along the ruler |
 | Edit | Double-click the flag, or right-click it: *Edit marker…* |
 | Delete | Right-click the flag: *Delete marker* |
@@ -28,7 +29,8 @@ Pressing or dragging a marker does not move the playhead.
 
 Each comp marker draws a line in its colour down through the rows of the Timeline, the Cut
 timeline and the Audio timeline. Beat markers draw theirs once the view is zoomed in far
-enough to tell them apart. **Settings ▸ Timeline ▸ Marker lines** turns the lines off.
+enough to tell them apart. **Settings ▸ Appearance ▸ Panels ▸ Marker lines** turns the lines
+off.
 
 ## Colour
 
@@ -54,10 +56,12 @@ beat markers have no region.
 ## Snapping
 
 With the **magnet** on, a dragged bar, keyframe, work-area edge or marker snaps to the
-markers, the playhead, layer ends, keyframes and work-area edges. `Ctrl` suspends it.
+markers, the playhead, layer ends, the edit points inside Sequence layers, keyframes and
+work-area edges. `Ctrl` suspends it.
 
-Hold `Shift` while dragging the playhead on the ruler and it lands on the nearest of the
-same targets.
+On the ruler of the Timeline, the Cut timeline and the Audio timeline, holding `Shift` while
+dragging the playhead lands it on the nearest of the same targets. Holding `Ctrl` (`Cmd` on
+macOS) [sounds the mix](/use/audio/#scrubbing) as the playhead moves.
 
 ## Numbered markers
 
@@ -77,8 +81,11 @@ Detection runs in the background. Where a comp carries no audio, nothing happens
 
 A beat marker stays a beat marker once you drag it or rename it.
 
+The [Audio panel](/panels/audio/)'s **Beats** section generates beat markers with a
+chosen source, sensitivity, range and tempo.
+
 :::note[Not built yet]
-Sensitivity tuning is planned, and so is tapping beats by hand during playback.
+Placing markers by tapping during playback.
 :::
 
 ## Related
