@@ -811,6 +811,10 @@ class Workspace extends ChangeNotifier {
   /// The folder File > Scripts lists, or empty for Lumit's own.
   String scriptsFolder = '';
 
+  /// The script run after each event, by its path in the Scripts folder.
+  /// None is set at first.
+  final Map<ScriptEvent, String> eventScripts = {};
+
   /// When the last update check finished, in milliseconds since the epoch.
   /// Zero means never. Kept so six launches in a morning ask GitHub once.
   int lastUpdateCheckMs = 0;
@@ -1404,6 +1408,16 @@ class Workspace extends ChangeNotifier {
     settingsChanged();
   }
 
+  /// Run [script] after [event], or nothing when it is null.
+  void setEventScript(ScriptEvent event, String? script) {
+    if (script == null) {
+      eventScripts.remove(event);
+    } else {
+      eventScripts[event] = script;
+    }
+    settingsChanged();
+  }
+
   /// Turn the welcome screen on or off for the next launch.
   void setShowWelcomeOnLaunch(bool on) {
     showWelcomeOnLaunch = on;
@@ -1933,6 +1947,10 @@ class Workspace extends ChangeNotifier {
         'show_welcome_on_launch': showWelcomeOnLaunch,
         'project_template': projectTemplate,
         'scripts_folder': scriptsFolder,
+        'event_scripts': {
+          for (final MapEntry(:key, :value) in eventScripts.entries)
+            key.name: value,
+        },
         'last_update_check_ms': lastUpdateCheckMs,
         'keymap': keymapJson,
         'audio_device': audioDevice,
@@ -2047,6 +2065,13 @@ class Workspace extends ChangeNotifier {
     showWelcomeOnLaunch = j['show_welcome_on_launch'] as bool? ?? true;
     projectTemplate = j['project_template'] as String? ?? '';
     scriptsFolder = j['scripts_folder'] as String? ?? '';
+    eventScripts.clear();
+    if (j['event_scripts'] case final Map<String, dynamic> scripts) {
+      for (final MapEntry(:key, :value) in scripts.entries) {
+        final event = ScriptEvent.values.asNameMap()[key];
+        if (event != null && value is String) eventScripts[event] = value;
+      }
+    }
     lastUpdateCheckMs = j['last_update_check_ms'] as int? ?? 0;
     keymapJson = j['keymap'] is String ? j['keymap'] as String : null;
     // Absent, or empty from a hand-edited file, means follow the machine —

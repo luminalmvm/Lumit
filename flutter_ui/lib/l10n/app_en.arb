@@ -20465,5 +20465,57 @@
   "liveScript": "a script",
   "@liveScript": {
     "description": "Stands for {name} in scriptRunning when a connected program runs a script without naming it: Running a script."
+  },
+  "settingsGroupScripts": "Scripts",
+  "@settingsGroupScripts": {
+    "description": "Settings window: heading over a group of rows, the Scripts folder and the script run after each event."
+  },
+  "settingsScriptAfterExport": "Export finished",
+  "@settingsScriptAfterExport": {
+    "description": "Settings window: the name of one setting, the script from the Scripts folder run each time an export finishes. Its choices are the scripts and None."
+  },
+  "settingsScriptAfterOpen": "Project opened",
+  "@settingsScriptAfterOpen": {
+    "description": "Settings window: the name of one setting, the script from the Scripts folder run each time a project is opened. Its choices are the scripts and None."
+  },
+  "settingsScriptAfterSave": "Project saved",
+  "@settingsScriptAfterSave": {
+    "description": "Settings window: the name of one setting, the script from the Scripts folder run each time the project is saved. Its choices are the scripts and None."
+  },
+  "scriptRanAfterExport": "Ran {name} after export",
+  "@scriptRanAfterExport": {
+    "description": "Bottom-strip notice after the script chosen in Settings ran to the end because an export finished. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptRanAfterOpen": "Ran {name} after opening",
+  "@scriptRanAfterOpen": {
+    "description": "Bottom-strip notice after the script chosen in Settings ran to the end because a project was opened. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptRanAfterSave": "Ran {name} after saving",
+  "@scriptRanAfterSave": {
+    "description": "Bottom-strip notice after the script chosen in Settings ran to the end because the project was saved. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptEventSkipped": "Skipped {name}, Lumit was busy",
+  "@scriptEventSkipped": {
+    "description": "Bottom-strip notice when the script chosen in Settings for an event was not run because another script was running or Lumit was busy. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   }
 }

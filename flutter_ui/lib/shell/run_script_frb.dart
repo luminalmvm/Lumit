@@ -2,6 +2,7 @@
 // project, picked, from the Scripts folder or dropped on the window.
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -12,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../state/file_dialogs.dart';
+import '../state/settings.dart' show ScriptEvent;
 import '../state/ui_state.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
@@ -25,12 +27,16 @@ import 'dialog_frame.dart';
 ///
 /// What it printed is a press away on the notice after.
 ///
+/// [after] is the event an event script runs after, which it reads with the
+/// file's name in `lumit.args`.
+///
 /// [picker] and [chooser] stand in for the file dialogues in a test.
 Future<void> runScriptFrb(
   BuildContext context,
   LumitState app,
   LumitUiState ui, {
   String? path,
+  (ScriptEvent, String)? after,
   Future<String?> Function()? picker,
   Future<String?> Function(List<String> extensions, String title)? chooser,
 }) async {
@@ -52,7 +58,12 @@ Future<void> runScriptFrb(
   final alerts = <String>[];
   var started = false;
   try {
-    started = project.runScript(path: path, events: events);
+    started = project.runScript(
+        path: path,
+        args: {
+          if (after != null) ...{'event': after.$1.name, 'file': after.$2},
+        },
+        events: events);
   } catch (_) {}
   StreamSubscription<BridgeScriptEvent>? listening;
   if (started) {
@@ -98,7 +109,12 @@ Future<void> runScriptFrb(
     case BridgeScriptEvent_Finished(stopped: true):
       say(l10n.scriptStopped(name));
     case BridgeScriptEvent_Finished(error: null):
-      say(l10n.scriptRan(name));
+      say(switch (after?.$1) {
+        null => l10n.scriptRan(name),
+        ScriptEvent.export => l10n.scriptRanAfterExport(name),
+        ScriptEvent.open => l10n.scriptRanAfterOpen(name),
+        ScriptEvent.save => l10n.scriptRanAfterSave(name),
+      });
     case BridgeScriptEvent_Finished(:final error?, line: final line?):
       say(l10n.scriptFailedAt(name, line, error), error: true);
     case BridgeScriptEvent_Finished(:final error?):
@@ -123,6 +139,28 @@ String? scriptsFolderIn(String chosen) {
   } catch (_) {
     return null;
   }
+}
+
+/// Give LumitState somewhere to run the scripts chosen in Settings. Called
+/// once, from the widget that is up for the whole life of the window.
+void installEventScripts(BuildContext context) {
+  final app = context.read<LumitState>();
+  final ui = context.read<LumitUiState>();
+  app.runEventScript = (event, path) {
+    final script = ui.workspace.eventScripts[event];
+    final folder = scriptsFolderIn(ui.workspace.scriptsFolder);
+    if (script == null || folder == null || app.project == null) return;
+    final sep = Platform.pathSeparator;
+    // Never on top of another script, or anything else the card is up for.
+    // A script's own saves and exports never get here, so none can loop.
+    if (app.busy.value != null) {
+      app.postNotice(l10n.scriptEventSkipped(_scriptName(script)));
+      return;
+    }
+    unawaited(runScriptFrb(context, app, ui,
+        path: '$folder$sep${script.replaceAll('/', sep)}',
+        after: (event, path.split(RegExp(r'[\\/]')).last)));
+  };
 }
 
 /// Whether [path] is a script, by its extension.

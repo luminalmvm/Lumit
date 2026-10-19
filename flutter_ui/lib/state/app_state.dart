@@ -21,6 +21,7 @@ import 'package:lumit_flutter/src/rust/api/share.dart' as bridge_share;
 import 'package:lumit_flutter/src/rust/api/share.dart'
     hide joinSharedProject, shareDefaultPort, shareLinkIn, shareRelayPort;
 import 'package:lumit_flutter/src/rust/api/state.dart';
+import 'package:lumit_flutter/state/settings.dart';
 import 'package:lumit_flutter/state/share.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/workspace.dart';
@@ -194,6 +195,10 @@ class LumitState extends ChangeNotifier {
   /// How the shell offers back the edits a crash left behind, for the project
   /// at a path. Null until there is a window to ask in.
   Future<void> Function(String path)? offerRecovery;
+
+  /// How the shell runs the script chosen for [ScriptEvent], told the file
+  /// the event was about. Null until there is a window to run it in.
+  void Function(ScriptEvent event, String path)? runEventScript;
 
   bool _askingUnsaved = false;
 
@@ -1084,8 +1089,26 @@ class LumitState extends ChangeNotifier {
       } catch (_) {
         // Closed again already.
       }
-      if (crashed) unawaited(offerRecovery?.call(path));
+      if (crashed) {
+        unawaited(offerRecovery?.call(path));
+        return;
+      }
     }
+    _tellOpened(opened, path);
+  }
+
+  /// Run the project-opened script once [opened] is in and its card has
+  /// gone, if it is still the open project then.
+  void _tellOpened(ProjectReference opened, String path) {
+    void check() {
+      if (opening.value) return;
+      opening.removeListener(check);
+      if (identical(project, opened)) {
+        runEventScript?.call(ScriptEvent.open, path);
+      }
+    }
+
+    opening.addListener(check);
   }
 
   /// Import an After Effects project and make it the open one (docs/11) —

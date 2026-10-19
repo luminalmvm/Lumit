@@ -1,6 +1,8 @@
 //! File > Run script, and other programs driving Lumit: work on the open
 //! project from outside the interface.
 
+use std::collections::HashMap;
+
 use flutter_rust_bridge::frb;
 
 use crate::api::{composition::CompositionReference, project::ProjectReference, BridgeError};
@@ -36,6 +38,7 @@ impl ProjectReference {
     /// Run the script at `path` on this project, on a thread of its own.
     /// Answers at once, false when a script is running already. `events`
     /// hears the rest, and the edits arrive on the change stream as usual.
+    /// `args` is what the script reads as `lumit.args`.
     ///
     /// The interface must not edit until it hears `Finished`, since the
     /// whole run is one undo step and an edit made meanwhile would join it.
@@ -43,9 +46,11 @@ impl ProjectReference {
     pub fn run_script(
         &self,
         path: String,
+        args: HashMap<String, String>,
         events: Option<StreamSink<BridgeScriptEvent>>,
     ) -> Result<bool, BridgeError> {
-        crate::script::start(self.clone(), path.into(), move |event| {
+        let args = args.into_iter().collect();
+        crate::script::start(self.clone(), path.into(), args, move |event| {
             events.as_ref().is_some_and(|sink| sink.add(event).is_ok())
         })
     }

@@ -11,6 +11,7 @@
 //! nothing else commits into the run's undo step.
 
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -40,12 +41,13 @@ struct Running {
 
 static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
 
-/// Run the script at `path` on `project`, on a thread of its own. False when
-/// one is running already. `tell` hears what it does, and answers false
-/// when nobody is listening.
+/// Run the script at `path` on `project`, on a thread of its own, with `args`
+/// as its `lumit.args`. False when one is running already. `tell` hears what
+/// it does, and answers false when nobody is listening.
 pub(crate) fn start(
     project: ProjectReference,
     path: PathBuf,
+    args: BTreeMap<String, String>,
     tell: impl Fn(BridgeScriptEvent) -> bool + Send + 'static,
 ) -> Result<bool, BridgeError> {
     let store = {
@@ -68,7 +70,7 @@ pub(crate) fn start(
         .name("script".into())
         .spawn(move || {
             let end = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_file(project, store, &path, stop, &tell)
+                run_file(project, store, &path, args, stop, &tell)
             }))
             .unwrap_or_else(|_| finished(Vec::new(), "The script stopped unexpectedly.", None));
             // Free before saying so, so the next run can start straight away.
@@ -136,6 +138,7 @@ fn run_file(
     project: ProjectReference,
     store: Arc<DocumentStore>,
     path: &Path,
+    args: BTreeMap<String, String>,
     stop: Arc<AtomicBool>,
     tell: &dyn Fn(BridgeScriptEvent) -> bool,
 ) -> BridgeScriptEvent {
@@ -165,6 +168,7 @@ fn run_file(
             choose_file: &choose,
             path: Some(path.to_path_buf()),
             alert: Some(&alert),
+            args,
             ..Default::default()
         },
     );
@@ -521,8 +525,10 @@ while (true) {}
         .expect("script written");
         let project = LumitBridgeState::new_project(None).expect("a new project");
         let (heard, hearing) = mpsc::channel();
-        let started =
-            start(project, path, move |event| heard.send(event).is_ok()).expect("started");
+        let started = start(project, path, BTreeMap::new(), move |event| {
+            heard.send(event).is_ok()
+        })
+        .expect("started");
         assert!(started);
         let wait = Duration::from_secs(20);
         let asked = hearing.recv_timeout(wait).expect("asked for a file");

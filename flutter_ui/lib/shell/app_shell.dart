@@ -27,6 +27,8 @@ import 'package:lumit_flutter/shell/menu_layer_frb.dart';
 import 'package:lumit_flutter/shell/project_history_window.dart'
     show saveVersionFrb;
 import 'package:lumit_flutter/shell/project_settings_frb.dart';
+import 'package:lumit_flutter/shell/run_script_frb.dart'
+    show installEventScripts;
 import 'package:lumit_flutter/shell/settings_window_frb.dart';
 import 'package:lumit_flutter/shell/share_dialog_frb.dart';
 import 'package:lumit_flutter/shell/splash.dart';
@@ -216,8 +218,9 @@ class _BootGateState extends State<BootGate> {
     _welcoming = widget.welcome &&
         context.read<LumitUiState>().workspace.showWelcomeOnLaunch;
     // Up for the whole life of the window, so this is where unsaved changes
-    // are asked about.
+    // are asked about, and the scripts chosen in Settings run.
     installUnsavedQuestion(context);
+    installEventScripts(context);
   }
 
   /// The engine's boot log, or empty where there is no engine to ask — a

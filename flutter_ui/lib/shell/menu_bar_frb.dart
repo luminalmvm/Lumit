@@ -59,7 +59,7 @@ import '../state/dock.dart';
 import '../state/external_links.dart';
 import '../state/file_dialogs.dart';
 import '../state/keymap.dart';
-import '../state/settings.dart' show ToolBarPosition;
+import '../state/settings.dart' show ScriptEvent, ToolBarPosition;
 import '../state/viewer_view.dart';
 import '../state/workspace.dart' show UserWorkspace, Workspace;
 import '../theme/theme.dart';
@@ -2389,12 +2389,16 @@ Future<void> unpackProjectFrb(LumitState app, LumitUiState ui) async {
 /// [pack] is Pack project file: the same save, with every footage item's file
 /// written into the `.lum`. A project that packs already, or packs
 /// automatically, takes the packing road without being asked.
+///
+/// [leaving] is a save on the way out of the project, which runs no
+/// project-saved script.
 Future<void> saveProjectFrb(
   LumitState app,
   LumitUiState ui, {
   bool forcePicker = false,
   Future<String?> Function()? picker,
   bool pack = false,
+  bool leaving = false,
 }) async {
   final project = app.project;
   if (project == null) return;
@@ -2445,6 +2449,7 @@ Future<void> saveProjectFrb(
     ui.pushDiscordStatus();
     // Told and not waited for: sending the save is no part of making it.
     ui.backup.saved(written);
+    if (!leaving) app.runEventScript?.call(ScriptEvent.save, written);
     // The welcome screen's picture of this project, taken *after* the save and
     // never in front of it: the save is done, the notice is posted, and taking
     // the picture happens on its own time. The fronted composition at the

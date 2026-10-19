@@ -219,6 +219,10 @@ enum DiscordStatus {
   names,
 }
 
+/// What a script chosen in Settings can be run after. Its name is what the
+/// script reads as `lumit.args.event`, and the settings file's key.
+enum ScriptEvent { export, open, save }
+
 /// What a file with more than one audio stream becomes when it is added to a
 /// composition. The engine's `BridgeStreamsArrival`, kept as an enum of the
 /// settings file's own so that file does not depend on a generated name.
