@@ -1,15 +1,18 @@
 // File ▸ Scripts: a JavaScript or After Effects script run on the open
-// project, picked or from the Scripts folder.
+// project, picked, from the Scripts folder or dropped on the window.
 
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:lumit_flutter/src/rust/api/script.dart';
+import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../state/file_dialogs.dart';
 import '../state/ui_state.dart';
+import '../widgets/controls.dart';
 
 /// Run the `.js` or `.jsx` file at [path] on the open project, or one picked
 /// when there is none.
@@ -102,5 +105,80 @@ String? scriptsFolderIn(String chosen) {
     return scriptsFolder();
   } catch (_) {
     return null;
+  }
+}
+
+/// Whether [path] is a script, by its extension.
+bool isScriptFile(String path) {
+  final lower = path.toLowerCase();
+  return lower.endsWith('.js') || lower.endsWith('.jsx');
+}
+
+/// Ask once for each script among [dropped], and run the ones agreed to.
+Future<void> runDroppedScripts(
+    BuildContext context, Iterable<String> dropped) async {
+  final app = context.read<LumitState>();
+  final ui = context.read<LumitUiState>();
+  for (final path in dropped.where(isScriptFile)) {
+    if (!context.mounted || app.project == null || app.busy.value != null) {
+      return;
+    }
+    final run = await showLumitModal<bool>(
+      context: context,
+      builder: (close) =>
+          _RunQuestion(name: _scriptName(path), onChoose: close),
+    );
+    if (run == true) await runScriptFrb(app, ui, path: path);
+  }
+}
+
+class _RunQuestion extends StatelessWidget {
+  final String name;
+  final ValueChanged<bool?> onChoose;
+
+  const _RunQuestion({required this.name, required this.onChoose});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return FloatSurface(
+      width: 320,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Text(l10n.scriptRunQuestion(name), style: t.bodyPrimary),
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                HouseButton(
+                  key: const ValueKey('script-drop-cancel'),
+                  small: true,
+                  frameless: true,
+                  onPressed: () => onChoose(false),
+                  child: Text(l10n.cancel, style: t.small),
+                ),
+                const SizedBox(width: 8),
+                HouseButton(
+                  key: const ValueKey('script-drop-run'),
+                  small: true,
+                  primary: true,
+                  autofocus: true,
+                  onPressed: () => onChoose(true),
+                  child: Text(l10n.scriptRun),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ),
+    );
   }
 }

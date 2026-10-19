@@ -20412,6 +20412,19 @@
   "@settingsScriptsFolder": {
     "description": "Settings window: the folder whose scripts File › Scripts lists. Under it is the folder's path."
   },
+  "scriptRunQuestion": "Run {name}?",
+  "@scriptRunQuestion": {
+    "description": "Question after a script file is dropped on the window. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptRun": "Run",
+  "@scriptRun": {
+    "description": "Button that runs a script dropped on the window."
+  },
   "settingsLiveEndpoint": "Let other programs drive Lumit",
   "@settingsLiveEndpoint": {
     "description": "Settings window: a switch, off by default. On, a program on this computer, such as an MCP client through lumit-cli, can edit the open project."
