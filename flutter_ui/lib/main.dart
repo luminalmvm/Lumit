@@ -90,6 +90,8 @@ Future<void> _start(List<String> args) async {
   // An invite link clicked in a browser starts Lumit with the link, and the
   // Shared project window opens on it once there is a window to open it in.
   state.launchInvite = inviteFromArgs(args);
+  // And a double-clicked extension package asks to be installed.
+  state.launchPackage = packagePathFromArgs(args);
   final ui = LumitUiState(state);
   // Where a new project's template is, which is the workspace's to say. The
   // project Lumit starts on is a new one too, unless something else was asked
@@ -121,7 +123,9 @@ Future<void> _start(List<String> args) async {
   // Somebody who double-clicked a `.lum` has already answered the welcome
   // screen's question, so it is not put to them.
   runApp(LumitAppNew(state, ui,
-      welcome: fromArgs == null && state.launchInvite == null));
+      welcome: fromArgs == null &&
+          state.launchInvite == null &&
+          state.launchPackage == null));
   // The probe drives the measured gestures and writes its table, only when
   // asked for by the define — an ordinary build compiles all of it out of reach.
   if (probeProjectPath.isNotEmpty) startPerfProbe(state, ui, probeBridge);

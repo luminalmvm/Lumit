@@ -2045,9 +2045,17 @@ impl HeadlessRenderer {
     /// cached frame went with the device — so the only answer is to drop this
     /// renderer and build another. The render worker asks once a turn and does
     /// exactly that; see [`lumit_gpu::GpuContext::device_lost`].
+    ///
+    /// The first time it is true, every LFX effect in a frame of this
+    /// renderer's that never finished takes a strike
+    /// ([`crate::gpufx::lfx::strike_in_flight`]).
     #[must_use]
     pub fn device_lost(&self) -> bool {
-        self.gpu.device_lost()
+        let lost = self.gpu.device_lost();
+        if lost {
+            crate::gpufx::lfx::strike_in_flight(&self.gpu);
+        }
+        lost
     }
 
     /// Lose the device on purpose, so the recovery path can be tested without a

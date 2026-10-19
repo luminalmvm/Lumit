@@ -43,7 +43,8 @@ pub struct BridgeEffectInfo {
     pub label: String,
     pub category: String,
     pub category_label: String,
-    /// Where this entry came from: [`NAMESPACE_BUILTIN`] or [`NAMESPACE_OFX`].
+    /// Where this entry came from: [`NAMESPACE_BUILTIN`], [`NAMESPACE_OFX`],
+    /// [`NAMESPACE_AUDIO`] or [`NAMESPACE_LFX`].
     ///
     /// A discovered plugin is drawn exactly as a built-in is — same row, same
     /// star, same drag — and this is the one difference: docs/12 §2.6 asks for
@@ -184,6 +185,8 @@ pub fn list_drivers() -> Vec<BridgeEffectInfo> {
 pub const NAMESPACE_BUILTIN: &str = "builtin";
 /// An entry that came out of an OFX plugin on this machine (docs/12 §2.6).
 pub const NAMESPACE_OFX: &str = "ofx";
+/// An LFX effect an installed extension carries.
+pub const NAMESPACE_LFX: &str = "lfx";
 /// An entry that came out of an **audio plugin** — CLAP or VST3, told apart
 /// only by the match name's own prefix (AP5). One value for both
 /// standards because the browser draws them the same: one Audio plugins
@@ -247,6 +250,14 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
         .iter()
         .map(lumit_core::fx::EffectDef::schema)
         .filter(|schema| keep(schema.category))
+        // An LFX effect whose extension was removed keeps its def, so a
+        // project naming it still opens, but it is not offered.
+        .filter(|schema| {
+            !schema
+                .match_name
+                .starts_with(lumit_core::fx::LFX_MATCH_PREFIX)
+                || lumit_core::fx::lfx::is_installed(schema.match_name)
+        })
         .map(|schema| {
             let (inputs, outputs) = crate::api::graph::catalogue_ports(schema.match_name);
             // A plugin places itself: its declared grouping is its heading, and
@@ -300,6 +311,11 @@ fn catalogue(keep: impl Fn(lumit_core::fx::FxCategory) -> bool) -> Vec<BridgeEff
                     .any(|def| def.schema().match_name == schema.match_name)
                 {
                     NAMESPACE_BUILTIN
+                } else if schema
+                    .match_name
+                    .starts_with(lumit_core::fx::LFX_MATCH_PREFIX)
+                {
+                    NAMESPACE_LFX
                 } else {
                     NAMESPACE_OFX
                 }
@@ -339,6 +355,9 @@ pub struct BridgePluginScan {
 /// plugin once, so a rescan after installing something new is safe at
 /// any moment.
 pub fn rescan_plugins() -> BridgePluginScan {
+    // The extensions' LFX effects first: they are files read, not bundles
+    // opened, so a project opened during the scan finds them soonest.
+    let (lfx_added, lfx_skipped) = crate::api::extensions::register_effects();
     let prefs = lumit_project::PluginPrefs::load_default();
     // The stored preference becomes the running one first, so a plugin
     // registered by an earlier scan and switched off since is switched off for
@@ -351,12 +370,11 @@ pub fn rescan_plugins() -> BridgePluginScan {
     let outcome =
         lumit_ofx::discover::scan(&options, &mut |def| lumit_render::gpufx::ofx::register(def));
     let mut scan = BridgePluginScan {
-        registered: outcome
-            .registered
-            .iter()
-            .map(|found| found.label.clone())
+        registered: lfx_added
+            .into_iter()
+            .chain(outcome.registered.iter().map(|found| found.label.clone()))
             .collect(),
-        skipped: outcome.skipped,
+        skipped: lfx_skipped.into_iter().chain(outcome.skipped).collect(),
     };
     scan_audio_plugins(&prefs, &mut scan);
     // Written beside plugins.json so someone whose plugin is missing can send
@@ -2133,6 +2151,8 @@ pub const BADGE_REASONS: &[&str] = &[
     "unknown_effect",
     "shader_failed",
     "addon_missing",
+    "lfx_missing",
+    "lfx_struck_off",
 ];
 
 /// Why this instance is not doing its own work, if it is not.
@@ -2164,6 +2184,22 @@ fn badge_of(effect: &EffectInstance) -> (Option<String>, Option<String>) {
             (Some("plugin_disabled".to_owned()), None)
         } else {
             (Some("plugin_failed".to_owned()), Some(why))
+        };
+    }
+    // An LFX effect answers for itself: missing names the extension to
+    // install, a shader that is refused or will not compile says why as the
+    // Custom shader's does, and one the graphics device was lost under twice
+    // is switched off until Lumit restarts.
+    if effect.effect.namespace == lumit_core::model::EffectNamespace::Lfx {
+        use lumit_render::gpufx::lfx::{status, LfxStatus};
+        let badge = |key: &str, detail| (Some(key.to_owned()), detail);
+        return match status(name) {
+            LfxStatus::Draws => (None, None),
+            LfxStatus::Missing { extension } => badge("lfx_missing", Some(extension)),
+            LfxStatus::SwitchedOff => badge("lfx_struck_off", None),
+            LfxStatus::Refused(why) | LfxStatus::WontCompile(why) => {
+                badge("shader_failed", Some(why))
+            }
         };
     }
     // A Custom shader that does not compile is the one built-in that can wear a

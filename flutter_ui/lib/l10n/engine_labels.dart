@@ -1835,8 +1835,9 @@ bool hasColourProblem(String key) => colourProblem(key, const {}) != null;
 // reason has no case below.
 
 /// The badge sentence for [key], or null when this build has none — the caller
-/// then draws nothing rather than a raw key.
-String? effectBadge(String key) {
+/// then draws nothing rather than a raw key. [detail] is the engine's line
+/// beneath, which a missing LFX effect's sentence names instead.
+String? effectBadge(String key, [String? detail]) {
   switch (key) {
     case 'plugin_failed':
       return l10n.badgePluginFailed;
@@ -1856,6 +1857,14 @@ String? effectBadge(String key) {
     // which one to install, untranslated, because it is an addon id.
     case 'addon_missing':
       return l10n.badgeAddonMissing;
+    // An LFX effect no installed extension carries. The detail is the
+    // extension's id, said in the sentence.
+    case 'lfx_missing':
+      return l10n.badgeLfxMissing(detail ?? '');
+    // An LFX effect the graphics device was lost under twice, switched off
+    // until Lumit restarts.
+    case 'lfx_struck_off':
+      return l10n.badgeLfxStruckOff;
     default:
       return null;
   }

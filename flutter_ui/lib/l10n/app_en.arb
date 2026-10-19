@@ -14065,6 +14065,19 @@
   "@badgeAddonMissing": {
     "description": "Calm badge at the top of an effect's card in the Effect controls panel, when the effect asks a trained model for a reading and the machine has not got the model. The layer still composites, showing the picture unchanged, and the addon to install is named beneath it."
   },
+  "badgeLfxMissing": "Install the {id} extension",
+  "@badgeLfxMissing": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an extension's effect in the project when no installed extension carries it. The id is the extension's own short id from its manifest, such as tape. The effect is kept exactly as it was saved and the layer shows its picture unchanged.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "badgeLfxStruckOff": "This effect is switched off until Lumit restarts",
+  "@badgeLfxStruckOff": {
+    "description": "Calm badge at the top of an effect's card in the Effect controls panel, for an extension's shader effect that was running when the graphics card stopped responding twice. Lumit switched it off for the rest of this run; the layer still composites, showing the picture unchanged."
+  },
   "badgeShaderFailed": "This shader did not compile",
   "@badgeShaderFailed": {
     "description": "Calm badge at the top of a Custom shader's card in the Effect controls panel, when the WGSL the user wrote or loaded will not compile. The layer still composites, showing the picture unchanged, and the compiler's own message appears beneath it with its line numbers counted from the user's own text."
@@ -17193,6 +17206,113 @@
   "extensionBack": "Go back",
   "@extensionBack": {
     "description": "Button on the warning strip of an extension's dock panel. Loads the extension's own page again."
+  },
+  "extensionInstalledPlain": "{name} installed",
+  "@extensionInstalledPlain": {
+    "description": "Bottom-strip notice after an extension that has no panel of its own (only effects) is installed.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionNotOurs": "{name} is in a folder Lumit doesn't own",
+  "@extensionNotOurs": {
+    "description": "Bottom-strip notice after Remove is pressed on an extension in Settings that sits in the machine-wide folder or a folder the person added. Lumit leaves those folders alone, so the extension stays. The name is the extension's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionRemoveFailed": "Couldn't remove {name}",
+  "@extensionRemoveFailed": {
+    "description": "Bottom-strip notice after Remove is pressed on an extension in Settings and its folder would not delete, so it is still installed. The name is the extension's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionCanEffects": "Add effects: {names}",
+  "@extensionCanEffects": {
+    "description": "One line in the install window's It can list: the effects the extension adds to Lumit, by name, separated by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionInstallsTo": "Installs to",
+  "@extensionInstallsTo": {
+    "description": "Heading of the box in the install window that shows the folder an extension package will be installed into, beside a Change button."
+  },
+  "changeEllipsis": "Change…",
+  "@changeEllipsis": {
+    "description": "Button that opens a dialogue to pick something other than what is shown beside it."
+  },
+  "extensionPackageMade": "{name} package saved",
+  "@extensionPackageMade": {
+    "description": "Bottom-strip notice after Settings has saved an extension as a .lfx package file.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "fileTypeExtensionPackage": "Lumit extension",
+  "@fileTypeExtensionPackage": {
+    "description": "File dialogue: the name of the .lfx file type, an extension packed as one file."
+  },
+  "settingsExtensionsInstallPackage": "Install a package",
+  "@settingsExtensionsInstallPackage": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a file picker for a .lfx package."
+  },
+  "settingsExtensionsMakePackage": "Make a package",
+  "@settingsExtensionsMakePackage": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Choose button: pick an extension's folder, then where to save it as one .lfx file to share."
+  },
+  "settingsExtensionEffects": "Effects: {names}",
+  "@settingsExtensionEffects": {
+    "description": "Line under an installed extension's row in Settings: the effects it adds, by name, separated by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGroupExtensionFolders": "Extension folders",
+  "@settingsGroupExtensionFolders": {
+    "description": "Section heading on the Addons page of Settings: the folders Lumit looks in for extensions."
+  },
+  "settingsExtensionsMachineFolder": "Machine-wide folder",
+  "@settingsExtensionsMachineFolder": {
+    "description": "Row title in the Extension folders section of Settings: the folder shared by every account on this computer, where an extension's own installer may put it. Its path is shown underneath."
+  },
+  "settingsExtensionsAddFolder": "Add a folder",
+  "@settingsExtensionsAddFolder": {
+    "description": "Row title in the Extension folders section of Settings, beside a Choose button: pick another folder for Lumit to look in for extensions."
+  },
+  "effectFromExtension": "From an extension",
+  "@effectFromExtension": {
+    "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect came from an installed extension."
+  },
+  "lfxInterface": "Interface",
+  "@lfxInterface": {
+    "description": "Button on the heading of an extension's effect in the Effect controls panel. Opens the effect's own interface, a page the extension draws, in a floating panel."
+  },
+  "tipLfxInterface": "Open interface",
+  "@tipLfxInterface": {
+    "description": "Tooltip on the Interface button on the heading of an extension's effect in the Effect controls panel."
+  },
+  "lfxInterfaceEmpty": "Select a layer with {name}",
+  "@lfxInterfaceEmpty": {
+    "description": "Quiet line in an extension effect's floating interface panel when it opens and no selected layer has that effect. Once the extension's page is showing, the page draws its own empty state instead. The name is the effect's.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "profileUnnamed": "You",
   "@profileUnnamed": {

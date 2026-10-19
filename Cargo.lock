@@ -2135,10 +2135,13 @@ name = "lumit-extensions"
 version = "0.8.1"
 dependencies = [
  "getrandom 0.4.3",
+ "lumit-core",
+ "lumit-gpu",
  "lumit-project",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+ "zip",
 ]
 
 [[package]]

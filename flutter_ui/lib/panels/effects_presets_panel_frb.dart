@@ -137,6 +137,12 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
     _boundUi = Provider.of<LumitUiState>(context, listen: false);
     _boundUi!.panelSearchRequest.addListener(_onSearchRequested);
     _boundUi!.presetsChanged.addListener(_refreshPresets);
+    // An extension installed or removed brings or takes its effects.
+    _boundUi!.extensions.addListener(_extensionsChanged);
+  }
+
+  void _extensionsChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onSearchRequested() {
@@ -155,6 +161,7 @@ class _EffectsPresetsPanelFrbState extends State<EffectsPresetsPanelFrb> {
   void dispose() {
     _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
     _boundUi?.presetsChanged.removeListener(_refreshPresets);
+    _boundUi?.extensions.removeListener(_extensionsChanged);
     _search.dispose();
     _searchFocus.dispose();
     super.dispose();
@@ -609,6 +616,9 @@ const String _ofxNamespace = 'ofx';
 /// VST3, which the browser has no reason to tell apart.
 const String _audioNamespace = 'audio';
 
+/// And the one an effect an extension carries has (`NAMESPACE_LFX`).
+const String _lfxNamespace = 'lfx';
+
 class _EffectRow extends StatelessWidget {
   final BridgeEffectInfo effect;
   final VoidCallback onApply;
@@ -654,7 +664,9 @@ class _EffectRow extends StatelessWidget {
                       ? l10n.effectFromAudioPlugin
                       : plugin
                           ? l10n.effectFromPlugin
-                          : l10n.effectBuiltIn,
+                          : effect.namespace == _lfxNamespace
+                              ? l10n.effectFromExtension
+                              : l10n.effectBuiltIn,
                   key: ValueKey<String>('fx-provenance-${effect.name}'),
                   style: ThemeScope.of(context)
                       .theme

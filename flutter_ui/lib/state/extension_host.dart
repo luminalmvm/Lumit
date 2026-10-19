@@ -84,6 +84,35 @@ abstract class ExtensionSurface {
   Future<String?> chooseFolder();
 }
 
+/// The one effect an LFX effect's interface page drives: the instance its
+/// panel is following. Only that page's host has one.
+///
+/// Values go in and come out in the row's own units: a number for a number
+/// row (a point is its own `_x` and `_y` rows), `[r, g, b, a]` for a colour,
+/// true or false for a checkbox, and the option's index for a choice.
+/// `effect.changed` carries `{values: {id: value}}` and `effect.target`
+/// carries `{id}`, null once nothing is followed.
+abstract class EffectChannel {
+  /// Every row at the playhead: `{id, label, kind, min, max, choices, value}`.
+  List<Map<String, Object?>> rows();
+
+  /// A drag on [id] starts. What [set] sends until [end] is previewed.
+  void begin(String id);
+
+  /// Write [value] to [id]. Committed at once unless a drag is running.
+  void set(String id, Object? value);
+
+  /// The drag ends, and what it set is committed as one undo step.
+  void end();
+
+  /// Drop a drag the page left open, and its preview: the page reloaded,
+  /// went elsewhere, or is gone.
+  void cancel();
+
+  /// Where the panel's events go, while the page is up.
+  void Function(String event, Map<String, Object?> data)? onEvent;
+}
+
 class ExtensionHost with WidgetsBindingObserver {
   final BridgeExtension extension;
   final LumitState app;
@@ -97,12 +126,17 @@ class ExtensionHost with WidgetsBindingObserver {
   /// Where messages for the page go. Null until the page is up.
   void Function(Map<String, Object?> message)? post;
 
+  /// The effect an LFX interface page drives. Null for every other page,
+  /// which is refused the `effect` calls.
+  final EffectChannel? effect;
+
   ExtensionHost({
     required this.extension,
     required this.app,
     required this.surface,
     required this.approvedFolders,
     required this.onFoldersChanged,
+    this.effect,
   });
 
   /// A permission as a manifest spells it.
@@ -138,6 +172,8 @@ class ExtensionHost with WidgetsBindingObserver {
 
   /// Start telling the page what it may know. Called once the page is up.
   void start() {
+    effect?.cancel();
+    effect?.onEvent = _emit;
     WidgetsBinding.instance.addObserver(this);
     app.addListener(_projectMaybeChanged);
     app.share.roster.addListener(_shareMaybeChanged);
@@ -164,6 +200,8 @@ class ExtensionHost with WidgetsBindingObserver {
   }
 
   void dispose() {
+    effect?.cancel();
+    effect?.onEvent = null;
     WidgetsBinding.instance.removeObserver(this);
     app.removeListener(_projectMaybeChanged);
     app.share.roster.removeListener(_shareMaybeChanged);
@@ -391,6 +429,9 @@ class ExtensionHost with WidgetsBindingObserver {
     final id = message['id'];
     final method = message['method'];
     if (id is! int || method is! String) return;
+    // Call 0 is the bootstrap's, from each new page, so a reload drops a
+    // drag the old page left open.
+    if (id == 0) effect?.cancel();
     final params = message['params'];
     try {
       final result = await _call(
@@ -416,6 +457,11 @@ class ExtensionHost with WidgetsBindingObserver {
     throw ExtensionRefusal('not-allowed',
         'this extension did not ask for the ${_word(permission)} permission');
   }
+
+  EffectChannel _effect() =>
+      effect ??
+      (throw const ExtensionRefusal(
+          'not-allowed', "only an effect's interface page can use effect"));
 
   String _text(Map<Object?, Object?> params, String name) {
     final value = params[name];
@@ -514,6 +560,18 @@ class ExtensionHost with WidgetsBindingObserver {
       case 'share.stop':
         _need(BridgeExtensionPermission.share);
         app.stopSharing();
+        return null;
+
+      case 'effect.rows':
+        return _effect().rows();
+      case 'effect.begin':
+        _effect().begin(_text(params, 'id'));
+        return null;
+      case 'effect.set':
+        _effect().set(_text(params, 'id'), params['value']);
+        return null;
+      case 'effect.end':
+        _effect().end();
         return null;
     }
     throw ExtensionRefusal('unknown-method', 'Lumit has no $method');

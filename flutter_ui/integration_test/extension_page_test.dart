@@ -99,11 +99,13 @@ void main() {
           author: '',
           homepage: '',
           folder: folder.path,
+          panel: true,
           entry: 'index.html',
           // Not `share`, so the page's one share call is refused.
           permissions: const [BridgeExtensionPermission.project],
           hosts: const [],
           broken: false,
+          effects: const [],
         ),
       ),
     ));

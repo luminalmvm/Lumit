@@ -680,10 +680,19 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExtension dco_decode_bridge_extension(dynamic raw);
 
   @protected
+  BridgeExtensionEffect dco_decode_bridge_extension_effect(dynamic raw);
+
+  @protected
+  BridgeExtensionFolders dco_decode_bridge_extension_folders(dynamic raw);
+
+  @protected
   BridgeExtensionOutcome dco_decode_bridge_extension_outcome(dynamic raw);
 
   @protected
   BridgeExtensionPermission dco_decode_bridge_extension_permission(dynamic raw);
+
+  @protected
+  BridgeExtensionRemoval dco_decode_bridge_extension_removal(dynamic raw);
 
   @protected
   BridgeFadeShape dco_decode_bridge_fade_shape(dynamic raw);
@@ -1431,6 +1440,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeExtension> dco_decode_list_bridge_extension(dynamic raw);
+
+  @protected
+  List<BridgeExtensionEffect> dco_decode_list_bridge_extension_effect(
+      dynamic raw);
 
   @protected
   List<BridgeExtensionPermission> dco_decode_list_bridge_extension_permission(
@@ -2687,11 +2700,23 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExtension sse_decode_bridge_extension(SseDeserializer deserializer);
 
   @protected
+  BridgeExtensionEffect sse_decode_bridge_extension_effect(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExtensionFolders sse_decode_bridge_extension_folders(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeExtensionOutcome sse_decode_bridge_extension_outcome(
       SseDeserializer deserializer);
 
   @protected
   BridgeExtensionPermission sse_decode_bridge_extension_permission(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExtensionRemoval sse_decode_bridge_extension_removal(
       SseDeserializer deserializer);
 
   @protected
@@ -3549,6 +3574,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<BridgeExtension> sse_decode_list_bridge_extension(
+      SseDeserializer deserializer);
+
+  @protected
+  List<BridgeExtensionEffect> sse_decode_list_bridge_extension_effect(
       SseDeserializer deserializer);
 
   @protected
@@ -4955,12 +4984,24 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeExtension self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_extension_effect(
+      BridgeExtensionEffect self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_extension_folders(
+      BridgeExtensionFolders self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_extension_outcome(
       BridgeExtensionOutcome self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_extension_permission(
       BridgeExtensionPermission self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_extension_removal(
+      BridgeExtensionRemoval self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_fade_shape(
@@ -5915,6 +5956,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_list_bridge_extension(
       List<BridgeExtension> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_bridge_extension_effect(
+      List<BridgeExtensionEffect> self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_bridge_extension_permission(
