@@ -39,7 +39,7 @@
 //! nothing is ever *silently* something else.
 
 use lumit_core::anim::{Animation, Property as LumProperty};
-use lumit_core::fx::ParamKind;
+use lumit_core::fx::{ParamKind, Unit};
 use lumit_core::model::{EffectInstance, EffectKey, EffectNamespace, EffectParam, EffectValue};
 use uuid::Uuid;
 
@@ -361,6 +361,17 @@ fn carry(
                 | ParamKind::Angle { .. },
             ) => {
                 let p = from_node(conv, at, leaf, 0, 0.0);
+                // After Effects keeps a share of the frame in the layer's
+                // pixels: Sapphire's X Rand Amp of 0.1 is 192 there.
+                let p = match param.unit {
+                    Unit::FrameWidth => {
+                        super::fx_colour::affine(p, 1.0 / conv.size.0.max(1.0), 0.0)
+                    }
+                    Unit::FrameHeight => {
+                        super::fx_colour::affine(p, 1.0 / conv.size.1.max(1.0), 0.0)
+                    }
+                    _ => p,
+                };
                 EffectValue::Float(if dissolve && folded(name) == DISSOLVE_AMOUNT {
                     curved(conv, here, schema.label, p)
                 } else {

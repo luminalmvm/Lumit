@@ -359,10 +359,15 @@ const fn control(
     }
 }
 
-/// S_Glow's two, one of which the After Effects side hands over as a colour.
+/// S_Glow's three: one the After Effects side hands over as a colour, and one
+/// it keeps in pixels where the plug-in reads a share of the width.
 const GLOW_CONTROLS: &[lumit_core::fx::ParamSchema] = &[
     control("brightness", "Brightness", 1.0),
     control("centre_x", "Centre", 0.5),
+    lumit_core::fx::ParamSchema {
+        unit: lumit_core::fx::Unit::FrameWidth,
+        ..control("width", "Width", 0.1)
+    },
 ];
 
 /// S_DissolveLuma's one that matters: the transition itself.
@@ -398,6 +403,7 @@ fn a_third_party_effect_maps_direct_to_the_ofx_plugin_the_user_has_installed() {
         "S_Glow",
         vec![
             vendor_leaf("S_Glow-0004", "Brightness", "float", serde_json::json!(2.5)),
+            vendor_leaf("S_Glow-0005", "Width", "float", serde_json::json!(192.0)),
             // Named alike, shaped unlike: a colour where the plug-in declares a
             // number. Said out loud, never coerced.
             vendor_leaf(
@@ -424,13 +430,22 @@ fn a_third_party_effect_maps_direct_to_the_ofx_plugin_the_user_has_installed() {
         Some(EffectValue::Float(LumProperty::fixed(2.5))),
         "the control both builds name Brightness carried across"
     );
+    assert_eq!(
+        ran.inst
+            .params
+            .iter()
+            .find(|p| p.id == "width")
+            .map(|p| p.value.clone()),
+        Some(EffectValue::Float(LumProperty::fixed(0.1))),
+        "192 pixels of a 1920 wide layer is a tenth of its width"
+    );
     assert!(
         ran.report.rows.iter().any(|r| matches!(
             &r.reason,
             Reason::EffectAsPlugin { match_name, carried, controls, .. }
-                if match_name == "S_Glow" && *carried == 1 && *controls == 2
+                if match_name == "S_Glow" && *carried == 2 && *controls == 3
         )),
-        "the report says which plug-in, and one of its two controls carried"
+        "the report says which plug-in, and two of its three controls carried"
     );
     assert!(
         ran.report.rows.iter().any(|r| matches!(

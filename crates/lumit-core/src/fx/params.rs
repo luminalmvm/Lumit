@@ -119,6 +119,12 @@ pub enum Unit {
     /// of controls a frame count is the honest spelling of (Flash's Duration
     /// and Phase, Datamosh's reach along the flow).
     Frames,
+    /// A share of the frame's width, where 1 is the whole width. Only an OFX
+    /// plug-in declares it, for a normalised X. After Effects stores the same
+    /// control in pixels, so the import divides by the width.
+    FrameWidth,
+    /// The same for the frame's height: an OFX plug-in's normalised Y.
+    FrameHeight,
 }
 
 impl Unit {
