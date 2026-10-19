@@ -31,38 +31,54 @@ What a script prints is not shown anywhere.
 | Object | What works |
 | --- | --- |
 | `app` | `project`, `newProject()`, `beginUndoGroup()`, `endUndoGroup()` |
-| `app.project` | `items`, `numItems`, `item()`, `rootFolder`, `file`, `importFile()`, `save()` |
+| `app.project` | `items`, `numItems`, `item()`, `rootFolder`, `activeItem`, `file`, `importFile()`, `save()` |
 | `items` | `addFolder()`, `addComp()`, `length`, `[n]` |
 | Any item | `name`, `parentFolder`, `comment` |
-| `CompItem` | `width`, `height`, `duration`, `frameRate`, `frameDuration`, `pixelAspect`, `numLayers`, `layer()`, `layers`, `openInViewer()` |
-| `layers` | `addCamera()`, `addNull()`, `add()` of footage, `byName()`, `length`, `[n]` |
-| Any layer | `name`, `index`, `enabled`, `guideLayer`, `threeDLayer`, `shy`, `solo`, `locked`, `motionBlur`, `startTime`, `inPoint`, `outPoint`, `parent`, `setParentWithJump()`, `autoOrient`, `moveToBeginning()`, `moveToEnd()`, `moveBefore()`, `moveAfter()`, `remove()`, `property()`, `transform` |
+| `CompItem` | `width`, `height`, `duration`, `frameRate`, `frameDuration`, `pixelAspect`, `numLayers`, `layer()`, `layers`, `markerProperty`, `openInViewer()` |
+| `layers` | `addCamera()`, `addNull()`, `addSolid()`, `add()` of footage or a comp, `byName()`, `length`, `[n]` |
+| Any layer | `name`, `index`, `enabled`, `guideLayer`, `threeDLayer`, `shy`, `solo`, `locked`, `motionBlur`, `startTime`, `inPoint`, `outPoint`, `parent`, `setParentWithJump()`, `autoOrient`, `moveToBeginning()`, `moveToEnd()`, `moveBefore()`, `moveAfter()`, `remove()`, `property()`, `transform`, `Effects`, `marker` |
 | Properties | Anchor Point, Position, Scale, Orientation, X, Y and Z Rotation, Opacity, and a camera's Point of Interest, Zoom, Focus Distance and Aperture, by match name or by name |
-| Keys | `value`, `valueAtTime()`, `setValue()`, `setValueAtTime()`, `setValuesAtTimes()`, `addKey()`, `removeKey()`, `numKeys`, `keyTime()`, `keyValue()`, `setInterpolationTypeAtKey()` |
+| Keys | `value`, `valueAtTime()`, `setValue()`, `setValueAtTime()`, `setValuesAtTimes()`, `addKey()`, `removeKey()`, `numKeys`, `keyTime()`, `keyValue()`, `setInterpolationTypeAtKey()`, `setTemporalEaseAtKey()`, `keyInTemporalEase()`, `keyOutTemporalEase()`, `setTemporalAutoBezierAtKey()`, `setTemporalContinuousAtKey()`, `setSpatialTangentsAtKey()` |
+| Expressions | `expression`, `expressionEnabled` |
+| Effects | `addProperty()` by match name or name, `property()` by number, match name or Lumit's name, `numProperties`, `name`, `enabled` |
+| Markers | `setValueAtTime()` with a `MarkerValue`, `setValuesAtTimes()`, `numKeys`, `keyTime()`, `keyValue()`, `removeKey()` |
 | `FootageItem` | `mainSource.conformFrameRate`, `file`, `duration` |
 | `ImportOptions` | `file`, `sequence`, footage as `importAs` |
-| `File`, `Folder` | `$.fileName`, `name`, `fsName`, `parent`, `exists`, `getFiles()`, `open()`, `read()`, `readln()`, `File.openDialog()` |
-| Globals | `alert()`, `$.writeln()`, `writeLn()`, `AutoOrientType`, `KeyframeInterpolationType`, `ImportAsType` |
+| `File`, `Folder` | `$.fileName`, `name`, `fsName`, `parent`, `exists`, `getFiles()`, `open()`, `read()`, `readln()`, `write()`, `writeln()`, `close()`, `encoding`, `lineFeed`, `remove()`, `Folder.create()`, `File.openDialog()` |
+| Globals | `alert()`, `$.writeln()`, `writeLn()`, `AutoOrientType`, `KeyframeInterpolationType`, `KeyframeEase`, `MarkerValue`, `ImportAsType` |
 
 Anything else stops the script with a message naming it.
 
 ### Where Lumit differs
 
-- Keys are linear or hold. A Bezier key comes in as linear, and ease and curved motion
-  paths are not carried.
+- A Bezier key with no ease of its own is automatic. Spatial tangents are not carried, so
+  a point moves between keys in a straight line.
+- `valueAtTime()` reads between eased keys in a straight line.
+- Roving keys stay at their times.
 - Key times land on the nearest frame of the comp.
 - A 3D layer's X, Y and Z Rotation are turned into Lumit's rotation order. The layer
   matches After Effects on every key.
 - Orientation is set once. Keys on it stop the script.
 - A layer given a `parent` stays where it is at the comp's start.
 - `app.newProject()` answers the open project.
+- `activeItem` is the comp open in the Viewer. On the command line it is the project's only
+  comp, or null when there are more.
+- An expression is JavaScript. While it is on, the keys under it are not kept.
+- An effect Lumit does not have stops the script. Controls named by number or match name take
+  After Effects' values and convert them as importing does. By name, they take Lumit's own.
+- A marker keeps its comment, duration, label colour and whether it is a chapter. Chapter
+  text, URLs and cue points are not kept.
+- `layers.precompose()` stops the script.
 - A numbered still always imports as the whole sequence.
 - A footage item's `duration` is known once it has a layer.
-- An item's `comment` and a comp's pixel aspect are not kept.
+- An item's `comment` and a comp's or solid's pixel aspect are not kept.
 - `#target` lines are skipped. `#include` stops the script.
 - A script reads and lists files in its own folder and the folders inside it, and files you
   chose or passed to it. A script at the top of a drive or in the home folder itself has no
   folder of its own. Anywhere else `exists` is false.
+- A script writes text files, as UTF-8, only in its own folder and the folders inside it, and
+  never over the project. A run writes at most 64 MB. A script with no folder of its own, as
+  over MCP, writes nothing.
 - A script imports footage only from the files it can read. It saves the project over its own
   file or as a new `.lum` file, and exports, only into the project's folder or its own, never
   over a file.
