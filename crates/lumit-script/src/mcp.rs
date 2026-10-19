@@ -155,7 +155,7 @@ fn server_info() -> Value {
 }
 
 /// `layer.add` as a tool name: letters, digits, `_` and `-` only.
-fn tool_name(command: &str) -> String {
+pub(crate) fn tool_name(command: &str) -> String {
     command.replace('.', "_")
 }
 

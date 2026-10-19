@@ -21,6 +21,7 @@ mod include;
 pub mod live;
 pub mod mcp;
 mod reach;
+mod reference;
 mod script;
 
 use std::path::{Path, PathBuf};
@@ -35,6 +36,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 pub use commands::COMMANDS;
+pub use reference::reference_page;
 pub use script::{run, Dialog, Limits, RunError, RunOptions, RunReport};
 
 /// What a command needs from the program it runs in. Lumit has one, and the
