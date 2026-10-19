@@ -33,6 +33,9 @@ pub const MAX_PASSES: usize = 8;
 /// The one pass an effect that lists none draws in.
 pub const DEFAULT_PASS: &str = "shade";
 
+/// How many lost graphics devices switch an effect off for the session.
+pub const STRIKES_OFF: u32 = 2;
+
 /// One effect an extension carries, as the engine needs it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LfxEffect {
@@ -140,6 +143,9 @@ static TABLE: RwLock<BTreeMap<&'static str, Arc<Installed>>> = RwLock::new(BTree
 /// Every def made this session, installed or not. Never shrinks.
 static DEFS: Mutex<BTreeMap<&'static str, &'static LfxDef>> = Mutex::new(BTreeMap::new());
 
+/// Lost devices counted against each effect.
+static STRIKES: Mutex<BTreeMap<String, u32>> = Mutex::new(BTreeMap::new());
+
 /// `lfx:<extension>/<effect>`.
 #[must_use]
 pub fn match_name(extension: &str, id: &str) -> String {
@@ -227,10 +233,33 @@ pub fn all() -> Vec<Arc<Installed>> {
 }
 
 /// What the frame key folds for an LFX op: the key hash while it draws, and
-/// 0 while it is missing, because then it draws nothing.
+/// a different number when it is missing (0) or switched off (1), because
+/// then it draws nothing.
 #[must_use]
 pub fn render_term(match_name: &str) -> u64 {
+    if is_off(match_name) {
+        return 1;
+    }
     installed(match_name).map_or(0, |e| e.key_hash)
+}
+
+/// Count a lost graphics device against an effect. `true` when this strike
+/// switched it off.
+pub fn strike(match_name: &str) -> bool {
+    let Ok(mut strikes) = STRIKES.lock() else {
+        return false;
+    };
+    let n = strikes.entry(match_name.to_owned()).or_insert(0);
+    *n += 1;
+    *n == STRIKES_OFF
+}
+
+/// Whether two lost devices have switched an effect off for the session.
+#[must_use]
+pub fn is_off(match_name: &str) -> bool {
+    STRIKES
+        .lock()
+        .is_ok_and(|s| s.get(match_name).is_some_and(|n| *n >= STRIKES_OFF))
 }
 
 /// The manifest facts, checked. Answers the category.

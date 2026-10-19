@@ -4,10 +4,11 @@
 //! effects and their shaders read and wrapped. This draws them: one dispatch
 //! per pass, each pass's picture handed to the passes after it, the last one
 //! mixed against the input by the effect's Mix row. Anything that stops an
-//! effect drawing (missing, refused or will not compile) leaves
+//! effect drawing (missing, refused, will not compile, switched off) leaves
 //! the picture as it came in, and [`status`] says which.
 
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use lumit_core::fx::effects::custom_shader as cs;
 use lumit_core::fx::lfx::{self, LfxEffect, LfxError};
@@ -18,6 +19,14 @@ use lumit_gpu::GpuContext;
 use super::{AuxSlot, CustomShader, GpuEffect};
 
 type Tex = wgpu::Texture;
+
+/// How long after its dispatch an effect counts as in flight when the
+/// device is lost. Longer than the drivers' own watchdogs, which stop a
+/// stuck dispatch after about two seconds.
+const IN_FLIGHT: Duration = Duration::from_secs(5);
+
+/// The LFX effects dispatched lately, and when.
+static LATELY: Mutex<Vec<(&'static str, Instant)>> = Mutex::new(Vec::new());
 
 /// Install one effect and register it in both tables: its pass here first,
 /// then its def in the catalogue, so no catalogue entry is ever without its
@@ -44,6 +53,8 @@ pub enum LfxStatus {
     Missing {
         extension: String,
     },
+    /// The graphics device was lost twice while it ran.
+    SwitchedOff,
     /// The shader breaks the contract; the sentence says how.
     Refused(String),
     /// The shader does not compile; the compiler's message, on the
@@ -55,6 +66,9 @@ pub enum LfxStatus {
 /// Custom shader. Compiles once per distinct shader.
 #[must_use]
 pub fn status(match_name: &str) -> LfxStatus {
+    if lfx::is_off(match_name) {
+        return LfxStatus::SwitchedOff;
+    }
     let Some(entry) = lfx::installed(match_name) else {
         return LfxStatus::Missing {
             extension: lfx::extension_of(match_name)
@@ -89,6 +103,32 @@ fn compiled(key: u64, program: &lumit_core::fx::shader::ShaderProgram) -> Option
     why
 }
 
+/// Strike every LFX effect dispatched in the last few seconds: the device
+/// was lost, and one of them may be why. Called once when a lost device is
+/// noticed; answers the effects this switched off.
+pub fn strike_in_flight() -> Vec<&'static str> {
+    let Ok(mut lately) = LATELY.lock() else {
+        return Vec::new();
+    };
+    let now = Instant::now();
+    let hit: Vec<&'static str> = lately
+        .drain(..)
+        .filter(|(_, at)| now.duration_since(*at) <= IN_FLIGHT)
+        .map(|(name, _)| name)
+        .collect();
+    hit.into_iter().filter(|name| lfx::strike(name)).collect()
+}
+
+fn note_dispatch(name: &'static str) {
+    if let Ok(mut lately) = LATELY.lock() {
+        let now = Instant::now();
+        match lately.iter_mut().find(|(n, _)| *n == name) {
+            Some(slot) => slot.1 = now,
+            None => lately.push((name, now)),
+        }
+    }
+}
+
 /// One installed effect's pass, by match name.
 struct LfxPass(&'static str);
 
@@ -107,9 +147,9 @@ impl GpuEffect for LfxPass {
         p: Params<'_>,
         aux: AuxSlot<'_>,
     ) -> Tex {
-        // Missing at resolve (no hash), a lost device or a refused shader:
-        // the input unchanged, never a fault.
-        if cs::hash_in(p).is_none() || ctx.device_lost() {
+        // Missing or switched off at resolve (no hash), off since, a lost
+        // device or a refused shader: the input unchanged, never a fault.
+        if cs::hash_in(p).is_none() || lfx::is_off(self.0) || ctx.device_lost() {
             return tex.clone();
         }
         let Some(entry) = lfx::installed(self.0) else {
@@ -136,6 +176,7 @@ impl GpuEffect for LfxPass {
         let mix = (p.float(lumit_core::fx::MIX_ID, 100.0) / 100.0).clamp(0.0, 1.0);
         let params = program.pack(p);
         let passes = entry.passes();
+        note_dispatch(self.0);
         let mut done: Vec<Tex> = Vec::with_capacity(passes.len());
         for (i, ((_, scale), pipeline)) in passes.iter().zip(&pipelines).enumerate() {
             let last = i + 1 == passes.len();
@@ -176,7 +217,14 @@ impl GpuEffect for LfxPass {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+    use lumit_core::anim::Property;
+    use lumit_core::model::{
+        Composition, Document, EffectInstance, EffectValue, Layer, LayerKind, LinearColour,
+        ProjectItem, SolidDef, Switches, TransformGroup,
+    };
+    use lumit_core::time::{CompTime, Duration, FrameRate, Rational};
     use std::sync::Arc;
+    use uuid::Uuid;
 
     const W: u32 = 8;
     const H: u32 = 8;
@@ -319,5 +367,142 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
                 assert!((got[i + 3] - 1.0).abs() < 1e-3, "alpha is the input's");
             }
         }
+    }
+
+    fn layer(kind: LayerKind) -> Layer {
+        Layer {
+            graph: Default::default(),
+            markers: Vec::new(),
+            id: Uuid::now_v7(),
+            name: "plate".into(),
+            kind,
+            in_point: CompTime(Rational::ZERO),
+            out_point: CompTime(Rational::new(10, 1).unwrap()),
+            start_offset: CompTime(Rational::ZERO),
+            transform: TransformGroup::default(),
+            matte: None,
+            parent: None,
+            label: 0,
+            volume_db: Property::zero(),
+            pan: Property::zero(),
+            audio_only: false,
+            audio_streams: Default::default(),
+            adjustment: false,
+            retime: None,
+            interpolation: Default::default(),
+            parked_flow: None,
+            graph_inputs: None,
+            blend: Default::default(),
+            masks: Vec::new(),
+            paint: Vec::new(),
+            puppet: None,
+            effects: Vec::new(),
+            styles: Vec::new(),
+            switches: Switches::default(),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    /// A gradient-free grey plate, with `effects` on it.
+    fn project(effects: Vec<EffectInstance>) -> (Document, Uuid) {
+        let def = Uuid::now_v7();
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: def,
+            name: "grey".into(),
+            colour: LinearColour([0.25, 0.4, 0.6, 1.0]),
+            width: 32,
+            height: 32,
+            extra: serde_json::Map::new(),
+        }));
+        let mut plate = layer(LayerKind::Solid { def });
+        plate.effects = effects;
+        let comp = Composition {
+            graph: None,
+            master_volume_db: 0.0,
+            sound_mix: false,
+            groups: Vec::new(),
+            beat_grid: None,
+            id: Uuid::now_v7(),
+            name: "Comp".into(),
+            width: 32,
+            height: 32,
+            frame_rate: FrameRate::new(30, 1).unwrap(),
+            duration: Duration(Rational::new(10, 1).unwrap()),
+            background: LinearColour::BLACK,
+            work_area: None,
+            layers: vec![plate],
+            markers: Vec::new(),
+            motion_blur: Default::default(),
+            extra: serde_json::Map::new(),
+        };
+        let id = comp.id;
+        doc.items.push(ProjectItem::Composition(comp));
+        (doc, id)
+    }
+
+    fn effects_of(doc: &Document) -> Vec<EffectInstance> {
+        doc.items
+            .iter()
+            .find_map(|item| match item {
+                ProjectItem::Composition(c) => Some(c.layers[0].effects.clone()),
+                _ => None,
+            })
+            .expect("the comp")
+    }
+
+    /// A project naming an LFX effect nobody installed here opens, draws its
+    /// input unchanged, and saves its values back as they were. Guards lost
+    /// work.
+    #[test]
+    fn a_missing_lfx_effect_opens_draws_nothing_and_keeps_its_values() {
+        // Built from the Custom shader's rows, then renamed: what a project
+        // made on a machine with the Tape extension would hold.
+        let mut missing = lumit_core::fx::instantiate("custom_shader").expect("a built-in");
+        missing.effect.namespace = lumit_core::model::EffectNamespace::Lfx;
+        missing.effect.match_name = lfx::match_name("nowhere", "tape");
+        missing.effect.version = 3;
+        missing.params.push(lumit_core::model::EffectParam {
+            id: "wobble".into(),
+            value: EffectValue::Float(Property::fixed(0.7)),
+            extra: serde_json::Map::new(),
+        });
+        for p in &mut missing.params {
+            if p.id == "mix" {
+                p.value = EffectValue::Float(Property::fixed(40.0));
+            }
+        }
+        missing
+            .extra
+            .insert("kept".into(), serde_json::json!({ "by": "a newer Lumit" }));
+        assert!(!lfx::is_installed(&missing.effect.match_name));
+        assert!(matches!(
+            status(&missing.effect.match_name),
+            LfxStatus::Missing { extension } if extension == "nowhere"
+        ));
+
+        let (doc, comp) = project(vec![missing.clone()]);
+        let dir = tempfile::tempdir().expect("a temp folder");
+        let first = dir.path().join("missing.lum");
+        lumit_project::save(&doc, &first).expect("it saves");
+        let (opened, _) = lumit_project::open(&first).expect("it opens");
+        let second = dir.path().join("again.lum");
+        lumit_project::save(&opened, &second).expect("it saves again");
+        let (again, _) = lumit_project::open(&second).expect("it opens again");
+        assert_eq!(effects_of(&opened), vec![missing.clone()]);
+        assert_eq!(effects_of(&again), vec![missing]);
+
+        let Ok(mut r) = crate::headless::HeadlessRenderer::shared() else {
+            lumit_gpu::no_adapter();
+            return;
+        };
+        let (plain, plain_comp) = project(Vec::new());
+        let (with, ..) = r
+            .render_rgba(&Arc::new(opened), comp, 0, 1.0)
+            .expect("it renders");
+        let (without, ..) = r
+            .render_rgba(&Arc::new(plain), plain_comp, 0, 1.0)
+            .expect("the control renders");
+        assert_eq!(with, without, "a missing effect leaves the picture alone");
     }
 }
