@@ -25,11 +25,12 @@ import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
+import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
 import 'package:lumit_flutter/shell/welcome_frb.dart' show projectDisplayName;
 import 'package:lumit_flutter/src/rust/api/assets.dart'
     show BridgeTextDocument;
 import 'package:lumit_flutter/src/rust/api/audio.dart'
-    show audioSetMuted, setAudioDevice;
+    show audioSetMuted, audioSetOffsetMs, setAudioDevice;
 import 'package:lumit_flutter/src/rust/api/cache.dart';
 import 'package:lumit_flutter/src/rust/api/colour.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -59,6 +60,7 @@ import 'package:lumit_flutter/src/rust/api/share.dart'
 import 'package:lumit_flutter/state/account.dart';
 import 'package:lumit_flutter/state/app_icon.dart';
 import 'package:lumit_flutter/state/backup.dart';
+import 'package:lumit_flutter/state/background.dart';
 import 'package:lumit_flutter/state/addons.dart';
 import 'package:lumit_flutter/state/extensions.dart';
 import 'package:lumit_flutter/state/addons_engine.dart';
@@ -458,6 +460,10 @@ class LumitUiState extends ChangeNotifier {
     }
     pushDiscordStatus();
   }
+
+  /// Let other programs drive Lumit, or stop, as Settings says.
+  void applyLiveEndpoint() =>
+      applyLiveEndpointFrb(workspace.liveEndpoint, _app, this);
 
   /// Tell Discord what Lumit is open on, as far as Settings allows. Called
   /// where the project's path or the fronted comp can have changed.
@@ -2463,9 +2469,11 @@ class LumitUiState extends ChangeNotifier {
       onExitRequested: () async {
         rememberSession();
         // The window stays open while the question is up. The platform waits
-        // for this answer, and closes only when it is told to exit.
-        if (_app.unsavedNeedsAsking && !await _app.askBeforeLeaving()) {
-          return AppExitResponse.cancel;
+        // for this answer, and closes only when it is told to exit. Quit in
+        // the tray can come with no window up, so it is shown first.
+        if (_app.unsavedNeedsAsking) {
+          if (this.workspace.keepRunning) await showWindow();
+          if (!await _app.askBeforeLeaving()) return AppExitResponse.cancel;
         }
         // A quit is a clean way out, so the next open doesn't read what is
         // left in the journal as a crash.
@@ -2474,6 +2482,9 @@ class LumitUiState extends ChangeNotifier {
         } catch (_) {
           // Closed already.
         }
+        // The endpoint's file goes with it, so nothing names a Lumit that
+        // has gone.
+        if (this.workspace.liveEndpoint) await stopLiveEndpointFrb();
         return AppExitResponse.exit;
       },
     );
@@ -2501,6 +2512,7 @@ class LumitUiState extends ChangeNotifier {
     setFullResDragPreviews(fullRes: perf.fullResDragPreviews);
     setHardwareDecode(on_: perf.hardwareDecode);
     pushDiscordStatus();
+    if (this.workspace.liveEndpoint) applyLiveEndpoint();
     // Which output Lumit is heard through. Same arrangement as the budgets: the
     // engine holds the live choice with no store behind it, so the settings
     // file carries it and hands it back here. Null means the system default,
@@ -2508,6 +2520,7 @@ class LumitUiState extends ChangeNotifier {
     // rather than made with an empty id, so nothing happens on a fresh install.
     final device = this.workspace.audioDevice;
     if (device != null) setAudioDevice(id: device);
+    audioSetOffsetMs(ms: this.workspace.audioOffsetMs);
     // How often a spare copy of the work is written, and how many are kept.
     // Always handed over rather than skipped when it matches the default: this
     // is what starts the engine's timer, so a fresh install with no settings

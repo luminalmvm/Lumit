@@ -7748,6 +7748,22 @@
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."
   },
+  "settingsKeepRunning": "Keep running in the background",
+  "@settingsKeepRunning": {
+    "description": "Settings window, General page: the name of the switch that keeps Lumit running in the system tray (the menu bar on macOS) when its window is closed, so the account's paired phones still see this computer and its exports."
+  },
+  "settingsOpenAtSignIn": "Open Lumit when you sign in",
+  "@settingsOpenAtSignIn": {
+    "description": "Settings window, General page: the name of the switch, shown only while Keep running in the background is on, that starts Lumit in the system tray (the menu bar on macOS) when the person signs in to the computer."
+  },
+  "trayOpen": "Open Lumit",
+  "@trayOpen": {
+    "description": "Row on the menu of Lumit's icon in the system tray (the menu bar on macOS), shown while Lumit keeps running in the background: brings the window back."
+  },
+  "trayQuit": "Quit Lumit",
+  "@trayQuit": {
+    "description": "Row on the menu of Lumit's icon in the system tray (the menu bar on macOS): ends Lumit, asking first about unsaved work as closing the window would."
+  },
   "settingsWelcomeOnLaunch": "Welcome screen on launch",
   "@settingsWelcomeOnLaunch": {
     "description": "Settings window, General page: the name of the switch that decides whether Lumit opens on the welcome screen. Off means it opens straight into the editor."
@@ -11780,6 +11796,10 @@
   "settingsAudioNoDevice": "This machine has no audio output.",
   "@settingsAudioNoDevice": {
     "description": "Settings window, Audio: the line under the output device row when the machine offers no sound output at all, so nothing can be played."
+  },
+  "settingsAudioOffset": "Audio offset",
+  "@settingsAudioOffset": {
+    "description": "Settings window, Audio: the name of the row that sets how many milliseconds late the sound is heard on this setup, so playback can line the picture up with it. Above zero holds the picture back for late sound, such as through Bluetooth headphones; below zero holds the sound back."
   },
   "settingsKeymapAfterEffects": "After Effects shortcuts",
   "@settingsKeymapAfterEffects": {
@@ -20266,5 +20286,109 @@
         "type": "String"
       }
     }
+  },
+  "menuRunScript": "Run script…",
+  "@menuRunScript": {
+    "description": "Item in the File menu. Opens a file chooser for a script, then runs it on the open project."
+  },
+  "fileTypeScript": "Script",
+  "@fileTypeScript": {
+    "description": "A file type in the system's Open dialogue for File › Run script: a JavaScript .js file or an After Effects .jsx script."
+  },
+  "scriptRunning": "Running {name}",
+  "@scriptRunning": {
+    "description": "On the card over the window while a script runs. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptStop": "Stop",
+  "@scriptStop": {
+    "description": "Button on the card over the window while a script runs. Stops the script and takes back what it did."
+  },
+  "scriptRan": "Ran {name}",
+  "@scriptRan": {
+    "description": "Bottom-strip notice after a script ran to the end. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptStopped": "Stopped {name}",
+  "@scriptStopped": {
+    "description": "Bottom-strip notice after Stop ended a script. What it did was taken back. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptFailed": "{name}: {error}",
+  "@scriptFailed": {
+    "description": "Bottom-strip notice when a script failed. {name} is the script's file name without its extension, {error} is the reason in English, as the script engine gives it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptFailedAt": "{name}, line {line}: {error}",
+  "@scriptFailedAt": {
+    "description": "Bottom-strip notice when a script failed at a line of its own. {name} is the script's file name without its extension, {line} the line number in the script, {error} the reason in English, as the script engine gives it.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "scriptCouldNotRun": "{name} could not run",
+  "@scriptCouldNotRun": {
+    "description": "Bottom-strip notice when a script could not be started at all. {name} is the script's file name without its extension.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsLiveEndpoint": "Let other programs drive Lumit",
+  "@settingsLiveEndpoint": {
+    "description": "Settings window: a switch, off by default. On, a program on this computer, such as an MCP client through lumit-cli, can edit the open project."
+  },
+  "liveDrivenBy": "{name} is driving Lumit",
+  "@liveDrivenBy": {
+    "description": "Bottom strip, while another program is connected and can edit the open project. {name} is the name the program gives itself.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "liveDrivenByProgram": "A program is driving Lumit",
+  "@liveDrivenByProgram": {
+    "description": "Bottom strip, while another program is connected and can edit the open project, and it has not given its name."
+  },
+  "liveDisconnect": "Disconnect",
+  "@liveDisconnect": {
+    "description": "Button on the bottom strip beside liveDrivenBy. Cuts the connected program off."
+  },
+  "liveCouldNotStart": "Other programs could not be let in",
+  "@liveCouldNotStart": {
+    "description": "Bottom-strip notice when turning on settingsLiveEndpoint failed."
+  },
+  "liveScript": "a script",
+  "@liveScript": {
+    "description": "Stands for {name} in scriptRunning when a connected program runs a script without naming it: Running a script."
   }
 }

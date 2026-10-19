@@ -148,6 +148,15 @@ Future<String?> pickPresetToOpen() async {
 XTypeGroup _shaderGroup() =>
     XTypeGroup(label: l10n.fileTypeShader, extensions: const ['wgsl']);
 
+/// Pick a script to run, JavaScript or After Effects', or null when
+/// cancelled.
+Future<String?> pickScript() async {
+  final file = await openFile(acceptedTypeGroups: [
+    XTypeGroup(label: l10n.fileTypeScript, extensions: const ['js', 'jsx'])
+  ]);
+  return file?.path;
+}
+
 /// Pick one `.wgsl` shader to load, or null when cancelled.
 Future<String?> pickShaderToOpen() async {
   final file = await openFile(acceptedTypeGroups: [_shaderGroup()]);

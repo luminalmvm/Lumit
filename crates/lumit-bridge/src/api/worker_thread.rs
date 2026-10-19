@@ -2353,7 +2353,7 @@ fn refresh_audio(playback: &mut Playback, document: &std::sync::Arc<lumit_core::
                 .ring
                 .front()
                 .map_or(playback.next, |(frame, _)| *frame);
-            crate::audio::play(comp, frame as f64 / playback.fps, document);
+            crate::audio::play(comp, frame as f64 / playback.fps + heard_late(), document);
             playback.settle_audio();
         }
     }
@@ -2435,12 +2435,12 @@ fn chase_audio(playback: &mut Playback, frame: u64, late: Option<std::time::Dura
         }
         AudioChase::Start => {
             playback.audio_held_for_picture = false;
-            crate::api::audio::audio_seek(frame as f64 / fps);
+            crate::api::audio::audio_seek(frame as f64 / fps + heard_late());
             resume_audio();
             playback.settle_audio();
         }
         AudioChase::Catch => {
-            crate::api::audio::audio_seek(frame as f64 / fps);
+            crate::api::audio::audio_seek(frame as f64 / fps + heard_late());
             playback.settle_audio();
         }
         AudioChase::Leave => {}
@@ -2541,6 +2541,18 @@ fn held_clock_seconds() -> Option<f64> {
     }
     #[cfg(not(feature = "media"))]
     None
+}
+
+/// How late the sound is heard, from the Audio settings: where the sound goes
+/// under a picture is this far past it.
+#[frb(ignore)]
+fn heard_late() -> f64 {
+    #[cfg(feature = "media")]
+    {
+        crate::audio::offset_seconds()
+    }
+    #[cfg(not(feature = "media"))]
+    0.0
 }
 
 /// Start the sound again where it stopped (see [`crate::audio::resume`]).

@@ -53,6 +53,7 @@ SolidCompression=no
 ; their own: the Windows CMake
 ; install step puts them beside the runner (docs/12 §2.3), and everything
 ; beside the runner is copied here.
+; `lib\lumit-cli.exe`, the command line, comes the same way.
 ;
 ; The two exports that ask a laptop for its discrete card make the linker write
 ; lumit.lib and lumit.exp beside the exe. Neither is any use to a user.

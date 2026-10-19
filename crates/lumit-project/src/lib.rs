@@ -1007,6 +1007,14 @@ pub fn extension_data_dir(id: &str) -> Option<PathBuf> {
     Some(dirs.data_local_dir().join("extension-data").join(id))
 }
 
+/// The file that says where a running Lumit lets other programs drive it,
+/// there only while the person allows it (`lumit_script::live`). Its folder
+/// is this user's alone.
+pub fn live_endpoint_file() -> Option<PathBuf> {
+    let dirs = project_dirs()?;
+    Some(dirs.data_local_dir().join("live").join("endpoint"))
+}
+
 /// Media frame-index cache directory (docs/10-FILE-FORMAT.md §3) — global,
 /// keyed by content fingerprint, so shared across projects and machines-safe.
 pub fn media_index_dir() -> Option<PathBuf> {

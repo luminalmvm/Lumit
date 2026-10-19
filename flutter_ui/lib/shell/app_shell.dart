@@ -370,10 +370,11 @@ class _LumitAppViewState extends State<LumitAppView> {
     listenForOpenRequests(_openAsked);
   }
 
-  /// A project or an extension package double-clicked in Finder, or an
-  /// invite link clicked in a browser, while Lumit is running. On macOS all
-  /// three come to this Lumit and are opened as File ▸ Open, the install
-  /// window and the Shared project window would.
+  /// A project or an extension package double-clicked, or an invite link
+  /// clicked in a browser, while Lumit is running. On macOS all three come to
+  /// this Lumit, and elsewhere when it is kept running in the background.
+  /// They are opened as File ▸ Open, the install window and the Shared
+  /// project window would.
   void _openAsked(List<String> asked) {
     if (!mounted) return;
     final app = context.read<LumitState>();

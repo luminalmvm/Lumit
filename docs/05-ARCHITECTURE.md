@@ -47,7 +47,7 @@ the top, so its samples do not depend on what was played.
 
 ## 3. The document
 
-- Every edit is a command (`AddLayer`, `SetKeyframe`, ...) with an inverse. Applying one
+- Every edit is an op (`AddLayer`, `SetKeyframe`, ...) with an inverse. Applying one
   makes a new immutable snapshot. Today that clones the whole `Document`.
 - Undo and redo walk the journal. Autosave appends the same journal to disk. Recovery is
   the last snapshot plus a journal replay.

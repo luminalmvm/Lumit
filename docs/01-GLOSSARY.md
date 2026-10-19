@@ -157,6 +157,7 @@ Not interchangeable.
 | **Model pack** | One addon holding one model |
 | **Extension** | A folder somebody else made, with an `extension.json`, that adds panels or effects. Its panel is shown in the dock. It reaches Lumit only through what its manifest asked to be allowed. Not *plugin*, which is an effect |
 | **Preset** | Saved effects, properties or animation |
+| **Script** | A JavaScript file that edits a project through the same commands the command line and MCP use. After Effects `.jsx` scripts run as they are |
 
 ## 9. Words we don't use
 

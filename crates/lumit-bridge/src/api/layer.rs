@@ -5563,42 +5563,16 @@ impl LayerReference {
         let (comp, layer) = (self.comp_id, self.layer_id);
         let doc = self.document()?;
         let c = doc.comp(comp).ok_or(BridgeError::InvalidItem)?;
-        let l = c
-            .layers
-            .iter()
-            .find(|l| l.id == layer)
-            .ok_or(BridgeError::InvalidLayer)?;
+        if !c.layers.iter().any(|l| l.id == layer) {
+            return Err(BridgeError::InvalidLayer);
+        }
         let t = c
             .frame_rate
             .time_of_frame(frame)
             .map_err(|_| BridgeError::InvalidTime)?
             .0
             .to_f64();
-        let context = std::sync::Arc::new(lumit_core::expression::ExpressionContext {
-            document: doc.clone(),
-            comp: Some(comp),
-            layer: Some(layer),
-            comp_time: t,
-            current_depth: 0,
-            inputs: None,
-        });
-        // The parent goes first: it names the undo step, and a refused one
-        // takes the transform edits down with it.
-        let mut ops = vec![lumit_core::Op::SetLayerParent {
-            comp,
-            layer,
-            parent,
-        }];
-        ops.extend(
-            lumit_render::build::reparented(c, l, parent, t, context)
-                .into_iter()
-                .map(|(prop, animation)| lumit_core::Op::SetTransformProperty {
-                    comp,
-                    layer,
-                    prop,
-                    animation,
-                }),
-        );
+        let ops = lumit_render::build::parent_ops(&doc, comp, layer, parent, t);
         self.commit(lumit_core::Op::Batch { ops })
     }
 
@@ -6911,12 +6885,8 @@ impl LayerReference {
         self.commit(op)
     }
 
-    /// The ops that put `value` on one transform property: its animation, and
-    /// beside it what an expression knows about the property (its language,
-    /// the value underneath, its seed) whenever that changes.
-    ///
-    /// The note is worked out here and carried whole in the op, so undo puts
-    /// back the one that was there and a replayed journal writes the same seed.
+    /// The ops that put `value` on one transform property
+    /// ([`lumit_core::edits::transform_ops`]).
     #[frb(ignore)]
     fn transform_ops(
         &self,
@@ -6924,29 +6894,18 @@ impl LayerReference {
         prop: BridgeTransformProp,
         value: &BridgeScalar,
     ) -> Result<Vec<lumit_core::Op>, BridgeError> {
-        use lumit_core::expression::SLOT_KEY;
-
         let animation = value.animation_at(layer.start_offset.0)?;
-        let mut ops = vec![lumit_core::Op::SetTransformProperty {
-            comp: self.comp_id,
-            layer: self.layer_id,
-            prop: prop.core(),
-            animation: animation.clone(),
-        }];
-        if let Some(held) = layer.prop(prop.core()) {
-            let mut next = held.clone();
-            value.put(&mut next, animation);
-            let slot = next.extra.get(SLOT_KEY).cloned();
-            if slot.as_ref() != held.extra.get(SLOT_KEY) {
-                ops.push(lumit_core::Op::SetTransformExpressionSlot {
-                    comp: self.comp_id,
-                    layer: self.layer_id,
-                    prop: prop.core(),
-                    slot,
-                });
-            }
-        }
-        Ok(ops)
+        let language = match value {
+            BridgeScalar::Expression(_, language) => Some(language.read()),
+            _ => None,
+        };
+        Ok(lumit_core::edits::transform_ops(
+            self.comp_id,
+            layer,
+            prop.core(),
+            animation,
+            language,
+        ))
     }
 
     /// Set how one two-axis property is shown and edited: combined on

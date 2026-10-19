@@ -1589,15 +1589,14 @@ impl BridgeKeyframe {
     /// The way back: a comp-time key returned to the layer's own clock.
     #[frb(ignore)]
     fn write_at(&self, offset: Rational) -> Result<Keyframe, BridgeError> {
-        Ok(Keyframe {
+        let key = Keyframe {
             time: Rational::new(self.time.num, self.time.den)
-                .map_err(|_| BridgeError::InvalidKeyframes)?
-                .checked_sub(offset)
                 .map_err(|_| BridgeError::InvalidKeyframes)?,
             value: self.value,
             interp_in: self.interp_in.write(),
             interp_out: self.interp_out.write(),
-        })
+        };
+        lumit_core::edits::key_on_layer_clock(key, offset).ok_or(BridgeError::InvalidKeyframes)
     }
 }
 
@@ -1694,21 +1693,11 @@ impl BridgeScalar {
         match self {
             BridgeScalar::Static(value) => Ok(Animation::Static(*value)),
             BridgeScalar::Keyframed(keys) => {
-                if keys.is_empty() {
-                    return Err(BridgeError::InvalidKeyframes);
-                }
-                let mut out: Vec<Keyframe> = Vec::with_capacity(keys.len());
-                for key in keys {
-                    let key = key.write_at(offset)?;
-                    // Ascending, unique times: `anim::evaluate` walks the list
-                    // assuming it is sorted, so an unsorted one does not error,
-                    // it silently evaluates wrongly.
-                    if out.last().is_some_and(|previous| key.time <= previous.time) {
-                        return Err(BridgeError::InvalidKeyframes);
-                    }
-                    out.push(key);
-                }
-                Ok(Animation::Keyframed(out))
+                let keys = keys
+                    .iter()
+                    .map(|key| key.write_at(offset))
+                    .collect::<Result<Vec<_>, _>>()?;
+                lumit_core::edits::keyframed(keys).ok_or(BridgeError::InvalidKeyframes)
             }
             BridgeScalar::Expression(expr, _) => Ok(Animation::Expression(expr.clone())),
         }

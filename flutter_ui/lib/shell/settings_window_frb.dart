@@ -57,6 +57,7 @@ import '../l10n/engine_labels.dart' show addonTask;
 import '../l10n/strings.dart';
 import '../state/addons.dart';
 import '../state/app_icon.dart';
+import '../state/background.dart';
 import '../state/expression_language.dart';
 import '../state/extensions.dart';
 import '../state/external_links.dart';
@@ -874,6 +875,12 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         workspace.setAutoUpdate(true);
         workspace.setDiscordStatus(DiscordStatus.app);
         ui.pushDiscordStatus();
+        workspace.setKeepRunning(false);
+        unawaited(applyBackground(workspace));
+        if (workspace.liveEndpoint) {
+          workspace.setLiveEndpoint(false);
+          ui.applyLiveEndpoint();
+        }
         ui.setLanguage(null);
       case SettingsPage.account:
         // Nothing here has a shipped value to go back to.
@@ -925,6 +932,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ui.pushViewerLook();
       case SettingsPage.audio:
         _chooseAudioDevice(workspace, null);
+        _setAudioOffset(workspace, 0);
       case SettingsPage.autosave:
         _setAutosave(workspace, minutes: 5, keep: 5);
       case SettingsPage.export:
@@ -1038,6 +1046,18 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             _flag(t, 'settings-welcome-on-launch', l10n.settingsWelcomeOnLaunch,
                 value: ui.workspace.showWelcomeOnLaunch,
                 set: ui.workspace.setShowWelcomeOnLaunch),
+            // Closing the window leaves Lumit in the tray, for the phones.
+            _flag(t, 'settings-keep-running', l10n.settingsKeepRunning,
+                value: ui.workspace.keepRunning, set: (on) {
+              ui.workspace.setKeepRunning(on);
+              unawaited(applyBackground(ui.workspace));
+            }),
+            if (ui.workspace.keepRunning)
+              _flag(t, 'settings-open-at-sign-in', l10n.settingsOpenAtSignIn,
+                  value: ui.workspace.openAtSignIn, set: (on) {
+                ui.workspace.setOpenAtSignIn(on);
+                unawaited(applyBackground(ui.workspace));
+              }),
             // The project a new one starts as a copy of. The path is the
             // row's own second line, and Clear goes back to an empty project.
             _row(
@@ -1101,6 +1121,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 }),
               ),
             ),
+            // Off until turned on: it is the one way another program can
+            // reach the open project.
+            _flag(t, 'settings-live-endpoint', l10n.settingsLiveEndpoint,
+                value: ui.workspace.liveEndpoint, set: (on) {
+              ui.workspace.setLiveEndpoint(on);
+              ui.applyLiveEndpoint();
+            }),
           ],
         ),
         // The same updater the Help menu drives, seen from the other side: one
@@ -2110,9 +2137,31 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                         ? l10n.settingsAudioNoDevice
                         : '',
           ),
+          _row(
+            t,
+            l10n.settingsAudioOffset,
+            SizedBox(
+              width: 70,
+              height: settingsControlHeight,
+              child: DragValueField(
+                key: const ValueKey('settings-audio-offset'),
+                value: ui.workspace.audioOffsetMs.toDouble(),
+                min: -1000,
+                max: 1000,
+                decimals: 0,
+                suffix: ' ms',
+                onChanged: (ms) => _setAudioOffset(ui.workspace, ms.round()),
+              ),
+            ),
+          ),
         ],
       ),
     ]);
+  }
+
+  void _setAudioOffset(Workspace workspace, int ms) {
+    audioSetOffsetMs(ms: ms);
+    setState(() => workspace.setAudioOffsetMs(ms));
   }
 
   /// Take the choice: tell the engine, write it to the settings file, and read

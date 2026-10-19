@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:lumit_flutter/data/expressions_metadata.dart';
 import 'package:lumit_flutter/panels/effect_param_row_frb.dart';
+import 'package:lumit_flutter/src/rust/api/cache.dart'
+    show clearCache, clearVramCache;
 import 'package:lumit_flutter/src/rust/api/effect.dart' show rescanPlugins;
 import 'package:lumit_flutter/src/rust/frb_generated.dart';
 import 'package:lumit_flutter/state/install_site.dart';
@@ -15,6 +17,7 @@ import 'package:lumit_flutter/probe/perf_probe.dart';
 import 'package:lumit_flutter/shell/app_shell.dart';
 import 'package:lumit_flutter/shell/startup_failure.dart';
 import 'package:lumit_flutter/state/app_state.dart';
+import 'package:lumit_flutter/state/background.dart';
 import 'package:lumit_flutter/state/bridge_trace.dart';
 import 'package:lumit_flutter/state/faults.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
@@ -103,6 +106,13 @@ Future<void> _start(List<String> args) async {
   unawaited(ui.profiles.start());
   ui.reviews.start();
   ui.phones.start();
+  // Closing the window into the tray, when Settings asks for it. The frames
+  // held for the preview are given back meanwhile, nobody is looking at them.
+  listenToRunner(hidden: () {
+    clearCache();
+    clearVramCache();
+  });
+  unawaited(applyBackground(ui.workspace));
   // The one start-up plugin scan (docs/12 §2.6). Not awaited: opening
   // other people's bundles and spawning a broker apiece takes as long as it
   // takes, and the shell must come up whether the machine has eighty plugins on
