@@ -523,6 +523,7 @@ abstract class BridgeLibApi extends BaseApi {
       required PlatformInt64 atFrame,
       required bool insert,
       required bool linked,
+      required bool withPicture,
       BridgeStreamsArrival? arrival});
 
   BridgeCutResult crateApiCompositionCompositionReferenceCutRazor(
@@ -5692,6 +5693,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required PlatformInt64 atFrame,
       required bool insert,
       required bool linked,
+      required bool withPicture,
       BridgeStreamsArrival? arrival}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
@@ -5704,6 +5706,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_i_64(atFrame, serializer);
         sse_encode_bool(insert, serializer);
         sse_encode_bool(linked, serializer);
+        sse_encode_bool(withPicture, serializer);
         sse_encode_opt_box_autoadd_bridge_streams_arrival(arrival, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 121)!;
       },
@@ -5722,6 +5725,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         atFrame,
         insert,
         linked,
+        withPicture,
         arrival
       ],
       apiImpl: this,
@@ -5740,6 +5744,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           "atFrame",
           "insert",
           "linked",
+          "withPicture",
           "arrival"
         ],
       );
@@ -21172,8 +21177,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeClip dco_decode_bridge_clip(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 23)
-      throw Exception('unexpected arr length: expect 23 but see ${arr.length}');
+    if (arr.length != 24)
+      throw Exception('unexpected arr length: expect 24 but see ${arr.length}');
     return BridgeClip(
       id: dco_decode_Uuid(arr[0]),
       placeStart: dco_decode_bridge_rational(arr[1]),
@@ -21192,12 +21197,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       gainDb: dco_decode_f_64(arr[14]),
       sourceName: dco_decode_String(arr[15]),
       link: dco_decode_opt_Uuid(arr[16]),
-      sourceIn: dco_decode_bridge_rational(arr[17]),
-      sourceOut: dco_decode_bridge_rational(arr[18]),
-      sourceIsComp: dco_decode_bool(arr[19]),
-      blend: dco_decode_opt_box_autoadd_u_32(arr[20]),
-      startExact: dco_decode_f_64(arr[21]),
-      endExact: dco_decode_f_64(arr[22]),
+      audible: dco_decode_bool(arr[17]),
+      sourceIn: dco_decode_bridge_rational(arr[18]),
+      sourceOut: dco_decode_bridge_rational(arr[19]),
+      sourceIsComp: dco_decode_bool(arr[20]),
+      blend: dco_decode_opt_box_autoadd_u_32(arr[21]),
+      startExact: dco_decode_f_64(arr[22]),
+      endExact: dco_decode_f_64(arr[23]),
     );
   }
 
@@ -27613,6 +27619,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_gainDb = sse_decode_f_64(deserializer);
     var var_sourceName = sse_decode_String(deserializer);
     var var_link = sse_decode_opt_Uuid(deserializer);
+    var var_audible = sse_decode_bool(deserializer);
     var var_sourceIn = sse_decode_bridge_rational(deserializer);
     var var_sourceOut = sse_decode_bridge_rational(deserializer);
     var var_sourceIsComp = sse_decode_bool(deserializer);
@@ -27637,6 +27644,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         gainDb: var_gainDb,
         sourceName: var_sourceName,
         link: var_link,
+        audible: var_audible,
         sourceIn: var_sourceIn,
         sourceOut: var_sourceOut,
         sourceIsComp: var_sourceIsComp,
@@ -35256,6 +35264,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_f_64(self.gainDb, serializer);
     sse_encode_String(self.sourceName, serializer);
     sse_encode_opt_Uuid(self.link, serializer);
+    sse_encode_bool(self.audible, serializer);
     sse_encode_bridge_rational(self.sourceIn, serializer);
     sse_encode_bridge_rational(self.sourceOut, serializer);
     sse_encode_bool(self.sourceIsComp, serializer);

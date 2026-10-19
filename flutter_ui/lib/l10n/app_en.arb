@@ -7744,6 +7744,18 @@
   "@streamsArrivalSplit": {
     "description": "A choice for the setting Several audio streams arrive as: every audio stream of the file gets a layer of its own."
   },
+  "settingsVideoSoundInCut": "Video sound in Cut",
+  "@settingsVideoSoundInCut": {
+    "description": "Settings window, Timeline, Editing: the name of the row choosing where a video's sound goes when the video is placed in the Cut timeline. The two choices follow it in a dropdown."
+  },
+  "cutSoundOnItsOwnTrack": "On its own track",
+  "@cutSoundOnItsOwnTrack": {
+    "description": "A choice for the setting Video sound in Cut: the sound goes on a linked clip on a sound track below the picture. What a fresh install has."
+  },
+  "cutSoundWithPicture": "With the picture",
+  "@cutSoundWithPicture": {
+    "description": "A choice for the setting Video sound in Cut: the sound stays on the picture clip, on the same track, and is cut with it."
+  },
   "settingsViewerBars": "Viewer bars",
   "@settingsViewerBars": {
     "description": "Settings window, Appearance: the name of the row choosing how the Viewer's chrome is arranged round the picture — split between a strip above and a bar below, or gathered into one strip at the top or at the bottom."

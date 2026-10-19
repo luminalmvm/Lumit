@@ -908,6 +908,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         settings.retimeInSeconds = shipped.retimeInSeconds;
         settings.videoAsSequenceLayer = shipped.videoAsSequenceLayer;
         settings.streamsArrival = shipped.streamsArrival;
+        settings.cutSoundWithPicture = shipped.cutSoundWithPicture;
         settings.pasteLayersAtOriginalTime = shipped.pasteLayersAtOriginalTime;
         settings.playheadStaysOnStop = shipped.playheadStaysOnStop;
         settings.transformInEffectControls = shipped.transformInEffectControls;
@@ -1948,6 +1949,22 @@ class _SettingsWindowState extends State<_SettingsWindow> {
               },
               onChanged: (arrival) => setState(() {
                 settings.streamsArrival = arrival;
+                changed();
+              }),
+            ),
+          ),
+          _row(
+            t,
+            l10n.settingsVideoSoundInCut,
+            _dropdown<bool>(
+              key: 'settings-cut-sound-with-picture',
+              width: _ddWide,
+              value: settings.cutSoundWithPicture,
+              options: const [false, true],
+              label: (on) =>
+                  on ? l10n.cutSoundWithPicture : l10n.cutSoundOnItsOwnTrack,
+              onChanged: (on) => setState(() {
+                settings.cutSoundWithPicture = on;
                 changed();
               }),
             ),

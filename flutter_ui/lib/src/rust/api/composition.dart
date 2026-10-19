@@ -1031,10 +1031,10 @@ class CompositionReference {
   /// holding both also puts its sound down as a clip on an audio-only
   /// Sequence layer: the one this picture layer's clips are already linked
   /// to, else the first with room, else a new one at the bottom of the
-  /// stack. A picture layer made here has its audible switch off, so the
-  /// sound is heard from the linked clip alone. An existing picture layer
-  /// whose audible switch is on already plays its clips' own sound, so it
-  /// takes the picture clip and no sound clip is made. A file with no
+  /// stack. The picture clip is then silent, so the sound is heard from the
+  /// linked clip alone. With `with_picture` the picture clip keeps its sound
+  /// and no sound clip is made. A picture layer whose audible switch is off
+  /// keeps its sound on linked clips whichever is asked. A file with no
   /// picture, or any file placed on an audio-only target, puts down its
   /// sound alone.
   ///
@@ -1050,6 +1050,7 @@ class CompositionReference {
           required PlatformInt64 atFrame,
           required bool insert,
           required bool linked,
+          required bool withPicture,
           BridgeStreamsArrival? arrival}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutPlace(
           that: this,
@@ -1060,6 +1061,7 @@ class CompositionReference {
           atFrame: atFrame,
           insert: insert,
           linked: linked,
+          withPicture: withPicture,
           arrival: arrival);
 
   /// Razor: cut every clip under `at_frame` on `layers`, or on every

@@ -4795,6 +4795,7 @@ fn wire__crate__api__composition__composition_reference_cut_place_impl(
             let api_at_frame = <i64>::sse_decode(&mut deserializer);
             let api_insert = <bool>::sse_decode(&mut deserializer);
             let api_linked = <bool>::sse_decode(&mut deserializer);
+            let api_with_picture = <bool>::sse_decode(&mut deserializer);
             let api_arrival =
                 <Option<crate::api::streams::BridgeStreamsArrival>>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -4808,6 +4809,7 @@ fn wire__crate__api__composition__composition_reference_cut_place_impl(
                     api_at_frame,
                     api_insert,
                     api_linked,
+                    api_with_picture,
                     api_arrival,
                 )?;
                 Ok(output_ok)
@@ -22524,6 +22526,7 @@ impl SseDecode for crate::api::layer::BridgeClip {
         let mut var_gainDb = <f64>::sse_decode(deserializer);
         let mut var_sourceName = <String>::sse_decode(deserializer);
         let mut var_link = <Option<uuid::Uuid>>::sse_decode(deserializer);
+        let mut var_audible = <bool>::sse_decode(deserializer);
         let mut var_sourceIn = <crate::api::effect::BridgeRational>::sse_decode(deserializer);
         let mut var_sourceOut = <crate::api::effect::BridgeRational>::sse_decode(deserializer);
         let mut var_sourceIsComp = <bool>::sse_decode(deserializer);
@@ -22548,6 +22551,7 @@ impl SseDecode for crate::api::layer::BridgeClip {
             gain_db: var_gainDb,
             source_name: var_sourceName,
             link: var_link,
+            audible: var_audible,
             source_in: var_sourceIn,
             source_out: var_sourceOut,
             source_is_comp: var_sourceIsComp,
@@ -32043,6 +32047,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeClip {
             self.gain_db.into_into_dart().into_dart(),
             self.source_name.into_into_dart().into_dart(),
             self.link.into_into_dart().into_dart(),
+            self.audible.into_into_dart().into_dart(),
             self.source_in.into_into_dart().into_dart(),
             self.source_out.into_into_dart().into_dart(),
             self.source_is_comp.into_into_dart().into_dart(),
@@ -39360,6 +39365,7 @@ impl SseEncode for crate::api::layer::BridgeClip {
         <f64>::sse_encode(self.gain_db, serializer);
         <String>::sse_encode(self.source_name, serializer);
         <Option<uuid::Uuid>>::sse_encode(self.link, serializer);
+        <bool>::sse_encode(self.audible, serializer);
         <crate::api::effect::BridgeRational>::sse_encode(self.source_in, serializer);
         <crate::api::effect::BridgeRational>::sse_encode(self.source_out, serializer);
         <bool>::sse_encode(self.source_is_comp, serializer);

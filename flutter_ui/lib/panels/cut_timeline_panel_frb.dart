@@ -2341,11 +2341,11 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
           ),
         // A file with several audio streams: which of them this clip plays,
         // a linked clip to each on a track of its own, and back onto one.
-        // The list is for a clip that is heard. A picture clip on a silent
-        // track has its sound on the clip linked to it, and the two commands
-        // under the list follow the link there.
+        // The list is for a clip that is heard. A silent picture clip has its
+        // sound on the clip linked to it, and the two commands under the list
+        // follow the link there.
         if (streams != null && streams.streams.length > 1) ...[
-          if (track.entry.info.switches.audible)
+          if (track.entry.info.switches.audible && clip.audible)
             audioStreamsSubmenu(
               key: const ValueKey('ctl-menu-audio-streams'),
               closeParent: () => close(null),
@@ -2495,6 +2495,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             atFrame: frame,
             insert: false,
             linked: _linked,
+            withPicture: ui.workspace.interface.cutSoundWithPicture,
             arrival: ui.streamsArrival,
           ));
       _afterCut(result);

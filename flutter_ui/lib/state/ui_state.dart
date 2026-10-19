@@ -3372,6 +3372,7 @@ class LumitUiState extends ChangeNotifier {
         atFrame: at,
         insert: insert,
         linked: cutLinked.value,
+        withPicture: workspace.interface.cutSoundWithPicture,
         arrival: streamsArrival,
       );
     } catch (_) {

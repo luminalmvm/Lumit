@@ -1621,6 +1621,9 @@ pub struct BridgeClip {
     /// it, a picture clip and the clip that carries its sound. `None` for a
     /// clip on its own.
     pub link: Option<Uuid>,
+    /// Whether the clip is heard. Off on a picture clip whose sound has been
+    /// detached onto a clip of its own.
+    pub audible: bool,
     /// The trim into the source, in seconds of source time: the first moment
     /// the clip shows and the moment it stops before.
     pub source_in: BridgeRational,
@@ -1742,6 +1745,7 @@ fn bridge_clip(
                 .unwrap_or_default(),
         },
         link: clip.link,
+        audible: clip.audible,
         source_in: rational_of(clip.source_in),
         source_out: rational_of(clip.source_out),
         source_is_comp: matches!(clip.source, lumit_core::sequence::ClipSource::Comp(_)),
