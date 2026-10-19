@@ -936,7 +936,23 @@ mod tests {
     fn evaluation_can_re_enter_itself() {
         let driven = driven_layer("Driven", "time * 3.0");
         let driven_id = driven.id;
-        let (document, comp) = doc_with(vec![driven]);
+        // Trimmed a second in, its keys still on its own clock from its start.
+        let mut trimmed = driven_layer("Trimmed", "0");
+        trimmed.in_point.0 = crate::time::Rational::new(1, 1).unwrap();
+        trimmed.transform.position_x = crate::anim::Property {
+            animation: crate::anim::Animation::Keyframed(
+                [0, 4]
+                    .map(|s| crate::anim::Keyframe {
+                        time: crate::time::Rational::new(s, 1).unwrap(),
+                        value: s as f64 * 10.0,
+                        interp_in: crate::anim::SideInterp::Linear,
+                        interp_out: crate::anim::SideInterp::Linear,
+                    })
+                    .to_vec(),
+            ),
+            extra: serde_json::Map::new(),
+        };
+        let (document, comp) = doc_with(vec![driven, trimmed]);
 
         let context = Arc::new(ExpressionContext {
             document,
@@ -946,7 +962,11 @@ mod tests {
             current_depth: 0,
             inputs: None,
         });
-        assert_eq!(evaluate("layer(\"Driven\").x + 1.0", Some(context)), 7.0);
+        assert_eq!(
+            evaluate("layer(\"Driven\").x + 1.0", Some(context.clone())),
+            7.0
+        );
+        assert_eq!(evaluate("layer(\"Trimmed\").x", Some(context)), 20.0);
     }
 
     /// Two properties that read each other must give up rather than recurse
