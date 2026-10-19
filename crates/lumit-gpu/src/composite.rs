@@ -329,14 +329,21 @@ impl CompositeLayer<'_> {
                     * Mat4::from_scale(glam::vec3(2.0 / comp_w, -2.0 / comp_h, 0.0))
             }
         };
+        // A 2D layer keeps the z and X/Y rotation it had while 3D, hidden, and
+        // draws as if they were 0, like After Effects.
+        let (z, rx, ry) = if self.three_d {
+            (self.z, self.rotation_x_deg, self.rotation_y_deg)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
         let mut place = Mat4::from_cols_array_2d(&place_matrix(
             self.position,
             self.anchor,
             self.scale,
             self.rotation_deg,
-            self.z,
-            self.rotation_x_deg,
-            self.rotation_y_deg,
+            z,
+            rx,
+            ry,
         ));
         if let Some(pre) = &self.pre {
             place = Mat4::from_cols_array_2d(pre) * place;
@@ -2687,7 +2694,8 @@ mod tests {
 
     /// A layer off z = 0 or tilted still draws in a comp with no camera, and a
     /// 2D layer holding a z still draws under one, rather than falling outside
-    /// the GPU's depth range and vanishing.
+    /// the GPU's depth range and vanishing. A 2D layer draws flat whatever
+    /// X rotation it kept from being 3D.
     #[test]
     fn a_layer_off_the_depth_range_still_draws() {
         let Some(ctx) = crate::test_support::lease() else {
@@ -2733,6 +2741,7 @@ mod tests {
             ("pulled forward, no camera", -50.0, 0.0, true, None, 64.0),
             ("tilted 60 degrees, no camera", 0.0, 60.0, true, None, 32.0),
             ("2D with a z, camera", -50.0, 0.0, false, Some(cam), 64.0),
+            ("2D still tilted from 3D", 0.0, 60.0, false, None, 64.0),
         ] {
             let got = count_white(z, rx, three_d, camera);
             assert!((got - area).abs() <= 8.0, "{what}: area {got} (≈{area})");
