@@ -288,7 +288,7 @@ fn a_keyframed_dropdown_imports_its_first_key_and_reports_it() {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Third-party effects: the two roads (docs/11 §5a)
+// Third-party effects (docs/11 §5a)
 // ---------------------------------------------------------------------------
 
 /// A definition that arrived at run time, the way a scanned OFX plug-in's does.
@@ -484,38 +484,46 @@ fn a_dissolve(percent: f64) -> AeProp {
     )
 }
 
-/// The Completion the nearest road ended up at.
-fn completion(inst: &EffectInstance) -> Option<LumProperty> {
+/// The plug-in's own Dissolve Percent.
+fn dissolve_percent(inst: &EffectInstance) -> Option<LumProperty> {
     inst.params
         .iter()
-        .find(|p| p.id == "completion")
+        .find(|p| p.id == "dissolve_percent")
         .and_then(|p| match &p.value {
             EffectValue::Float(v) => Some(v.clone()),
             _ => None,
         })
 }
 
-/// **The owner's dissolve curve, on both roads.**
+/// **Without the plug-in a Sapphire dissolve is a placeholder, and with it the
+/// dissolve curve drives the plug-in's own Dissolve Percent.**
 ///
-/// One test rather than three, and the order inside it is the point: the OFX
-/// catalogue is a process-global, so registering the dissolve plug-in closes
-/// the nearest road for the rest of the binary. The two roads for one row are
-/// therefore walked here in the order a machine walks them — without the
-/// plug-in, then with it — instead of racing each other across threads.
+/// One test rather than two, and the order inside it is the point: the OFX
+/// catalogue is a process-global, so registering the plug-in changes the
+/// answer for the rest of the binary.
 #[test]
-fn a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads() {
-    // --- the nearest road: every other control is still at Lumit's default,
-    // and this one is the exception, because a Sapphire dissolve *is* its
-    // Dissolve Percent and a transition standing in without it would sit
-    // half-complete for the whole shot.
+fn a_sapphire_dissolve_carries_its_amount_through_the_dissolve_curve() {
+    let ran = run(&a_dissolve(25.0));
+    assert!(
+        !ran.mapped,
+        "without the plug-in it is a placeholder, not one of our effects"
+    );
+
+    a_discovered_plugin(
+        "com.genarts.sapphire.Transitions.S_DissolveLuma",
+        "S_DissolveLuma",
+        DISSOLVE_CONTROLS,
+    );
     for (input, expected) in CURVE {
         let ran = run(&a_dissolve(*input));
-        assert!(ran.mapped, "the nearest effect is a mapped effect");
-        assert_eq!(ran.inst.effect.match_name, "linear_wipe");
         assert_eq!(
-            completion(&ran.inst),
+            ran.inst.effect.match_name, "ofx:com.genarts.sapphire.Transitions.S_DissolveLuma",
+            "the installed plug-in is the effect itself"
+        );
+        assert_eq!(
+            dissolve_percent(&ran.inst),
             Some(LumProperty::fixed(*expected)),
-            "Dissolve Percent {input} is Completion {expected}"
+            "Dissolve Percent {input} is the curve's {expected}"
         );
         assert!(
             ran.report.rows.iter().any(|r| matches!(
@@ -539,9 +547,9 @@ fn a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads
     let Some(LumProperty {
         animation: Animation::Keyframed(keys),
         ..
-    }) = completion(&ran.inst)
+    }) = dissolve_percent(&ran.inst)
     else {
-        panic!("a keyframed Dissolve Percent is a keyframed Completion");
+        panic!("a keyframed Dissolve Percent stays keyframed");
     };
     assert_eq!(
         keys.iter().map(|k| k.value).collect::<Vec<_>>(),
@@ -561,29 +569,6 @@ fn a_sapphire_dissolve_carries_its_amount_through_the_owners_curve_on_both_roads
                 if imported_as.contains("keyframe")
         )),
         "the report says the curve is met at the keys and approximated between them"
-    );
-
-    // --- the direct road: the ruling is about the dissolve, not about which
-    // road it took, so the plug-in's own Dissolve Percent receives the curved
-    // number too.
-    a_discovered_plugin(
-        "com.genarts.sapphire.Transitions.S_DissolveLuma",
-        "S_DissolveLuma",
-        DISSOLVE_CONTROLS,
-    );
-    let ran = run(&a_dissolve(25.0));
-    assert_eq!(
-        ran.inst.effect.match_name, "ofx:com.genarts.sapphire.Transitions.S_DissolveLuma",
-        "the installed plug-in is the effect itself"
-    );
-    assert_eq!(
-        ran.inst
-            .params
-            .iter()
-            .find(|p| p.id == "dissolve_percent")
-            .map(|p| p.value.clone()),
-        Some(EffectValue::Float(LumProperty::fixed(50.0))),
-        "25 % came across as the curve's 50, not as 25 — the same curve on both roads"
     );
 }
 

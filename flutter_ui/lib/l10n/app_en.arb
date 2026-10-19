@@ -11443,18 +11443,6 @@
       }
     }
   },
-  "aeEffectNearest": "{matchName} is somebody else's effect — {instead} is the closest in Lumit and imported in its place, at its own defaults",
-  "@aeEffectNearest": {
-    "description": "Import report row reason, lower case, in the After Effects import report. Said when a third-party effect in the After Effects project has no OFX build installed, so the closest Lumit effect stands in for it, at Lumit's own default settings rather than with the vendor's numbers guessed across. matchName is After Effects' internal name for the effect; instead is the Lumit effect that took its place.",
-    "placeholders": {
-      "matchName": {
-        "type": "String"
-      },
-      "instead": {
-        "type": "String"
-      }
-    }
-  },
   "bakeNotBaked": "Not baked yet",
   "@bakeNotBaked": {
     "description": "Bake points status line in Effect controls, before Bake has ever been pressed for these settings."
