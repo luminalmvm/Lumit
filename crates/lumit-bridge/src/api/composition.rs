@@ -84,75 +84,31 @@ pub(crate) fn bridge_marker(
 }
 
 /// A whole marker list coming back from the panel, merged onto the list the
-/// document holds.
-///
-/// **Why a merge and not a conversion.** The bridge marker carries what a panel
-/// can edit — id, time, label, colour and the span — and the engine's marker
-/// carries two more it cannot: the *kind* (a detected beat's provenance, plus
-/// its confidence) and the `extra` map that keeps fields a newer Lumit wrote
-/// (docs/10 §1.1's forward-compatibility promise). Rebuilding each marker from
-/// the bridge's fields alone flattened those to their defaults, so **dragging
-/// or renaming a beat marker on the ruler turned it into an ordinary cue** —
-/// and then *Clear beat markers* could no longer find it, because there was
-/// nothing left to say it had ever been one. The ruler markers made that a
-/// click away.
-///
-/// So each incoming marker is matched by id against what the document already
-/// holds: found, and it keeps that marker's kind and extra; new, and it is a
-/// plain user marker, which is exactly what a marker the panel just created is.
-///
-/// **The duration crosses now, and still rides the merge.** It crosses as
-/// *frames* — what the ruler draws with — so a straight conversion back would
-/// round a marker whose span is finer than a frame down to the frame boundary
-/// every time an unrelated drag wrote the list. So a duration that still reads
-/// as the same number of frames keeps the document's exact rational, and only a
-/// span the panel actually changed is rebuilt from frames.
+/// document holds ([`lumit_core::markers::merge_edits`] says why a merge).
 #[frb(ignore)]
 pub(crate) fn core_markers(
     incoming: Vec<BridgeMarker>,
     existing: &[lumit_core::markers::Marker],
     rate: lumit_core::time::FrameRate,
 ) -> Result<Vec<lumit_core::markers::Marker>, BridgeError> {
-    incoming
+    let edits = incoming
         .into_iter()
-        .map(|m| {
-            let was = existing.iter().find(|e| e.id == m.id);
-            core_marker(m, was, rate)
-        })
-        .collect()
+        .map(core_marker)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(lumit_core::markers::merge_edits(edits, existing, rate))
 }
 
 #[frb(ignore)]
-pub(crate) fn core_marker(
-    m: BridgeMarker,
-    existing: Option<&lumit_core::markers::Marker>,
-    rate: lumit_core::time::FrameRate,
-) -> Result<lumit_core::markers::Marker, BridgeError> {
+pub(crate) fn core_marker(m: BridgeMarker) -> Result<lumit_core::markers::MarkerEdit, BridgeError> {
     use lumit_core::time::{CompTime, Rational};
-    let was = existing.and_then(|e| e.duration);
-    let duration = match m.duration_frames {
-        // Unchanged in frames: keep the exact span the document holds, so a
-        // rename or a drag cannot quantise a marker nobody resized.
-        Some(frames) if was.map(|d| rate.frame_at(CompTime(d))) == Some(frames) => was,
-        // A span the panel set. Nought frames or fewer is a moment, which is
-        // what "no span" means everywhere else.
-        Some(frames) if frames > 0 => rate.time_of_frame(frames).ok().map(|t| t.0),
-        Some(_) => None,
-        None => None,
-    };
-    Ok(lumit_core::markers::Marker {
+    Ok(lumit_core::markers::MarkerEdit {
         id: m.id,
         time: CompTime(
             Rational::new(m.time.num, m.time.den).map_err(|_| BridgeError::InvalidTime)?,
         ),
-        duration,
         label: m.label,
         colour: m.colour,
-        // Everything the panel cannot edit is carried from the marker that was
-        // already there; a marker it has just made has nothing to carry, and
-        // takes the plain-user defaults.
-        kind: existing.map(|e| e.kind).unwrap_or_default(),
-        extra: existing.map(|e| e.extra.clone()).unwrap_or_default(),
+        duration_frames: m.duration_frames,
     })
 }
 
@@ -350,34 +306,40 @@ impl BridgeCompSettings {
     /// what a default comp is.
     #[frb(sync)]
     pub fn defaults() -> BridgeCompSettings {
+        let d = lumit_core::edits::CompSettings::default();
         BridgeCompSettings {
-            name: String::new(),
-            width: 1920,
-            height: 1080,
-            fps_num: 60,
-            fps_den: 1,
-            duration: BridgeRational { num: 30, den: 1 },
-            // Black, and the model's own shutter — one place decides what a
-            // comp is, and this is it.
-            background: [0.0, 0.0, 0.0, 1.0],
-            shutter_angle: lumit_core::model::MotionBlur::default().shutter_angle,
-            motion_blur_samples: lumit_core::model::MotionBlur::default().samples,
+            name: d.name,
+            width: d.width,
+            height: d.height,
+            fps_num: d.frame_rate.num(),
+            fps_den: d.frame_rate.den(),
+            duration: BridgeRational {
+                num: d.duration.0.num(),
+                den: d.duration.0.den(),
+            },
+            background: d.background,
+            shutter_angle: d.shutter_angle,
+            motion_blur_samples: d.motion_blur_samples,
         }
     }
 
-    /// The engine types this settings block names, or `None` when the rate or
+    /// The engine's settings this block names, or `None` when the rate or
     /// duration is not a time at all.
     #[frb(ignore)]
-    pub(crate) fn to_engine(
-        &self,
-    ) -> Option<(lumit_core::time::FrameRate, lumit_core::time::Duration)> {
-        use lumit_core::time::{Duration, FrameRate, Rational};
-        let rate = FrameRate::new(self.fps_num, self.fps_den).ok()?;
+    pub(crate) fn to_engine(&self) -> Option<lumit_core::edits::CompSettings> {
+        use lumit_core::time::{FrameRate, Rational};
+        let frame_rate = FrameRate::new(self.fps_num, self.fps_den).ok()?;
         let duration = Rational::new(self.duration.num, self.duration.den).ok()?;
-        // A comp shorter than one frame has nothing to show, so the floor is one
-        // frame at the rate being applied.
-        let floor = rate.frame_duration().ok()?;
-        Some((rate, Duration(duration.max(floor.0))))
+        Some(lumit_core::edits::CompSettings {
+            name: self.name.clone(),
+            width: self.width,
+            height: self.height,
+            frame_rate,
+            duration: lumit_core::edits::comp_duration(frame_rate, duration)?,
+            background: self.background,
+            shutter_angle: self.shutter_angle,
+            motion_blur_samples: self.motion_blur_samples,
+        })
     }
 }
 
@@ -647,68 +609,18 @@ impl CompositionReference {
     #[frb(sync)]
     pub fn set_settings(&self, settings: BridgeCompSettings) -> Result<(), BridgeError> {
         let comp = self.composition()?;
-        let (frame_rate, duration) = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+        let settings = settings.to_engine().ok_or(BridgeError::InvalidFrameRate)?;
+        let ops = lumit_core::edits::comp_settings_ops(&comp, settings);
 
-        let motion_blur = lumit_core::model::MotionBlur {
-            // The dialog does not ask whether the master switch is on, or what
-            // the shutter's phase is; both are left exactly as they stand.
-            shutter_angle: settings.shutter_angle,
-            samples: settings.motion_blur_samples.max(1),
-            ..comp.motion_blur
-        };
-
-        let (width, height) = (
-            settings.width.clamp(16, 16384),
-            settings.height.clamp(16, 16384),
-        );
         let proj = self.project()?;
         let proj = proj.write().map_err(|_| BridgeError::WriteFailed)?;
         proj.store.begin_undo_group();
-        // The other settings first, at the size the frame has, so the step
-        // is named for the settings in the undo list. Then a new frame size,
-        // which keeps the picture's middle in the middle: the frame is
-        // cropped (or grown) evenly about its centre, which moves the layers
-        // with it. Without this every layer stays where it was against the
-        // top-left corner and a narrower comp shows them pushed to one side.
-        let applied = proj
-            .store
-            .commit(lumit_core::Op::SetCompSettings {
-                comp: self.id,
-                name: settings.name,
-                width: comp.width,
-                height: comp.height,
-                frame_rate,
-                duration,
-                background: lumit_core::model::LinearColour(settings.background),
-            })
-            .map_err(BridgeError::OpError)
-            .and_then(|_| {
-                if (width, height) == (comp.width, comp.height) {
-                    return Ok(());
-                }
-                proj.store
-                    .commit(lumit_core::Op::CropCompToRegion {
-                        comp: self.id,
-                        x: (f64::from(comp.width) - f64::from(width)) / 2.0,
-                        y: (f64::from(comp.height) - f64::from(height)) / 2.0,
-                        width,
-                        height,
-                    })
-                    .map(|_| ())
-                    .map_err(BridgeError::OpError)
-            })
-            .and_then(|_| {
-                if motion_blur == comp.motion_blur {
-                    return Ok(());
-                }
-                proj.store
-                    .commit(lumit_core::Op::SetCompMotionBlur {
-                        comp: self.id,
-                        motion_blur,
-                    })
-                    .map(|_| ())
-                    .map_err(BridgeError::OpError)
-            });
+        let applied = ops.into_iter().try_for_each(|op| {
+            proj.store
+                .commit(op)
+                .map(|_| ())
+                .map_err(BridgeError::OpError)
+        });
         proj.store.end_undo_group();
         applied
     }
@@ -1172,19 +1084,7 @@ impl CompositionReference {
     pub fn add_solid_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
         let comp = self.composition()?;
         let doc = self.document()?;
-        let (def, name, mut ops) = crate::edits::white_solid_ops(&doc, comp.width, comp.height);
-
-        let mut layer = crate::edits::base_layer(
-            name,
-            lumit_core::model::LayerKind::Solid { def },
-            comp.duration.0,
-            crate::edits::centred_transform(
-                f64::from(comp.width),
-                f64::from(comp.height),
-                comp.width,
-                comp.height,
-            ),
-        );
+        let (mut layer, mut ops) = crate::edits::white_solid_layer(&doc, &comp);
         crate::edits::solo_on_arrival(&mut layer, comp.layers.iter());
         let id = layer.id;
         ops.push(lumit_core::Op::AddLayer {
@@ -1893,21 +1793,8 @@ impl CompositionReference {
     /// position is centred and the anchor stays at the origin.
     #[frb(sync)]
     pub fn add_null_layer(&self, row: Option<u32>) -> Result<LayerReference, BridgeError> {
-        use lumit_core::anim::Property;
-        use lumit_core::model::TransformGroup;
-
         let comp = self.composition()?;
-        let layer = crate::edits::base_layer(
-            "Null".into(),
-            lumit_core::model::LayerKind::Null,
-            comp.duration.0,
-            TransformGroup {
-                position_x: Property::fixed(f64::from(comp.width) * 0.5),
-                position_y: Property::fixed(f64::from(comp.height) * 0.5),
-                ..TransformGroup::default()
-            },
-        );
-        self.add_at(layer, row)
+        self.add_at(crate::edits::null_layer(&comp), row)
     }
 
     /// Add an empty Sequence layer — a clip row spanning the comp.
