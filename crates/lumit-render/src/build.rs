@@ -1561,7 +1561,11 @@ fn comp_walk(
                     // effect does, so a styled solid needs its real
                     // pixels for the same reason an effected one does — an
                     // 8 × 8 tile has no edge for a shadow to fall off.
-                    && !layer.styles.iter().any(|e| e.enabled);
+                    && !layer.styles.iter().any(|e| e.enabled)
+                    // A light falls differently on every pixel, so lit on the
+                    // tile its pool would come out as a smear of sixty-four
+                    // pixels stretched over the whole solid.
+                    && !(layer.switches.accepts_lights && !comp.lights_at(t_comp).is_empty());
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
                     Arc::new(px_tile(&px, tw, th)),
@@ -6338,6 +6342,122 @@ mod render_below_at_tests {
             dark, unlit,
             "Accepts lights off must render byte-identically to no light at all"
         );
+    }
+
+    /// A plain solid is drawn from a small tile, which is no picture to light:
+    /// a spot falling on one must come out as it does on the same solid made
+    /// full size by a mask that covers it, and not as the tile's light
+    /// stretched over the layer.
+    #[test]
+    fn a_lit_plain_solid_is_lit_at_its_own_size() {
+        use lumit_core::model::{LightDef, LightKind, ProjectItem, SolidDef};
+
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            return; // no GPU here — skip, as the gpu crate's own tests do
+        };
+        let engine = ctx.colour();
+        let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
+        let realiser = Realiser {
+            ctx: ctx.clone_handle(),
+            engine,
+            compositor: ctx.compositor(),
+            fx: ctx.fx(),
+            lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
+            render_scale: 1.0,
+            samples: 1,
+            profiler: None,
+            colour_inputs: None,
+            colour_config: None,
+            flow: None,
+            late_clones: None,
+            graph_reach: None,
+        };
+        let (w, h) = (320u32, 180u32);
+        let def = Uuid::now_v7();
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Solid(SolidDef {
+            id: def,
+            name: "grey".into(),
+            colour: LinearColour([0.2, 0.2, 0.2, 1.0]),
+            width: w,
+            height: h,
+            extra: serde_json::Map::new(),
+        }));
+        let doc = std::sync::Arc::new(doc);
+
+        // A narrow spot over one side, so the pool has an edge to smear.
+        let mut spot = text_layer(100.0);
+        spot.kind = LayerKind::Light {
+            light: Box::new(LightDef {
+                kind: LightKind::Spot,
+                cone_deg: Property::fixed(20.0),
+                ..LightDef::default()
+            }),
+        };
+        spot.transform.position_y = Property::fixed(90.0);
+        spot.transform.position_z = Property::fixed(-150.0);
+        let solid = |masked: bool| {
+            let mut l = text_layer(f64::from(w) / 2.0);
+            l.kind = LayerKind::Solid { def };
+            l.transform.anchor_x = Property::fixed(f64::from(w) / 2.0);
+            l.transform.anchor_y = Property::fixed(f64::from(h) / 2.0);
+            l.transform.position_y = Property::fixed(f64::from(h) / 2.0);
+            if masked {
+                l.masks.push(lumit_core::mask::Mask::rectangle(
+                    0.0,
+                    0.0,
+                    f64::from(w),
+                    f64::from(h),
+                ));
+            }
+            l
+        };
+        let render = |layers: Vec<Layer>| {
+            let comp = Composition {
+                graph: None,
+                master_volume_db: 0.0,
+                sound_mix: false,
+                groups: Vec::new(),
+                beat_grid: None,
+                id: Uuid::now_v7(),
+                name: "c".into(),
+                width: w,
+                height: h,
+                frame_rate: FrameRate::new(30, 1).unwrap(),
+                duration: Duration(Rational::new(10, 1).unwrap()),
+                background: LinearColour([0.0, 0.0, 0.0, 1.0]),
+                work_area: None,
+                layers,
+                markers: Vec::new(),
+                motion_blur: Default::default(),
+                extra: serde_json::Map::new(),
+            };
+            let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+            let mut visited = vec![comp.id];
+            let draws = build_comp_draws(&doc, &comp, 0.0, &pixels, &mut visited);
+            let tex = realiser.realise(None, w, h, [0.0, 0.0, 0.0, 1.0], &draws);
+            engine
+                .readback8(
+                    &ctx,
+                    &engine.display(&ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL),
+                )
+                .unwrap()
+        };
+
+        let plain = render(vec![spot.clone(), solid(false)]);
+        let masked = render(vec![spot.clone(), solid(true)]);
+        assert_ne!(plain, render(vec![solid(false)]), "the spot lights it");
+        // The mask's own antialiased edge is the one place the two may
+        // differ, so the outermost pixels are left out.
+        let worst = (2..h - 2)
+            .flat_map(|y| (2..w - 2).map(move |x| ((y * w + x) * 4) as usize))
+            .flat_map(|i| (0..3).map(move |c| i + c))
+            .map(|i| plain[i].abs_diff(masked[i]))
+            .max()
+            .unwrap_or(0);
+        assert!(worst <= 1, "a plain solid lit as a tile, {worst}/255 off");
     }
 
     /// A region of interest composites a window of the comp, and that window

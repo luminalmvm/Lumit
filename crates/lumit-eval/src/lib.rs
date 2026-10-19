@@ -58,7 +58,8 @@ pub mod schedule;
 /// * 7: a 2D layer and its children ignore the z and X/Y Rotation it
 ///   kept from being 3D.
 /// * 8: a parented adjustment layer grades where its parent puts it.
-pub const ALGO_VERSION: u32 = 8;
+/// * 9: a lit plain solid is lit at its own size, not as a stretched tile.
+pub const ALGO_VERSION: u32 = 9;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4518,12 +4519,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 8, which renamed every frame.
+        // Pinned under ALGO_VERSION 9, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                249_750_056_554_269_677_724_671_477_515_386_123_169,
-                319_002_937_087_763_857_072_061_952_023_437_516_702
+                278_819_954_123_723_258_822_881_518_220_219_330_963,
+                193_541_551_027_730_927_826_153_944_426_140_164_816
             )
         );
 

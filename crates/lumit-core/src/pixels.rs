@@ -44,9 +44,7 @@ pub fn solid_rgba(c: LinearColour) -> [u8; 4] {
 }
 
 pub fn px_tile(px: &[u8; 4], w: u32, h: u32) -> Vec<u8> {
-    std::iter::repeat_n(*px, (w * h) as usize)
-        .flatten()
-        .collect()
+    px.repeat((w * h) as usize)
 }
 
 /// Contain-fit a `src_w × src_h` image inside `dst_w × dst_h`, keeping aspect
