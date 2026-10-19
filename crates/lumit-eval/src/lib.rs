@@ -53,7 +53,11 @@ pub mod schedule;
 ///   renames the frames that read it; and the flare's bake snaps its
 ///   continuous iris dials to a step, which moves the picture very slightly
 ///   at every f-stop between two steps.
-pub const ALGO_VERSION: u32 = 5;
+/// * 6: a 3D layer off z = 0 or tilted in a comp with no camera now
+///   draws, where it used to be cut away.
+/// * 7: a 2D layer and its children ignore the z and X/Y Rotation it
+///   kept from being 3D.
+pub const ALGO_VERSION: u32 = 7;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -1527,17 +1531,26 @@ fn feed_layer(
         {
             let alt = lumit_core::time::layer_time(t, ancestor.start_offset.0);
             let atr = &ancestor.transform;
+            // A 2D ancestor's hidden z and X/Y rotation count as 0, as the
+            // renderer places it. Cameras and lights have no 3D switch.
+            let flat = !ancestor.switches.three_d
+                && !matches!(
+                    ancestor.kind,
+                    lumit_core::model::LayerKind::Camera { .. }
+                        | lumit_core::model::LayerKind::Light { .. }
+                );
+            let hidden = |p: &lumit_core::anim::Property| if flat { 0.0 } else { p.value_at(alt) };
             for v in [
                 atr.position_x.value_at(alt),
                 atr.position_y.value_at(alt),
-                atr.position_z.value_at(alt),
+                hidden(&atr.position_z),
                 atr.anchor_x.value_at(alt),
                 atr.anchor_y.value_at(alt),
                 atr.scale_x.value_at(alt),
                 atr.scale_y.value_at(alt),
                 atr.rotation.value_at(alt),
-                atr.rotation_x.value_at(alt),
-                atr.rotation_y.value_at(alt),
+                hidden(&atr.rotation_x),
+                hidden(&atr.rotation_y),
             ] {
                 feed_f64(h, v);
             }
@@ -3042,6 +3055,11 @@ mod tests {
             "a hidden parent still places its children, so moving it must retire \
              their frames"
         );
+        // A 2D parent's leftover tilt places nothing until it goes 3D again.
+        comp.layers[1].transform.rotation_x = Property::fixed(60.0);
+        let flat = key(&doc, &comp, 1.0);
+        comp.layers[1].switches.three_d = true;
+        assert_ne!(flat, key(&doc, &comp, 1.0), "the parent's tilt is back");
 
         // The grandparent case too: the whole chain places the child, so an
         // ancestor two steps up is content just as the immediate parent is.
@@ -4488,12 +4506,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned on the code as it stood before fades reached the picture.
+        // Pinned under ALGO_VERSION 7, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                303_821_901_826_944_988_283_012_693_430_024_403_241,
-                214_093_313_630_544_915_097_010_732_135_860_045_414
+                209_343_133_942_395_489_499_553_564_765_575_167_149,
+                66_631_918_514_862_135_221_443_392_115_838_253_518
             )
         );
 
