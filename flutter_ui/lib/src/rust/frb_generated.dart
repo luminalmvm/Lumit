@@ -2289,7 +2289,8 @@ abstract class BridgeLibApi extends BaseApi {
 
   Future<BridgeLens> crateApiLensReadLens({required String path});
 
-  Future<BridgePluginScan> crateApiEffectRescanPlugins();
+  Future<BridgePluginScan> crateApiEffectRescanPlugins(
+      {RustStreamSink<BridgeScanProgress>? progress});
 
   void crateApiAudioResetAudioClip();
 
@@ -19316,10 +19317,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  Future<BridgePluginScan> crateApiEffectRescanPlugins() {
+  Future<BridgePluginScan> crateApiEffectRescanPlugins(
+      {RustStreamSink<BridgeScanProgress>? progress}) {
     return handler.executeNormal(NormalTask(
       callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_opt_StreamSink_bridge_scan_progress_Sse(
+            progress, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
             funcId: 601, port: port_);
       },
@@ -19328,7 +19332,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         decodeErrorData: null,
       ),
       constMeta: kCrateApiEffectRescanPluginsConstMeta,
-      argValues: [],
+      argValues: [progress],
       apiImpl: this,
     ));
   }
@@ -19336,7 +19340,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiEffectRescanPluginsConstMeta =>
       const TaskConstMeta(
         debugName: "rescan_plugins",
-        argNames: [],
+        argNames: ["progress"],
       );
 
   @override
@@ -20810,6 +20814,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   @protected
   RustStreamSink<BridgeLiveEvent> dco_decode_StreamSink_bridge_live_event_Sse(
       dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
+  @protected
+  RustStreamSink<BridgeScanProgress>
+      dco_decode_StreamSink_bridge_scan_progress_Sse(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     throw UnimplementedError();
   }
@@ -24620,6 +24631,27 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeScanProgress dco_decode_bridge_scan_progress(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return BridgeScanProgress(
+      stage: dco_decode_bridge_scan_stage(arr[0]),
+      bundle: dco_decode_String(arr[1]),
+      effect: dco_decode_String(arr[2]),
+      done: dco_decode_u_32(arr[3]),
+      total: dco_decode_u_32(arr[4]),
+    );
+  }
+
+  @protected
+  BridgeScanStage dco_decode_bridge_scan_stage(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return BridgeScanStage.values[raw as int];
+  }
+
+  @protected
   BridgeScopeTrace dco_decode_bridge_scope_trace(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -26680,6 +26712,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  RustStreamSink<BridgeScanProgress>?
+      dco_decode_opt_StreamSink_bridge_scan_progress_Sse(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_StreamSink_bridge_scan_progress_Sse(raw);
+  }
+
+  @protected
   RustStreamSink<BridgeScriptEvent>?
       dco_decode_opt_StreamSink_bridge_script_event_Sse(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -27392,6 +27433,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   @protected
   RustStreamSink<BridgeLiveEvent> sse_decode_StreamSink_bridge_live_event_Sse(
       SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
+
+  @protected
+  RustStreamSink<BridgeScanProgress>
+      sse_decode_StreamSink_bridge_scan_progress_Sse(
+          SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     throw UnimplementedError('Unreachable ()');
   }
@@ -31422,6 +31471,30 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeScanProgress sse_decode_bridge_scan_progress(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_stage = sse_decode_bridge_scan_stage(deserializer);
+    var var_bundle = sse_decode_String(deserializer);
+    var var_effect = sse_decode_String(deserializer);
+    var var_done = sse_decode_u_32(deserializer);
+    var var_total = sse_decode_u_32(deserializer);
+    return BridgeScanProgress(
+        stage: var_stage,
+        bundle: var_bundle,
+        effect: var_effect,
+        done: var_done,
+        total: var_total);
+  }
+
+  @protected
+  BridgeScanStage sse_decode_bridge_scan_stage(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return BridgeScanStage.values[inner];
+  }
+
+  @protected
   BridgeScopeTrace sse_decode_bridge_scope_trace(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_kind = sse_decode_u_32(deserializer);
@@ -34280,6 +34353,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  RustStreamSink<BridgeScanProgress>?
+      sse_decode_opt_StreamSink_bridge_scan_progress_Sse(
+          SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_StreamSink_bridge_scan_progress_Sse(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   RustStreamSink<BridgeScriptEvent>?
       sse_decode_opt_StreamSink_bridge_script_event_Sse(
           SseDeserializer deserializer) {
@@ -35339,6 +35425,19 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         self.setupAndSerialize(
             codec: SseCodec(
           decodeSuccessData: sse_decode_bridge_live_event,
+          decodeErrorData: sse_decode_AnyhowException,
+        )),
+        serializer);
+  }
+
+  @protected
+  void sse_encode_StreamSink_bridge_scan_progress_Sse(
+      RustStreamSink<BridgeScanProgress> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+        self.setupAndSerialize(
+            codec: SseCodec(
+          decodeSuccessData: sse_decode_bridge_scan_progress,
           decodeErrorData: sse_decode_AnyhowException,
         )),
         serializer);
@@ -38614,6 +38713,24 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_bridge_scan_progress(
+      BridgeScanProgress self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_scan_stage(self.stage, serializer);
+    sse_encode_String(self.bundle, serializer);
+    sse_encode_String(self.effect, serializer);
+    sse_encode_u_32(self.done, serializer);
+    sse_encode_u_32(self.total, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_scan_stage(
+      BridgeScanStage self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_scope_trace(
       BridgeScopeTrace self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -40819,6 +40936,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_StreamSink_bridge_live_event_Sse(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_StreamSink_bridge_scan_progress_Sse(
+      RustStreamSink<BridgeScanProgress>? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_StreamSink_bridge_scan_progress_Sse(self, serializer);
     }
   }
 
