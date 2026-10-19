@@ -1240,7 +1240,7 @@ class EffectParamRowFrb extends StatelessWidget {
         .rangeSliders;
     if (!rangeSliders || !sliderTrack) return field;
 
-    return Row(
+    final both = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         field,
@@ -1272,6 +1272,11 @@ class EffectParamRowFrb extends StatelessWidget {
         ),
       ],
     );
+    // Without room for both, the number stands alone rather than the track
+    // being cut off.
+    return LayoutBuilder(
+        builder: (context, box) =>
+            box.maxWidth < effectCellWidth + 6 + 78 ? field : both);
   }
 
   /// A number in degrees with the dial under it (docs/07 §6).
