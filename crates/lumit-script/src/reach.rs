@@ -1,4 +1,4 @@
-//! Where a script may reach on disk.
+//! Where a script or a program over MCP may reach on disk.
 //!
 //! Every path a caller hands over is read as text first: a network share, a
 //! device or anything else that is not a plain path on this computer is
@@ -8,9 +8,10 @@
 //! the same refusal whether it exists or not.
 //!
 //! In reach: the script's own folder and the files the person chose or passed
-//! to it for reading, and the project's folder and the script's for saves and
-//! exports. A save goes over the project's own file or makes a new `.lum`, and
-//! an export never writes over a file.
+//! to it for reading, the project's folder and the script's for saves and
+//! exports, and over MCP the project's folder for everything. A save goes over
+//! the project's own file or makes a new `.lum`, and an export never writes
+//! over a file.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -24,6 +25,8 @@ pub(crate) struct Reach {
     pub(crate) folder: Option<PathBuf>,
     /// Files the person chose or passed in, as real paths.
     pub(crate) files: Vec<PathBuf>,
+    /// Whether footage may come from the project's folder, as over MCP.
+    pub(crate) project: bool,
 }
 
 /// `path` when it is a plain path on this computer. A network share, a
@@ -134,6 +137,14 @@ fn unsaved() -> ScriptError {
 }
 
 impl Reach {
+    /// The project's folder and nothing else, as over MCP.
+    pub(crate) fn project() -> Self {
+        Self {
+            project: true,
+            ..Self::default()
+        }
+    }
+
     /// Whether a script may read or look at `path`: in its folder, or a file
     /// chosen or passed. A relative path is read from where Lumit runs.
     pub(crate) fn reads(&self, path: &Path) -> bool {
@@ -161,7 +172,7 @@ impl Reach {
     fn writes(&self, host: &dyn Host) -> Result<Vec<PathBuf>, ScriptError> {
         let project = host.path().and_then(|p| p.parent().map(Path::to_path_buf));
         let folders: Vec<PathBuf> = project.into_iter().chain(self.folder.clone()).collect();
-        if folders.is_empty() {
+        if folders.is_empty() || (self.project && host.path().is_none()) {
             return Err(unsaved());
         }
         Ok(folders)
@@ -177,16 +188,26 @@ impl Reach {
 
     /// Footage file `path` as the host is to read it, or why it may not.
     pub(crate) fn footage(&self, host: &dyn Host, path: &Path) -> Result<PathBuf, ScriptError> {
+        let project = host.path().and_then(|p| p.parent().map(Path::to_path_buf));
+        if self.project && project.is_none() {
+            return Err(unsaved());
+        }
+        let folders: Vec<PathBuf> = self
+            .folder
+            .iter()
+            .chain(project.iter().filter(|_| self.project))
+            .cloned()
+            .collect();
         if let Some(full) = self.whole(host, path) {
             let chosen = full.canonicalize().is_ok_and(|p| self.files.contains(&p));
-            if chosen || inside(&full, self.folder.as_slice()) {
+            if chosen || inside(&full, &folders) {
                 return Ok(full);
             }
         }
-        let places = if self.folder.is_some() {
-            "the script's folder or files you chose or passed to it"
-        } else {
-            "files you chose or passed to the script"
+        let places = match (self.project, self.folder.is_some()) {
+            (true, _) => "the project's folder",
+            (false, true) => "the script's folder or files you chose or passed to it",
+            (false, false) => "files you chose or passed to the script",
         };
         Err(ScriptError::BadArgs(format!(
             "{} is out of reach. Footage comes only from {places}.",

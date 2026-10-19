@@ -17,10 +17,14 @@
 //! shared project's threads do (docs/14 §1).
 
 mod commands;
+pub mod live;
+pub mod mcp;
 mod reach;
 mod script;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 use lumit_core::model::{Composition, Layer};
 use lumit_core::time::CompTime;
@@ -81,6 +85,12 @@ pub trait Host {
             layer,
             parent,
         }]
+    }
+
+    /// What stops a script run through MCP at its next step, when the host
+    /// has a Stop for it. By default nothing does.
+    fn stop_flag(&self) -> Arc<AtomicBool> {
+        Arc::default()
     }
 }
 

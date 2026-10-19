@@ -36,7 +36,11 @@ import 'package:lumit_flutter/src/rust/api/audio.dart'
     show BridgeAudioMeter, audioMeters;
 
 import '../state/reviews.dart' show isReviewExport;
+import 'package:lumit_flutter/src/rust/api/script.dart'
+    show disconnectLiveProgram;
+
 import 'cache_confirm_frb.dart';
+import 'live_endpoint_frb.dart';
 import 'profile_chip.dart';
 import 'project_history_window.dart';
 import 'review_links_window.dart';
@@ -331,6 +335,16 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
           // header, which is where nobody found it.
           _bubble(t, const RenderTimingsToggle()),
           _divider(t),
+          // A program driving Lumit, for as long as it is connected.
+          ValueListenableBuilder<String?>(
+            valueListenable: liveProgram,
+            builder: (context, name, _) => name == null
+                ? const SizedBox.shrink()
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [_bubble(t, _live(t, name)), _divider(t)],
+                  ),
+          ),
           // A shared project's button, and nothing when it is not one.
           ListenableBuilder(
             listenable: Listenable.merge([state.share.roster, _ui.following]),
@@ -693,6 +707,35 @@ class _StatusLineFrbState extends State<StatusLineFrb> {
       ],
     );
   }
+
+  /// Who is driving Lumit, and the button that cuts them off.
+  Widget _live(LumitTheme t, String name) => Row(
+        key: const ValueKey('status-live'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // The program names itself, so a long name is cut short here.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: Text(
+              name.isEmpty
+                  ? l10n.liveDrivenByProgram
+                  : l10n.liveDrivenBy(name),
+              style: t.small,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 6),
+          HouseButton(
+            key: const ValueKey('status-live-disconnect'),
+            small: true,
+            frameless: true,
+            onPressed: disconnectLiveProgram,
+            child: Text(l10n.liveDisconnect, style: t.small),
+          ),
+        ],
+      );
 
   /// How many marks the strip gives to the other people before the last of
   /// them becomes a count.

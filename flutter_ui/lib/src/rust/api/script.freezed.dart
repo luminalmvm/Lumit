@@ -13,6 +13,575 @@ part of 'script.dart';
 T _$identity<T>(T value) => value;
 
 /// @nodoc
+mixin _$BridgeLiveEvent {
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeLiveEvent);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeLiveEvent()';
+  }
+}
+
+/// @nodoc
+class $BridgeLiveEventCopyWith<$Res> {
+  $BridgeLiveEventCopyWith(
+      BridgeLiveEvent _, $Res Function(BridgeLiveEvent) __);
+}
+
+/// Adds pattern-matching-related methods to [BridgeLiveEvent].
+extension BridgeLiveEventPatterns on BridgeLiveEvent {
+  /// A variant of `map` that fallback to returning `orElse`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(BridgeLiveEvent_Attached value)? attached,
+    TResult Function(BridgeLiveEvent_Detached value)? detached,
+    TResult Function(BridgeLiveEvent_ScriptStarted value)? scriptStarted,
+    TResult Function(BridgeLiveEvent_ScriptEnded value)? scriptEnded,
+    TResult Function(BridgeLiveEvent_OpenComp value)? openComp,
+    TResult Function(BridgeLiveEvent_Alert value)? alert,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeLiveEvent_Attached() when attached != null:
+        return attached(_that);
+      case BridgeLiveEvent_Detached() when detached != null:
+        return detached(_that);
+      case BridgeLiveEvent_ScriptStarted() when scriptStarted != null:
+        return scriptStarted(_that);
+      case BridgeLiveEvent_ScriptEnded() when scriptEnded != null:
+        return scriptEnded(_that);
+      case BridgeLiveEvent_OpenComp() when openComp != null:
+        return openComp(_that);
+      case BridgeLiveEvent_Alert() when alert != null:
+        return alert(_that);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// Callbacks receives the raw object, upcasted.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case final Subclass2 value:
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(BridgeLiveEvent_Attached value) attached,
+    required TResult Function(BridgeLiveEvent_Detached value) detached,
+    required TResult Function(BridgeLiveEvent_ScriptStarted value)
+        scriptStarted,
+    required TResult Function(BridgeLiveEvent_ScriptEnded value) scriptEnded,
+    required TResult Function(BridgeLiveEvent_OpenComp value) openComp,
+    required TResult Function(BridgeLiveEvent_Alert value) alert,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeLiveEvent_Attached():
+        return attached(_that);
+      case BridgeLiveEvent_Detached():
+        return detached(_that);
+      case BridgeLiveEvent_ScriptStarted():
+        return scriptStarted(_that);
+      case BridgeLiveEvent_ScriptEnded():
+        return scriptEnded(_that);
+      case BridgeLiveEvent_OpenComp():
+        return openComp(_that);
+      case BridgeLiveEvent_Alert():
+        return alert(_that);
+    }
+  }
+
+  /// A variant of `map` that fallback to returning `null`.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case final Subclass value:
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(BridgeLiveEvent_Attached value)? attached,
+    TResult? Function(BridgeLiveEvent_Detached value)? detached,
+    TResult? Function(BridgeLiveEvent_ScriptStarted value)? scriptStarted,
+    TResult? Function(BridgeLiveEvent_ScriptEnded value)? scriptEnded,
+    TResult? Function(BridgeLiveEvent_OpenComp value)? openComp,
+    TResult? Function(BridgeLiveEvent_Alert value)? alert,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeLiveEvent_Attached() when attached != null:
+        return attached(_that);
+      case BridgeLiveEvent_Detached() when detached != null:
+        return detached(_that);
+      case BridgeLiveEvent_ScriptStarted() when scriptStarted != null:
+        return scriptStarted(_that);
+      case BridgeLiveEvent_ScriptEnded() when scriptEnded != null:
+        return scriptEnded(_that);
+      case BridgeLiveEvent_OpenComp() when openComp != null:
+        return openComp(_that);
+      case BridgeLiveEvent_Alert() when alert != null:
+        return alert(_that);
+      case _:
+        return null;
+    }
+  }
+
+  /// A variant of `when` that fallback to an `orElse` callback.
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return orElse();
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function(String name)? attached,
+    TResult Function()? detached,
+    TResult Function(String name)? scriptStarted,
+    TResult Function()? scriptEnded,
+    TResult Function(CompositionReference comp)? openComp,
+    TResult Function(String message)? alert,
+    required TResult orElse(),
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeLiveEvent_Attached() when attached != null:
+        return attached(_that.name);
+      case BridgeLiveEvent_Detached() when detached != null:
+        return detached();
+      case BridgeLiveEvent_ScriptStarted() when scriptStarted != null:
+        return scriptStarted(_that.name);
+      case BridgeLiveEvent_ScriptEnded() when scriptEnded != null:
+        return scriptEnded();
+      case BridgeLiveEvent_OpenComp() when openComp != null:
+        return openComp(_that.comp);
+      case BridgeLiveEvent_Alert() when alert != null:
+        return alert(_that.message);
+      case _:
+        return orElse();
+    }
+  }
+
+  /// A `switch`-like method, using callbacks.
+  ///
+  /// As opposed to `map`, this offers destructuring.
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case Subclass2(:final field2):
+  ///     return ...;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function(String name) attached,
+    required TResult Function() detached,
+    required TResult Function(String name) scriptStarted,
+    required TResult Function() scriptEnded,
+    required TResult Function(CompositionReference comp) openComp,
+    required TResult Function(String message) alert,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeLiveEvent_Attached():
+        return attached(_that.name);
+      case BridgeLiveEvent_Detached():
+        return detached();
+      case BridgeLiveEvent_ScriptStarted():
+        return scriptStarted(_that.name);
+      case BridgeLiveEvent_ScriptEnded():
+        return scriptEnded();
+      case BridgeLiveEvent_OpenComp():
+        return openComp(_that.comp);
+      case BridgeLiveEvent_Alert():
+        return alert(_that.message);
+    }
+  }
+
+  /// A variant of `when` that fallback to returning `null`
+  ///
+  /// It is equivalent to doing:
+  /// ```dart
+  /// switch (sealedClass) {
+  ///   case Subclass(:final field):
+  ///     return ...;
+  ///   case _:
+  ///     return null;
+  /// }
+  /// ```
+
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function(String name)? attached,
+    TResult? Function()? detached,
+    TResult? Function(String name)? scriptStarted,
+    TResult? Function()? scriptEnded,
+    TResult? Function(CompositionReference comp)? openComp,
+    TResult? Function(String message)? alert,
+  }) {
+    final _that = this;
+    switch (_that) {
+      case BridgeLiveEvent_Attached() when attached != null:
+        return attached(_that.name);
+      case BridgeLiveEvent_Detached() when detached != null:
+        return detached();
+      case BridgeLiveEvent_ScriptStarted() when scriptStarted != null:
+        return scriptStarted(_that.name);
+      case BridgeLiveEvent_ScriptEnded() when scriptEnded != null:
+        return scriptEnded();
+      case BridgeLiveEvent_OpenComp() when openComp != null:
+        return openComp(_that.comp);
+      case BridgeLiveEvent_Alert() when alert != null:
+        return alert(_that.message);
+      case _:
+        return null;
+    }
+  }
+}
+
+/// @nodoc
+
+class BridgeLiveEvent_Attached extends BridgeLiveEvent {
+  const BridgeLiveEvent_Attached({required this.name}) : super._();
+
+  final String name;
+
+  /// Create a copy of BridgeLiveEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeLiveEvent_AttachedCopyWith<BridgeLiveEvent_Attached> get copyWith =>
+      _$BridgeLiveEvent_AttachedCopyWithImpl<BridgeLiveEvent_Attached>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeLiveEvent_Attached &&
+            (identical(other.name, name) || other.name == name));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, name);
+
+  @override
+  String toString() {
+    return 'BridgeLiveEvent.attached(name: $name)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeLiveEvent_AttachedCopyWith<$Res>
+    implements $BridgeLiveEventCopyWith<$Res> {
+  factory $BridgeLiveEvent_AttachedCopyWith(BridgeLiveEvent_Attached value,
+          $Res Function(BridgeLiveEvent_Attached) _then) =
+      _$BridgeLiveEvent_AttachedCopyWithImpl;
+  @useResult
+  $Res call({String name});
+}
+
+/// @nodoc
+class _$BridgeLiveEvent_AttachedCopyWithImpl<$Res>
+    implements $BridgeLiveEvent_AttachedCopyWith<$Res> {
+  _$BridgeLiveEvent_AttachedCopyWithImpl(this._self, this._then);
+
+  final BridgeLiveEvent_Attached _self;
+  final $Res Function(BridgeLiveEvent_Attached) _then;
+
+  /// Create a copy of BridgeLiveEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? name = null,
+  }) {
+    return _then(BridgeLiveEvent_Attached(
+      name: null == name
+          ? _self.name
+          : name // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeLiveEvent_Detached extends BridgeLiveEvent {
+  const BridgeLiveEvent_Detached() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType && other is BridgeLiveEvent_Detached);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeLiveEvent.detached()';
+  }
+}
+
+/// @nodoc
+
+class BridgeLiveEvent_ScriptStarted extends BridgeLiveEvent {
+  const BridgeLiveEvent_ScriptStarted({required this.name}) : super._();
+
+  final String name;
+
+  /// Create a copy of BridgeLiveEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeLiveEvent_ScriptStartedCopyWith<BridgeLiveEvent_ScriptStarted>
+      get copyWith => _$BridgeLiveEvent_ScriptStartedCopyWithImpl<
+          BridgeLiveEvent_ScriptStarted>(this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeLiveEvent_ScriptStarted &&
+            (identical(other.name, name) || other.name == name));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, name);
+
+  @override
+  String toString() {
+    return 'BridgeLiveEvent.scriptStarted(name: $name)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeLiveEvent_ScriptStartedCopyWith<$Res>
+    implements $BridgeLiveEventCopyWith<$Res> {
+  factory $BridgeLiveEvent_ScriptStartedCopyWith(
+          BridgeLiveEvent_ScriptStarted value,
+          $Res Function(BridgeLiveEvent_ScriptStarted) _then) =
+      _$BridgeLiveEvent_ScriptStartedCopyWithImpl;
+  @useResult
+  $Res call({String name});
+}
+
+/// @nodoc
+class _$BridgeLiveEvent_ScriptStartedCopyWithImpl<$Res>
+    implements $BridgeLiveEvent_ScriptStartedCopyWith<$Res> {
+  _$BridgeLiveEvent_ScriptStartedCopyWithImpl(this._self, this._then);
+
+  final BridgeLiveEvent_ScriptStarted _self;
+  final $Res Function(BridgeLiveEvent_ScriptStarted) _then;
+
+  /// Create a copy of BridgeLiveEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? name = null,
+  }) {
+    return _then(BridgeLiveEvent_ScriptStarted(
+      name: null == name
+          ? _self.name
+          : name // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeLiveEvent_ScriptEnded extends BridgeLiveEvent {
+  const BridgeLiveEvent_ScriptEnded() : super._();
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeLiveEvent_ScriptEnded);
+  }
+
+  @override
+  int get hashCode => runtimeType.hashCode;
+
+  @override
+  String toString() {
+    return 'BridgeLiveEvent.scriptEnded()';
+  }
+}
+
+/// @nodoc
+
+class BridgeLiveEvent_OpenComp extends BridgeLiveEvent {
+  const BridgeLiveEvent_OpenComp({required this.comp}) : super._();
+
+  final CompositionReference comp;
+
+  /// Create a copy of BridgeLiveEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeLiveEvent_OpenCompCopyWith<BridgeLiveEvent_OpenComp> get copyWith =>
+      _$BridgeLiveEvent_OpenCompCopyWithImpl<BridgeLiveEvent_OpenComp>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeLiveEvent_OpenComp &&
+            (identical(other.comp, comp) || other.comp == comp));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, comp);
+
+  @override
+  String toString() {
+    return 'BridgeLiveEvent.openComp(comp: $comp)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeLiveEvent_OpenCompCopyWith<$Res>
+    implements $BridgeLiveEventCopyWith<$Res> {
+  factory $BridgeLiveEvent_OpenCompCopyWith(BridgeLiveEvent_OpenComp value,
+          $Res Function(BridgeLiveEvent_OpenComp) _then) =
+      _$BridgeLiveEvent_OpenCompCopyWithImpl;
+  @useResult
+  $Res call({CompositionReference comp});
+}
+
+/// @nodoc
+class _$BridgeLiveEvent_OpenCompCopyWithImpl<$Res>
+    implements $BridgeLiveEvent_OpenCompCopyWith<$Res> {
+  _$BridgeLiveEvent_OpenCompCopyWithImpl(this._self, this._then);
+
+  final BridgeLiveEvent_OpenComp _self;
+  final $Res Function(BridgeLiveEvent_OpenComp) _then;
+
+  /// Create a copy of BridgeLiveEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? comp = null,
+  }) {
+    return _then(BridgeLiveEvent_OpenComp(
+      comp: null == comp
+          ? _self.comp
+          : comp // ignore: cast_nullable_to_non_nullable
+              as CompositionReference,
+    ));
+  }
+}
+
+/// @nodoc
+
+class BridgeLiveEvent_Alert extends BridgeLiveEvent {
+  const BridgeLiveEvent_Alert({required this.message}) : super._();
+
+  final String message;
+
+  /// Create a copy of BridgeLiveEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @pragma('vm:prefer-inline')
+  $BridgeLiveEvent_AlertCopyWith<BridgeLiveEvent_Alert> get copyWith =>
+      _$BridgeLiveEvent_AlertCopyWithImpl<BridgeLiveEvent_Alert>(
+          this, _$identity);
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is BridgeLiveEvent_Alert &&
+            (identical(other.message, message) || other.message == message));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, message);
+
+  @override
+  String toString() {
+    return 'BridgeLiveEvent.alert(message: $message)';
+  }
+}
+
+/// @nodoc
+abstract mixin class $BridgeLiveEvent_AlertCopyWith<$Res>
+    implements $BridgeLiveEventCopyWith<$Res> {
+  factory $BridgeLiveEvent_AlertCopyWith(BridgeLiveEvent_Alert value,
+          $Res Function(BridgeLiveEvent_Alert) _then) =
+      _$BridgeLiveEvent_AlertCopyWithImpl;
+  @useResult
+  $Res call({String message});
+}
+
+/// @nodoc
+class _$BridgeLiveEvent_AlertCopyWithImpl<$Res>
+    implements $BridgeLiveEvent_AlertCopyWith<$Res> {
+  _$BridgeLiveEvent_AlertCopyWithImpl(this._self, this._then);
+
+  final BridgeLiveEvent_Alert _self;
+  final $Res Function(BridgeLiveEvent_Alert) _then;
+
+  /// Create a copy of BridgeLiveEvent
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  $Res call({
+    Object? message = null,
+  }) {
+    return _then(BridgeLiveEvent_Alert(
+      message: null == message
+          ? _self.message
+          : message // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
 mixin _$BridgeScriptEvent {
   @override
   bool operator ==(Object other) {

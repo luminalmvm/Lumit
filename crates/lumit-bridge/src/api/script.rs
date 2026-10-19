@@ -1,4 +1,5 @@
-//! File > Run script: a script run on the open project.
+//! File > Run script, and other programs driving Lumit: work on the open
+//! project from outside the interface.
 
 use flutter_rust_bridge::frb;
 
@@ -61,4 +62,58 @@ pub fn stop_script() {
 #[frb(sync)]
 pub fn answer_script_file(path: Option<String>) {
     crate::script::answer(path.map(Into::into));
+}
+
+/// What happens on the endpoint other programs drive Lumit through.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BridgeLiveEvent {
+    /// A program has connected and proved it holds the secret. `name` is
+    /// what it calls itself, empty until it says.
+    Attached {
+        name: String,
+    },
+    /// It has gone, or was let go.
+    Detached,
+    /// It is running a script, `name`, as one undo step. The interface must
+    /// not edit until `ScriptEnded`, as for File > Run script.
+    ScriptStarted {
+        name: String,
+    },
+    ScriptEnded,
+    /// It opens `comp` in the Viewer.
+    OpenComp {
+        comp: CompositionReference,
+    },
+    /// Its script shows `message`.
+    Alert {
+        message: String,
+    },
+}
+
+/// Let other programs on this computer drive Lumit: listen on a local
+/// socket, never a network port, for one program at a time that holds the
+/// secret written beside it. `events` hears who connects and what they do,
+/// and edits arrive on the change stream as usual. False when it could not
+/// start.
+pub fn start_live_endpoint(events: Option<StreamSink<BridgeLiveEvent>>) -> bool {
+    crate::live::start(move |event| events.as_ref().is_some_and(|sink| sink.add(event).is_ok()))
+}
+
+/// Stop listening and let go of the program connected. Harmless when off.
+pub fn stop_live_endpoint() {
+    crate::live::stop();
+}
+
+/// The busy card for a program's script is up, after `ScriptStarted`. The
+/// script waits for this, so nothing from the window lands in its undo step.
+#[frb(sync)]
+pub fn live_script_shown() {
+    crate::live::shown();
+}
+
+/// Let go of the program connected. It may connect again.
+#[frb(sync)]
+pub fn disconnect_live_program() {
+    crate::live::disconnect();
 }

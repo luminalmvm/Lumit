@@ -2,9 +2,11 @@
 //!
 //! # In plain terms
 //!
-//! Two jobs from a terminal or another program: export a comp of a project
-//! (`export`), and run a script on a project, saving it after if asked
-//! (`run`). Both open the project and export the way Lumit does, through
+//! Three jobs from a terminal or another program: export a comp of a project
+//! (`export`), run a script on a project, saving it after if asked (`run`),
+//! and let a program that speaks MCP edit a project through the commands
+//! (`mcp`), or the project open in Lumit when the person allows it. All
+//! open the project and export the way Lumit does, through
 //! [`host::Headless`]. What happens is told on standard error, and what
 //! comes out, the exported file or the script's answer, on standard output.
 //!
@@ -24,10 +26,11 @@ macro_rules! out {
 
 mod host;
 mod interrupt;
+mod relay;
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::io::{IsTerminal, Write};
+use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -41,6 +44,7 @@ Usage:
   lumit-cli export <project.lum> [--comp <name>] [--out <file>]
   lumit-cli run <script.js> [--project <project.lum>] [--save | --save-as <file>]
                 [--arg <key>=<value>]...
+  lumit-cli mcp [--project <project.lum>]
   lumit-cli --help
   lumit-cli --version
 
@@ -55,6 +59,12 @@ run        Run a JavaScript or After Effects (.jsx) script on a project, or on a
   --save-as  Save it as this file instead.
   --arg      Text for the script, read as lumit.args. A file named this way
              can be read by the script.
+
+mcp        Answer MCP on standard input and output, so another program can edit
+           a project through Lumit's commands. Without --project, the project
+           open in Lumit, when Let other programs drive Lumit is on in Settings.
+  --project  The project. Footage comes from its folder, exports go into it,
+             and it saves only when asked.
 
 Exit status: 0 done, 1 failed, 2 the arguments were wrong.
 ";
@@ -74,6 +84,10 @@ enum Command {
         project: Option<PathBuf>,
         save: Save,
         args: BTreeMap<String, String>,
+    },
+    Mcp {
+        /// `None` for the project open in Lumit.
+        project: Option<PathBuf>,
     },
 }
 
@@ -118,6 +132,10 @@ fn main() -> i32 {
             save,
             args,
         } => run(&script, project.as_deref(), save, args),
+        Command::Mcp { project: None } => relay::relay(),
+        Command::Mcp {
+            project: Some(project),
+        } => mcp(&project),
     };
     match done {
         Ok(()) => 0,
@@ -215,7 +233,9 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
         match (first.as_str(), flag.as_str()) {
             ("export", "--comp") => comp = Some(text(wants(&flag, rest.pop())?)?),
             ("export", "--out") => out = Some(PathBuf::from(wants(&flag, rest.pop())?)),
-            ("run", "--project") => project = Some(PathBuf::from(wants(&flag, rest.pop())?)),
+            ("run" | "mcp", "--project") => {
+                project = Some(PathBuf::from(wants(&flag, rest.pop())?))
+            }
             ("run", "--save") | ("run", "--save-as") if save != Save::No => {
                 return Err("--save and --save-as go one at a time.".into());
             }
@@ -256,6 +276,12 @@ fn parse(args: Vec<OsString>) -> Result<Command, String> {
                 save,
                 args: script_args,
             })
+        }
+        "mcp" => {
+            if !positional.is_empty() {
+                return Err("mcp takes the project with --project.".into());
+            }
+            Ok(Command::Mcp { project })
         }
         other => Err(format!("There is no command called {other}.")),
     }
@@ -389,6 +415,47 @@ fn run(
         out!("{text}");
     }
     Ok(())
+}
+
+/// Answer MCP, one message a line on standard input and one reply a line on
+/// standard output, until the client closes its end.
+fn mcp(project: &Path) -> Result<(), String> {
+    let host = open(project)?;
+    // Held while the client is there, so Lumit does not open a project the
+    // client may still save.
+    let own = host.save_target(None).map_err(|e| e.to_string())?;
+    host.claim(&own).map_err(|_| {
+        format!(
+            "{} is open in Lumit, or in another lumit-cli. Close it there first.",
+            own.display()
+        )
+    })?;
+    note!("Ready for MCP on standard input");
+    let mut input = std::io::stdin().lock();
+    let mut output = std::io::stdout().lock();
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        let read = input
+            .read_until(b'\n', &mut line)
+            .map_err(|e| format!("Standard input could not be read: {e}."))?;
+        if read == 0 {
+            break;
+        }
+        let text = String::from_utf8_lossy(&line);
+        // PowerShell puts a byte order mark before what it pipes in.
+        let text = text.trim_start_matches('\u{feff}').trim();
+        if text.is_empty() {
+            continue;
+        }
+        if let Some(reply) = lumit_script::mcp::answer(text, &host) {
+            writeln!(output, "{reply}")
+                .and_then(|()| output.flush())
+                .map_err(|e| format!("Standard output could not be written: {e}."))?;
+        }
+    }
+    // Nobody is left to ask after an export, so it stops with the client.
+    finish_exports(&host, &AtomicBool::new(false), false)
 }
 
 /// Exports a script started and did not wait for: let them finish, or stop

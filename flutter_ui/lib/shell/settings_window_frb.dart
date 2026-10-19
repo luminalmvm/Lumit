@@ -877,6 +877,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ui.pushDiscordStatus();
         workspace.setKeepRunning(false);
         unawaited(applyBackground(workspace));
+        if (workspace.liveEndpoint) {
+          workspace.setLiveEndpoint(false);
+          ui.applyLiveEndpoint();
+        }
         ui.setLanguage(null);
       case SettingsPage.account:
         // Nothing here has a shipped value to go back to.
@@ -1117,6 +1121,13 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                 }),
               ),
             ),
+            // Off until turned on: it is the one way another program can
+            // reach the open project.
+            _flag(t, 'settings-live-endpoint', l10n.settingsLiveEndpoint,
+                value: ui.workspace.liveEndpoint, set: (on) {
+              ui.workspace.setLiveEndpoint(on);
+              ui.applyLiveEndpoint();
+            }),
           ],
         ),
         // The same updater the Help menu drives, seen from the other side: one
