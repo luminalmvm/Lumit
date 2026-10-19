@@ -893,6 +893,7 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ui.setShape(ThemeShape.studio);
         workspace.setAnimationLevel(AnimationLevel.all);
         workspace.setThemedScopes(false);
+        workspace.setThemedSplash(false);
         workspace.setThemedEffectGraphs(false);
         workspace.setThemedViewerSurround(false);
         settings.uiScale = shipped.uiScale;
@@ -1361,6 +1362,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
           _row(t, l10n.settingsYourThemes, _themeShelf(t, ui),
               description: _themeMessage ?? ''),
           _row(t, l10n.settingsAccent, _accentSwatches(t, ui)),
+          _flag(t, 'settings-themed-splash', l10n.settingsSplashUsesThemeColour,
+              value: ui.workspace.themedSplash,
+              set: ui.workspace.setThemedSplash),
           _row(t, l10n.settingsShape, _shapeChips(t, ui)),
           // How labels are cased. Null is the style's own, and a file that
           // never chose stores nothing.

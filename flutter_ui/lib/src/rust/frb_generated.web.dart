@@ -134,6 +134,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  RustStreamSink<BridgeScanProgress>
+      dco_decode_StreamSink_bridge_scan_progress_Sse(dynamic raw);
+
+  @protected
   RustStreamSink<BridgeScriptEvent>
       dco_decode_StreamSink_bridge_script_event_Sse(dynamic raw);
 
@@ -1113,6 +1117,12 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeScalar dco_decode_bridge_scalar(dynamic raw);
 
   @protected
+  BridgeScanProgress dco_decode_bridge_scan_progress(dynamic raw);
+
+  @protected
+  BridgeScanStage dco_decode_bridge_scan_stage(dynamic raw);
+
+  @protected
   BridgeScopeTrace dco_decode_bridge_scope_trace(dynamic raw);
 
   @protected
@@ -1743,6 +1753,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dco_decode_opt_StreamSink_bridge_live_event_Sse(dynamic raw);
 
   @protected
+  RustStreamSink<BridgeScanProgress>?
+      dco_decode_opt_StreamSink_bridge_scan_progress_Sse(dynamic raw);
+
+  @protected
   RustStreamSink<BridgeScriptEvent>?
       dco_decode_opt_StreamSink_bridge_script_event_Sse(dynamic raw);
 
@@ -2070,6 +2084,11 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   RustStreamSink<BridgeLiveEvent> sse_decode_StreamSink_bridge_live_event_Sse(
       SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<BridgeScanProgress>
+      sse_decode_StreamSink_bridge_scan_progress_Sse(
+          SseDeserializer deserializer);
 
   @protected
   RustStreamSink<BridgeScriptEvent>
@@ -3214,6 +3233,13 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeScalar sse_decode_bridge_scalar(SseDeserializer deserializer);
 
   @protected
+  BridgeScanProgress sse_decode_bridge_scan_progress(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeScanStage sse_decode_bridge_scan_stage(SseDeserializer deserializer);
+
+  @protected
   BridgeScopeTrace sse_decode_bridge_scope_trace(SseDeserializer deserializer);
 
   @protected
@@ -3975,6 +4001,11 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
           SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<BridgeScanProgress>?
+      sse_decode_opt_StreamSink_bridge_scan_progress_Sse(
+          SseDeserializer deserializer);
+
+  @protected
   RustStreamSink<BridgeScriptEvent>?
       sse_decode_opt_StreamSink_bridge_script_event_Sse(
           SseDeserializer deserializer);
@@ -4339,6 +4370,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_StreamSink_bridge_live_event_Sse(
       RustStreamSink<BridgeLiveEvent> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_StreamSink_bridge_scan_progress_Sse(
+      RustStreamSink<BridgeScanProgress> self, SseSerializer serializer);
 
   @protected
   void sse_encode_StreamSink_bridge_script_event_Sse(
@@ -5588,6 +5623,14 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   void sse_encode_bridge_scalar(BridgeScalar self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_scan_progress(
+      BridgeScanProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_scan_stage(
+      BridgeScanStage self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_scope_trace(
       BridgeScopeTrace self, SseSerializer serializer);
 
@@ -6388,6 +6431,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_StreamSink_bridge_live_event_Sse(
       RustStreamSink<BridgeLiveEvent>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_StreamSink_bridge_scan_progress_Sse(
+      RustStreamSink<BridgeScanProgress>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_StreamSink_bridge_script_event_Sse(

@@ -4,6 +4,7 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -45,6 +46,16 @@ class FlutterWindow : public Win32Window {
 
   // Put Lumit's icon in the tray, or take it away.
   void ShowTray(bool shown);
+
+  // Put the start-up splash on screen, or give it new pixels:
+  // premultiplied RGBA, |width| by |height|. False if it could not.
+  bool ShowSplash(int width, int height, const std::vector<uint8_t>& rgba);
+
+  // Take the splash down.
+  void CloseSplash();
+
+  // The splash's window while it is up. The main window waits for it to go.
+  HWND splash_ = nullptr;
 
   // The tray icon's menu, at the pointer.
   void TrayMenu();

@@ -31,6 +31,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::api::{layer::LayerReference, state::PROJECTS, BridgeError};
+use crate::frb_generated::StreamSink;
 
 /// One built-in effect as the Add-effect menu needs it: the stable `name` to
 /// pass to [`crate::api::layer::LayerReference::add_effect`], the sentence-case
@@ -341,6 +342,35 @@ pub struct BridgePluginScan {
     pub skipped: Vec<String>,
 }
 
+/// Which part of the plugin scan a [`BridgeScanProgress`] is from.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeScanStage {
+    /// Extensions' LFX effects, read from files.
+    Extensions,
+    /// OFX bundles.
+    Effects,
+    /// CLAP and VST3 files.
+    Audio,
+}
+
+/// How far the plugin scan has got, so the splash can say what it is waiting on.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeScanProgress {
+    pub stage: BridgeScanStage,
+    /// The bundle or file being opened, by its own name ("Sapphire"). Empty for
+    /// the extensions, which are read all at once.
+    pub bundle: String,
+    /// The effect that bundle has just added, or empty while it is still being
+    /// opened.
+    pub effect: String,
+    /// How many of this stage's bundles came before this one, and how many
+    /// there are.
+    pub done: u32,
+    pub total: u32,
+}
+
 /// Scan the standard OFX folders (and `OFX_PLUGIN_PATH`) **and the standard
 /// CLAP and VST3 folders** (and `CLAP_PATH`, `VST3_PATH`), and offer what is
 /// found as effects.
@@ -354,9 +384,23 @@ pub struct BridgePluginScan {
 /// Registration is additive and idempotent: calling this twice registers each
 /// plugin once, so a rescan after installing something new is safe at
 /// any moment.
-pub fn rescan_plugins() -> BridgePluginScan {
+///
+/// `progress` hears about each bundle as it is opened and each effect it adds.
+pub fn rescan_plugins(progress: Option<StreamSink<BridgeScanProgress>>) -> BridgePluginScan {
+    let say = |stage, bundle: &str, effect: &str, done: usize, total: usize| {
+        if let Some(sink) = &progress {
+            let _ = sink.add(BridgeScanProgress {
+                stage,
+                bundle: bundle.to_owned(),
+                effect: effect.to_owned(),
+                done: u32::try_from(done).unwrap_or(u32::MAX),
+                total: u32::try_from(total).unwrap_or(u32::MAX),
+            });
+        }
+    };
     // The extensions' LFX effects first: they are files read, not bundles
     // opened, so a project opened during the scan finds them soonest.
+    say(BridgeScanStage::Extensions, "", "", 0, 1);
     let (lfx_added, lfx_skipped) = crate::api::extensions::register_effects();
     let prefs = lumit_project::PluginPrefs::load_default();
     // The stored preference becomes the running one first, so a plugin
@@ -367,8 +411,35 @@ pub fn rescan_plugins() -> BridgePluginScan {
         disabled: prefs.disabled.clone(),
         ..lumit_ofx::discover::ScanOptions::standard()
     };
-    let outcome =
-        lumit_ofx::discover::scan(&options, &mut |def| lumit_render::gpufx::ofx::register(def));
+    // The bundle being opened, so an effect it adds can be named beside it.
+    let opening = std::cell::RefCell::new((String::new(), 0, 0));
+    let outcome = lumit_ofx::discover::scan_reporting(
+        &options,
+        &mut |def| {
+            let added = lumit_render::gpufx::ofx::register(def);
+            if added {
+                let (bundle, done, total) = &*opening.borrow();
+                say(
+                    BridgeScanStage::Effects,
+                    bundle,
+                    def.schema().label,
+                    *done,
+                    *total,
+                );
+            }
+            added
+        },
+        &mut |binary, done, total| {
+            *opening.borrow_mut() = (bundle_name(binary), done, total);
+            say(
+                BridgeScanStage::Effects,
+                &bundle_name(binary),
+                "",
+                done,
+                total,
+            );
+        },
+    );
     let mut scan = BridgePluginScan {
         registered: lfx_added
             .into_iter()
@@ -376,7 +447,15 @@ pub fn rescan_plugins() -> BridgePluginScan {
             .collect(),
         skipped: lfx_skipped.into_iter().chain(outcome.skipped).collect(),
     };
-    scan_audio_plugins(&prefs, &mut scan);
+    scan_audio_plugins(&prefs, &mut scan, &mut |binary, done, total| {
+        say(
+            BridgeScanStage::Audio,
+            &bundle_name(binary),
+            "",
+            done,
+            total,
+        );
+    });
     // Written beside plugins.json so someone whose plugin is missing can send
     // us why. Only when something was turned away, so the last report stays.
     if !scan.skipped.is_empty() {
@@ -407,12 +486,17 @@ pub fn rescan_plugins() -> BridgePluginScan {
 ///
 /// A machine with neither folder scans nothing, registers nothing and reports
 /// nothing, which is what a build with no audio plugins installed should cost.
-fn scan_audio_plugins(prefs: &lumit_project::PluginPrefs, scan: &mut BridgePluginScan) {
+fn scan_audio_plugins(
+    prefs: &lumit_project::PluginPrefs,
+    scan: &mut BridgePluginScan,
+    file: &mut dyn FnMut(&std::path::Path, usize, usize),
+) {
     lumit_aplug::set_disabled(&prefs.disabled);
-    let outcome = lumit_aplug::scan_brokered(
+    let outcome = lumit_aplug::scan_brokered_reporting(
         &lumit_aplug::search_paths(),
         &lumit_aplug::session_disabled(),
         None,
+        file,
     );
     for found in outcome.found {
         // A rescan is not a second effect. `register` would refuse the name
@@ -433,6 +517,15 @@ fn scan_audio_plugins(prefs: &lumit_project::PluginPrefs, scan: &mut BridgePlugi
         }
     }
     scan.skipped.extend(outcome.skipped);
+}
+
+/// A plugin file's own name, without the folders a bundle keeps it in or its
+/// extension: `Sapphire.ofx.bundle/Contents/Win64/Sapphire.ofx` is "Sapphire".
+fn bundle_name(binary: &std::path::Path) -> String {
+    binary
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// Switch a discovered plugin on or off, by the `match_name` the listing hands

@@ -291,31 +291,44 @@ fn scan_module(binary: &Path, options: &ScanOptions, outcome: &mut ScanOutcome) 
 /// Blocking, and not to be called from the interface's thread.
 #[must_use]
 pub fn scan_brokered(paths: &[PathBuf], disabled: &DisableList, exe: Option<&Path>) -> ScanOutcome {
+    scan_brokered_reporting(paths, disabled, exe, &mut |_, _, _| {})
+}
+
+/// [`scan_brokered`], saying which file it is about to open, how many came
+/// before it and how many there are, so the splash can name what it is
+/// waiting on.
+pub fn scan_brokered_reporting(
+    paths: &[PathBuf],
+    disabled: &DisableList,
+    exe: Option<&Path>,
+    file: &mut dyn FnMut(&Path, usize, usize),
+) -> ScanOutcome {
     let mut outcome = ScanOutcome::default();
-    for dir in paths {
-        for binary in scan_dir(dir) {
-            let mut config = BrokerConfig::new(&binary);
-            config.disabled = Arc::clone(disabled);
-            config.exe = exe.map(Path::to_path_buf);
-            // The shipped quirks are keyed by plugin id and a scan does not know
-            // one yet, so a describe runs on the defaults. The per-plugin entry
-            // is read where it matters — when a layer opens a live instance.
-            let mut broker = match Broker::spawn(config) {
-                Ok(broker) => broker,
-                Err(error) => {
-                    outcome.skipped.push(skip_line(&binary, &error.to_string()));
-                    continue;
-                }
-            };
-            if let Err(error) = broker.describe() {
+    let binaries: Vec<PathBuf> = paths.iter().flat_map(|dir| scan_dir(dir)).collect();
+    let total = binaries.len();
+    for (index, binary) in binaries.into_iter().enumerate() {
+        file(&binary, index, total);
+        let mut config = BrokerConfig::new(&binary);
+        config.disabled = Arc::clone(disabled);
+        config.exe = exe.map(Path::to_path_buf);
+        // The shipped quirks are keyed by plugin id and a scan does not know
+        // one yet, so a describe runs on the defaults. The per-plugin entry
+        // is read where it matters — when a layer opens a live instance.
+        let mut broker = match Broker::spawn(config) {
+            Ok(broker) => broker,
+            Err(error) => {
                 outcome.skipped.push(skip_line(&binary, &error.to_string()));
                 continue;
             }
-            let described = broker.descriptors().to_vec();
-            let rejected = broker.rejected().to_vec();
-            drop(broker);
-            offer(&binary, &described, &rejected, &mut outcome);
+        };
+        if let Err(error) = broker.describe() {
+            outcome.skipped.push(skip_line(&binary, &error.to_string()));
+            continue;
         }
+        let described = broker.descriptors().to_vec();
+        let rejected = broker.rejected().to_vec();
+        drop(broker);
+        offer(&binary, &described, &rejected, &mut outcome);
     }
     outcome
 }

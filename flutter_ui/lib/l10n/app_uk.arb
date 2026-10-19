@@ -4547,10 +4547,6 @@
   "@sourceZoom": {
     "description": "Field label: how much a still is scaled as it is read in."
   },
-  "splashSubtitle": "Моушн-графіка та композитинг",
-  "@splashSubtitle": {
-    "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
-  },
   "stretchNewDuration": "Нова тривалість",
   "@stretchNewDuration": {
     "description": "Stretch dialogue: the well holding the length the layer will have, in frames. Linked to the speed well above it."

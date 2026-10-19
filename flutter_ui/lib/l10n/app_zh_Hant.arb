@@ -7445,10 +7445,6 @@
   "@sourceZoom": {
     "description": "Field label: how much a still is scaled as it is read in."
   },
-  "splashSubtitle": "Flutter frontend",
-  "@splashSubtitle": {
-    "description": "Line under the name on the start-up screen, in small muted type. Says what Lumit is, in a few words."
-  },
   "stretchAnchor": "入點保持不變；圖層的末端移動。",
   "@stretchAnchor": {
     "description": "Stretch dialogue: a note under the wells saying which end of the layer stays put when it is stretched."

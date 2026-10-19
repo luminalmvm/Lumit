@@ -260,13 +260,27 @@ pub fn scan(
     options: &ScanOptions,
     register: &mut dyn FnMut(&'static dyn EffectDef) -> bool,
 ) -> ScanOutcome {
+    scan_reporting(options, register, &mut |_, _, _| {})
+}
+
+/// [`scan`], saying which bundle it is about to open, how many came before it
+/// and how many there are, so the splash can name what it is waiting on.
+pub fn scan_reporting(
+    options: &ScanOptions,
+    register: &mut dyn FnMut(&'static dyn EffectDef) -> bool,
+    bundle: &mut dyn FnMut(&std::path::Path, usize, usize),
+) -> ScanOutcome {
     let mut outcome = ScanOutcome::default();
-    for dir in &options.paths {
-        for binary in bundle::scan_dir(dir) {
-            match options.hosting {
-                Hosting::Broker => scan_through_broker(&binary, options, register, &mut outcome),
-                Hosting::InProcess => scan_in_process(&binary, options, register, &mut outcome),
-            }
+    let binaries: Vec<PathBuf> = options
+        .paths
+        .iter()
+        .flat_map(|dir| bundle::scan_dir(dir))
+        .collect();
+    for (index, binary) in binaries.iter().enumerate() {
+        bundle(binary, index, binaries.len());
+        match options.hosting {
+            Hosting::Broker => scan_through_broker(binary, options, register, &mut outcome),
+            Hosting::InProcess => scan_in_process(binary, options, register, &mut outcome),
         }
     }
     outcome
