@@ -17,6 +17,7 @@
 //! shared project's threads do (docs/14 §1).
 
 mod commands;
+mod include;
 pub mod live;
 pub mod mcp;
 mod reach;

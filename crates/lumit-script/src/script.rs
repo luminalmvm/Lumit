@@ -39,6 +39,7 @@ use rquickjs::{CatchResultExt, CaughtError, Context, Ctx, Exception, FromJs, Fun
 use rquickjs::{Runtime, Value as JsValue};
 use serde_json::{json, Value};
 
+use crate::include;
 use crate::reach::{self, Reach};
 use crate::{commands, one_step, Host, ScriptError, COMMANDS};
 
@@ -191,17 +192,34 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
             .as_deref()
             .and_then(|p| std::path::absolute(p).ok()),
     };
+    let source = match include::expand(
+        source,
+        setup.path.as_deref(),
+        desk.reach.borrow().folder.as_deref(),
+    ) {
+        Ok(source) => source,
+        Err((error, line)) => {
+            return RunReport {
+                log: Vec::new(),
+                result: Err(RunError {
+                    error,
+                    line: Some(line),
+                    column: None,
+                }),
+            }
+        }
+    };
     let stop = options.stop;
     let mut at = None;
     let result = one_step(host.store(), || {
         std::thread::scope(|s| {
             let (ask, asked) = mpsc::sync_channel(0);
             let lumit = Lumit { ask };
-            let (setup, stop, log) = (&setup, &stop, &log);
+            let (setup, stop, log, text) = (&setup, &stop, &log, source.text.as_str());
             let worker = std::thread::Builder::new()
                 .name("script".into())
                 .stack_size(STACK_BYTES)
-                .spawn_scoped(s, move || evaluate(source, setup, lumit, stop, log))
+                .spawn_scoped(s, move || evaluate(text, setup, lumit, stop, log))
                 .map_err(|e| ScriptError::Failed(format!("The script could not start: {e}.")))?;
             desk.serve(asked);
             let out = match worker.join() {
@@ -230,10 +248,21 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
     let log = log.lock().map(|l| l.lines.clone()).unwrap_or_default();
     RunReport {
         log,
-        result: result.map_err(|error| RunError {
-            error,
-            line: at.map(|(line, _)| line),
-            column: at.map(|(_, column)| column),
+        result: result.map_err(|error| match at {
+            Some((line, column)) => {
+                let (error, own, included) = source.locate(error, line);
+                RunError {
+                    error,
+                    line: Some(own),
+                    // A column on the include line would mean nothing.
+                    column: (!included).then_some(column),
+                }
+            }
+            None => RunError {
+                error,
+                line: None,
+                column: None,
+            },
         }),
     }
 }
@@ -496,7 +525,6 @@ fn evaluate(
     let stop = stop.clone();
     runtime.set_interrupt_handler(Some(Box::new(move || stop.load(Ordering::Relaxed))));
     let context = Context::full(&runtime).map_err(broken)?;
-    let source = without_directives(source)?;
     context.with(|ctx| {
         // The command error a native call last threw, so a script that lets
         // it fly comes back with the error it was rather than its text.
@@ -516,7 +544,7 @@ fn evaluate(
                 .as_ref()
                 .map(|p| p.to_string_lossy().into_owned());
             prelude.call::<_, ()>((n.clone(), path, cfg!(windows)))?;
-            let value: JsValue = ctx.eval_with_options(source.as_str(), options(&setup.name))?;
+            let value: JsValue = ctx.eval_with_options(source, options(&setup.name))?;
             if let Ok(finish) = n.get::<_, Function>("finish") {
                 finish.call::<_, ()>(())?;
             }
@@ -686,36 +714,6 @@ fn frame_on(seconds: f64, num: u32, den: u32) -> Result<i64, ScriptError> {
     let t = Rational::from_f64_on_grid(seconds, Rational::FLICK_DEN)
         .map_err(|_| ScriptError::BadArgs("That time is out of range.".into()))?;
     Ok(rate.nearest_frame_at(CompTime(t)))
-}
-
-/// `source` with After Effects' `#target` lines and their like blanked, as
-/// they are not JavaScript, so the line numbers stay the script's own.
-/// `#include` pulls in another file, which a run does not.
-fn without_directives(source: &str) -> Result<String, (ScriptError, Place)> {
-    let source = source.strip_prefix('\u{feff}').unwrap_or(source);
-    let mut out = String::with_capacity(source.len());
-    for (n, line) in source.split_inclusive('\n').enumerate() {
-        let word = line
-            .trim_start()
-            .strip_prefix('#')
-            .and_then(|rest| rest.split_whitespace().next());
-        match word {
-            Some("target" | "targetengine" | "strict" | "script" | "engine") => {
-                out.push_str(&line[line.trim_end_matches(['\r', '\n']).len()..]);
-            }
-            Some("include" | "includepath") => {
-                return Err((
-                    ScriptError::BadArgs(
-                        "#include is not supported in Lumit, which runs a script as one file."
-                            .into(),
-                    ),
-                    Some((n + 1, 1)),
-                ));
-            }
-            _ => out.push_str(line),
-        }
-    }
-    Ok(out)
 }
 
 /// Throw `error` into the script as an `Error` carrying its `code`.
