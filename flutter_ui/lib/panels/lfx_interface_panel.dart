@@ -1,6 +1,6 @@
 // An LFX effect's own interface: the extension's page in a panel that floats
-// over the work, one per effect type. It follows the selected layer's
-// instance of that effect, the picked one when there are several, and its
+// over the work, one per effect type. It follows the picked card's instance
+// of that effect, or the selected layer's first one, and its
 // page drives that instance's real rows through the `effect` calls.
 
 import 'dart:convert';
@@ -183,7 +183,9 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
   }
 
   ({LayerReference layer, BridgeEffectInstanceInfo info})? _find() {
-    final layer = ui.selectedLayer.value;
+    // The layer the picked card is on, as Effect controls reads it, so the
+    // card whose Interface was pressed is the one driven.
+    final layer = ui.selectedEffectsLayer ?? ui.selectedLayer.value;
     if (layer == null) return null;
     final effects = ui.model.byId(layer.internallayerId)?.info.effects ?? [];
     final mine = [
