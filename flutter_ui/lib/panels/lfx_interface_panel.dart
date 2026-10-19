@@ -389,9 +389,9 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
     }
     final (:layer, :info) = _target();
     final row = _row(info, id);
-    final written = _value(row, _stored(info, id), value);
     final comp = ui.selectedComp;
     if (comp == null) return;
+    final written = _value(row, _stored(info, id), value);
     if (_dragging) {
       _staged[id] = written;
       _editor.live(comp, layer, info.id, id, written,
@@ -460,8 +460,11 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
         }
         throw ExtensionRefusal('bad-params', '${row.id} takes an option index');
       case BridgeParamKind_Seed():
-        if (value is int) return BridgeEffectValue.seed(value);
-        throw ExtensionRefusal('bad-params', '${row.id} takes a whole number');
+        if (value is int && value >= 0 && value <= 0xFFFFFFFF) {
+          return BridgeEffectValue.seed(value);
+        }
+        throw ExtensionRefusal('bad-params',
+            '${row.id} takes a whole number from 0 to 4294967295');
       case BridgeParamKind_Colour():
         final was = stored is BridgeEffectValue_Colour ? stored.field0 : null;
         if (value is! List || value.length < 3 || value.length > 4) {
