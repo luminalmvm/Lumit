@@ -86,14 +86,10 @@ pub fn open(file: &Path) -> io::Result<(Listener, Secret)> {
     private_folder(dir)?;
     let token = Token::generate().map_err(io::Error::other)?.as_name();
     let secret = Secret::generate().map_err(io::Error::other)?;
-    let name = if cfg!(windows) {
-        format!("lumit-live-{token}")
-    } else {
-        // Half the token: the folder is what keeps others out here, and a
-        // Unix socket's whole path has to fit in about a hundred bytes.
-        let short = token.get(..16).unwrap_or(&token);
-        dir.join(short).to_string_lossy().into_owned()
-    };
+    #[cfg(not(unix))]
+    let name = format!("lumit-live-{token}");
+    #[cfg(unix)]
+    let name = socket_path(dir, &token)?;
     // Named pipes turn away other computers unless asked not to, and this
     // never asks.
     let options = if cfg!(windows) {
@@ -146,6 +142,60 @@ fn private_folder(dir: &Path) -> io::Result<()> {
     // SYSTEM and Administrators, inherited by what is made inside.
     #[cfg(not(unix))]
     std::fs::create_dir_all(dir)
+}
+
+/// Where the socket goes on macOS and Linux. Its whole path has to fit in
+/// 104 bytes on macOS and 108 on Linux, and the data folder alone can be
+/// nearly that, so it goes in a short folder only this user can open: the
+/// runtime folder on Linux, the temp folder macOS gives each user, or one of
+/// our own in /tmp. Half the token is plenty, the secret is what keeps
+/// others out.
+#[cfg(unix)]
+fn socket_path(data: &Path, token: &str) -> io::Result<String> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    use std::path::PathBuf;
+    // The data folder was just made ours, so its owner is who we are.
+    let uid = std::fs::metadata(data)?.uid();
+    let private = |dir: &Path| {
+        std::fs::symlink_metadata(dir)
+            .is_ok_and(|m| m.is_dir() && m.uid() == uid && m.mode() & 0o077 == 0)
+    };
+    let given = ["XDG_RUNTIME_DIR", "TMPDIR"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .map(PathBuf::from)
+        .find(|dir| dir.is_absolute() && private(dir));
+    let dir = match given {
+        Some(dir) => dir,
+        None => {
+            let dir = PathBuf::from(format!("/tmp/lumit-{uid}"));
+            match std::fs::DirBuilder::new().mode(0o700).create(&dir) {
+                Err(e) if e.kind() != io::ErrorKind::AlreadyExists => return Err(e),
+                _ => {}
+            }
+            // Anyone can make a folder in /tmp, so one made first by someone
+            // else, or opened up to them, is not used.
+            if !private(&dir) {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("{} is not private to this user", dir.display()),
+                ));
+            }
+            dir
+        }
+    };
+    let short = token.get(..16).unwrap_or(token);
+    let path = dir.join(format!("lumit-live-{short}"));
+    let path = path.to_string_lossy().into_owned();
+    // Less one byte for the end of the string.
+    let room = if cfg!(target_os = "linux") { 107 } else { 103 };
+    if path.len() > room {
+        return Err(io::Error::other(format!(
+            "the socket path is {} bytes, more than the {room} a socket takes: {path}",
+            path.len()
+        )));
+    }
+    Ok(path)
 }
 
 /// Write `text` to `file`, readable by this user only.
