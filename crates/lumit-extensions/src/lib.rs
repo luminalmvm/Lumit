@@ -197,7 +197,6 @@ fn lfx_effect(extension: &str, effect: &ManifestEffect, shader: String) -> LfxEf
             },
         }),
         shader,
-        interface: effect.interface.is_some(),
     }
 }
 

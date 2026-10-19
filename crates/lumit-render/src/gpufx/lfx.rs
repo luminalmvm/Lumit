@@ -238,7 +238,6 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
                 .collect(),
             input: None,
             shader: shader.into(),
-            interface: false,
         }
     }
 

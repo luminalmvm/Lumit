@@ -56,8 +56,6 @@ pub struct LfxEffect {
     pub input: Option<LfxInput>,
     /// The `.wgsl` file's text.
     pub shader: String,
-    /// Whether it has an interface page.
-    pub interface: bool,
 }
 
 /// One pass: a function in the shader, drawn at `scale` of the raster.
@@ -108,7 +106,6 @@ pub enum LfxError {
 /// wrapped.
 #[derive(Debug)]
 pub struct Installed {
-    pub effect: LfxEffect,
     pub match_name: &'static str,
     /// The shader, its passes and its version, hashed: what the frame key
     /// folds, so an edited plugin never serves old frames.
@@ -158,7 +155,8 @@ fn pass_list(effect: &LfxEffect) -> Vec<(&str, f32)> {
 /// The installed effects, by match name.
 static TABLE: RwLock<BTreeMap<&'static str, Arc<Installed>>> = RwLock::new(BTreeMap::new());
 
-/// Every shader built, by key hash. Never shrinks, as the programs are leaked.
+/// Every shader built, by key hash. Each distinct shader is kept until Lumit
+/// restarts, as the programs are leaked, so this grows only on rescans.
 static BUILT: RwLock<BTreeMap<u64, &'static Built>> = RwLock::new(BTreeMap::new());
 
 /// Every def made since Lumit started, installed or not. Never shrinks.
@@ -213,7 +211,6 @@ pub fn install(effect: LfxEffect) -> Result<&'static dyn EffectDef, LfxError> {
     };
     let def = def_for(&name, &effect, category);
     let entry = Arc::new(Installed {
-        effect,
         match_name: def.match_name,
         key_hash,
         built,
@@ -510,7 +507,6 @@ mod tests {
             passes: vec![pass("bleed", 0.5), pass("shade", 1.0)],
             input: None,
             shader: shader.into(),
-            interface: false,
         }
     }
 
