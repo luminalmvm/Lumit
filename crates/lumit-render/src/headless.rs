@@ -6611,6 +6611,48 @@ mod tests {
         }
     }
 
+    /// A parented adjustment layer grades where its parent puts it, the same
+    /// as one moved there by hand.
+    #[test]
+    fn a_parented_adjustment_grades_where_its_parent_puts_it() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (w, h) = (32u32, 16u32);
+        let mut frames = Vec::new();
+        for parented in [false, true] {
+            let (mut doc, comp_id, _) = matrix_base(w, h, LinearColour([0.8, 0.2, 0.1, 1.0]));
+            let mut adj = matrix_layer("Adjust", LayerKind::Adjustment, w, h);
+            adj.effects
+                .push(lumit_core::fx::instantiate("invert").unwrap());
+            let mut parent = matrix_layer("Parent", LayerKind::Null, w, h);
+            // Half the frame to the right, by the parent or by hand.
+            let right = Property::fixed(f64::from(w));
+            if parented {
+                parent.transform.position_x = right;
+                adj.parent = Some(parent.id);
+            } else {
+                adj.transform.position_x = right;
+            }
+            let comp = doc.comp_mut(comp_id).unwrap();
+            comp.layers.insert(0, parent);
+            comp.layers.insert(0, adj);
+            let doc = DocumentStore::new(doc).snapshot();
+            frames.push(r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0);
+        }
+        let px = |f: &[u8], x: u32| f[(x * 4) as usize];
+        assert_ne!(
+            px(&frames[0], 0),
+            px(&frames[0], w - 1),
+            "half the frame inverted"
+        );
+        assert_eq!(frames[0], frames[1], "the parent moved the adjustment");
+    }
+
     /// **Depth of field reaches the picture** (docs/impl/camera.md §5).
     ///
     /// One comp, one camera focused on its own zoom, and the same nested tile

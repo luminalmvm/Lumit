@@ -1975,7 +1975,7 @@ impl Realiser<'_> {
                 rotation_y_deg: l.rotation_y_deg,
                 three_d: l.three_d,
                 layer_mask: None,
-                pre: None,
+                pre: l.pre,
             }],
             cam_mat,
             None,
