@@ -40,6 +40,27 @@ for each folder inside it. **Open scripts folder** shows it in the file manager.
 
 **Settings ▸ General ▸ Scripts folder** lists another folder instead. **Clear** goes back.
 
+## Event scripts
+
+The **Scripts** rows in **Settings ▸ General** run a script from the Scripts folder after an
+event. Each is **None** until set.
+
+| Row | Runs after |
+| --- | --- |
+| **Export finished** | each export from the export queue |
+| **Project opened** | a project opens |
+| **Project saved** | the project is saved |
+
+It runs as from the menu, and the status line names it after.
+
+| | |
+| --- | --- |
+| `lumit.args.event` | `"export"`, `"open"` or `"save"` |
+| `lumit.args.file` | the exported file's or the project's file name, without its folder |
+
+An event script is skipped while another script runs. A script's own saves and exports, and
+the save made before a project closes, run none.
+
 ## After Effects scripts
 
 | Object | What works |
