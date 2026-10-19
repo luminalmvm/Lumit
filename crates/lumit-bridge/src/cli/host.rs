@@ -486,6 +486,18 @@ impl Host for Headless {
         Ok(())
     }
 
+    fn render_frame(
+        &self,
+        comp: Uuid,
+        frame: u64,
+        scale: f32,
+        out: &Path,
+    ) -> Result<(u32, u32), ScriptError> {
+        let doc = self.store.snapshot();
+        self.load_plugins(&doc);
+        crate::render::save_frame(&doc, comp, frame, scale, out).map_err(ScriptError::Failed)
+    }
+
     fn parent_ops(&self, comp: Uuid, layer: Uuid, parent: Option<Uuid>, at: CompTime) -> Vec<Op> {
         let doc = self.store.snapshot();
         lumit_render::build::parent_ops(&doc, comp, layer, parent, at.0.to_f64())
@@ -588,5 +600,31 @@ mod tests {
         )
         .unwrap();
         assert_eq!(restored, (1, Vec::new()));
+    }
+
+    /// `comp.frame` writes a PNG at the size asked for, and never over a
+    /// file already there.
+    #[test]
+    fn a_frame_is_a_png_of_the_size_asked_for() {
+        let dir = tempfile::tempdir().unwrap();
+        let host = Headless::new_project();
+        let args = serde_json::json!({ "name": "Shot", "width": 64, "height": 32 });
+        let made = lumit_script::dispatch(&host, "comp.new", args).unwrap();
+        let comp = Uuid::try_parse(made["id"].as_str().unwrap()).unwrap();
+        if crate::render::thumbnail(&host.store.snapshot(), comp, 0, 1.0).is_none() {
+            eprintln!("no graphics adapter; skipping");
+            return;
+        }
+        let out = dir.path().join("shot.png");
+        let args = serde_json::json!({ "comp": "Shot", "scale": 0.5, "out": out });
+        let answer = lumit_script::dispatch(&host, "comp.frame", args.clone()).unwrap();
+        assert_eq!(
+            (answer["width"].as_u64(), answer["height"].as_u64()),
+            (Some(32), Some(16))
+        );
+        let bytes = std::io::Cursor::new(std::fs::read(&out).unwrap());
+        let png = png::Decoder::new(bytes).read_info().unwrap();
+        assert_eq!((png.info().width, png.info().height), (32, 16));
+        assert!(lumit_script::dispatch(&host, "comp.frame", args).is_err());
     }
 }

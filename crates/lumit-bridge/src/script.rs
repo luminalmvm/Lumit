@@ -459,6 +459,19 @@ impl Host for AppHost<'_> {
         Ok(())
     }
 
+    // On the script's own thread, from a snapshot, so the project's lock is
+    // not held while it renders.
+    fn render_frame(
+        &self,
+        comp: Uuid,
+        frame: u64,
+        scale: f32,
+        out: &Path,
+    ) -> Result<(u32, u32), ScriptError> {
+        crate::render::save_frame(&self.store.snapshot(), comp, frame, scale, out)
+            .map_err(ScriptError::Failed)
+    }
+
     fn open_comp(&self, comp: Uuid) -> Result<(), ScriptError> {
         self.say(BridgeScriptEvent::OpenComp {
             comp: CompositionReference::new(self.project.id, comp),

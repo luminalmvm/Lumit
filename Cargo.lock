@@ -2457,6 +2457,7 @@ dependencies = [
  "lumit-share",
  "lumit-text",
  "lumit-track",
+ "png",
  "serde",
  "serde_json",
  "tempfile",

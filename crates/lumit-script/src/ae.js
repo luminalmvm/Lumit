@@ -456,6 +456,10 @@
         command('comp.open', { comp: this._id });
         return null;
     };
+    CompItem.prototype.saveFrameToPng = function (time, file) {
+        var to = file instanceof Entry ? file : new File(file);
+        command('comp.frame', { comp: this._id, time: this._frame(time), out: to.fsName });
+    };
 
     // ---- Layers ----
 

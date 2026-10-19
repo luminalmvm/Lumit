@@ -10,8 +10,8 @@
 //! In reach: the script's own folder and the files the person chose or passed
 //! to it for reading, the project's folder and the script's for saves and
 //! exports, and over MCP the project's folder for everything. A save goes over
-//! the project's own file or makes a new `.lum`, and an export never writes
-//! over a file. A script writes text files only in its own folder, so one run
+//! the project's own file or makes a new `.lum`, and an export or a frame
+//! never writes over a file. A script writes text files only in its own folder, so one run
 //! with no folder, as over MCP, writes none.
 
 use std::path::{Component, Path, PathBuf};
@@ -279,27 +279,55 @@ impl Reach {
         host: &dyn Host,
         out: Option<&Path>,
     ) -> Result<Option<PathBuf>, ScriptError> {
+        self.new_file(host, out, "mp4", "Exports go", "an export never writes")
+    }
+
+    /// Where a frame's PNG may go, by the rules an export keeps to. Only a
+    /// `.png` file is written.
+    pub(crate) fn frame(
+        &self,
+        host: &dyn Host,
+        out: Option<&Path>,
+    ) -> Result<Option<PathBuf>, ScriptError> {
+        let full = self.new_file(host, out, "png", "Frames go", "a frame never writes")?;
+        let png = |p: &PathBuf| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("png"));
+        if full.as_ref().is_some_and(|p| !png(p)) {
+            return Err(ScriptError::BadArgs("A frame saves as a .png file.".into()));
+        }
+        Ok(full)
+    }
+
+    /// A new file at `out` in a folder in reach, with `extension` when it
+    /// has none. `places` and `never` name what is written in the refusals.
+    fn new_file(
+        &self,
+        host: &dyn Host,
+        out: Option<&Path>,
+        extension: &str,
+        places: &str,
+        never: &str,
+    ) -> Result<Option<PathBuf>, ScriptError> {
         let folders = self.writes(host)?;
         let Some(out) = out else {
             return Ok(None);
         };
         let out_of_reach = || {
             ScriptError::BadArgs(format!(
-                "{} is out of reach. Exports go only into {}.",
+                "{} is out of reach. {places} only into {}.",
                 out.display(),
                 self.write_places()
             ))
         };
         let mut full = self.whole(host, out).ok_or_else(out_of_reach)?;
         if full.extension().is_none() {
-            full.set_extension("mp4");
+            full.set_extension(extension);
         }
         if !inside(&full, &folders) {
             return Err(out_of_reach());
         }
         if full.symlink_metadata().is_ok() {
             return Err(ScriptError::BadArgs(format!(
-                "{} is already there, and an export never writes over a file.",
+                "{} is already there, and {never} over a file.",
                 full.display()
             )));
         }

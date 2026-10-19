@@ -198,6 +198,17 @@ pub const COMMANDS: &[Command] = &[
         schema: none!(),
     },
     Command {
+        name: "comp.frame",
+        summary: "Render a frame of a comp to a PNG, and answer its path, width and height",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","time":{"description":"The frame, 0 when left out","allOf":["#,
+            time!(),
+            r#"]},"scale":{"type":"number","exclusiveMinimum":0,"maximum":1,"description":"Of the comp's size, 1 when left out"},"out":{"type":"string","description":"The .png file to write. Without it, a numbered file beside the project"}},"required":["comp"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
         name: "item.list",
         summary: "Every item in the project panel: comps, footage, folders and solids, with the folder each is in",
         schema: none!(),
@@ -381,6 +392,7 @@ pub(crate) fn run(
         "comp.precompose" => comp_precompose(host, parse(args)?),
         "comp.open" => comp_open(host, parse(args)?),
         "comp.active" => comp_active(host, parse(args)?),
+        "comp.frame" => comp_frame(host, reach, parse(args)?),
         "item.list" => item_list(host, parse(args)?),
         "item.set" => item_set(host, parse(args)?),
         "folder.new" => folder_new(host, parse(args)?),
@@ -863,6 +875,83 @@ fn comp_active(host: &dyn Host, _: NoArgs) -> Result<Value, ScriptError> {
     let doc = host.store().snapshot();
     let comp = host.active_comp().and_then(|id| doc.comp(id));
     Ok(json!({ "comp": comp.map(comp_json) }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FrameArgs {
+    comp: String,
+    time: Option<Time>,
+    scale: Option<f32>,
+    out: Option<PathBuf>,
+}
+
+fn comp_frame(host: &dyn Host, reach: Option<&Reach>, a: FrameArgs) -> Result<Value, ScriptError> {
+    let doc = host.store().snapshot();
+    let comp = find_comp(&doc, &a.comp)?;
+    let rate = comp.frame_rate;
+    let at = a.time.unwrap_or(Time::Frame(0)).at(rate)?;
+    let frames = rate.frame_at(CompTime(comp.duration.0)).max(1);
+    let frame = u64::try_from(rate.frame_at(CompTime(at)))
+        .ok()
+        .filter(|f| i64::try_from(*f).is_ok_and(|f| f < frames))
+        .ok_or_else(|| bad(format!("{} has frames 0 to {}.", comp.name, frames - 1)))?;
+    let scale = a.scale.unwrap_or(1.0);
+    if !(scale > 0.0 && scale <= 1.0) {
+        return Err(bad("The scale is above 0 and at most 1."));
+    }
+    let out = a.out.as_deref().map(reach::plain).transpose()?;
+    let out = match reach {
+        Some(reach) => reach.frame(host, out)?,
+        None => out.map(|out| {
+            let mut out = out.to_path_buf();
+            if out.extension().is_none() {
+                out.set_extension("png");
+            }
+            out
+        }),
+    };
+    let out = match out {
+        Some(out) => out,
+        None => frame_path(host, reach, &comp.name, frame)?,
+    };
+    let (width, height) = host.render_frame(comp.id, frame, scale, &out)?;
+    Ok(json!({ "path": out, "width": width, "height": height }))
+}
+
+/// A new file for frame `frame` of comp `name`, numbered, beside the project
+/// or else in the script's folder.
+fn frame_path(
+    host: &dyn Host,
+    reach: Option<&Reach>,
+    name: &str,
+    frame: u64,
+) -> Result<PathBuf, ScriptError> {
+    let dir = host
+        .path()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .or_else(|| reach.and_then(|r| r.folder.clone()))
+        .ok_or_else(|| bad("The project has not been saved yet, so the frame needs a path."))?;
+    // A comp's name may hold anything, a separator included, and the file
+    // must stay in `dir`.
+    let safe: String = name
+        .chars()
+        .map(|c| match c {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
+        .collect();
+    let safe = safe.trim().trim_end_matches('.');
+    let safe = if safe.is_empty() { "Frame" } else { safe };
+    let stem = format!("{safe}_{frame:05}");
+    let mut path = dir.join(format!("{stem}.png"));
+    let mut n = 2;
+    while path.symlink_metadata().is_ok() {
+        path = dir.join(format!("{stem}_{n}.png"));
+        n += 1;
+    }
+    Ok(path)
 }
 
 fn find_item<'a>(doc: &'a Document, key: &str) -> Result<&'a ProjectItem, ScriptError> {

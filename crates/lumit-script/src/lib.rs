@@ -68,6 +68,22 @@ pub trait Host {
     /// Stop export `job`. Stopping one that has finished does nothing.
     fn export_cancel(&self, job: u64) -> Result<(), ScriptError>;
 
+    /// Render frame `frame` of `comp` at `scale` of its size to a new PNG at
+    /// `out`, never over a file. Answers the picture's width and height. A
+    /// host that does not say otherwise renders nothing.
+    fn render_frame(
+        &self,
+        comp: Uuid,
+        frame: u64,
+        scale: f32,
+        out: &Path,
+    ) -> Result<(u32, u32), ScriptError> {
+        let _ = (comp, frame, scale, out);
+        Err(ScriptError::Failed(
+            "Frames cannot be rendered here.".into(),
+        ))
+    }
+
     /// Show `comp` in the Viewer. Where there is no Viewer, as on the command
     /// line, this does nothing.
     fn open_comp(&self, comp: Uuid) -> Result<(), ScriptError> {
