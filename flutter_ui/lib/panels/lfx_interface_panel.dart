@@ -152,7 +152,7 @@ class _LfxInterfaceWindowState extends State<LfxInterfaceWindow> {
 ///
 /// Rows, the preview while dragging and the commit go through the same
 /// [EffectStackEditor] calls the Effect controls rows use, so a drag is one
-/// undo step and the engine clamps every value.
+/// undo step. A row with a hard range is held to it.
 class LfxFollow extends ChangeNotifier implements EffectChannel {
   final LumitUiState ui;
   final String matchName;
@@ -387,11 +387,25 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
   }
 
   /// [value] from the page as the row's own value, keyed at the playhead
-  /// where the row is keyed.
+  /// where the row is keyed, and held to the row's hard range.
   BridgeEffectValue _value(
       BridgeParamInfo row, BridgeEffectValue? stored, Object? value) {
     final comp = ui.selectedComp!;
     final frame = ui.playheadFrame.value;
+    final (low, high) = switch (row.kind) {
+      BridgeParamKind_Float(:final hardMin, :final hardMax) => (
+          hardMin,
+          hardMax
+        ),
+      BridgeParamKind_Int(:final hardMin, :final hardMax) => (
+          hardMin?.toDouble(),
+          hardMax?.toDouble()
+        ),
+      BridgeParamKind_Slider(:final min, :final max) ||
+      BridgeParamKind_Colour(:final min, :final max) =>
+        (min, max),
+      _ => (null, null),
+    };
     BridgeScalar scalar(BridgeScalar? was, Object? v) {
       if (v is! num) {
         throw ExtensionRefusal('bad-params', '${row.id} takes a number');
@@ -402,7 +416,11 @@ class LfxFollow extends ChangeNotifier implements EffectChannel {
       }
       final n = row.kind is BridgeParamKind_Int ? v.roundToDouble() : v;
       return scalarWithValueAt(
-          was ?? BridgeScalar.static_(0), n.toDouble(), comp, frame);
+          was ?? BridgeScalar.static_(0),
+          n.toDouble().clamp(low ?? double.negativeInfinity,
+              high ?? double.infinity),
+          comp,
+          frame);
     }
 
     switch (row.kind) {
