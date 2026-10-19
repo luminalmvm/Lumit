@@ -98,6 +98,9 @@ flutter analyze
 - After changing an effect's declaration, run
   `cargo test -p lumit-core regenerate_fx_reference -- --ignored` and commit the updated
   `fx-reference.json`.
+- After changing a script command, run
+  `cargo test -p lumit-script regenerate_scripting_reference -- --ignored` and commit the
+  manual's `reference/scripting.md`.
 - `crates/lumit-gpu/tests/wgsl_validates.rs` checks every shader compiles. The CPU-oracle
   tests check they're right, and those need a GPU.
 - GPU tests share one device per process and run one at a time. No adapter means a skip,

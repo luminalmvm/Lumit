@@ -1060,7 +1060,9 @@ List<MenuSection> lumitMenus(
                 l10n.menuExport, comp == null ? null : () => exportFrb(context),
                 action: 'file.export'),
             MenuEntry(l10n.menuRunScript,
-                project == null ? null : () => runScriptFrb(app, ui)),
+                project == null
+                    ? null
+                    : () => runScriptFrb(app, ui, context: context)),
             MenuEntry.divider(),
             // Sharing this project, joining somebody else's, and who is here.
             MenuEntry(

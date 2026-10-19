@@ -18,6 +18,13 @@ pub enum BridgeScriptEvent {
     },
     /// It shows `message`, and carries on without waiting.
     Alert { message: String },
+    /// It shows an After Effects ScriptUI window, or shows it again as it now
+    /// is. `tree` is the window as JSON: controls with ids, kinds, texts and
+    /// values, groups and panels holding more. [`answer_script_dialog`] says
+    /// what the person did next.
+    ShowDialog { tree: String },
+    /// It has closed its window.
+    CloseDialog,
     /// It opens `comp` in the Viewer.
     OpenComp { comp: CompositionReference },
     /// It has ended, and its edits are one undo step, or none when it failed
@@ -34,8 +41,9 @@ pub enum BridgeScriptEvent {
 
 impl ProjectReference {
     /// Run the script at `path` on this project, on a thread of its own.
-    /// Answers at once, false when a script is running already. `events`
-    /// hears the rest, and the edits arrive on the change stream as usual.
+    /// Answers at once, false when a script is running already. `comp` is
+    /// the one open in the Viewer, if any. `events` hears the rest, and the
+    /// edits arrive on the change stream as usual.
     ///
     /// The interface must not edit until it hears `Finished`, since the
     /// whole run is one undo step and an edit made meanwhile would join it.
@@ -43,9 +51,11 @@ impl ProjectReference {
     pub fn run_script(
         &self,
         path: String,
+        comp: Option<CompositionReference>,
         events: Option<StreamSink<BridgeScriptEvent>>,
     ) -> Result<bool, BridgeError> {
-        crate::script::start(self.clone(), path.into(), move |event| {
+        let comp = comp.map(|c| c.id);
+        crate::script::start(self.clone(), path.into(), comp, move |event| {
             events.as_ref().is_some_and(|sink| sink.add(event).is_ok())
         })
     }
@@ -61,7 +71,15 @@ pub fn stop_script() {
 /// cancelled.
 #[frb(sync)]
 pub fn answer_script_file(path: Option<String>) {
-    crate::script::answer(path.map(Into::into));
+    crate::script::answer(path);
+}
+
+/// What the person did in a script's window: `{"id": the control pressed or
+/// changed, "values": {id: value}}` as JSON, each value a text, a tick, a
+/// number or a list's chosen place. `None` when they closed the window.
+#[frb(sync)]
+pub fn answer_script_dialog(event: Option<String>) {
+    crate::script::answer(event);
 }
 
 /// What happens on the endpoint other programs drive Lumit through.

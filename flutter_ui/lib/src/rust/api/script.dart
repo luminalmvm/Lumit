@@ -20,6 +20,12 @@ void stopScript() => BridgeLib.instance.api.crateApiScriptStopScript();
 void answerScriptFile({String? path}) =>
     BridgeLib.instance.api.crateApiScriptAnswerScriptFile(path: path);
 
+/// What the person did in a script's window: `{"id": the control pressed or
+/// changed, "values": {id: value}}` as JSON, each value a text, a tick, a
+/// number or a list's chosen place. `None` when they closed the window.
+void answerScriptDialog({String? event}) =>
+    BridgeLib.instance.api.crateApiScriptAnswerScriptDialog(event: event);
+
 /// Let other programs on this computer drive Lumit: listen on a local
 /// socket, never a network port, for one program at a time that holds the
 /// secret written beside it. `events` hears who connects and what they do,
@@ -88,6 +94,17 @@ sealed class BridgeScriptEvent with _$BridgeScriptEvent {
   const factory BridgeScriptEvent.alert({
     required String message,
   }) = BridgeScriptEvent_Alert;
+
+  /// It shows an After Effects ScriptUI window, or shows it again as it now
+  /// is. `tree` is the window as JSON: controls with ids, kinds, texts and
+  /// values, groups and panels holding more. [`answer_script_dialog`] says
+  /// what the person did next.
+  const factory BridgeScriptEvent.showDialog({
+    required String tree,
+  }) = BridgeScriptEvent_ShowDialog;
+
+  /// It has closed its window.
+  const factory BridgeScriptEvent.closeDialog() = BridgeScriptEvent_CloseDialog;
 
   /// It opens `comp` in the Viewer.
   const factory BridgeScriptEvent.openComp({
