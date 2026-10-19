@@ -721,7 +721,7 @@ class LumitMenuBarFrb extends StatelessWidget {
     }
     // Every panel: Enter shows it if it was closed, fronts it in its group
     // and points the keyboard at it, which is what cycling to it does.
-    for (final extension in ui.extensions.installed) {
+    for (final extension in ui.extensions.panels) {
       commands.add(PaletteCommand(
         label: extension.name,
         category: l10n.palettePanels,
@@ -1724,13 +1724,13 @@ List<MenuSection> lumitMenus(
                   checked: () => panelVisible(ui.split, panel),
                 ),
             MenuEntry.submenu(l10n.menuExtensions, [
-              for (final extension in ui.extensions.installed)
+              for (final extension in ui.extensions.panels)
                 MenuEntry.toggle(
                   extension.name,
                   () => ui.toggleExtension(extension.id),
                   checked: () => ui.extensionShown(extension.id),
                 ),
-              if (ui.extensions.installed.isNotEmpty) MenuEntry.divider(),
+              if (ui.extensions.panels.isNotEmpty) MenuEntry.divider(),
               MenuEntry(
                   l10n.menuManageExtensions,
                   () => showSettingsWindowFrb(context,

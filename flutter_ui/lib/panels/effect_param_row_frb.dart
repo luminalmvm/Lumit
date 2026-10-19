@@ -2327,13 +2327,19 @@ class EffectSchemaMemo {
       return await scan();
     } finally {
       _scanning = false;
-      _effects = null;
-      _parameters.clear();
-      _groups.clear();
-      // And the point pairs, which were read as none for a plugin the scan
-      // had not reached and would stay none until Lumit was started again.
-      _pairSchema.clear();
+      forget();
     }
+  }
+
+  /// Drop everything read, so the next question asks the engine again. An
+  /// extension installed or removed changes which effects there are.
+  void forget() {
+    _effects = null;
+    _parameters.clear();
+    _groups.clear();
+    // And the point pairs, which were read as none for a plugin the scan
+    // had not reached and would stay none until Lumit was started again.
+    _pairSchema.clear();
   }
 
   /// Whether [effect] may only be missing because the scan has not reached it.

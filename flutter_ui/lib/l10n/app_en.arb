@@ -17144,6 +17144,78 @@
   "@extensionBack": {
     "description": "Button on the warning strip of an extension's dock panel. Loads the extension's own page again."
   },
+  "extensionInstalledPlain": "{name} installed",
+  "@extensionInstalledPlain": {
+    "description": "Bottom-strip notice after an extension that has no panel of its own (only effects) is installed.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionCanEffects": "Add effects: {names}",
+  "@extensionCanEffects": {
+    "description": "One line in the install window's It can list: the effects the extension adds to Lumit, by name, separated by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "extensionInstallsTo": "Installs to",
+  "@extensionInstallsTo": {
+    "description": "Heading of the box in the install window that shows the folder an extension package will be installed into, beside a Change button."
+  },
+  "changeEllipsis": "Change…",
+  "@changeEllipsis": {
+    "description": "Button that opens a dialogue to pick something other than what is shown beside it."
+  },
+  "extensionPackageMade": "{name} package saved",
+  "@extensionPackageMade": {
+    "description": "Bottom-strip notice after Settings has saved an extension as a .lfx package file.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "fileTypeExtensionPackage": "Lumit extension",
+  "@fileTypeExtensionPackage": {
+    "description": "File dialogue: the name of the .lfx file type, an extension packed as one file."
+  },
+  "settingsExtensionsInstallPackage": "Install a package",
+  "@settingsExtensionsInstallPackage": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Choose button that opens a file picker for a .lfx package."
+  },
+  "settingsExtensionsMakePackage": "Make a package",
+  "@settingsExtensionsMakePackage": {
+    "description": "Row title in the Extensions section of the Addons page, beside a Choose button: pick an extension's folder, then where to save it as one .lfx file to share."
+  },
+  "settingsExtensionEffects": "Effects: {names}",
+  "@settingsExtensionEffects": {
+    "description": "Line under an installed extension's row in Settings: the effects it adds, by name, separated by commas.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsGroupExtensionFolders": "Extension folders",
+  "@settingsGroupExtensionFolders": {
+    "description": "Section heading on the Addons page of Settings: the folders Lumit looks in for extensions."
+  },
+  "settingsExtensionsMachineFolder": "Machine-wide folder",
+  "@settingsExtensionsMachineFolder": {
+    "description": "Row title in the Extension folders section of Settings: the folder shared by every account on this computer, where an extension's own installer may put it. Its path is shown underneath."
+  },
+  "settingsExtensionsAddFolder": "Add a folder",
+  "@settingsExtensionsAddFolder": {
+    "description": "Row title in the Extension folders section of Settings, beside a Choose button: pick another folder for Lumit to look in for extensions."
+  },
+  "effectFromExtension": "From an extension",
+  "@effectFromExtension": {
+    "description": "Provenance line at the top of the right-click menu on a row in the Effects & presets panel, when the effect came from an installed extension."
+  },
   "profileUnnamed": "You",
   "@profileUnnamed": {
     "description": "Name shown for a profile that has not been given one, on the profile button at the left of the bottom strip and in its card."

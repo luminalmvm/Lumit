@@ -2431,16 +2431,19 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   style: t.small.copyWith(color: t.warning)),
               const SizedBox(width: 8),
             ],
-            HouseButton(
-              key: ValueKey<String>('settings-extension-show-${extension.id}'),
-              small: true,
-              onPressed: () => setState(() => ui.toggleExtension(extension.id)),
-              child: Text(
-                  ui.extensionShown(extension.id)
-                      ? l10n.settingsExtensionHide
-                      : l10n.settingsExtensionShow,
-                  style: t.small),
-            ),
+            if (extension.panel)
+              HouseButton(
+                key:
+                    ValueKey<String>('settings-extension-show-${extension.id}'),
+                small: true,
+                onPressed: () =>
+                    setState(() => ui.toggleExtension(extension.id)),
+                child: Text(
+                    ui.extensionShown(extension.id)
+                        ? l10n.settingsExtensionHide
+                        : l10n.settingsExtensionShow,
+                    style: t.small),
+              ),
             HouseButton(
               key:
                   ValueKey<String>('settings-extension-remove-${extension.id}'),
@@ -2456,14 +2459,16 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             ),
           ],
         ),
-        description: extension.summary,
+        description: [
+          if (extension.summary.isNotEmpty) extension.summary,
+          if (extension.effects.isNotEmpty)
+            l10n.settingsExtensionEffects(
+                extension.effects.map((e) => e.name).join(', ')),
+        ].join('\n'),
       );
 
   List<Widget?> _extensionRows(LumitTheme t, LumitUiState ui) {
     final service = ui.extensions;
-    // Every extension sits in the one folder, so the first one's shows it.
-    final first = service.installed.firstOrNull?.folder;
-    final folder = first == null ? null : File(first).parent.path;
     return [
       for (final extension in service.installed)
         _extensionRow(t, ui, extension),
@@ -2477,6 +2482,19 @@ class _SettingsWindowState extends State<_SettingsWindow> {
             style: t.small.copyWith(color: t.textMuted),
           ),
         ),
+      _row(
+        t,
+        l10n.settingsExtensionsInstallPackage,
+        HouseButton(
+          key: const ValueKey('settings-extension-install-package'),
+          small: true,
+          onPressed: service.busy
+              ? null
+              : () => unawaited(installExtensionFromPackage(
+                  context, context.read<LumitState>(), service)),
+          child: Text(l10n.chooseEllipsis, style: t.small),
+        ),
+      ),
       _row(
         t,
         l10n.settingsExtensionsInstall,
@@ -2493,13 +2511,67 @@ class _SettingsWindowState extends State<_SettingsWindow> {
       ),
       _row(
         t,
+        l10n.settingsExtensionsMakePackage,
+        HouseButton(
+          key: const ValueKey('settings-extension-make-package'),
+          small: true,
+          onPressed: service.busy
+              ? null
+              : () => unawaited(makeExtensionPackage(
+                  context.read<LumitState>(), service)),
+          child: Text(l10n.chooseEllipsis, style: t.small),
+        ),
+      ),
+    ];
+  }
+
+  /// Where extensions are found: Lumit's own folder, the machine-wide ones
+  /// and the ones the person added, in the order they are scanned.
+  List<Widget?> _extensionFolderRows(LumitTheme t, ExtensionService service) {
+    final folders = service.scanFolders;
+    final own = folders.own;
+    return [
+      _row(
+        t,
         l10n.settingsExtensionsFolder,
         HouseButton(
           key: const ValueKey('settings-extension-show-folder'),
           small: true,
-          onPressed:
-              folder == null ? null : () => revealInFolder(path: folder),
+          onPressed: own == null ? null : () => revealInFolder(path: own),
           child: Text(l10n.settingsAddonsShow, style: t.small),
+        ),
+        description: own ?? '',
+      ),
+      if (folders.machine.isNotEmpty)
+        _row(
+          t,
+          l10n.settingsExtensionsMachineFolder,
+          const SizedBox.shrink(),
+          description: folders.machine.join('\n'),
+        ),
+      for (final folder in folders.extra)
+        _row(
+          t,
+          folder,
+          HouseButton(
+            key: ValueKey<String>('settings-extension-folder-remove-$folder'),
+            small: true,
+            frameless: true,
+            onPressed: () => service.removeFolder(folder),
+            child: Text(l10n.settingsAddonsRemove, style: t.small),
+          ),
+        ),
+      _row(
+        t,
+        l10n.settingsExtensionsAddFolder,
+        HouseButton(
+          key: const ValueKey('settings-extension-folder-add'),
+          small: true,
+          onPressed: () async {
+            final folder = await pickFolder();
+            if (folder != null) service.addFolder(folder);
+          },
+          child: Text(l10n.chooseEllipsis, style: t.small),
         ),
       ),
     ];
@@ -2573,6 +2645,10 @@ class _SettingsWindowState extends State<_SettingsWindow> {
         ]
       ),
       (l10n.settingsGroupExtensions, _extensionRows(t, ui)),
+      (
+        l10n.settingsGroupExtensionFolders,
+        _extensionFolderRows(t, ui.extensions)
+      ),
     ]);
   }
 

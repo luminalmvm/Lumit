@@ -6,6 +6,8 @@
 // and which folders the person has let it watch.
 
 import 'package:flutter/foundation.dart';
+import 'package:lumit_flutter/panels/effect_param_row_frb.dart'
+    show effectSchema;
 import 'package:lumit_flutter/src/rust/api/extensions.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/workspace.dart';
@@ -21,6 +23,14 @@ class ExtensionService extends ChangeNotifier {
   /// Every extension installed, by id.
   List<BridgeExtension> installed = const [];
 
+  /// The ones with a panel of their own. One that carries only effects has
+  /// no pane.
+  Iterable<BridgeExtension> get panels => installed.where((e) => e.panel);
+
+  /// The folders extensions are found in.
+  BridgeExtensionFolders scanFolders =
+      const BridgeExtensionFolders(machine: [], extra: []);
+
   /// An install is running. One at a time.
   bool busy = false;
 
@@ -32,11 +42,19 @@ class ExtensionService extends ChangeNotifier {
   void refresh() {
     try {
       installed = extensionList();
+      scanFolders = extensionFolders();
     } catch (_) {
       // No engine to ask, as in a widget test.
       installed = const [];
     }
     notifyListeners();
+  }
+
+  /// The engine has registered or dropped effects, so the effect lists are
+  /// read again.
+  void _effectsChanged() {
+    effectSchema.forget();
+    refresh();
   }
 
   /// The pane an extension is shown in: its `Panel.extension` instance
@@ -58,7 +76,7 @@ class ExtensionService extends ChangeNotifier {
 
   /// The extension shown in the pane numbered [slot], if it is installed.
   BridgeExtension? inSlot(int slot) {
-    for (final extension in installed) {
+    for (final extension in panels) {
       if (_workspace.extensionSlots[extension.id] == slot) return extension;
     }
     return null;
@@ -92,8 +110,73 @@ class ExtensionService extends ChangeNotifier {
     }
     busy = false;
     if (outcome is BridgeExtensionOutcome_Ready) generation++;
-    refresh();
+    _effectsChanged();
     return outcome;
+  }
+
+  /// What the `.lfx` package at [path] holds and asks to be allowed.
+  /// Nothing is unpacked.
+  BridgeExtensionOutcome inspectPackage(String path) {
+    try {
+      return extensionInspectPackage(path: path);
+    } catch (_) {
+      return const BridgeExtensionOutcome.failed();
+    }
+  }
+
+  /// Install the package at [path] into [folder], or Lumit's own folder
+  /// when null.
+  Future<BridgeExtensionOutcome> installPackage(String path,
+      {String? folder}) async {
+    if (busy) return const BridgeExtensionOutcome.busy();
+    busy = true;
+    notifyListeners();
+    BridgeExtensionOutcome outcome;
+    try {
+      outcome = await extensionInstallPackage(path: path, folder: folder);
+    } catch (_) {
+      outcome = const BridgeExtensionOutcome.failed();
+    }
+    busy = false;
+    if (outcome is BridgeExtensionOutcome_Ready) generation++;
+    _effectsChanged();
+    return outcome;
+  }
+
+  /// Pack the extension in [folder] as [out], checked as an install would be.
+  Future<BridgeExtensionOutcome> makePackage(String folder, String out) async {
+    if (busy) return const BridgeExtensionOutcome.busy();
+    busy = true;
+    notifyListeners();
+    BridgeExtensionOutcome outcome;
+    try {
+      outcome = await extensionMakePackage(folder: folder, out: out);
+    } catch (_) {
+      outcome = const BridgeExtensionOutcome.failed();
+    }
+    busy = false;
+    _effectsChanged();
+    return outcome;
+  }
+
+  /// Scan [folder] for extensions too.
+  void addFolder(String folder) {
+    try {
+      extensionAddFolder(folder: folder);
+    } catch (_) {
+      // Nothing was added.
+    }
+    _effectsChanged();
+  }
+
+  /// Stop scanning a folder the person added. Nothing in it is deleted.
+  void removeFolder(String folder) {
+    try {
+      extensionRemoveFolder(folder: folder);
+    } catch (_) {
+      // Nothing was taken off.
+    }
+    _effectsChanged();
   }
 
   /// Remove an extension. What its page stored, and the folders picked for
@@ -105,7 +188,7 @@ class ExtensionService extends ChangeNotifier {
     } catch (_) {
       // Nothing was removed.
     }
-    refresh();
+    _effectsChanged();
     return removed;
   }
 }
