@@ -1267,6 +1267,11 @@
         get numItems() { return this.items.length; },
         item: function (n) { return this.items[n]; },
         get rootFolder() { return rootFolder; },
+        // The comp open in the Viewer.
+        get activeItem() {
+            var comp = command('comp.active').comp;
+            return comp ? itemFor({ id: comp.id, kind: 'comp' }) : null;
+        },
         get file() {
             var path = command('project.info').path;
             return path ? new File(path) : null;

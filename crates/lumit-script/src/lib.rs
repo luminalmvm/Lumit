@@ -74,6 +74,12 @@ pub trait Host {
         Ok(())
     }
 
+    /// The comp open in the Viewer, which After Effects calls the active
+    /// item. Where there is no Viewer there is none.
+    fn active_comp(&self) -> Option<Uuid> {
+        None
+    }
+
     /// The ops that make `parent` the parent of `layer` in `comp`, or leave it
     /// with none. By default only the parent changes, so the layer jumps with
     /// it; a host that can place layers also changes the layer's transform so

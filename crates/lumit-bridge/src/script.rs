@@ -40,12 +40,13 @@ struct Running {
 
 static RUNNING: Mutex<Option<Running>> = Mutex::new(None);
 
-/// Run the script at `path` on `project`, on a thread of its own. False when
-/// one is running already. `tell` hears what it does, and answers false
-/// when nobody is listening.
+/// Run the script at `path` on `project`, on a thread of its own, with
+/// `comp` open in the Viewer. False when one is running already. `tell` hears
+/// what it does, and answers false when nobody is listening.
 pub(crate) fn start(
     project: ProjectReference,
     path: PathBuf,
+    comp: Option<Uuid>,
     tell: impl Fn(BridgeScriptEvent) -> bool + Send + 'static,
 ) -> Result<bool, BridgeError> {
     let store = {
@@ -68,7 +69,7 @@ pub(crate) fn start(
         .name("script".into())
         .spawn(move || {
             let end = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                run_file(project, store, &path, stop, &tell)
+                run_file(project, store, &path, comp, stop, &tell)
             }))
             .unwrap_or_else(|_| finished(Vec::new(), "The script stopped unexpectedly.", None));
             // Free before saying so, so the next run can start straight away.
@@ -136,6 +137,7 @@ fn run_file(
     project: ProjectReference,
     store: Arc<DocumentStore>,
     path: &Path,
+    comp: Option<Uuid>,
     stop: Arc<AtomicBool>,
     tell: &dyn Fn(BridgeScriptEvent) -> bool,
 ) -> BridgeScriptEvent {
@@ -149,7 +151,8 @@ fn run_file(
     if read.is_err() || source.len() as u64 > MAX_SOURCE_BYTES {
         return finished(Vec::new(), "The script could not be read.", None);
     }
-    let host = AppHost::new(project, store, stop.clone(), tell);
+    let mut host = AppHost::new(project, store, stop.clone(), tell);
+    host.active = comp;
     let choose = |title: &str, extensions: &[String]| host.choose_file(title, extensions);
     let alert = |message: &str| {
         host.say(BridgeScriptEvent::Alert {
@@ -202,6 +205,8 @@ pub(crate) struct AppHost<'a> {
     stop: Arc<AtomicBool>,
     /// The interface, which hears [`BridgeScriptEvent`]s.
     tell: &'a dyn Fn(BridgeScriptEvent) -> bool,
+    /// The comp open in the Viewer when the run started.
+    pub(crate) active: Option<Uuid>,
 }
 
 impl<'a> AppHost<'a> {
@@ -219,6 +224,7 @@ impl<'a> AppHost<'a> {
             export: RefCell::new(None),
             stop,
             tell,
+            active: None,
         }
     }
 
@@ -445,6 +451,10 @@ impl Host for AppHost<'_> {
         self.stop.clone()
     }
 
+    fn active_comp(&self) -> Option<Uuid> {
+        self.active
+    }
+
     fn parent_ops(
         &self,
         comp: Uuid,
@@ -482,7 +492,7 @@ while (true) {}
         let project = LumitBridgeState::new_project(None).expect("a new project");
         let (heard, hearing) = mpsc::channel();
         let started =
-            start(project, path, move |event| heard.send(event).is_ok()).expect("started");
+            start(project, path, None, move |event| heard.send(event).is_ok()).expect("started");
         assert!(started);
         let wait = Duration::from_secs(20);
         let asked = hearing.recv_timeout(wait).expect("asked for a file");

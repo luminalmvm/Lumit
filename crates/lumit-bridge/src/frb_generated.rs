@@ -18724,6 +18724,9 @@ fn wire__crate__api__project__project_reference_run_script_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that = <crate::api::project::ProjectReference>::sse_decode(&mut deserializer);
             let api_path = <String>::sse_decode(&mut deserializer);
+            let api_comp = <Option<crate::api::composition::CompositionReference>>::sse_decode(
+                &mut deserializer,
+            );
             let api_events = <Option<
                 StreamSink<
                     crate::api::script::BridgeScriptEvent,
@@ -18733,7 +18736,7 @@ fn wire__crate__api__project__project_reference_run_script_impl(
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::project::ProjectReference::run_script(
-                    &api_that, api_path, api_events,
+                    &api_that, api_path, api_comp, api_events,
                 )?;
                 Ok(output_ok)
             })())

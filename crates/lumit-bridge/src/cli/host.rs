@@ -475,6 +475,19 @@ impl Host for Headless {
             });
         stop
     }
+
+    /// There is no Viewer here, so a project with one comp has that one open.
+    fn active_comp(&self) -> Option<Uuid> {
+        let doc = self.store.snapshot();
+        let mut comps = doc.items.iter().filter_map(|i| match i {
+            ProjectItem::Composition(c) => Some(c.id),
+            _ => None,
+        });
+        match (comps.next(), comps.next()) {
+            (Some(only), None) => Some(only),
+            _ => None,
+        }
+    }
 }
 
 /// Export `job`, numbered from 1 in the order they started.

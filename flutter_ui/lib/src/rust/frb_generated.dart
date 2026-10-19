@@ -2071,6 +2071,7 @@ abstract class BridgeLibApi extends BaseApi {
   bool crateApiProjectProjectReferenceRunScript(
       {required ProjectReference that,
       required String path,
+      CompositionReference? comp,
       RustStreamSink<BridgeScriptEvent>? events});
 
   Future<String> crateApiProjectProjectReferenceSave(
@@ -17488,12 +17489,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   bool crateApiProjectProjectReferenceRunScript(
       {required ProjectReference that,
       required String path,
+      CompositionReference? comp,
       RustStreamSink<BridgeScriptEvent>? events}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_project_reference(that, serializer);
         sse_encode_String(path, serializer);
+        sse_encode_opt_box_autoadd_composition_reference(comp, serializer);
         sse_encode_opt_StreamSink_bridge_script_event_Sse(events, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 537)!;
       },
@@ -17503,7 +17506,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiProjectProjectReferenceRunScriptConstMeta,
-      argValues: [that, path, events],
+      argValues: [that, path, comp, events],
       apiImpl: this,
     ));
   }
@@ -17511,7 +17514,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   TaskConstMeta get kCrateApiProjectProjectReferenceRunScriptConstMeta =>
       const TaskConstMeta(
         debugName: "project_reference_run_script",
-        argNames: ["that", "path", "events"],
+        argNames: ["that", "path", "comp", "events"],
       );
 
   @override

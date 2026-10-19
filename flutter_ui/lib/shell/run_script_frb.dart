@@ -40,7 +40,8 @@ Future<void> runScriptFrb(
   final ended = Completer<BridgeScriptEvent_Finished?>();
   var started = false;
   try {
-    started = project.runScript(path: path, events: events);
+    started = project.runScript(
+        path: path, comp: ui.selectedComp, events: events);
   } catch (_) {}
   StreamSubscription<BridgeScriptEvent>? listening;
   if (started) {

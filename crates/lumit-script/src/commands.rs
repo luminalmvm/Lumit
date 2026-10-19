@@ -182,6 +182,11 @@ pub const COMMANDS: &[Command] = &[
         ),
     },
     Command {
+        name: "comp.active",
+        summary: "The comp open in the Viewer, if there is one",
+        schema: none!(),
+    },
+    Command {
         name: "item.list",
         summary: "Every item in the project panel: comps, footage, folders and solids, with the folder each is in",
         schema: none!(),
@@ -326,6 +331,7 @@ pub(crate) fn run(
         "comp.new" => comp_new(host, parse(args)?),
         "comp.set" => comp_set(host, parse(args)?),
         "comp.open" => comp_open(host, parse(args)?),
+        "comp.active" => comp_active(host, parse(args)?),
         "item.list" => item_list(host, parse(args)?),
         "item.set" => item_set(host, parse(args)?),
         "folder.new" => folder_new(host, parse(args)?),
@@ -717,6 +723,12 @@ fn comp_open(host: &dyn Host, a: CompArgs) -> Result<Value, ScriptError> {
     let comp = find_comp(&host.store().snapshot(), &a.comp)?.id;
     host.open_comp(comp)?;
     Ok(json!({}))
+}
+
+fn comp_active(host: &dyn Host, _: NoArgs) -> Result<Value, ScriptError> {
+    let doc = host.store().snapshot();
+    let comp = host.active_comp().and_then(|id| doc.comp(id));
+    Ok(json!({ "comp": comp.map(comp_json) }))
 }
 
 fn find_item<'a>(doc: &'a Document, key: &str) -> Result<&'a ProjectItem, ScriptError> {

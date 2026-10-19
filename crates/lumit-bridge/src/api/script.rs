@@ -34,8 +34,9 @@ pub enum BridgeScriptEvent {
 
 impl ProjectReference {
     /// Run the script at `path` on this project, on a thread of its own.
-    /// Answers at once, false when a script is running already. `events`
-    /// hears the rest, and the edits arrive on the change stream as usual.
+    /// Answers at once, false when a script is running already. `comp` is
+    /// the one open in the Viewer, if any. `events` hears the rest, and the
+    /// edits arrive on the change stream as usual.
     ///
     /// The interface must not edit until it hears `Finished`, since the
     /// whole run is one undo step and an edit made meanwhile would join it.
@@ -43,9 +44,11 @@ impl ProjectReference {
     pub fn run_script(
         &self,
         path: String,
+        comp: Option<CompositionReference>,
         events: Option<StreamSink<BridgeScriptEvent>>,
     ) -> Result<bool, BridgeError> {
-        crate::script::start(self.clone(), path.into(), move |event| {
+        let comp = comp.map(|c| c.id);
+        crate::script::start(self.clone(), path.into(), comp, move |event| {
             events.as_ref().is_some_and(|sink| sink.add(event).is_ok())
         })
     }
