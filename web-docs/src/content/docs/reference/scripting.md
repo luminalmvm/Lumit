@@ -191,6 +191,34 @@ Script: `lumit.layer.add({ ... })`. MCP tool: `layer_add`.
 | `width` | integer (1 to 16384) |  | For a solid, the comp's if left out |
 | `height` | integer (1 to 16384) |  |  |
 
+## shape.add
+
+Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient and the rest.
+
+Script: `lumit.shape.add({ ... })`. MCP tool: `shape_add`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `name` | string |  |  |
+| `index` | integer (at least 0) |  | Where in the stack, 0 is the top |
+| `items` | list of object | yes | The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one |
+
+## layer.composite
+
+Set how a layer meets the layers below: its blend mode, and a track matte from another layer of its comp.
+
+Script: `lumit.layer.composite({ ... })`. MCP tool: `layer_composite`.
+
+| Argument | Type | Required | Meaning |
+| --- | --- | --- | --- |
+| `comp` | string | yes | The comp's id or name |
+| `layer` | string | yes | The layer's id, or its name in the comp |
+| `blend` | string |  | A blend mode as a .lum file names it: Normal, Add, Screen, Multiply, Overlay, SoftLight and the rest |
+| `matte` | string or null |  | The matte layer's id or name, or null for none |
+| `luma` | boolean |  | Matte by brightness rather than alpha |
+| `inverted` | boolean |  |  |
+
 ## layer.get
 
 One layer: its span, parent, switches and transform.

@@ -237,6 +237,26 @@ pub const COMMANDS: &[Command] = &[
         ),
     },
     Command {
+        name: "shape.add",
+        summary: "Add a shape layer drawn from paths, each item in the form a .lum file keeps it: path, fill, stroke, stroke_width, opacity, gradient and the rest",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","name":{"type":"string"},"index":{"type":"integer","minimum":0,"description":"Where in the stack, 0 is the top"},"items":{"type":"array","minItems":1,"description":"The shape items as a .lum file keeps them. Each path is {vertices:[{pos:[x,y],tan_in:[x,y],tan_out:[x,y]}],closed}, in comp pixels with tangents relative to their vertex. Colours are linear-light RGBA. An id and a name are made for any item without one","items":{"type":"object"}}},"required":["comp","items"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
+        name: "layer.composite",
+        summary: "Set how a layer meets the layers below: its blend mode, and a track matte from another layer of its comp",
+        schema: concat!(
+            r#"{"type":"object","properties":{"comp":"#,
+            comp!(),
+            r#","layer":"#,
+            layer!(),
+            r#","blend":{"type":"string","description":"A blend mode as a .lum file names it: Normal, Add, Screen, Multiply, Overlay, SoftLight and the rest"},"matte":{"type":["string","null"],"description":"The matte layer's id or name, or null for none"},"luma":{"type":"boolean","description":"Matte by brightness rather than alpha"},"inverted":{"type":"boolean"}},"required":["comp","layer"],"additionalProperties":false}"#
+        ),
+    },
+    Command {
         name: "layer.get",
         summary: "One layer: its span, parent, switches and transform",
         schema: concat!(
@@ -397,6 +417,8 @@ pub(crate) fn run(
         "item.set" => item_set(host, parse(args)?),
         "folder.new" => folder_new(host, parse(args)?),
         "layer.add" => layer_add(host, parse(args)?),
+        "shape.add" => shape_add(host, parse(args)?),
+        "layer.composite" => layer_composite(host, parse(args)?),
         "layer.get" => layer_get(host, parse(args)?),
         "layer.set" => layer_set(host, parse(args)?),
         "layer.delete" => layer_delete(host, parse(args)?),
@@ -1232,6 +1254,127 @@ fn layer_add(host: &dyn Host, a: AddArgs) -> Result<Value, ScriptError> {
         });
     }
     commit(store, ops)?;
+    layer_now(store, comp.id, id)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CompositeArgs {
+    comp: String,
+    layer: String,
+    blend: Option<lumit_core::model::BlendMode>,
+    #[serde(default, deserialize_with = "present")]
+    matte: Option<Option<String>>,
+    #[serde(default)]
+    luma: bool,
+    #[serde(default)]
+    inverted: bool,
+}
+
+fn layer_composite(host: &dyn Host, a: CompositeArgs) -> Result<Value, ScriptError> {
+    use lumit_core::model::{LayerInputSource, MatteChannel, MatteRef};
+
+    let store = host.store();
+    let doc = store.snapshot();
+    let comp = find_comp(&doc, &a.comp)?;
+    let layer = find_layer(comp, &a.layer)?;
+    let mut ops = Vec::new();
+    if let Some(blend) = a.blend {
+        ops.push(Op::SetLayerBlend {
+            comp: comp.id,
+            layer: layer.id,
+            blend,
+        });
+    }
+    if let Some(matte) = a.matte {
+        let matte = match matte {
+            Some(key) => {
+                let source = find_layer(comp, &key)?;
+                if source.id == layer.id {
+                    return Err(bad("A layer cannot be its own matte."));
+                }
+                Some(MatteRef {
+                    layer: source.id,
+                    channel: if a.luma {
+                        MatteChannel::Luma
+                    } else {
+                        MatteChannel::Alpha
+                    },
+                    inverted: a.inverted,
+                    source: LayerInputSource::default(),
+                })
+            }
+            None => None,
+        };
+        ops.push(Op::SetLayerMatte {
+            comp: comp.id,
+            layer: layer.id,
+            matte,
+        });
+    }
+    commit(store, ops)?;
+    layer_now(store, comp.id, layer.id)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ShapeArgs {
+    comp: String,
+    name: Option<String>,
+    index: Option<usize>,
+    items: Vec<Value>,
+}
+
+fn shape_add(host: &dyn Host, a: ShapeArgs) -> Result<Value, ScriptError> {
+    use lumit_core::model::TransformGroup;
+    use lumit_core::shape::ShapeItem;
+
+    let store = host.store();
+    let doc = store.snapshot();
+    let comp = find_comp(&doc, &a.comp)?;
+    let mut contents = Vec::new();
+    for (n, mut item) in a.items.into_iter().enumerate() {
+        let Some(object) = item.as_object_mut() else {
+            return Err(bad("Each item is an object."));
+        };
+        object.entry("id").or_insert_with(|| json!(Uuid::now_v7()));
+        object
+            .entry("name")
+            .or_insert_with(|| json!(format!("Path {}", n + 1)));
+        let item: ShapeItem =
+            serde_json::from_value(item).map_err(|e| bad(format!("Item {}: {e}.", n + 1)))?;
+        if item.path.vertices.len() < 2 {
+            return Err(bad(format!("Item {} needs two vertices or more.", n + 1)));
+        }
+        contents.push(item);
+    }
+    // The art is drawn in comp pixels, so the layer sits on the art's own box
+    // with its anchor at the corner, as the pen tool's layers do.
+    let (x0, y0, _, _) = lumit_core::shape::contents_bounds(&contents, 0.0)
+        .ok_or_else(|| bad("The paths draw nothing."))?;
+    let layer = edits::base_layer(
+        a.name.unwrap_or_else(|| "Shape".into()),
+        LayerKind::Shape { contents },
+        comp.duration.0,
+        TransformGroup {
+            anchor_x: Property::fixed(0.0),
+            anchor_y: Property::fixed(0.0),
+            position_x: Property::fixed(x0),
+            position_y: Property::fixed(y0),
+            ..TransformGroup::default()
+        },
+    );
+    let id = layer.id;
+    let mut layer = layer;
+    edits::solo_on_arrival(&mut layer, comp.layers.iter());
+    commit(
+        store,
+        vec![Op::AddLayer {
+            comp: comp.id,
+            index: a.index.unwrap_or(0).min(comp.layers.len()),
+            layer: Box::new(layer),
+        }],
+    )?;
     layer_now(store, comp.id, id)
 }
 
