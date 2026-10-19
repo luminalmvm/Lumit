@@ -418,16 +418,13 @@ pub fn machine_dirs() -> Vec<PathBuf> {
     )]
 }
 
-/// The machine-wide folders, for authors who ship their own installer. The
-/// second is the person's own, for an installer that runs without root.
+/// The machine-wide folders, for authors who ship their own installer. Only
+/// a native install sees it: inside the Flatpak `/usr/share` is the
+/// runtime's, and the sandbox grants no host path for it.
 #[cfg(all(unix, not(target_os = "macos")))]
 #[must_use]
 pub fn machine_dirs() -> Vec<PathBuf> {
-    let mut dirs = vec![PathBuf::from("/usr/share/lumit/extensions")];
-    if let Some(home) = std::env::var_os("HOME") {
-        dirs.push(PathBuf::from(home).join(".local/share/lumit/extensions"));
-    }
-    dirs
+    vec![PathBuf::from("/usr/share/lumit/extensions")]
 }
 
 #[cfg(not(any(windows, unix)))]
