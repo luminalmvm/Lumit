@@ -64,6 +64,23 @@ pub fn answer_script_file(path: Option<String>) {
     crate::script::answer(path.map(Into::into));
 }
 
+/// Lumit's own Scripts folder, made the first time it is asked for. `None`
+/// when this machine has nowhere for it.
+#[frb(sync)]
+pub fn scripts_folder() -> Option<String> {
+    let folder = lumit_project::scripts_dir()?;
+    std::fs::create_dir_all(&folder).ok()?;
+    Some(folder.to_string_lossy().into_owned())
+}
+
+/// What File > Scripts lists from `folder`: each `.js` and `.jsx` file in it
+/// and the folders inside it, as a path under `folder` with `/` between the
+/// parts, in name order.
+#[frb(sync)]
+pub fn list_scripts(folder: String) -> Vec<String> {
+    crate::script::list(std::path::Path::new(&folder))
+}
+
 /// What happens on the endpoint other programs drive Lumit through.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq, Eq)]

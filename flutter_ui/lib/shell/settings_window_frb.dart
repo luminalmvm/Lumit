@@ -86,6 +86,7 @@ import 'export_dialog_frb.dart'
         exportTokenDate;
 import 'keymap_keyboard.dart';
 import 'menu_bar_frb.dart';
+import 'run_script_frb.dart' show scriptsFolderIn;
 import 'settings_account.dart';
 import 'settings_rows.dart';
 import 'theme_editor_frb.dart';
@@ -1092,6 +1093,39 @@ class _SettingsWindowState extends State<_SettingsWindow> {
                   ? l10n.settingsHelpProjectTemplate
                   : ui.workspace.projectTemplate,
             ),
+            // The folder File ▸ Scripts lists. Clear goes back to Lumit's own.
+            _row(
+              t,
+              l10n.settingsScriptsFolder,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  HouseButton(
+                    key: const ValueKey('settings-scripts-folder'),
+                    small: true,
+                    onPressed: () async {
+                      final folder = await pickFolder();
+                      if (folder == null || !mounted) return;
+                      setState(() => ui.workspace.setScriptsFolder(folder));
+                    },
+                    child: Text(l10n.chooseEllipsis, style: t.small),
+                  ),
+                  if (ui.workspace.scriptsFolder.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    HouseButton(
+                      key: const ValueKey('settings-scripts-folder-clear'),
+                      small: true,
+                      onPressed: () =>
+                          setState(() => ui.workspace.setScriptsFolder('')),
+                      child: Text(l10n.clear, style: t.small),
+                    ),
+                  ],
+                ],
+              ),
+              description: ui.workspace.scriptsFolder.isEmpty
+                  ? _ownScriptsFolder
+                  : ui.workspace.scriptsFolder,
+            ),
             _row(
               t,
               l10n.settingsPanelLayout,
@@ -1198,6 +1232,9 @@ class _SettingsWindowState extends State<_SettingsWindow> {
   /// every update-service notification, and the installed version cannot
   /// change under a running process.
   late final String _installed = lumitProductVersion();
+
+  /// Lumit's own Scripts folder, read once like the version above.
+  late final String _ownScriptsFolder = scriptsFolderIn('') ?? '';
 
   /// The line under "This version": what is installed, and what the last check
   /// made of it. Rebuilt with the row, so it follows the service too.

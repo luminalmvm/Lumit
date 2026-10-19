@@ -457,6 +457,46 @@ impl Host for AppHost<'_> {
     }
 }
 
+/// The most scripts File > Scripts lists, and how many folders deep it looks.
+const MAX_LISTED: usize = 500;
+const MAX_DEPTH: usize = 4;
+
+/// The `.js` and `.jsx` files in `folder` and the folders inside it, as paths
+/// under it with `/` between the parts. Each folder's names are in order, with
+/// its folders among its files. Hidden ones are left out.
+pub(crate) fn list(folder: &Path) -> Vec<String> {
+    fn walk(folder: &Path, under: &str, depth: usize, out: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(folder) else {
+            return;
+        };
+        let mut names: Vec<(String, PathBuf)> = entries
+            .flatten()
+            .map(|e| (e.file_name().to_string_lossy().into_owned(), e.path()))
+            .filter(|(name, _)| !name.starts_with('.'))
+            .collect();
+        names.sort_by_cached_key(|(name, _)| name.to_lowercase());
+        for (name, path) in names {
+            if out.len() >= MAX_LISTED {
+                return;
+            }
+            let at = format!("{under}{name}");
+            if path.is_dir() {
+                if depth < MAX_DEPTH {
+                    walk(&path, &format!("{at}/"), depth + 1, out);
+                }
+            } else if path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("js") || e.eq_ignore_ascii_case("jsx"))
+            {
+                out.push(at);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(folder, "", 1, &mut out);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc;

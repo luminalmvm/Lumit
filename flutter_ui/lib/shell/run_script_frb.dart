@@ -1,5 +1,5 @@
-// File ▸ Run script…: a JavaScript or After Effects script run on the open
-// project.
+// File ▸ Scripts: a JavaScript or After Effects script run on the open
+// project, picked or from the Scripts folder.
 
 import 'dart:async';
 
@@ -11,7 +11,8 @@ import '../state/app_state.dart';
 import '../state/file_dialogs.dart';
 import '../state/ui_state.dart';
 
-/// Pick a `.js` or `.jsx` file and run it on the open project.
+/// Run the `.js` or `.jsx` file at [path] on the open project, or one picked
+/// when there is none.
 ///
 /// The busy card covers the window until the script ends, with Stop on it.
 /// The whole run is one undo step, and an edit made from the interface
@@ -21,12 +22,13 @@ import '../state/ui_state.dart';
 Future<void> runScriptFrb(
   LumitState app,
   LumitUiState ui, {
+  String? path,
   Future<String?> Function()? picker,
   Future<String?> Function(List<String> extensions, String title)? chooser,
 }) async {
   final project = app.project;
   if (project == null) return;
-  final path = await (picker ?? pickScript)();
+  path ??= await (picker ?? pickScript)();
   if (path == null) return;
   final name = _scriptName(path);
 
@@ -90,4 +92,15 @@ String _scriptName(String path) {
   final file = path.split(RegExp(r'[\\/]')).last;
   final dot = file.lastIndexOf('.');
   return dot > 0 ? file.substring(0, dot) : file;
+}
+
+/// The folder File ▸ Scripts lists: [chosen] in Settings, else Lumit's own,
+/// made the first time it is asked for. Null when there is nowhere.
+String? scriptsFolderIn(String chosen) {
+  if (chosen.isNotEmpty) return chosen;
+  try {
+    return scriptsFolder();
+  } catch (_) {
+    return null;
+  }
 }

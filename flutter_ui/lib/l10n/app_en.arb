@@ -20400,6 +20400,18 @@
       }
     }
   },
+  "menuScripts": "Scripts",
+  "@menuScripts": {
+    "description": "Submenu in the File menu. Lists the scripts in the Scripts folder, then Run script and Open scripts folder."
+  },
+  "menuOpenScriptsFolder": "Open scripts folder",
+  "@menuOpenScriptsFolder": {
+    "description": "Last item in File › Scripts. Shows the Scripts folder in the system's file manager."
+  },
+  "settingsScriptsFolder": "Scripts folder",
+  "@settingsScriptsFolder": {
+    "description": "Settings window: the folder whose scripts File › Scripts lists. Under it is the folder's path."
+  },
   "settingsLiveEndpoint": "Let other programs drive Lumit",
   "@settingsLiveEndpoint": {
     "description": "Settings window: a switch, off by default. On, a program on this computer, such as an MCP client through lumit-cli, can edit the open project."

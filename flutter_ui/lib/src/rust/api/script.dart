@@ -20,6 +20,16 @@ void stopScript() => BridgeLib.instance.api.crateApiScriptStopScript();
 void answerScriptFile({String? path}) =>
     BridgeLib.instance.api.crateApiScriptAnswerScriptFile(path: path);
 
+/// Lumit's own Scripts folder, made the first time it is asked for. `None`
+/// when this machine has nowhere for it.
+String? scriptsFolder() => BridgeLib.instance.api.crateApiScriptScriptsFolder();
+
+/// What File > Scripts lists from `folder`: each `.js` and `.jsx` file in it
+/// and the folders inside it, as a path under `folder` with `/` between the
+/// parts, in name order.
+List<String> listScripts({required String folder}) =>
+    BridgeLib.instance.api.crateApiScriptListScripts(folder: folder);
+
 /// Let other programs on this computer drive Lumit: listen on a local
 /// socket, never a network port, for one program at a time that holds the
 /// secret written beside it. `events` hears who connects and what they do,
