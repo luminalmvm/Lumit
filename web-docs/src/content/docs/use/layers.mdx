@@ -68,6 +68,46 @@ instead, turn on *Paste layers at their original time* in [Settings ▸
 Timeline](/use/settings/). A parent or matte reference is retained only if the target
 composition still contains that layer.
 
+## The row menu
+
+Right-click a layer's row in the Timeline outline, or its bar, for the row menu. Its commands
+act on every selected layer and skip locked ones.
+
+| Item | Does |
+| --- | --- |
+| **Duplicate** | Duplicates the layers. |
+| **Accepts lights** | Whether Light layers shade the layer. |
+| **Bring forward**, **Send backward** | Moves the layers one place up or down the stack. |
+| **Convert to sequence layer**, **Convert to footage layer** | Turns a Footage layer into a [Sequence layer](/use/sequence-layers/), and back. A Sequence layer of several clips refuses. |
+| **Detach audio** | Moves the layer's sound onto an Audio layer directly below it, and mutes the layer. Not on Audio layers. |
+| **Audio streams ▸**, **Split audio streams**, **Merge audio streams** | On a file with several [audio streams](/use/audio/#audio-streams): which streams the layer plays, each stream onto a layer of its own, and back onto one. |
+| **Enable Retime** or **Disable Retime**, **Stretch…**, **Freeze frame at playhead** | See [Retime](/use/retime/). Not on Sequence layers. |
+| **Pre-compose…** | See [Compositions](/use/compositions/#nest-one-composition-in-another). |
+| **Copy sequence shape**, **Paste sequence shape** | On Sequence layers. See [Sequence layers](/use/sequence-layers/). |
+| **Delete** | Deletes the layers. |
+| **Delete all markers** | Removes the layers' markers. Only on a layer with markers. |
+
+On a locked layer the menu leaves out the commands that edit it.
+
+## Label colours
+
+The dot after the layer number is the layer's **label colour**. Click it for nine chips; the
+first is plain grey. The pick applies to every selected layer, locked ones included. The
+label colours the dot and the layer's bar.
+
+Each new layer starts on its kind's colour:
+
+| Kind | Colour |
+| --- | --- |
+| Footage and Audio | Azure |
+| Solid | Amber |
+| Precomp | Violet |
+| Text | Mint |
+| Camera | Teal |
+| Sequence | Indigo |
+| Adjustment | Magenta |
+| Null | Coral |
+
 ## Switches
 
 <Shot file="layer-switches.png" caption="The switches on a layer's row." />
@@ -82,10 +122,12 @@ The columns open on visibility, mute, solo and lock, and on disable effects, 3D 
 blur. Drag a column's seam wider to show the rest.
 
 `Ctrl+L` locks or unlocks the selected layers, and `Ctrl+Shift+L` unlocks every layer. A
-locked layer cannot be clicked in the Viewer; the click goes to the layer behind it.
+locked layer refuses every edit except its lock, shy switch and label colour. It cannot be
+clicked in the Viewer; the click goes to the layer behind it.
 
 A row shows only the switches its layer can use. An [Audio layer](/use/audio/) has no
-visibility switch, and a layer that can never be heard has no mute switch. Guide is drawn
+visibility switch, and a layer that can never be heard has no mute switch. A layer with
+sound and no picture has no box in the Viewer and cannot be picked there. Guide is drawn
 on every row.
 
 - Click a switch on a selected layer and every selected layer takes the same state.

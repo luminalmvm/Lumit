@@ -1,0 +1,112 @@
+---
+title: Speed ramps, coming from Vegas
+description: Ramp, freeze and reverse footage with a speed envelope, the way Vegas does it.
+sidebar:
+  order: 0
+---
+
+import Clip from "../../../components/Clip.astro";
+
+A Vegas velocity envelope is a **speed envelope** in Lumit. It sits under the clips of a
+[Sequence layer](/use/sequence-layers/), one line per clip, in per cent. Everything else on
+this page is in [Retiming and speed](/use/retime/).
+
+## Vegas to Lumit
+
+| Vegas | Lumit |
+| --- | --- |
+| Velocity envelope | The speed envelope under a Sequence layer's clips |
+| Playback rate, in Event properties | **Speed…** on the clip's right-click menu |
+| `Ctrl`+drag an event's edge | Not built. **Stretch…** on a layer's right-click menu |
+| Reverse | A speed below 0% |
+| Insert freeze frame at cursor | A point at 0%, or **Freeze frame at playhead** on a layer |
+| Resample mode: Disable resample | **In-between frames ▸ Nearest** |
+| Resample mode: Force resample | **In-between frames ▸ Blend** |
+| Optical flow | **Flow** |
+
+A velocity envelope in Vegas runs from −100% to 300%. A speed envelope runs from −10000% to
+10000%.
+
+## 1. Set Lumit up the Vegas way
+
+On the first run, choose **Vegas** under **Editing style**. Tick **Use the Vegas shortcuts**
+for the keys you know.
+
+Already past the first run, the same three choices are in Settings:
+
+- **Settings ▸ Timeline ▸ Editing ▸ Video arrives as a Sequence layer**
+- **Settings ▸ Timeline ▸ Editing ▸ Retime opens to Speed**
+- The **Vegas** preset in **Settings ▸ Shortcuts**
+
+## 2. Put the footage on a Sequence layer
+
+Drag the footage from the Project panel into the composition. With **Video arrives as a
+Sequence layer** on, it arrives as one.
+
+A footage layer already in the composition becomes one with **Convert to sequence layer** on
+its right-click menu.
+
+## 3. Open the layer
+
+Double-click the Sequence layer's row in the Timeline. The clips open in place, and the speed
+envelope runs under them at 100%. Drag the divider above the envelope to make it taller.
+
+<Clip name="retime-envelope" caption="A point added where the slow motion starts, and the clip's end dragged down to 25%." />
+
+## 4. Add points
+
+Double-click the line where the ramp should start, and again where it should end. A new point
+takes the speed already there, so nothing changes yet.
+
+## 5. Set the speed
+
+Drag the second point down. The readout beside it gives the speed. Hold `Ctrl` for a tenth of
+the movement.
+
+For an exact number, double-click the point and type it into **Set speed…**.
+
+Between two points the speed changes in a straight line. The clip keeps its start and its
+length.
+
+## 6. Play it
+
+Press `Space`. A clip with spare media after its end can be lengthened by dragging its edge,
+and carries on at the speed of its last point.
+
+## Hold a frame
+
+Drag a point to 0%. The frame there holds until the next point.
+
+## Play backwards
+
+Drag a point below 0%, or type a negative speed into **Set speed…**.
+
+## One speed for the whole clip
+
+Right-click the clip and choose **Speed…**. **Reset speed** puts it back to 100%.
+
+For a layer, right-click its row and choose **Stretch…**. It sets a speed and gives the layer
+the length that goes with it.
+
+## Smoother slow motion
+
+Footage played slower than its own frame rate repeats frames. **Flow** makes the frames in
+between.
+
+<Clip name="retime-flow" caption="The same footage at 25%: Nearest repeats each frame four times, Flow makes the frames between."/>
+
+Flow is a switch on footage layers: the **Flow** cell in the **Modes** column, or
+**Layer ▸ Flow**. **Convert to sequence layer** gives every clip the setting the footage layer
+had. See [Frames in between](/use/retime/#frames-in-between).
+
+## Sound
+
+A retimed clip is silent. **Detach audio** on the layer's right-click menu, before retiming,
+moves the sound to an Audio layer of its own at normal speed.
+
+## Related
+
+- [Retiming and speed](/use/retime/)
+- [Sequence layers](/use/sequence-layers/)
+- [Cutting](/use/cutting/)
+- [Coming from After Effects, Vegas, Premiere Pro or Resolve](/start/coming-from/)

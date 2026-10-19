@@ -1,0 +1,54 @@
+---
+title: Chorus
+description: "Copies of the sound with a delay that will not sit still: a chorus or a flanger."
+---
+
+Chorus is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Copies of the sound are read from a delay line whose length an oscillator moves, and mixed
+back in. Mode sets how far the sweep travels: far for a chorus, short for a flanger.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Mode** | Slider, whole numbers | 0 to 1 | 0 | - |
+| **Rate** | Slider | 0.01 to 10 | 0.5 | - |
+| **Depth** | Slider | 0 to 100 | 50 | Per cent |
+| **Delay** | Slider | 0.1 to 40 | 25 | - |
+| **Feedback** | Slider | -95 to 95 | 0 | Per cent |
+| **Voices** | Slider, whole numbers | 1 to 4 | 2 | - |
+| **Spread** | Slider | 0 to 180 | 90 | Degrees |
+| **Wet** | Slider | 0 to 100 | 50 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Mode**: 0 chorus, 1 flanger.
+- **Rate**: cycles a second.
+- **Depth**: how much of the mode's travel the sweep uses.
+- **Delay**: the middle of the sweep, in milliseconds.
+- **Feedback**: how much of the wet sound goes back into the line. Below 0 it goes back the
+  other way up.
+- **Voices**: how many copies each channel reads.
+- **Spread**: how far apart in the cycle the copies sit.
+- **Wet**: how much of the copies is heard. At 0 the sound comes through untouched.
+
+## Related
+
+- [Phaser](/effects/audio/phaser/)
+- [Vibrato](/effects/audio/vibrato/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

@@ -28,7 +28,7 @@ Every property can be animated. See [Keyframes](/use/keyframes/).
 
 Anchor point, position and scale are each one row with a value box per axis. Right-click
 the row's name for **Separate axes**, and each axis gets a row of its own with its own
-keyframes. **Combine axes** on the same menu puts them back.
+keyframes. **Combine axes** on the same menu puts them back, with Scale linked.
 
 Scale's menu also carries **Link axes** and **Unlink axes**:
 linked, one edit scales both by the same factor; unlinked, each box is edited on its own.
@@ -51,6 +51,9 @@ selected layers one pixel, or ten with `Shift`. See [the Viewer](/panels/viewer/
 Parent a layer to another and it follows the parent's transform. Its own values then read
 as offsets from the parent. Parenting or unparenting a layer does not move it on the
 current frame.
+
+The Viewer draws a parented layer's outline, handles and motion path through the whole parent
+chain. Drags, nudges and **Align** move its Position in the parent's space.
 
 Use a **null layer** as the parent when you want a rig that never draws. One layer can
 parent many layers at once.

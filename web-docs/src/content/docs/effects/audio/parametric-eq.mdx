@@ -1,0 +1,70 @@
+---
+title: Parametric EQ
+description: "Five filters in a row, each a bell, a shelf, a pass or a notch."
+---
+
+Parametric EQ is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Five filters in a row, per channel. Band 1 starts as a high pass and band 5 as a low pass,
+both switched off; bands 2 to 4 start as bells at no gain.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Band 1 on** | Slider, whole numbers | 0 to 1 | 0 | - |
+| **Band 1 type** | Slider, whole numbers | 0 to 5 | 3 | - |
+| **Band 1 frequency** | Slider | 20 to 20000 | 80 | - |
+| **Band 1 gain** | Slider | -24 to 24 | 0 | - |
+| **Band 1 Q** | Slider | 0.1 to 10 | 0.7071067811865476 | - |
+| **Band 2 on** | Slider, whole numbers | 0 to 1 | 1 | - |
+| **Band 2 type** | Slider, whole numbers | 0 to 5 | 0 | - |
+| **Band 2 frequency** | Slider | 20 to 20000 | 250 | - |
+| **Band 2 gain** | Slider | -24 to 24 | 0 | - |
+| **Band 2 Q** | Slider | 0.1 to 10 | 1 | - |
+| **Band 3 on** | Slider, whole numbers | 0 to 1 | 1 | - |
+| **Band 3 type** | Slider, whole numbers | 0 to 5 | 0 | - |
+| **Band 3 frequency** | Slider | 20 to 20000 | 1000 | - |
+| **Band 3 gain** | Slider | -24 to 24 | 0 | - |
+| **Band 3 Q** | Slider | 0.1 to 10 | 1 | - |
+| **Band 4 on** | Slider, whole numbers | 0 to 1 | 1 | - |
+| **Band 4 type** | Slider, whole numbers | 0 to 5 | 0 | - |
+| **Band 4 frequency** | Slider | 20 to 20000 | 4000 | - |
+| **Band 4 gain** | Slider | -24 to 24 | 0 | - |
+| **Band 4 Q** | Slider | 0.1 to 10 | 1 | - |
+| **Band 5 on** | Slider, whole numbers | 0 to 1 | 0 | - |
+| **Band 5 type** | Slider, whole numbers | 0 to 5 | 4 | - |
+| **Band 5 frequency** | Slider | 20 to 20000 | 12000 | - |
+| **Band 5 gain** | Slider | -24 to 24 | 0 | - |
+| **Band 5 Q** | Slider | 0.1 to 10 | 0.7071067811865476 | - |
+| **Output** | Slider | -24 to 24 | 0 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Band 1 on** to **Band 5 on**: 1 puts the band in the path, 0 takes it out.
+- **Band 1 type** to **Band 5 type**: the band's shape: 0 bell, 1 low shelf, 2 high shelf, 3
+  high pass, 4 low pass, 5 notch.
+- **Band 1 frequency** to **Band 5 frequency**: the band's centre or corner, in Hz.
+- **Band 1 gain** to **Band 5 gain**: the band's gain, in dB. A high pass, a low pass and a
+  notch ignore it.
+- **Band 1 Q** to **Band 5 Q**: how narrow the band's shape is.
+- **Output**: a trim on the way out, in dB.
+
+## Related
+
+- [Graphic EQ](/effects/audio/graphic-eq/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

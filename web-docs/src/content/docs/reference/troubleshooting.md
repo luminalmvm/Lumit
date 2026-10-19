@@ -42,8 +42,47 @@ frame rate. Despite this, export will always render at full quality. Any adjustm
 you've made to the Viewer, such as changing the preview resolution, exposure, displayed
 grids, etc. are not seen by the export. See [Exporting](/use/export/).
 
+## "Could not check for updates"
+
+The update check got no answer it could use. Where GitHub refused the request, the
+message names its answer instead, such as **GitHub answered 403**: GitHub answers 403 when
+its hourly limit for the address is used up. The line under **Edit ▸ Settings ▸ General ▸
+Updates ▸ This version** keeps the last reason. See [Installation](/start/install/).
+
+## A plugin is missing
+
+When the start-up scan turns a plugin away, Lumit writes the reasons to `plugin-scan.txt`,
+beside `plugins.json` in Lumit's data folder:
+
+| Platform | Folder |
+| --- | --- |
+| Windows | `%APPDATA%\Lumit\Lumit\data` |
+| macOS | `~/Library/Application Support/dev.Lumit.Lumit` |
+| Linux (Flatpak) | `~/.var/app/io.github.luminalmvm.Lumit/data/lumit` |
+
+See [Plugins](/use/plugins/).
+
+## Disk space drops while plugins are in use
+
+Each OpenFX plugin bundle that renders keeps a frame file of about 512 MB,
+`lumit-ofx-*.ring`, in the system temp folder. A bundle that is installed but not used
+takes a few kilobytes. The files are deleted when Lumit closes.
+
+## "Extensions need Microsoft WebView2, which isn't installed."
+
+On Windows, extension panels need the Microsoft WebView2 runtime. **Get WebView2** opens
+Microsoft's download page. See [Extensions](/use/extensions/).
+
+## "This project is already open in another Lumit window"
+
+A project is open in one Lumit window at a time. Opening it again brings that window
+forward. Where the system does not allow that, this message shows instead, and the
+project already loaded stays.
+
 ## Related
 
 - [Installation](/start/install/)
 - [Preview and playback](/use/preview/)
 - [Exporting](/use/export/)
+- [Plugins](/use/plugins/)
+- [Extensions](/use/extensions/)

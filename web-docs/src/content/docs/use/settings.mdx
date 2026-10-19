@@ -14,14 +14,28 @@ Open the settings window from **Edit ▸ Settings…**.
 The search box in the title strip finds a setting by name on any page, and lists what it
 finds under the page names. On the Shortcuts page it searches the shortcuts instead.
 
+Changes apply at once. **Reset page**, at the foot of the window, puts the page in view back
+to how it shipped. On **Preview and cache** it leaves the cache budgets and the disk cache's
+place as they are.
+
 ## General
 
-**Language**, which follows the system unless you choose otherwise. Whether the welcome
-screen appears on launch. **New project template**, a project that every new one starts as
-a copy of. And **Reset workspace**, which puts the arrangement you are on back to how it
-shipped.
-
-Beneath those, whether Lumit checks for updates, and what it found last time it checked.
+- **Display**: **Language**. **Same as this machine** follows the system's.
+- **Shared projects**: **Footage upload limit** and **Footage download limit**, the speed
+  footage in a [shared project](/use/projects/#shared-projects) moves at, from 128 KB/s up,
+  or **No limit**.
+- **Workspace**: **Welcome screen on launch**. **New project template**, a project that
+  every new one starts as a copy of: **Choose…** picks it and **Clear** goes back to an
+  empty project. **Reset workspace** puts the current arrangement back to how it
+  shipped. **Discord status** sets what Discord shows while Lumit is open: **Off**,
+  **Lumit only**, or **Project and composition**, which adds the names of the open project
+  and composition.
+- **Updates**: **Automatic updates** checks for a new version at launch, at most once a
+  day; downloading waits for a click. **Nightly builds** follows nightly builds instead of
+  releases, and asks first. **Nightly icon**, on a nightly build on Windows or macOS,
+  chooses between the nightly's own icon and the regular one. **This version** names the
+  build installed and what the last check found, beside the same update button as the
+  **Help** menu. See [Installation](/start/install/).
 
 ## Account
 
@@ -30,46 +44,69 @@ of it is synced. See [Profiles and accounts](/use/profiles/).
 
 ## Appearance
 
-- **Theme**: seven built-in schemes grouped dark and light, plus your own. **Customise…**
-  opens the theme editor; themes can be exported and imported. **Accent** and **Shape** tune
-  whichever scheme is in force. Shape is the interface style: **Studio**, **Desk** or
-  **Lantern**. **Label case** sets how panel titles, headings and other labels are cased:
-  **Style's choice**, **All caps**, **First letter** or **Lower case**. Left to the style,
-  Studio writes the first letter as a capital, Desk is lower case and Lantern is all caps.
+- **Theme**: **Colour scheme** offers 33 built-in schemes grouped dark and light, plus your
+  own, and pointing at one previews it. **Customise…** opens the theme editor, and **Your
+  themes** holds the ones you have made; themes can be exported and imported. **Accent** and
+  **Shape** tune whichever scheme is in force. Shape is the interface style: **Studio**,
+  **Desk** or **Lantern**. **Label case** sets how panel titles, headings and other labels
+  are cased: **Style's choice**, **All caps**, **First letter** or **Lower case**. Left to the
+  style, Studio writes the first letter as a capital, Desk is lower case and Lantern is all
+  caps.
+  **Room**, shown with Lantern only, is **Style's choice**, **Day** or **Night**.
 - **Interface**: [**Scale**](/use/workspaces/#how-large-everything-draws), 75 % to 200 %.
-  **Tooltips**, on or off. **Motion**, for how much controls animate. **Compact**, which
-  tightens the row spacing throughout. And **labels**, deciding whether the bars carry
-  words, icons, or icons everywhere.
+  **Tooltips**, on or off. **Motion**, for how much controls animate: **Full**, **Minimal**
+  or **None**. **Compact**, which tightens the row spacing throughout. And **Chrome
+  labels**, deciding whether the bars carry **Words**, **Icons**, or **Icons everywhere**.
 - **Viewer**: whether the scopes and an effect's own graphs take the theme's colours or their
-  own, and whether the surround behind the picture is neutral or themed.
+  own, and whether the **Surround** behind the picture is **Neutral** or **Theme colour**.
+  **Viewer bars** places the Viewer's bars: **Split, top and bottom**, **One bar, at the
+  top**, **One bar, at the bottom** or **Deck**. **Toolbar position** is **Top** or
+  **Left**. **Range sliders** draws a track beside a ranged parameter's number. **Command
+  box in the top line** shows the search box that opens the command palette. On Linux,
+  **Lumit's own title bar** replaces the system's, from the next start. **Icon set** draws
+  the icons **Regular**, **Engraved** or **Bold**. Viewer bars, Toolbar position and Icon
+  set can also be left to the **Style's choice**. **Custom icons** reads your own icons from
+  the folder it shows, one SVG per icon named after it, and counts how many it replaces;
+  **Reload icons** reads the folder again.
 - **Panels**: whether footage rows in the Project panel carry thumbnails, whether layer names
-  are drawn on the lane bars, whether [markers](/use/markers/) draw lines down the rows, and
-  whether a minimap of the bars is drawn under the lanes. **Wires** sets how each wire in a
+  are drawn on the lane bars, whether [markers](/use/markers/) draw lines down the rows
+  (**Marker lines**), and whether a minimap of the bars is drawn under the lanes (**Minimap
+  under the lanes**, on by default in Lantern). **Wires** sets how each wire in a
   node graph runs between its two sockets: **Curved**, **Angled**, which turns only at 45 or
   90 degrees, or **Hanging**, which droops like a slack cable.
+- **Waveforms**: **Style** is **Plain** or **Frequency**, which splits the waveform into low,
+  mid and high bands. **Anchor** draws it from the **Centre** or the **Bottom**.
 
 ## Timeline
 
-Whether [Retime](/use/retime/) opens to the Value or the Speed lens and
-whether it reads in seconds, whether video is placed in a [Sequence
-layer](/use/sequence-layers/) automatically, whether pasted layers keep their original time
-rather than pasting at the playhead, and whether the playhead stays where playback stopped.
-
-Then the panel habits: whether Transform appears in Effect controls, whether Effect controls
-shows its keyframes beside the parameters, whether an ease opens in a popup or the
-[Easing panel](/use/workspaces/), and whether sound moves in whole frames.
-
-Last, **Node graphs**: whether a right-click, `Tab` or `Shift+A` on a node graph canvas opens
+- **Editing**: whether [Retime](/use/retime/) opens to the Speed lens rather than Value
+  (**Retime opens to Speed**) and whether it reads in seconds, whether video is placed in a
+  [Sequence layer](/use/sequence-layers/) automatically, whether pasted layers keep their
+  original time rather than pasting at the playhead, and whether the playhead stays where
+  playback stopped. **Several audio streams arrive as** sets what a file with more than one
+  audio stream becomes when placed: **The first stream**, **One layer, mixed** or **A layer
+  each**. **New expressions are written in** **JavaScript** or **Rhai**; each expression
+  keeps its own language afterwards.
+- **Panels**: whether Transform appears in Effect controls, whether Effect controls shows its
+  keyframes beside the parameters (**Keyframes in Effect controls**), whether an ease opens
+  in a popup or the [Easing panel](/use/workspaces/), and whether sound dragged in the Cut
+  or Audio timeline lands on whole frames (**Sound moves in whole frames**).
+- **Node graphs**: whether a right-click, `Tab` or `Shift+A` on a node graph canvas opens
 [node search](/use/nodes/). Each is on by default and can be turned off on its own.
 
 ## Viewer
 
 Whether the picture is smoothed when zoomed in, and whether the tone-map button appears on
-the Viewer bar, which can be used to try and help see details in area's of brightness greater than one.
+the Viewer bar. Turning the button off turns the tone map off too.
 
 ## Audio
 
-The output device. Follows the system unless you name one.
+- **Output device**: **System default**, first in the list, follows the machine. A device
+  chosen by name is used while it is connected; while it is not, Lumit plays through the
+  system default and the row says so.
+- **Audio offset**, −1000 to 1000 ms. Above zero holds the picture back for sound heard
+  late, such as through Bluetooth headphones; below zero holds the sound back. It applies
+  while playing, not to export, and is kept for this machine.
 
 ## Autosave
 
@@ -81,14 +118,37 @@ turns autosave off.
 What the export dialogue opens on: a preset, a filename template, and whether it asks for a
 destination each time or uses a folder you name.
 
+## Addons
+
+- **Runtime**: the **Model runtime**, with **Install**, or once installed **Load now** and
+  **Remove**. The line under it says what it is running on, or that it would not load.
+- **Installed**: each addon with its licence, size and what it does, and **Remove**. One
+  with files missing says **Files are missing**.
+- **Available**: **Catalogue ▸ Check for addons** lists what can be downloaded, each with
+  its licence and size and **Install**, or **Update** for a newer version of one already
+  here. Nothing installs before the runtime. **Install from file** installs from a manifest
+  on disk. **Where they are kept ▸ Show** opens the folder.
+- **Extensions**: each installed [extension](/use/extensions/), with **Show panel** or
+  **Hide panel**, and **Remove**. **Install from a folder** takes the folder containing
+  `extension.json`. **Extensions folder ▸ Show** opens the folder.
+
+**Licence**, on a row, opens that licence in the browser.
+
 ## Preview and cache
 
-- **Playback**: every frame, or adaptive resolution.
+- **Playback**: when the machine cannot keep up, every frame, or adaptive resolution.
+  **Full resolution while dragging** draws a value drag at the Viewer's own resolution
+  rather than a reduced one.
 - **Hardware video decoding**: on by default. If importing video freezes the computer,
   turn it off and open the project again.
 - **Cache budgets** for all three tiers: rendered frames in memory, preview frames on the
-  graphics card, and frames parked on disk. The disk cache's location is set here too, per
-  machine or per project.
+  graphics card, and frames parked on disk. Each shows what is **In use**, with **Clear**.
+  The disk cache's location is set here too (**Where**), for **Everything** or **This
+  project**.
+- **Quality tier**: the resolution playback has stepped down to, **Full**, **Half**,
+  **Third** or **Quarter**. **Reset** starts it again at full.
+- **Resource governor**: how much **Graphics memory** and **Ordinary memory** is in use
+  against its budget, and how many requests it has turned away.
 
 ## Shortcuts
 

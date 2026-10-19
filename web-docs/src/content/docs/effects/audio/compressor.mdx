@@ -1,0 +1,57 @@
+---
+title: Compressor
+description: "Turns down whatever is louder than a threshold."
+---
+
+Compressor is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns the sound down once it is louder than the **Threshold**. The detector hears the louder
+of the two channels, so both are turned down together. **Lookahead** adds no delay: the
+layer's sound is placed that much earlier.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Threshold** | Slider | -60 to 0 | -18 | - |
+| **Ratio** | Slider | 1 to 20 | 4 | - |
+| **Knee** | Slider | 0 to 24 | 6 | - |
+| **Attack** | Slider | 0.1 to 100 | 10 | - |
+| **Release** | Slider | 5 to 1000 | 100 | - |
+| **Makeup** | Slider | 0 to 24 | 0 | - |
+| **Detector** | Slider, whole numbers | 0 to 1 | 0 | - |
+| **Lookahead** | Slider | 0 to 20 | 0 | - |
+| **Wet** | Slider | 0 to 100 | 100 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Threshold**: where compression starts, in dB.
+- **Ratio**: how much of what goes past the threshold comes back, as n to 1.
+- **Knee**: the dB either side of the threshold the curve bends over.
+- **Attack**: how fast the reduction deepens, in milliseconds.
+- **Release**: how fast it lets go again, in milliseconds.
+- **Makeup**: gain put back after the compression, in dB.
+- **Detector**: what the detector listens to: 0 peak, 1 RMS.
+- **Lookahead**: how far ahead the detector hears, in milliseconds.
+- **Wet**: how much of the compressed sound is in the output. Below 100 the untouched sound
+  is mixed in beside it.
+
+## Related
+
+- [Limiter](/effects/audio/limiter/)
+- [Gate](/effects/audio/gate/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

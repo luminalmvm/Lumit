@@ -1,0 +1,45 @@
+---
+title: Tremolo
+description: "The level moved up and down by an oscillator, or the sound panned side to side."
+---
+
+Tremolo is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+One gain moved by an oscillator. The top of the cycle is the sound's own level. At a Stereo
+phase of 180 the two channels move opposite ways, which is an auto-pan.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Rate** | Slider | 0.01 to 20 | 5 | - |
+| **Depth** | Slider | 0 to 100 | 50 | Per cent |
+| **Shape** | Slider, whole numbers | 0 to 2 | 0 | - |
+| **Stereo phase** | Slider | 0 to 180 | 0 | Degrees |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Rate**: cycles a second.
+- **Depth**: how far the level falls at the bottom of the cycle. At 100 the bottom is
+  silence.
+- **Shape**: 0 sine, 1 triangle, 2 square.
+- **Stereo phase**: how far the right channel's cycle sits behind the left's.
+
+## Related
+
+- [Vibrato](/effects/audio/vibrato/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

@@ -1,116 +1,226 @@
 ---
 title: Retiming and speed
-description: Speed ramps, freezes, reverse, and how Lumit fills in frames.
+description: Every way to change speed in Lumit, from one clip's ramp to a freeze or a run backwards.
 sidebar:
   order: 7
 ---
 
 import Shot from "../../../components/Shot.astro";
+import Clip from "../../../components/Clip.astro";
 
-**Retime** maps a layer's time (or clip time, inside a Sequence layer). Use it
-to ramp speed or hold a frame. It can also run footage backwards.
+**Retime** maps a layer's time to its source's time. It is how Lumit plays footage at another
+speed, ramps between speeds, holds a frame or runs backwards.
 
-## What can be retimed
+<Clip name="retime-envelope" caption="A point added to a clip's speed envelope, and the clip's end dragged down to 25%."/>
 
-- **Footage layers** have their own Retime.
-- **Precomp layers** have their own Retime. A
-  [node graph](/use/node-graphs/) placed as a Precomp layer retimes the same way, and a
-  **Time offset** box shifts one branch inside a graph.
-- Inside a [**Sequence layer**](/use/sequence-layers/), each cut clip has its Retime.
+## Ways to change speed
 
-## Speed
+| Way | Where | Works on |
+| --- | --- | --- |
+| [**Speed envelope**](#speed-on-a-clip) | Under a Sequence layer's clips | Clips |
+| [**Speed…**](#speed-on-a-clip) | A clip's right-click menu | Clips |
+| [**Retime**](#retime-on-a-layer) | **Layer ▸ Enable Retime**, `Ctrl+Alt+T` | Footage and Precomp layers |
+| [**Stretch…**](#stretch) | A layer's right-click menu in the Timeline | Footage and Precomp layers |
+| [**Freeze frame at playhead**](#freeze-a-frame) | A layer's right-click menu in the Timeline | Footage and Precomp layers |
+| [**Interpret footage…**](#interpret-footage) | The Project panel's right-click menu | Footage items |
+| [**Posterize time**](/effects/temporal/posterize-time/) | **Effect ▸ Temporal** | Any layer |
 
-**Speed** is the rate the retime map runs at:
+The **Retiming** workspace puts the Easing panel beside the Viewer, with the Timeline across
+the bottom.
 
-| Speed | Result |
+## Speed on a clip
+
+Each clip in a [Sequence layer](/use/sequence-layers/) has its own speed. Double-click the
+Sequence layer's row in the Timeline to open it. Under the clips is the **speed envelope**: a
+line per clip, in per cent.
+
+- Drag a line up or down to change the speed. On a clip that has never been retimed the
+  whole line moves as one.
+- Double-click a line, or `Ctrl`+click it, to add a point. It takes the speed already there.
+- Drag a point sideways to move it in time, in whole frames. A clip's first and last points
+  stay on its ends.
+- `Alt`+click a point to remove it. A clip keeps at least two.
+- Drag across empty space in the strip to select points, with `Shift` to add to them.
+  Selected points move together, across clips too.
+- Double-click a point, or right-click it and choose **Set speed…**, to type its speed.
+- Hold `Ctrl` while dragging to change the speed a tenth as fast. `Ctrl` also suspends the
+  snap to **Every frame**.
+- Drag the divider above the strip to make it taller.
+
+Between two points the speed changes in a straight line. Below 0% the clip plays backwards.
+
+A clip keeps its start and its length. A change of speed changes which source frames fill it.
+Lengthening a retimed clip carries on at the speed its last point has.
+
+| On a clip's right-click menu | What it does |
 | --- | --- |
-| 100% | Normal. |
-| 0% | A **freeze**. The frame holds. |
-| −100% | Reverse. |
+| **Speed…** | Sets the whole clip to one speed, from 1% to 10000%. |
+| **Reset speed** | Sets the whole clip back to 100%. |
+| **Copy this clip's shape** | Copies the clip's cut and ramp, without its media. |
+| **Copy the whole row's shape** | Copies where every cut falls and how each piece is ramped. |
+| **Paste shape onto this layer** | Cuts and ramps this Sequence layer to match. |
 
-Speed is easiest to work with through the **Speed** lens of the graph editor rather than
-the Value lens, which shows which moment of the source is on screen instead.
+The razor cuts through a ramp. The [Cut timeline](/use/cutting/) does not show the envelope.
 
-## Set an exact speed
+## Retime on a layer
 
-In the **Speed** lens, and in the envelope under a Sequence layer's clips:
+Footage and Precomp layers have a **Retime** of their own. Turn it on with
+**Layer ▸ Enable Retime**, `Ctrl+Alt+T`, or **Enable Retime** on the layer's right-click
+menu. A Sequence layer has none: its clips carry theirs.
 
-- Double-click a point, or right-click it and choose **Set speed…**, to type its speed in
-  per cent.
-- Hold `Ctrl` while dragging a point to move it a tenth as far.
-- **Every frame** is a dashed line at the speed where footage with a higher frame rate than
-  the composition shows each of its frames once. Below it frames repeat. A dragged point
-  snaps to it and the line lights, and `Ctrl` suspends the snap.
+Turning it on adds a **Retime** row above Transform, with two linear keyframes at the layer's
+in and out points. Nothing changes until a key moves. The row reads the moment of the source
+showing, as timecode at the footage's own frame rate. **Settings ▸ Timeline ▸ Editing ▸
+Retime values in seconds** shows seconds instead.
 
-## Make a speed ramp
+**Disable Retime** removes the map, and so does turning off the row's stopwatch. The layer
+keeps the frame it showed at its in point and plays on from there at normal speed.
+
+A [node graph](/use/node-graphs/) placed as a Precomp layer retimes the same way. Inside a
+graph, a **Time offset** box shifts one branch.
+
+The ends of a retimed layer's bar drag freely. A drag trims or extends the layer and never
+changes its speed.
+
+**Edit ▸ Split layer** on a retimed layer puts a keyframe at the cut on both halves, so the
+curve keeps its shape.
+
+## The graph editor
+
+Select the Retime row and open the [graph editor](/use/graph-editor/) (`Shift+F3`). The
+**Value** and **Speed** buttons at the bottom pick the lens.
+
+| Lens | Shows |
+| --- | --- |
+| **Value** | Which moment of the source shows, in seconds. A rising line plays forwards, a flat line holds, a falling line plays backwards. |
+| **Speed** | How fast the source runs. |
+
+<Clip name="retime-speed-graph" caption="The Retime row in the Value lens, then the Speed lens: a point added at five seconds and dragged down to 44%."/>
+
+**Settings ▸ Timeline ▸ Editing ▸ Retime opens to Speed** makes the Speed lens a speed
+envelope in per cent, the same as a clip's, and opens the Retime row straight into it. With
+it off, the Speed lens is the ordinary speed graph of any property, with **Keyframe speed…**
+on a key's menu.
+
+In the speed envelope:
+
+- Double-click the line, or `Ctrl`+click it, to add a point.
+- Double-click a point, or right-click it and choose **Set speed…**, to type its **Frame** and
+  **Speed**. Speed runs from −10000% to 10000%.
+- `Alt`+click a point to remove it.
+- Hold `Ctrl` while dragging to change the speed a tenth as fast.
+- The first point stays where it is. Moving a later point moves the frames after it.
 
 <Shot file="speed-ramp.png" caption="A speed ramp in the graph editor, seen through the Speed lens."/>
 
-1. Turn on Retime for the layer.
-2. Add a keyframe where the ramp starts.
-3. Add another where it ends.
-4. Shape the curve between them in [the graph editor](/use/graph-editor/).
-
-## Overrun
-
-**Overrunning** is when the map asks for source time past the end of the media, or before its
-start. Lumit clamps the boundary frames and marks the region in the timeline.
-
-Overrun never moves layer boundaries or edit points.
-
-## Frame interpolation
-
-The **In-between frames** setting on a footage layer's Source card decides what shows when
-a retime lands between two source frames:
-
-| Mode | How |
-| --- | --- |
-| **Nearest** | Repeat the closer frame. Sharp, but it stutters. |
-| **Blend** | Crossfade the two frames. Smooth, but it ghosts. |
-
-The third answer is **Flow**, which synthesises the frame in between. It is the **Flow**
-switch in the layer's switch cluster rather than an entry in that dropdown. Turning it on
-reveals a **Flow** group in the Effect Controls panel: engine, measurement resolution,
-input rate, vector detail, smoothness, how occlusions are handled, what to fall back to, a
-guard for on-screen overlays, and a switch to force it on where it would otherwise stand
-down.
-
-**Engine** is Lumit's own optical flow or the RIFE model pack installed from
-**Settings ▸ Addons**. A machine without the pack previews with the built-in engine and
-says so on the row, and an export of that layer is **refused**.
-
-Turning Flow off returns the layer to Nearest and keeps the group's settings.
-
-Frame interpolation is a render setting either way. It does not change the retime map.
+**Every frame** is a dashed line at the speed where footage with a higher frame rate than the
+composition shows each of its frames once. Below it frames repeat. A dragged point snaps to it
+and the line lights. It appears only for footage faster than the composition.
 
 ## Stretch
 
-**Stretch** plays the layer at a new speed and gives it the length that implies.
+**Stretch…** plays a layer at a new speed and gives it the length that speed implies.
 Right-click the layer's row in the Timeline and choose **Stretch…**.
 
-The dialogue takes a **new speed** in per cent or a **new duration**, and editing either
-moves the other. The layer is anchored at its **in point**.
+The dialogue takes a **New speed**, from 1% to 10000%, or a **New duration** in frames.
+Editing either moves the other. The layer's in point holds and its end moves.
 
-Stretch rescales the Retime map itself, so an existing Retime is kept — every key's time is
-scaled about the in point.
+Stretch turns Retime on if it was off, and scales an existing Retime about the in point. With
+several layers selected each gets the same speed. A Sequence layer cannot be stretched; its
+clips have **Speed…**.
 
-A **clip** inside a Sequence layer has **Speed…** instead, and no duration field — a
-clip's place and length are fixed. **Reset speed** on the same menu puts it back to 100%.
+## Freeze a frame
 
-## Freeze a frame where you are
+Right-click the layer's row and choose **Freeze frame at playhead**. The frame showing is held
+for one second, everything after it moves one second later, and the layer keeps its length.
 
-Right-click the layer's row and choose **Freeze frame at playhead**. The moment showing is
-held for one second, everything after it is pushed that far later, and the map is cropped
-back to the layer's own out point — the layer's length never changes. The tail may newly
-overrun.
+The hold is two ordinary keyframes on the Retime row. It is refused on a Sequence layer, and
+on or outside the layer's ends.
 
-The hold is two ordinary keyframes once it is made, so it drags and eases like anything
-else. It is refused on a Sequence layer, and at a moment on or outside the layer's own
-ends.
+A point at 0% in a speed envelope also holds, and so does a **Hold** keyframe in the Value
+lens.
+
+## Play backwards
+
+There is no Reverse command. A speed below 0% plays backwards: drag a point under 0%, or type
+a negative speed into **Set speed…**. In the Value lens a line that falls plays backwards.
+
+**Stretch…** and **Speed…** stop at 1%.
+
+## Frames in between
+
+The **In-between frames** setting on a footage layer's Source card decides what shows when a
+retime lands between two source frames:
+
+| Mode | How |
+| --- | --- |
+| **Nearest** | Repeats the closer frame. Sharp, but it stutters. |
+| **Blend** | Crossfades the two frames. Smooth, but it ghosts. |
+
+<Clip name="retime-flow" caption="The same footage at 25%: Nearest repeats each frame four times, Flow makes the frames between."/>
+
+The third answer is **Flow**, which makes the frame in between. It is the **Flow** switch in
+the layer's **Modes** column, and **Layer ▸ Flow**. Turning it on adds a **Flow** group to
+Effect controls and to the layer's rows in the Timeline:
+
+| Control | What it sets |
+| --- | --- |
+| **Engine** | **Built in**, or **RIFE** from the model pack in **Settings ▸ Addons**. |
+| **Flow resolution** | **Native**, **Half** or **Quarter**: the size the motion is measured at. |
+| **Input rate** | The rate the footage is read at, below its own: **On 2s (12)** for animation on twos. **Auto** is the file's own rate. Keyframeable. |
+| **Vector detail** | **Low** to **Ultra**. |
+| **Smoothness** | How even the motion field is, 0 to 100. |
+| **Occlusion** | Where a pixel shows in only one of the two frames: **Visible only** takes that frame, **Blend** weights both. |
+| **Fallback** | **Blend** or **Nearest**, where flow is not confident enough to make a frame. |
+| **HUD guard** | Blends still, detailed areas, such as a game's interface, instead of flowing them. On by default. |
+| **Always on** | Flows even where every comp frame already lands on a source frame. |
+
+Flow works only between 0% and the speed where every source frame is shown once.
+
+Flow and In-between frames are set on footage layers. **Convert to sequence layer** gives
+every clip the footage layer's setting.
+
+A machine without the RIFE pack previews with the built-in engine and says so on the row, and
+an export of that layer is **refused**. Turning Flow off returns the layer to Nearest and keeps
+the group's settings.
+
+**Retime blend** in the export dialogue's overrides exports with these settings, or with every
+layer and clip on Nearest.
+
+## Sound
+
+A retimed layer is silent, footage and Precomp alike, as soon as Retime is on. So is a
+retimed clip.
+
+**Detach audio** on the layer's right-click menu, before retiming, moves its sound to an Audio
+layer of its own. **Convert to sequence layer** is refused on a retimed layer.
+
+## Overrun
+
+A retime that asks for source time past the end of the media, or before its start, holds the
+last or first frame. Overrun never moves layer ends or edit points.
+
+## Interpret footage
+
+**Interpret footage…** on the Project panel's right-click menu (`Ctrl+Alt+G`) reads a file at
+another **Frame rate**. Every layer and clip using it plays the same pictures at the new rate.
+See [Importing](/use/importing/).
+
+## From After Effects
+
+An [imported](/use/importing/) layer's Time Remap becomes its Retime. A time stretch becomes
+the matching straight-line Retime, and a negative one runs backwards. Frame Mix becomes
+**Blend** and Pixel Motion becomes **Flow**.
+
+:::note[Not built yet]
+Stretching a layer or clip by dragging its edge. A Reverse command. Sound that follows a
+retime. The speed envelope in the Cut timeline.
+:::
 
 ## Related
 
+- [Speed ramps, coming from Vegas](/tutorials/speed-ramps-from-vegas/)
 - [The graph editor](/use/graph-editor/)
-- [Node graph compositions](/use/node-graphs/)
 - [Sequence layers](/use/sequence-layers/)
+- [Node graph compositions](/use/node-graphs/)
 - [Keyframes](/use/keyframes/)

@@ -1,0 +1,45 @@
+---
+title: Gain
+description: "Turns a layer's sound up or down, each side on its own, and can flip its polarity."
+---
+
+Gain is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Gain moves both channels together and the two trims move one channel each. At the bottom of
+the Gain row the sound is silent.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Gain** | Slider | -100 to 24 | 0 | - |
+| **Left trim** | Slider | -24 to 24 | 0 | - |
+| **Right trim** | Slider | -24 to 24 | 0 | - |
+| **Invert** | Slider, whole numbers | 0 to 1 | 0 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Gain**: the level of both channels, in dB.
+- **Left trim**: the left channel's level on top of Gain, in dB.
+- **Right trim**: the right channel's level on top of Gain, in dB.
+- **Invert**: 1 flips the polarity of both channels, 0 leaves it.
+
+## Related
+
+- [Stereo width](/effects/audio/stereo-width/)
+- [Limiter](/effects/audio/limiter/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

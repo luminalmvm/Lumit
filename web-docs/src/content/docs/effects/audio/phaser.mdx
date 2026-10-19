@@ -1,0 +1,52 @@
+---
+title: Phaser
+description: "A row of notches swept up and down the sound."
+---
+
+Phaser is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+A chain of all-pass filters swept by an oscillator and mixed with the untouched sound. Two
+stages make one notch.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Stages** | Slider, whole numbers | 1 to 12 | 4 | - |
+| **Rate** | Slider | 0.01 to 10 | 0.5 | - |
+| **Depth** | Slider | 0 to 100 | 70 | Per cent |
+| **Centre** | Slider | 50 to 8000 | 700 | - |
+| **Feedback** | Slider | -95 to 95 | 50 | Per cent |
+| **Stereo phase** | Slider | 0 to 180 | 0 | Degrees |
+| **Wet** | Slider | 0 to 100 | 50 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Stages**: how many all-pass filters the chain holds.
+- **Rate**: cycles a second.
+- **Depth**: how far the sweep travels. At 100 it moves two octaves either side of Centre.
+- **Centre**: the middle of the sweep, in Hz.
+- **Feedback**: how much of the last stage goes back into the first. Below 0 it goes back
+  the other way up.
+- **Stereo phase**: how far the right channel's cycle sits behind the left's.
+- **Wet**: how much of the phased sound is heard. The notches are deepest at 50.
+
+## Related
+
+- [Chorus](/effects/audio/chorus/)
+- [Wah](/effects/audio/wah/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)
