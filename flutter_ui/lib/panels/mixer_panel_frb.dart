@@ -8,8 +8,10 @@
 // and carries the muted LUFS placeholder (loudness measurement is post-v1,
 // docs/09 §8).
 //
-// **The meters animate; nothing else does.** One [AudioMeterFeed] polls the
-// engine's tap and the meter *painters* listen to its frame directly, each
+// **The meters run off the feed.** The rest moves only as the house controls
+// do: a picked strip's fill and a switch's light ease in. One
+// [AudioMeterFeed] polls the engine's tap and the meter *painters* listen to
+// its frame directly, each
 // inside its own RepaintBoundary — a tick repaints the bars and rebuilds no
 // widget at all, which is what keeps the redraw gates green
 // (docs/impl/ui-performance.md WP-2). Everything else draws from the held comp
@@ -18,6 +20,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/audio.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -31,11 +34,13 @@ import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'audio_meters_feed.dart';
 import 'keyframe_controls_frb.dart';
 import 'placeholder.dart';
+import 'timeline_extras_frb.dart' show rowSelectionFill;
 
 /// The fader's floor: the engine's own knee, at or below which the sound is
 /// exactly off (`lumit_audio::mix::VOLUME_FLOOR_DB`).
@@ -97,16 +102,37 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
   /// asked exactly as the Timeline asks it.
   final Map<String, bool> _hasAudio = {};
 
+  /// The layers the panel was opened on, and those added since. A strip for
+  /// one added since comes up into its place; the desk the panel opened on is
+  /// simply there.
+  Set<String>? _opening;
+  final Set<String> _added = {};
+
   @override
   void initState() {
     super.initState();
     if (widget.feed == null) _feed.start();
   }
 
+  /// The strips' own scroll, for the bar under them and the wheel.
+  final ScrollController _strips = ScrollController();
+
   @override
   void dispose() {
     if (widget.feed == null) _feed.dispose();
+    _strips.dispose();
     super.dispose();
+  }
+
+  /// A plain wheel turn carries the strips sideways: the list only runs one
+  /// way, so there is nothing else for it to mean.
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_strips.hasClients) return;
+    final by = event.scrollDelta.dx != 0
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    final p = _strips.position;
+    _strips.jumpTo((p.pixels + by).clamp(0.0, p.maxScrollExtent));
   }
 
   /// Fill in any missing has-audio answers, off the build (the probe opens
@@ -141,6 +167,12 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
         final t = ThemeScope.of(context).theme;
         final layers = ui.model.heldLayers;
         _refreshAudio(layers);
+        final ids = {
+          for (final entry in layers) entry.layer.internallayerId.toString(),
+        };
+        final opening = _opening ??= ids;
+        _added.addAll(ids.difference(opening));
+        final reveal = ThemeScope.of(context).motion;
         final sounding = [
           for (final entry in layers)
             if (_hasAudio[entry.layer.internallayerId.toString()] ?? false)
@@ -163,22 +195,41 @@ class _MixerPanelFrbState extends State<MixerPanelFrb> {
                           ),
                         ),
                       )
-                    : ListView(
+                    // A bar under the strips says there are more than the
+                    // panel shows, and where they are.
+                    : Listener(
+                        onPointerSignal: _wheel,
+                        child: HouseScrollbar(
+                        controller: _strips,
+                        crossAxisMargin: 2,
+                        child: ListView(
+                        controller: _strips,
                         scrollDirection: Axis.horizontal,
                         children: [
                           for (final entry in sounding)
-                            _MixerStrip(
+                            Entrance(
                               key: ValueKey(
-                                  'strip-${entry.layer.internallayerId}'),
-                              comp: comp,
-                              entry: entry,
-                              feed: _feed,
-                              onChanged: () {
-                                ui.model.refresh();
-                                comp.audioPrepare();
-                              },
+                                  'strip-in-${entry.layer.internallayerId}'),
+                              spec: _added.contains(
+                                      entry.layer.internallayerId.toString())
+                                  ? reveal.reveal
+                                  : MotionSpec.still,
+                              rise: reveal.revealRise,
+                              child: _MixerStrip(
+                                key: ValueKey(
+                                    'strip-${entry.layer.internallayerId}'),
+                                comp: comp,
+                                entry: entry,
+                                feed: _feed,
+                                onChanged: () {
+                                  ui.model.refresh();
+                                  comp.audioPrepare();
+                                },
+                              ),
                             ),
                         ],
+                      ),
+                      ),
                       ),
               ),
               _MasterStrip(comp: comp, feed: _feed),
@@ -233,20 +284,41 @@ class _MixerStripState extends State<_MixerStrip> {
     // rebuilds for one.
     final animated = info.volumeDb is! BridgeScalar_Static ||
         info.pan is! BridgeScalar_Static;
+    final ui = Provider.of<LumitUiState>(context, listen: false);
+    final mark = ThemeScope.of(context).motion.mark;
 
-    return Container(
-      width: _stripWidth,
-      decoration: BoxDecoration(
-        border: Border(right: BorderSide(color: t.hairline)),
+    // A press anywhere on the strip picks its layer, on the way down so the
+    // pick lands before the fader or the pot starts its own gesture. The
+    // picked strip wears the Timeline's selection fill.
+    return Listener(
+      onPointerDown: (_) {
+        if (!ui.selectedLayerIds.contains(layer.internallayerId)) {
+          ui.setSelection([layer]);
+        }
+      },
+      child: ValueListenableBuilder<List<LayerReference>>(
+        valueListenable: ui.selectedLayers,
+        builder: (context, picked, child) => AnimatedContainer(
+          duration: mark.duration,
+          curve: mark.curve,
+          width: _stripWidth,
+          decoration: BoxDecoration(
+            color: picked.any((l) => l.internallayerId == layer.internallayerId)
+                ? rowSelectionFill(t)
+                : rowSelectionFill(t).withValues(alpha: 0),
+            border: Border(right: BorderSide(color: t.hairline)),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: child,
+        ),
+        child: !animated
+            ? _body(context, t, info, layer, id, switches, playhead.value)
+            : ValueListenableBuilder<int>(
+                valueListenable: playhead,
+                builder: (context, frame, _) =>
+                    _body(context, t, info, layer, id, switches, frame),
+              ),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: !animated
-          ? _body(context, t, info, layer, id, switches, playhead.value)
-          : ValueListenableBuilder<int>(
-              valueListenable: playhead,
-              builder: (context, frame, _) =>
-                  _body(context, t, info, layer, id, switches, frame),
-            ),
     );
   }
 
@@ -335,7 +407,7 @@ class _MixerStripState extends State<_MixerStrip> {
                       onCommit: (v) => _commitVolume(volume, v, frame),
                       onCancel: () => setState(() => _dragDb = null),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 3),
                     MeterBand(stripId: id, feed: widget.feed),
                   ],
                 ),
@@ -453,7 +525,7 @@ class _MasterStripState extends State<_MasterStrip> {
                   },
                   onCancel: () => setState(() => _dragDb = null),
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(width: 3),
                 MeterBand(stripId: '', feed: widget.feed),
               ],
             ),
@@ -494,9 +566,11 @@ class _LimiterLamp extends StatelessWidget {
           builder: (context, over) => GestureDetector(
             key: const ValueKey('limiter-lamp'),
             onTap: resetAudioClip,
-            child: Container(
+            child: AnimatedContainer(
+              duration: ThemeScope.of(context).motion.mark.duration,
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
+                color: t.error.withValues(alpha: lit ? 0.18 : 0),
                 border: Border.all(color: lit ? t.error : t.hairlineStrong),
                 borderRadius: BorderRadius.circular(2),
               ),
@@ -517,7 +591,7 @@ class _LimiterLamp extends StatelessWidget {
 }
 
 /// One strip's stereo meters: RMS body, peak cap, and the panel's own hold
-/// line, on a −60..0 dB scale.
+/// line, on the fader's scale beside them.
 ///
 /// A [RepaintBoundary] around a [CustomPaint] whose painter repaints off the
 /// feed's frame notifier directly — a meter tick is a repaint of this band
@@ -589,20 +663,34 @@ class MeterPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1,
     );
+    // On the fader's own scale, so the numbers printed beside the rail read
+    // the meter too: a bar level with the 0 mark is at 0 dB.
+    double yOf(double amplitude) {
+      // Under the meter's floor is silence, and draws nothing.
+      final db = amplitudeDb(amplitude);
+      final f = db <= -60 ? 0.0 : _faderFraction(db);
+      return _knobHeight / 2 + (size.height - _knobHeight) * (1 - f);
+    }
+
     // Peak behind, dimmer; RMS in front — the bar's body is what it sounds
     // like, the cap is the loudest instant.
-    final peakTop = size.height * (1 - meterFraction(peak));
-    canvas.drawRect(
-      Rect.fromLTRB(x, peakTop, x + barWidth, size.height),
-      Paint()..color = cap.withValues(alpha: 0.55),
-    );
-    final rmsTop = size.height * (1 - meterFraction(rms));
-    canvas.drawRect(
-      Rect.fromLTRB(x, rmsTop, x + barWidth, size.height),
-      Paint()..color = body,
-    );
-    if (holdValue > 0) {
-      final y = size.height * (1 - meterFraction(holdValue));
+    final floor = yOf(0);
+    final peakTop = yOf(peak);
+    if (peakTop < floor) {
+      canvas.drawRect(
+        Rect.fromLTRB(x, peakTop, x + barWidth, size.height),
+        Paint()..color = cap.withValues(alpha: 0.55),
+      );
+    }
+    final rmsTop = yOf(rms);
+    if (rmsTop < floor) {
+      canvas.drawRect(
+        Rect.fromLTRB(x, rmsTop, x + barWidth, size.height),
+        Paint()..color = body,
+      );
+    }
+    if (yOf(holdValue) < floor) {
+      final y = yOf(holdValue);
       canvas.drawRect(
         Rect.fromLTWH(x, y, barWidth, 1),
         Paint()..color = hold,
@@ -617,9 +705,12 @@ class MeterPainter extends CustomPainter {
       old.stripId != stripId || old.frame != frame || old.body != body;
 }
 
-/// The fader: a vertical drag over a rail. Live values go up to the strip and
-/// the release commits once; double-click returns to unity.
-class _Fader extends StatelessWidget {
+/// The fader: a vertical drag over a rail, with the console's scale printed
+/// beside it. The knob moves by as much as the pointer does, wherever it was
+/// taken hold of, so a press a hair off the knob never jumps the level. Live
+/// values go up to the strip and the release commits once; double-click
+/// returns to unity.
+class _Fader extends StatefulWidget {
   final double db;
   final ValueChanged<double> onLive;
   final ValueChanged<double> onCommit;
@@ -634,28 +725,78 @@ class _Fader extends StatelessWidget {
   });
 
   @override
+  State<_Fader> createState() => _FaderState();
+}
+
+/// The marks the scale prints, as a console's are: no minus signs, the floor
+/// left to the rail's own foot.
+const List<(double, String)> _faderScale = [
+  (6, '6'),
+  (0, '0'),
+  (-10, '10'),
+  (-20, '20'),
+  (-40, '40'),
+];
+
+/// How tall the knob is drawn.
+const double _knobHeight = 7;
+
+class _FaderState extends State<_Fader> with TickerProviderStateMixin {
+  late final HoverGlow _glow = HoverGlow(this, () => setState(() {}));
+  double _from = 0;
+  double _travel = 0;
+
+  @override
+  void dispose() {
+    _glow.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    final motion = scope.motion;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final height = constraints.maxHeight;
-        double dbAt(Offset local) =>
-            _faderDb(1 - (local.dy / height).clamp(0.0, 1.0));
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onVerticalDragUpdate: (d) => onLive(dbAt(d.localPosition)),
-          // The strip fed [db] every live tick, so what is showing is what
-          // the release commits.
-          onVerticalDragEnd: (_) => onCommit(db),
-          onVerticalDragCancel: onCancel,
-          onDoubleTap: () => onCommit(0.0),
-          child: SizedBox(
-            width: 13,
-            child: CustomPaint(
-              painter: _FaderPainter(
-                fraction: _faderFraction(db),
-                rail: t.surface3,
-                knob: t.textSecondary,
+        final throw_ = math.max(1.0, constraints.maxHeight - _knobHeight);
+        return MouseRegion(
+          cursor: SystemMouseCursors.resizeUpDown,
+          onEnter: (_) => _glow.mark(motion, over: true),
+          onExit: (_) => _glow.mark(motion, over: false),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragStart: (_) {
+              _from = _faderFraction(widget.db);
+              _travel = 0;
+              _glow.mark(motion, held: true);
+            },
+            onVerticalDragUpdate: (d) {
+              _travel += d.delta.dy;
+              widget.onLive(_faderDb(_from - _travel / throw_));
+            },
+            // The strip fed [db] every live tick, so what is showing is what
+            // the release commits.
+            onVerticalDragEnd: (_) {
+              _glow.mark(motion, held: false);
+              widget.onCommit(widget.db);
+            },
+            onVerticalDragCancel: () {
+              _glow.mark(motion, held: false);
+              widget.onCancel();
+            },
+            onDoubleTap: () => widget.onCommit(0.0),
+            child: SizedBox(
+              width: 26,
+              child: CustomPaint(
+                painter: _FaderPainter(
+                  fraction: _faderFraction(widget.db),
+                  rail: t.surface3,
+                  knob: Color.lerp(
+                      t.textSecondary, t.textPrimary, _glow.light)!,
+                  tick: t.textMuted,
+                  label: t.mono.copyWith(fontSize: 7, color: t.textMuted),
+                ),
               ),
             ),
           ),
@@ -667,31 +808,63 @@ class _Fader extends StatelessWidget {
 
 class _FaderPainter extends CustomPainter {
   final double fraction;
-  final Color rail, knob;
+  final Color rail, knob, tick;
+  final TextStyle label;
 
   const _FaderPainter({
     required this.fraction,
     required this.rail,
     required this.knob,
+    required this.tick,
+    required this.label,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final x = size.width / 2;
+    // The rail stands at the right of the box, the scale's words to its left.
+    final x = size.width - 7;
+    final travel = size.height - _knobHeight;
+    double yOf(double f) => _knobHeight / 2 + travel * (1 - f);
     canvas.drawRect(
       Rect.fromLTWH(x - 1.5, 0, 3, size.height),
       Paint()..color = rail,
     );
-    final y = (size.height - 5) * (1 - fraction);
-    canvas.drawRect(
-      Rect.fromLTWH(x - 5.5, y, 11, 5),
+    for (final (db, text) in _faderScale) {
+      final y = yOf(_faderFraction(db));
+      // Unity is the one a hand looks for, so its mark is the longer.
+      final unity = db == 0;
+      canvas.drawRect(
+        Rect.fromLTWH(x - (unity ? 7 : 5), y - 0.5, unity ? 4 : 2, 1),
+        Paint()..color = tick,
+      );
+      final words = TextPainter(
+        text: TextSpan(text: text, style: label),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      words.paint(
+          canvas, Offset(x - 9 - words.width, y - words.height / 2));
+    }
+    final y = yOf(fraction);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(x - 6.5, y - _knobHeight / 2, 13, _knobHeight),
+        const Radius.circular(1),
+      ),
       Paint()..color = knob,
+    );
+    // The knob's own line, which is where the level reads.
+    canvas.drawRect(
+      Rect.fromLTWH(x - 4.5, y - 0.5, 9, 1),
+      Paint()..color = rail,
     );
   }
 
   @override
   bool shouldRepaint(_FaderPainter old) =>
-      old.fraction != fraction || old.knob != knob;
+      old.fraction != fraction ||
+      old.knob != knob ||
+      old.rail != rail ||
+      old.tick != tick;
 }
 
 /// The pan pot: a small dial, −100 full left through centre to +100 full
@@ -718,7 +891,9 @@ class PanPot extends StatelessWidget {
     var live = value;
     return LumitTooltip(
       message: panLabel(value),
-      child: GestureDetector(
+      child: HoverMark(
+        cursor: SystemMouseCursors.resizeUpDown,
+        builder: (context, lit) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onVerticalDragUpdate: (d) {
           live = (live - d.delta.dy * 2).clamp(-100.0, 100.0);
@@ -733,10 +908,11 @@ class PanPot extends StatelessWidget {
           child: CustomPaint(
             painter: _PotPainter(
               fraction: (value + 100) / 200,
-              ring: t.hairlineStrong,
-              mark: t.textSecondary,
+              ring: Color.lerp(t.hairlineStrong, t.textSecondary, lit)!,
+              mark: Color.lerp(t.textSecondary, t.textPrimary, lit)!,
             ),
           ),
+        ),
         ),
       ),
     );
@@ -788,7 +964,7 @@ class _PotPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_PotPainter old) =>
-      old.fraction != fraction || old.mark != mark;
+      old.fraction != fraction || old.mark != mark || old.ring != ring;
 }
 
 /// The dB well under a fader.
@@ -836,7 +1012,10 @@ class _SwitchGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
+    // A strip that sounds is the usual case and draws quietly; a muted one is
+    // the one to notice, so it takes the warning colour.
     return LumitTooltip(
       message: tip,
       child: HoverMark(
@@ -844,11 +1023,15 @@ class _SwitchGlyph extends StatelessWidget {
           key: ValueKey(keyName),
           onTap: onTap,
           behavior: HitTestBehavior.opaque,
-          child: glyph.LumitIcon(
-            mark,
-            size: 12,
-            colour:
-                on ? t.warning : Color.lerp(t.textMuted, t.textPrimary, lit),
+          child: TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: on ? t.textMuted : t.warning),
+            duration: scope.motion.mark.duration,
+            curve: scope.motion.mark.curve,
+            builder: (context, ink, _) => glyph.LumitIcon(
+              mark,
+              size: 12,
+              colour: Color.lerp(ink, t.textPrimary, on ? lit : 0),
+            ),
           ),
         ),
       ),
@@ -865,7 +1048,8 @@ class _SoloChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = ThemeScope.of(context).theme;
+    final scope = ThemeScope.of(context);
+    final t = scope.theme;
     return LumitTooltip(
       message: on ? l10n.switchSoloed : l10n.switchSolo,
       child: HoverMark(
@@ -873,9 +1057,14 @@ class _SoloChip extends StatelessWidget {
           key: ValueKey(keyName),
           onTap: onTap,
           behavior: HitTestBehavior.opaque,
-          child: Container(
+          child: AnimatedContainer(
+            duration: scope.motion.mark.duration,
+            curve: scope.motion.mark.curve,
             padding: const EdgeInsets.symmetric(horizontal: 4),
             decoration: BoxDecoration(
+              color: on
+                  ? t.accent.withValues(alpha: 0.25)
+                  : t.accent.withValues(alpha: 0),
               border: Border.all(color: on ? t.accent : t.hairlineStrong),
               borderRadius: BorderRadius.circular(2),
             ),

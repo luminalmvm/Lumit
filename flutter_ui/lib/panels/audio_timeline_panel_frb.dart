@@ -64,9 +64,16 @@ import 'easing_curve.dart' show EasingCurve;
 import 'effect_controls_panel_frb.dart' show showAddEffectMenu;
 import 'graph_channels.dart' show GraphChannel, graphChannels;
 import 'graph_clipboard.dart'
-    show copySelectedKeys, graphKeyClipboard, pasteKeysAtPlayhead;
-import 'graph_edits.dart' show applyEasingToSelection;
-import 'graph_maths.dart' show rationalSeconds;
+    show
+        copySelectedEase,
+        copySelectedKeys,
+        easeClipboard,
+        graphKeyClipboard,
+        pasteEaseOnSelection,
+        pasteKeysAtPlayhead;
+import 'graph_edits.dart'
+    show applyEasingToSelection, applyInterpToSelection, deleteKeysFromChannels;
+import 'graph_maths.dart' show easyEase, rationalSeconds;
 import 'key_block.dart' show KeyStretch;
 import 'layer_fold_frb.dart';
 import '../state/share.dart';
@@ -516,11 +523,14 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// took over before its own, so a claim held from before must stand down.
   bool get _keysAreOurs => _ui?.activePanel == Panel.audioTimeline;
 
-  /// Delete: the picked clip.
+  /// Delete: the picked keyframes, or else the picked clip. Keys first, as
+  /// they sit on the clip and picking one must not cost the clip.
   bool _deleteClaim() {
     final picked = _selectedClip;
     final ui = _ui;
-    if (!mounted || ui == null || picked == null || !_keysAreOurs) return false;
+    if (!mounted || ui == null || !_keysAreOurs) return false;
+    if (_laneKeys.value.isNotEmpty && _deleteKeys()) return true;
+    if (picked == null) return false;
     for (final track in _lastTracks) {
       if (track.id != picked.track) continue;
       for (final clip in track.entry.info.clips) {
@@ -603,6 +613,83 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       if (pasted && mounted) _afterWrite();
     });
     return true;
+  }
+
+  /// Delete the picked keyframes, as one undo step.
+  bool _deleteKeys() {
+    final ui = _ui;
+    if (!mounted || ui == null) return false;
+    final channels = _keyChannels(ui);
+    final selection = _keysOnChannels(channels);
+    if (selection.isEmpty) return false;
+    asOneUndoStep(
+      Provider.of<LumitState>(context, listen: false).project,
+      () => deleteKeysFromChannels(channels: channels, selectedKeys: selection),
+    );
+    _laneKeys.value = {};
+    _afterWrite();
+    return true;
+  }
+
+  /// Linear, Easy ease or Hold on both sides of every picked keyframe.
+  void _applyInterp(BridgeSideInterp side) {
+    final ui = _ui;
+    if (!mounted || ui == null) return;
+    final channels = _keyChannels(ui);
+    final selection = _keysOnChannels(channels);
+    if (selection.isEmpty) return;
+    applyInterpToSelection(
+        channels: channels, selectedKeys: selection, side: side);
+    _afterWrite();
+  }
+
+  /// The right-click menu on a lane keyframe, the layer Timeline's own rows
+  /// less the ease editor, which wants the graph view this panel does not
+  /// have. A key that is not picked is picked first, so the menu acts on what
+  /// was clicked, and on a picked one it acts on all of them.
+  void _keyMenu(String id, Offset position) {
+    if (!_laneKeys.value.contains(id)) _selectKey(id, false);
+    final ui = _ui;
+    if (ui == null) return;
+    Widget row(String key, String label, VoidCallback act,
+            void Function(Object?) close) =>
+        MenuRow(
+          key: ValueKey<String>('atl-key-menu-$key'),
+          onPressed: () {
+            close(null);
+            act();
+          },
+          child: Text(label),
+        );
+    showMenuAt<void>(
+      context: context,
+      position: position,
+      width: 170,
+      rows: (close) => [
+        row('linear', l10n.easeLinear,
+            () => _applyInterp(const BridgeSideInterp.linear()), close),
+        row('ease', l10n.easeEasy, () => _applyInterp(easyEase), close),
+        row('hold', l10n.easeHold,
+            () => _applyInterp(const BridgeSideInterp.hold()), close),
+        row('copy-ease', l10n.keyMenuCopyEase, () {
+          final channels = _keyChannels(ui);
+          copySelectedEase(
+              channels: channels, selectedKeys: _keysOnChannels(channels));
+        }, close),
+        if (easeClipboard.isNotEmpty)
+          row('paste-ease', l10n.keyMenuPasteEase, () {
+            final channels = _keyChannels(ui);
+            if (pasteEaseOnSelection(
+              project: Provider.of<LumitState>(context, listen: false).project,
+              channels: channels,
+              selectedKeys: _keysOnChannels(channels),
+            )) {
+              _afterWrite();
+            }
+          }, close),
+        row('delete', l10n.deleteKey, _deleteKeys, close),
+      ],
+    );
   }
 
   /// A shape sent from the Easing panel, onto every span the picked keyframes
@@ -1114,7 +1201,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                 await _dropFootage(comp, footage, details.offset);
               }
             },
-            builder: (context, candidate, _) => Container(
+            builder: (context, candidate, _) => AnimatedContainer(
+              duration: scope.motion.dropZone.duration,
+              curve: scope.motion.dropZone.curve,
               // A live outline while something is over it, so the drop is
               // visibly going to land rather than being taken on faith.
               // Always a decoration, clear until then: adding one only
@@ -1462,6 +1551,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               onChanged: _afterWrite,
               onResize: (dy) => _resizeTrack(track, dy),
               onResizeStart: () => _rowCarry = 0,
+              onResizeReset: () =>
+                  setState(() => _trackRows.remove(track.id)),
             ),
           );
     return Column(
@@ -1478,6 +1569,14 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                   TheirBar([for (final c in onTrack) t.personColour(c)]),
               child: head,
             ),
+          // What the twirl opens comes up into place, as an Effect controls
+          // section does; the lane half plays the same entrance beside it.
+          OpenReveal(
+            key: ValueKey<String>('atl-open-${track.id}'),
+            open: track.drawnRows.isNotEmpty,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
           for (final row in track.drawnRows)
             FoldRow(
               key: ValueKey<String>('atl-prop-${foldRowPath(track.id, row)}'),
@@ -1511,6 +1610,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                   ? (at) => _addTrackEffect(track, at)
                   : null,
             ),
+              ],
+            ),
+          ),
         ],
       );
   }
@@ -2267,6 +2369,18 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               ),
             ],
           ),
+          // A comp with nothing to hear says so, rather than leaving an empty
+          // table to be puzzled over.
+          if (tracks.isEmpty && _search.trim().isEmpty)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Center(
+                  child: Text(l10n.mixerNoSound,
+                      key: const ValueKey<String>('atl-empty'),
+                      style: t.small),
+                ),
+              ),
+            ),
           // Each marker's line, from the ruler down through every track.
           MarkerLinesGround(comp: comp, axis: axis, hScroll: _hLane),
           // The playhead rides above every lane, and it is the only thing here
@@ -2356,16 +2470,25 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
                     razor: razor,
                     razorFrameAt: razorFrameAt)),
           ),
-          for (final row in track.drawnRows)
-            SizedBox(
-              height: track.rowHeight,
-              child: _foldLane(ui, track, row,
-                  axis: axis,
-                  snap: snap,
-                  fps: fps,
-                  fpsNum: fpsNum,
-                  fpsDen: fpsDen),
+          OpenReveal(
+            key: ValueKey<String>('atl-lane-open-${track.id}'),
+            open: track.drawnRows.isNotEmpty,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final row in track.drawnRows)
+                  SizedBox(
+                    height: track.rowHeight,
+                    child: _foldLane(ui, track, row,
+                        axis: axis,
+                        snap: snap,
+                        fps: fps,
+                        fpsNum: fpsNum,
+                        fpsDen: fpsDen),
+                  ),
+              ],
             ),
+          ),
         ],
       );
 
@@ -2412,8 +2535,13 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
       razor: razor,
       onRazor: (frame) => _razorCut(track.entry, frame),
       razorFrameAt: razorFrameAt,
-      onSelect: (clip) => setState(
-          () => _selectedClip = (track: track.id, clip: clip.id.toString())),
+      // Picking a clip picks its track too, as a bar picks its layer in the
+      // Timeline, so the Mixer and the Audio panel follow it.
+      onSelect: (clip) {
+        setState(() =>
+            _selectedClip = (track: track.id, clip: clip.id.toString()));
+        _ui?.setSelection([track.entry.layer]);
+      },
       onMenu: (clip, at) => _clipMenu(track, clip, at),
       onFadeMenu: (clip, into, at) => _fadeMenu(track, clip, into, at),
       onCommit: (edit) => _commitClipEdit(track, edit),
@@ -2441,8 +2569,45 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
     // in, and the source's own clock runs from there less wherever the layer
     // starts it.
     final origin = -startOffset - TimelineAxis.pad * secondsPerPixel;
+    final label = t.labelColour(info.label);
     return Stack(
       children: [
+        // The bar itself, boxed as a clip is: an uncut track is a track of
+        // one clip, and should look like one before its first cut as after.
+        Positioned(
+          key: ValueKey<String>('atl-bar-${track.id}'),
+          left: left,
+          width: max(0.0, right - left),
+          top: 2,
+          bottom: 2,
+          child: IgnorePointer(
+            child: ValueListenableBuilder<List<LayerReference>>(
+              valueListenable: _ui!.selectedLayers,
+              builder: (context, picked, _) {
+                final on = picked.any((l) =>
+                    l.internallayerId == track.entry.layer.internallayerId);
+                final mark = ThemeScope.of(context).motion.mark;
+                return AnimatedContainer(
+                  duration: mark.duration,
+                  curve: mark.curve,
+                  decoration: BoxDecoration(
+                    color: label.withValues(
+                        alpha: on ? clipFillSelectedAlpha : clipFillAlpha),
+                    border: Border.all(
+                        color: on
+                            ? (t.shape == ThemeShape.desk
+                                ? t.accent
+                                : t.textPrimary)
+                            : t.surface0),
+                    borderRadius: BorderRadius.circular(clipRadius(t)),
+                  ),
+                  alignment: Alignment.centerLeft,
+                  child: Container(width: clipEdgeWidth, color: label),
+                );
+              },
+            ),
+          ),
+        ),
         if (_modeOf(track.id) == LaneMode.spectral)
           RepaintBoundary(
             key: ValueKey<String>('atl-spectral-${track.id}'),
@@ -2483,8 +2648,8 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         // there is no one number to say.
         if (_levelOf(info.volumeDb) case final reading?)
           Positioned(
-            right: 6,
-            top: 2,
+            right: 8,
+            bottom: 4,
             child: Text(reading,
                 style: t.mono.copyWith(fontSize: 8, color: t.textMuted)),
           ),
@@ -2496,7 +2661,9 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   }
 
   /// The track's level as a readout, or null while it is keyed.
+  /// Unity says nothing, so it is left off the lane.
   String? _levelOf(BridgeScalar scalar) => switch (scalar) {
+        BridgeScalar_Static(:final field0) when field0.abs() < 0.05 => null,
         BridgeScalar_Static(:final field0) => field0 <= volumeBandFloorDb
             ? l10n.volumeNegInf
             : '${field0.toStringAsFixed(1)} dB',
@@ -2548,11 +2715,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
         snapTargets: snap,
         selectedKeys: selected,
         stretch: _keyStretch,
-        // ponytail: no key menu here, so a right click on a diamond does
-        // nothing. The ceiling is the interpolation rows and Delete key the
-        // Timeline's menu offers; the upgrade is lifting that menu out of
-        // timeline_panel_frb.dart, which is where its five commands live.
-        onKeyMenu: (index, position) {},
+        onKeyMenu: (index, position) => _keyMenu('$rowId#$index', position),
         onSelectKey: (index, additive) => _selectKey('$rowId#$index', additive),
         onMoveKeys: (moved) =>
             _moveHeldKeys(moved, _lastTracks, fps, fpsNum, fpsDen),

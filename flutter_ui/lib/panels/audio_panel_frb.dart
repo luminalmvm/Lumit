@@ -32,12 +32,73 @@ import '../state/app_state.dart';
 import '../state/beats_notice.dart';
 import '../state/comp_time.dart';
 import '../state/ui_state.dart';
+import '../theme/motion.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'audio_meters_feed.dart';
+import 'graph_maths.dart' show rationalSeconds;
 import 'keyframe_controls_frb.dart';
+import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'mixer_panel_frb.dart' show PanPot, panLabel;
 import 'placeholder.dart';
+
+/// The fade commands' silence, the engine's own floor
+/// (`lumit_audio::mix::VOLUME_FLOOR_DB`).
+const double _fadeFloorDb = -100;
+
+/// A fade the fade commands wrote at one end of a layer: the index of its
+/// first key, how long it runs, its shape, and the level it rises to.
+typedef AudioFade = ({
+  int first,
+  double seconds,
+  BridgeFadeShape shape,
+  double level,
+});
+
+/// The fade at the layer's in point ([rising]) or out point, read off its
+/// Volume keys, or null when that end has none.
+///
+/// A fade is two neighbouring keys, silence on the edge and the level on the
+/// inside, which is all the fade commands write. The shape is read back from
+/// the two sides they set: straight at both ends is Linear, eased only at the
+/// loud end is Exponential, and anything else Ease. [slack] is how far from
+/// the edge the silent key may sit, since the edge is read in whole frames.
+AudioFade? audioFadeOf(
+  BridgeScalar volume, {
+  required double edgeSeconds,
+  required bool rising,
+  required double slack,
+}) {
+  if (volume is! BridgeScalar_Keyframed) return null;
+  final keys = volume.field0;
+  for (var i = 0; i + 1 < keys.length; i++) {
+    final quiet = rising ? keys[i] : keys[i + 1];
+    final loud = rising ? keys[i + 1] : keys[i];
+    if ((rationalSeconds(quiet.time) - edgeSeconds).abs() > slack) continue;
+    if (quiet.value > _fadeFloorDb + 0.1 || loud.value <= quiet.value) {
+      continue;
+    }
+    final quietStraight = (rising ? quiet.interpOut : quiet.interpIn)
+        is BridgeSideInterp_Linear;
+    final loudStraight =
+        (rising ? loud.interpIn : loud.interpOut) is BridgeSideInterp_Linear;
+    return (
+      first: i,
+      seconds:
+          (rationalSeconds(keys[i + 1].time) - rationalSeconds(keys[i].time))
+              .abs(),
+      shape: quietStraight
+          ? (loudStraight ? BridgeFadeShape.linear : BridgeFadeShape.exponential)
+          : BridgeFadeShape.ease,
+      level: loud.value,
+    );
+  }
+  return null;
+}
+
+/// The panel's two columns: the words, then the well each row edits.
+const double audioLabelWidth = 74;
+const double audioValueWidth = 72;
 
 /// What the Range dropdown offers (docs/09 §5): the whole comp, or only the
 /// work area.
@@ -79,10 +140,16 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   /// Which layers can make a sound, probed once and remembered.
   final Map<String, bool> _hasAudio = {};
 
+  /// Whether the panel has been on screen a frame. The selected layer's rows
+  /// come up into place when the pick changes, and are simply there when the
+  /// panel itself arrives.
+  bool _settled = false;
+
   @override
   void initState() {
     super.initState();
     if (widget.feed == null) _feed.start();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _settled = true);
   }
 
   @override
@@ -135,7 +202,13 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
               _section(t, l10n.audioSectionBeats),
               _beats(context, t, ui, comp, sounding),
               _hair(t),
-              _selectedLayer(context, t, ui, comp),
+              // The pick is its own notifier: the model does not move when
+              // a layer is picked, so this listens to it directly.
+              ValueListenableBuilder<List<LayerReference>>(
+                valueListenable: ui.selectedLayers,
+                builder: (context, _, __) =>
+                    _selectedLayer(context, t, ui, comp),
+              ),
             ],
           ),
         );
@@ -151,8 +224,14 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
   Widget _hair(LumitTheme t) => Container(height: 1, color: t.hairline);
 
   Widget _label(LumitTheme t, String text) => SizedBox(
-        width: 74,
+        width: audioLabelWidth,
         child: Text(text, style: t.body.copyWith(color: t.textMuted)),
+      );
+
+  /// A dropdown sized to what it says, standing at the start of the value
+  /// column rather than stretched across the panel with its words centred.
+  Widget _dropdown(Widget dropdown) => Flexible(
+        child: Align(alignment: Alignment.centerLeft, child: dropdown),
       );
 
   // --- Beats -------------------------------------------------------------
@@ -182,8 +261,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
         children: [
           Row(children: [
             _label(t, l10n.beatsSource),
-            Expanded(
-              child: BareDropdown<String>(
+            _dropdown(
+              BareDropdown<String>(
                 key: const ValueKey('beats-source'),
                 value: _source,
                 options: [
@@ -216,8 +295,8 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
           const SizedBox(height: 6),
           Row(children: [
             _label(t, l10n.beatsRange),
-            Expanded(
-              child: BareDropdown<BeatRange>(
+            _dropdown(
+              BareDropdown<BeatRange>(
                 key: const ValueKey('beats-range'),
                 value: _range,
                 options: BeatRange.values,
@@ -233,7 +312,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
           Row(children: [
             _label(t, l10n.beatsMinSpacing),
             SizedBox(
-              width: 64,
+              width: audioValueWidth,
               child: DragValueField(
                 key: const ValueKey('beats-spacing'),
                 value: _minSpacingMs.toDouble(),
@@ -254,19 +333,21 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _label(t, l10n.beatsBpm),
-              SizedBox(
-                width: 64,
-                child: DragValueField(
-                  key: const ValueKey('beats-bpm'),
-                  value: bpmShown,
-                  min: 0,
-                  max: 300,
-                  decimals: 2,
-                  onChanged: (v) =>
-                      setState(() => _bpmOverride = v.toDouble().clamp(0, 300)),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                _label(t, l10n.beatsBpm),
+                SizedBox(
+                  width: audioValueWidth,
+                  child: DragValueField(
+                    key: const ValueKey('beats-bpm'),
+                    value: bpmShown,
+                    min: 0,
+                    max: 300,
+                    decimals: 2,
+                    onChanged: (v) => setState(
+                        () => _bpmOverride = v.toDouble().clamp(0, 300)),
+                  ),
                 ),
-              ),
+              ]),
               HouseButton(
                 key: const ValueKey('beats-tap'),
                 small: true,
@@ -277,7 +358,17 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
               // milliseconds a press — under half a frame at 60.
               _phaseChip(t, '‹', -10),
               _phaseChip(t, '›', 10),
-              if (_bpmOverride > 0) Text(l10n.beatsGridOn, style: t.caption),
+              // Where the nudges have put the grid, so a press is seen to do
+              // something before Generate is run again.
+              if (_phaseMs != 0)
+                Text(
+                    '${_phaseMs > 0 ? '+' : ''}${_phaseMs.round()} ms',
+                    key: const ValueKey('beats-phase'),
+                    style: t.caption),
+              if (_bpmOverride > 0)
+                Text(l10n.beatsGridOn, style: t.caption)
+              else if (bpmShown == 0)
+                Text(l10n.beatsBpmAuto, style: t.caption),
             ],
           ),
           const SizedBox(height: 8),
@@ -424,7 +515,13 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
             child: Text(l10n.selectALayer, style: t.small),
           )
         else
-          _SelectedLayerBlock(
+          Entrance(
+            key: ValueKey('audio-selected-in-${entry.layer.internallayerId}'),
+            spec: _settled
+                ? ThemeScope.of(context).motion.reveal
+                : MotionSpec.still,
+            rise: ThemeScope.of(context).motion.revealRise,
+            child: _SelectedLayerBlock(
             key: ValueKey('audio-selected-${entry.layer.internallayerId}'),
             comp: comp,
             entry: entry,
@@ -436,6 +533,7 @@ class _AudioPanelFrbState extends State<AudioPanelFrb> {
               ui.model.refresh();
               comp.audioPrepare();
             },
+          ),
           ),
       ],
     );
@@ -489,14 +587,16 @@ class _LevelsBlock extends StatelessWidget {
                   builder: (context, over) => GestureDetector(
                     key: const ValueKey('audio-clip-lamp'),
                     onTap: resetAudioClip,
-                    child: Container(
+                    child: AnimatedContainer(
+                      duration: ThemeScope.of(context).motion.mark.duration,
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
                         color: Color.lerp(lit ? t.error : t.surface2,
                             t.textPrimary, 0.35 * over),
-                        border: Border.all(color: t.hairlineStrong),
-                        borderRadius: BorderRadius.circular(1),
+                        border: Border.all(
+                            color: lit ? t.error : t.hairlineStrong),
+                        shape: BoxShape.circle,
                       ),
                     ),
                   ),
@@ -607,11 +707,10 @@ class _SelectedLayerBlock extends StatefulWidget {
 }
 
 class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
-  /// The fade wells' seconds — panel state until a commit writes the keys.
+  /// How long a fade is made when the layer has none at that end yet. Where it
+  /// has one, the wells read the fade itself.
   double _fadeInSeconds = 0.5;
   double _fadeOutSeconds = 0.5;
-  BridgeFadeShape _fadeInShape = BridgeFadeShape.ease;
-  BridgeFadeShape _fadeOutShape = BridgeFadeShape.ease;
 
   /// The pot's live reading while it is being turned, or null at rest — the
   /// Mixer strip's own shape: the drag shows here and commits once on release.
@@ -636,6 +735,22 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
             (pan is BridgeScalar_Static
                 ? pan.field0
                 : sampledScalar(pan, timeOfFrame(widget.comp, frame)));
+        // The fades the layer already has, read off its Volume keys, so the
+        // wells and chips say what is there rather than what was last typed.
+        final fps = ui.model.fps;
+        final slack = fps > 0 ? 0.5 / fps + 0.002 : 0.002;
+        final fadeIn = fps <= 0
+            ? null
+            : audioFadeOf(volume,
+                edgeSeconds: info.inFrame.toInt() / fps,
+                rising: true,
+                slack: slack);
+        final fadeOut = fps <= 0
+            ? null
+            : audioFadeOf(volume,
+                edgeSeconds: info.outFrame.toInt() / fps,
+                rising: false,
+                slack: slack);
         return Padding(
           padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
           child: Column(
@@ -651,23 +766,13 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                KeyframeControlsFrb(
-                  scalars: [volume],
-                  comp: widget.comp,
-                  onSeek: ui.scrubTo,
-                  rowKey: 'audio-volume',
-                  onWrite: (next) {
-                    layer.setVolumeDb(value: next.single);
-                    widget.onChanged();
-                  },
-                ),
                 SizedBox(
-                  width: 56,
+                  width: audioLabelWidth,
                   child: Text(l10n.volume,
                       style: t.body.copyWith(color: t.textMuted)),
                 ),
                 SizedBox(
-                  width: 72,
+                  width: audioValueWidth,
                   child: DragValueField(
                     key: const ValueKey('audio-volume-db'),
                     value: volumeValue,
@@ -680,39 +785,30 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                         _commitVolume(volume, v.toDouble(), frame),
                   ),
                 ),
+                const SizedBox(width: 6),
+                KeyframeControlsFrb(
+                  scalars: [volume],
+                  comp: widget.comp,
+                  onSeek: ui.scrubTo,
+                  rowKey: 'audio-volume',
+                  onWrite: (next) {
+                    layer.setVolumeDb(value: next.single);
+                    widget.onChanged();
+                  },
+                ),
               ]),
               const SizedBox(height: 6),
               Wrap(
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                KeyframeControlsFrb(
-                  scalars: [pan],
-                  comp: widget.comp,
-                  onSeek: ui.scrubTo,
-                  rowKey: 'audio-pan',
-                  onWrite: (next) {
-                    layer.setPan(value: next.single);
-                    widget.onChanged();
-                  },
-                ),
                 SizedBox(
-                  width: 56,
+                  width: audioLabelWidth,
                   child: Text(l10n.audioPan,
                       style: t.body.copyWith(color: t.textMuted)),
                 ),
-                // The board's own dial beside the value well — the Mixer
-                // strip's pot, turning the same way.
-                PanPot(
-                  key: const ValueKey('audio-pan-pot'),
-                  value: panValue,
-                  onLive: (v) => setState(() => _dragPan = v),
-                  onCommit: (v) => _commitPan(pan, v, frame),
-                  onCancel: () => setState(() => _dragPan = null),
-                ),
-                const SizedBox(width: 6),
                 SizedBox(
-                  width: 72,
+                  width: audioValueWidth,
                   child: DragValueField(
                     key: const ValueKey('audio-pan-value'),
                     value: panValue,
@@ -724,6 +820,28 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                   ),
                 ),
                 const SizedBox(width: 6),
+                // The stopwatch first, so it stands under Volume's.
+                KeyframeControlsFrb(
+                  scalars: [pan],
+                  comp: widget.comp,
+                  onSeek: ui.scrubTo,
+                  rowKey: 'audio-pan',
+                  onWrite: (next) {
+                    layer.setPan(value: next.single);
+                    widget.onChanged();
+                  },
+                ),
+                const SizedBox(width: 6),
+                // The board's own dial beside the value well — the Mixer
+                // strip's pot, turning the same way.
+                PanPot(
+                  key: const ValueKey('audio-pan-pot'),
+                  value: panValue,
+                  onLive: (v) => setState(() => _dragPan = v),
+                  onCommit: (v) => _commitPan(pan, v, frame),
+                  onCancel: () => setState(() => _dragPan = null),
+                ),
+                const SizedBox(width: 6),
                 Text(panLabel(panValue), style: t.caption),
               ]),
               const SizedBox(height: 6),
@@ -731,28 +849,20 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
                 t,
                 key: 'fade-in',
                 label: l10n.audioFadeIn,
-                seconds: _fadeInSeconds,
-                shape: _fadeInShape,
-                onSeconds: (v) => setState(() => _fadeInSeconds = v),
-                onShape: (s) => setState(() => _fadeInShape = s),
-                apply: () {
-                  layer.fadeIn(seconds: _fadeInSeconds, shape: _fadeInShape);
-                  widget.onChanged();
-                },
+                rising: true,
+                fade: fadeIn,
+                seconds: fadeIn?.seconds ?? _fadeInSeconds,
+                onDefault: (v) => _fadeInSeconds = v,
               ),
               const SizedBox(height: 6),
               _fadeRow(
                 t,
                 key: 'fade-out',
                 label: l10n.audioFadeOut,
-                seconds: _fadeOutSeconds,
-                shape: _fadeOutShape,
-                onSeconds: (v) => setState(() => _fadeOutSeconds = v),
-                onShape: (s) => setState(() => _fadeOutShape = s),
-                apply: () {
-                  layer.fadeOut(seconds: _fadeOutSeconds, shape: _fadeOutShape);
-                  widget.onChanged();
-                },
+                rising: false,
+                fade: fadeOut,
+                seconds: fadeOut?.seconds ?? _fadeOutSeconds,
+                onDefault: (v) => _fadeOutSeconds = v,
               ),
               const SizedBox(height: 10),
               ],
@@ -777,27 +887,28 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
     );
   }
 
-  /// A fade well and its three curve chips: the well holds the
-  /// length, a chip picks the shape, and either commits the keyframe pair
-  /// there and then — running it again reshapes the same fade.
+  /// A fade well and its three curve chips. The well holds the length and a
+  /// chip the shape, and either writes the fade there and then. A chip is lit
+  /// only while the layer has a fade at that end, and a length of 0 takes the
+  /// fade away.
   Widget _fadeRow(
     LumitTheme t, {
     required String key,
     required String label,
+    required bool rising,
+    required AudioFade? fade,
     required double seconds,
-    required BridgeFadeShape shape,
-    required ValueChanged<double> onSeconds,
-    required ValueChanged<BridgeFadeShape> onShape,
-    required VoidCallback apply,
+    required ValueChanged<double> onDefault,
   }) {
+    final shape = fade?.shape;
     Widget chip(String text, BridgeFadeShape option) => HoverMark(
           builder: (context, lit) => GestureDetector(
             key: ValueKey('$key-${option.name}'),
-            onTap: () {
-              onShape(option);
-              apply();
-            },
-            child: Container(
+            onTap: () => _writeFade(
+                rising: rising, fade: fade, seconds: seconds, shape: option),
+            child: AnimatedContainer(
+              duration: ThemeScope.of(context).motion.mark.duration,
+              curve: ThemeScope.of(context).motion.mark.curve,
               margin: const EdgeInsets.only(left: 4),
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
@@ -823,11 +934,11 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         SizedBox(
-          width: 74,
+          width: audioLabelWidth,
           child: Text(label, style: t.body.copyWith(color: t.textMuted)),
         ),
         SizedBox(
-          width: 64,
+          width: audioValueWidth,
           child: DragValueField(
             key: ValueKey('$key-seconds'),
             value: seconds,
@@ -837,8 +948,12 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
             suffix: ' s',
             speed: 0.02,
             onChanged: (v) {
-              onSeconds(v.toDouble());
-              apply();
+              if (fade == null && v > 0) onDefault(v.toDouble());
+              _writeFade(
+                  rising: rising,
+                  fade: fade,
+                  seconds: v.toDouble(),
+                  shape: shape ?? BridgeFadeShape.ease);
             },
           ),
         ),
@@ -847,6 +962,39 @@ class _SelectedLayerBlockState extends State<_SelectedLayerBlock> {
         chip(l10n.fadeShapeExponential, BridgeFadeShape.exponential),
       ],
     );
+  }
+
+  /// Write a fade at one end, as one undo step. The old fade's pair of keys
+  /// comes off first, so a shorter fade does not leave the old far key behind
+  /// and the new one rises to the layer's real level rather than to a point
+  /// halfway up the old ramp.
+  void _writeFade({
+    required bool rising,
+    required AudioFade? fade,
+    required double seconds,
+    required BridgeFadeShape shape,
+  }) {
+    final layer = widget.entry.layer;
+    final volume = widget.entry.info.volumeDb;
+    asOneUndoStep(Provider.of<LumitState>(context, listen: false).project, () {
+      try {
+        if (fade != null && volume is BridgeScalar_Keyframed) {
+          final rest = [...volume.field0]..removeRange(fade.first, fade.first + 2);
+          layer.setVolumeDb(
+              value: rest.isEmpty
+                  ? BridgeScalar.static_(fade.level)
+                  : BridgeScalar.keyframed(rest));
+        }
+        if (seconds > 0) {
+          rising
+              ? layer.fadeIn(seconds: seconds, shape: shape)
+              : layer.fadeOut(seconds: seconds, shape: shape);
+        }
+      } catch (_) {
+        // A fade longer than the layer, or a locked layer: nothing written.
+      }
+    });
+    widget.onChanged();
   }
 
   void _commitVolume(BridgeScalar scalar, double value, int frame) {

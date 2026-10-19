@@ -709,9 +709,9 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           child: MouseRegion(
             // The razor's own blade is drawn over the lanes, and the innermost
             // cursor is the one shown - so this stands down while it is armed.
-            cursor: widget.razor
-                ? SystemMouseCursors.none
-                : SystemMouseCursors.resizeLeftRight,
+            cursor: _cursor(),
+            onHover: (e) => _hoverAt(barGrabAt(e.localPosition.dx, width)),
+            onExit: (_) => _hoverAt(null),
             child: Listener(
               behavior: HitTestBehavior.opaque,
               onPointerDown: (e) => _down(e, null, width),
@@ -734,6 +734,24 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       for (final clip in _clips)
         if (_widthOf(clip) >= audioClipHeaderMinWidth) _headerBox(t, clip),
     ]);
+  }
+
+  /// What the pointer would take hold of where it is resting.
+  BarGrab? _hover;
+
+  void _hoverAt(BarGrab? grab) {
+    if (grab != _hover) setState(() => _hover = grab);
+  }
+
+  /// A hand over the body, as a layer bar shows one, and the trim arrows only
+  /// at the ends that trim.
+  MouseCursor _cursor() {
+    if (widget.razor) return SystemMouseCursors.none;
+    return switch (_drag?.grab ?? _hover) {
+      BarGrab.trimIn || BarGrab.trimOut => SystemMouseCursors.resizeLeftRight,
+      _ when _drag != null => SystemMouseCursors.grabbing,
+      _ => SystemMouseCursors.grab,
+    };
   }
 
   /// Where a clip's box begins and how wide it is drawn, with whatever the drag
@@ -807,7 +825,9 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       width: width,
       top: 2,
       bottom: 2,
-      child: Container(
+      child: AnimatedContainer(
+        duration: ThemeScope.of(context).motion.mark.duration,
+        curve: ThemeScope.of(context).motion.mark.curve,
         decoration: BoxDecoration(
           // The label's own colour thinned over the ground, with the solid
           // leading edge below carrying it at full strength - the layer bar's
@@ -830,9 +850,11 @@ class _AudioClipStripState extends State<AudioClipStrip> {
             child: MouseRegion(
               // The razor's own blade is drawn over the lanes, and the innermost
               // cursor is the one shown - so this stands down while it is armed.
-              cursor: widget.razor
-                  ? SystemMouseCursors.none
-                  : SystemMouseCursors.resizeLeftRight,
+              cursor: _cursor(),
+              onHover: (e) => _hoverAt(audioClipGrabAt(
+                      _clips, widget.axis, _localX(e.position))
+                  ?.grab),
+              onExit: (_) => _hoverAt(null),
               child: Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (e) => _down(e, clip, width),

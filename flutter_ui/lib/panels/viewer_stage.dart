@@ -272,6 +272,9 @@ class ViewerStage extends StatelessWidget {
     final out = <LayerBox>[];
     for (final entry in model.heldLayers) {
       if (entry.info.kind == BridgeLayerKind.camera) continue;
+      // Nor does a layer that only makes a sound: a box the size of the comp
+      // round nothing, and a click on the picture that picked it.
+      if (!_drawsPicture(entry)) continue;
       if (!entry.info.switches.visible || entry.info.switches.locked) continue;
       // A value scrub in the property rows previews the picture at a
       // provisional transform while the document still holds the old one, so
@@ -995,6 +998,27 @@ ParentPlacement? parentPlacement(
   return (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]);
 }
 
+/// Footage layers already asked whether they have a picture, by layer.
+// ponytail: keyed by layer, so a layer whose footage is swapped for a sound
+// keeps its first answer until the next start. Key by source if that bites.
+final Map<UuidValue, bool> _pictured = {};
+
+/// Whether [entry] puts anything on the picture. Only footage has to be asked,
+/// and only once a layer: the engine answers from the probe it made at import,
+/// so the first ask is the one crossing and the rest are a lookup.
+bool _drawsPicture(BridgeLayerEntry entry) => switch (entry.info.kind) {
+      BridgeLayerKind.audio => false,
+      BridgeLayerKind.footage =>
+        _pictured[entry.layer.internallayerId] ??= () {
+          try {
+            return entry.layer.hasPicture();
+          } catch (_) {
+            return true;
+          }
+        }(),
+      _ => true,
+    };
+
 /// The layer a click on [comp]'s picture would select at [frame], with [at]
 /// in composition pixels: the gizmo's own rule ([layerAtPoint], over boxes
 /// built as [ViewerStage._boxes] builds them), for a composition and a frame
@@ -1696,7 +1720,8 @@ class ViewerTag extends StatelessWidget {
         String? name;
         for (final entry in uiState.model.heldLayers) {
           if (picked.contains(entry.layer.internallayerId)) {
-            name = entry.info.name;
+            // The tag names the box, and a sound has none.
+            if (_drawsPicture(entry)) name = entry.info.name;
             break;
           }
         }

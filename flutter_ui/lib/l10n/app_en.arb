@@ -12936,6 +12936,10 @@
   "@beatsTap": {
     "description": "Audio panel, Beats section: the tap-tempo button - press it in time with the music and the BPM well takes the tapped tempo."
   },
+  "beatsBpmAuto": "Auto",
+  "@beatsBpmAuto": {
+    "description": "Audio panel, Beats: shown beside the BPM well while no tempo is typed or tapped, so the next Generate works the tempo out from the sound."
+  },
   "beatsGridOn": "Grid on",
   "@beatsGridOn": {
     "description": "Audio panel, Beats section: small caption shown while a typed or tapped BPM overrides the estimate, so generated beats snap to that grid."
