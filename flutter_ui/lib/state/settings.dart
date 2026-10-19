@@ -342,6 +342,14 @@ class InterfaceSettings {
   /// a composition.
   StreamsArrival streamsArrival;
 
+  /// Whether a video placed in the Cut timeline keeps its sound on its
+  /// picture clip. Off, the sound goes on a linked clip on a sound track.
+  bool cutSoundWithPicture;
+
+  /// Whether the Cut timeline stands its tracks in stack order, sound among
+  /// picture, with no dividing line.
+  bool cutTracksAnyOrder;
+
   /// Whether stopping playback leaves the playhead on the frame that was on
   /// screen, rather than putting it back where play started.
   ///
@@ -541,6 +549,8 @@ class InterfaceSettings {
     this.cutAutoCrossfade = false,
     this.quantiseSound = true,
     this.streamsArrival = StreamsArrival.mixed,
+    this.cutSoundWithPicture = false,
+    this.cutTracksAnyOrder = false,
     this.playheadStaysOnStop = false,
     this.pasteLayersAtOriginalTime = false,
     this.multiwaveWaveforms = true,
@@ -581,6 +591,8 @@ class InterfaceSettings {
         'cut_auto_crossfade': cutAutoCrossfade,
         'quantise_sound': quantiseSound,
         'audio_streams_arrival': streamsArrival.name,
+        'cut_sound_with_picture': cutSoundWithPicture,
+        'cut_tracks_any_order': cutTracksAnyOrder,
         'playhead_stays_on_stop': playheadStaysOnStop,
         'paste_layers_at_original_time': pasteLayersAtOriginalTime,
         'multiwave_waveforms': multiwaveWaveforms,
@@ -650,6 +662,8 @@ class InterfaceSettings {
                 (j['audio_streams_arrival'] ??
                     (j['streams_arrival'] == 'split' ? 'split' : null)),
             orElse: () => StreamsArrival.mixed),
+        cutSoundWithPicture: j['cut_sound_with_picture'] as bool? ?? false,
+        cutTracksAnyOrder: j['cut_tracks_any_order'] as bool? ?? false,
         // Absent means off here too, but for the opposite reason: the returning
         // playhead is the *new* default, so a settings file written
         // before this field existed adopts it rather than being pinned to the

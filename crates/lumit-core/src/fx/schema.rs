@@ -661,6 +661,8 @@ pub enum EnabledCond {
     /// Editable while the named [`ParamKind::Layer`] actually names a layer.
     /// An unset or dangling reference greys the dependent row.
     LayerSet,
+    /// Editable while the named [`ParamKind::Layer`] names no layer.
+    LayerUnset,
 }
 
 /// The Add-effect menu's grouping: every schema declares one.

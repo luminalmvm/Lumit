@@ -10359,6 +10359,49 @@
           "hard_min": 0.0
         },
         {
+          "id": "collide_with",
+          "label": "Collide with",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "on_contact",
+          "label": "On contact",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Bounce",
+            "Slide",
+            "Stick",
+            "Kill"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "bounciness",
+          "label": "Bounciness",
+          "kind": "float",
+          "unit": "percent",
+          "default": 60.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "friction",
+          "label": "Friction",
+          "kind": "float",
+          "unit": "percent",
+          "default": 10.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
           "id": "mode",
           "label": "Mode",
           "kind": "choice",
@@ -10617,6 +10660,16 @@
           "collapsed": false
         },
         {
+          "label": "Collide",
+          "params": [
+            "collide_with",
+            "on_contact",
+            "bounciness",
+            "friction"
+          ],
+          "collapsed": false
+        },
+        {
           "label": "Render",
           "params": [
             "mode",
@@ -10677,6 +10730,54 @@
           "on": "path_from",
           "cond": "choice_is_not",
           "value": 1
+        },
+        {
+          "param": "particle_blend",
+          "on": "collide_with",
+          "cond": "layer_unset"
+        },
+        {
+          "param": "density_layer",
+          "on": "collide_with",
+          "cond": "layer_unset"
+        },
+        {
+          "param": "density_layer_placement",
+          "on": "collide_with",
+          "cond": "layer_unset"
+        },
+        {
+          "param": "on_contact",
+          "on": "collide_with",
+          "cond": "layer_set"
+        },
+        {
+          "param": "bounciness",
+          "on": "collide_with",
+          "cond": "layer_set"
+        },
+        {
+          "param": "bounciness",
+          "on": "on_contact",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "friction",
+          "on": "collide_with",
+          "cond": "layer_set"
+        },
+        {
+          "param": "friction",
+          "on": "on_contact",
+          "cond": "choice_is_not",
+          "value": 2
+        },
+        {
+          "param": "friction",
+          "on": "on_contact",
+          "cond": "choice_is_not",
+          "value": 3
         }
       ],
       "matte_role": "strength"
