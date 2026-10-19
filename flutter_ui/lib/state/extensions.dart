@@ -38,23 +38,31 @@ class ExtensionService extends ChangeNotifier {
   /// loads the new page.
   int generation = 0;
 
-  /// Read the folder again.
-  void refresh() {
+  int _reads = 0;
+
+  /// Read the folder again. A read overtaken by a later one is dropped.
+  Future<void> refresh() async {
+    final read = ++_reads;
+    List<BridgeExtension> list;
+    BridgeExtensionFolders? folders;
     try {
-      installed = extensionList();
-      scanFolders = extensionFolders();
+      list = await extensionList();
+      folders = await extensionFolders();
     } catch (_) {
       // No engine to ask, as in a widget test.
-      installed = const [];
+      list = const [];
     }
+    if (read != _reads) return;
+    installed = list;
+    if (folders != null) scanFolders = folders;
     notifyListeners();
   }
 
   /// The engine has registered or dropped effects, so the effect lists are
   /// read again.
-  void _effectsChanged() {
+  Future<void> _effectsChanged() {
     effectSchema.forget();
-    refresh();
+    return refresh();
   }
 
   /// The pane an extension is shown in: its `Panel.extension` instance
@@ -101,9 +109,9 @@ class ExtensionService extends ChangeNotifier {
 
   /// What the extension in [folder] says about itself and asks to be
   /// allowed. Nothing is installed.
-  BridgeExtensionOutcome inspect(String folder) {
+  Future<BridgeExtensionOutcome> inspect(String folder) async {
     try {
-      return extensionInspect(folder: folder);
+      return await extensionInspect(folder: folder);
     } catch (_) {
       return const BridgeExtensionOutcome.failed();
     }
@@ -121,7 +129,7 @@ class ExtensionService extends ChangeNotifier {
     }
     busy = false;
     if (outcome is BridgeExtensionOutcome_Ready) generation++;
-    _effectsChanged();
+    await _effectsChanged();
     return outcome;
   }
 
@@ -150,7 +158,7 @@ class ExtensionService extends ChangeNotifier {
     }
     busy = false;
     if (outcome is BridgeExtensionOutcome_Ready) generation++;
-    _effectsChanged();
+    await _effectsChanged();
     return outcome;
   }
 
@@ -166,7 +174,7 @@ class ExtensionService extends ChangeNotifier {
       outcome = const BridgeExtensionOutcome.failed();
     }
     busy = false;
-    _effectsChanged();
+    await _effectsChanged();
     return outcome;
   }
 
@@ -178,7 +186,7 @@ class ExtensionService extends ChangeNotifier {
     } catch (_) {
       // No engine to ask, as in a widget test.
     }
-    _effectsChanged();
+    await _effectsChanged();
   }
 
   /// Scan [folder] for extensions too.
@@ -188,7 +196,7 @@ class ExtensionService extends ChangeNotifier {
     } catch (_) {
       // Nothing was added.
     }
-    _effectsChanged();
+    await _effectsChanged();
   }
 
   /// Stop scanning a folder the person added. Nothing in it is deleted.
@@ -198,7 +206,7 @@ class ExtensionService extends ChangeNotifier {
     } catch (_) {
       // Nothing was taken off.
     }
-    _effectsChanged();
+    await _effectsChanged();
   }
 
   /// Remove an extension. What its page stored, and the folders picked for
@@ -210,7 +218,7 @@ class ExtensionService extends ChangeNotifier {
     } catch (_) {
       // Nothing was removed.
     }
-    _effectsChanged();
+    await _effectsChanged();
     return removed;
   }
 }

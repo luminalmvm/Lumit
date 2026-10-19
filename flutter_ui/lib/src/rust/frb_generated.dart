@@ -1051,9 +1051,9 @@ abstract class BridgeLibApi extends BaseApi {
 
   String? crateApiExtensionsExtensionDataDir({required String id});
 
-  BridgeExtensionFolders crateApiExtensionsExtensionFolders();
+  Future<BridgeExtensionFolders> crateApiExtensionsExtensionFolders();
 
-  BridgeExtensionOutcome crateApiExtensionsExtensionInspect(
+  Future<BridgeExtensionOutcome> crateApiExtensionsExtensionInspect(
       {required String folder});
 
   Future<BridgeExtensionOutcome> crateApiExtensionsExtensionInspectPackage(
@@ -1065,7 +1065,7 @@ abstract class BridgeLibApi extends BaseApi {
   Future<BridgeExtensionOutcome> crateApiExtensionsExtensionInstallPackage(
       {required String path, String? folder});
 
-  List<BridgeExtension> crateApiExtensionsExtensionList();
+  Future<List<BridgeExtension>> crateApiExtensionsExtensionList();
 
   Future<BridgeExtensionOutcome> crateApiExtensionsExtensionMakePackage(
       {required String folder, required String out});
@@ -9420,11 +9420,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  BridgeExtensionFolders crateApiExtensionsExtensionFolders() {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+  Future<BridgeExtensionFolders> crateApiExtensionsExtensionFolders() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 243)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 243, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_extension_folders,
@@ -9443,13 +9444,14 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  BridgeExtensionOutcome crateApiExtensionsExtensionInspect(
+  Future<BridgeExtensionOutcome> crateApiExtensionsExtensionInspect(
       {required String folder}) {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(folder, serializer);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 244)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 244, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_bridge_extension_outcome,
@@ -9547,11 +9549,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       );
 
   @override
-  List<BridgeExtension> crateApiExtensionsExtensionList() {
-    return handler.executeSync(SyncTask(
-      callFfi: () {
+  Future<List<BridgeExtension>> crateApiExtensionsExtensionList() {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
         final serializer = SseSerializer(generalizedFrbRustBinding);
-        return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 248)!;
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 248, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_list_bridge_extension,

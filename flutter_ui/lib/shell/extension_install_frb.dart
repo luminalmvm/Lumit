@@ -42,7 +42,8 @@ Future<void> installExtensionFromFolder(
     BuildContext context, LumitState app, ExtensionService service) async {
   final folder = await pickFolder();
   if (folder == null || !context.mounted) return;
-  final read = service.inspect(folder);
+  final read = await service.inspect(folder);
+  if (!context.mounted) return;
   if (read is! BridgeExtensionOutcome_Ready) {
     return app.postNotice(extensionOutcomeText(read), error: true);
   }
@@ -107,7 +108,7 @@ Future<void> makeExtensionPackage(
     LumitState app, ExtensionService service) async {
   final folder = await pickFolder();
   if (folder == null) return;
-  final read = service.inspect(folder);
+  final read = await service.inspect(folder);
   if (read is! BridgeExtensionOutcome_Ready) {
     return app.postNotice(extensionOutcomeText(read), error: true);
   }

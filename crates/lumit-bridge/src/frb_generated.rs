@@ -9033,15 +9033,16 @@ fn wire__crate__api__extensions__extension_data_dir_impl(
     )
 }
 fn wire__crate__api__extensions__extension_folders_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "extension_folders",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -9054,23 +9055,27 @@ fn wire__crate__api__extensions__extension_folders_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok = Result::<_, ()>::Ok(crate::api::extensions::extension_folders())?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::extensions::extension_folders())?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
 fn wire__crate__api__extensions__extension_inspect_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "extension_inspect",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -9084,11 +9089,13 @@ fn wire__crate__api__extensions__extension_inspect_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_folder = <String>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok =
-                    Result::<_, ()>::Ok(crate::api::extensions::extension_inspect(api_folder))?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::extensions::extension_inspect(api_folder))?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -9198,15 +9205,16 @@ fn wire__crate__api__extensions__extension_install_package_impl(
     )
 }
 fn wire__crate__api__extensions__extension_list_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
     data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
             debug_name: "extension_list",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
         move || {
             let message = unsafe {
@@ -9219,10 +9227,12 @@ fn wire__crate__api__extensions__extension_list_impl(
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok = Result::<_, ()>::Ok(crate::api::extensions::extension_list())?;
-                Ok(output_ok)
-            })())
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::extensions::extension_list())?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -30741,6 +30751,12 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
+        243 => {
+            wire__crate__api__extensions__extension_folders_impl(port, ptr, rust_vec_len, data_len)
+        }
+        244 => {
+            wire__crate__api__extensions__extension_inspect_impl(port, ptr, rust_vec_len, data_len)
+        }
         245 => wire__crate__api__extensions__extension_inspect_package_impl(
             port,
             ptr,
@@ -30756,6 +30772,7 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
+        248 => wire__crate__api__extensions__extension_list_impl(port, ptr, rust_vec_len, data_len),
         249 => wire__crate__api__extensions__extension_make_package_impl(
             port,
             ptr,
@@ -31191,9 +31208,6 @@ fn pde_ffi_dispatcher_sync_impl(
 239 => wire__crate__api__export__export_resolved_bitrate_impl(ptr, rust_vec_len, data_len),
 240 => wire__crate__api__effect__expression_fault_impl(ptr, rust_vec_len, data_len),
 242 => wire__crate__api__extensions__extension_data_dir_impl(ptr, rust_vec_len, data_len),
-243 => wire__crate__api__extensions__extension_folders_impl(ptr, rust_vec_len, data_len),
-244 => wire__crate__api__extensions__extension_inspect_impl(ptr, rust_vec_len, data_len),
-248 => wire__crate__api__extensions__extension_list_impl(ptr, rust_vec_len, data_len),
 253 => wire__crate__api__track__fire_effect_action_impl(ptr, rust_vec_len, data_len),
 254 => wire__crate__api__folder__folder_reference_get_children_impl(ptr, rust_vec_len, data_len),
 255 => wire__crate__api__footage__footage_reference_audio_streams_impl(ptr, rust_vec_len, data_len),

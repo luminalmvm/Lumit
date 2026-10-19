@@ -228,7 +228,8 @@ fn outcome(done: Result<Installed, ExtensionError>) -> BridgeExtensionOutcome {
 }
 
 /// Every extension installed, by id.
-#[frb(sync)]
+///
+/// Not sync: it reads every folder's manifests.
 #[must_use]
 pub fn extension_list() -> Vec<BridgeExtension> {
     let installed = lumit_extensions::scan().into_iter();
@@ -239,7 +240,8 @@ pub fn extension_list() -> Vec<BridgeExtension> {
 
 /// What the extension in `folder` says about itself and asks to be allowed,
 /// for the person to read before they agree. Nothing is installed.
-#[frb(sync)]
+///
+/// Not sync: it reads the folder.
 #[must_use]
 pub fn extension_inspect(folder: String) -> BridgeExtensionOutcome {
     read(lumit_extensions::inspect(Path::new(&folder)))
@@ -334,7 +336,8 @@ pub fn extension_rescan() {
 }
 
 /// The folders extensions are found in.
-#[frb(sync)]
+///
+/// Not sync: the added ones are read from the settings file.
 #[must_use]
 pub fn extension_folders() -> BridgeExtensionFolders {
     let text = |dir: std::path::PathBuf| dir.to_string_lossy().into_owned();

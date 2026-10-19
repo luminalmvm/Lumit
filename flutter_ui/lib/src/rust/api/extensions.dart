@@ -12,12 +12,16 @@ part 'extensions.freezed.dart';
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Every extension installed, by id.
-List<BridgeExtension> extensionList() =>
+///
+/// Not sync: it reads every folder's manifests.
+Future<List<BridgeExtension>> extensionList() =>
     BridgeLib.instance.api.crateApiExtensionsExtensionList();
 
 /// What the extension in `folder` says about itself and asks to be allowed,
 /// for the person to read before they agree. Nothing is installed.
-BridgeExtensionOutcome extensionInspect({required String folder}) =>
+///
+/// Not sync: it reads the folder.
+Future<BridgeExtensionOutcome> extensionInspect({required String folder}) =>
     BridgeLib.instance.api.crateApiExtensionsExtensionInspect(folder: folder);
 
 /// What the `.lfx` package at `path` holds and asks to be allowed, for the
@@ -72,7 +76,9 @@ Future<void> extensionRescan() =>
     BridgeLib.instance.api.crateApiExtensionsExtensionRescan();
 
 /// The folders extensions are found in.
-BridgeExtensionFolders extensionFolders() =>
+///
+/// Not sync: the added ones are read from the settings file.
+Future<BridgeExtensionFolders> extensionFolders() =>
     BridgeLib.instance.api.crateApiExtensionsExtensionFolders();
 
 /// Scan `folder` for extensions too, and register what it carries. False
