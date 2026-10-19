@@ -262,10 +262,10 @@ app.endUndoGroup();
         }
     };
     faces(p, [(10.0, 40.0, 5.0), (20.0, 50.0, 5.0), (30.0, 60.0, 5.0)]);
-    // The whole run is one step, named after the script.
+    // The whole run is one step, named after its undo group.
     let history = host.store().history();
     assert_eq!(history.len(), 1);
-    assert_eq!(history[0].name, "Camera.jsx");
+    assert_eq!(history[0].name, "Camera");
 
     // X and Y keyed apart from Z, as Lumit can leave them. A second run
     // reads every axis at every key, and reads the rotation back in After

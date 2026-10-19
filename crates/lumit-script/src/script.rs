@@ -178,6 +178,7 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
         limited: options.limits != Limits::Off,
         edited: Cell::new(false),
         written: Cell::new(0),
+        step: RefCell::new(None),
     };
     let name = if options.name.is_empty() {
         "Script".to_owned()
@@ -238,9 +239,11 @@ pub fn run(host: &dyn Host, source: &str, options: RunOptions<'_>) -> RunReport 
                 return Err(ScriptError::Stopped);
             }
             // The run goes onto the History list as one step, which reads
-            // better named after the script than after its first edit.
+            // better named after the script than after its first edit, or
+            // after what the script called its undo group.
             if out.is_ok() && desk.edited.get() {
-                host.store().name_undo_group(setup.name.clone());
+                let step = desk.step.borrow_mut().take();
+                host.store().name_undo_group(step.unwrap_or_else(|| setup.name.clone()));
             }
             out
         })
@@ -293,6 +296,8 @@ struct Desk<'a> {
     edited: Cell<bool>,
     /// What the script has written to files so far, in bytes.
     written: Cell<u64>,
+    /// The first name the script gave its undo group.
+    step: RefCell<Option<String>>,
 }
 
 impl Desk<'_> {
@@ -663,6 +668,20 @@ fn natives<'js>(
                 match desk.alert {
                     Some(alert) => alert(&cut(text)),
                     None => keep(&desk.log, text),
+                }
+                Ok(Value::Null)
+            })
+        })?,
+    )?;
+
+    n.set(
+        "nameStep",
+        asking(|lumit, name, _| {
+            lumit.ask(move |desk| {
+                let name = cut(name.trim().to_owned());
+                let mut step = desk.step.borrow_mut();
+                if step.is_none() && !name.is_empty() {
+                    *step = Some(name);
                 }
                 Ok(Value::Null)
             })

@@ -1655,8 +1655,11 @@
             note('app.newProject() uses the open project.');
             return project;
         },
-        // The whole run is already one undo step.
-        beginUndoGroup: function () {},
+        // The whole run is already one undo step, which takes the first
+        // name given here.
+        beginUndoGroup: function (name) {
+            if (name !== undefined) N.nameStep(String(name));
+        },
         endUndoGroup: function () {},
     }, 'app');
 
