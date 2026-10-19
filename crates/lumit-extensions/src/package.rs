@@ -3,7 +3,7 @@
 //! applies the same caps as a folder and refuses any file that would land
 //! outside it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -24,13 +24,28 @@ fn not_a_package() -> ExtensionError {
 }
 
 /// A name inside a package as a plain path below its root, with forward
-/// slashes, or None for one that is absolute, climbs out with `..`, or is
-/// too deep.
+/// slashes, or None for one that is absolute, climbs out with `..`, is too
+/// deep, or that Windows can't write: a device name such as `con.txt`, or
+/// one ending in a dot or a space.
 fn plain(name: &str) -> Option<String> {
     let name = name.strip_suffix('/').unwrap_or(name);
     let parts: Vec<&str> = name.split('/').collect();
-    let part =
-        |p: &&str| !p.is_empty() && *p != "." && *p != ".." && !p.contains(['\\', ':', '\0']);
+    let device = |p: &str| {
+        let stem = p.split('.').next().unwrap_or(p).to_ascii_uppercase();
+        let numbered = |prefix: &str| {
+            stem.strip_prefix(prefix)
+                .is_some_and(|n| n.len() == 1 && matches!(n.as_bytes()[0], b'1'..=b'9'))
+        };
+        ["CON", "PRN", "AUX", "NUL"].contains(&stem.as_str()) || numbered("COM") || numbered("LPT")
+    };
+    let part = |p: &&str| {
+        !p.is_empty()
+            && *p != "."
+            && *p != ".."
+            && !p.contains(['\\', ':', '\0'])
+            && !p.ends_with(['.', ' '])
+            && !device(p)
+    };
     (parts.len() <= MAX_DEPTH + 1 && parts.iter().all(part)).then(|| parts.join("/"))
 }
 
@@ -52,11 +67,17 @@ struct Package {
 }
 
 fn open(path: &Path) -> Result<Package, ExtensionError> {
-    let mut zip = ZipArchive::new(File::open(path)?).map_err(|_| not_a_package())?;
+    let file = File::open(path)?;
+    if file.metadata()?.len() > MAX_BYTES {
+        return Err(ExtensionError::TooLarge);
+    }
+    let mut zip = ZipArchive::new(file).map_err(|_| not_a_package())?;
     if zip.len() > MAX_FILES {
         return Err(ExtensionError::TooLarge);
     }
     let mut files = BTreeMap::new();
+    // Names as a case-blind disk sees them, so two can't land on one file.
+    let mut folded = BTreeSet::new();
     let mut bytes = 0u64;
     for index in 0..zip.len() {
         let entry = zip.by_index_raw(index).map_err(|_| not_a_package())?;
@@ -74,9 +95,10 @@ fn open(path: &Path) -> Result<Package, ExtensionError> {
         if bytes > MAX_BYTES {
             return Err(ExtensionError::TooLarge);
         }
-        if files.insert(name, (index, entry.size())).is_some() {
+        if !folded.insert(name.to_lowercase()) {
             return Err(invalid("the package has two files of one name"));
         }
+        files.insert(name, (index, entry.size()));
     }
     let &(index, size) = files
         .get(MANIFEST_FILE)
@@ -243,8 +265,9 @@ mod tests {
     }
 
     /// A package someone else made is untrusted: a file that would land
-    /// outside its folder, or more files than any extension holds, is
-    /// refused before anything is written. Guards untrusted input.
+    /// outside its folder or on another file, one Windows can't write, or
+    /// more files than any extension holds, is refused before anything is
+    /// written. Guards untrusted input.
     #[test]
     fn a_hostile_package_is_refused() {
         let root = std::env::temp_dir().join(format!("lumit-lfx-test-{}", std::process::id()));
@@ -254,16 +277,22 @@ mod tests {
         let manifest =
             r#"{"format":1,"id":"tape","name":"Tape","version":"1.0.0","entry":"index.html"}"#;
 
-        let climbs = root.join("climbs.lfx");
-        let mut zip = ZipWriter::new(File::create(&climbs).unwrap());
-        zip.start_file(MANIFEST_FILE, SimpleFileOptions::default())
-            .unwrap();
-        zip.write_all(manifest.as_bytes()).unwrap();
-        for name in ["index.html", "../outside.txt"] {
-            zip.start_file(name, SimpleFileOptions::default()).unwrap();
-            zip.write_all(b"x").unwrap();
-        }
-        zip.finish().unwrap();
+        let hostile = |file: &str, name: &str| {
+            let path = root.join(file);
+            let mut zip = ZipWriter::new(File::create(&path).unwrap());
+            zip.start_file(MANIFEST_FILE, SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(manifest.as_bytes()).unwrap();
+            for name in ["index.html", name] {
+                zip.start_file(name, SimpleFileOptions::default()).unwrap();
+                zip.write_all(b"x").unwrap();
+            }
+            zip.finish().unwrap();
+            path
+        };
+        let climbs = hostile("climbs.lfx", "../outside.txt");
+        let clashes = hostile("clashes.lfx", "Index.html");
+        let device = hostile("device.lfx", "ui/con.txt");
 
         let crowded = root.join("crowded.lfx");
         let names: Vec<String> = (0..=MAX_FILES).map(|i| format!("f{i}")).collect();
@@ -273,10 +302,12 @@ mod tests {
             read_package(&climbs),
             Err(ExtensionError::Invalid(_))
         ));
-        assert!(matches!(
-            install_package(&climbs, Some(&store)),
-            Err(ExtensionError::Invalid(_))
-        ));
+        for refused in [&climbs, &clashes, &device] {
+            assert!(matches!(
+                install_package(refused, Some(&store)),
+                Err(ExtensionError::Invalid(_))
+            ));
+        }
         assert!(matches!(
             install_package(&crowded, Some(&store)),
             Err(ExtensionError::TooLarge)
