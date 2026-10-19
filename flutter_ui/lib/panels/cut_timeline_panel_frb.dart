@@ -2230,6 +2230,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     final across = cutClipAcross(track, clip, endEdge: endEdge) != null;
     final dissolved = across && cutEdgeOverlaps(track, clip, endEdge: endEdge);
     final second = _secondFrames(ui);
+    final heard = track.entry.info.switches.audible;
     // The audio streams of the clip's file, for the rows that choose among
     // them. The item was probed when it was placed, so this opens nothing.
     BridgeAudioStreams? streams;
@@ -2339,13 +2340,37 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               Expanded(child: Text(l10n.cutBypassEffects)),
             ]),
           ),
+        // A picture clip's sound, taken off onto a sound track of its own, or
+        // brought back from the clip it was taken onto.
+        if (track.kind == CutTrackKind.picture &&
+            !clip.retimed &&
+            !clip.sourceIsComp) ...[
+          if (heard && clip.audible)
+            MenuRow(
+              key: const ValueKey('ctl-menu-detach-audio'),
+              onPressed: () {
+                close(null);
+                _sound(comp, detach: true);
+              },
+              child: Text(l10n.cutDetachAudio),
+            )
+          else if (_mates[id]?.isNotEmpty ?? false)
+            MenuRow(
+              key: const ValueKey('ctl-menu-attach-audio'),
+              onPressed: () {
+                close(null);
+                _sound(comp, detach: false);
+              },
+              child: Text(l10n.cutAttachAudio),
+            ),
+        ],
         // A file with several audio streams: which of them this clip plays,
         // a linked clip to each on a track of its own, and back onto one.
         // The list is for a clip that is heard. A silent picture clip has its
         // sound on the clip linked to it, and the two commands under the list
         // follow the link there.
         if (streams != null && streams.streams.length > 1) ...[
-          if (track.entry.info.switches.audible && clip.audible)
+          if (heard && clip.audible)
             audioStreamsSubmenu(
               key: const ValueKey('ctl-menu-audio-streams'),
               closeParent: () => close(null),
@@ -2435,6 +2460,23 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       Provider.of<LumitState>(context, listen: false).postNotice(split
           ? l10n.audioStreamsNothingToSplit
           : l10n.audioStreamsNothingToMerge);
+      return;
+    }
+    _afterCut(result);
+  }
+
+  /// Detach or attach the sound of the selected picture clips. The engine
+  /// passes over the clips each cannot be asked of, the sound clips among
+  /// them say.
+  void _sound(CompositionReference comp, {required bool detach}) {
+    final clips = _selectedIds();
+    final result = _cut(() => detach
+        ? comp.cutDetachAudio(clips: clips)
+        : comp.cutAttachAudio(clips: clips));
+    if (!mounted) return;
+    if (result == BridgeCutResult.nothing) {
+      Provider.of<LumitState>(context, listen: false).postNotice(
+          detach ? l10n.cutNoSoundToDetach : l10n.cutNoSoundToAttach);
       return;
     }
     _afterCut(result);

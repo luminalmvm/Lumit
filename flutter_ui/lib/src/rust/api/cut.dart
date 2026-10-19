@@ -9,7 +9,7 @@ import 'footage.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:uuid/uuid.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_row`, `chosen`, `close_gap`, `commit`, `copy`, `covers`, `cut`, `delete`, `find`, `follows`, `forget_copied`, `frame_up`, `has_sound`, `is_still`, `land`, `make_composition`, `merge_streams`, `move_by`, `open`, `paste`, `place`, `razor_at`, `razor`, `relink`, `remove_span`, `renew`, `retrimmed`, `ripple`, `roll`, `room`, `row_of`, `same_stretch`, `slide`, `slip`, `sounding`, `split_streams`, `streams_of`, `time`, `transition`, `trim`, `with_linked`
+// These functions are ignored because they are not marked as `pub`: `add_row`, `attach`, `chosen`, `close_gap`, `commit`, `copy`, `covers`, `cut`, `delete`, `detach`, `find`, `follows`, `forget_copied`, `frame_up`, `has_sound`, `hear`, `is_still`, `kinds_of`, `land`, `make_composition`, `merge_streams`, `move_by`, `open`, `paste`, `place`, `razor_at`, `razor`, `relink`, `remove_span`, `renew`, `retrimmed`, `ripple`, `roll`, `room`, `row_of`, `same_stretch`, `slide`, `slip`, `sounding`, `split_streams`, `streams_of`, `time`, `transition`, `trim`, `with_linked`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Edit`, `Held`, `Row`, `Stop`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`
 

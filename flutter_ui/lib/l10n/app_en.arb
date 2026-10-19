@@ -7744,6 +7744,22 @@
   "@streamsArrivalSplit": {
     "description": "A choice for the setting Several audio streams arrive as: every audio stream of the file gets a layer of its own."
   },
+  "cutDetachAudio": "Detach audio",
+  "@cutDetachAudio": {
+    "description": "Cut timeline, right-click menu of a picture clip that plays its own sound: put the sound on a clip of its own on a sound track below, linked to the picture, and make the picture clip silent."
+  },
+  "cutAttachAudio": "Attach audio",
+  "@cutAttachAudio": {
+    "description": "Cut timeline, right-click menu of a picture clip whose sound was detached: the way back from Detach audio. The linked sound clip goes back into the picture clip, if it still covers the same stretch."
+  },
+  "cutNoSoundToDetach": "That clip has no sound to detach.",
+  "@cutNoSoundToDetach": {
+    "description": "One line in the status bar, after Detach audio in the Cut timeline found no picture clip with sound of its own among those picked. Calm, not an error."
+  },
+  "cutNoSoundToAttach": "No sound clip still lines up with that clip.",
+  "@cutNoSoundToAttach": {
+    "description": "One line in the status bar, after Attach audio in the Cut timeline found no linked sound clip covering the same stretch as the picked picture clip, because it was trimmed or moved. Calm, not an error."
+  },
   "settingsVideoSoundInCut": "Video sound in Cut",
   "@settingsVideoSoundInCut": {
     "description": "Settings window, Timeline, Editing: the name of the row choosing where a video's sound goes when the video is placed in the Cut timeline. The two choices follow it in a dropdown."

@@ -884,6 +884,14 @@ class CompositionReference {
       .crateApiCompositionCompositionReferenceCropToRegion(
           that: this, region: region);
 
+  /// **Attach audio**: each silent picture clip named takes back the sound
+  /// of the clips linked to it that are still the same stretch, and those
+  /// clips go. `Nothing` when no clip named has such a clip beside it.
+  BridgeCutResult cutAttachAudio({required List<UuidValue> clips}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutAttachAudio(
+              that: this, clips: clips);
+
   /// The composition a clip plays, made for it when it plays footage, for
   /// work on one clip that a Sequence layer has no room for.
   ///
@@ -928,6 +936,14 @@ class CompositionReference {
           required bool linked}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutDelete(
           that: this, clips: clips, ripple: ripple, linked: linked);
+
+  /// **Detach audio**: each heard picture clip named goes silent, and its
+  /// sound goes down as a clip of its own on a sound row, linked to it.
+  /// `Nothing` when no clip named is a heard picture clip with sound.
+  BridgeCutResult cutDetachAudio({required List<UuidValue> clips}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceCutDetachAudio(
+              that: this, clips: clips);
 
   /// Duplicate clips: [`Self::cut_move`] with the clips left where they
   /// are and copies of them making the move, overwriting what they land

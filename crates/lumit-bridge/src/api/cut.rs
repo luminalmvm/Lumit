@@ -1055,6 +1055,154 @@ impl<'a> Edit<'a> {
         self.commit()
     }
 
+    /// Make a silent picture row heard without changing what is heard: its
+    /// switch goes on and each clip on it goes silent. A row made silent
+    /// before rows were all heard has its clips' sound on linked clips on
+    /// sound rows, or none.
+    fn hear(&mut self, r: usize) {
+        let row = &mut self.rows[r];
+        if row.audio_only || row.audible {
+            return;
+        }
+        row.audible = true;
+        for clip in &mut row.clips {
+            clip.audible = false;
+        }
+    }
+
+    /// Whether a footage item has a picture, and whether it carries sound.
+    /// Neither for anything else.
+    fn kinds_of(&self, item: Uuid) -> Cut<(bool, bool)> {
+        let proj = self.of.project()?;
+        let state = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let doc = state.store.snapshot();
+        Ok(match doc.item(item) {
+            Some(ProjectItem::Footage(f)) => (
+                CompositionReference::has_picture(&state, f),
+                has_sound(&state, f),
+            ),
+            _ => (false, false),
+        })
+    }
+
+    /// **Detach audio.** Each picture clip named that is heard goes silent,
+    /// and its sound goes down as a clip of its own, linked to it, on a sound
+    /// row: the first with room, else a new one at the bottom. That clip
+    /// plays the streams the picture clip did, at its level and with its
+    /// fades, and takes its sound effects with it. A retimed clip is silent
+    /// and has nothing to give.
+    fn detach(mut self, clips: &[Uuid]) -> Cut {
+        let mut detached = false;
+        for id in clips {
+            let (r, c) = self.find(*id)?;
+            let row = &self.rows[r];
+            let clip = row.clips[c].clone();
+            if row.audio_only || !row.audible || !clip.audible || clip.retime.is_some() {
+                continue;
+            }
+            let ClipSource::Footage(item) = clip.source else {
+                continue;
+            };
+            if self.kinds_of(item)? != (true, true) {
+                continue;
+            }
+            if row.locked {
+                return Err(BridgeCutResult::Locked.into());
+            }
+            let link = clip.link.unwrap_or_else(Uuid::now_v7);
+            let (heard, seen): (Vec<_>, Vec<_>) = clip
+                .effects
+                .iter()
+                .cloned()
+                .partition(|e| crate::api::effect::is_audio_effect(&e.effect.match_name));
+            let picture = &mut self.rows[r].clips[c];
+            picture.link = Some(link);
+            picture.audible = false;
+            picture.effects = seen;
+
+            let (start, end) = (clip.place_start, clip.place_end());
+            let room = (0..self.rows.len()).find(|i| {
+                let row = &self.rows[*i];
+                row.audio_only && !row.locked && !row.clips.iter().any(|c| covers(c, start, end))
+            });
+            let landing = match room {
+                Some(i) => i,
+                None => {
+                    let name = self.streams_of(item)?.0;
+                    let (w, h) = (f64::from(self.comp.width), f64::from(self.comp.height));
+                    self.add_row(name, true, w, h)
+                }
+            };
+            // The effects move rather than copy, so they keep their ids.
+            let mut sound = clip;
+            sound.id = Uuid::now_v7();
+            sound.link = Some(link);
+            sound.effects = heard;
+            sound.blend = None;
+            self.rows[landing].clips.push(sound);
+            detached = true;
+        }
+        if !detached {
+            return Err(BridgeCutResult::Nothing.into());
+        }
+        self.commit()
+    }
+
+    /// **Attach audio**, the way back. A silent picture clip takes back the
+    /// sound of every clip linked to it on a sound row that is the same
+    /// stretch of the same file at the same moment: their streams, mixed,
+    /// their sound effects, and the first one's level. Its fades stay its
+    /// own. Those clips go, and a sound row left empty goes with them. A
+    /// sound clip trimmed or moved away from its picture is no longer the
+    /// same stretch, and stays.
+    fn attach(mut self, clips: &[Uuid]) -> Cut {
+        let mut attached = false;
+        for id in clips {
+            let (r, c) = self.find(*id)?;
+            let picture = self.rows[r].clips[c].clone();
+            if self.rows[r].audio_only || (self.rows[r].audible && picture.audible) {
+                continue;
+            }
+            let beside = |other: &&Clip| same_stretch(&picture, other);
+            let mut places: Vec<u32> = Vec::new();
+            let mut effects = Vec::new();
+            let mut gain: Option<f64> = None;
+            let mut gone: Vec<Uuid> = Vec::new();
+            for row in self.rows.iter().filter(|row| row.audio_only && !row.locked) {
+                for other in row.clips.iter().filter(beside) {
+                    places.extend_from_slice(other.audio_streams.places());
+                    effects.extend(other.effects.iter().cloned());
+                    gain.get_or_insert(other.gain_db);
+                    gone.push(other.id);
+                }
+            }
+            if gone.is_empty() {
+                continue;
+            }
+            if self.rows[r].locked {
+                return Err(BridgeCutResult::Locked.into());
+            }
+            self.hear(r);
+            let kept = &mut self.rows[r].clips[c];
+            kept.audible = true;
+            kept.audio_streams = AudioStreams::of(&places);
+            kept.effects.extend(effects);
+            kept.gain_db = gain.unwrap_or_default();
+            for row in &mut self.rows {
+                let before = row.clips.len();
+                row.clips.retain(|c| !gone.contains(&c.id));
+                if row.clips.is_empty() && before > 0 && row.audio_only && row.fresh.is_none() {
+                    self.gone.push(row.id);
+                }
+            }
+            attached = true;
+        }
+        if !attached {
+            return Err(BridgeCutResult::Nothing.into());
+        }
+        self.commit()
+    }
+
     fn delete(mut self, clips: &[Uuid], ripple: bool, linked: bool) -> Cut {
         let gone = self.chosen(clips, linked)?;
         let mut spans: Vec<(Rational, Rational)> = Vec::new();
@@ -1738,6 +1886,22 @@ impl CompositionReference {
         clips: Vec<Uuid>,
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| edit.split_streams(&clips))
+    }
+
+    /// **Detach audio**: each heard picture clip named goes silent, and its
+    /// sound goes down as a clip of its own on a sound row, linked to it.
+    /// `Nothing` when no clip named is a heard picture clip with sound.
+    #[frb(sync)]
+    pub fn cut_detach_audio(&self, clips: Vec<Uuid>) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.detach(&clips))
+    }
+
+    /// **Attach audio**: each silent picture clip named takes back the sound
+    /// of the clips linked to it that are still the same stretch, and those
+    /// clips go. `Nothing` when no clip named has such a clip beside it.
+    #[frb(sync)]
+    pub fn cut_attach_audio(&self, clips: Vec<Uuid>) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| edit.attach(&clips))
     }
 
     /// **Merge audio streams**: fold the clips split off these ones back into
