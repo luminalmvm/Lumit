@@ -58,6 +58,13 @@ void main() {
       }
     });
 
+    test('a Mac that can replace itself takes the .app.zip', () {
+      final release = UpdateRelease.parse(_releaseJson(),
+          platform: 'macos', kind: InstallKind.bundle, replaceable: true);
+      expect(release?.assetName, 'lumit-0.2.0-macos-arm64.app.zip');
+      expect(release?.delivery, UpdateDelivery.inPlace);
+    });
+
     test('drafts and pre-releases are refused', () {
       expect(
         UpdateRelease.parse(_releaseJson(draft: true), platform: 'windows'),
@@ -148,6 +155,16 @@ void main() {
       expect(service.followsNightly, isTrue);
       await service.check();
       expect(service.release?.version, '0.2.1-nightly.20261013.11');
+    });
+
+    test('a nightly is never offered the stable release it precedes',
+        () async {
+      final service = _service(
+        version: '0.2.1-nightly.20261013.11',
+        fetch: (_) async => [_releaseJson(tag: 'v0.2.1'), ...recent()],
+      );
+      await service.check();
+      expect(service.stage, UpdateStage.upToDate);
     });
 
     test('a stable build is never offered one', () async {
@@ -619,7 +636,7 @@ Map<String, dynamic> _releaseJson({
             _asset('lumit-0.2.0-windows-x64-setup.exe'),
             _asset('lumit-0.2.0-windows-x64.zip'),
             _asset('lumit-0.2.0.dmg'),
-            _asset('lumit-0.2.0-macos-arm64.zip'),
+            _asset('lumit-0.2.0-macos-arm64.app.zip'),
             _asset('lumit-0.2.0-linux-x64.tar.gz'),
             _asset('lumit-0.2.0-linux-x64.flatpak'),
           ],

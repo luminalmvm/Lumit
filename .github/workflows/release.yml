@@ -395,13 +395,17 @@ jobs:
       # `zip`: an .app carries symbolic links, code signatures and executable
       # bits, and an archiver that drops those produces a bundle macOS refuses
       # to open.
+      #
+      # Named `.app.zip`, not `macos-arm64.zip`, so that builds from before
+      # 0.8.0 never find it. Their swap left a file in the bundle that macOS
+      # calls damaged, so they get the disk image instead.
       - name: Package the bundle for in-place updates
         run: |
           version="${RELEASE_VERSION#v}"
           app="flutter_ui/build/macos/Build/Products/Release/Lumit.app"
           mkdir -p packaging/macos/dist
           ditto -c -k --keepParent "$app" \
-            "packaging/macos/dist/lumit-$version-macos-$(uname -m).zip"
+            "packaging/macos/dist/lumit-$version-macos-$(uname -m).app.zip"
           (cd flutter_ui && dart run tool/blockmap.dart ../packaging/macos/dist/*.zip)
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
