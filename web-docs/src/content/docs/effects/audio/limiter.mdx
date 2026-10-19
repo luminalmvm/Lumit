@@ -1,0 +1,49 @@
+---
+title: Limiter
+description: "Holds the sound under a ceiling."
+---
+
+Limiter is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Nothing comes out louder than the Ceiling. The detector hears the sound a Lookahead ahead of
+the output, so the gain is down before a peak arrives, and the layer's sound is placed that
+much earlier.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Ceiling** | Slider | -24 to 0 | -0.3 | - |
+| **Input** | Slider | -12 to 24 | 0 | - |
+| **Lookahead** | Slider | 0 to 20 | 5 | - |
+| **Release** | Slider | 1 to 1000 | 100 | - |
+| **True peak** | Slider, whole numbers | 0 to 1 | 0 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Ceiling**: the loudest the output may be, in dB.
+- **Input**: gain into the limiter, in dB.
+- **Lookahead**: how far ahead it hears, in milliseconds.
+- **Release**: how fast it lets go once the loud part has gone, in milliseconds.
+- **True peak**: 1 measures between the samples, at four times the rate. 0 measures the
+  samples.
+
+## Related
+
+- [Compressor](/effects/audio/compressor/)
+- [Gain](/effects/audio/gain/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

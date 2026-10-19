@@ -238,6 +238,7 @@ Useful tools for specific tasks.
 | [Depth](/effects/utility/depth/) | Reads how far away every pixel is, for other effects to use. |
 | [Remove background](/effects/utility/remove-background/) | Cuts a subject out of a shot with a trained model, a frame at a time. |
 | [Custom shader](/effects/utility/custom-shader/) | An effect you write yourself, as WGSL text or a graph of boxes. |
+| [Extract channels](/effects/utility/extract-channels/) | Reads channels an OpenEXR file holds beyond its RGB into the layer's red, green, blue and alpha. |
 | [Node graph](/effects/utility/node-graph/) | Applies a node graph composition to the layer, with the graph's Inputs as its rows. |
 
 {/* END GENERATED */}
@@ -293,7 +294,7 @@ A driver is wired on a layer's own graph, see [The node graph](/use/nodes/), or 
 | Effect | What it does |
 | --- | --- |
 | [Wiggle](/effects/drivers/wiggle/) | A number that wobbles, for anything that should not sit still. |
-| [Audio level](/effects/drivers/audio-level/) | How loud a layer's sound is, as a number. |
+| [Audio level](/effects/drivers/audio-level/) | How loud the composition, a layer or a clip is, as a number. |
 | [Colour cycle](/effects/drivers/colour-cycle/) | A colour that turns through the hue wheel. |
 | [Math](/effects/drivers/math/) | Two numbers and one arithmetic sign. |
 | [Remap](/effects/drivers/remap/) | One range of numbers into another. |
@@ -306,5 +307,31 @@ A driver is wired on a layer's own graph, see [The node graph](/use/nodes/), or 
 | [Clone index](/effects/drivers/clone-index/) | Tells a layer which copy Clone to points is stamping it as. |
 | [Measure](/effects/drivers/measure/) | The size and edges of a layer's content, as numbers. |
 | [Beat trigger](/effects/drivers/beat-trigger/) | Turns beats and loud moments into events other effects react to. |
+
+{/* END GENERATED */}
+
+### Audio
+
+Effects that change a layer's sound. They draw nothing.
+
+{/* GENERATED:list:audio - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Effect | What it does |
+| --- | --- |
+| [Gain](/effects/audio/gain/) | Turns a layer's sound up or down, each side on its own, and can flip its polarity. |
+| [Stereo width](/effects/audio/stereo-width/) | Narrows or widens the stereo picture, moves it left or right, and folds the bass to the middle. |
+| [Parametric EQ](/effects/audio/parametric-eq/) | Five filters in a row, each a bell, a shelf, a pass or a notch. |
+| [Graphic EQ](/effects/audio/graphic-eq/) | Ten octave bands, one gain each. |
+| [Compressor](/effects/audio/compressor/) | Turns down whatever is louder than a threshold. |
+| [Limiter](/effects/audio/limiter/) | Holds the sound under a ceiling. |
+| [Gate](/effects/audio/gate/) | Turns down whatever is quieter than a threshold. |
+| [Distortion](/effects/audio/distortion/) | Bends or coarsens a waveform: soft clip, hard clip, foldback, bit crush or rate reduce. |
+| [Delay](/effects/audio/delay/) | Repeats the sound after a set time, each repeat quieter and duller. |
+| [Reverb](/effects/audio/reverb/) | A room's reflections added to the sound. |
+| [Chorus](/effects/audio/chorus/) | Copies of the sound with a delay that will not sit still: a chorus or a flanger. |
+| [Phaser](/effects/audio/phaser/) | A row of notches swept up and down the sound. |
+| [Tremolo](/effects/audio/tremolo/) | The level moved up and down by an oscillator, or the sound panned side to side. |
+| [Vibrato](/effects/audio/vibrato/) | The pitch moved up and down by an oscillator. |
+| [Wah](/effects/audio/wah/) | A narrow band of the sound swept up and down, by an oscillator or by the sound's own level. |
 
 {/* END GENERATED */}

@@ -1,0 +1,45 @@
+---
+title: Stereo width
+description: "Narrows or widens the stereo picture, moves it left or right, and folds the bass to the middle."
+---
+
+Stereo width is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Width scales the difference between the two channels. At 0 both channels carry the same
+sound.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Width** | Slider | 0 to 200 | 100 | Per cent |
+| **Balance** | Slider | -100 to 100 | 0 | Per cent |
+| **Mono below** | Slider | 0 to 500 | 0 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Width**: how much of the difference between the channels is kept. 0 is mono, 100 is the
+  sound as it is, 200 is twice the difference.
+- **Balance**: moves the sound towards the left, below 0, or the right, above 0, at constant
+  loudness.
+- **Mono below**: a frequency in Hz. Everything under it is folded into the middle. 0 is
+  off.
+
+## Related
+
+- [Gain](/effects/audio/gain/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

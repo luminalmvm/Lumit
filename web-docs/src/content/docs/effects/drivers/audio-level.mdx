@@ -1,6 +1,6 @@
 ---
 title: Audio level
-description: "How loud a layer's sound is, as a number."
+description: "How loud the composition, a layer or a clip is, as a number."
 ---
 
 Audio level is a **Drivers** effect.
@@ -13,10 +13,13 @@ Audio level is a **Drivers** effect.
 
 ## What it does
 
-Returns the loudness of the audio from a given layer at the current frame. It has two sockets:
-**Amplitude**, the level of the whole sound, and **Low**, the level of the bottom end.
+Returns the loudness at the current frame of the sound the **Source** row picks. It has four
+sockets: **Amplitude**, the level of the whole sound, **Low**, the level of the bottom end,
+**Peak**, the loudest single sample, and **High**, the level of the top end.
 
-The level is measured over a short stretch of time centred on the frame.
+The level is measured over a short stretch of time centred on the frame. A layer or clip
+that has been deleted reads 0. An Audio level saved before the Source row existed and set
+to a layer reads that layer's file before its volume.
 
 ## Parameters
 
@@ -24,14 +27,25 @@ The level is measured over a short stretch of time centred on the frame.
 
 | Parameter | Control | Range | Default | Unit |
 | --- | --- | --- | --- | --- |
+| **Source** | Dropdown | This comp · Layer · Clip | This comp | - |
 | **Audio** | Layer | Any layer in the composition | None | - |
+| **Clip** | clip | - | - | - |
 | **Window** | Slider | 0.01 to 1; down to 0.001 and up to 10 | 0.05 | Seconds |
+
+In the Effect Controls panel:
+
+- **Clip** is editable while **Source** is set to Clip.
+- **Audio** is editable while **Source** is anything but This comp.
 
 {/* END GENERATED */}
 
 ## What each control does
 
-- **Audio**: the layer whose sound is measured.
+- **Source**: which sound is measured. **This comp** is the composition's mix, at the layers'
+  own volumes, with muted layers silent and solo honoured. **Layer** is the Audio layer's
+  part of that mix, after its volume. **Clip** is one clip of that layer, with its fades.
+- **Audio**: the layer Layer and Clip measure.
+- **Clip**: the clip Clip measures, from the clips of the Audio layer.
 - **Window**: how long a stretch of time the level is measured over.
 
 ## Related

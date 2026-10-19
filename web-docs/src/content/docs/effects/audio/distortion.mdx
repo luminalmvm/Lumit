@@ -1,0 +1,47 @@
+---
+title: Distortion
+description: "Bends or coarsens a waveform: soft clip, hard clip, foldback, bit crush or rate reduce."
+---
+
+Distortion is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+The shaping runs at four times the sample rate. Tone tilts the shaped sound darker or
+brighter.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Drive** | Slider | 0 to 48 | 12 | - |
+| **Shape** | Slider, whole numbers | 0 to 4 | 0 | - |
+| **Tone** | Slider | -12 to 12 | 0 | - |
+| **Output** | Slider | -24 to 24 | 0 | - |
+| **Wet** | Slider | 0 to 100 | 100 | Per cent |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Drive**: how hard the sound is pushed into the shaper, in dB. On bit crush and rate
+  reduce it picks the bit depth and the hold length instead.
+- **Shape**: 0 soft clip, 1 hard clip, 2 foldback, 3 bit crush, 4 rate reduce.
+- **Tone**: a tilt over the shaped sound, in dB. Below 0 is darker, above 0 brighter.
+- **Output**: the level on the way out, in dB.
+- **Wet**: how much of the output is the shaped sound.
+
+## Related
+
+- [Limiter](/effects/audio/limiter/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)

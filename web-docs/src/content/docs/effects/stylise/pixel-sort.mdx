@@ -32,7 +32,8 @@ decides where each line's runs are cut.
 | **Reverse** | Checkbox | On or off | Off | - |
 | **Min** | Slider | 0 to 1 | 0 | - |
 | **Max** | Slider | 0 to 1 | 1 | - |
-| **Maximum span length** | Slider | 0 to 1000; up to 1024 | 300 | Pixels at composition size |
+| **Maximum span length** | Slider | 0 to 1000; up to 4096 | 300 | Pixels at composition size |
+| **Random offset scale** | Slider | 0 to 1 | 1 | - |
 | **Random span offsets** | Seed | Any whole number | A fresh random seed per instance | - |
 | **Mix** | Slider | 0 to 100 | 100 | Per cent |
 | **Blend** | Dropdown | Normal · Darken · Multiply · Colour burn · Linear burn · Darker colour · Add · Lighten · Screen · Colour dodge · Lighter colour · Overlay · Soft light · Hard light · Linear light · Vivid light · Pin light · Hard mix · Difference · Exclusion · Subtract · Divide · Hue · Saturation · Colour · Luminosity | Normal | - |
@@ -57,6 +58,8 @@ In the Effect Controls panel:
 - **Min**: the bottom of the band that sorts.
 - **Max**: the top of it. Min above Max sorts nothing.
 - **Maximum span length**: the most pixels one run may hold.
+- **Random offset scale**: how far each line's runs are shifted at random. At 0 every line's
+  runs start in the same place.
 - **Random span offsets**: which offsets the runs take on each line.
 - **Mix**: how much of the result replaces the original.
 - **Matte** and **Invert** say where the runs may form, alongside **Min** and

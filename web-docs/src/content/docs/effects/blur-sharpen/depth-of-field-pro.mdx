@@ -148,20 +148,44 @@ picture, the **Depth** view hands on the distance, **Focus distance (m)** hands 
 the lens is focused, for Lens flare's **Focus distance (m)** to follow, **F-stop** its
 aperture, for Lens dirt's, and **Glass curvature** how far the lens's front glass bulges,
 for Lens dirt's too.
+With **Use focus point** on, the **Focus distance (m)** output still hands out the row's
+value.
 
 ## The lens window
 
-**Edit lens…** opens the same window on Depth of field pro and on Lens flare. It lists the
-bundled lenses, your own lenses, and the lens kept in the effect. **Import…** opens a
-`.lens` file.
+**Edit lens…** opens the **Lens** window, the same on Depth of field pro and on Lens flare.
+Its list holds **In this effect**, **Built in** and, once any are saved, **Your lenses**.
+**Import…** opens a `.lens` file. A file that is not one is refused: "That file is not a
+lens."
 
-Every surface of the open lens can be changed: radius, thickness, index, Abbe number,
-diameter, coating, and which surface is the stop.
+Above the open lens are its name and **Focal length**, 1 to 2000 mm. Below them is a
+cross-section: the glass, the iris in amber at the current F-stop, and 21 parallel rays,
+green where they reach the sensor line and red where an edge or the iris stops them.
 
+- **F-stop** runs from the lens's widest to 22. **Use lens** writes it to the effect when it
+  was moved and the effect's F-stop is not keyed.
+- **Field angle** tilts the rays off the axis. It changes only the drawing.
+
+Every surface is a row:
+
+| Column | What it is |
+| --- | --- |
+| **Radius** | The surface's radius of curvature, in mm. 0 is flat. The stop row has none. |
+| **Thickness** | The distance to the next surface, in mm. |
+| **Index** | The refractive index of what follows the surface. |
+| **Abbe** | The Abbe number of what follows the surface. |
+| **Diameter** | How far from the axis the surface reaches, in mm. |
+| **Coating** | 0 bare, 1 single layer, 2 and up multicoat. |
+| **Stop** | The iris. One row is the stop. |
+
+**Add surface** adds a row, up to 40. **Remove surface**, the cross at the end of a row,
+takes one away, down to three.
+
+- **Cancel** closes the window and changes nothing.
 - **Use lens** puts the lens on the effect. An edited or imported lens is kept in the
   effect and saved with the project.
 - **Save to your lenses** saves it to your own lenses, offered in every project. Bundled
-  lenses are never changed.
+  lenses are never changed. A save that fails says "The lens could not be saved."
 
 ## Related
 

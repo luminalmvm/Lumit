@@ -1,0 +1,53 @@
+---
+title: Gate
+description: "Turns down whatever is quieter than a threshold."
+---
+
+Gate is an **Audio** effect.
+
+{/* GENERATED:example - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+
+
+{/* END GENERATED */}
+
+## What it does
+
+Turns the sound down once it is quieter than the **Threshold**. The gate shuts once the level
+has fallen **Hysteresis** under the threshold and the **Hold** has run out. At the top of
+**Ratio** the gate shuts; lower down it is an expander that leans on the quiet parts.
+
+## Parameters
+
+{/* GENERATED:parameters - rewritten by `npm run docs:effects`. Edit the prose, not this block. */}
+
+| Parameter | Control | Range | Default | Unit |
+| --- | --- | --- | --- | --- |
+| **Threshold** | Slider | -60 to 0 | -40 | - |
+| **Ratio** | Slider | 1 to 20 | 20 | - |
+| **Hysteresis** | Slider | 0 to 24 | 3 | - |
+| **Attack** | Slider | 0.1 to 100 | 1 | - |
+| **Hold** | Slider | 0 to 500 | 10 | - |
+| **Release** | Slider | 5 to 1000 | 100 | - |
+| **Range** | Slider | -100 to 0 | -60 | - |
+
+{/* END GENERATED */}
+
+## What each control does
+
+- **Threshold**: the level the gate opens at, in dB.
+- **Ratio**: how steeply the quiet part is turned down, as n to 1. 1 is off.
+- **Hysteresis**: how far under the threshold, in dB, the level falls before the gate may
+  shut.
+- **Attack**: how fast it opens once the sound arrives, in milliseconds.
+- **Hold**: how long it stays open after the level drops, in milliseconds.
+- **Release**: how fast it shuts once the hold has run out, in milliseconds.
+- **Range**: the lowest a shut gate goes, in dB. 0 lets everything through and -100 is
+  silence.
+
+## Related
+
+- [Compressor](/effects/audio/compressor/)
+- [Audio](/use/audio/)
+- [Audio effects](/effects/#audio)
+- [Effects](/use/effects/)
