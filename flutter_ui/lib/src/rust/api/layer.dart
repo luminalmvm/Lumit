@@ -2675,6 +2675,14 @@ class LayerReference {
       BridgeLib.instance.api
           .crateApiLayerLayerReferenceClipAudioStreams(that: this, clip: clip);
 
+  /// Whether a clip on this layer plays something with a picture: false
+  /// for a clip of a file with no video stream, which a picture row plays
+  /// as sound. Probing costs an FFmpeg open the first time, so the Cut
+  /// timeline asks once a clip, off the build, and remembers.
+  Future<bool> clipHasPicture({required UuidValue clip}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceClipHasPicture(that: this, clip: clip);
+
   /// A thumbnail of the **first frame this clip shows**.
   ///
   /// Not the file's first frame: a clip after a cut starts part way in, and

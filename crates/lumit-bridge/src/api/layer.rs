@@ -6233,6 +6233,29 @@ impl LayerReference {
         }
     }
 
+    /// Whether a clip on this layer plays something with a picture: false
+    /// for a clip of a file with no video stream, which a picture row plays
+    /// as sound. Probing costs an FFmpeg open the first time, so the Cut
+    /// timeline asks once a clip, off the build, and remembers.
+    pub fn clip_has_picture(&self, clip: Uuid) -> Result<bool, BridgeError> {
+        let (clips, index) = self.clips_and_index(clip)?;
+        let Some(clip) = clips.get(index) else {
+            return Ok(true);
+        };
+        let lumit_core::sequence::ClipSource::Footage(item) = clip.source else {
+            return Ok(true);
+        };
+        let proj = self.project()?;
+        let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        let snapshot = proj.store.snapshot();
+        Ok(match snapshot.item(item) {
+            Some(lumit_core::model::ProjectItem::Footage(footage)) => {
+                crate::api::composition::CompositionReference::has_picture(&proj, footage)
+            }
+            _ => true,
+        })
+    }
+
     /// Whether this layer has a picture to sample — the mirror of
     /// [`Self::has_audio`], and what tells a matte or a layer-valued effect
     /// parameter which layers are worth offering.

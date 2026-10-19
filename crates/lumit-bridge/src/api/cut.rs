@@ -762,6 +762,12 @@ impl<'a> Edit<'a> {
 
         // Dropped on a sound row, a file gives its sound and nothing else.
         let onto_sound = target.is_some_and(|r| self.rows[r].audio_only);
+        // A file with no picture dropped on a picture row is sound on that
+        // row, which is made heard for it.
+        let onto_picture = !picture && target.is_some_and(|r| !self.rows[r].audio_only);
+        if let (true, Some(r)) = (onto_picture, target) {
+            self.hear(r);
+        }
         let picture_row = match target {
             _ if !picture || onto_sound => None,
             Some(r) => Some(r),
@@ -793,7 +799,7 @@ impl<'a> Edit<'a> {
             // The sound of the file itself goes where it always has. A stream
             // split off beside it goes on a row nothing of this file is on.
             let whole = n == 0 && wanted;
-            if whole && onto_sound {
+            if whole && (onto_sound || onto_picture) {
                 landings.push(target);
                 continue;
             }
@@ -1070,6 +1076,18 @@ impl<'a> Edit<'a> {
         }
     }
 
+    /// Whether a clip on row `r` is sound: any clip on a sound row, and one
+    /// of a file with no picture on a picture row.
+    fn is_sound(&self, r: usize, clip: &Clip) -> Cut<bool> {
+        if self.rows[r].audio_only {
+            return Ok(true);
+        }
+        Ok(match clip.source {
+            ClipSource::Footage(item) => !self.kinds_of(item)?.0,
+            ClipSource::Comp(_) => false,
+        })
+    }
+
     /// Whether a footage item has a picture, and whether it carries sound.
     /// Neither for anything else.
     fn kinds_of(&self, item: Uuid) -> Cut<(bool, bool)> {
@@ -1273,9 +1291,20 @@ impl<'a> Edit<'a> {
         // A picture clip moves among picture rows and sound among sound rows.
         // The clips of the grabbed clip's kind all cross as many rows as it
         // does, and the others, its linked sound say, stay on their own.
+        // Sound may also cross between a sound row and a picture row, and
+        // then only the grabbed clip's row moves.
         let sound = self.rows[from].audio_only;
-        if self.rows[to].audio_only != sound {
-            return Err(BridgeCutResult::WrongLayer.into());
+        let across = self.rows[to].audio_only != sound;
+        if across {
+            for clip in self.rows[from]
+                .clips
+                .iter()
+                .filter(|c| moving.contains(&c.id))
+            {
+                if !self.is_sound(from, clip)? {
+                    return Err(BridgeCutResult::WrongLayer.into());
+                }
+            }
         }
         let lane: Vec<usize> = (0..self.rows.len())
             .filter(|r| self.rows[*r].audio_only == sound)
@@ -1283,17 +1312,27 @@ impl<'a> Edit<'a> {
         let place = |r: usize| lane.iter().position(|l| *l == r);
 
         let mut lifted: Vec<(usize, Clip)> = Vec::new();
+        // Whether each clip lifted was heard where it was.
+        let mut sounding: Vec<bool> = Vec::new();
         for r in 0..self.rows.len() {
             if !self.rows[r].clips.iter().any(|c| moving.contains(&c.id)) {
                 continue;
             }
             let landing = match (place(r), place(from), place(to)) {
+                _ if across => {
+                    if r == from {
+                        to
+                    } else {
+                        r
+                    }
+                }
                 (Some(here), Some(from), Some(to)) => (here + to)
                     .checked_sub(from)
                     .and_then(|i| lane.get(i).copied())
                     .ok_or(BridgeCutResult::Limit)?,
                 _ => r,
             };
+            let heard = self.rows[r].audible;
             if self.rows[landing].locked {
                 return Err(BridgeCutResult::Locked.into());
             }
@@ -1310,11 +1349,26 @@ impl<'a> Edit<'a> {
                 if clip.place_start.is_negative() {
                     return Err(BridgeCutResult::BeforeStart.into());
                 }
+                sounding.push(heard && clip.audible);
                 lifted.push((landing, clip));
             }
         }
         if copy {
             renew(lifted.iter_mut().map(|(_, clip)| clip));
+        }
+        // A clip lands on a picture row heard as it was before: a row made
+        // silent before rows were all heard is made heard for one that was,
+        // and one that was not stays silent on a row that is.
+        for ((landing, clip), heard) in lifted.iter_mut().zip(sounding) {
+            if self.rows[*landing].audio_only {
+                continue;
+            }
+            if heard {
+                self.hear(*landing);
+            }
+            if self.rows[*landing].audible {
+                clip.audible = heard;
+            }
         }
         if let (true, false, Some(at)) = (how.ripple, copy, from_time) {
             // What followed the clips goes with them, by as much.

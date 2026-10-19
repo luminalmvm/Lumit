@@ -91,6 +91,10 @@ class CutTrackPainter extends CustomPainter {
   final Map<String, ui.Image?> thumbs;
   final Map<String, BridgeAudioPeaks> peaks;
 
+  /// The clips on picture tracks that play something with no picture, by
+  /// id. They draw as sound clips do.
+  final Set<String> soundOnPicture;
+
   /// The composition glyph, or null until the panel has made it.
   final CutGlyph? compGlyph;
 
@@ -125,6 +129,7 @@ class CutTrackPainter extends CustomPainter {
     required this.hover,
     required this.thumbs,
     required this.peaks,
+    required this.soundOnPicture,
     required this.compGlyph,
     required this.nameOf,
     required this.handles,
@@ -160,12 +165,20 @@ class CutTrackPainter extends CustomPainter {
     final to = axis.frameAtExact(viewLeft + viewWidth).ceil() + slack;
     // A move across tracks: the travelling clips of the grabbed clip's kind
     // leave their own track and are drawn on the one they will land on.
-    final crossing = held != null &&
+    // Sound crossing between a sound track and a picture track takes the
+    // grabbed clip's track alone.
+    final moving = held != null &&
         held.trackShift != 0 &&
         held.grab == BarGrab.move &&
         held.tool != CutTool.slide &&
-        held.track != null &&
-        tracks[held.track!].kind == track.kind;
+        held.track != null;
+    final kinds = {CutTrackKind.picture, CutTrackKind.sound};
+    final crossing = moving && tracks[held.track!].kind == track.kind;
+    final across = moving &&
+        !crossing &&
+        index - held.trackShift == held.track &&
+        kinds.contains(track.kind) &&
+        kinds.contains(tracks[held.track!].kind);
     final mark = hover.value;
     if (track.clips.isEmpty) {
       _plainBar(canvas, size, held, locked);
@@ -183,11 +196,12 @@ class CutTrackPainter extends CustomPainter {
         }
         final span = cutDraggedSpan(clip, held, locked: locked);
         spans.add(span);
-        final (left, width) = _boxOf(clip, span, held, sound: track.sound);
+        final sound = _isSound(track, clip);
+        final (left, width) = _boxOf(clip, span, held, sound: sound);
         if (left > viewLeft + viewWidth || left + width < viewLeft) continue;
         final box = Rect.fromLTWH(
             left, cutClipInset, width, size.height - cutClipInset * 2);
-        _clipBox(canvas, clip, box, held, mark, sound: track.sound);
+        _clipBox(canvas, clip, box, held, mark, sound: sound);
       }
       // Where two clips overlap the overlap is the transition, a dissolve
       // on a picture track and a crossfade on a sound track: the join,
@@ -208,7 +222,7 @@ class CutTrackPainter extends CustomPainter {
       }
       _fades(canvas, size, lo, hi, spans, held, mark);
     }
-    if (!crossing) return;
+    if (!crossing && !across) return;
     final source = index - held.trackShift;
     if (source < 0 || source >= tracks.length) return;
     final other = tracks[source];
@@ -216,14 +230,20 @@ class CutTrackPainter extends CustomPainter {
     for (var i = lo; i < hi; i++) {
       final clip = other.clips[i];
       if (!held.clips.contains(clip.id.toString())) continue;
+      final sound = _isSound(other, clip);
       final (left, width) =
-          _boxOf(clip, cutDraggedSpan(clip, held), held, sound: other.sound);
+          _boxOf(clip, cutDraggedSpan(clip, held), held, sound: sound);
       if (left > viewLeft + viewWidth || left + width < viewLeft) continue;
       final box = Rect.fromLTWH(
           left, cutClipInset, width, size.height - cutClipInset * 2);
-      _clipBox(canvas, clip, box, held, null, sound: other.sound);
+      _clipBox(canvas, clip, box, held, null, sound: sound);
     }
   }
+
+  /// Whether [clip] on [on] draws as sound: every clip on a sound track,
+  /// and one that plays no picture on a picture track.
+  bool _isSound(CutTrack on, BridgeClip clip) =>
+      on.sound || soundOnPicture.contains(clip.id.toString());
 
   /// A clip's box for its dragged [span]. A sound clip may sit between two
   /// frames, so its box is drawn where it is to the part of a frame, and a
@@ -654,6 +674,7 @@ class CutTrackPainter extends CustomPainter {
       old.axis.width != axis.width ||
       old.fps != fps ||
       old.selected != selected ||
+      old.soundOnPicture != soundOnPicture ||
       old.compGlyph != compGlyph ||
       old.handles != handles ||
       old.blendNames != blendNames ||

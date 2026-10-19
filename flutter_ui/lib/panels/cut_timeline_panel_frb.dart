@@ -179,6 +179,12 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// Linked switch is on.
   Map<String, Set<String>> _mates = const {};
 
+  /// Whether each clip on a picture track plays something with a picture,
+  /// by clip id, asked once a clip and off the build. The ones that do not
+  /// are sound on that track, and draw as sound clips do.
+  final Map<String, bool> _pictured = {};
+  Set<String> _soundOnPicture = const {};
+
   /// The tool armed on the strip, other than the razor, which rides the
   /// shell's own tool state so the toolbar and its chord arm it too.
   CutTool _localTool = CutTool.select;
@@ -1218,6 +1224,31 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       }
     }
     _trackOfClip = of;
+    _pictured.removeWhere((id, _) => !of.containsKey(id));
+    final sounding = <String>{};
+    for (final track in _tracks) {
+      if (track.kind != CutTrackKind.picture) continue;
+      for (final clip in track.clips) {
+        if (clip.sourceIsComp) continue;
+        final id = clip.id.toString();
+        switch (_pictured[id]) {
+          case false:
+            sounding.add(id);
+          case null:
+            // Claimed first, so a rebuild mid-probe does not ask twice.
+            _pictured[id] = true;
+            track.entry.layer.clipHasPicture(clip: clip.id).then((has) {
+              if (!mounted || has) return;
+              setState(() {
+                _pictured[id] = false;
+                _tracksRevision = null;
+              });
+            }, onError: (Object _) {});
+          case true:
+        }
+      }
+    }
+    _soundOnPicture = sounding;
     // A row that has gone takes its height with it, or it would be written
     // back out with the project for ever.
     // A layer's own sound row arrives after its file has been asked about
@@ -1356,7 +1387,8 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       final (lo, hi) = track.window(from, to);
       for (var k = lo; k < hi; k++) {
         final clip = track.clips[k];
-        if (!track.sound) {
+        final id = clip.id.toString();
+        if (!track.sound && !_soundOnPicture.contains(id)) {
           _wantThumb(track, clip);
           // A picture clip that is heard brings its sound as well, for the
           // band along the foot of its box.
@@ -1366,7 +1398,6 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
               !clip.sourceIsComp;
           if (!heard) continue;
         }
-        final id = clip.id.toString();
         live.add(id);
         final (left, width) =
             cutClipBox(axis, clip.startFrame.toInt(), clip.endFrame.toInt());
@@ -3321,6 +3352,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
                                       hover: _hover,
                                       thumbs: _thumbs,
                                       peaks: _peaks,
+                                      soundOnPicture: _soundOnPicture,
                                       compGlyph: _compGlyph,
                                       nameOf: _nameOf,
                                       handles: _toolOf(ui) == CutTool.select,
