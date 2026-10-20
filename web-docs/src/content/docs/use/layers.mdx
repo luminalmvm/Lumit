@@ -192,6 +192,10 @@ linearised.
 - **Falloff**: **None**, **Smooth** or **Inverse square clamped**. **Radius** is how far the
   light keeps its full strength, and **Falloff distance** how far past it a smooth falloff
   takes to fade out.
+- **Casts shadows**: whether the light casts the shadows of layers that cast them. An ambient
+  light casts none.
+- **Shadow darkness** and **Shadow diffusion**, while it casts: how dark its shadows are, and
+  how many pixels their edges spread over.
 
 Every row but the type and the falloff can be keyframed. **Point of interest**, in Light
 settings, aims a spot, parallel or area light at a point rather than by its rotation; the
@@ -199,7 +203,13 @@ point's row then shows under Transform, and the rotation rows turn the light fro
 
 **Material options**, beside Transform on a 3D layer, sets how it takes the lights:
 
-- **Accepts lights**: whether the lights shade it.
+- **Casts shadows**: **Off**, **On**, or **Only**, which casts the shadow without drawing
+  the layer.
+- **Accepts shadows**: **Off**, **On**, or **Only**, which draws nothing but the shadows that
+  fall on it.
+- **Light transmission**, while it casts: how much of the light passing through the layer
+  takes its colour rather than stopping.
+- **Accepts lights**: whether the lights shade it. Shadows still fall on it when this is off.
 - **Ambient**: how much of the ambient lights it takes.
 - **Diffuse**: how much of the other lights it takes.
 - **Specular intensity**: how bright the highlight a light makes on it is.
@@ -209,8 +219,12 @@ point's row then shows under Transform, and the rotation rows turn the light fro
 A layer in a project saved before materials existed has no highlight until its **Specular
 intensity** is raised.
 
+3D layers separated by a 2D or adjustment layer don't shade each other. Up to 16 layers in
+each run of 3D layers cast shadows, those nearest the layers they shade.
+
 :::note[Not built yet]
-Shadows. An After Effects project's shadow settings are kept with it.
+Motion blur on a moving layer's shadow. A track matte or a precomp's masks in the shadow it
+casts.
 :::
 
 ## Parenting

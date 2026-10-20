@@ -158,6 +158,7 @@ List<TransformGroup> transformGroups({
   BridgeLayerKind kind = BridgeLayerKind.footage,
   bool twoNode = false,
   BridgeLightSettings? light,
+  BridgeMaterialSettings? material,
 }) {
   List<TransformGroup> pairRows(
     BridgeTransformPair pair,
@@ -286,6 +287,16 @@ List<TransformGroup> transformGroups({
           TransformAxis(BridgeTransformProp.falloffDistance,
               suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
         ], section: option),
+      if (s.castsShadows && s.kind != BridgeLightKind.ambient) ...[
+        TransformGroup(l10n.lightShadowDarkness, const [
+          TransformAxis(BridgeTransformProp.shadowDarkness,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+        TransformGroup(l10n.lightShadowDiffusion, [
+          TransformAxis(BridgeTransformProp.shadowDiffusion,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 0.5),
+        ], section: option),
+      ],
     ];
   }
 
@@ -341,6 +352,9 @@ List<TransformGroup> transformGroups({
     // has no picture to light.
     if (threeD && kind != BridgeLayerKind.nullLayer)
       for (final (label, prop) in [
+        // Light passes through a layer only where it casts a shadow.
+        if (material?.castsShadows != BridgeShadowMode.off)
+          (l10n.materialLightTransmission, BridgeTransformProp.lightTransmission),
         (l10n.materialAmbient, BridgeTransformProp.ambient),
         (l10n.materialDiffuse, BridgeTransformProp.diffuse),
         (l10n.materialSpecular, BridgeTransformProp.specular),
@@ -374,8 +388,10 @@ class TransformRowsFrb extends StatelessWidget {
   final bool twoNode;
   final BridgeLightSettings? light;
 
-  /// The layer's Accepts lights switch, for the Material options' own row.
+  /// The layer's Accepts lights switch and its shadow settings, for the
+  /// Material options' own rows.
   final bool acceptsLights;
+  final BridgeMaterialSettings? material;
 
   /// How each pair is shown — which decides how many rows there are.
   final BridgeAxisModes axisModes;
@@ -407,6 +423,7 @@ class TransformRowsFrb extends StatelessWidget {
     this.twoNode = false,
     this.light,
     this.acceptsLights = true,
+    this.material,
     required this.axisModes,
     required this.playheadFrame,
     required this.onSeek,
@@ -429,7 +446,8 @@ class TransformRowsFrb extends StatelessWidget {
         modes: axisModes,
         kind: kind,
         twoNode: twoNode,
-        light: light)) {
+        light: light,
+        material: material)) {
       if (group.section != last) {
         last = group.section;
         // The Effect controls card names each options group as the
@@ -447,6 +465,7 @@ class TransformRowsFrb extends StatelessWidget {
             layer: layer,
             setting: setting,
             light: light,
+            material: material,
             acceptsLights: acceptsLights,
             onChanged: onChanged,
             keyPrefix: keyPrefix,
@@ -1232,11 +1251,17 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
         tf.light?.falloffDistance ?? _noChannel,
       BridgeTransformProp.lightWidth => tf.light?.width ?? _noChannel,
       BridgeTransformProp.lightHeight => tf.light?.height ?? _noChannel,
+      BridgeTransformProp.shadowDarkness =>
+        tf.light?.shadowDarkness ?? _noChannel,
+      BridgeTransformProp.shadowDiffusion =>
+        tf.light?.shadowDiffusion ?? _noChannel,
       BridgeTransformProp.ambient => tf.material?.ambient ?? _noChannel,
       BridgeTransformProp.diffuse => tf.material?.diffuse ?? _noChannel,
       BridgeTransformProp.specular => tf.material?.specular ?? _noChannel,
       BridgeTransformProp.shininess => tf.material?.shininess ?? _noChannel,
       BridgeTransformProp.metal => tf.material?.metal ?? _noChannel,
+      BridgeTransformProp.lightTransmission =>
+        tf.material?.lightTransmission ?? _noChannel,
     };
 
 /// A copy of `tf` with one property replaced — what the preview renders.
@@ -1301,6 +1326,10 @@ BridgeTransform writeScalar(
                 pick(BridgeTransformProp.falloffDistance, light.falloffDistance),
             width: pick(BridgeTransformProp.lightWidth, light.width),
             height: pick(BridgeTransformProp.lightHeight, light.height),
+            shadowDarkness:
+                pick(BridgeTransformProp.shadowDarkness, light.shadowDarkness),
+            shadowDiffusion:
+                pick(BridgeTransformProp.shadowDiffusion, light.shadowDiffusion),
           ),
     material: material == null
         ? null
@@ -1310,6 +1339,8 @@ BridgeTransform writeScalar(
             specular: pick(BridgeTransformProp.specular, material.specular),
             shininess: pick(BridgeTransformProp.shininess, material.shininess),
             metal: pick(BridgeTransformProp.metal, material.metal),
+            lightTransmission: pick(BridgeTransformProp.lightTransmission,
+                material.lightTransmission),
           ),
   );
 }

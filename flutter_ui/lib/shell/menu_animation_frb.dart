@@ -247,6 +247,7 @@ bool toggleTransformKeys(LumitState app, LumitUiState ui, String property) {
       kind: entry.info.kind,
       twoNode: entry.info.camera?.twoNode ?? false,
       light: entry.info.light,
+      material: entry.info.material,
     )) {
       if (group.section != TransformSection.transform) continue;
       if (!group.axes.first.prop.name.startsWith(property)) continue;

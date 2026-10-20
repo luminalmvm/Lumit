@@ -690,8 +690,8 @@ pub struct Material {
     /// How much the highlight takes the layer's own colour rather than the
     /// light's.
     pub metal: Property,
-    /// The shadow settings, kept and keyframed but not yet drawn: whether it
-    /// casts and takes shadows, and how much light passes through it.
+    /// Whether it casts and takes shadows, and how much light passing
+    /// through it takes its colour.
     pub casts_shadows: ShadowMode,
     pub accepts_shadows: ShadowMode,
     pub light_transmission: Property,
@@ -706,6 +706,14 @@ pub enum ShadowMode {
     Off,
     On,
     Only,
+}
+
+/// The non-animatable part of a material, what `Op::SetMaterialSettings`
+/// carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaterialSettings {
+    pub casts_shadows: ShadowMode,
+    pub accepts_shadows: ShadowMode,
 }
 
 impl Material {
@@ -739,6 +747,14 @@ impl Material {
             TransformProp::LightTransmission => &self.light_transmission,
             _ => return None,
         })
+    }
+
+    #[must_use]
+    pub fn settings(&self) -> MaterialSettings {
+        MaterialSettings {
+            casts_shadows: self.casts_shadows,
+            accepts_shadows: self.accepts_shadows,
+        }
     }
 
     pub fn get_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
@@ -2296,9 +2312,8 @@ pub struct LightDef {
     pub two_node: bool,
     /// Where an aimed light points, comp pixels.
     pub point_of_interest: [Property; 3],
-    /// After Effects' shadow settings, kept and keyframed but not yet drawn:
-    /// whether it casts them, how dark they are as a percentage, and how soft
-    /// in comp pixels.
+    /// After Effects' shadow settings: whether it casts them, how dark they
+    /// are as a percentage, and how soft in comp pixels.
     pub casts_shadows: bool,
     pub shadow_darkness: Property,
     pub shadow_diffusion: Property,
@@ -2490,6 +2505,7 @@ impl LightDef {
             falloff: self.falloff,
             two_node: self.two_node,
             legacy_shape: self.legacy_shape,
+            casts_shadows: self.casts_shadows,
         }
     }
 
@@ -2498,6 +2514,7 @@ impl LightDef {
         self.falloff = s.falloff;
         self.two_node = s.two_node;
         self.legacy_shape = s.legacy_shape;
+        self.casts_shadows = s.casts_shadows;
     }
 }
 
@@ -2535,6 +2552,8 @@ pub struct LightSettings {
     /// old light onto the new curves undoes back off them.
     #[serde(default)]
     pub legacy_shape: bool,
+    #[serde(default)]
+    pub casts_shadows: bool,
 }
 
 /// One Light layer resolved at a comp time — what the renderer hands to the
@@ -2571,6 +2590,10 @@ pub struct ResolvedLight {
     pub z: f64,
     pub rotation_x_deg: f64,
     pub rotation_y_deg: f64,
+    /// How much light its shadows take away, 0..1 with nought where it
+    /// casts none, and how many comp pixels their edges spread over.
+    pub shadow_darkness: f32,
+    pub shadow_diffusion: f32,
 }
 
 /// The active camera's evaluated placement at one comp time — what both the
@@ -2826,6 +2849,14 @@ impl Composition {
                     z: eye.position.2,
                     rotation_x_deg: eye.rotation_deg.0,
                     rotation_y_deg: eye.rotation_deg.1,
+                    // An ambient light comes from nowhere, so it has nothing
+                    // to cast a shadow from.
+                    shadow_darkness: if light.casts_shadows && light.kind != LightKind::Ambient {
+                        (light.shadow_darkness.value_at(lt) / 100.0).clamp(0.0, 1.0) as f32
+                    } else {
+                        0.0
+                    },
+                    shadow_diffusion: light.shadow_diffusion.value_at(lt).max(0.0) as f32,
                 })
             })
             .collect()

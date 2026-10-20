@@ -1263,8 +1263,16 @@ pub fn shading_lights(
 ) -> Vec<lumit_gpu::fx::LightingLight> {
     use lumit_core::model::{LayerKind, LightKind};
 
-    // After Effects never lights a 2D layer.
-    if !layer.switches.accepts_lights
+    // Accepts lights off still takes the shadows of the lights that cast
+    // them, as in After Effects. And After Effects never lights a 2D layer.
+    let unlit = !layer.switches.accepts_lights;
+    let takes_shadows = layer.switches.three_d
+        && layer.transform.material.accepts_shadows != lumit_core::model::ShadowMode::Off
+        && comp.layers.iter().any(|l| {
+            l.switches.three_d
+                && l.transform.material.casts_shadows != lumit_core::model::ShadowMode::Off
+        });
+    if (unlit && !takes_shadows)
         || matches!(
             layer.kind,
             LayerKind::Light { .. } | LayerKind::Camera { .. }
@@ -1276,6 +1284,9 @@ pub fn shading_lights(
     let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
     let read = lumit_core::model::context_reader(context, t_comp);
     let mut lights = comp.lights_at(t_comp, &read, crate::track::solves_for(&context.document));
+    if unlit {
+        lights.retain(|l| l.shadow_darkness > 0.0);
+    }
     if lights.is_empty() {
         return Vec::new();
     }
@@ -1355,6 +1366,8 @@ pub fn shading_lights(
                         .cos() as f32
                 },
                 axis: unit(place_dir(&place, 0.0, 0.0, 1.0)),
+                shadow_darkness: l.shadow_darkness,
+                shadow_diffusion: l.shadow_diffusion,
             }
         })
         .collect()
@@ -1379,6 +1392,11 @@ pub fn shading_material(
     // always was; After Effects lights from black at the Diffuse given.
     let adds = comp.lighting == lumit_core::model::CompLighting::Adds;
     let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
+    let shadows = |s: lumit_core::model::ShadowMode| match s {
+        lumit_core::model::ShadowMode::Off => lumit_gpu::fx::LightingShadows::Off,
+        lumit_core::model::ShadowMode::On => lumit_gpu::fx::LightingShadows::On,
+        lumit_core::model::ShadowMode::Only => lumit_gpu::fx::LightingShadows::Only,
+    };
     lumit_gpu::fx::LightingMaterial {
         base: if adds { 1.0 } else { 0.0 },
         ambient: pct(&m.ambient),
@@ -1388,6 +1406,10 @@ pub fn shading_material(
         metal: pct(&m.metal).min(1.0),
         eye: [0.0; 3],
         encoded,
+        accepts_shadows: shadows(m.accepts_shadows),
+        casts_shadows: shadows(m.casts_shadows),
+        transmission: pct(&m.light_transmission).min(1.0),
+        unlit: !layer.switches.accepts_lights,
     }
 }
 
@@ -1832,14 +1854,8 @@ fn comp_walk(
                     && !layer.styles.iter().any(|e| e.enabled)
                     // A light falls differently on every pixel, so lit on the
                     // tile its pool would come out as a smear of sixty-four
-                    // pixels stretched over the whole solid.
-                    && !(layer.switches.accepts_lights && !comp
-                        .lights_at(
-                            t_comp,
-                            &lumit_core::model::context_reader(&context, t_comp),
-                            None,
-                        )
-                        .is_empty());
+                    // pixels stretched over the whole solid. So does a shadow.
+                    && shading_lights(comp, layer, t_comp, &context).is_empty();
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
                     Arc::new(px_tile(&px, tw, th)),
@@ -7149,6 +7165,134 @@ mod render_below_at_tests {
             .max()
             .unwrap_or(0);
         assert!(worst <= 1, "a plain solid lit as a tile, {worst}/255 off");
+    }
+
+    /// A card between a light and a floor shades the floor, Only keeps the
+    /// shadow without the card, and a floor that takes no shadows comes out
+    /// exactly as if nothing cast one.
+    #[test]
+    fn a_card_casts_its_shadow_and_only_hides_the_card() {
+        use lumit_core::model::{LightDef, LightKind, Material, ProjectItem, ShadowMode, SolidDef};
+
+        let Some(ctx) = lumit_gpu::test_support::lease() else {
+            return; // no GPU here — skip, as the gpu crate's own tests do
+        };
+        let engine = ctx.colour();
+        let lut_cache = std::cell::RefCell::new(crate::fxops::LutCache::default());
+        let fx_cache = std::cell::RefCell::new(crate::fxops::FxCache::default());
+        let realiser = Realiser {
+            ctx: ctx.clone_handle(),
+            engine,
+            compositor: ctx.compositor(),
+            fx: ctx.fx(),
+            lut_cache: &lut_cache,
+            fx_cache: &fx_cache,
+            render_scale: 1.0,
+            samples: 1,
+            profiler: None,
+            colour_inputs: None,
+            colour_config: None,
+            flow: None,
+            late_clones: None,
+            graph_reach: None,
+        };
+        let (w, h) = (320u32, 180u32);
+        let mut doc = Document::new();
+        let mut solid = |size: (u32, u32)| {
+            let def = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "grey".into(),
+                colour: LinearColour([0.5, 0.5, 0.5, 1.0]),
+                width: size.0,
+                height: size.1,
+                extra: serde_json::Map::new(),
+            }));
+            def
+        };
+        let (floor_def, card_def) = (solid((w, h)), solid((80, 60)));
+        let doc = std::sync::Arc::new(doc);
+        let mut light = text_layer(40.0);
+        light.kind = LayerKind::Light {
+            light: Box::new(LightDef {
+                kind: LightKind::Point,
+                casts_shadows: true,
+                ..LightDef::default()
+            }),
+        };
+        light.transform.position_y = Property::fixed(90.0);
+        light.transform.position_z = Property::fixed(-200.0);
+        let card_layer = |def: Uuid, size: (u32, u32), z: f64, casts, accepts| {
+            let mut l = text_layer(f64::from(w) / 2.0);
+            l.kind = LayerKind::Solid { def };
+            l.switches.three_d = true;
+            l.transform.anchor_x = Property::fixed(f64::from(size.0) / 2.0);
+            l.transform.anchor_y = Property::fixed(f64::from(size.1) / 2.0);
+            l.transform.position_y = Property::fixed(f64::from(h) / 2.0);
+            l.transform.position_z = Property::fixed(z);
+            l.transform.material = Box::new(Material {
+                casts_shadows: casts,
+                accepts_shadows: accepts,
+                ..Material::default()
+            });
+            l
+        };
+        let render = |casts: ShadowMode, floor_takes: ShadowMode| {
+            let comp = Composition {
+                graph: None,
+                master_volume_db: 0.0,
+                lighting: Default::default(),
+                sound_mix: false,
+                groups: Vec::new(),
+                beat_grid: None,
+                id: Uuid::now_v7(),
+                name: "c".into(),
+                width: w,
+                height: h,
+                frame_rate: FrameRate::new(30, 1).unwrap(),
+                duration: Duration(Rational::new(10, 1).unwrap()),
+                background: LinearColour([0.0, 0.0, 0.0, 1.0]),
+                work_area: None,
+                layers: vec![
+                    light.clone(),
+                    card_layer(card_def, (80, 60), -80.0, casts, ShadowMode::On),
+                    card_layer(floor_def, (w, h), 0.0, ShadowMode::Off, floor_takes),
+                ],
+                markers: Vec::new(),
+                motion_blur: Default::default(),
+                extra: serde_json::Map::new(),
+            };
+            let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
+            let mut visited = vec![comp.id];
+            let draws = build_comp_draws(&doc, &comp, 0.0, &pixels, &mut visited);
+            let tex = realiser.realise(None, w, h, [0.0, 0.0, 0.0, 1.0], &draws);
+            engine
+                .readback8(
+                    &ctx,
+                    &engine.display(&ctx, &tex, lumit_gpu::DisplayParams::NEUTRAL),
+                )
+                .unwrap()
+        };
+
+        let none = render(ShadowMode::Off, ShadowMode::On);
+        let cast = render(ShadowMode::On, ShadowMode::On);
+        let only = render(ShadowMode::Only, ShadowMode::On);
+        assert_ne!(none, cast, "the card's shadow falls on the floor");
+        assert!(
+            cast.iter().zip(&none).all(|(a, b)| a <= b),
+            "a shadow only ever takes light away"
+        );
+        assert_ne!(only, cast, "Only hides the card");
+        assert_eq!(
+            cast,
+            render(ShadowMode::On, ShadowMode::On),
+            "deterministic"
+        );
+        assert_eq!(
+            none,
+            render(ShadowMode::On, ShadowMode::Off),
+            "a floor that takes no shadows is lit as if none were cast"
+        );
     }
 
     /// A region of interest composites a window of the comp, and that window

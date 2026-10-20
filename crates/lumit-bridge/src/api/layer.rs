@@ -1904,6 +1904,8 @@ pub struct BridgeLayerInfo {
     pub camera: Option<BridgeCameraSettings>,
     /// A Light layer's, the same way: which of its rows show.
     pub light: Option<BridgeLightSettings>,
+    /// A 3D layer's shadow settings, `None` where it has no Material options.
+    pub material: Option<BridgeMaterialSettings>,
 }
 
 /// One marker on a layer's bar: the marker itself plus where it lands at the
@@ -2302,6 +2304,8 @@ pub(crate) fn read_layer_info(
             }
             _ => None,
         },
+        material: (layer.switches.three_d && layer.can_adjust())
+            .then(|| BridgeMaterialSettings::of(layer.transform.material.settings())),
     }
 }
 
@@ -2467,6 +2471,55 @@ pub struct BridgeMaterialChannels {
     pub specular: BridgeScalar,
     pub shininess: BridgeScalar,
     pub metal: BridgeScalar,
+    pub light_transmission: BridgeScalar,
+}
+
+/// Casts shadows and Accepts shadows ([`lumit_core::model::ShadowMode`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeShadowMode {
+    Off,
+    On,
+    Only,
+}
+
+/// Whether a layer casts and accepts shadows, one op
+/// ([`lumit_core::model::MaterialSettings`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeMaterialSettings {
+    pub casts_shadows: BridgeShadowMode,
+    pub accepts_shadows: BridgeShadowMode,
+}
+
+impl BridgeMaterialSettings {
+    #[frb(ignore)]
+    pub(crate) fn of(s: lumit_core::model::MaterialSettings) -> Self {
+        use lumit_core::model::ShadowMode as M;
+        let mode = |m: M| match m {
+            M::Off => BridgeShadowMode::Off,
+            M::On => BridgeShadowMode::On,
+            M::Only => BridgeShadowMode::Only,
+        };
+        Self {
+            casts_shadows: mode(s.casts_shadows),
+            accepts_shadows: mode(s.accepts_shadows),
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn core(self) -> lumit_core::model::MaterialSettings {
+        use lumit_core::model::ShadowMode as M;
+        let mode = |m: BridgeShadowMode| match m {
+            BridgeShadowMode::Off => M::Off,
+            BridgeShadowMode::On => M::On,
+            BridgeShadowMode::Only => M::Only,
+        };
+        lumit_core::model::MaterialSettings {
+            casts_shadows: mode(self.casts_shadows),
+            accepts_shadows: mode(self.accepts_shadows),
+        }
+    }
 }
 
 /// The animatable channels a Light layer has beyond its transform. Intensity
@@ -2488,6 +2541,10 @@ pub struct BridgeLightChannels {
     pub falloff_distance: BridgeScalar,
     pub width: BridgeScalar,
     pub height: BridgeScalar,
+    /// Percent.
+    pub shadow_darkness: BridgeScalar,
+    /// Comp pixels.
+    pub shadow_diffusion: BridgeScalar,
 }
 
 /// What kind of light a Light layer is ([`lumit_core::model::LightKind`]).
@@ -2519,6 +2576,7 @@ pub struct BridgeLightSettings {
     pub falloff: BridgeLightFalloff,
     /// Aimed at its point of interest.
     pub two_node: bool,
+    pub casts_shadows: bool,
 }
 
 impl BridgeLightSettings {
@@ -2539,6 +2597,7 @@ impl BridgeLightSettings {
                 F::InverseSquareClamped => BridgeLightFalloff::InverseSquareClamped,
             },
             two_node: s.two_node,
+            casts_shadows: s.casts_shadows,
         }
     }
 
@@ -2561,6 +2620,7 @@ impl BridgeLightSettings {
             },
             two_node: self.two_node,
             legacy_shape,
+            casts_shadows: self.casts_shadows,
         }
     }
 }
@@ -2772,11 +2832,14 @@ pub enum BridgeTransformProp {
     FalloffDistance,
     LightWidth,
     LightHeight,
+    ShadowDarkness,
+    ShadowDiffusion,
     Ambient,
     Diffuse,
     Specular,
     Shininess,
     Metal,
+    LightTransmission,
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2912,6 +2975,9 @@ impl BridgeTransformProp {
             BridgeTransformProp::Specular => P::Specular,
             BridgeTransformProp::Shininess => P::Shininess,
             BridgeTransformProp::Metal => P::Metal,
+            BridgeTransformProp::ShadowDarkness => P::ShadowDarkness,
+            BridgeTransformProp::ShadowDiffusion => P::ShadowDiffusion,
+            BridgeTransformProp::LightTransmission => P::LightTransmission,
         }
     }
 }
@@ -2976,6 +3042,8 @@ impl BridgeTransform {
                 falloff_distance: read(&light.falloff_px),
                 width: read(&light.size[0]),
                 height: read(&light.size[1]),
+                shadow_darkness: read(&light.shadow_darkness),
+                shadow_diffusion: read(&light.shadow_diffusion),
             });
         }
         if layer.switches.three_d && layer.can_adjust() {
@@ -2987,6 +3055,7 @@ impl BridgeTransform {
                 specular: read(&m.specular),
                 shininess: read(&m.shininess),
                 metal: read(&m.metal),
+                light_transmission: read(&m.light_transmission),
             });
         }
         out
@@ -3033,6 +3102,8 @@ impl BridgeTransform {
                 (&mut light.falloff_px, &c.falloff_distance),
                 (width, &c.width),
                 (height, &c.height),
+                (&mut light.shadow_darkness, &c.shadow_darkness),
+                (&mut light.shadow_diffusion, &c.shadow_diffusion),
             ] {
                 to.animation = from.animation_at(offset)?;
             }
@@ -3088,6 +3159,7 @@ impl BridgeTransform {
                 (&mut to.specular, &m.specular),
                 (&mut to.shininess, &m.shininess),
                 (&mut to.metal, &m.metal),
+                (&mut to.light_transmission, &m.light_transmission),
             ] {
                 to.animation = from.animation_at(offset)?;
             }

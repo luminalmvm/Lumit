@@ -1934,7 +1934,8 @@ void main() {
           settings: const BridgeLightSettings(
               kind: BridgeLightKind.spot,
               falloff: BridgeLightFalloff.none,
-              twoNode: true));
+              twoNode: true,
+              castsShadows: false));
       set(beam, {
         BridgeTransformProp.positionZ: -300,
         BridgeTransformProp.rotation: -15,

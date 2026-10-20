@@ -105,8 +105,9 @@ pub struct FxEngine {
     vignette: wgpu::ComputePipeline,
     exposure: wgpu::ComputePipeline,
     /// The lighting pass (docs/06). Not an effect — the realiser calls
-    /// it directly, between a layer's effect stack and its composite.
-    lighting: wgpu::ComputePipeline,
+    /// it directly, between a layer's effect stack and its composite. Its own
+    /// layout, for the shadow casters it reads.
+    lighting: lighting::LightingFx,
     temperature: wgpu::ComputePipeline,
     invert: wgpu::ComputePipeline,
     tint: wgpu::ComputePipeline,

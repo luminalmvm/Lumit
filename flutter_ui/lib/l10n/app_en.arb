@@ -256,6 +256,34 @@
   "@materialMetal": {
     "description": "Material options row: how much the highlight takes the layer's own colour rather than the light's, as a percentage."
   },
+  "castsShadows": "Casts shadows",
+  "@castsShadows": {
+    "description": "Row and settings field on a light and in a 3D layer's Material options: whether it casts shadows."
+  },
+  "acceptsShadows": "Accepts shadows",
+  "@acceptsShadows": {
+    "description": "Material options row: whether shadows fall on the layer."
+  },
+  "shadowsOn": "On",
+  "@shadowsOn": {
+    "description": "Casts shadows or Accepts shadows: yes."
+  },
+  "shadowsOnly": "Only",
+  "@shadowsOnly": {
+    "description": "Casts shadows or Accepts shadows: only the shadow, without the layer itself. After Effects' word for it."
+  },
+  "lightShadowDarkness": "Shadow darkness",
+  "@lightShadowDarkness": {
+    "description": "Light row: how dark the shadows the light casts are, as a percentage."
+  },
+  "lightShadowDiffusion": "Shadow diffusion",
+  "@lightShadowDiffusion": {
+    "description": "Light row: how soft the shadows the light casts are, in pixels."
+  },
+  "materialLightTransmission": "Light transmission",
+  "@materialLightTransmission": {
+    "description": "Material options row: how much of the light passing through the layer takes its colour onto what is behind it, as a percentage."
+  },
   "cameraType": "Type",
   "@cameraType": {
     "description": "Camera settings row: whether the camera is one-node or two-node."
@@ -11613,9 +11641,9 @@
   "@aeRotationOrderConverted": {
     "description": "Import report row reason, lower case. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
   },
-  "aeCastsShadowsNotCarried": "the layer casts shadows, and Lumit's lights cast none, so it imported without them",
-  "@aeCastsShadowsNotCarried": {
-    "description": "Import report row reason, lower case. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
+  "aeShadowSwitchKeyed": "the setting is keyframed, and Lumit keeps the first key's",
+  "@aeShadowSwitchKeyed": {
+    "description": "Import report row reason, lower case. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
   },
   "aeSpatialTangentsFlattened": "the motion path's spatial tangents are not carried — each axis animates on its own",
   "@aeSpatialTangentsFlattened": {
@@ -14906,7 +14934,11 @@
   },
   "histSetLightSettings": "Set light settings",
   "@histSetLightSettings": {
-    "description": "Undo history entry: a light's type, falloff or aim was changed."
+    "description": "Undo history entry: a light's type, falloff, aim or shadows were changed."
+  },
+  "histSetMaterialSettings": "Set material settings",
+  "@histSetMaterialSettings": {
+    "description": "Undo history entry: whether a layer casts or accepts shadows was changed."
   },
   "histSetCameraZoom": "Set camera zoom",
   "@histSetCameraZoom": {

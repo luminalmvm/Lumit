@@ -296,6 +296,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  BridgeMaterialSettings dco_decode_box_autoadd_bridge_material_settings(
+      dynamic raw);
+
+  @protected
   BridgeMatte dco_decode_box_autoadd_bridge_matte(dynamic raw);
 
   @protected
@@ -946,6 +950,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeMaterialChannels dco_decode_bridge_material_channels(dynamic raw);
 
   @protected
+  BridgeMaterialSettings dco_decode_bridge_material_settings(dynamic raw);
+
+  @protected
   BridgeMatte dco_decode_bridge_matte(dynamic raw);
 
   @protected
@@ -1191,6 +1198,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShaderTy dco_decode_bridge_shader_ty(dynamic raw);
+
+  @protected
+  BridgeShadowMode dco_decode_bridge_shadow_mode(dynamic raw);
 
   @protected
   BridgeShapeDeform dco_decode_bridge_shape_deform(dynamic raw);
@@ -1896,6 +1906,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       dynamic raw);
 
   @protected
+  BridgeMaterialSettings? dco_decode_opt_box_autoadd_bridge_material_settings(
+      dynamic raw);
+
+  @protected
   BridgeMatte? dco_decode_opt_box_autoadd_bridge_matte(dynamic raw);
 
   @protected
@@ -2330,6 +2344,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeMaterialChannels sse_decode_box_autoadd_bridge_material_channels(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeMaterialSettings sse_decode_box_autoadd_bridge_material_settings(
       SseDeserializer deserializer);
 
   @protected
@@ -3096,6 +3114,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeMaterialSettings sse_decode_bridge_material_settings(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMatte sse_decode_bridge_matte(SseDeserializer deserializer);
 
   @protected
@@ -3377,6 +3399,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeShaderTy sse_decode_bridge_shader_ty(SseDeserializer deserializer);
+
+  @protected
+  BridgeShadowMode sse_decode_bridge_shadow_mode(SseDeserializer deserializer);
 
   @protected
   BridgeShapeDeform sse_decode_bridge_shape_deform(
@@ -4223,6 +4248,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeMaterialSettings? sse_decode_opt_box_autoadd_bridge_material_settings(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeMatte? sse_decode_opt_box_autoadd_bridge_matte(
       SseDeserializer deserializer);
 
@@ -4678,6 +4707,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_material_channels(
       BridgeMaterialChannels self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_material_settings(
+      BridgeMaterialSettings self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_matte(
@@ -5517,6 +5550,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeMaterialChannels self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_material_settings(
+      BridgeMaterialSettings self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_matte(BridgeMatte self, SseSerializer serializer);
 
   @protected
@@ -5834,6 +5871,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_shader_ty(
       BridgeShaderTy self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_shadow_mode(
+      BridgeShadowMode self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_shape_deform(
@@ -6712,6 +6753,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_material_channels(
       BridgeMaterialChannels? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_material_settings(
+      BridgeMaterialSettings? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_matte(

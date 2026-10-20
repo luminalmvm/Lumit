@@ -823,8 +823,7 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
 /// options group, and the light's kind, colour, intensity, cone and aim.
 /// The colour converts into scene-linear light; the rest is After Effects'
 /// own numbers.
-/// Material Options' **Casts Shadows** is kept, and reported, since nothing
-/// draws it yet.
+/// Material Options' **Casts Shadows** is kept and drawn.
 ///
 /// **ROWS NOT CARRIED**, all owed in docs/TODO.md and all revealed here:
 ///
@@ -845,12 +844,9 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     assert_eq!(card.transform.rotation_x.value_at(0.0), 0.0);
     assert_eq!(card.transform.rotation_y.value_at(0.0), 30.0);
     assert_eq!(card.transform.rotation.value_at(0.0), 0.0);
-    assert!(
-        report().rows.iter().any(|row| {
-            row.reason == Reason::CastsShadowsNotCarried
-                && row.path.layer.as_deref() == Some("3d card")
-        }),
-        "the card casts shadows, and Lumit's lights cast none"
+    assert_eq!(
+        card.transform.material.casts_shadows,
+        lumit_core::model::ShadowMode::On
     );
 
     let camera = layer(c, "camera");
@@ -880,7 +876,7 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     assert_close(light.cone_angle.value_at(0.0), 60.0);
     assert_close(light.cone_feather.value_at(0.0), 50.0);
     assert!(light.two_node, "aimed at its point of interest");
-    assert!(light.casts_shadows, "kept, though not drawn");
+    assert!(light.casts_shadows);
     assert_close(light.point_of_interest[0].value_at(0.0), 320.0);
     // [1, 0.9, 0.8] in the project's display space.
     assert_close(light.colour[0].value_at(0.0), 1.0);
@@ -1134,11 +1130,10 @@ fn the_report_counts_what_it_says_and_names_its_placeholder() {
             // Skew and Skew Axis carry rather than report. One fewer since
             // the camera gained its second node: the fixture's two-node
             // camera and its point of interest cross over whole.
-            // One more for the 3D card's Casts Shadows.
             // One fewer since the text layer's styling carries.
             // Two fewer since the Gaussian blur gained Repeat edge pixels:
             // the fixture's two blurs carry theirs.
-            adjusted: 55,
+            adjusted: 54,
             placeholders: 1,
             skipped: 1,
         }

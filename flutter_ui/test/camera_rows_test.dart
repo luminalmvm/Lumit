@@ -102,6 +102,7 @@ void main() {
           kind: BridgeLightKind.spot,
           falloff: BridgeLightFalloff.smooth,
           twoNode: true,
+          castsShadows: false,
         ),
       ));
       expect(

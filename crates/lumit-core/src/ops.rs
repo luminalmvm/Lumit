@@ -564,9 +564,9 @@ pub enum Op {
         layer: Uuid,
         settings: crate::model::CameraSettings,
     },
-    /// Replace the non-animatable part of a Light layer: its kind, its falloff
-    /// and whether it is aimed at its point of interest. One op, so the
-    /// settings dialog is one undo step.
+    /// Replace the non-animatable part of a Light layer: its kind, its
+    /// falloff, whether it is aimed at its point of interest and whether it
+    /// casts shadows. One op, so the settings dialog is one undo step.
     SetLightSettings {
         comp: Uuid,
         layer: Uuid,
@@ -576,6 +576,12 @@ pub enum Op {
     SetCompLighting {
         comp: Uuid,
         lighting: crate::model::CompLighting,
+    },
+    /// Replace whether a layer casts and accepts shadows, as one undo step.
+    SetMaterialSettings {
+        comp: Uuid,
+        layer: Uuid,
+        settings: crate::model::MaterialSettings,
     },
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
     /// with `None` (docs/03 §5.6).
@@ -923,6 +929,7 @@ impl Op {
             Op::SetCameraZoom { .. } => "Set camera zoom",
             Op::SetCameraSettings { .. } => "Set camera settings",
             Op::SetLightSettings { .. } => "Set light settings",
+            Op::SetMaterialSettings { .. } => "Set material settings",
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
@@ -1016,6 +1023,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetLightSettings { comp, layer, .. }
+        | Op::SetMaterialSettings { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
@@ -2206,6 +2214,27 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
             Ok(Op::SetCompLighting {
                 comp: *comp,
                 lighting: previous,
+            })
+        }
+        Op::SetMaterialSettings {
+            comp,
+            layer,
+            settings,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let m = &mut l.transform.material;
+            let previous = m.settings();
+            m.casts_shadows = settings.casts_shadows;
+            m.accepts_shadows = settings.accepts_shadows;
+            Ok(Op::SetMaterialSettings {
+                comp: *comp,
+                layer: *layer,
+                settings: previous,
             })
         }
         Op::SetCameraSolveLink {

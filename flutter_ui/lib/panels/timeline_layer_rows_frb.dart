@@ -525,6 +525,7 @@ class FoldRow extends StatelessWidget {
           layer: layer,
           setting: setting,
           light: info.light,
+          material: info.material,
           acceptsLights: info.switches.acceptsLights,
           valueColumn: valueColumn,
           keyPrefix: 'tl-tf',

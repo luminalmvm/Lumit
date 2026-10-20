@@ -1217,6 +1217,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                         twoNode: info.camera?.twoNode ?? false,
                         light: info.light,
                         acceptsLights: info.switches.acceptsLights,
+                        material: info.material,
                         corrected: info.trackCorrected,
                         playheadFrame: playhead,
                         onSeek: (frame) => ui.playheadFrame.value = frame,
@@ -3186,6 +3187,7 @@ class _TransformSection extends StatelessWidget {
   final bool twoNode;
   final BridgeLightSettings? light;
   final bool acceptsLights;
+  final BridgeMaterialSettings? material;
 
   bool get isCamera => kind == BridgeLayerKind.camera;
 
@@ -3209,6 +3211,7 @@ class _TransformSection extends StatelessWidget {
     required this.twoNode,
     required this.light,
     required this.acceptsLights,
+    required this.material,
     required this.corrected,
     required this.playheadFrame,
     required this.onSeek,
@@ -3231,6 +3234,7 @@ class _TransformSection extends StatelessWidget {
       twoNode: twoNode,
       light: light,
       acceptsLights: acceptsLights,
+      material: material,
       axisModes: axisModes,
       playheadFrame: playheadFrame,
       onSeek: onSeek,
