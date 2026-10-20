@@ -6831,6 +6831,68 @@ mod tests {
         (Arc::new(doc), comp_id)
     }
 
+    /// **A 2D layer inside a collapsed 3D precomp is seen by the camera**, on
+    /// the precomp's plane, and like any 2D layer it keeps its stack order, as
+    /// in After Effects. Pushed back to twice the camera's distance, the red
+    /// 32 px solid shows at 16 px, where drawn flat it filled 32. It stays over
+    /// the blue 3D card below it inside, though the card is nearer.
+    #[test]
+    fn a_2d_layer_in_a_collapsed_3d_precomp_is_seen_by_the_camera() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (base, _) = cards_scene(&[], 100.0);
+        let mut doc = (*base).clone();
+        let comp_id = doc
+            .items
+            .iter()
+            .find_map(|i| match i {
+                ProjectItem::Composition(c) => Some(c.id),
+                _ => None,
+            })
+            .unwrap();
+        let mut solid = |colour: [f32; 4]| {
+            let def = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "Solid".into(),
+                colour: LinearColour(colour),
+                width: 32,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            matrix_layer("Solid", LayerKind::Solid { def }, 32, 32)
+        };
+        let flat = solid([1.0, 0.0, 0.0, 1.0]);
+        let mut card = solid([0.0, 0.0, 1.0, 1.0]);
+        card.switches.three_d = true;
+        card.transform.position_z = Property::fixed(-64.0);
+        let inner = push_comp(&mut doc, "Inner", 32, 32);
+        doc.comp_mut(inner).unwrap().layers = vec![flat, card];
+        let mut nested = matrix_layer("Nested", LayerKind::Precomp { comp: inner }, 32, 32);
+        nested.switches.three_d = true;
+        nested.switches.collapse = true;
+        nested.transform.position_x = Property::fixed(32.0);
+        nested.transform.position_y = Property::fixed(32.0);
+        nested.transform.position_z = Property::fixed(128.0);
+        doc.comp_mut(comp_id).unwrap().layers.push(nested);
+        let (rgba, w, _) = r
+            .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
+            .expect("a frame");
+        let at = |x: u32| &rgba[((32 * w + x) * 4) as usize..][..3];
+        assert!(
+            at(32)[0] > 200 && at(41)[2] > 200 && at(44)[2] < 50,
+            "the red solid should show 16 px wide over the blue card, got {:?} {:?} {:?}",
+            at(32),
+            at(41),
+            at(44)
+        );
+    }
+
     /// **The nearer 3D layer covers the farther one, wherever they sit in the
     /// stack**, as in After Effects. Red is at the bottom but nearer the
     /// camera. Drawn in stack order, blue would cover it.

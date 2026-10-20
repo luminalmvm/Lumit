@@ -3094,6 +3094,7 @@ fn comp_walk(
                 rotation_x_deg: 0.0,
                 rotation_y_deg: 0.0,
                 three_d: false,
+                ends_run: false,
                 matte: None,
                 blend: lumit_gpu::Blend::Normal,
                 mask_cov: None,
@@ -3568,6 +3569,16 @@ fn comp_walk(
                         None => own,
                     };
                     for d in &mut spliced_in {
+                        // A 2D layer inside a collapsed 3D precomp lies flat on
+                        // the precomp's plane, so the camera sees it there,
+                        // and it still ends a run of 3D layers.
+                        if layer.switches.three_d && !d.three_d {
+                            d.three_d = true;
+                            d.ends_run = true;
+                            d.z = 0.0;
+                            d.rotation_x_deg = 0.0;
+                            d.rotation_y_deg = 0.0;
+                        }
                         d.pre = Some(match d.pre {
                             // A collapsed chain: this parent wraps the child's
                             // own parent placement.
@@ -3845,6 +3856,7 @@ fn comp_walk(
                     rotation_x_deg: tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
                     rotation_y_deg: tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
                     three_d: layer.switches.three_d,
+                    ends_run: false,
                     // The adjustment's own Matte gates where its stack lands,
                     // exactly as a matte gates an ordinary layer's picture: it
                     // multiplies into the coverage the blend uses (realise.rs).
@@ -4095,6 +4107,7 @@ fn comp_walk(
             rotation_x_deg: tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
             rotation_y_deg: tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
             three_d: layer.switches.three_d,
+            ends_run: false,
             matte,
             blend: blend_of(layer.blend),
             mask_cov: match &layer.kind {
@@ -4386,6 +4399,7 @@ fn graph_comp_draw(
         rotation_x_deg: 0.0,
         rotation_y_deg: 0.0,
         three_d: false,
+        ends_run: false,
         matte: None,
         blend: lumit_gpu::Blend::Normal,
         mask_cov: None,
@@ -5275,6 +5289,7 @@ fn read_draw(
         rotation_x_deg: 0.0,
         rotation_y_deg: 0.0,
         three_d: false,
+        ends_run: false,
         matte: None,
         blend: lumit_gpu::Blend::Normal,
         mask_cov: None,

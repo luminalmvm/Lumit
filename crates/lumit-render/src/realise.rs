@@ -2562,8 +2562,9 @@ fn placed_in_3d<'a>(
 /// The order a segment's layers draw in: each run of adjacent 3D layers
 /// farthest first, as After Effects draws them, with how each draw is cut
 /// where layers pass through each other (a layer cut into pieces draws once
-/// per piece). A 2D layer ends a run, and so does an adjustment layer, which
-/// already splits the segments. With no camera 3D layers draw flat, so the
+/// per piece). A 2D layer ends a run, even one drawn on a collapsed 3D
+/// precomp's plane, and so does an adjustment layer, which already splits
+/// the segments. With no camera 3D layers draw flat, so the
 /// stack order stands.
 fn draw_order(
     layers: &[CompLayerDraw],
@@ -2578,7 +2579,7 @@ fn draw_order(
     let mut start = 0;
     while start < layers.len() {
         let end = (start..layers.len())
-            .find(|&i| !layers[i].three_d)
+            .find(|&i| !layers[i].three_d || layers[i].ends_run)
             .unwrap_or(layers.len());
         let worlds: Vec<lumit_gpu::Mat4> = (start..end)
             .map(|i| placed_in_3d(&textures[i], &layers[i], grown[i]).world())
@@ -2841,6 +2842,7 @@ mod tests {
             rotation_x_deg: 0.0,
             rotation_y_deg: 0.0,
             three_d: false,
+            ends_run: false,
             matte: None,
             blend: lumit_gpu::Blend::Normal,
             mask_cov: None,

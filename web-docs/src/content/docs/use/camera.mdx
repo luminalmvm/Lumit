@@ -25,8 +25,9 @@ A 3D layer gains a Z position. Adjusting this moves the layer forwards and backw
 
 Nearer 3D layers draw in front of farther ones, whatever their stack order, and 3D layers
 that pass through each other cut where they meet. A 2D layer or an adjustment layer between
-3D layers splits them into groups, which stack in timeline order. Two motion-blurred 3D
-layers do not cut each other.
+3D layers splits them into groups, which stack in timeline order. A 2D layer inside a
+collapsed 3D precomp lies on the precomp's plane and splits groups the same way. Two
+motion-blurred 3D layers do not cut each other.
 
 ## In the Viewer
 
