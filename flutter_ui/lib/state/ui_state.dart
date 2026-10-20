@@ -3843,6 +3843,15 @@ class LumitUiState extends ChangeNotifier {
     return _poseIn(view, compFor(view)?.internalid.toString());
   }
 
+  /// The pose [look] holds in Viewer view [viewId] for its comp, whether or
+  /// not it is the one in front, or null when it has none yet.
+  BridgeCameraPose? heldViewPose(ViewerView look, {required int viewId}) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    if (view == null || comp == null) return null;
+    return view.cameraPoses['${comp.internalid}/${look.name}'];
+  }
+
   /// The custom view Viewer view [viewId] last looked through.
   ViewerView lastCustomViewOf(int viewId) =>
       _surfaceOf(viewId)?.lastCustom ?? ViewerView.custom1;
