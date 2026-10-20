@@ -1362,6 +1362,64 @@ void main() {
           reason: 'the arrow moved the layer along x');
     });
 
+    /// **Nor does a ring drag.** The Rotation tool's rings are measured on
+    /// the same held rows, and the turn is written once.
+    testWidgets('a 3D ring drag writes once and asks for no camera',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer()
+        ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      comp.addCameraLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([layer]);
+      p.uiState.tools.select(ToolMode.rotate);
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      // Round the Z ring, which faces the camera, where the tool drew it.
+      final paint = find.byWidgetPredicate((w) =>
+          w is CustomPaint &&
+          w.painter.runtimeType.toString() == '_RotateCursorPainter');
+      final rings =
+          (tester.widget<CustomPaint>(paint).painter as dynamic).rings;
+      final ring = (rings.rings[2] as List).first as List<Offset>;
+      final box = tester.renderObject<RenderBox>(paint);
+      // Away from where the edge-on X and Y rings cross it.
+      final drag = await tester.startGesture(box.localToGlobal(ring[8]),
+          kind: PointerDeviceKind.mouse);
+      counter
+        ..reset()
+        ..counting = true;
+      for (var k = 9; k <= 24; k++) {
+        await drag.moveTo(box.localToGlobal(ring[k]));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      counter.counting = false;
+      expect(counter.calls['composition_reference_view_projection'] ?? 0, 0,
+          reason: 'the turn asked for the camera:\n${counter.ranking()}');
+      expect(counter.calls['layer_reference_set_transforms'] ?? 0, 0,
+          reason: 'the turn wrote before it was let go');
+
+      counter
+        ..reset()
+        ..counting = true;
+      await drag.up();
+      await tester.pump();
+      counter.counting = false;
+      expect(counter.calls['layer_reference_set_transforms'], 1);
+      expect(
+          sampledScalar(layer.getTransform().rotation, timeOfFrame(comp, 0)),
+          isNot(0),
+          reason: 'the ring turned the layer');
+    });
+
     /// **Nor must a pick drag** (docs/07 §6.1). A window is 129 pixels a side
     /// and the magnifier's 9×9 is cut out of it in Dart, so a sweep across the
     /// picture is meant to cost the engine *nothing at all* until the pointer
