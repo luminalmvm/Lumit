@@ -80,6 +80,9 @@ const double gizmoRotateReach = 28;
 /// the drag being broken. So the pivot has to be *aimed at*.
 const double gizmoAnchorSlop = 16;
 
+/// How far a light's mark reaches either side of its place, in screen pixels.
+const double gizmoMarkerReach = 7;
+
 /// The eight scale handles and the rotation knob.
 ///
 /// The scale handles are named for where they sit on the layer's own box, so
@@ -194,6 +197,11 @@ class LayerBox {
   /// because Position is where the anchor lands in the comp.
   final BridgeMotionPath? motionPath;
 
+  /// Whether the layer is a point rather than a box: a light, which has a
+  /// place in the scene and no picture. It is drawn as a small mark at its
+  /// Position and picked by that.
+  final bool marker;
+
   const LayerBox({
     required this.layer,
     required this.id,
@@ -207,6 +215,7 @@ class LayerBox {
     this.artOrigin = Offset.zero,
     this.puppet,
     this.motionPath,
+    this.marker = false,
   });
 
   /// A point of the layer's **art** on screen.
@@ -236,6 +245,7 @@ class LayerBox {
         artOrigin: artOrigin,
         puppet: puppet,
         motionPath: motionPath,
+        marker: marker,
       );
 
   /// The same box with the layer scaled to [sxPercent] / [syPercent] — the
@@ -257,13 +267,63 @@ class LayerBox {
 
   /// The box's four corners in screen space, clockwise from the layer's own
   /// top-left. A rotated layer therefore gives a rotated quad, not an
-  /// axis-aligned rectangle — the box turns with the layer.
-  List<Offset> get corners => [
-        map.toScreen(0, 0),
-        map.toScreen(bounds.width, 0),
-        map.toScreen(bounds.width, bounds.height),
-        map.toScreen(0, bounds.height),
+  /// axis-aligned rectangle — the box turns with the layer. Seen through a
+  /// camera it is the four corners in perspective, and a marker's are a small
+  /// diamond round its place.
+  List<Offset> get corners {
+    if (marker) {
+      final at = anchorScreen;
+      return [
+        at + const Offset(0, -gizmoMarkerReach),
+        at + const Offset(gizmoMarkerReach, 0),
+        at + const Offset(0, gizmoMarkerReach),
+        at + const Offset(-gizmoMarkerReach, 0),
       ];
+    }
+    return [
+      map.toScreen(0, 0),
+      map.toScreen(bounds.width, 0),
+      map.toScreen(bounds.width, bounds.height),
+      map.toScreen(0, bounds.height),
+    ];
+  }
+
+  /// Whether every corner is in front of the eye, which a 2D layer always is.
+  /// A box reaching behind it has no sensible place for its handles.
+  bool get wholeInFront => marker
+      ? map.inFront(map.ax, map.ay)
+      : map.inFront(0, 0) &&
+          map.inFront(bounds.width, 0) &&
+          map.inFront(bounds.width, bounds.height) &&
+          map.inFront(0, bounds.height);
+
+  /// The outline drawn round the layer: [corners], less any part behind the
+  /// eye, which a camera cannot see and has no screen point for.
+  List<Offset> get outline {
+    if (marker) return wholeInFront ? corners : const [];
+    if (!map.projected) return corners;
+    final quad = [
+      (0.0, 0.0),
+      (bounds.width, 0.0),
+      (bounds.width, bounds.height),
+      (0.0, bounds.height),
+    ];
+    // Cut on the layer itself, a hair in front of the eye.
+    const near = 1e-3;
+    final kept = <(double, double)>[];
+    for (var i = 0; i < quad.length; i++) {
+      final a = quad[i];
+      final b = quad[(i + 1) % quad.length];
+      final da = map.depthOf(a.$1, a.$2) - near;
+      final db = map.depthOf(b.$1, b.$2) - near;
+      if (da >= 0) kept.add(a);
+      if ((da >= 0) != (db >= 0)) {
+        final t = da / (da - db);
+        kept.add((a.$1 + (b.$1 - a.$1) * t, a.$2 + (b.$2 - a.$2) * t));
+      }
+    }
+    return [for (final p in kept) map.toScreen(p.$1, p.$2)];
+  }
 
   /// Where the layer's anchor — the point it scales and rotates about — is on
   /// screen.
@@ -273,8 +333,14 @@ class LayerBox {
   ///
   /// Answered in *layer* space rather than by a polygon test on screen, which
   /// is both simpler and exact under rotation, scale and pan: the inverse map
-  /// already undoes all three.
+  /// already undoes all three. Seen through a camera the layer has to be in
+  /// front of the eye there too. A marker is hit near its place.
   bool contains(Offset point) {
+    if (marker) {
+      return wholeInFront &&
+          (anchorScreen - point).distance <= gizmoAnchorSlop / 2;
+    }
+    if (map.depthAt(point) == null) return false;
     final p = map.layerOf(point);
     return p.dx >= 0 &&
         p.dy >= 0 &&
@@ -286,7 +352,7 @@ class LayerBox {
   /// corner must be inside, so a layer half-caught by the rubber band is not
   /// selected (After Effects' own behaviour, and the one that makes a sloppy
   /// sweep predictable).
-  bool insideRect(Rect rect) => corners.every(rect.contains);
+  bool insideRect(Rect rect) => wholeInFront && corners.every(rect.contains);
 
   /// Where [handle] is drawn, in screen space.
   Offset handleAt(GizmoHandle handle) {
@@ -314,6 +380,7 @@ class LayerBox {
   /// The handle under [point], or null when none is. Nearest wins, so two
   /// handles whose slop overlaps on a small box do not fight.
   GizmoHandle? handleHit(Offset point) {
+    if (marker || !wholeInFront) return null;
     GizmoHandle? best;
     var bestDistance = gizmoHandleSlop / 2;
     // The anchor first in the list only matters for ties; nearest still wins.
@@ -451,27 +518,37 @@ Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect) => {
 ///
 /// Two points on the picture, subtracted, so the layer's scale and rotation are
 /// undone exactly — which is what lets a selection spanning two layers with
-/// different transforms still move together on screen.
-Offset pointDeltaIn(LayerBox box, Offset screenDelta) =>
-    box.map.layerOf(screenDelta) - box.map.layerOf(Offset.zero);
+/// different transforms still move together on screen. Seen through a camera
+/// the two points are taken about the anchor, since perspective makes a step
+/// depend on where it is taken.
+Offset pointDeltaIn(LayerBox box, Offset screenDelta) {
+  final base = box.map.projected ? box.anchorScreen : Offset.zero;
+  return box.map.layerOf(base + screenDelta) - box.map.layerOf(base);
+}
 
 /// A Position-space point on screen. A motion path is in the parent's pixels
 /// (the comp's, with no parent) rather than layer pixels, because Position is
 /// where the layer's anchor lands there, so it goes through none of the
-/// layer's own scale or rotation.
-Offset compToScreen(LayerBox box, double x, double y) =>
-    box.map.parentToScreen(x, y);
+/// layer's own scale or rotation. [z] is a 3D layer's depth there.
+Offset compToScreen(LayerBox box, double x, double y, [double? z]) =>
+    box.map.parentToScreen(x, y, z);
 
 /// [box]'s motion path on screen, one point per comp frame; empty when the
 /// layer has none.
 List<Offset> motionPathScreen(LayerBox box) {
   final path = box.motionPath;
   if (path == null) return const [];
+  final depths = path.depths;
   return [
     for (var i = 0; i + 1 < path.samples.length; i += 2)
-      compToScreen(box, path.samples[i], path.samples[i + 1]),
+      compToScreen(box, path.samples[i], path.samples[i + 1],
+          i ~/ 2 < depths.length ? depths[i ~/ 2] : null),
   ];
 }
+
+/// Where [key] of [box]'s motion path is on screen.
+Offset motionKeyScreen(LayerBox box, BridgeMotionKey key) =>
+    compToScreen(box, key.x, key.y, box.map.projected ? key.z : null);
 
 /// The motion-path key under [point] across [boxes], or null when none is
 /// near enough. Nearest wins, as it does for a path's points.
@@ -486,7 +563,7 @@ List<Offset> motionPathScreen(LayerBox box) {
     final keys = box.motionPath?.keys;
     if (keys == null) continue;
     for (var i = 0; i < keys.length; i++) {
-      final d = (compToScreen(box, keys[i].x, keys[i].y) - point).distance;
+      final d = (motionKeyScreen(box, keys[i]) - point).distance;
       if (d <= bestDistance) {
         bestDistance = d;
         best = (box: box, index: i);
@@ -1074,7 +1151,13 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         selectedPoints: _points,
         pointNudge: _drag == _GizmoDrag.points ? _delta : Offset.zero,
         anchors: widget.showControls && widget.showAnchors
-            ? [for (final box in selected) box.anchorScreen]
+            ? [
+                for (final box in selected)
+                  box.anchorScreen +
+                      (box.map.projected
+                          ? Offset.zero
+                          : move?.delta ?? Offset.zero),
+              ]
             : const [],
         marquee: _drag == _GizmoDrag.marquee ? _marqueeRect() : null,
         moved: move?.delta ?? Offset.zero,
@@ -1133,6 +1216,17 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// scale handles, both local, and the Rotation tool's turn, which arrives on
   /// [LumitUiState.liveRotations] from another layer of the Viewer's stack.
   LayerBox _live(LayerBox box) {
+    // A move seen through a camera is drawn where it puts the layer, not slid
+    // across the screen with the pointer.
+    if (_drag == _GizmoDrag.move &&
+        box.map.projected &&
+        box.draggable &&
+        widget.uiState.selectedLayerIds.contains(box.id)) {
+      final (x, y) = _movedPosition(box);
+      return box.copyWith(
+          map: box.map.pivotedAt(box.map.ax, box.map.ay,
+              position: Offset(x, y)));
+    }
     if (_acting?.id == box.id) {
       switch (_drag) {
         case _GizmoDrag.rotate:
@@ -2007,7 +2101,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final key = keys[index];
     return (
       key,
-      Offset(key.x, key.y) + box.map.positionStep(_delta / box.map.viewScale),
+      Offset(key.x, key.y) +
+          box.map.positionStep(_delta / box.map.viewScale,
+              from: motionKeyScreen(box, key),
+              z: box.map.projected ? key.z : null),
     );
   }
 
@@ -2200,15 +2297,17 @@ class _GizmoPainter extends CustomPainter {
     // selection, so a selected box is never dimmed by a hover on top of it.
     final hovered = hover;
     if (hovered != null) {
-      _outline(canvas, hovered.corners, accent.withValues(alpha: 0.35));
+      _outline(canvas, hovered.outline, accent.withValues(alpha: 0.35));
     }
 
     for (final box in selected) {
-      _outline(canvas, [for (final c in box.corners) c + moved], accent);
+      final shift = _shift(box);
+      _outline(canvas, [for (final c in box.outline) c + shift], accent);
     }
 
     final handles = handlesFor;
-    if (handles != null) {
+    if (handles != null && handles.wholeInFront) {
+      final moved = _shift(handles);
       final corners = [for (final c in handles.corners) c + moved];
       // The rotation bar first, so the knob's outline draws over it.
       final top = (corners[0] + corners[1]) / 2;
@@ -2258,7 +2357,7 @@ class _GizmoPainter extends CustomPainter {
     }
 
     for (final anchor in anchors) {
-      paintAnchorMark(canvas, anchor + moved, accent);
+      paintAnchorMark(canvas, anchor, accent);
     }
 
     for (final box in motionPaths) {
@@ -2297,10 +2396,11 @@ class _GizmoPainter extends CustomPainter {
       final key = path.keys[i];
       final held = inHand != null && inHand.layer == box.id && inHand.index == i;
       final nudge = held ? inHand.nudge : Offset.zero;
-      final at = compToScreen(box, key.x, key.y) + nudge;
+      final at = motionKeyScreen(box, key) + nudge;
+      final z = box.map.projected ? key.z : null;
       for (final handle in [key.handleIn, key.handleOut]) {
         if (handle == null) continue;
-        final h = compToScreen(box, handle[0], handle[1]) + nudge;
+        final h = compToScreen(box, handle[0], handle[1], z) + nudge;
         canvas.drawLine(at, h, line);
         canvas.drawCircle(h, 3, Paint()..color = surface);
         canvas.drawCircle(h, 3, line);
@@ -2311,7 +2411,13 @@ class _GizmoPainter extends CustomPainter {
     }
   }
 
+  /// How far a move in flight has carried [box] on screen. A box seen through
+  /// a camera is drawn where the move puts it instead, since perspective
+  /// makes a move more than a slide across the screen.
+  Offset _shift(LayerBox box) => box.map.projected ? Offset.zero : moved;
+
   void _outline(Canvas canvas, List<Offset> corners, Color colour) {
+    if (corners.length < 2) return;
     canvas.drawPath(
       Path()..addPolygon(corners, true),
       Paint()
@@ -2356,35 +2462,44 @@ class _GizmoPainter extends CustomPainter {
     List<double>? feather,
   }) {
     if (vertices.length < 2) return;
+    final projected = box.map.projected;
+    // Behind the eye a point has no place on screen to draw.
+    if (projected && !box.wholeInFront) return;
+    final moved = _shift(box);
     // A selected point follows the pointer while it is being dragged, so the
-    // path bends live rather than jumping on release.
+    // path bends live rather than jumping on release. Seen through a camera
+    // the drag is carried on the layer, where the release writes it.
+    final drag = projected ? pointDeltaIn(box, pointNudge) : Offset.zero;
+    bool picked(int i) => selectedPoints.contains(keyOf(i));
     Offset nudgeFor(int i) =>
-        selectedPoints.contains(keyOf(i)) ? pointNudge : Offset.zero;
+        picked(i) && !projected ? pointNudge : Offset.zero;
+    Offset onLayer(int i, double dx, double dy) {
+      final v = vertices[i];
+      final n = picked(i) ? drag : Offset.zero;
+      return Offset(v.x + dx + n.dx, v.y + dy + n.dy);
+    }
+
     Offset screen(double x, double y) =>
         art ? box.shapePoint(x, y) : box.map.toScreen(x, y);
-    Offset at(int i) {
-      final v = vertices[i];
-      return screen(v.x, v.y) + moved + nudgeFor(i);
-    }
-
-    Offset out(int i) {
-      final v = vertices[i];
-      return screen(v.x + v.tanOutX, v.y + v.tanOutY) + moved + nudgeFor(i);
-    }
-
-    Offset into(int i) {
-      final v = vertices[i];
-      return screen(v.x + v.tanInX, v.y + v.tanInY) + moved + nudgeFor(i);
-    }
+    Offset shown(Offset p) => screen(p.dx, p.dy) + moved;
+    Offset at(int i) => shown(onLayer(i, 0, 0)) + nudgeFor(i);
+    Offset out(int i) => shown(onLayer(
+            i, vertices[i].tanOutX, vertices[i].tanOutY)) +
+        nudgeFor(i);
+    Offset into(int i) =>
+        shown(onLayer(i, vertices[i].tanInX, vertices[i].tanInY)) +
+        nudgeFor(i);
 
     canvas.drawPath(
-      bezierPath(
-        count: vertices.length,
-        at: at,
-        tangentOut: out,
-        tangentIn: into,
-        closed: closed,
-      ),
+      projected
+          ? _walkedPath(vertices, closed, onLayer, shown)
+          : bezierPath(
+              count: vertices.length,
+              at: at,
+              tangentOut: out,
+              tangentIn: into,
+              closed: closed,
+            ),
       Paint()
         ..color = accent
         ..style = PaintingStyle.stroke
@@ -2452,6 +2567,42 @@ class _GizmoPainter extends CustomPainter {
         );
       }
     }
+  }
+
+  /// A path through a camera. Perspective bends a curve the way it bends the
+  /// layer, so each span is walked on the layer and every step is put through
+  /// the camera, rather than the handles alone.
+  Path _walkedPath(
+    List<BridgeVertex> vertices,
+    bool closed,
+    Offset Function(int i, double dx, double dy) onLayer,
+    Offset Function(Offset layerPoint) shown,
+  ) {
+    const steps = 16;
+    final path = Path();
+    final spans = closed && vertices.length > 2
+        ? vertices.length
+        : vertices.length - 1;
+    final first = shown(onLayer(0, 0, 0));
+    path.moveTo(first.dx, first.dy);
+    for (var i = 0; i < spans; i++) {
+      final j = (i + 1) % vertices.length;
+      final p0 = onLayer(i, 0, 0);
+      final p1 = onLayer(i, vertices[i].tanOutX, vertices[i].tanOutY);
+      final p2 = onLayer(j, vertices[j].tanInX, vertices[j].tanInY);
+      final p3 = onLayer(j, 0, 0);
+      for (var step = 1; step <= steps; step++) {
+        final t = step / steps;
+        final u = 1 - t;
+        final p = shown(p0 * (u * u * u) +
+            p1 * (3 * u * u * t) +
+            p2 * (3 * u * t * t) +
+            p3 * (t * t * t));
+        path.lineTo(p.dx, p.dy);
+      }
+    }
+    if (closed && vertices.length > 2) path.close();
+    return path;
   }
 
   void _knob(Canvas canvas, Offset at) {

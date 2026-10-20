@@ -199,6 +199,10 @@ class ViewerStage extends StatelessWidget {
     return null;
   }
 
+  /// The pose this Viewer is looked at through, null for the comp's own
+  /// camera. The one place the overlays read it.
+  BridgeCameraPose? _viewPose() => uiState.viewPoseOf(viewId);
+
   /// Every layer of the comp with its box, top of the stack first — what the
   /// gizmo hit-tests, outlines and drags.
   ///
@@ -269,6 +273,22 @@ class ViewerStage extends StatelessWidget {
     final byId = {
       for (final entry in model.heldLayers) entry.layer.internallayerId: entry
     };
+    // How the picture sees the comp's 3D space, asked of the engine only when
+    // there is a 3D layer to see and held until the frame, the document or
+    // the view moves.
+    final view = model.heldLayers.any(_seenInDepth)
+        ? uiState.viewProjections.of(
+            comp: comp,
+            viewId: viewId,
+            frame: uiState.playheadFrame.value,
+            revision: revision,
+            generation: uiState.solveLanded.value,
+            view: _viewPose(),
+          )
+        : null;
+    BridgeTransform transformOf(BridgeLayerEntry a) =>
+        uiState.liveTransforms.value[a.layer.internallayerId] ??
+        a.info.transform;
     final out = <LayerBox>[];
     for (final entry in model.heldLayers) {
       if (entry.info.kind == BridgeLayerKind.camera) continue;
@@ -282,9 +302,11 @@ class ViewerStage extends StatelessWidget {
       // together (the reasoning [LumitUiState.liveRotations] sets out, for the
       // rows rather than the on-picture tools). Absent whenever nothing is
       // being dragged, which is nearly always.
-      final tf = uiState.liveTransforms.value[entry.layer.internallayerId] ??
-          entry.info.transform;
+      final tf = transformOf(entry);
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
+      final light = entry.info.kind == BridgeLayerKind.light;
+      final map = layerMapOf(entry, byId, transformOf, read,
+          origin: fitted.topLeft, viewScale: viewScale, view: view);
       final rotation = read(tf.rotation, entry.layer);
       final live = uiState.liveText.value[entry.layer.internallayerId];
       final id = entry.layer.internallayerId;
@@ -299,25 +321,7 @@ class ViewerStage extends StatelessWidget {
       out.add(LayerBox(
         layer: entry.layer,
         id: id,
-        map: ViewerLayerMap.of(
-          positionX: read(tf.positionX, entry.layer),
-          positionY: read(tf.positionY, entry.layer),
-          anchorX: read(tf.anchorX, entry.layer),
-          anchorY: read(tf.anchorY, entry.layer),
-          scaleXPercent: read(tf.scaleX, entry.layer),
-          scaleYPercent: read(tf.scaleY, entry.layer),
-          rotationDegrees: rotation,
-          origin: fitted.topLeft,
-          viewScale: viewScale,
-          parent: parentPlacement(
-            entry,
-            byId,
-            (a) =>
-                uiState.liveTransforms.value[a.layer.internallayerId] ??
-                a.info.transform,
-            read,
-          ),
-        ),
+        map: map,
         // A line being typed measures what is being typed: the
         // document holds the old one until the edit ends, so a box measured
         // from it would not grow with the words.
@@ -329,13 +333,19 @@ class ViewerStage extends StatelessWidget {
         // keys are dragged on the motion path instead. Keyed scale or
         // rotation likewise grows no handles.
         draggable: positionStill,
-        scalable: isStill(tf.scaleX) &&
+        // A light is a place, with nothing to scale or turn on the picture.
+        scalable: !light &&
+            isStill(tf.scaleX) &&
             isStill(tf.scaleY) &&
             isStill(tf.rotation),
         rotationDegrees: rotation,
+        marker: light,
         // The path a keyed position follows, for the layers whose outline is
-        // drawn: asked once per layer per document revision and held.
-        motionPath: !positionStill && outlined.contains(id.toString())
+        // drawn: asked once per layer per document revision and held. A 3D
+        // layer moving only in depth has one too.
+        motionPath: (!positionStill ||
+                    (map.projected && !isStill(tf.positionZ))) &&
+                outlined.contains(id.toString())
             ? uiState.motionPaths
                 .pathOf(entry.layer, revision: revision)
             : null,
@@ -547,7 +557,7 @@ class ViewerStage extends StatelessWidget {
             // (docs/impl/camera.md §6): a scene is arranged from a viewpoint
             // that shows where the cameras and the lights actually are, and
             // nothing in the picture says that by itself.
-            if (uiState.viewPoseOf(viewId) case final view?)
+            if (_viewPose() case final view?)
               Positioned.fill(
                 key: const ValueKey('viewer-wireframes'),
                 child: IgnorePointer(
@@ -966,11 +976,59 @@ class ViewerStage extends StatelessWidget {
   }
 }
 
+/// Whether [entry] is seen through the comp's camera: a 3D layer, or a light,
+/// which is always somewhere in the scene.
+bool _seenInDepth(BridgeLayerEntry entry) =>
+    entry.info.switches.threeD || entry.info.kind == BridgeLayerKind.light;
+
+/// [entry]'s map onto a picture whose corner is at [origin] and drawn
+/// [viewScale] screen pixels a comp pixel. A 3D layer or a light goes through
+/// [view], the engine's rows for whatever the picture is looked at through;
+/// a 2D one, or any layer while the rows are not known, is flat.
+ViewerLayerMap layerMapOf(
+  BridgeLayerEntry entry,
+  Map<UuidValue, BridgeLayerEntry> byId,
+  BridgeTransform Function(BridgeLayerEntry) transformOf,
+  double Function(BridgeScalar, LayerReference) read, {
+  required Offset origin,
+  required double viewScale,
+  required List<double>? view,
+}) {
+  final tf = transformOf(entry);
+  double at(BridgeScalar s) => read(s, entry.layer);
+  final parent = parentMatrix(entry, byId, transformOf, read);
+  final m = parent?.storage;
+  return ViewerLayerMap.of(
+    positionX: at(tf.positionX),
+    positionY: at(tf.positionY),
+    anchorX: at(tf.anchorX),
+    anchorY: at(tf.anchorY),
+    scaleXPercent: at(tf.scaleX),
+    scaleYPercent: at(tf.scaleY),
+    rotationDegrees: at(tf.rotation),
+    origin: origin,
+    viewScale: viewScale,
+    parent: m == null
+        ? null
+        : (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]),
+    depth: view != null && _seenInDepth(entry)
+        ? ViewerDepth(
+            view: view,
+            parent: parent,
+            z: at(tf.positionZ),
+            rotationX: at(tf.rotationX),
+            rotationY: at(tf.rotationY),
+          )
+        : null,
+  );
+}
+
 /// Where [entry]'s parents put its Position space in the comp, null when it
 /// has none: the engine's `parent_world_placement`, each ancestor placed as
-/// `place_matrix` places it, flattened to the picture. Without it a parented
-/// layer's box stays behind while its picture follows the parent.
-ParentPlacement? parentPlacement(
+/// `place_matrix` places it, and a 2D ancestor placed flat. Without it a
+/// parented layer's box stays behind while its picture follows the parent. A
+/// 2D layer is drawn flat, so it takes this flattened to the picture.
+Matrix4? parentMatrix(
   BridgeLayerEntry entry,
   Map<UuidValue, BridgeLayerEntry> byId,
   BridgeTransform Function(BridgeLayerEntry) transformOf,
@@ -999,9 +1057,7 @@ ParentPlacement? parentPlacement(
     world = world == null ? own : own.multiplied(world);
     id = up.info.parent;
   }
-  final m = world?.storage;
-  if (m == null) return null;
-  return (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]);
+  return world;
 }
 
 /// Footage layers already asked whether they have a picture, by layer.
@@ -1062,33 +1118,30 @@ BridgeLayerEntry? layerAtCompPoint(
   final byId = {
     for (final entry in model.layers) entry.layer.internallayerId: entry
   };
+  // What a pin points at was seen through the comp's own camera.
+  List<double>? view;
+  if (model.layers.any(_seenInDepth)) {
+    try {
+      view = comp.viewProjection(frame: BigInt.from(frame), view: null);
+    } catch (_) {
+      // Seen flat, as with no camera.
+    }
+  }
   for (final entry in model.layers) {
     final info = entry.info;
     if (pictureless.contains(info.kind) || !info.switches.visible) continue;
     if (frame < info.inFrame || frame >= info.outFrame) continue;
-    final tf = info.transform;
-    final rotation = read(tf.rotation, entry.layer);
     final box = LayerBox(
       layer: entry.layer,
       id: entry.layer.internallayerId,
       // No fitting and no pan: a "screen" pixel here is a composition pixel.
-      map: ViewerLayerMap.of(
-        positionX: read(tf.positionX, entry.layer),
-        positionY: read(tf.positionY, entry.layer),
-        anchorX: read(tf.anchorX, entry.layer),
-        anchorY: read(tf.anchorY, entry.layer),
-        scaleXPercent: read(tf.scaleX, entry.layer),
-        scaleYPercent: read(tf.scaleY, entry.layer),
-        rotationDegrees: rotation,
-        origin: Offset.zero,
-        viewScale: 1,
-        parent: parentPlacement(entry, byId, (a) => a.info.transform, read),
-      ),
+      map: layerMapOf(entry, byId, (a) => a.info.transform, read,
+          origin: Offset.zero, viewScale: 1, view: view),
       bounds: uiState.layerBounds.boundsOf(entry,
           compSize: size, revision: revision, t: seconds),
       draggable: false,
       scalable: false,
-      rotationDegrees: rotation,
+      rotationDegrees: read(info.transform.rotation, entry.layer),
     );
     if (box.contains(at)) return entry;
   }
