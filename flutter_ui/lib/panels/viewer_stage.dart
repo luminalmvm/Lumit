@@ -44,7 +44,7 @@ import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_follow.dart';
 import 'viewer_gizmo.dart';
-import 'viewer_gizmo_3d.dart' show gizmoAxisColours;
+import 'viewer_gizmo_3d.dart' show Vec3, eulerYxz, gizmoAxisColours, turnOf;
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
 import 'viewer_paint.dart';
@@ -311,7 +311,14 @@ class ViewerStage extends StatelessWidget {
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
       final light = entry.info.kind == BridgeLayerKind.light;
       final map = layerMapOf(entry, byId, transformOf, read,
-          origin: fitted.topLeft, viewScale: viewScale, view: rows);
+          origin: fitted.topLeft,
+          viewScale: viewScale,
+          view: rows,
+          cameraPose: (camera) => uiState.cameraPoses.of(camera.layer,
+              id: camera.layer.internallayerId,
+              frame: uiState.playheadFrame.value,
+              revision: revision,
+              generation: uiState.solveLanded.value));
       final rotation =
           read(tf.rotation, entry.layer, BridgeTransformProp.rotation);
       final live = uiState.liveText.value[entry.layer.internallayerId];
@@ -384,8 +391,8 @@ class ViewerStage extends StatelessWidget {
   }
 
   /// The selected cameras, each as a mark at its eye for the 3D handles,
-  /// turned the way the engine has it aimed. Cameras ignore their parents
-  /// here as the render does, so the eye is in comp space.
+  /// turned the way the engine has it aimed. A parented camera's mark is its
+  /// own values inside its parents, so a drag writes its own values.
   List<LayerBox> _cameraBoxes() {
     final ids = uiState.selectedLayerIds;
     // Only the Selection tool draws them, so nothing else asks for the pose.
@@ -402,6 +409,15 @@ class ViewerStage extends StatelessWidget {
           BridgeScalar_Static(:final field0) => field0,
           _ => sampledScalar(s, at),
         };
+    late final byId = {
+      for (final entry in model.heldLayers) entry.layer.internallayerId: entry
+    };
+    BridgeCameraPose? poseOf(BridgeLayerEntry camera) =>
+        uiState.cameraPoses.of(camera.layer,
+            id: camera.layer.internallayerId,
+            frame: frame,
+            revision: model.heldRevision,
+            generation: uiState.solveLanded.value);
     final out = <LayerBox>[];
     for (final entry in model.heldLayers) {
       final id = entry.layer.internallayerId;
@@ -409,13 +425,26 @@ class ViewerStage extends StatelessWidget {
         continue;
       }
       final tf = uiState.liveTransforms.value[id] ?? entry.info.transform;
-      final pose = uiState.cameraPoses.of(entry.layer,
-          id: id,
-          frame: frame,
-          revision: model.heldRevision,
-          generation: uiState.solveLanded.value);
+      final pose = poseOf(entry);
       final aim = tf.camera;
       if (pose == null || aim == null) continue;
+      // The engine's turn is in the comp. Under a parent the mark sits in the
+      // parent's space, so the parent's own turn comes off it.
+      final parent = entry.info.parent == null
+          ? null
+          : parentMatrix(
+              entry,
+              byId,
+              (a) =>
+                  uiState.liveTransforms.value[a.layer.internallayerId] ??
+                  a.info.transform,
+              (s, _, __) => read(s),
+              cameraPose: poseOf,
+            );
+      final turn = parent == null
+          ? (pose.rotationX, pose.rotationY, pose.rotationZ)
+          : _turnInside(parent, (pose.rotationX, pose.rotationY, pose.rotationZ));
+      final m = parent?.storage;
       out.add(LayerBox(
         layer: entry.layer,
         id: id,
@@ -426,11 +455,15 @@ class ViewerStage extends StatelessWidget {
           anchorY: 0,
           scaleXPercent: 100,
           scaleYPercent: 100,
-          rotationDegrees: pose.rotationZ,
+          rotationDegrees: turn.$3,
           origin: fitted.topLeft,
           viewScale:
               compSize.width == 0 ? 1.0 : fitted.width / compSize.width,
+          parent: m == null
+              ? null
+              : (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]),
           depth: ViewerDepth(
+            parent: parent,
             view: () => uiState.viewProjections.of(
               comp: comp,
               viewId: viewId,
@@ -440,14 +473,14 @@ class ViewerStage extends StatelessWidget {
               view: _viewPose(),
             ),
             z: read(tf.positionZ),
-            rotationX: pose.rotationX,
-            rotationY: pose.rotationY,
+            rotationX: turn.$1,
+            rotationY: turn.$2,
           ),
         ),
         bounds: Size.zero,
         draggable: false,
         scalable: false,
-        rotationDegrees: pose.rotationZ,
+        rotationDegrees: turn.$3,
         marker: true,
         transform: tf,
         aim: (entry.info.camera?.twoNode ?? false)
@@ -1141,10 +1174,12 @@ ViewerLayerMap layerMapOf(
   required Offset origin,
   required double viewScale,
   required List<double> Function() view,
+  BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
 }) {
   final tf = transformOf(entry);
   double at(BridgeScalar s, BridgeTransformProp p) => read(s, entry.layer, p);
-  final parent = parentMatrix(entry, byId, transformOf, read);
+  final parent =
+      parentMatrix(entry, byId, transformOf, read, cameraPose: cameraPose);
   final m = parent?.storage;
   return ViewerLayerMap.of(
     positionX: at(tf.positionX, BridgeTransformProp.positionX),
@@ -1176,17 +1211,36 @@ ViewerLayerMap layerMapOf(
 /// `place_matrix` places it, and a 2D ancestor placed flat. Without it a
 /// parented layer's box stays behind while its picture follows the parent. A
 /// 2D layer is drawn flat, so it takes this flattened to the picture.
+///
+/// A camera or a light has no anchor or scale of its own. A camera parent is
+/// placed where [cameraPose], the engine's pose, has it, its aim, solve and
+/// own parents included.
 Matrix4? parentMatrix(
   BridgeLayerEntry entry,
   Map<UuidValue, BridgeLayerEntry> byId,
   BridgeTransform Function(BridgeLayerEntry) transformOf,
-  double Function(BridgeScalar, LayerReference, BridgeTransformProp) read,
-) {
+  double Function(BridgeScalar, LayerReference, BridgeTransformProp) read, {
+  BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
+}) {
   Matrix4? world;
   final seen = {entry.layer.internallayerId};
   for (var id = entry.info.parent; id != null && seen.add(id);) {
     final up = byId[id];
     if (up == null) break;
+    final eye = up.info.kind == BridgeLayerKind.camera ||
+        up.info.kind == BridgeLayerKind.light;
+    final pose = up.info.kind == BridgeLayerKind.camera
+        ? cameraPose?.call(up)
+        : null;
+    if (pose != null) {
+      // Already in the comp, so the walk ends here.
+      final placed = Matrix4.translationValues(pose.x, pose.y, pose.z)
+        ..rotateY(pose.rotationY * math.pi / 180)
+        ..rotateX(pose.rotationX * math.pi / 180)
+        ..rotateZ(pose.rotationZ * math.pi / 180);
+      world = world == null ? placed : placed.multiplied(world);
+      break;
+    }
     final tf = transformOf(up);
     double at(BridgeScalar s, BridgeTransformProp p) => read(s, up.layer, p);
     double turn(BridgeScalar s, BridgeTransformProp p) =>
@@ -1202,15 +1256,41 @@ Matrix4? parentMatrix(
         flat ? 0 : at(tf.positionZ, BridgeTransformProp.positionZ))
       ..rotateY(flat ? 0 : turn(tf.rotationY, BridgeTransformProp.rotationY))
       ..rotateX(flat ? 0 : turn(tf.rotationX, BridgeTransformProp.rotationX))
-      ..rotateZ(turn(tf.rotation, BridgeTransformProp.rotation))
-      ..scaleByDouble(at(tf.scaleX, BridgeTransformProp.scaleX) / 100,
-          at(tf.scaleY, BridgeTransformProp.scaleY) / 100, 1, 1)
-      ..translateByDouble(-at(tf.anchorX, BridgeTransformProp.anchorX),
-          -at(tf.anchorY, BridgeTransformProp.anchorY), 0, 1);
+      ..rotateZ(turn(tf.rotation, BridgeTransformProp.rotation));
+    if (!eye) {
+      own
+        ..scaleByDouble(at(tf.scaleX, BridgeTransformProp.scaleX) / 100,
+            at(tf.scaleY, BridgeTransformProp.scaleY) / 100, 1, 1)
+        ..translateByDouble(-at(tf.anchorX, BridgeTransformProp.anchorX),
+            -at(tf.anchorY, BridgeTransformProp.anchorY), 0, 1);
+    }
     world = world == null ? own : own.multiplied(world);
     id = up.info.parent;
   }
   return world;
+}
+
+/// A turn in the comp, [deg], as the same turn inside [parent]: the parent's
+/// own turn taken off, its stretch left out, as a camera has none.
+Vec3 _turnInside(Matrix4 parent, Vec3 deg) {
+  final p = parent.storage;
+  // The parent's columns made unit length, row-major.
+  final cols = [
+    for (var c = 0; c < 3; c++)
+      () {
+        final v = [p[c * 4], p[c * 4 + 1], p[c * 4 + 2]];
+        final len = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+        return len < 1e-12 ? v : [for (final x in v) x / len];
+      }()
+  ];
+  final w = turnOf(deg);
+  // Parentᵀ · world.
+  final local = [
+    for (var r = 0; r < 3; r++)
+      for (var c = 0; c < 3; c++)
+        cols[r][0] * w[c] + cols[r][1] * w[3 + c] + cols[r][2] * w[6 + c],
+  ];
+  return eulerYxz(local);
 }
 
 /// Footage layers already asked whether they have a picture, by layer.
@@ -1293,7 +1373,16 @@ BridgeLayerEntry? layerAtCompPoint(
       id: id,
       // No fitting and no pan: a "screen" pixel here is a composition pixel.
       map: layerMapOf(entry, byId, (a) => a.info.transform, read,
-          origin: Offset.zero, viewScale: 1, view: () => rows),
+          origin: Offset.zero,
+          viewScale: 1,
+          view: () => rows,
+          cameraPose: (camera) {
+            try {
+              return camera.layer.cameraAimAt(frame: BigInt.from(frame))?.pose;
+            } catch (_) {
+              return null;
+            }
+          }),
       bounds: uiState.layerBounds.boundsOf(entry,
           compSize: size, revision: revision, t: seconds),
       draggable: false,
