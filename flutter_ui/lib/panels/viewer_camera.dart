@@ -40,6 +40,7 @@
 // The maths below is pure and in composition pixels; the widget under it only
 // turns drags into these calls and commits transform properties.
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -72,6 +73,10 @@ const double orbitDegreesPerPixel = 0.25;
 /// at 500 px and one built at 5000: dragging the width of the picture roughly
 /// halves or doubles the distance to what you are looking at.
 const double dollyFraction = 0.0015;
+
+/// How many pixels of dolly drag a pixel of wheel scroll is worth: a notch
+/// is half what it would be dragged.
+const double wheelDollyPixels = 0.5;
 
 /// A camera's pose in the shape the tools work in: where the eye is, which way
 /// it faces, how far ahead the plane it renders 1:1 sits, and what it is aimed
@@ -368,6 +373,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // state, and only this widget knows it was asked for.
     if (_locked) thawCursor();
     _throttle.cancel();
+    _wheelRest?.cancel();
     _closeUndoStep();
     super.dispose();
   }
@@ -388,6 +394,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// Whether an undo group is open for the drag, so the whole of it is one
   /// step however many moves it wrote.
   bool _grouped = false;
+
+  /// Closes a run of wheel notches into one undo step once the wheel rests.
+  Timer? _wheelRest;
 
   void _closeUndoStep() {
     if (!_grouped) return;
@@ -592,31 +601,69 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
         // told nothing about which button is down and the button is the whole
         // of what picks the move. The stage's own pan is switched off while a
         // camera tool is armed, so nothing underneath takes the drag instead.
-        child: unified
-            ? Listener(
-                behavior: HitTestBehavior.opaque,
-                onPointerDown: (e) {
-                  _move = cameraMoveForButtons(e.buttons);
-                  _begin(e.localPosition);
-                },
-                onPointerMove: (e) => _drag(e.localPosition, e.delta),
-                onPointerUp: (_) => _end(),
-                onPointerCancel: (_) => _end(),
-                child: stack,
-              )
-            : GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (_) {
-                  if (_target == null) _sayNoCamera();
-                },
-                onPanStart: (d) => _begin(d.localPosition),
-                onPanUpdate: (d) => _drag(d.localPosition, d.delta),
-                onPanEnd: (_) => _end(),
-                onPanCancel: _end,
-                child: stack,
-              ),
+        child: Listener(
+          onPointerSignal: _wheel,
+          child: unified
+              ? Listener(
+                  behavior: HitTestBehavior.opaque,
+                  onPointerDown: (e) {
+                    _move = cameraMoveForButtons(e.buttons);
+                    _begin(e.localPosition);
+                  },
+                  onPointerMove: (e) => _drag(e.localPosition, e.delta),
+                  onPointerUp: (_) => _end(),
+                  onPointerCancel: (_) => _end(),
+                  child: stack,
+                )
+              : GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (_) {
+                    if (_target == null) _sayNoCamera();
+                  },
+                  onPanStart: (d) => _begin(d.localPosition),
+                  onPanUpdate: (d) => _drag(d.localPosition, d.delta),
+                  onPanEnd: (_) => _end(),
+                  onPanCancel: _end,
+                  child: stack,
+                ),
+        ),
       ),
     );
+  }
+
+  /// The wheel dollies while a camera tool is in hand, and the Viewer's own
+  /// wheel zoom stands aside for it. With nothing to move it is left to the
+  /// zoom.
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || _start != null) return;
+    final target = _target;
+    if (target == null) return;
+    GestureBinding.instance.pointerSignalResolver
+        .register(event, (_) => _dollyBy(target, event.scrollDelta.dy));
+  }
+
+  /// One notch of the wheel: away from you dollies in, as in After Effects.
+  /// A run of notches is one undo step, closed once the wheel rests.
+  void _dollyBy(({LayerReference? layer, CameraPose pose}) target, double dy) {
+    final pose = dollyCamera(target.pose, -dy * wheelDollyPixels, 0);
+    final layer = target.layer;
+    final tf = _held?.transform;
+    if (layer == null) {
+      widget.uiState.setViewerViewPose(viewOfPose(pose), viewId: widget.viewId);
+      return;
+    }
+    if (tf == null) return;
+    if (!_grouped) {
+      try {
+        widget.state.project?.beginUndoGroup();
+        _grouped = true;
+      } catch (_) {
+        // No project, so no history to keep tidy.
+      }
+    }
+    _wheelRest?.cancel();
+    _wheelRest = Timer(const Duration(milliseconds: 500), _closeUndoStep);
+    _writeCamera(layer, tf, pose, _movedProps(pose, ToolMode.cameraDolly));
   }
 
   void _sayNoCamera() => widget.state.postNotice(
@@ -639,7 +686,10 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     final start = _activeMove == ToolMode.cameraOrbit
         ? _orbitable(target.pose)
         : target.pose;
-    if (target.layer != null && !_grouped) {
+    // A wheel run still open is its own step, not the start of this one.
+    _wheelRest?.cancel();
+    _closeUndoStep();
+    if (target.layer != null) {
       try {
         widget.state.project?.beginUndoGroup();
         _grouped = true;
