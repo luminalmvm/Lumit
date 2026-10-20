@@ -1541,6 +1541,8 @@ impl Compositor {
     /// 3D layer covers at least half reads as far as a half float goes, or as
     /// `under` where that is given: the depth of the layers below these.
     /// `metres_per_w` is the camera's zoom over its pixels per metre.
+    /// Distance is counted from a clip w of `near`, so a scene far from the
+    /// eye keeps its precision.
     ///
     /// 2D layers draw nothing here, so a 3D layer still reads through a 2D
     /// one in front of it. A 2D layer inside a collapsed 3D precomp lies on the
@@ -1557,6 +1559,7 @@ impl Compositor {
         runs: &[&[CompositeLayer<'_>]],
         camera: Mat4,
         metres_per_w: f32,
+        near: f32,
         render_scale: f32,
         under: Option<&wgpu::Texture>,
     ) -> wgpu::Texture {
@@ -1591,7 +1594,7 @@ impl Compositor {
                     0.0,
                     0.0,
                 ],
-                target: [tw as f32, th as f32, 0.0, metres_per_w],
+                target: [tw as f32, th as f32, near, metres_per_w],
                 cut: [0.0; 4],
                 piece: [[0.0; 4]; PIECE_CORNERS / 2],
             };
@@ -3669,6 +3672,7 @@ mod tests {
             &[&[card(30.0), card(-30.0)]],
             cam,
             1.0,
+            0.0,
             1.0,
             None,
         );
@@ -3715,13 +3719,14 @@ mod tests {
         // Split into two runs, as a 2D layer between them does, the blue card
         // above covers the red one wherever it is, nearer or not. Laid over
         // the red card's depth as what is below, it does the same.
-        let red = compositor.composite_depth(&ctx, 32, 32, &[&[card(30.0)]], cam, 1.0, 1.0, None);
+        let red =
+            compositor.composite_depth(&ctx, 32, 32, &[&[card(30.0)]], cam, 1.0, 0.0, 1.0, None);
         for under in [None, Some(&red)] {
             let runs: &[&[CompositeLayer<'_>]] = match under {
                 None => &[&[card(30.0)], &[card(-30.0)]],
                 Some(_) => &[&[card(-30.0)]],
             };
-            let depth = compositor.composite_depth(&ctx, 32, 32, runs, cam, 1.0, 1.0, under);
+            let depth = compositor.composite_depth(&ctx, 32, 32, runs, cam, 1.0, 0.0, 1.0, under);
             let px = crate::fx::readback_linear_f32(&ctx, &depth, 32, 32).unwrap();
             for x in [10u32, 21] {
                 let (got, blue) = (px[((16 * 32 + x) * 4) as usize], hit(x as f32 + 0.5, -30.0));

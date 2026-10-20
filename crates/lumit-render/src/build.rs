@@ -7420,6 +7420,7 @@ mod render_below_at_tests {
             bg,
             &draws,
             Some(region),
+            None,
         );
         assert_eq!(
             (windowed.width(), windowed.height()),
@@ -7451,6 +7452,7 @@ mod render_below_at_tests {
             bg,
             &draws,
             Some(region),
+            None,
         );
         assert_eq!(win_px, bytes(&again), "a windowed composite is bit-stable");
     }
