@@ -6119,13 +6119,15 @@ mod tests {
     }
 
     /// **Two views of one comp never trade frames.** With one looking from
-    /// Top and the other through the comp's camera, each names its own frame
-    /// and is served only its own, and closing the Top view lets go of its
-    /// view and its names.
+    /// Top and the other through the comp's camera, the cache bar reads the
+    /// active Top view's frame, each view names its own frame and is served
+    /// only its own, and closing the Top view lets go of its view, its names
+    /// and the fill's anchor.
     #[test]
     fn two_views_of_one_comp_never_trade_frames() {
         use crate::api::layer::{camera_view_pose, BridgeCameraView, BridgeLayerSwitch};
 
+        let _cache = crate::framecache::test_guard();
         let (project, comp) = project_with_solid_of(4);
         let layer = {
             let state = project.state().expect("state");
@@ -6148,6 +6150,33 @@ mod tests {
         let quality = super::still_quality(1.0);
         let top = camera_view_pose(BridgeCameraView::Top, 64.0, 32.0).core();
         super::set_view(&mut state, 1, Some((comp, top)));
+
+        // Only the Top frame is made, so a bar naming frames any other way
+        // finds nothing held.
+        let mut stream = crate::frb_generated::StreamSink::deserialize("0".into());
+        super::render_comp(
+            super::RenderCompRequest {
+                comp: CompositionReference::new(state.project.id, comp),
+                frame: 0,
+                view: 1,
+                active: true,
+                prefix: None,
+                mode: BridgePlaybackMode::EveryFrame,
+                scale: 1.0,
+            },
+            &mut state,
+            &mut stream,
+        )
+        .expect("the Top frame");
+        crate::framecache::bar::want(comp, 4, 1000);
+        super::publish_cache_bar(&mut state, &mut stream);
+        let strip = crate::framecache::bar::read(comp, 4, 1000);
+        assert_eq!(
+            crate::framecache::bar::storage_of(strip[0]),
+            2,
+            "the bar reads the frame the active Top view shows"
+        );
+
         let name = |state: &mut super::WorkerState, view: u32| {
             state.set_view_id(view);
             let document = super::viewed_through(None, state.camera_view(), document.clone());
@@ -6171,6 +6200,10 @@ mod tests {
         assert!(
             state.camera_views.is_empty(),
             "a closed view lets go of its 3D view"
+        );
+        assert!(
+            state.last_shown.is_none(),
+            "and the fill no longer anchors on it"
         );
         assert_eq!(
             name(&mut state, 1),
