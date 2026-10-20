@@ -2865,18 +2865,20 @@ impl CompositionReference {
         })
     }
 
-    /// Look at this comp through `view` rather than its active camera
-    /// (docs/impl/camera.md §6), or through the active camera again with
-    /// `None`. Panel state, so the frontend sends it whenever the Viewer's
-    /// 3D view changes and the next render looks through it. Export never
-    /// sees a view.
+    /// Look at this comp in Viewer view `view` through `pose` rather than its
+    /// active camera (docs/impl/camera.md §6), or through the active camera
+    /// again with `None`. Panel state, kept per view like the look, so the
+    /// frontend sends it whenever a view's 3D view changes and that view's
+    /// next render looks through it. Export never sees a view.
     #[frb(sync)]
     pub fn set_camera_view(
         &self,
-        view: Option<crate::api::layer::BridgeCameraPose>,
+        pose: Option<crate::api::layer::BridgeCameraPose>,
+        view: u32,
     ) -> Result<(), BridgeError> {
         self.dispatch(WorkerRequest::SetCameraView {
             comp: self.id,
+            pose,
             view,
         })
     }
