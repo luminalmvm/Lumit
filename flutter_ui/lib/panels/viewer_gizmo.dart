@@ -543,27 +543,33 @@ Offset pointDeltaIn(LayerBox box, Offset screenDelta, {Offset? from}) {
   return box.map.layerOf(base + screenDelta) - box.map.layerOf(base);
 }
 
-/// An arrow key's nudge on a 3D layer, as the change it makes to Position: a
-/// whole step of [by]'s length on the Position axis that runs most nearly the
-/// arrow's way on screen, with that axis's sign, however near or far the
-/// layer is. Null when neither axis runs anywhere near it, as with Up in a
-/// Top view, where only z could.
-Offset? nudgeIn3D(LayerBox box, Offset by) {
+Vec3 _flat(Offset step) => (step.dx, step.dy, 0);
+
+/// An arrow key's nudge, as the change it makes to Position. A 2D layer
+/// moves [by] on screen. A 3D layer takes a whole step of [by]'s length on
+/// the Position axis that runs most nearly the arrow's way on screen, with
+/// that axis's sign, however near or far the layer is: z where z runs that
+/// way, as Up does in a Top view. Null when no axis runs anywhere near it.
+Vec3? nudgeStep(LayerBox box, Offset by) {
+  if (!box.map.projected) return _flat(box.map.positionStep(by));
   final m = box.map;
   if (!m.inFront(m.ax, m.ay)) return null;
+  final z = m.depth!.z;
   final at = m.parentToScreen(m.px, m.py);
   final arrow = by / by.distance;
-  Offset? best;
+  Vec3? best;
   var nearest = 0.5;
   for (final (axis, run) in [
-    (const Offset(1, 0), m.parentToScreen(m.px + 1, m.py) - at),
-    (const Offset(0, 1), m.parentToScreen(m.px, m.py + 1) - at),
+    ((1.0, 0.0, 0.0), m.parentToScreen(m.px + 1, m.py) - at),
+    ((0.0, 1.0, 0.0), m.parentToScreen(m.px, m.py + 1) - at),
+    ((0.0, 0.0, 1.0), m.parentToScreen(m.px, m.py, z + 1) - at),
   ]) {
     if (run.distance < 1e-9) continue;
     final along = (run.dx * arrow.dx + run.dy * arrow.dy) / run.distance;
     if (along.abs() > nearest) {
       nearest = along.abs();
-      best = axis * (along.sign * by.distance);
+      final k = along.sign * by.distance;
+      best = (axis.$1 * k, axis.$2 * k, axis.$3 * k);
     }
   }
   return best;
@@ -1289,11 +1295,13 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final moves = [
       for (final box in _selected)
         if (box.draggable)
-          if ((box.map.projected
-                  ? nudgeIn3D(box, by)
-                  : box.map.positionStep(by))
-              case final step?)
-            (box, box.map.px + step.dx, box.map.py + step.dy, null),
+          if (nudgeStep(box, by) case final step?)
+            (
+              box,
+              box.map.px + step.$1,
+              box.map.py + step.$2,
+              step.$3 == 0 ? null : box.map.depth!.z + step.$3,
+            ),
     ];
     if (moves.isEmpty) return false;
     _place(moves);
@@ -1813,23 +1821,34 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void _align(_Align to) {
     final moves = <(LayerBox, double, double, double?)>[];
     for (final box in _selected) {
-      final rect = box.draggable ? _rectOf([box]) : null;
-      if (rect == null) continue;
-      // Both measured from the composition's corner, at the view's scale.
-      final scale = box.map.viewScale;
-      final r = rect.shift(-box.map.origin);
-      final frame = widget.compSize * scale;
-      final d = switch (to) {
-            _Align.left => Offset(-r.left, 0),
-            _Align.centre => Offset(frame.width / 2 - r.center.dx, 0),
-            _Align.right => Offset(frame.width - r.right, 0),
-            _Align.top => Offset(0, -r.top),
-            _Align.middle => Offset(0, frame.height / 2 - r.center.dy),
-            _Align.bottom => Offset(0, frame.height - r.bottom),
-          } /
-          scale;
-      final step = box.map.positionStep(d);
-      moves.add((box, box.map.px + step.dx, box.map.py + step.dy, null));
+      if (!box.draggable || _rectOf([box]) == null) continue;
+      var (x, y) = (box.map.px, box.map.py);
+      // Seen through a camera a move also changes how big the box looks, so
+      // a few steps close in on the edge rather than landing near it.
+      for (var i = 0; i < (box.map.projected ? 4 : 1); i++) {
+        final moved = i == 0
+            ? box
+            : box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(x, y));
+        final rect = _rectOf([moved]);
+        if (rect == null) break;
+        // Both measured from the composition's corner, at the view's scale.
+        final scale = box.map.viewScale;
+        final r = rect.shift(-box.map.origin);
+        final frame = widget.compSize * scale;
+        final d = switch (to) {
+              _Align.left => Offset(-r.left, 0),
+              _Align.centre => Offset(frame.width / 2 - r.center.dx, 0),
+              _Align.right => Offset(frame.width - r.right, 0),
+              _Align.top => Offset(0, -r.top),
+              _Align.middle => Offset(0, frame.height / 2 - r.center.dy),
+              _Align.bottom => Offset(0, frame.height - r.bottom),
+            } /
+            scale;
+        final step = moved.map.positionStep(d);
+        x += step.dx;
+        y += step.dy;
+      }
+      moves.add((box, x, y, null));
     }
     _place(moves);
   }
