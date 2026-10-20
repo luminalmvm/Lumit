@@ -81,6 +81,10 @@ const double dollyFraction = 0.0015;
 /// distance.
 const double wheelDollyPixels = 0.5;
 
+/// The most scroll one wheel event counts for, so a coarse notch on one
+/// platform is no bigger a step than a run of fine ones on another.
+const double wheelNotchPixels = 120;
+
 /// A camera's pose in the shape the tools work in: where the eye is, which way
 /// it faces, how far ahead the plane it renders 1:1 sits, and what it is aimed
 /// at when it is aimed at something.
@@ -759,6 +763,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
         // camera tool is armed, so nothing underneath takes the drag instead.
         child: Listener(
           onPointerSignal: _wheel,
+          // A trackpad's two-finger push dollies as the wheel does.
+          onPointerPanZoomUpdate: (e) =>
+              _dollyBy(e.localPosition, -e.panDelta.dy),
           child: unified
               ? Listener(
                   behavior: HitTestBehavior.opaque,
@@ -794,13 +801,12 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     if (event is! PointerScrollEvent || _start != null || _target == null) {
       return;
     }
+    final dy = event.scrollDelta.dy.clamp(-wheelNotchPixels, wheelNotchPixels);
     GestureBinding.instance.pointerSignalResolver.register(
-        event,
-        (_) => _dollyBy(
-            event.localPosition, -event.scrollDelta.dy * wheelDollyPixels));
+        event, (_) => _dollyBy(event.localPosition, -dy * wheelDollyPixels));
   }
 
-  /// One notch of the wheel: [travel] pixels of dolly toward
+  /// One step of the wheel or the trackpad: [travel] pixels of dolly toward
   /// what is under [at], away from you going in, as in After Effects.
   void _dollyBy(Offset at, double travel) {
     final target = _target;
