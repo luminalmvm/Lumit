@@ -55,6 +55,7 @@ import 'package:lumit_flutter/src/rust/api/system.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
+import 'package:lumit_flutter/widgets/drag_escape.dart';
 
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'transform_rows_frb.dart' show read;
@@ -482,6 +483,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // state, and only this widget knows it was asked for.
     if (_locked) thawCursor();
     _throttle.cancel();
+    _escape.dispose();
     _wheelRest?.cancel();
     _closeUndoStep();
     super.dispose();
@@ -499,6 +501,16 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// writes from this, so a keyed camera keeps replacing the one key at the
   /// playhead rather than piling them up.
   BridgeTransform? _startTransform;
+
+  /// Whether the drag has written to the camera, so Escape knows there is a
+  /// step to take back.
+  bool _wrote = false;
+
+  /// Escape takes the drag back, putting the camera or the view where it was.
+  final DragEscape _escape = DragEscape();
+
+  /// What puts a view back as the drag found it, for Escape.
+  VoidCallback? _revertView;
 
   /// Whether an undo group is open, so a whole drag, or a run of wheel
   /// notches, is one step however many writes it made.
@@ -849,11 +861,14 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     var start = target.pose;
     var pivot = orbit ? _pivotFor(at, start) : null;
     _aimAt(at, start);
+    _revertView = target.layer == null ? _viewReverter() : null;
     if (orbit && _fixedView) (start, pivot) = _toCustom(start, pivot);
     // A wheel run still open is its own step, not the start of this one.
     _wheelRest?.cancel();
     _closeUndoStep();
     if (target.layer != null) _openUndoStep();
+    _wrote = false;
+    _escape.begin(_abandon);
     setState(() {
       _acting = target.layer;
       _actingView = target.layer == null;
@@ -890,6 +905,24 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       ? zoomView(pose, travel, at: _dollyAt, depth: _framed)
       : dollyCamera(pose, travel, toward: _dollyToward);
 
+  /// What puts the Viewer's view back as it is now, should Escape take the
+  /// drag back, including an orbit that carried a fixed view into a custom one.
+  VoidCallback _viewReverter() {
+    final ui = widget.uiState;
+    final id = widget.viewId;
+    final look = ui.viewOf(id);
+    final pose = ui.viewPoseOf(id);
+    final custom = ui.lastCustomViewOf(id);
+    final customPose = ui.heldViewPose(custom, viewId: id);
+    return () {
+      if (ui.viewOf(id) == custom && custom != look && customPose != null) {
+        ui.setViewerViewPose(customPose, viewId: id);
+      }
+      ui.setViewerView(look, viewId: id);
+      if (pose != null) ui.setViewerViewPose(pose, viewId: id);
+    };
+  }
+
   /// A fixed view never turns, so an orbit begun in one carries its framing
   /// into the Viewer's last custom view and turns that: the same picture of
   /// the plane the fixed view frames, seen from the custom view's zoom at the
@@ -922,7 +955,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 
   void _drag(Offset at, Offset delta) {
-    if (_start == null) return;
+    if (_start == null || !_escape.running) return;
     final anchor = _anchor;
     if (_locked && anchor != null) {
       // Measured from where the pointer is *held*, not from the last event:
@@ -941,11 +974,15 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 
   void _end() {
-    if (_start != null && _delta != Offset.zero) _write(preview: false);
+    final commit = _escape.end();
+    if (commit && _start != null && _delta != Offset.zero) {
+      _write(preview: false);
+    }
     _closeUndoStep();
     if (_locked) thawCursor();
     _locked = false;
     _anchor = null;
+    _revertView = null;
     setState(() {
       _acting = null;
       _actingView = false;
@@ -954,6 +991,25 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       _pivot = null;
       _delta = Offset.zero;
     });
+  }
+
+  /// Escape mid-drag: the camera or the view goes back where it was, and the
+  /// rest of the drag moves nothing.
+  void _abandon() {
+    _throttle.cancel();
+    if (_actingView) {
+      _revertView?.call();
+      return;
+    }
+    final wrote = _wrote;
+    _closeUndoStep();
+    if (!wrote) return;
+    try {
+      widget.state.project?.undo();
+    } catch (_) {
+      // The project closed mid-drag.
+    }
+    widget.onChanged();
   }
 
   /// Which move the drag is: the armed tool's, or the button's under the
@@ -1125,7 +1181,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     final layer = _acting;
     final tf = _startTransform;
     if (layer == null || tf == null) return;
-    _writeCamera(layer, tf, pose, _movedProps(pose, _activeMove));
+    if (_writeCamera(layer, tf, pose, _movedProps(pose, _activeMove))) {
+      _wrote = true;
+    }
   }
 
   /// What [move] changes on the camera. Only what moved is written, so a
