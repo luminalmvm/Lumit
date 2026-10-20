@@ -30,6 +30,7 @@ void main() {
     List<BridgeShapeItem> shapeContents = const [],
     Offset artOrigin = Offset.zero,
     BridgeMotionPath? motionPath,
+    ViewerDepth? depth,
   }) =>
       LayerBox(
         layer: LayerReference(
@@ -48,6 +49,7 @@ void main() {
           rotationDegrees: rotation,
           origin: origin,
           viewScale: viewScale,
+          depth: depth,
         ),
         bounds: size,
         draggable: true,
@@ -248,6 +250,20 @@ void main() {
       // Beyond the small one, the big one below still answers.
       expect(layerAtPoint([top, under], const Offset(380, 200))?.id, under.id);
       expect(layerAtPoint([top, under], const Offset(600, 600)), isNull);
+
+      // Through a camera at rest over a 600 by 400 comp, 3D layers next to
+      // each other go nearest first, and a 2D layer above them still wins.
+      ViewerDepth deep(double z) => ViewerDepth(
+            view: const [1, 0, 0.3, 0, 0, 1, 0.2, 0, 0, 0, 0.001, 1],
+            z: z,
+            rotationX: 0,
+            rotationY: 0,
+          );
+      final far = box(size: const Size(50, 50), depth: deep(500));
+      final near = box(depth: deep(0));
+      expect(layerAtPoint([far, near], const Offset(300, 200))?.id, near.id);
+      expect(layerAtPoint([top, far, near], const Offset(300, 200))?.id,
+          top.id);
     });
   });
 
