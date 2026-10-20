@@ -1280,6 +1280,7 @@ mod tests {
             markers: Vec::new(),
             motion_blur: MotionBlur::default(),
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             beat_grid: None,
             graph: None,

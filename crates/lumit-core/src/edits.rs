@@ -76,9 +76,17 @@ pub fn base_layer(
     name: String,
     kind: LayerKind,
     out: Rational,
-    transform: TransformGroup,
+    mut transform: TransformGroup,
 ) -> Layer {
     let label = kind.default_label();
+    // Nothing lights a camera, a light or a null, so it keeps the material
+    // a file leaves out.
+    if matches!(
+        kind,
+        LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Null
+    ) {
+        transform.material = Box::new(lumit_core::model::Material::legacy());
+    }
     Layer {
         markers: Vec::new(),
         graph: Default::default(),
@@ -683,6 +691,7 @@ pub fn precompose_ops(
     let inner = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -1092,6 +1101,7 @@ pub fn new_comp_ops(
     let comp = Composition {
         graph,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -1256,6 +1266,23 @@ pub fn transform_ops(
                 layer: layer.id,
                 prop,
                 slot,
+            });
+        }
+    }
+    // An old light's edge and falloff numbers mean the old curves. Edit one
+    // and the light moves onto After Effects' curves in the same step, so
+    // undo puts the old ones back.
+    if let LayerKind::Light { light } = &layer.kind {
+        use lumit_core::model::TransformProp as P;
+        let shape = matches!(prop, P::ConeFeather | P::LightRadius | P::FalloffDistance);
+        if light.legacy_shape && shape {
+            ops.push(Op::SetLightSettings {
+                comp,
+                layer: layer.id,
+                settings: lumit_core::model::LightSettings {
+                    legacy_shape: false,
+                    ..light.settings()
+                },
             });
         }
     }

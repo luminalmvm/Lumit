@@ -5320,10 +5320,6 @@
   "@menuApplyAnimationPreset": {
     "description": "Menu item."
   },
-  "menuAreaLight": "Flächenlicht",
-  "@menuAreaLight": {
-    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
-  },
   "menuAssignWorkspaceShortcut": "Assign shortcut to this workspace",
   "@menuAssignWorkspaceShortcut": {
     "description": "Menu item (a feature that is not built yet — it appears greyed out)."
@@ -5544,10 +5540,6 @@
   "@menuPaste": {
     "description": "Menu item."
   },
-  "menuPointLight": "Punktlicht",
-  "@menuPointLight": {
-    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
-  },
   "menuPreCompose": "Vorkomponieren…",
   "@menuPreCompose": {
     "description": "Menu item."
@@ -5663,10 +5655,6 @@
   "menuSplitLayer": "Ebene teilen",
   "@menuSplitLayer": {
     "description": "Menu item."
-  },
-  "menuSpotLight": "Spotlicht",
-  "@menuSpotLight": {
-    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuStretch": "Dehnen…",
   "@menuStretch": {

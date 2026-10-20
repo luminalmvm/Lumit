@@ -76,6 +76,7 @@ fn doc_with_four() -> (Document, Uuid, Vec<Uuid>) {
         markers: Vec::new(),
         motion_blur: Default::default(),
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         beat_grid: None,
         extra: serde_json::Map::new(),

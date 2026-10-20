@@ -398,6 +398,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

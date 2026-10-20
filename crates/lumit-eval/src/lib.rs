@@ -400,12 +400,19 @@ fn feed_comp(
     let lights = comp.lights_at(t);
     if !lights.is_empty() {
         h.update(b"lights/");
+        if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
+            h.update(b"after-effects/");
+            h.update(&[u8::from(linear)]);
+        }
         for l in &lights {
             h.update(&[match l.kind {
                 lumit_core::model::LightKind::Point => 0u8,
                 lumit_core::model::LightKind::Spot => 1,
                 lumit_core::model::LightKind::Area => 2,
+                lumit_core::model::LightKind::Parallel => 3,
+                lumit_core::model::LightKind::Ambient => 4,
             }]);
+            h.update(&[l.falloff as u8, u8::from(l.legacy_shape)]);
             for v in [
                 l.position.0,
                 l.position.1,
@@ -417,6 +424,9 @@ fn feed_comp(
                 l.rotation_x_deg,
                 l.rotation_y_deg,
                 l.falloff_px,
+                l.cone_feather,
+                l.radius_px,
+                f64::from(l.gain),
             ] {
                 feed_f64(h, v);
             }
@@ -1607,6 +1617,19 @@ fn feed_layer(
     // described, and gating it that way keeps every one of those keys valid.
     if !layer.switches.accepts_lights && comp.layers.iter().any(|l| l.is_light()) {
         h.update(b"unlit");
+    }
+    // The material shades only a 3D layer and only where there is a light,
+    // and is hashed only once it has moved off what layers had before it
+    // existed, so those keys stay valid.
+    let m = &layer.transform.material;
+    if layer.switches.three_d
+        && comp.layers.iter().any(|l| l.is_light())
+        && **m != lumit_core::model::Material::legacy()
+    {
+        h.update(b"material");
+        for p in [&m.ambient, &m.diffuse, &m.specular, &m.shininess, &m.metal] {
+            feed_f64(h, p.value_at(lt));
+        }
     }
     // Collapse changes how a Precomp composites (docs/06 §1.4), so it is
     // content. Hashed only when set, so every pre-collapse key stays valid.
@@ -2851,6 +2874,7 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

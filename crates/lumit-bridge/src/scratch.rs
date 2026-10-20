@@ -136,6 +136,7 @@ pub fn document_with(
         motion_blur: lumit_core::model::MotionBlur::default(),
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         // A scratch composition is never a mix: it is one item on its own, and
         // the Audio timeline has nothing to show of it.
         sound_mix: false,

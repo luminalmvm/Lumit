@@ -2011,6 +2011,14 @@ impl Realiser<'_> {
         // does — and multiplying a placement by 1.0 moves nothing, so the
         // composite below is byte for byte what it was.
         let mut grown: Vec<(f32, f32)> = Vec::with_capacity(layers.len());
+        // Where a highlight is seen from: the camera the frame is drawn
+        // through, which is the default one when the comp has no camera.
+        let eye = camera
+            .unwrap_or_else(|| {
+                lumit_core::camera::default_pose(f64::from(width), f64::from(height))
+            })
+            .position;
+        let eye = [eye.0, eye.1, eye.2].map(|v| v as f32);
         for l in layers {
             // One row's own cost: its source uploaded and linearised (or its
             // Precomp realised entire) and then its effect stack. The composite
@@ -2223,7 +2231,7 @@ impl Realiser<'_> {
             // placed. `l.lights` is empty unless the comp holds lights and
             // this layer accepts them, and empty means the pass never runs —
             // so a comp without lights renders byte-for-byte as before.
-            if let Some(op) = lighting_op(l, tex.width(), tex.height()) {
+            if let Some(op) = lighting_op(l, tex.width(), tex.height(), eye) {
                 tex = self
                     .fx
                     .lighting(&self.ctx, &tex, tex.width(), tex.height(), &op);
@@ -2699,6 +2707,7 @@ fn lighting_op(
     l: &crate::draw::CompLayerDraw,
     w: u32,
     h: u32,
+    eye: [f32; 3],
 ) -> Option<lumit_gpu::fx::LightingOp> {
     use crate::build::{place_dir, place_point, unit};
 
@@ -2730,6 +2739,7 @@ fn lighting_op(
         // increasing z away from the camera, as After Effects does, so the
         // side a light has to be on is the negative one.
         normal: unit(cross(dv, du)),
+        material: lumit_gpu::fx::LightingMaterial { eye, ..l.material },
         lights: l.lights.clone(),
     })
 }
@@ -2871,6 +2881,7 @@ mod tests {
             fx_input_key: None,
             mb: Vec::new(),
             lights: Vec::new(),
+            material: Default::default(),
             temporal_below: None,
             accumulation_below: None,
             flow_below: Vec::new(),

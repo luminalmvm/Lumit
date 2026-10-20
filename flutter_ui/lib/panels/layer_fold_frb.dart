@@ -33,6 +33,7 @@ import 'package:uuid/uuid.dart';
 import 'effect_param_row_frb.dart';
 import 'graph_maths.dart';
 import 'graph_panel.dart' show DrivenParam;
+import 'light_rows_frb.dart';
 import 'text_animator_rows_frb.dart';
 import 'transform_rows_frb.dart';
 
@@ -77,6 +78,14 @@ final class FoldTransformRow extends LayerFoldRow {
   final TransformGroup group;
   final BridgeTransform transform;
   const FoldTransformRow(this.group, this.transform, {required int depth})
+      : super(depth);
+}
+
+/// One of a layer's choice rows: a light's type or falloff.
+final class FoldSettingRow extends LayerFoldRow {
+  final LayerSetting setting;
+  final BridgeLayerInfo info;
+  const FoldSettingRow(this.setting, this.info, {required int depth})
       : super(depth);
 }
 
@@ -918,7 +927,7 @@ bool _foldRowChanged(LayerFoldRow row, double compWidth, double compHeight) =>
       FoldShapePaintRow() ||
       FoldAnimatorValueRow() =>
         true,
-      FoldWaveformRow() => false,
+      FoldWaveformRow() || FoldSettingRow() => false,
     };
 
 /// What a transform axis reads on a layer nobody has touched, or null for an
@@ -944,6 +953,23 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
         100,
       // A full circle of confusion, which is what a fresh camera carries.
       BridgeTransformProp.blurLevel => 100,
+      // A fresh light's, After Effects' own.
+      BridgeTransformProp.lightIntensity => 100,
+      BridgeTransformProp.lightColourR ||
+      BridgeTransformProp.lightColourG ||
+      BridgeTransformProp.lightColourB =>
+        1,
+      BridgeTransformProp.coneAngle => 90,
+      BridgeTransformProp.coneFeather => 50,
+      BridgeTransformProp.lightRadius ||
+      BridgeTransformProp.falloffDistance =>
+        500,
+      // Seeded from the comp, as a camera's are.
+      BridgeTransformProp.lightWidth || BridgeTransformProp.lightHeight => null,
+      // After Effects' Material options defaults.
+      BridgeTransformProp.ambient || BridgeTransformProp.metal => 100,
+      BridgeTransformProp.diffuse || BridgeTransformProp.specular => 50,
+      BridgeTransformProp.shininess => 5,
       // The rest of a camera's channels are seeded from the comp and from
       // each other (docs/impl/camera.md §1), so there is no number here that
       // means "untouched". Exempt, exactly as the Anchor is.
@@ -1729,6 +1755,8 @@ String foldRowPath(String layerId, LayerFoldRow row) => switch (row) {
       FoldRetimeRow() => retimePath(layerId),
       FoldFlowRow(:final kind) => '${flowPath(layerId)}/${kind.name}',
       FoldWaveformRow() => waveformPath(layerId),
+      FoldSettingRow(:final setting) =>
+        '${transformPath(layerId)}/${setting.name}',
       FoldAnimatorValueRow(:final index, :final value) =>
         '${animatorPath(layerId, index)}/${value.name}',
       FoldMaskRow(:final mask) => '${masksPath(layerId)}/${mask.id}',
@@ -1777,6 +1805,14 @@ String transformPath(String layerId) => '$layerId/transform';
 /// heading is a place to fold them away, not a place they live.
 String cameraOptionsPath(String layerId) =>
     '${transformPath(layerId)}/camera-options';
+
+/// The path of a light's Light options heading, on the same terms.
+String lightOptionsPath(String layerId) =>
+    '${transformPath(layerId)}/light-options';
+
+/// The path of a 3D layer's Material options, a heading of its own beside
+/// Transform as in After Effects.
+String materialPath(String layerId) => '$layerId/material';
 
 /// The path of one Transform row — Position, Scale, Rotation and the rest.
 ///
@@ -1985,6 +2021,7 @@ List<LayerFoldRow> layerFoldRows({
     modes: info.axisModes,
     kind: info.kind,
     twoNode: info.camera?.twoNode ?? false,
+    light: info.light,
   );
   final soloed = !transformOpen &&
       groups.any((g) => open.contains(transformGroupPath(id, g)));
@@ -2029,30 +2066,70 @@ List<LayerFoldRow> layerFoldRows({
     depth: 1,
   ));
   for (final group in groups) {
-    if (group.cameraOption) continue;
+    if (group.section != TransformSection.transform) continue;
     if (transformOpen || open.contains(transformGroupPath(id, group))) {
       rows.add(FoldTransformRow(group, info.transform, depth: 2));
     }
   }
 
-  // Camera options: a second heading under Transform, after the placement rows
-  // (docs/impl/camera.md §1). The four numbers under it are about the lens
-  // rather than about where the camera stands, and a camera is the only kind
-  // that has any.
-  final options = [for (final g in groups) if (g.cameraOption) g];
-  if (options.isNotEmpty) {
-    final optionsOpen = open.contains(cameraOptionsPath(id));
+  // Camera options and Light options: a second heading under Transform, after
+  // the placement rows (docs/impl/camera.md §1). The numbers under it are
+  // about the lens or the light rather than about where the layer stands. A
+  // light's choice rows head its list.
+  final settings = layerSettings(
+      kind: info.kind, light: info.light, threeD: info.switches.threeD);
+  for (final (section, path, label) in [
+    (TransformSection.camera, cameraOptionsPath(id), l10n.cameraOptions),
+    (TransformSection.light, lightOptionsPath(id), l10n.lightOptions),
+  ]) {
+    final options = [for (final g in groups) if (g.section == section) g];
+    if (options.isEmpty) continue;
+    final optionsOpen = open.contains(path);
     if (transformOpen) {
       rows.add(FoldGroupRow(
-        path: cameraOptionsPath(id),
-        label: l10n.cameraOptions,
+        path: path,
+        label: label,
         open: optionsOpen,
         depth: 2,
       ));
     }
+    if (optionsOpen) {
+      for (final setting in settings) {
+        if (setting.section == section) {
+          rows.add(FoldSettingRow(setting, info, depth: 3));
+        }
+      }
+    }
     for (final group in options) {
       if (optionsOpen || open.contains(transformGroupPath(id, group))) {
         rows.add(FoldTransformRow(group, info.transform, depth: 3));
+      }
+    }
+  }
+
+  // Material options, beside Transform rather than inside it.
+  final material = [
+    for (final g in groups)
+      if (g.section == TransformSection.material) g
+  ];
+  if (material.isNotEmpty && !soloed) {
+    final materialOpen = open.contains(materialPath(id));
+    rows.add(FoldGroupRow(
+      path: materialPath(id),
+      label: l10n.materialOptions,
+      open: materialOpen,
+      depth: 1,
+    ));
+    if (materialOpen) {
+      for (final setting in settings) {
+        if (setting.section == TransformSection.material) {
+          rows.add(FoldSettingRow(setting, info, depth: 2));
+        }
+      }
+    }
+    for (final group in material) {
+      if (materialOpen || open.contains(transformGroupPath(id, group))) {
+        rows.add(FoldTransformRow(group, info.transform, depth: 2));
       }
     }
   }

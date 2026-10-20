@@ -564,6 +564,19 @@ pub enum Op {
         layer: Uuid,
         settings: crate::model::CameraSettings,
     },
+    /// Replace the non-animatable part of a Light layer: its kind, its falloff
+    /// and whether it is aimed at its point of interest. One op, so the
+    /// settings dialog is one undo step.
+    SetLightSettings {
+        comp: Uuid,
+        layer: Uuid,
+        settings: crate::model::LightSettings,
+    },
+    /// Switch how a composition's lights fall on its layers.
+    SetCompLighting {
+        comp: Uuid,
+        lighting: crate::model::CompLighting,
+    },
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
     /// with `None` (docs/03 §5.6).
     ///
@@ -909,6 +922,7 @@ impl Op {
             Op::SetTransformAxisMode { .. } => "Set axis mode",
             Op::SetCameraZoom { .. } => "Set camera zoom",
             Op::SetCameraSettings { .. } => "Set camera settings",
+            Op::SetLightSettings { .. } => "Set light settings",
             Op::SetCameraSolveLink { .. } => "Link camera to solve",
             Op::SetLayerVolume { .. } => "Edit volume",
             Op::SetLayerPan { .. } => "Edit pan",
@@ -931,6 +945,7 @@ impl Op {
             Op::SetFootageColourSpace { .. } => "Set footage colour space",
             Op::SetFootageInterpretation { .. } => "Interpret footage",
             Op::SetCompSettings { .. } => "Composition settings",
+            Op::SetCompLighting { .. } => "Set lighting",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
             Op::CropCompToRegion { .. } => "Crop comp to region of interest",
@@ -1000,6 +1015,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetTransformAxisMode { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSettings { comp, layer, .. }
+        | Op::SetLightSettings { comp, layer, .. }
         | Op::SetCameraSolveLink { comp, layer, .. }
         | Op::SetLayerVolume { comp, layer, .. }
         | Op::SetLayerPan { comp, layer, .. }
@@ -2160,6 +2176,36 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 settings: previous,
+            })
+        }
+        Op::SetLightSettings {
+            comp,
+            layer,
+            settings,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let crate::model::LayerKind::Light { light } = &mut l.kind else {
+                return Err(OpError::PropNotOnLayer);
+            };
+            let previous = light.settings();
+            light.set_settings(*settings);
+            Ok(Op::SetLightSettings {
+                comp: *comp,
+                layer: *layer,
+                settings: previous,
+            })
+        }
+        Op::SetCompLighting { comp, lighting } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.lighting, *lighting);
+            Ok(Op::SetCompLighting {
+                comp: *comp,
+                lighting: previous,
             })
         }
         Op::SetCameraSolveLink {

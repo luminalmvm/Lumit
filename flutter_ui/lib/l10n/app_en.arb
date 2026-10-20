@@ -155,6 +155,107 @@
   "@cameraTwoNode": {
     "description": "Camera type: a camera that aims at its point of interest."
   },
+  "lightOptions": "Light options",
+  "@lightOptions": {
+    "description": "Heading in a light's Transform group, over the rows about the light itself rather than about where it stands."
+  },
+  "lightType": "Light type",
+  "@lightType": {
+    "description": "Row and settings field: which kind of light a Light layer is."
+  },
+  "lightPoint": "Point",
+  "@lightPoint": {
+    "description": "Light type: light from one point, shining every way."
+  },
+  "lightSpot": "Spot",
+  "@lightSpot": {
+    "description": "Light type: a cone of light."
+  },
+  "lightArea": "Area",
+  "@lightArea": {
+    "description": "Light type: light from a rectangle of a set size, like a softbox."
+  },
+  "lightParallel": "Parallel",
+  "@lightParallel": {
+    "description": "Light type: light from very far away, every ray running the same way, like the sun."
+  },
+  "lightAmbient": "Ambient",
+  "@lightAmbient": {
+    "description": "Light type: light from everywhere at once, with no place or direction."
+  },
+  "lightIntensity": "Intensity",
+  "@lightIntensity": {
+    "description": "Light row: how bright the light is, as a percentage."
+  },
+  "lightColour": "Colour",
+  "@lightColour": {
+    "description": "Light row: the colour of the light."
+  },
+  "lightConeAngle": "Cone angle",
+  "@lightConeAngle": {
+    "description": "Spot light row: the full angle of the cone of light, in degrees."
+  },
+  "lightConeFeather": "Cone feather",
+  "@lightConeFeather": {
+    "description": "Spot light row: how much of the cone's edge fades rather than cuts off, as a percentage."
+  },
+  "lightFalloff": "Falloff",
+  "@lightFalloff": {
+    "description": "Light row and settings field: how the light weakens with distance."
+  },
+  "lightFalloffSmooth": "Smooth",
+  "@lightFalloffSmooth": {
+    "description": "Light falloff: full strength out to the radius, then fading smoothly to nothing over the falloff distance."
+  },
+  "lightFalloffInverseSquare": "Inverse square clamped",
+  "@lightFalloffInverseSquare": {
+    "description": "Light falloff: full strength out to the radius, then weakening with the square of the distance, as real light does. After Effects' name for it."
+  },
+  "lightRadius": "Radius",
+  "@lightRadius": {
+    "description": "Light row: how far the light keeps its full strength before it starts to fall off, in pixels."
+  },
+  "lightFalloffDistance": "Falloff distance",
+  "@lightFalloffDistance": {
+    "description": "Light row: how far past the radius a smooth falloff takes to fade to nothing, in pixels."
+  },
+  "lightSettings": "Light settings",
+  "@lightSettings": {
+    "description": "Layer menu item, and the title of the window it opens: a light's type and options. The window also opens when a light is made."
+  },
+  "lightLayerName": "{kind} light",
+  "@lightLayerName": {
+    "description": "The name a new light starts with in the light settings window, from its type, as in \"Spot light\".",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "materialOptions": "Material options",
+  "@materialOptions": {
+    "description": "Heading beside Transform on a 3D layer, over the rows about how it takes the composition's lights. After Effects' name for the group."
+  },
+  "materialAmbient": "Ambient",
+  "@materialAmbient": {
+    "description": "Material options row: how much of the ambient lights the layer takes, as a percentage."
+  },
+  "materialDiffuse": "Diffuse",
+  "@materialDiffuse": {
+    "description": "Material options row: how much of the other lights the layer takes, as a percentage."
+  },
+  "materialSpecular": "Specular intensity",
+  "@materialSpecular": {
+    "description": "Material options row: how bright the highlight a light makes on the layer is, as a percentage."
+  },
+  "materialShininess": "Specular shininess",
+  "@materialShininess": {
+    "description": "Material options row: how small and hard the highlight is, as a percentage."
+  },
+  "materialMetal": "Metal",
+  "@materialMetal": {
+    "description": "Material options row: how much the highlight takes the layer's own colour rather than the light's, as a percentage."
+  },
   "cameraType": "Type",
   "@cameraType": {
     "description": "Camera settings row: whether the camera is one-node or two-node."
@@ -5339,16 +5440,16 @@
   "@keyNewCameraLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyNewLightLayer": "New Light layer",
+  "@keyNewLightLayer": {
+    "description": "Keyboard shortcut action: open the light settings window to make a new Light layer."
+  },
   "keyNewComposition": "New composition",
   "@keyNewComposition": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyNewNullLayer": "New Null layer",
   "@keyNewNullLayer": {
-    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
-  },
-  "keyNewPointLightLayer": "New Point light layer",
-  "@keyNewPointLightLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
   "keyNewProject": "New project",
@@ -6188,10 +6289,6 @@
   "@menuBlendingMode": {
     "description": "Menu item."
   },
-  "menuAreaLight": "Area light",
-  "@menuAreaLight": {
-    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
-  },
   "menuCamera": "Camera",
   "@menuCamera": {
     "description": "Menu item."
@@ -6432,6 +6529,10 @@
   "@menuLayerSettings": {
     "description": "Menu item."
   },
+  "menuLight": "Light…",
+  "@menuLight": {
+    "description": "Layer > New menu item: opens the light settings window, then makes the light."
+  },
   "menuLayerStyles": "Layer styles",
   "@menuLayerStyles": {
     "description": "Menu item."
@@ -6495,10 +6596,6 @@
   "menuNull": "Null",
   "@menuNull": {
     "description": "Menu item."
-  },
-  "menuPointLight": "Point light",
-  "@menuPointLight": {
-    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
   },
   "menuOpenProject": "Open project…",
   "@menuOpenProject": {
@@ -6763,10 +6860,6 @@
   "menuSolid": "Solid",
   "@menuSolid": {
     "description": "Menu item."
-  },
-  "menuSpotLight": "Spot light",
-  "@menuSpotLight": {
-    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuSplitLayer": "Split layer",
   "@menuSplitLayer": {
@@ -12542,6 +12635,18 @@
   "@compShutterAngle": {
     "description": "New composition / Composition settings dialog: row label: how much of a frame the shutter is open for, in degrees."
   },
+  "compGroupLights": "Lights",
+  "@compGroupLights": {
+    "description": "Section of the Composition settings window about how the composition's lights fall on its layers."
+  },
+  "compLightsLikeAfterEffects": "Like After Effects",
+  "@compLightsLikeAfterEffects": {
+    "description": "Composition settings checkbox: light layers from black, with ambient lights as their base, as After Effects does, rather than adding light to the picture. On for compositions imported from After Effects."
+  },
+  "histSetLighting": "Set lighting",
+  "@histSetLighting": {
+    "description": "Undo history entry: a composition's lighting was switched between Lumit's and After Effects' way."
+  },
   "compSamples": "Samples",
   "@compSamples": {
     "description": "New composition / Composition settings dialog: label beside the shutter angle: how many sub-frame samples a blurred layer is drawn at."
@@ -14798,6 +14903,10 @@
   "histSetCameraSettings": "Set camera settings",
   "@histSetCameraSettings": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetLightSettings": "Set light settings",
+  "@histSetLightSettings": {
+    "description": "Undo history entry: a light's type, falloff or aim was changed."
   },
   "histSetCameraZoom": "Set camera zoom",
   "@histSetCameraZoom": {

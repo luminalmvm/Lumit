@@ -246,6 +246,16 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
         order.push((item, uuid, kind));
     }
 
+    // Every comp is lit as the project lit it: on the display-encoded picture
+    // unless the project linearised its working space.
+    let lighting = lumit_core::model::CompLighting::AfterEffects {
+        linear: capture
+            .project
+            .as_ref()
+            .and_then(|p| p.linearize_working_space)
+            == Some(true),
+    };
+
     // Pass two: build them, in the capture's own order, which is the Project
     // panel's order.
     for (item, uuid, kind) in &order {
@@ -275,6 +285,7 @@ pub fn map_capture(capture: &Capture) -> (Document, ImportReport) {
                         *uuid,
                         &name,
                         &items,
+                        lighting,
                     )),
                     None => {
                         // The item list said there was a comp and the walk had
@@ -637,6 +648,7 @@ fn empty_comp(id: Uuid, name: &str, ae_id: i64) -> Composition {
     Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -662,6 +674,7 @@ fn composition(
     id: Uuid,
     name: &str,
     items: &Items,
+    lighting: lumit_core::model::CompLighting,
 ) -> Composition {
     let path = ItemPath::item(name);
 
@@ -771,6 +784,8 @@ fn composition(
     Composition {
         graph: None,
         master_volume_db: 0.0,
+        // Lit as After Effects lights it, so the comp looks as it did there.
+        lighting,
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

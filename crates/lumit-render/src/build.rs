@@ -1092,14 +1092,17 @@ pub fn shading_lights(
 ) -> Vec<lumit_gpu::fx::LightingLight> {
     use lumit_core::model::{LayerKind, LightKind};
 
+    // After Effects never lights a 2D layer.
     if !layer.switches.accepts_lights
         || matches!(
             layer.kind,
             LayerKind::Light { .. } | LayerKind::Camera { .. }
         )
+        || (comp.lighting != lumit_core::model::CompLighting::Adds && !layer.switches.three_d)
     {
         return Vec::new();
     }
+    let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
     let mut lights = comp.lights_at(t_comp);
     if lights.is_empty() {
         return Vec::new();
@@ -1142,21 +1145,78 @@ pub fn shading_lights(
             );
             let (hw, hh) = (l.half_size.0 as f32, l.half_size.1 as f32);
             let at = |x: f32, y: f32| place_point(&place, x, y, 0.0);
+            // A spot is aimed along its own local +z, away from the camera;
+            // anything below -1 tells the kernel "not a spot".
+            let cone_cos = match l.kind {
+                LightKind::Spot => (l.cone_deg as f32).to_radians().cos(),
+                _ => -2.0,
+            };
+            use lumit_gpu::fx::LightingKind as K;
             lumit_gpu::fx::LightingLight {
                 corners: [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)],
-                colour: l.colour,
+                // A picture lit in display encoding takes the light's colour
+                // encoded too, and its intensity as it is, as After Effects does.
+                colour: if encoded {
+                    l.tint.map(|c| lumit_core::lighting::encode(c) * l.gain)
+                } else {
+                    l.colour
+                },
+                kind: match l.kind {
+                    LightKind::Area if hw > 0.0 && hh > 0.0 => K::Area,
+                    LightKind::Parallel => K::Parallel,
+                    LightKind::Ambient => K::Ambient,
+                    _ => K::Point,
+                },
+                falloff: l.falloff as u32,
+                radius_px: l.radius_px as f32,
                 falloff_px: l.falloff_px as f32,
-                is_area: l.kind == LightKind::Area && hw > 0.0 && hh > 0.0,
-                // A spot is aimed along its own local +z, away from the
-                // camera; anything below -1 tells the kernel "not a spot".
-                cone_cos: match l.kind {
-                    LightKind::Spot => (l.cone_deg as f32).to_radians().cos(),
-                    _ => -2.0,
+                legacy: l.legacy_shape,
+                cone_cos,
+                // The feather is a share of the cone's angle, as After Effects
+                // has it. An old light's is a share of its cosine, which at a
+                // tenth is the edge spots had before it was a row.
+                cone_inner: if l.legacy_shape {
+                    cone_cos + (1.0 - cone_cos) * (l.cone_feather / 100.0) as f32
+                } else {
+                    (l.cone_deg * (1.0 - l.cone_feather / 100.0))
+                        .to_radians()
+                        .cos() as f32
                 },
                 axis: unit(place_dir(&place, 0.0, 0.0, 1.0)),
             }
         })
         .collect()
+}
+
+/// A layer's Material options at comp time `t_comp`, as what the lighting
+/// pass reads. The eye is the realiser's to fill in. A 2D layer has no
+/// Material options to set, so it takes the lights as they always were, with
+/// no highlight.
+pub fn shading_material(
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    t_comp: f64,
+) -> lumit_gpu::fx::LightingMaterial {
+    if !layer.switches.three_d {
+        return lumit_gpu::fx::LightingMaterial::default();
+    }
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let m = &layer.transform.material;
+    let pct = |p: &lumit_core::anim::Property| (p.value_at(lt) / 100.0).max(0.0) as f32;
+    // Where light adds to the picture, Diffuse at a half is the light as it
+    // always was; After Effects lights from black at the Diffuse given.
+    let adds = comp.lighting == lumit_core::model::CompLighting::Adds;
+    let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
+    lumit_gpu::fx::LightingMaterial {
+        base: if adds { 1.0 } else { 0.0 },
+        ambient: pct(&m.ambient),
+        diffuse: if adds { 2.0 } else { 1.0 } * pct(&m.diffuse),
+        specular: pct(&m.specular),
+        exponent: lumit_core::lighting::ShadingMaterial::exponent_for(m.shininess.value_at(lt)),
+        metal: pct(&m.metal).min(1.0),
+        eye: [0.0; 3],
+        encoded,
+    }
 }
 
 /// A point through a column-major placement matrix, done by hand so the render
@@ -3122,6 +3182,7 @@ fn comp_walk(
                 // The members were each already lit; shading the slab would
                 // light them twice.
                 lights: Vec::new(),
+                material: Default::default(),
                 temporal_below: None,
                 accumulation_below: None,
                 flow_below: Vec::new(),
@@ -3918,6 +3979,7 @@ fn comp_walk(
                     // the composite of everything below, whose layers were
                     // each already lit. Shading it would light them twice.
                     lights: Vec::new(),
+                    material: Default::default(),
                     temporal_below,
                     accumulation_below,
                     // The composite this layer's temporal effects read as
@@ -4162,6 +4224,7 @@ fn comp_walk(
             mb: motion_blur_samples(comp, layer, t_comp, context.clone()),
             // The comp's lights, if this layer takes them (docs/06).
             lights: shading_lights(comp, layer, t_comp),
+            material: shading_material(comp, layer, t_comp),
             // Ordinary layers never carry a temporal re-render — that is an
             // adjustment-only capability in v1 (docs/08 §3.25, §3.26).
             temporal_below: None,
@@ -4417,6 +4480,7 @@ fn graph_comp_draw(
         fx_input_key: None,
         mb: Vec::new(),
         lights: Vec::new(),
+        material: Default::default(),
         temporal_below: None,
         accumulation_below: None,
         flow_below: Vec::new(),
@@ -5305,6 +5369,7 @@ fn read_draw(
         fx_input_key: None,
         mb: Vec::new(),
         lights: Vec::new(),
+        material: Default::default(),
         temporal_below: None,
         accumulation_below: None,
         flow_below: Vec::new(),
@@ -6028,6 +6093,7 @@ mod parent_placement_tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -6416,6 +6482,7 @@ mod render_below_at_tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -6497,7 +6564,7 @@ mod render_below_at_tests {
         light.kind = LayerKind::Light {
             light: Box::new(LightDef {
                 kind: LightKind::Area,
-                half_size: [Property::fixed(120.0), Property::fixed(80.0)],
+                size: [Property::fixed(240.0), Property::fixed(160.0)],
                 ..LightDef::default()
             }),
         };
@@ -6506,6 +6573,7 @@ mod render_below_at_tests {
         let comp_with = |layers: Vec<Layer>| Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -6616,7 +6684,7 @@ mod render_below_at_tests {
         spot.kind = LayerKind::Light {
             light: Box::new(LightDef {
                 kind: LightKind::Spot,
-                cone_deg: Property::fixed(20.0),
+                cone_angle: Property::fixed(40.0),
                 ..LightDef::default()
             }),
         };
@@ -6642,6 +6710,7 @@ mod render_below_at_tests {
             let comp = Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -6722,6 +6791,7 @@ mod render_below_at_tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -6873,6 +6943,7 @@ mod render_below_at_tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -7022,6 +7093,7 @@ mod render_below_at_tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

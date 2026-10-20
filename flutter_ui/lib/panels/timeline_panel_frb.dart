@@ -1775,6 +1775,7 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
           modes: entry.info.axisModes,
           kind: entry.info.kind,
           twoNode: entry.info.camera?.twoNode ?? false,
+          light: entry.info.light,
         ))
           if (group.axes.first.prop.name.startsWith(axis))
             transformGroupPath(id, group),

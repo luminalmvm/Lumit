@@ -5991,7 +5991,8 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
 /// bit of a transcendental — an absolute epsilon, as the blur oracle uses.
 #[test]
 fn wgsl_lighting_matches_the_cpu_oracle() {
-    use lumit_core::lighting::{ShadingLight, ShadingSurface};
+    use lumit_core::lighting::{ShadingKind, ShadingLight, ShadingMaterial, ShadingSurface};
+    use lumit_core::model::LightFalloff;
 
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
@@ -6016,39 +6017,73 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
             [cx - half, cy + half, cz],
         ]
     };
+    let plain = ShadingLight {
+        corners: [[0.0; 3]; 4],
+        colour: [1.0, 1.0, 1.0],
+        kind: ShadingKind::Point,
+        falloff: LightFalloff::None,
+        radius_px: 0.0,
+        falloff_px: 0.0,
+        legacy: false,
+        cone_cos: -2.0,
+        cone_inner: -2.0,
+        axis: [0.0, 0.0, 1.0],
+    };
     let softbox = ShadingLight {
         corners: rect(16.0, 12.0, -40.0, 30.0),
         colour: [1.0, 0.8, 0.6],
-        falloff_px: 0.0,
-        is_area: true,
-        cone_cos: -2.0,
-        axis: [0.0, 0.0, 1.0],
+        kind: ShadingKind::Area,
+        ..plain
     };
     let bulb = ShadingLight {
         corners: [[4.0, 4.0, -20.0]; 4],
         colour: [0.2, 0.4, 1.0],
+        falloff: LightFalloff::Smooth,
         falloff_px: 120.0,
-        is_area: false,
-        cone_cos: -2.0,
-        axis: [0.0, 0.0, 1.0],
+        legacy: true,
+        ..plain
     };
+    let cone_cos = 25f32.to_radians().cos();
     let spot = ShadingLight {
         corners: [[16.0, 12.0, -60.0]; 4],
-        colour: [1.0, 1.0, 1.0],
-        falloff_px: 0.0,
-        is_area: false,
-        cone_cos: 25f32.to_radians().cos(),
-        axis: [0.0, 0.0, 1.0],
+        cone_cos,
+        cone_inner: cone_cos + (1.0 - cone_cos) * 0.1,
+        ..plain
     };
     // A light sunk behind the layer: the horizon clip is what makes this
     // nothing rather than nonsense, so it belongs in the comparison.
     let behind = ShadingLight {
         corners: rect(16.0, 12.0, 50.0, 30.0),
-        colour: [1.0, 1.0, 1.0],
-        falloff_px: 0.0,
-        is_area: true,
-        cone_cos: -2.0,
-        axis: [0.0, 0.0, 1.0],
+        kind: ShadingKind::Area,
+        ..plain
+    };
+    // The terms the light rows added: a spot feathered right to its middle,
+    // a smooth falloff with a radius, the inverse square, a parallel light
+    // raking in from one side and an ambient one.
+    let feathered = ShadingLight {
+        cone_inner: 1.0,
+        radius_px: 30.0,
+        falloff: LightFalloff::Smooth,
+        falloff_px: 40.0,
+        ..spot
+    };
+    let inverse = ShadingLight {
+        corners: [[24.0, 6.0, -15.0]; 4],
+        colour: [0.9, 0.3, 0.1],
+        falloff: LightFalloff::InverseSquareClamped,
+        radius_px: 18.0,
+        ..plain
+    };
+    let parallel = ShadingLight {
+        kind: ShadingKind::Parallel,
+        axis: [0.6, 0.0, 0.8],
+        colour: [0.5, 0.6, 0.7],
+        ..plain
+    };
+    let ambient = ShadingLight {
+        kind: ShadingKind::Ambient,
+        colour: [0.1, 0.2, 0.05],
+        ..plain
     };
 
     for (name, lights) in [
@@ -6058,23 +6093,99 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         ("spot", vec![spot]),
         ("behind", vec![behind]),
         ("three", vec![softbox, bulb, spot]),
+        ("feathered", vec![feathered]),
+        ("inverse square", vec![inverse]),
+        ("parallel", vec![parallel]),
+        ("ambient", vec![ambient]),
+        ("specular", vec![softbox, bulb]),
+        (
+            "negative",
+            vec![
+                ShadingLight {
+                    colour: [-0.6, -2.0, 0.3],
+                    ..bulb
+                },
+                ambient,
+            ],
+        ),
+        ("plastic", vec![spot, parallel]),
+        ("after effects", vec![spot, ambient]),
+        ("after effects encoded", vec![spot, ambient]),
     ] {
+        // Two are seen through a shiny material, a metal one and then a
+        // plastic one, and one lit from black as After Effects does; the rest
+        // through the plain one.
+        let eye = [16.0, 12.0, -200.0];
+        let plain = ShadingMaterial {
+            eye,
+            ..ShadingMaterial::PLAIN
+        };
+        let m = match name {
+            "specular" => ShadingMaterial {
+                specular: 0.5,
+                exponent: 6.0,
+                ..plain
+            },
+            "plastic" => ShadingMaterial {
+                specular: 0.8,
+                exponent: 20.0,
+                metal: 0.0,
+                ambient: 0.5,
+                ..plain
+            },
+            "after effects" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 6.0,
+                ..plain
+            },
+            "after effects encoded" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 6.0,
+                metal: 0.5,
+                encoded: true,
+                ..plain
+            },
+            _ => plain,
+        };
         let mut cpu = img.clone();
-        lumit_core::lighting::shade(&mut cpu, w, h, &surface, &lights);
+        lumit_core::lighting::shade(&mut cpu, w, h, &surface, &m, &lights);
 
         let op = crate::fx::LightingOp {
             origin: surface.origin,
             du: surface.du,
             dv: surface.dv,
             normal: surface.normal,
+            material: crate::fx::LightingMaterial {
+                base: m.base,
+                ambient: m.ambient,
+                diffuse: m.diffuse,
+                specular: m.specular,
+                exponent: m.exponent,
+                metal: m.metal,
+                eye: m.eye,
+                encoded: m.encoded,
+            },
             lights: lights
                 .iter()
                 .map(|l| crate::fx::LightingLight {
                     corners: l.corners,
                     colour: l.colour,
+                    kind: match l.kind {
+                        ShadingKind::Point => crate::fx::LightingKind::Point,
+                        ShadingKind::Area => crate::fx::LightingKind::Area,
+                        ShadingKind::Parallel => crate::fx::LightingKind::Parallel,
+                        ShadingKind::Ambient => crate::fx::LightingKind::Ambient,
+                    },
+                    falloff: l.falloff as u32,
+                    radius_px: l.radius_px,
                     falloff_px: l.falloff_px,
-                    is_area: l.is_area,
+                    legacy: l.legacy,
                     cone_cos: l.cone_cos,
+                    cone_inner: l.cone_inner,
                     axis: l.axis,
                 })
                 .collect(),

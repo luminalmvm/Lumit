@@ -243,6 +243,38 @@ LumitClipGroup _transformClipGroup(
         l10n.cameraBlurLevel,
         l10n.unitPercent
       ),
+    BridgeTransformProp.lightIntensity => (
+        l10n.lightIntensity,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.lightColourR ||
+    BridgeTransformProp.lightColourG ||
+    BridgeTransformProp.lightColourB =>
+      (l10n.lightColour, ''),
+    BridgeTransformProp.coneAngle => (l10n.lightConeAngle, l10n.unitDegrees),
+    BridgeTransformProp.coneFeather => (
+        l10n.lightConeFeather,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.lightRadius => (l10n.lightRadius, l10n.unitPixels),
+    BridgeTransformProp.falloffDistance => (
+        l10n.lightFalloffDistance,
+        l10n.unitPixels
+      ),
+    BridgeTransformProp.lightWidth ||
+    BridgeTransformProp.lightHeight =>
+      (l10n.size, l10n.unitPixels),
+    BridgeTransformProp.ambient => (l10n.materialAmbient, l10n.unitPercent),
+    BridgeTransformProp.diffuse => (l10n.materialDiffuse, l10n.unitPercent),
+    BridgeTransformProp.specular => (
+        l10n.materialSpecular,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.shininess => (
+        l10n.materialShininess,
+        l10n.unitPercent
+      ),
+    BridgeTransformProp.metal => (l10n.materialMetal, l10n.unitPercent),
   };
   // The union of the axes' key frames: an axis with no key on some frame
   // contributes the value its curve reads there, so every row is complete.

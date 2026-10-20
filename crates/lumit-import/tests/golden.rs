@@ -820,10 +820,11 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
 /// What does come across: the 3D switch and the layer's Z, the layer's
 /// **Orientation** on the rotation lanes (the rotations here are zero, so the
 /// orientation is exactly what they describe), the camera's Zoom out of its
-/// options group, and the light's kind, colour, intensity and cone.
-/// Two of those convert — AE's intensity is a percentage where 100 is unity,
-/// and its cone angle is the *full* angle where Lumit's is the half.
-/// Material Options' **Casts Shadows** has no Lumit field and is reported.
+/// options group, and the light's kind, colour, intensity, cone and aim.
+/// The colour converts into scene-linear light; the rest is After Effects'
+/// own numbers.
+/// Material Options' **Casts Shadows** is kept, and reported, since nothing
+/// draws it yet.
 ///
 /// **ROWS NOT CARRIED**, all owed in docs/TODO.md and all revealed here:
 ///
@@ -875,8 +876,12 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
         panic!("a light");
     };
     assert_eq!(light.kind, LightKind::Spot);
-    assert_close(light.intensity.value_at(0.0), 75.0 / 100.0);
-    assert_close(light.cone_deg.value_at(0.0), 60.0 / 2.0);
+    assert_close(light.intensity.value_at(0.0), 75.0);
+    assert_close(light.cone_angle.value_at(0.0), 60.0);
+    assert_close(light.cone_feather.value_at(0.0), 50.0);
+    assert!(light.two_node, "aimed at its point of interest");
+    assert!(light.casts_shadows, "kept, though not drawn");
+    assert_close(light.point_of_interest[0].value_at(0.0), 320.0);
     // [1, 0.9, 0.8] in the project's display space.
     assert_close(light.colour[0].value_at(0.0), 1.0);
     assert_close(light.colour[1].value_at(0.0), to_linear(0.899_999_976));

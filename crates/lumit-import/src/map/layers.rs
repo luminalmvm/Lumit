@@ -38,8 +38,8 @@ use lumit_core::anim::Property as LumProperty;
 use lumit_core::markers::{Marker, MarkerKind};
 use lumit_core::mask::{BezierPath, Mask, MaskMode, PathKeyframe, Vertex};
 use lumit_core::model::{
-    BlendMode, Layer, LayerInputSource, LayerKind, LightDef, LightKind, MatteChannel, MatteRef,
-    Switches, TextDocument, TransformGroup,
+    BlendMode, Layer, LayerInputSource, LayerKind, LightDef, LightKind, Material, MatteChannel,
+    MatteRef, ShadowMode, Switches, TextDocument, TransformGroup,
 };
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Rational};
@@ -145,6 +145,12 @@ pub(crate) fn map_layer(
     // pre-transform deviation is visible exactly on a turned or squashed layer,
     // and that is what decides whether the import says so.
     let mut transform = transform(conv, &path, props);
+    // Nothing lights a camera, a light or a null, so it keeps the material a
+    // file leaves out.
+    transform.material = Box::new(match kind {
+        LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Null => Material::legacy(),
+        _ => material(conv, &path, props),
+    });
     // After Effects measures a text layer from its first baseline and Lumit
     // from the corner of the raster the words are drawn into. The anchor and
     // the masks move by the gap, so both stay where After Effects had them.
@@ -203,7 +209,7 @@ pub(crate) fn map_layer(
         // AE has no driver graph, so an import never produces one; the round
         // trip is untouched.
         graph: Default::default(),
-        switches: switches(conv, &path, ae),
+        switches: switches(conv, &path, ae, props),
         extra: ae_map(vec![
             ("index", serde_json::json!(index)),
             ("kind", serde_json::json!(ae.kind)),
@@ -517,17 +523,19 @@ pub(crate) fn shift(property: &mut LumProperty, by: f64) {
     *property = super::fx_colour::map_values(moved, |v| v + by).0;
 }
 
-/// A Light layer's own properties. AE's intensity is a percentage where 100 is
-/// unity, and its cone angle is the *full* angle where Lumit's is the half —
-/// the two conversions this function makes.
+/// A Light layer's own properties, keyframes and all. AE's intensity and cone
+/// angle are Lumit's, a percentage and the full angle; its colours are display
+/// colours, and come across into scene-linear light. An aimed light's Point of
+/// Interest is its transform group's anchor point, as a camera's is.
 fn light(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property]) -> LightDef {
+    use lumit_core::model::LightFalloff;
     let kind = match ae.light_type.as_deref() {
         Some("SPOT") => LightKind::Spot,
+        Some("PARALLEL") => LightKind::Parallel,
+        Some("AMBIENT") => LightKind::Ambient,
         Some("POINT") | None => LightKind::Point,
         Some(other) => {
-            // Parallel and Ambient have no counterpart: a parallel light is a
-            // point light infinitely far away, an ambient one is not a place
-            // at all. Both import as points and say so.
+            // An environment light has no counterpart and imports as a point.
             conv.report.row(
                 path.clone(),
                 Outcome::Adjusted,
@@ -538,19 +546,74 @@ fn light(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property])
             LightKind::Point
         }
     };
-    let colour_axis = |axis: usize| {
-        let raw = still(props, "ADBE Light Color", axis).unwrap_or(1.0);
-        LumProperty::fixed(f64::from(srgb_to_linear(raw)))
+    let options = group(props, "ADBE Light Options Group");
+    let mut colour_axis = |axis: usize| {
+        let p = scalar(conv, path, options, "ADBE Light Color", axis, 1.0);
+        super::fx_colour::map_values(p, |v| f64::from(srgb_to_linear(v))).0
     };
-    let intensity = still(props, "ADBE Light Intensity", 0).unwrap_or(100.0) / 100.0;
-    let cone = still(props, "ADBE Light Cone Angle", 0).unwrap_or(90.0) / 2.0;
+    let colour = [colour_axis(0), colour_axis(1), colour_axis(2)];
+    let mut option = |name: &str, fallback: f64| scalar(conv, path, options, name, 0, fallback);
+    let intensity = option("ADBE Light Intensity", 100.0);
+    let cone_angle = option("ADBE Light Cone Angle", 90.0);
+    let cone_feather = option("ADBE Light Cone Feather 2", 50.0);
+    let radius_px = option("ADBE Light Falloff Start", 500.0);
+    let falloff_px = option("ADBE Light Falloff Distance", 500.0);
+    let shadow_darkness = option("ADBE Light Shadow Darkness", 100.0);
+    let shadow_diffusion = option("ADBE Light Shadow Diffusion", 0.0);
+    let casts_shadows = still(options, "ADBE Casts Shadows", 0).is_some_and(|v| v != 0.0);
+    // AE numbers its menus from one: None, Smooth, Inverse Square Clamped.
+    let falloff = match still(options, "ADBE Light Falloff Type", 0) {
+        Some(v) if v.round() == 2.0 => LightFalloff::Smooth,
+        Some(v) if v.round() == 3.0 => LightFalloff::InverseSquareClamped,
+        _ => LightFalloff::None,
+    };
+    let group = child(props, "ADBE Transform Group").map_or(&[][..], |g| g.children());
     LightDef {
         kind,
-        colour: [colour_axis(0), colour_axis(1), colour_axis(2)],
-        intensity: LumProperty::fixed(intensity),
-        half_size: [LumProperty::zero(), LumProperty::zero()],
-        cone_deg: LumProperty::fixed(cone),
-        falloff_px: LumProperty::zero(),
+        colour,
+        intensity,
+        cone_angle,
+        cone_feather,
+        falloff,
+        radius_px,
+        falloff_px,
+        two_node: ae.auto_orient.as_deref() == Some("CAMERA_OR_POINT_OF_INTEREST"),
+        point_of_interest: [
+            scalar(conv, path, group, "ADBE Anchor Point", 0, 0.0),
+            scalar(conv, path, group, "ADBE Anchor Point", 1, 0.0),
+            scalar(conv, path, group, "ADBE Anchor Point", 2, 0.0),
+        ],
+        casts_shadows,
+        shadow_darkness,
+        shadow_diffusion,
+        ..LightDef::default()
+    }
+}
+
+/// A layer's Material options, keyframes and all, on AE's own defaults where
+/// the file has none.
+fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Material {
+    let options = group(props, "ADBE Material Options Group");
+    let mut read = |name: &str, fallback: f64| scalar(conv, path, options, name, 0, fallback);
+    Material {
+        ambient: read("ADBE Ambient Coefficient", 100.0),
+        diffuse: read("ADBE Diffuse Coefficient", 50.0),
+        specular: read("ADBE Specular Coefficient", 50.0),
+        shininess: read("ADBE Shininess Coefficient", 5.0),
+        metal: read("ADBE Metal Coefficient", 100.0),
+        light_transmission: read("ADBE Light Transmission", 0.0),
+        casts_shadows: shadow_mode(still(options, "ADBE Casts Shadows", 0), ShadowMode::Off),
+        accepts_shadows: shadow_mode(still(options, "ADBE Accepts Shadows", 0), ShadowMode::On),
+    }
+}
+
+/// AE's Off, On and Only, as it numbers them.
+fn shadow_mode(value: Option<f64>, fallback: ShadowMode) -> ShadowMode {
+    match value.map(|v| v.round() as i64) {
+        Some(0) => ShadowMode::Off,
+        Some(1) => ShadowMode::On,
+        Some(2) => ShadowMode::Only,
+        _ => fallback,
     }
 }
 
@@ -578,6 +641,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         // them is a follow-up — the axes' values and keyframes are already
         // faithful either way, because both editors store them per axis.
         axis_modes: lumit_core::model::AxisModes::default(),
+        material: Box::default(),
         extra: serde_json::Map::new(),
     };
     let orientation = orientation(conv, path, props, &mut out);
@@ -787,7 +851,7 @@ fn volume(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> LumProper
 
 /// The layer's switches. Lumit has no draft/wireframe quality, so that one is
 /// reported rather than dropped in silence; the guide flag maps 1:1.
-fn switches(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer) -> Switches {
+fn switches(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property]) -> Switches {
     let s = ae.switches.clone().unwrap_or_default();
     if let Some(quality) = s.quality.as_deref().filter(|q| *q != "BEST") {
         conv.report.row(
@@ -816,7 +880,15 @@ fn switches(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer) -> Switches {
         motion_blur: s.motion_blur.unwrap_or(false),
         shy: s.shy.unwrap_or(false),
         guide: s.guide.unwrap_or(false),
-        accepts_lights: true,
+        // After Effects lights only 3D layers, and only those whose Material
+        // options accept lights.
+        accepts_lights: s.three_d.unwrap_or(false)
+            && still(
+                group(props, "ADBE Material Options Group"),
+                "ADBE Accepts Lights",
+                0,
+            )
+            .is_none_or(|v| v != 0.0),
     }
 }
 

@@ -395,6 +395,7 @@ fn add_comp(project: &ProjectReference, name: &str) -> CompositionReference {
     let comp = lumit_core::model::Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -766,6 +767,55 @@ fn project_with_layer() -> (ProjectReference, LayerReference) {
 
     let layer = LayerReference::new(project.id, comp.id, layer_id);
     (project, layer)
+}
+
+/// A light from an older file keeps its old edge and falloff until one of
+/// those numbers is edited. The edit moves it onto After Effects' curves, and
+/// its undo moves it back, so nothing about the old picture is lost.
+#[test]
+fn editing_an_old_lights_feather_takes_the_new_curves_and_undo_brings_the_old_back() {
+    use crate::api::effect::BridgeScalar;
+    use crate::api::layer::BridgeTransformProp;
+    use lumit_core::model::{LayerKind, LightDef, TransformGroup};
+
+    let project = LumitBridgeState::new_project(None).expect("a new project");
+    let comp = add_comp(&project, "Scene");
+    let old = crate::edits::base_layer(
+        "Spot".into(),
+        LayerKind::Light {
+            light: Box::new(LightDef {
+                legacy_shape: true,
+                ..LightDef::default()
+            }),
+        },
+        lumit_core::time::Rational::new(5, 1).expect("5 s"),
+        TransformGroup::default(),
+    );
+    let id = old.id;
+    {
+        let state = project.state().expect("state");
+        let state = state.write().expect("write");
+        state
+            .store
+            .commit(Op::AddLayer {
+                comp: comp.id,
+                index: 0,
+                layer: Box::new(old),
+            })
+            .expect("layer added");
+    }
+    let layer = LayerReference::new(project.id, comp.id, id);
+    let legacy = || match layer.item().expect("light").kind {
+        LayerKind::Light { light } => light.legacy_shape,
+        _ => panic!("a light"),
+    };
+
+    layer
+        .set_transform(BridgeTransformProp::ConeFeather, BridgeScalar::Static(30.0))
+        .expect("feather set");
+    assert!(!legacy(), "an edited feather is measured in angle");
+    project.undo().expect("undone");
+    assert!(legacy(), "and undo puts the old edge back");
 }
 
 /// An effect instance carrying one parameter of every `EffectValue` kind, plus a
