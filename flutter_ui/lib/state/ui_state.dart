@@ -3827,6 +3827,10 @@ class LumitUiState extends ChangeNotifier {
     return _poseIn(view, compFor(view)?.internalid.toString());
   }
 
+  /// The custom view Viewer view [viewId] last looked through.
+  ViewerView lastCustomViewOf(int viewId) =>
+      _surfaceOf(viewId)?.lastCustom ?? ViewerView.custom1;
+
   /// Look at view [viewId]'s comp through [look], and render it again.
   void setViewerView(ViewerView look, {required int viewId}) {
     final view = _surfaceOf(viewId);
@@ -3855,20 +3859,21 @@ class LumitUiState extends ChangeNotifier {
         }
       }
       view.cameraViews[id] = look;
+      if (look.orbits) view.lastCustom = look;
     }
     _cameraMoved(view, comp);
   }
 
-  /// Keep what a camera drag did to view [viewId]'s custom view, and show
-  /// it. A fixed view has nothing to keep, so it is left as the engine built
-  /// it.
+  /// Keep what a camera drag did to view [viewId]'s view, and show it. A
+  /// fixed view keeps its track and dolly the same way a custom view keeps
+  /// everything.
   void setViewerViewPose(BridgeCameraPose pose, {required int viewId}) {
     final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
     if (view == null || comp == null) return;
     final id = comp.internalid.toString();
     final looking = view.cameraViews[id];
-    if (looking == null || !looking.movable) return;
+    if (looking == null) return;
     view.cameraPoses['$id/${looking.name}'] = pose;
     _cameraMoved(view, comp);
   }

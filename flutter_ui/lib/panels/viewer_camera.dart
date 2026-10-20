@@ -33,8 +33,9 @@
 //   dolly changes the distance to it.
 //
 // In a view other than Active camera the same drags move the **view** rather
-// than any layer. The six fixed views are not movable: dragging in one says so
-// and changes nothing.
+// than any layer. The six fixed views track and dolly but never turn: orbiting
+// one carries it into the last custom view and turns that, as After Effects
+// does.
 //
 // The maths below is pure and in composition pixels; the widget under it only
 // turns drags into these calls and commits transform properties.
@@ -434,14 +435,14 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   double? _fps;
 
   /// What a drag moves: the fronted comp's active camera, or the Viewer's own
-  /// custom view. Null when there is nothing to move, which is a comp with no
-  /// live camera, one placed by an expression, or a fixed view.
+  /// view. Null when there is nothing to move, which is a comp with no live
+  /// camera or one placed by an expression.
   ({LayerReference? layer, CameraPose pose})? get _target {
     final view = widget.uiState.viewOf(widget.viewId);
     if (view != ViewerView.activeCamera) {
       final pose = widget.uiState.viewPoseOf(widget.viewId);
-      if (!view.movable || pose == null) return null;
-      // Read fresh rather than held: a custom view moves without the document
+      if (pose == null) return null;
+      // Read fresh rather than held: a view moves without the document
       // or the playhead moving, and this costs nothing to build.
       return (layer: null, pose: poseOfView(pose));
     }
@@ -635,6 +636,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // button comes up, which is what every 3D application does.
     _anchor = at;
     _locked = freezeCursor();
+    final start = _activeMove == ToolMode.cameraOrbit
+        ? _orbitable(target.pose)
+        : target.pose;
     if (target.layer != null && !_grouped) {
       try {
         widget.state.project?.beginUndoGroup();
@@ -646,10 +650,37 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     setState(() {
       _acting = target.layer;
       _actingView = target.layer == null;
-      _start = target.pose;
+      _start = start;
       _startTransform = _held?.transform;
       _delta = Offset.zero;
     });
+  }
+
+  /// [pose] ready to orbit. A fixed view never turns, so an orbit begun in
+  /// one carries its framing into the Viewer's custom view and turns that:
+  /// the same picture on the plane through the comp centre, seen from that
+  /// view's own distance.
+  CameraPose _orbitable(CameraPose pose) {
+    final ui = widget.uiState;
+    final id = widget.viewId;
+    final look = ui.viewOf(id);
+    if (look == ViewerView.activeCamera || look.orbits) return pose;
+    ui.setViewerView(ui.lastCustomViewOf(id), viewId: id);
+    final custom = ui.viewPoseOf(id);
+    if (custom == null) return pose;
+    final f = pose.axes.forward;
+    final p = pose.pivot;
+    final moved = CameraPose(
+      position: (
+        p.$1 - f.$1 * custom.zoom,
+        p.$2 - f.$2 * custom.zoom,
+        p.$3 - f.$3 * custom.zoom,
+      ),
+      rotation: pose.rotation,
+      zoom: custom.zoom,
+    );
+    ui.setViewerViewPose(viewOfPose(moved), viewId: id);
+    return moved;
   }
 
   void _drag(Offset at, Offset delta) {
