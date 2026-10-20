@@ -64,6 +64,11 @@ The camera tools move the active camera, or the view the Viewer is looking throu
   An orbit in one of them carries it into the last custom view.
 - A camera placed by an expression does not move.
 
+With no camera tool, `Alt` with the left, middle or right button orbits, tracks or dollies,
+and `Alt` with the wheel dollies, in a composition with a 3D layer, camera or light. The
+wheel's modifier is in Settings ▸ Keymap. On a selected layer `Alt` moves the layer instead.
+The drawing, painting, Roto, Puppet and Zoom tools keep `Alt` for themselves.
+
 ## 3D views
 
 **View ▸ Switch 3D view** picks what the Viewer looks through. Each view keeps its own.
@@ -85,14 +90,51 @@ that is turned off.
 A camera moved by these takes a key at the playhead where it is keyed, Reset included, as one
 undo step.
 
+## 3D viewport
+
+**Window ▸ New 3D viewport**, or **Open in new 3D viewport** in the Viewer bar's 3D view
+menu, opens a Viewer beside the one in use that looks at the same composition through a
+**Free view** of its own and fills its pane. It frames every layer and camera the first
+time it shows a composition, and keeps its free view of each with the session.
+
+| Action | What it does |
+| --- | --- |
+| Right drag | Orbit round what is under the pointer, else the selection, else the scene. |
+| Middle drag, or `Shift` and right drag | Track, keeping what is under the pointer under it. |
+| Wheel | Dolly toward what is under the pointer. |
+| Two fingers on a trackpad | Orbit, or track with `Shift`. A pinch dollies. |
+| Hold the right button, `W` `A` `S` `D` | Fly forward, left, back and right. The mouse looks about. |
+| Hold the right button, `E` `Q` | Fly up and down. `Shift` flies four times as fast, the wheel sets the pace. |
+| `F` | Frame the selected layers. |
+| `Shift+F` | Frame every layer and camera. |
+| Click an axis in the corner | Look along it, orthographically, until the next orbit. Drag the axes to orbit. |
+| **Persp** / **Ortho** under the axes | Switch between perspective and orthographic. |
+| **Lines only** under the axes | Draw the outlines on the ground with no picture. |
+
+Moving it while it looks through the active camera or a fixed view switches it to its free
+view from there. The ground is drawn into its picture, under any 2D layer stacked above the
+3D ones and hidden wherever a layer stands in front of it. It follows the playhead at its
+own resolution, **Half** until given another, and plays along only while the Viewer has time
+to spare. It draws without motion blur or depth of field.
+
+On Wayland the pointer is not held still during a drag. Some Linux window managers take
+`Alt` and a drag to move windows.
+
+## Placing layers
+
+**View ▸ Place on surface**, or `Ctrl`-click in a 3D view, moves the selected 3D layers so
+their anchors sit on the layer, Null or light under the pointer. With `Shift` they turn to
+match it. **View ▸ Move active camera to 3D view** puts the composition's camera where the
+view looks from. Both are one undo step and key what is keyed.
+
 ## 3D handles
 
 A selected 3D layer, light or camera has three arrows at its anchor: x red, y green, z blue.
 
 - **Drag an arrow** to move along that axis only.
 - **Drag a square** between two arrows to move in that plane.
-- **Drag the ring** at the centre, or **Alt-drag** the layer, to move it across the view at
-  its depth.
+- **Drag the ring** at the centre, or **Alt-drag** the selected layer, to move it across the
+  view at its depth.
 - **Shift** keeps an arrow or square drag to steps of 10.
 - With the **Rotation** tool, **drag a ring** to turn about that axis, or drag off the rings
   to turn freely. `Shift` turns in 45° steps. Cameras and lights have rings too.
