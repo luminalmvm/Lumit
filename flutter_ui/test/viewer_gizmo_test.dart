@@ -254,7 +254,7 @@ void main() {
       // Through a camera at rest over a 600 by 400 comp, 3D layers next to
       // each other go nearest first, and a 2D layer above them still wins.
       ViewerDepth deep(double z) => ViewerDepth(
-            view: const [1, 0, 0.3, 0, 0, 1, 0.2, 0, 0, 0, 0.001, 1],
+            view: () => const [1, 0, 0.3, 0, 0, 1, 0.2, 0, 0, 0, 0.001, 1],
             z: z,
             rotationX: 0,
             rotationY: 0,

@@ -1227,6 +1227,72 @@ void main() {
       );
     });
 
+    /// **3D boxes ask for the camera once a frame, and never on a pan or a
+    /// hover.** The camera's rows are held per Viewer against the frame, the
+    /// document and the view, and asked for only once a 3D box is drawn.
+    testWidgets('3D boxes ask for the camera once a frame and no more',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layers = [
+        for (var i = 0; i < 3; i++)
+          comp.addSolidLayer()
+            ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true),
+      ];
+      comp.addCameraLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([layers.first]);
+      p.uiState.tools.select(ToolMode.hand);
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+      const rows = 'composition_reference_view_projection';
+
+      final centre = tester.getCenter(find.byType(ViewerPanelFrb));
+      final pan = await tester.startGesture(centre);
+      await settleFrb(tester, minRounds: 4);
+      counter
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await pan.moveBy(const Offset(3, 2));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await pan.up();
+      p.uiState.tools.select(ToolMode.select);
+      await tester.pump();
+      final hover = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await hover.addPointer(location: centre);
+      for (var i = 0; i < 20; i++) {
+        await hover.moveBy(const Offset(4, 3));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await hover.removePointer();
+      counter.counting = false;
+      expect(counter.calls[rows] ?? 0, 0,
+          reason: 'a pan or a hover asked for the camera:\n'
+              '${counter.ranking()}');
+
+      counter
+        ..reset()
+        ..counting = true;
+      for (var frame = 1; frame <= 5; frame++) {
+        p.uiState.playheadFrame.value = frame;
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      counter.counting = false;
+      // At least once, or the selected box was never drawn through the
+      // camera, and no more than once a frame.
+      expect(counter.calls[rows] ?? 0, inInclusiveRange(1, 5),
+          reason: 'five frame steps asked for the camera:\n'
+              '${counter.ranking()}');
+    });
+
     /// **Nor must a pick drag** (docs/07 §6.1). A window is 129 pixels a side
     /// and the magnifier's 9×9 is cut out of it in Dart, so a sweep across the
     /// picture is meant to cost the engine *nothing at all* until the pointer

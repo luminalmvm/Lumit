@@ -29,6 +29,7 @@ import '../state/comp_time.dart'
 import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
 import '../state/share.dart';
+import '../state/view_projection.dart' show flatView;
 import '../state/tools.dart';
 import '../state/workspace.dart' show ViewerOverlays, ViewerReach;
 import '../theme/theme.dart';
@@ -273,19 +274,17 @@ class ViewerStage extends StatelessWidget {
     final byId = {
       for (final entry in model.heldLayers) entry.layer.internallayerId: entry
     };
-    // How the picture sees the comp's 3D space, asked of the engine only when
-    // there is a 3D layer to see and held until the frame, the document or
-    // the view moves.
-    final view = model.heldLayers.any(_seenInDepth)
-        ? uiState.viewProjections.of(
-            comp: comp,
-            viewId: viewId,
-            frame: uiState.playheadFrame.value,
-            revision: revision,
-            generation: uiState.solveLanded.value,
-            view: _viewPose(),
-          )
-        : null;
+    // How the picture sees the comp's 3D space. Asked of the engine only once
+    // a 3D box is drawn or aimed at, and held until the frame, the document
+    // or the view moves.
+    List<double> rows() => uiState.viewProjections.of(
+          comp: comp,
+          viewId: viewId,
+          frame: uiState.playheadFrame.value,
+          revision: revision,
+          generation: uiState.solveLanded.value,
+          view: _viewPose(),
+        );
     BridgeTransform transformOf(BridgeLayerEntry a) =>
         uiState.liveTransforms.value[a.layer.internallayerId] ??
         a.info.transform;
@@ -306,7 +305,7 @@ class ViewerStage extends StatelessWidget {
       final positionStill = isStill(tf.positionX) && isStill(tf.positionY);
       final light = entry.info.kind == BridgeLayerKind.light;
       final map = layerMapOf(entry, byId, transformOf, read,
-          origin: fitted.topLeft, viewScale: viewScale, view: view);
+          origin: fitted.topLeft, viewScale: viewScale, view: rows);
       final rotation = read(tf.rotation, entry.layer);
       final live = uiState.liveText.value[entry.layer.internallayerId];
       final id = entry.layer.internallayerId;
@@ -605,6 +604,8 @@ class ViewerStage extends StatelessWidget {
                   uiState.liveRotations,
                   uiState.liveText,
                   uiState.liveTransforms,
+                  // A solve landing moves a camera that follows it.
+                  uiState.solveLanded,
                   // The box picked on a node graph's canvas is what the Roto
                   // tools stroke on there.
                   uiState.compGraphNode,
@@ -983,8 +984,8 @@ bool _seenInDepth(BridgeLayerEntry entry) =>
 
 /// [entry]'s map onto a picture whose corner is at [origin] and drawn
 /// [viewScale] screen pixels a comp pixel. A 3D layer or a light goes through
-/// [view], the engine's rows for whatever the picture is looked at through;
-/// a 2D one, or any layer while the rows are not known, is flat.
+/// [view], the engine's rows for whatever the picture is looked at through,
+/// asked for only when the map is first used. A 2D one is flat.
 ViewerLayerMap layerMapOf(
   BridgeLayerEntry entry,
   Map<UuidValue, BridgeLayerEntry> byId,
@@ -992,7 +993,7 @@ ViewerLayerMap layerMapOf(
   double Function(BridgeScalar, LayerReference) read, {
   required Offset origin,
   required double viewScale,
-  required List<double>? view,
+  required List<double> Function() view,
 }) {
   final tf = transformOf(entry);
   double at(BridgeScalar s) => read(s, entry.layer);
@@ -1011,7 +1012,7 @@ ViewerLayerMap layerMapOf(
     parent: m == null
         ? null
         : (a: m[0], b: m[1], c: m[4], d: m[5], e: m[12], f: m[13]),
-    depth: view != null && _seenInDepth(entry)
+    depth: _seenInDepth(entry)
         ? ViewerDepth(
             view: view,
             parent: parent,
@@ -1119,14 +1120,13 @@ BridgeLayerEntry? layerAtCompPoint(
     for (final entry in model.layers) entry.layer.internallayerId: entry
   };
   // What a pin points at was seen through the comp's own camera.
-  List<double>? view;
-  if (model.layers.any(_seenInDepth)) {
+  late final List<double> rows = () {
     try {
-      view = comp.viewProjection(frame: BigInt.from(frame), view: null);
+      return comp.viewProjection(frame: BigInt.from(frame), view: null);
     } catch (_) {
-      // Seen flat, as with no camera.
+      return flatView;
     }
-  }
+  }();
   final boxes = <LayerBox>[];
   final entries = <UuidValue, BridgeLayerEntry>{};
   for (final entry in model.layers) {
@@ -1140,7 +1140,7 @@ BridgeLayerEntry? layerAtCompPoint(
       id: id,
       // No fitting and no pan: a "screen" pixel here is a composition pixel.
       map: layerMapOf(entry, byId, (a) => a.info.transform, read,
-          origin: Offset.zero, viewScale: 1, view: view),
+          origin: Offset.zero, viewScale: 1, view: () => rows),
       bounds: uiState.layerBounds.boundsOf(entry,
           compSize: size, revision: revision, t: seconds),
       draggable: false,

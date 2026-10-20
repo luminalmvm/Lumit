@@ -8,15 +8,18 @@
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
+/// The rows that draw a 3D layer flat, as the compositor does with no camera.
+const List<double> flatView = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
+
 /// The engine's view rows per Viewer, asked again only when the comp, the
 /// frame, the document, a solve or the view itself has moved.
 class ViewProjections {
   final Map<int, _Held> _byView = {};
 
   /// Comp space to the picture, three rows of four, for [viewId] showing
-  /// [comp] at [frame] through [view] (null for the comp's own camera). Null
-  /// while the engine cannot say, in which case 3D layers are drawn flat.
-  List<double>? of({
+  /// [comp] at [frame] through [view] (null for the comp's own camera). Flat
+  /// while the engine cannot say.
+  List<double> of({
     required CompositionReference comp,
     required int viewId,
     required int frame,
@@ -27,11 +30,12 @@ class ViewProjections {
     final key = (comp.internalid, frame, revision, generation, view);
     final held = _byView[viewId];
     if (held != null && held.key == key) return held.rows;
-    List<double>? rows;
+    var rows = flatView;
     try {
       rows = comp.viewProjection(frame: BigInt.from(frame), view: view);
     } catch (_) {
-      // No worker yet, or a comp that has gone. Asked again on the next move.
+      // No worker yet, or a comp that has gone. Asked again once the frame,
+      // the document or the view moves.
     }
     _byView[viewId] = _Held(key, rows);
     return rows;
@@ -43,6 +47,6 @@ class ViewProjections {
 
 class _Held {
   final Object key;
-  final List<double>? rows;
+  final List<double> rows;
   const _Held(this.key, this.rows);
 }

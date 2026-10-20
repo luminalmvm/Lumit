@@ -74,7 +74,7 @@ void main() {
           origin: const Offset(12, 7),
           viewScale: 0.5,
           depth: ViewerDepth(
-              view: rows, z: z, rotationX: tilt, rotationY: tilt / 2),
+              view: () => rows, z: z, rotationX: tilt, rotationY: tilt / 2),
         );
 
     test('lands where the flat map does on the plane the camera sees 1:1', () {
