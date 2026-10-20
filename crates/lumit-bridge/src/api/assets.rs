@@ -733,8 +733,9 @@ impl LayerReference {
 
     /// The camera's own values that put it at `aim` in the comp at `frame`:
     /// the eye, the rotation rows and the point of interest carried back into
-    /// its parent's space. What a camera drag writes, so a parented camera
-    /// lands where the drag put it. `aim` comes back as it is with no parent.
+    /// its parent's space, and the camera's Orientation taken off the rows.
+    /// What a camera drag writes, so a parented camera lands where the drag
+    /// put it. `aim` comes back as it is with no parent and no Orientation.
     #[frb(sync)]
     pub fn camera_own_aim(
         &self,
@@ -745,15 +746,38 @@ impl LayerReference {
             let context = lumit_core::model::comp_context(doc, comp, t);
             let read = lumit_core::model::context_reader(&context, t);
             let solves = lumit_render::track::solves_for(doc);
-            let back = lumit_core::model::parent_space(comp, layer, t, &read, solves)?;
-            let back = back.invert()?;
+            let lt = lumit_core::time::layer_time(t, layer.start_offset.0);
+            let orientation = layer.transform.orientation_at(lt, &|p| read(layer, p));
+            let back = match lumit_core::model::parent_space(comp, layer, t, &read, solves) {
+                Some(space) => Some(space.invert()?),
+                None if orientation == (0.0, 0.0, 0.0) && !layer.transform.after_effects_order => {
+                    return None
+                }
+                None => None,
+            };
             let p = aim.pose;
-            let eye = back.carry(lumit_core::camera::Eye {
+            let mut eye = lumit_core::camera::Eye {
                 position: (p.x, p.y, p.z),
                 rotation_deg: (p.rotation_x, p.rotation_y, p.rotation_z),
                 point_of_interest: None,
-            });
-            let poi = back.point((aim.poi_x, aim.poi_y, aim.poi_z));
+            };
+            let mut poi = (aim.poi_x, aim.poi_y, aim.poi_z);
+            if let Some(back) = back {
+                eye = back.carry(eye);
+                poi = back.point(poi);
+            }
+            let tr = &layer.transform;
+            let rows = (
+                read(layer, &tr.rotation_x),
+                read(layer, &tr.rotation_y),
+                read(layer, &tr.rotation),
+            );
+            eye.rotation_deg = lumit_core::camera::unoriented(
+                orientation,
+                eye.rotation_deg,
+                tr.after_effects_order,
+                rows,
+            );
             Some(crate::api::layer::BridgeCameraAim {
                 pose: crate::api::layer::BridgeCameraPose {
                     x: eye.position.0,

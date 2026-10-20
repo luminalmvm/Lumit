@@ -223,6 +223,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCutMove dco_decode_box_autoadd_bridge_cut_move(dynamic raw);
 
   @protected
+  BridgeDepthChannels dco_decode_box_autoadd_bridge_depth_channels(dynamic raw);
+
+  @protected
   BridgeDrmNode dco_decode_box_autoadd_bridge_drm_node(dynamic raw);
 
   @protected
@@ -652,6 +655,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCutResult dco_decode_bridge_cut_result(dynamic raw);
+
+  @protected
+  BridgeDepthChannels dco_decode_bridge_depth_channels(dynamic raw);
 
   @protected
   BridgeDiskCacheStats dco_decode_bridge_disk_cache_stats(dynamic raw);
@@ -1862,6 +1868,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeCompSize? dco_decode_opt_box_autoadd_bridge_comp_size(dynamic raw);
 
   @protected
+  BridgeDepthChannels? dco_decode_opt_box_autoadd_bridge_depth_channels(
+      dynamic raw);
+
+  @protected
   BridgeDrmNode? dco_decode_opt_box_autoadd_bridge_drm_node(dynamic raw);
 
   @protected
@@ -2256,6 +2266,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCutMove sse_decode_box_autoadd_bridge_cut_move(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeDepthChannels sse_decode_box_autoadd_bridge_depth_channels(
       SseDeserializer deserializer);
 
   @protected
@@ -2764,6 +2778,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCutResult sse_decode_bridge_cut_result(SseDeserializer deserializer);
+
+  @protected
+  BridgeDepthChannels sse_decode_bridge_depth_channels(
+      SseDeserializer deserializer);
 
   @protected
   BridgeDiskCacheStats sse_decode_bridge_disk_cache_stats(
@@ -4197,6 +4215,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeDepthChannels? sse_decode_opt_box_autoadd_bridge_depth_channels(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeDrmNode? sse_decode_opt_box_autoadd_bridge_drm_node(
       SseDeserializer deserializer);
 
@@ -4617,6 +4639,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_cut_move(
       BridgeCutMove self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_depth_channels(
+      BridgeDepthChannels self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_drm_node(
@@ -5162,6 +5188,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_cut_result(
       BridgeCutResult self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_depth_channels(
+      BridgeDepthChannels self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_disk_cache_stats(
@@ -6703,6 +6733,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_comp_size(
       BridgeCompSize? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_depth_channels(
+      BridgeDepthChannels? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_drm_node(

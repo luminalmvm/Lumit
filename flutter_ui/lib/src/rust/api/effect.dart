@@ -233,6 +233,17 @@ Float64List sampleScalars(
     BridgeLib.instance.api
         .crateApiEffectSampleScalars(scalars: scalars, time: time);
 
+/// [`sample_scalars`], and with them Orientations, three scalars each in
+/// `turns`, read as the render reads them: between keys the three turn round
+/// together rather than each on its own. The scalars' values come first, then
+/// three for each Orientation, in order. One crossing for the lot.
+Float64List sampleScalarsAndTurns(
+        {required List<BridgeScalar> scalars,
+        required List<BridgeScalar> turns,
+        required BridgeRational time}) =>
+    BridgeLib.instance.api.crateApiEffectSampleScalarsAndTurns(
+        scalars: scalars, turns: turns, time: time);
+
 double sampleScalarWithContext(
         {required BridgeScalar scalar,
         required BridgeRational time,
