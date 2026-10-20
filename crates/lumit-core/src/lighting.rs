@@ -428,7 +428,9 @@ pub fn shade(
             }
             let a = px[3];
             for ((ch, g), sh) in px[..3].iter_mut().zip(gain).zip(shine) {
-                *ch = *ch * (g + m.metal * sh) + (1.0 - m.metal) * sh * a;
+                // A negative light can take a pixel to black but no further.
+                let sh = sh.max(0.0);
+                *ch = *ch * (g + m.metal * sh).max(0.0) + (1.0 - m.metal) * sh * a;
             }
         }
     }
@@ -659,6 +661,15 @@ mod tests {
         let mut px = vec![0.4, 0.4, 0.4, 1.0];
         shade(&mut px, 1, 1, &surface, &ShadingMaterial::PLAIN, &[ambient]);
         assert!(close(px[0], 0.6) && close(px[1], 0.5) && close(px[2], 0.4));
+
+        // A negative light takes light away, down to black and no further.
+        let dark = ShadingLight {
+            colour: [-0.5, -3.0, 0.0],
+            ..ambient
+        };
+        let mut px = vec![0.4, 0.4, 0.4, 1.0];
+        shade(&mut px, 1, 1, &surface, &ShadingMaterial::PLAIN, &[dark]);
+        assert!(close(px[0], 0.2) && px[1] == 0.0 && close(px[2], 0.4));
     }
 
     /// The Material options: Diffuse scales the light, with a half the light

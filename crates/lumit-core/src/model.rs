@@ -2726,7 +2726,8 @@ impl Composition {
                 }
                 let lt = crate::time::layer_time(t, l.start_offset.0);
                 let tr = &l.transform;
-                let gain = (light.intensity.value_at(lt) / 100.0).max(0.0) as f32;
+                // Negative, as in After Effects, takes light away.
+                let gain = (light.intensity.value_at(lt) / 100.0) as f32;
                 let position = (
                     tr.position_x.value_at(lt),
                     tr.position_y.value_at(lt),

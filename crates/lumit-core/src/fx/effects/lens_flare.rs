@@ -1098,9 +1098,10 @@ impl EffectDef for LensFlareDef {
             push(
                 rgb,
                 Value::Colour([
-                    resolved.colour[0],
-                    resolved.colour[1],
-                    resolved.colour[2],
+                    // A negative light takes light away, which a flare cannot.
+                    resolved.colour[0].max(0.0),
+                    resolved.colour[1].max(0.0),
+                    resolved.colour[2].max(0.0),
                     0.0,
                 ]),
             );

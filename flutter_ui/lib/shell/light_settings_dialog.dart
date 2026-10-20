@@ -274,7 +274,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
               t,
               l10n.lightIntensity,
               _well(t, 'intensity', _v.intensity, (v) => _v.intensity = v,
-                  unit: l10n.unitSymbolPercent, speed: 0.5)),
+                  unit: l10n.unitSymbolPercent, min: -100000, speed: 0.5)),
           if (kind == BridgeLightKind.spot) ...[
             _row(
                 t,
@@ -398,6 +398,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
   /// One number with its unit after it, or the word for an animated one.
   Widget _well(LumitTheme t, String id, double? value, ValueChanged<double> set,
           {required String unit,
+          double min = 0,
           double max = 1000000,
           int decimals = 0,
           double speed = 1}) =>
@@ -406,14 +407,17 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
           : Row(
               children: [
                 _field(t, id, value, set,
-                    max: max, decimals: decimals, speed: speed),
+                    min: min, max: max, decimals: decimals, speed: speed),
                 const SizedBox(width: 6),
                 Text(unit, style: dialogMono(t)),
               ],
             );
 
   Widget _field(LumitTheme t, String id, double? value, ValueChanged<double> set,
-          {double max = 1000000, int decimals = 0, double speed = 1}) =>
+          {double min = 0,
+          double max = 1000000,
+          int decimals = 0,
+          double speed = 1}) =>
       SizedBox(
         width: cameraWell,
         height: dialogControlHeight,
@@ -422,7 +426,7 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
             : DragValueField(
                 key: ValueKey<String>('light-$id'),
                 value: value,
-                min: 0,
+                min: min,
                 max: max,
                 speed: speed,
                 decimals: decimals,

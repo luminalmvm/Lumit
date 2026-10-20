@@ -251,5 +251,7 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     }
     let metal = p.eye.w;
-    textureStore(dst, xy, vec4<f32>(o.rgb * (gain + metal * shine) + (1.0 - metal) * shine * o.a, o.a));
+    let lit = max(shine, vec3<f32>(0.0));
+    let g = max(gain + metal * lit, vec3<f32>(0.0));
+    textureStore(dst, xy, vec4<f32>(o.rgb * g + (1.0 - metal) * lit * o.a, o.a));
 }

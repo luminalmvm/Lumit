@@ -6098,6 +6098,16 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         ("parallel", vec![parallel]),
         ("ambient", vec![ambient]),
         ("specular", vec![softbox, bulb]),
+        (
+            "negative",
+            vec![
+                ShadingLight {
+                    colour: [-0.6, -2.0, 0.3],
+                    ..bulb
+                },
+                ambient,
+            ],
+        ),
         ("plastic", vec![spot, parallel]),
     ] {
         // The last two are seen through a shiny material, a metal one and

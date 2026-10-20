@@ -248,7 +248,7 @@ List<TransformGroup> transformGroups({
       ...placement(),
       TransformGroup(l10n.lightIntensity, const [
         TransformAxis(BridgeTransformProp.lightIntensity,
-            suffix: '%', min: 0, decimals: 0, speed: 0.5),
+            suffix: '%', decimals: 0, speed: 0.5),
       ], section: option),
       TransformGroup(
           l10n.lightColour,
