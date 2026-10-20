@@ -6248,6 +6248,101 @@ pub fn blur_gaussian_matted(
     }
 }
 
+/// The camera's depth of field on one layer, the oracle for `fx_blur.wgsl`'s
+/// field path, laid out as that file says. Each pass blurs a texel by half its
+/// circle of confusion on screen over how long one texel step along the pass
+/// is on screen, capped at `cap`, with Repeat edges.
+///
+/// With `step` above 1 the picture is shrunk onto Glow's grid that many pixels
+/// apart, blurred there and scaled back up, for a layer whose blur is wider
+/// than `cap` everywhere.
+pub fn blur_gaussian_field(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    cap: f32,
+    field: [[f32; 4]; 3],
+    step: f32,
+) {
+    if step <= 1.0 {
+        return field_blur(rgba, w, h, cap, field);
+    }
+    let (fw, fh) = (w as usize, h as usize);
+    let (cw, ch) = (glow_grid(w, step), glow_grid(h, step));
+    let across = glow_tent(rgba, (fw, fh), (cw as usize, fh), step, true);
+    let mut coarse = glow_tent(
+        &across,
+        (cw as usize, fh),
+        (cw as usize, ch as usize),
+        step,
+        false,
+    );
+    let wider = |r: [f32; 4]| [r[0] * step, r[1] * step, r[2] * step, r[3]];
+    field_blur(
+        &mut coarse,
+        cw,
+        ch,
+        cap,
+        [wider(field[0]), wider(field[1]), field[2]],
+    );
+    rgba.fill(0.0);
+    glow_up_add(
+        rgba,
+        (fw, fh),
+        &coarse,
+        (cw as usize, ch as usize),
+        step,
+        1.0,
+    );
+}
+
+fn field_blur(rgba: &mut [f32], w: u32, h: u32, cap: f32, field: [[f32; 4]; 3]) {
+    let (wi, hi) = (i64::from(w), i64::from(h));
+    let radius = |x: i64, y: i64, step: [f32; 4]| {
+        let (ax, ay) = (x as f32 + 0.5, y as f32 + 0.5);
+        let q: [f32; 3] =
+            std::array::from_fn(|i| field[2][i] + field[0][i] * ax + field[1][i] * ay);
+        let along = (step[0] * q[2] - q[0] * step[2]).hypot(step[1] * q[2] - q[1] * step[2]);
+        if q[2] <= 0.0 || along <= 0.0 {
+            return 0.0;
+        }
+        (field[0][3] * (q[2] - field[1][3]).abs() * q[2] / along).min(cap)
+    };
+    for (step, across) in [(field[0], true), (field[1], false)] {
+        let src = rgba.to_vec();
+        for y in 0..hi {
+            for x in 0..wi {
+                let rad = radius(x, y, step);
+                let (r, sigma) = (rad.ceil() as i64, (rad * 0.5).max(1e-3));
+                if r == 0 {
+                    continue;
+                }
+                let (mut acc, mut wsum) = ([0.0f32; 4], 0.0f32);
+                for i in -r..=r {
+                    let dd = i as f32 / sigma;
+                    let wt = (-0.5 * dd * dd).exp();
+                    wsum += wt;
+                    let tap = if across {
+                        edge_index(x + i, wi, 1).map(|tx| (y, tx))
+                    } else {
+                        edge_index(y + i, hi, 1).map(|ty| (ty, x))
+                    };
+                    if let Some((ty, tx)) = tap {
+                        let s = ((ty * wi + tx) * 4) as usize;
+                        for c in 0..4 {
+                            acc[c] += src[s + c] * wt;
+                        }
+                    }
+                }
+                let d = ((y * wi + x) * 4) as usize;
+                for c in 0..4 {
+                    rgba[d + c] = acc[c] / wsum;
+                }
+            }
+        }
+    }
+}
+
 /// One resolved Channel blur (docs/08 §3.45) is four radii, an edge code and a
 /// mix, so it takes no struct — see [`channel_blur`].
 ///

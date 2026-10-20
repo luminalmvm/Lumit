@@ -224,6 +224,11 @@ pub enum LayerInputDraw {
     /// so a Lens flare added to one finds the lights in the footage beneath
     /// it without being pointed anywhere.
     ThisLayer,
+    /// A Depth row on an adjustment layer pointed at itself, with 3D layers
+    /// below it: how far the layers below are from the camera, metres, as the
+    /// comp draws them. Made beside the composite below, so only an effect that
+    /// asks for it pays. Carries the comp's pixels per metre.
+    Below(f64),
     /// Another layer, rendered alone at this raster.
     Layer(DofInputDraw),
     /// One op's whole list of layers, for an effect with more than one layer

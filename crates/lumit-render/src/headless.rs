@@ -6668,6 +6668,57 @@ mod tests {
         assert_eq!(frames[0], frames[1], "the parent moved the adjustment");
     }
 
+    /// Depth of field pro on an adjustment layer, its Depth row pointed at
+    /// itself, reads how far the 3D layers below are: two white cards at two
+    /// distances show as two greys in its Depth display.
+    #[test]
+    fn an_adjustment_layer_reads_the_depth_of_the_3d_layers_below() {
+        use lumit_core::model::EffectValue;
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (w, h) = (64u32, 32u32);
+        let (mut doc, comp_id, solid) = matrix_base(w, h, LinearColour([1.0, 1.0, 1.0, 1.0]));
+        let card = |x: f64, z: f64| {
+            let mut l = matrix_layer("Card", LayerKind::Solid { def: solid }, w, h);
+            l.switches.three_d = true;
+            l.transform.scale_x = Property::fixed(20.0);
+            l.transform.scale_y = Property::fixed(40.0);
+            l.transform.position_x = Property::fixed(x);
+            l.transform.position_z = Property::fixed(z);
+            l
+        };
+        let mut adj = matrix_layer("Adjust", LayerKind::Adjustment, w, h);
+        let mut dof = lumit_core::fx::instantiate("dof_pro").unwrap();
+        for (id, value) in [
+            ("depth", EffectValue::Layer(Some(adj.id))),
+            ("display", EffectValue::Choice(1)),
+            ("near_m", EffectValue::Float(Property::fixed(0.05))),
+            ("far_m", EffectValue::Float(Property::fixed(0.5))),
+        ] {
+            if let Some(p) = dof.params.iter_mut().find(|p| p.id == id) {
+                p.value = value;
+            }
+        }
+        adj.effects.push(dof);
+        let comp = doc.comp_mut(comp_id).unwrap();
+        // The far card lands at x = 48 through the default camera.
+        comp.layers = vec![adj, card(16.0, 0.0), card(66.0, 100.0)];
+        let doc = DocumentStore::new(doc).snapshot();
+        let (rgba, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
+        let grey = |x: u32| i32::from(rgba[((h / 2 * w + x) * 4) as usize]);
+        assert!(
+            (grey(16) - grey(48)).abs() > 20,
+            "the near card reads {} and the far one {}",
+            grey(16),
+            grey(48)
+        );
+    }
+
     /// **Depth of field reaches the picture** (docs/impl/camera.md §5).
     ///
     /// One comp, one camera focused on its own zoom, and the same nested tile
@@ -6767,6 +6818,56 @@ mod tests {
         assert!(
             soft >= 5,
             "the layer at twice the focus distance came out with a {soft}-pixel edge"
+        );
+
+        // A tile turned away from the camera about its square's left edge,
+        // which is on the focus plane: that edge stays sharp and the far one
+        // goes soft.
+        let mut turned_doc = (*doc).clone();
+        let scene = turned_doc.comp_mut(comp_id).unwrap();
+        if let LayerKind::Camera { options, .. } = &mut scene.layers[0].kind {
+            options.aperture = Property::fixed(160.0);
+        }
+        scene.layers.truncate(1);
+        let mut turned = at(40.0, 0.0);
+        turned.transform.anchor_x = Property::fixed(12.0);
+        turned.transform.rotation_y = Property::fixed(60.0);
+        scene.layers.push(turned);
+        let (rgba, w, _) = r
+            .render_rgba(&Arc::new(turned_doc), comp_id, 0, 1.0)
+            .expect("a frame");
+        let ramp = |from: u32, to: u32| {
+            (from..to)
+                .filter(|x| (25..230).contains(&rgba[((ch / 2 * w + x) * 4) as usize]))
+                .count()
+        };
+        let (near, far) = (ramp(30, 46), ramp(46, 64));
+        assert!(
+            near <= 2 && far >= 4,
+            "a turned layer came out {near} pixels soft at its near edge and {far} at its far one"
+        );
+
+        // A floor whose far edge is on the focus plane and which runs on under
+        // the camera: the bottom of the frame, nearest the eye, goes soft.
+        let mut under_doc = (*doc).clone();
+        let scene = under_doc.comp_mut(comp_id).unwrap();
+        scene.layers.truncate(1);
+        let mut floor = at(f64::from(cw) * 0.5, 0.0);
+        floor.transform.position_y = Property::fixed(f64::from(ch) * 0.5 + 8.0);
+        floor.transform.anchor_y = Property::fixed(0.0);
+        floor.transform.scale_x = Property::fixed(50.0);
+        floor.transform.scale_y = Property::fixed(1000.0);
+        floor.transform.rotation_x = Property::fixed(-90.0);
+        scene.layers.push(floor);
+        let (rgba, w, _) = r
+            .render_rgba(&Arc::new(under_doc), comp_id, 0, 1.0)
+            .expect("a frame");
+        let soft = (0..cw / 2)
+            .filter(|x| (25..230).contains(&rgba[(((ch - 4) * w + x) * 4) as usize]))
+            .count();
+        assert!(
+            soft >= 6,
+            "a floor running under the camera came out {soft} pixels soft near the eye"
         );
 
         // The aperture is content, so it is part of the frame's name.

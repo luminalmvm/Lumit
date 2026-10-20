@@ -3439,4 +3439,4 @@ pub use composite::{
     scaled_size, unplace_matrix, Blend, CompositeLayer, Compositor, Cut, MatteInput, MbSample,
     Region,
 };
-pub use glam::Mat4;
+pub use glam::{Mat4, Vec3};
