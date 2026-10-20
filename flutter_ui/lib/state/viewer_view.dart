@@ -55,9 +55,10 @@ enum ViewerView {
           BridgeCameraView.custom,
       };
 
-  /// Whether the camera tools move this view. Only the custom three: a Front
-  /// view that could be dragged off square would not be a front view.
-  bool get movable =>
+  /// Whether the camera tools can orbit this view. Only the custom three: a
+  /// Front view turned off square would not be a front view. The fixed ones
+  /// still track and dolly.
+  bool get orbits =>
       this == ViewerView.custom1 ||
       this == ViewerView.custom2 ||
       this == ViewerView.custom3;
@@ -74,6 +75,37 @@ enum ViewerView {
         ViewerView.custom1 => l10n.viewerViewCustom1,
         ViewerView.custom2 => l10n.viewerViewCustom2,
         ViewerView.custom3 => l10n.viewerViewCustom3,
+      };
+}
+
+/// The 3D view shortcuts a Viewer view starts with, F10 to F12 in turn, as
+/// After Effects sets them.
+const List<ViewerView> defaultViewSlots = [
+  ViewerView.front,
+  ViewerView.custom1,
+  ViewerView.activeCamera,
+];
+
+/// What the View menu and the keyboard ask a Viewer's 3D view to do. The
+/// Viewer answers, since it holds the layers' boxes and the camera tools'
+/// way of writing a camera.
+enum ViewerCameraCommand {
+  lookAtSelected,
+  lookAtAll,
+  reset;
+
+  /// The keymap action id this command answers.
+  String get action => switch (this) {
+        ViewerCameraCommand.lookAtSelected => 'viewer.3d.look.selected',
+        ViewerCameraCommand.lookAtAll => 'viewer.3d.look.all',
+        ViewerCameraCommand.reset => 'viewer.3d.reset',
+      };
+
+  /// What the View menu's row reads.
+  String get title => switch (this) {
+        ViewerCameraCommand.lookAtSelected => l10n.menuLookAtSelectedLayers,
+        ViewerCameraCommand.lookAtAll => l10n.menuLookAtAllLayers,
+        ViewerCameraCommand.reset => l10n.menuReset3dView,
       };
 }
 

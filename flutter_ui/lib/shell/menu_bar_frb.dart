@@ -51,6 +51,7 @@ import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/timeline_razor.dart' show razorCut, razorTargets;
+import '../panels/viewer_camera.dart' show cameraFromView;
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/beats_notice.dart';
 import '../state/clipboard.dart';
@@ -1607,6 +1608,63 @@ List<MenuSection> lumitMenus(
               checked: () => ui.tools.snapToGrid,
             ),
             MenuEntry.divider(),
+            // The 3D view of the view in front, After Effects' rows: a view
+            // on one of the F10 to F12 shortcuts shows its key.
+            MenuEntry.submenu(l10n.menuSwitch3dView, [
+              for (final look in ViewerView.values)
+                MenuEntry.option(
+                  look.title,
+                  () {
+                    final view = ui.views.active;
+                    if (view != null) {
+                      ui.setViewerView(look, viewId: view.engineId);
+                    }
+                  },
+                  action: switch ([
+                    for (var slot = 0; slot < 3; slot++) ui.viewSlotOf(slot)
+                  ].indexOf(look)) {
+                    -1 => null,
+                    final slot => 'viewer.3d.slot.${slot + 1}',
+                  },
+                  checked: () =>
+                      ui.views.active != null &&
+                      ui.viewOf(ui.views.active!.engineId) == look,
+                ),
+            ]),
+            MenuEntry.submenu(
+                l10n.menuAssignViewShortcut(ui.views.active == null
+                    ? ViewerView.activeCamera.title
+                    : ui.viewOf(ui.views.active!.engineId).title),
+                [
+                  for (var slot = 0; slot < 3; slot++)
+                    MenuEntry(
+                      l10n.menuViewShortcutSlot(
+                          '${slot + 1}', ui.viewSlotOf(slot).title),
+                      comp == null ? null : () => ui.assignViewSlot(slot),
+                      action: 'viewer.3d.assign.${slot + 1}',
+                    ),
+                ]),
+            MenuEntry(l10n.menuSwitchToLast3dView,
+                comp == null ? null : ui.switchToLastView,
+                action: 'viewer.3d.last'),
+            MenuEntry(l10n.menuBackToActiveCamera,
+                comp == null ? null : ui.backToActiveCamera,
+                action: 'viewer.3d.camera'),
+            for (final command in ViewerCameraCommand.values)
+              MenuEntry(
+                command.title,
+                comp == null ? null : () => ui.requestViewerCamera(command),
+                action: command.action,
+              ),
+            MenuEntry(
+                l10n.menuCameraFromView,
+                comp == null ||
+                        ui.views.active == null ||
+                        !ui.viewOf(ui.views.active!.engineId).orbits
+                    ? null
+                    : () => cameraFromView(app, ui),
+                action: 'viewer.3d.camera.new'),
+            MenuEntry.divider(),
             // Several views in one Viewer panel (docs/07 §2, and After Effects'
             // own view-layout menu). Option rows: picking one runs it and leaves
             // the menu open, so two layouts can be compared without reopening it.
@@ -2076,11 +2134,13 @@ Future<void> exportFrb(BuildContext context) async {
 }
 
 void undoFrb(LumitState app) {
+  app.settleHistory();
   app.project?.undo();
   app.notifyDocumentChanged();
 }
 
 void redoFrb(LumitState app) {
+  app.settleHistory();
   app.project?.redo();
   app.notifyDocumentChanged();
 }

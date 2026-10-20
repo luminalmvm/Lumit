@@ -127,6 +127,17 @@ void listenForOpenRequests(void Function(List<String> asked) open) {
 class LumitState extends ChangeNotifier {
   ProjectReference? project;
 
+  /// Closes an undo step left open across time, a camera's run of wheel
+  /// notches, so Undo, Redo and the History window never land inside it.
+  VoidCallback? closeOpenStep;
+
+  /// Close any undo step still open, before the history moves.
+  void settleHistory() {
+    final close = closeOpenStep;
+    closeOpenStep = null;
+    close?.call();
+  }
+
   /// The invite link Lumit was started with, until the Shared project window
   /// has opened on it.
   String? launchInvite;

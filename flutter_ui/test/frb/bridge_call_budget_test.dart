@@ -1528,25 +1528,33 @@ void main() {
       await mouse.moveTo(centre);
       await tester.pump();
 
-      counter
-        ..reset()
-        ..counting = true;
-      for (var i = 0; i < 20; i++) {
-        await mouse.moveTo(centre + Offset(i * 3.0, i * 2.0));
-        // Real frames, with time between them — see the note in the pan test
-        // above. Without it this test measured zero while the tool was asking
-        // the engine for the document's revision on every single frame.
+      // Orbiting round the scene walks the boxes for its mark, once, and
+      // then holds it like the camera.
+      for (final pivot in [CameraPivot.cursor, CameraPivot.scene]) {
+        p.uiState.tools.cameraPivot = pivot;
+        await mouse.moveTo(centre + const Offset(1, 1));
         await tester.pump(const Duration(milliseconds: 16));
-      }
-      counter.counting = false;
+        counter
+          ..reset()
+          ..counting = true;
+        for (var i = 0; i < 20; i++) {
+          await mouse.moveTo(centre + Offset(i * 3.0, i * 2.0));
+          // Real frames, with time between them — see the note in the pan
+          // test above. Without it this test measured zero while the tool was
+          // asking the engine for the document's revision on every frame.
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        counter.counting = false;
 
-      // ignore: avoid_print
-      print('CAMERA HOVER COST ${counter.total} calls\n${counter.ranking()}');
-      expect(
-        counter.total,
-        0,
-        reason: 'hovering re-found the camera:\n${counter.ranking()}',
-      );
+        // ignore: avoid_print
+        print('CAMERA HOVER COST ($pivot) ${counter.total} calls\n'
+            '${counter.ranking()}');
+        expect(
+          counter.total,
+          0,
+          reason: 'hovering re-found the camera:\n${counter.ranking()}',
+        );
+      }
     });
 
     /// **Nor must fronting a composition, while nobody is looking through

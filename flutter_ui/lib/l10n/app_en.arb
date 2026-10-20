@@ -5747,6 +5747,54 @@
   "@keyAlwaysPreviewThisView": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keySwitchTo3dViewShortcut1": "Switch to 3D view shortcut 1",
+  "@keySwitchTo3dViewShortcut1": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchTo3dViewShortcut2": "Switch to 3D view shortcut 2",
+  "@keySwitchTo3dViewShortcut2": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchTo3dViewShortcut3": "Switch to 3D view shortcut 3",
+  "@keySwitchTo3dViewShortcut3": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAssignThe3dViewToShortcut1": "Assign the 3D view to shortcut 1",
+  "@keyAssignThe3dViewToShortcut1": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAssignThe3dViewToShortcut2": "Assign the 3D view to shortcut 2",
+  "@keyAssignThe3dViewToShortcut2": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyAssignThe3dViewToShortcut3": "Assign the 3D view to shortcut 3",
+  "@keyAssignThe3dViewToShortcut3": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySwitchToTheLast3dView": "Switch to the last 3D view",
+  "@keySwitchToTheLast3dView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyBackToTheActiveCamera": "Back to the active camera",
+  "@keyBackToTheActiveCamera": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyLookAtTheSelectedLayers": "Look at the selected layers",
+  "@keyLookAtTheSelectedLayers": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyLookAtAllLayers": "Look at all layers",
+  "@keyLookAtAllLayers": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyResetThe3dView": "Reset the 3D view",
+  "@keyResetThe3dView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyCreateACameraFromThe3dView": "Create a camera from the 3D view",
+  "@keyCreateACameraFromThe3dView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyShowOrHideTheLayer": "Show or hide the layer",
   "@keyShowOrHideTheLayer": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6659,6 +6707,59 @@
   "@menuSnapToGrid": {
     "description": "Menu item."
   },
+  "menuSwitch3dView": "Switch 3D view",
+  "@menuSwitch3dView": {
+    "description": "View menu: a submenu listing the 3D views the Viewer can look through (Active camera, Front, Top, Custom view 1 and so on), then the three views on the F10, F11 and F12 shortcuts."
+  },
+  "menuAssignViewShortcut": "Assign shortcut to {view}",
+  "@menuAssignViewShortcut": {
+    "description": "View menu: a submenu that puts the Viewer's current 3D view on one of the F10, F11 and F12 shortcuts. {view} is the current view's name, such as Custom view 1.",
+    "placeholders": {
+      "view": {
+        "type": "String"
+      }
+    }
+  },
+  "menuSwitchToLast3dView": "Switch to last 3D view",
+  "@menuSwitchToLast3dView": {
+    "description": "View menu: switch the Viewer back to the 3D view it was on before the one it is on now. Pressed again it switches back."
+  },
+  "menuViewShortcutSlot": "Shortcut {number}: {view}",
+  "@menuViewShortcutSlot": {
+    "description": "View menu, under Assign shortcut to: one of the three 3D view shortcuts (1, 2 and 3 are F10, F11 and F12), named by the view it switches to now, which the current view replaces. {view} is that view's name, such as Front.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "view": {
+        "type": "String"
+      }
+    }
+  },
+  "menuBackToActiveCamera": "Back to active camera",
+  "@menuBackToActiveCamera": {
+    "description": "View menu: switch the Viewer back to looking through the composition's active camera."
+  },
+  "menuLookAtSelectedLayers": "Look at selected layers",
+  "@menuLookAtSelectedLayers": {
+    "description": "View menu: move the 3D view, or the active camera, so the selected 3D layers fill the picture."
+  },
+  "menuLookAtAllLayers": "Look at all layers",
+  "@menuLookAtAllLayers": {
+    "description": "View menu: move the 3D view, or the active camera, so every 3D layer fills the picture."
+  },
+  "menuReset3dView": "Reset 3D view",
+  "@menuReset3dView": {
+    "description": "View menu: put the Viewer's 3D view back where it starts, or the active camera back where a new camera stands."
+  },
+  "menuCameraFromView": "Create camera from 3D view",
+  "@menuCameraFromView": {
+    "description": "View menu: add a camera layer placed where the Viewer's custom 3D view looks from."
+  },
+  "noLayersToLookAt": "No 3D layers to look at",
+  "@noLayersToLookAt": {
+    "description": "Notice when Look at selected layers or Look at all layers is chosen and there is no 3D layer to frame."
+  },
   "menuSolid": "Solid",
   "@menuSolid": {
     "description": "Menu item."
@@ -6812,6 +6913,10 @@
   "noCameraToMove": "No camera to move — add a camera layer first",
   "@noCameraToMove": {
     "description": "Notice when a camera tool is used in a composition with no camera."
+  },
+  "cameraExpressionRefused": "Can't move a camera driven by an expression",
+  "@cameraExpressionRefused": {
+    "description": "Notice when a camera tool is dragged in the Viewer and the active camera's Position, Rotation or Point of interest is set by an expression, which the drag would overwrite."
   },
   "noCommandsMatch": "No commands match",
   "@noCommandsMatch": {
@@ -9129,6 +9234,26 @@
   "toolCameraUnified": "Unified camera",
   "@toolCameraUnified": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip. One tool that does all three camera moves, picked by which mouse button is dragged."
+  },
+  "toolOrbitAround": "Orbit around",
+  "@toolOrbitAround": {
+    "description": "Label before a dropdown on the toolbar's options while a camera tool is armed: what a camera orbit swings round. Followed by Point of interest, Cursor, Scene or Selection."
+  },
+  "cameraPivotPointOfInterest": "Point of interest",
+  "@cameraPivotPointOfInterest": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round what the camera is looking at."
+  },
+  "cameraPivotCursor": "Cursor",
+  "@cameraPivotCursor": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the point on the layer under the mouse pointer."
+  },
+  "cameraPivotScene": "Scene",
+  "@cameraPivotScene": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the middle of all the 3D layers."
+  },
+  "cameraPivotSelection": "Selection",
+  "@cameraPivotSelection": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the middle of the selected 3D layers."
   },
   "toolCloneStamp": "Clone stamp",
   "@toolCloneStamp": {

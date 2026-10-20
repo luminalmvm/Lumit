@@ -16,6 +16,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/state/clipboard.dart';
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
+import 'package:lumit_flutter/widgets/escape_ladder.dart';
 
 import 'frb_test_support.dart';
 
@@ -606,6 +607,42 @@ void main() {
         expect(a.getSwitches().visible, isFalse);
         expect(b.getSwitches().visible, isFalse,
             reason: 'the whole selection, not the primary alone');
+      });
+
+      /// The 3D views on After Effects' keys, from any panel, and Escape
+      /// back to the last view only once nothing else wanted the press.
+      testWidgets('F10 to F12 switch 3D views and Escape waits its turn',
+          (tester) async {
+        final p = await mount(tester);
+        final ui = p.uiState;
+        ui.activePane.value = Panel.timeline.pane();
+        await tester.pump();
+        final id = ui.views.active!.engineId;
+
+        await chord(tester, LogicalKeyboardKey.f10);
+        expect(ui.viewOf(id), ViewerView.front);
+        await chord(tester, LogicalKeyboardKey.f11, shift: true);
+        expect(ui.viewSlotOf(1), ViewerView.front, reason: 'Shift assigns');
+        await chord(tester, LogicalKeyboardKey.f12);
+        expect(ui.viewOf(id), ViewerView.activeCamera);
+
+        // An open menu takes the first Escape, and only that.
+        ui.activePane.value = Panel.viewer.pane();
+        await tester.pump();
+        var menuOpen = true;
+        final release = EscapeLadder.register(EscapeRung.popup, () {
+          if (!menuOpen) return false;
+          menuOpen = false;
+          return true;
+        });
+        addTearDown(release);
+        await chord(tester, LogicalKeyboardKey.escape);
+        expect(menuOpen, isFalse);
+        expect(ui.viewOf(id), ViewerView.activeCamera);
+        await chord(tester, LogicalKeyboardKey.escape);
+        expect(ui.viewOf(id), ViewerView.front, reason: 'the last 3D view');
+        await chord(tester, LogicalKeyboardKey.escape);
+        expect(ui.viewOf(id), ViewerView.activeCamera, reason: 'and back');
       });
     });
   }, skip: !engineAvailable);

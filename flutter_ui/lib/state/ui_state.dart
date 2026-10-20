@@ -2881,6 +2881,7 @@ class LumitUiState extends ChangeNotifier {
     paletteRequest.dispose();
     consoleRequest.dispose();
     viewerZoomRequest.dispose();
+    viewerCameraRequest.dispose();
     panelSearchRequest.dispose();
     selectAllRequest.dispose();
     super.dispose();
@@ -3843,12 +3844,97 @@ class LumitUiState extends ChangeNotifier {
     return _poseIn(view, compFor(view)?.internalid.toString());
   }
 
+  /// The pose [look] holds in Viewer view [viewId] for its comp, whether or
+  /// not it is the one in front, or null when it has none yet.
+  BridgeCameraPose? heldViewPose(ViewerView look, {required int viewId}) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    if (view == null || comp == null) return null;
+    return view.cameraPoses['${comp.internalid}/${look.name}'];
+  }
+
+  /// The 3D view shortcut [slot] of the active view: 0 to 2 for F10 to F12.
+  ViewerView viewSlotOf(int slot) =>
+      views.active?.viewSlots[slot] ?? defaultViewSlots[slot];
+
+  /// Whether a camera tool's drag is running, which holds the 3D view still
+  /// until it ends.
+  bool cameraDragging = false;
+
+  /// Switch the active view to its 3D view shortcut [slot]. False with no
+  /// composition in it.
+  bool recallViewSlot(int slot) {
+    final view = views.active;
+    if (view == null || compFor(view) == null || cameraDragging) return false;
+    setViewerView(view.viewSlots[slot], viewId: view.engineId);
+    return true;
+  }
+
+  /// Make the active view's 3D view its shortcut [slot].
+  bool assignViewSlot(int slot) {
+    final view = views.active;
+    if (view == null || compFor(view) == null) return false;
+    view.viewSlots[slot] = viewOf(view.engineId);
+    rememberSession();
+    notifyListeners();
+    return true;
+  }
+
+  /// Put the active view back on its comp's own camera. False when it is
+  /// there already, so the key is left for anything else that wants it.
+  bool backToActiveCamera() {
+    final view = views.active;
+    if (view == null ||
+        cameraDragging ||
+        viewOf(view.engineId) == ViewerView.activeCamera) {
+      return false;
+    }
+    setViewerView(ViewerView.activeCamera, viewId: view.engineId);
+    return true;
+  }
+
+  /// Switch the active view back to the 3D view it was on before, After
+  /// Effects' Escape, which toggles between the two. False with none.
+  bool switchToLastView() {
+    final view = views.active;
+    final comp = view == null ? null : compFor(view);
+    final last = view?.lastViews[comp?.internalid.toString()];
+    if (view == null || last == null || cameraDragging) return false;
+    setViewerView(last, viewId: view.engineId);
+    return true;
+  }
+
+  /// Put Viewer view [viewId]'s 3D view back where it started.
+  void resetViewerView({required int viewId}) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    if (view == null || comp == null) return;
+    final look = viewOf(viewId);
+    if (look == ViewerView.activeCamera) return;
+    view.cameraPoses.remove('${comp.internalid}/${look.name}');
+    setViewerView(look, viewId: viewId);
+  }
+
+  /// A Look at or a Reset the active Viewer view has been asked for. A
+  /// notifier, as [viewerZoomRequest] is: the Viewer holds what it needs.
+  final ValueNotifier<(int, ViewerCameraCommand)?> viewerCameraRequest =
+      ValueNotifier(null);
+  int _viewerCameraRequests = 0;
+
+  void requestViewerCamera(ViewerCameraCommand command) =>
+      viewerCameraRequest.value = (++_viewerCameraRequests, command);
+
+  /// The custom view Viewer view [viewId] last looked through.
+  ViewerView lastCustomViewOf(int viewId) =>
+      _surfaceOf(viewId)?.lastCustom ?? ViewerView.custom1;
+
   /// Look at view [viewId]'s comp through [look], and render it again.
   void setViewerView(ViewerView look, {required int viewId}) {
     final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
     if (view == null || comp == null) return;
     final id = comp.internalid.toString();
+    final was = view.cameraViews[id] ?? ViewerView.activeCamera;
     final fixed = look.fixed;
     if (fixed == null) {
       view.cameraViews.remove(id);
@@ -3871,20 +3957,22 @@ class LumitUiState extends ChangeNotifier {
         }
       }
       view.cameraViews[id] = look;
+      if (look.orbits) view.lastCustom = look;
     }
+    if (look != was) view.lastViews[id] = was;
     _cameraMoved(view, comp);
   }
 
-  /// Keep what a camera drag did to view [viewId]'s custom view, and show
-  /// it. A fixed view has nothing to keep, so it is left as the engine built
-  /// it.
+  /// Keep what a camera drag did to view [viewId]'s view, and show it. A
+  /// fixed view keeps its track and dolly the same way a custom view keeps
+  /// everything.
   void setViewerViewPose(BridgeCameraPose pose, {required int viewId}) {
     final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
     if (view == null || comp == null) return;
     final id = comp.internalid.toString();
     final looking = view.cameraViews[id];
-    if (looking == null || !looking.movable) return;
+    if (looking == null) return;
     view.cameraPoses['$id/${looking.name}'] = pose;
     _cameraMoved(view, comp);
   }
