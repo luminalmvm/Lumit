@@ -1325,6 +1325,9 @@ class LumitUiState extends ChangeNotifier {
       }
     }
     pushViewerLook();
+    // The engine's fill, cache bar and drags follow the active view, and a
+    // render is how it hears which one that is.
+    requestFrame();
     notifyListeners();
     rememberSession();
   }
