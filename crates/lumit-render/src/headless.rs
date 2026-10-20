@@ -6747,16 +6747,13 @@ mod tests {
     /// **Depth of field reaches the picture** (docs/impl/camera.md §5).
     ///
     /// One comp, one camera focused on its own zoom, and the same nested tile
-    /// shown twice: once on the focus plane and once at twice the distance. The
-    /// blur runs on the layer's own raster with the edge repeated, so the edge
-    /// it can soften has to be *inside* that raster - hence a white square in a
-    /// black tile rather than a bare solid, which is one flat colour edge to
-    /// edge and would come out of any blur exactly as it went in.
+    /// shown twice: once on the focus plane and once at twice the distance.
     ///
     /// The far tile draws at half size, so a pixel or two of its edge is
     /// intermediate however sharp it is; the gate is the width of the ramp, not
-    /// its presence. And the aperture is in the frame's name, or a frame banked
-    /// at one aperture would be handed back at another.
+    /// its presence. A bare solid's outline blurs too, as wide as After Effects
+    /// blurs it. And the aperture is in the frame's name, or a frame banked at
+    /// one aperture would be handed back at another.
     #[test]
     fn depth_of_field_softens_the_layer_off_the_focus_plane() {
         let mut r = match HeadlessRenderer::shared() {
@@ -6795,7 +6792,7 @@ mod tests {
                 correction_base: None,
                 options: Box::new(lumit_core::model::CameraOptions {
                     depth_of_field: true,
-                    aperture: Property::fixed(16.0),
+                    aperture: Property::fixed(105.0),
                     ..lumit_core::model::CameraOptions::fresh(
                         ZOOM,
                         (f64::from(cw) * 0.5, f64::from(ch) * 0.5, 0.0),
@@ -6851,7 +6848,7 @@ mod tests {
         let mut turned_doc = (*doc).clone();
         let scene = turned_doc.comp_mut(comp_id).unwrap();
         if let LayerKind::Camera { options, .. } = &mut scene.layers[0].kind {
-            options.aperture = Property::fixed(160.0);
+            options.aperture = Property::fixed(1050.0);
         }
         scene.layers.truncate(1);
         let mut turned = at(40.0, 0.0);
@@ -6895,6 +6892,81 @@ mod tests {
             "a floor running under the camera came out {soft} pixels soft near the eye"
         );
 
+        // A bare solid, which has no edge inside its own picture. After Effects
+        // blurs one 36.37 px either side with a box at zoom 1200, focus 600,
+        // aperture 400 and depth 2200; this is that camera a sixth the size,
+        // and its softer edge has to spread about as far.
+        let mut bare_doc = (*doc).clone();
+        let big = Uuid::now_v7();
+        bare_doc.items.push(ProjectItem::Solid(SolidDef {
+            id: big,
+            name: "Square".into(),
+            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            width: 96,
+            height: 96,
+            extra: serde_json::Map::new(),
+        }));
+        let scene = bare_doc.comp_mut(comp_id).unwrap();
+        scene.background = LinearColour([0.0; 4]);
+        if let LayerKind::Camera { options, .. } = &mut scene.layers[0].kind {
+            options.aperture = Property::fixed(400.0 / 6.0);
+            options.focus_distance = Property::fixed(ZOOM / 2.0);
+        }
+        scene.layers.truncate(1);
+        let mut bare = matrix_layer("Square", LayerKind::Solid { def: big }, 96, 96);
+        bare.switches.three_d = true;
+        bare.transform.position_x = Property::fixed(f64::from(cw) * 0.5);
+        bare.transform.position_y = Property::fixed(f64::from(ch) * 0.5);
+        bare.transform.position_z = Property::fixed(2200.0 / 6.0 - ZOOM);
+        // The same solid inside a collapsed precomp, seen through this camera.
+        let mut nested_doc = bare_doc.clone();
+        let inner = push_comp(&mut nested_doc, "Inner", cw, ch);
+        nested_doc
+            .comp_mut(inner)
+            .unwrap()
+            .layers
+            .push(bare.clone());
+        let mut collapsed = matrix_layer("Inner", LayerKind::Precomp { comp: inner }, cw, ch);
+        collapsed.switches.three_d = true;
+        collapsed.switches.collapse = true;
+        nested_doc.comp_mut(comp_id).unwrap().layers.push(collapsed);
+        bare_doc.comp_mut(comp_id).unwrap().layers.push(bare);
+        for (how, d) in [("straight", bare_doc), ("collapsed", nested_doc)] {
+            let (lin, w, _) = r
+                .render_preview_linear(&Arc::new(d), comp_id, 0, Quality::default())
+                .expect("a frame");
+            // The left edge's ramp along the middle row: where it is, and how
+            // wide, read as the box with the same spread.
+            let lit = |x: u32| f64::from(lin[((ch / 2 * w + x) * 4 + 3) as usize]);
+            let rise: Vec<f64> = (0..cw / 2)
+                .map(|x| (lit(x + 1) - lit(x)).max(0.0))
+                .collect();
+            let total: f64 = rise.iter().sum();
+            let mean = rise
+                .iter()
+                .enumerate()
+                .map(|(x, d)| x as f64 * d)
+                .sum::<f64>()
+                / total;
+            let spread = rise
+                .iter()
+                .enumerate()
+                .map(|(x, d)| (x as f64 - mean).powi(2) * d)
+                .sum::<f64>()
+                / total;
+            let half_width = (12.0 * spread).sqrt() / 2.0;
+            let edge = mean + 1.0;
+            assert!(
+                (edge - (64.0 - 48.0 * ZOOM * 6.0 / 2200.0)).abs() < 1.0,
+                "a bare solid {how} had its edge at {edge}"
+            );
+            assert!(
+                (half_width / (36.37 / 6.0) - 1.0).abs() < 0.1,
+                "a bare solid {how} blurred {half_width} px either side, not After Effects' {}",
+                36.37 / 6.0
+            );
+        }
+
         // The aperture is content, so it is part of the frame's name.
         let q = Quality::default();
         let wide = r.frame_key(&doc, comp_id, 0, q).expect("a nameable frame");
@@ -6902,7 +6974,7 @@ mod tests {
         if let LayerKind::Camera { options, .. } =
             &mut narrower.comp_mut(comp_id).unwrap().layers[0].kind
         {
-            options.aperture = Property::fixed(4.0);
+            options.aperture = Property::fixed(26.0);
         }
         assert_ne!(
             wide,

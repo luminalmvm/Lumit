@@ -596,12 +596,24 @@ pub fn aperture_for_f_stop(f_stop: f64, zoom: f64) -> f64 {
 /// behind the eye, or with nothing to focus on.
 #[must_use]
 pub fn coc_px(dof: &crate::model::CameraDof, zoom: f64, d: f64) -> f64 {
-    if d <= 0.0 || dof.focus_distance <= 0.0 || zoom <= 0.0 {
+    if d <= 0.0 {
         return 0.0;
     }
-    dof.aperture * (d - dof.focus_distance).abs() / d
-        * (zoom / dof.focus_distance)
-        * (dof.blur_level / 100.0).max(0.0)
+    coc_per_zoom(dof, zoom) * zoom * (d - dof.focus_distance).abs() / d
+}
+
+/// [`coc_px`] over zoom times how far off focus a point is over its distance.
+/// After Effects draws it through a thin lens whose focal length is a tenth of
+/// the zoom, the same ten as [`f_stop`], and Blur Level scales that focal
+/// length rather than the blur. Zero when focused nearer than the lens itself,
+/// which After Effects was never checked at.
+#[must_use]
+pub fn coc_per_zoom(dof: &crate::model::CameraDof, zoom: f64) -> f64 {
+    let lens = zoom * (dof.blur_level / 100.0).max(0.0) / 10.0;
+    if dof.focus_distance <= lens || zoom <= 0.0 {
+        return 0.0;
+    }
+    dof.aperture * lens / (zoom * (dof.focus_distance - lens))
 }
 
 /// The Viewer's fixed 3D views (docs/07 §2.2). Active camera is the absence of
@@ -1036,15 +1048,31 @@ mod tests {
             blur_level: 100.0,
         };
         assert_eq!(coc_px(&dof, 1000.0, 1000.0), 0.0);
-        assert!(close(coc_px(&dof, 1000.0, 2000.0), 10.0));
-        assert!(close(coc_px(&dof, 2000.0, 2000.0), 20.0));
+        assert!(coc_px(&dof, 1000.0, 2000.0) > 0.0);
         assert_eq!(coc_px(&dof, 1000.0, 0.0), 0.0);
         assert_eq!(coc_px(&dof, 1000.0, -5.0), 0.0);
-        let half = crate::model::CameraDof {
-            blur_level: 50.0,
-            ..dof
-        };
-        assert!(close(coc_px(&half, 1000.0, 2000.0), 5.0));
+        // After Effects 2026's own blur, read off white squares in a
+        // 1280 x 720 comp at zoom 1200, aperture 400: the half-width of its box
+        // blur at each focus, Blur Level and depth.
+        for (focus, level, d, half_width) in [
+            (1200.0, 100.0, 2200.0, 10.10),
+            (1200.0, 100.0, 600.0, 22.23),
+            (600.0, 100.0, 2200.0, 36.37),
+            (2400.0, 100.0, 1200.0, 10.53),
+            (3600.0, 100.0, 900.0, 20.68),
+            (1200.0, 50.0, 4200.0, 7.51),
+        ] {
+            let dof = crate::model::CameraDof {
+                focus_distance: focus,
+                aperture: 400.0,
+                blur_level: level,
+            };
+            let ours = coc_px(&dof, 1200.0, d) / 2.0;
+            assert!(
+                (ours / half_width - 1.0).abs() < 0.01,
+                "focus {focus}, level {level}, depth {d}: {ours} against {half_width}"
+            );
+        }
 
         // After Effects' doubled rig: a camera turned -5 on Y, focused at 1500,
         // on a null turned -10 on X and 30 on Y and scaled 200. After Effects

@@ -71,7 +71,9 @@ pub mod schedule;
 ///   one, and an adjustment layer's Depth row pointed at itself reads the 3D
 ///   layers below.
 /// * 15: shadows are drawn, where a light and a layer cast them.
-pub const ALGO_VERSION: u32 = 15;
+/// * 16: camera depth of field blurs a 3D layer's outline too, and blurs as
+///   much as After Effects does.
+pub const ALGO_VERSION: u32 = 16;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4684,12 +4686,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 15, which renamed every frame.
+        // Pinned under ALGO_VERSION 16, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                115_094_099_329_550_942_698_573_664_903_240_632_315,
-                134_226_275_403_338_071_672_715_221_392_344_839_471
+                236_345_018_442_741_691_863_493_237_578_023_808_731,
+                3_417_315_519_665_212_432_167_007_372_236_651_887
             )
         );
 

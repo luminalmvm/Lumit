@@ -2054,6 +2054,9 @@ impl Realiser<'_> {
         ground: Option<ViewGround>,
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
+        // A layer's picture before the camera blurred it, for the depth pass,
+        // where a small solid far off focus would otherwise fade out of it.
+        let mut sharp: Vec<Option<(wgpu::Texture, (f32, f32))>> = Vec::new();
         // How much wider and taller each layer's finished picture is than the
         // source it started from. `(1.0, 1.0)` for every layer whose
         // stack holds no Tile above 100 % output, which is every layer until one
@@ -2086,7 +2089,7 @@ impl Realiser<'_> {
                     tex_h,
                     format,
                     colour_space,
-                } if straight_to_composite(l)
+                } if straight_to_composite(l, camera)
                     && matches!(format, lumit_media::PixelFormat::Srgb8)
                     && self.input_transform(colour_space).is_none() =>
                 {
@@ -2282,7 +2285,7 @@ impl Realiser<'_> {
             };
             // How much its effects grew the picture, which the depth of field
             // reads to place each pixel.
-            let grow = (
+            let mut grow = (
                 tex.width() as f32 / source_w as f32,
                 tex.height() as f32 / source_h as f32,
             );
@@ -2296,7 +2299,13 @@ impl Realiser<'_> {
                 });
                 waiting.push((so_far, fx_ms));
             } else {
-                tex = self.lit(l, tex, eye, camera, None, None, grow, (width, height));
+                let blurred;
+                (tex, grow, blurred) =
+                    self.lit(l, tex, eye, camera, None, None, grow, (width, height));
+                if scene_depth.is_some() || below.is_some() {
+                    sharp.resize(linear_textures.len() + 1, None);
+                    sharp[linear_textures.len()] = blurred;
+                }
                 self.layer_done(l, started, fx_ms);
             }
             grown.push(grow);
@@ -2305,7 +2314,7 @@ impl Realiser<'_> {
         if shadowed {
             let (sets, each) =
                 self.shadow_casters(layers, &linear_textures, &grown, width, height, eye);
-            linear_textures = linear_textures
+            let lit: Vec<_> = linear_textures
                 .into_iter()
                 .zip(layers)
                 .zip(each)
@@ -2315,11 +2324,21 @@ impl Realiser<'_> {
                     let started = so_far.and_then(|d| std::time::Instant::now().checked_sub(d));
                     let casters = set.and_then(|k| sets.get(k));
                     let size = (width, height);
-                    let tex = self.lit(l, tex, eye, camera, casters, own, *grow, size);
+                    let lit = self.lit(l, tex, eye, camera, casters, own, *grow, size);
                     self.layer_done(l, started, fx_ms);
-                    tex
+                    lit
                 })
                 .collect();
+            let keep_sharp = scene_depth.is_some() || below.is_some();
+            linear_textures = Vec::with_capacity(lit.len());
+            grown.clear();
+            for (tex, grow, blurred) in lit {
+                if keep_sharp {
+                    sharp.push(blurred);
+                }
+                grown.push(grow);
+                linear_textures.push(tex);
+            }
         }
         let cam_mat = camera.map(|pose| crate::export::camera_mat(width, height, pose));
         // Per-layer motion blur (docs/06 §4): a blurring layer's
@@ -2480,6 +2499,30 @@ impl Realiser<'_> {
                 .unzip();
         let comp_layers: Vec<lumit_gpu::CompositeLayer> =
             order.iter().map(|&i| comp_layers[i].clone()).collect();
+        // The depth pass reads each layer's coverage before the camera blurred
+        // it.
+        let depth_layers: Vec<lumit_gpu::CompositeLayer> = order
+            .iter()
+            .zip(&comp_layers)
+            .map(|(&i, c)| {
+                match sharp
+                    .get(i)
+                    .and_then(Option::as_ref)
+                    .filter(|_| layers[i].mb.is_empty())
+                {
+                    Some((texture, g)) => lumit_gpu::CompositeLayer {
+                        texture,
+                        size: grow_size(layers[i].natural_size, *g),
+                        anchor: {
+                            let (dx, dy) = grow_offset(layers[i].natural_size, *g);
+                            (layers[i].anchor.0 + dx, layers[i].anchor.1 + dy)
+                        },
+                        ..c.clone()
+                    },
+                    None => c.clone(),
+                }
+            })
+            .collect();
         // The depth of everything so far, for an adjustment layer above that
         // reads it, laid over what the segments below left.
         if let (Some((metres_per_w, depth)), Some(cam)) = (below, cam_mat) {
@@ -2487,7 +2530,7 @@ impl Realiser<'_> {
                 &self.ctx,
                 width,
                 height,
-                &runs_of(layers, &order, &comp_layers),
+                &runs_of(layers, &order, &depth_layers),
                 cam,
                 metres_per_w,
                 0.0,
@@ -2500,7 +2543,7 @@ impl Realiser<'_> {
                 &self.ctx,
                 width,
                 height,
-                &runs_of(layers, &order, &comp_layers),
+                &runs_of(layers, &order, &depth_layers),
                 cam,
                 metres_per_w,
                 0.0,
@@ -2622,8 +2665,10 @@ impl Realiser<'_> {
     /// it applies, so a comp with neither renders byte-for-byte as before.
     /// `casters` are the segment's shadows and `own` this layer's square
     /// among them; `grow` is how much its effects grew it and `size` the
-    /// comp's, which the depth of field reads.
-    #[allow(clippy::too_many_arguments)]
+    /// comp's, which the depth of field reads. Hands back the picture, how much
+    /// it has grown now, and the lit picture before the blur with its own grow
+    /// when it was blurred.
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn lit(
         &self,
         l: &CompLayerDraw,
@@ -2634,7 +2679,11 @@ impl Realiser<'_> {
         own: Option<usize>,
         grow: (f32, f32),
         size: (u32, u32),
-    ) -> wgpu::Texture {
+    ) -> (
+        wgpu::Texture,
+        (f32, f32),
+        Option<(wgpu::Texture, (f32, f32))>,
+    ) {
         // After its effects and before it is placed. `l.lights` is empty
         // unless the comp holds lights and this layer accepts them, and empty
         // means the pass never runs. An unlit layer only takes shadows, so
@@ -2649,14 +2698,23 @@ impl Realiser<'_> {
         // Depth of field (docs/impl/camera.md §5): each part of a 3D layer
         // off the camera's focus plane is blurred by its own circle of
         // confusion. None unless the camera carries one.
-        if let Some((reach, field, step)) = dof_blur(camera, l, &tex, grow, size, self.render_scale)
-        {
-            let (w, h) = (tex.width(), tex.height());
-            tex = self
-                .fx
-                .blur_field(&self.ctx, &tex, w, h, reach, field, step);
-        }
-        tex
+        let Some((reach, field, step, room)) =
+            dof_blur(camera, l, &tex, grow, size, self.render_scale)
+        else {
+            return (tex, grow, None);
+        };
+        // Room round the layer for its outline to blur into, or a solid would
+        // come out as sharp as it went in.
+        let (w, h) = (tex.width() + room.0 * 2, tex.height() + room.1 * 2);
+        let padded = lumit_gpu::fx::fit_centred(&self.ctx, tex.clone(), w, h);
+        let blurred = self
+            .fx
+            .blur_field(&self.ctx, &padded, w, h, reach, field, step);
+        let wider = (
+            grow.0 * w as f32 / tex.width() as f32,
+            grow.1 * h as f32 / tex.height() as f32,
+        );
+        (blurred, wider, Some((tex, grow)))
     }
 
     /// Each layer's shadows: which run of 3D layers' casters it takes, and its
@@ -2961,11 +3019,21 @@ fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
 /// seen nearly edge on would otherwise reach across all of it.
 const DOF_REACH: f32 = 512.0;
 
+/// The layer seen from the eye, laid out as `fx_blur.wgsl` says.
+type DofField = [[f32; 4]; 3];
+
+/// How much wider the gaussian's reach is than half the circle of confusion.
+/// After Effects blurs with a box that wide either side, and this gaussian is
+/// the one that comes closest to its pictures.
+const DOF_SOFTNESS: f64 = 1.37;
+
 /// Depth of field on a 3D layer (docs/impl/camera.md §5), for
-/// `FxEngine::blur_field`: the layer seen from the eye, and how far a pass may
-/// reach. Each pixel is blurred by its own distance from the focus plane,
-/// round on screen, so a floor going into the distance softens towards its far
-/// end. A parent's scale comes in through the placement.
+/// `FxEngine::blur_field`: the layer seen from the eye, how far a pass may
+/// reach, and how many texels of room the layer needs on each side for its
+/// edges to blur into, with the field already moved out by that room. Each
+/// pixel is blurred by its own distance from the focus plane, so a floor going
+/// into the distance softens towards its far end. A parent's scale comes in
+/// through the placement.
 ///
 /// `None` for a sharp layer: no camera, no depth of field, a 2D layer, one
 /// wholly behind the eye or off the frame, or one blurred under half a pixel.
@@ -2976,20 +3044,20 @@ fn dof_blur(
     grow: (f32, f32),
     comp: (u32, u32),
     render_scale: f32,
-) -> Option<(f32, [[f32; 4]; 3], f32)> {
+) -> Option<(f32, DofField, f32, (u32, u32))> {
     let cam = camera?;
     let dof = cam.dof?;
-    if !l.three_d || dof.focus_distance <= 0.0 {
+    if !l.three_d {
         return None;
     }
-    // Half the circle of confusion on screen is this times zoom times how far
-    // off focus a point is over its distance.
-    let k = (dof.aperture * (dof.blur_level / 100.0).max(0.0) / (2.0 * dof.focus_distance)) as f32;
+    let zoom = (cam.zoom as f32).max(1.0);
+    // The blur's reach on screen is this times zoom times how far off focus a
+    // point is over its distance.
+    let k = (lumit_core::camera::coc_per_zoom(&dof, f64::from(zoom)) / 2.0 * DOF_SOFTNESS) as f32;
     let focus = dof.focus_distance as f32;
     if k <= 0.0 {
         return None;
     }
-    let zoom = (cam.zoom as f32).max(1.0);
     let (cw, ch) = (comp.0 as f32, comp.1 as f32);
     let frame = lumit_gpu::camera_frame(
         cw,
@@ -3049,10 +3117,14 @@ fn dof_blur(
     let along = |q: lumit_gpu::Vec3, s: lumit_gpu::Vec3| {
         (s.x * q.z - q.x * s.z).hypot(s.y * q.z - q.y * s.z)
     };
-    let least = if corners.iter().all(|c| c.z > 0.0) {
+    let in_front = corners.iter().all(|c| c.z > 0.0);
+    let texels = |c: lumit_gpu::Vec3, s: lumit_gpu::Vec3| {
+        k * (c.z - focus).abs() * c.z / along(c, s).max(1e-9)
+    };
+    let least = if in_front {
         corners
             .iter()
-            .flat_map(|&c| [x, y].map(|s| k * (c.z - focus).abs() * c.z / along(c, s).max(1e-9)))
+            .flat_map(|&c| [x, y].map(|s| texels(c, s)))
             .fold(f32::MAX, f32::min)
     } else {
         0.0
@@ -3062,14 +3134,30 @@ fn dof_blur(
     } else {
         1.0
     };
+    let reach = DOF_REACH.min(tw.max(th) / step);
+    // The widest blur along each side is at one of its corners in front of
+    // the eye, as what is behind it never shows. Never past the widest picture
+    // the card takes.
+    let room = |s: lumit_gpu::Vec3, n: f32| {
+        let widest = corners
+            .iter()
+            .filter(|c| c.z > 0.0)
+            .map(|&c| texels(c, s))
+            .fold(0.0, f32::max);
+        let most = crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n as u32) / 2;
+        (widest.min(reach * step).ceil() as u32).min(most)
+    };
+    let room = (room(x, tw), room(y, th));
+    let corner = corner - x * room.0 as f32 - y * room.1 as f32;
     Some((
-        DOF_REACH.min(tw.max(th) / step),
+        reach,
         [
             [x.x, x.y, x.z, k],
             [y.x, y.y, y.z, focus],
             [corner.x, corner.y, corner.z, 0.0],
         ],
         step,
+        room,
     ))
 }
 
@@ -3141,13 +3229,14 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 /// eight-bit sRGB texture reads as the same linear values the linearise pass
 /// would have written into a working-format copy of it. Everything else that
 /// touches a layer's picture wants the working format: an effect stack, the
-/// lighting pass, and the motion-blur average, whose fp32 accumulation is what
-/// keeps a still layer bit-exact (docs/06 §4). One of those and the layer
-/// linearises as it always did.
-fn straight_to_composite(l: &CompLayerDraw) -> bool {
+/// lighting pass, the camera's depth of field, and the motion-blur average,
+/// whose fp32 accumulation is what keeps a still layer bit-exact (docs/06 §4).
+/// One of those and the layer linearises as it always did.
+fn straight_to_composite(l: &CompLayerDraw, camera: Option<lumit_core::model::CameraPose>) -> bool {
     l.fx.is_empty()
         && l.lights.is_empty()
         && l.mb.is_empty()
+        && !(l.three_d && camera.is_some_and(|c| c.dof.is_some()))
         && l.material.casts_shadows == lumit_gpu::fx::LightingShadows::Off
 }
 
