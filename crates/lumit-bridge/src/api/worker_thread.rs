@@ -2641,6 +2641,8 @@ pub struct RenderScopeRequest {
     pub kind: u32,
     /// Background, trace, then the R, G and B channel tints, each `[r, g, b]`.
     pub colours: [[u8; 3]; 5],
+    /// Which Viewer view the trace reads, so it reads that view's picture.
+    pub view: u32,
 }
 
 /// One read of the pixels under the dropper — the magnifier's request.
@@ -5053,6 +5055,12 @@ fn trace_scope(
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
         document.store.snapshot()
     };
+    // The picture that view shows: through its own 3D view, and the chip.
+    let document = viewed_through(
+        state.prefix,
+        state.camera_views.get(&req.view).copied(),
+        document,
+    );
 
     // Reuse the picture the Viewer already has, at whatever resolution it was
     // made at. Scopes read the *values* in a frame, so any size answers the

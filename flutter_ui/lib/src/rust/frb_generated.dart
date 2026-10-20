@@ -814,7 +814,8 @@ abstract class BridgeLibApi extends BaseApi {
       required BigInt frame,
       required double scale,
       required int kind,
-      required List<Uint8List> colours});
+      required List<Uint8List> colours,
+      required int view});
 
   void crateApiCompositionCompositionReferenceSamplePixels(
       {required CompositionReference that,
@@ -7588,7 +7589,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required BigInt frame,
       required double scale,
       required int kind,
-      required List<Uint8List> colours}) {
+      required List<Uint8List> colours,
+      required int view}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -7597,6 +7599,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_f_32(scale, serializer);
         sse_encode_u_32(kind, serializer);
         sse_encode_list_list_prim_u_8_strict(colours, serializer);
+        sse_encode_u_32(view, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 179)!;
       },
       codec: SseCodec(
@@ -7605,7 +7608,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceRenderScopeConstMeta,
-      argValues: [that, frame, scale, kind, colours],
+      argValues: [that, frame, scale, kind, colours, view],
       apiImpl: this,
     ));
   }
@@ -7614,7 +7617,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceRenderScopeConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_render_scope",
-            argNames: ["that", "frame", "scale", "kind", "colours"],
+            argNames: ["that", "frame", "scale", "kind", "colours", "view"],
           );
 
   @override

@@ -2026,14 +2026,21 @@ class CompositionReference {
   /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.
   /// `colours` is background, trace, then the R, G and B tints, each as
   /// `[r, g, b]` — the panel's theme decides them, so the engine never has to
-  /// know what a Lumit surface looks like.
+  /// know what a Lumit surface looks like. `view` is the Viewer view whose
+  /// picture is read.
   void renderScope(
           {required BigInt frame,
           required double scale,
           required int kind,
-          required List<Uint8List> colours}) =>
+          required List<Uint8List> colours,
+          required int view}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderScope(
-          that: this, frame: frame, scale: scale, kind: kind, colours: colours);
+          that: this,
+          frame: frame,
+          scale: scale,
+          kind: kind,
+          colours: colours,
+          view: view);
 
   /// Ask the worker for the pixels under the dropper: a `window × window`
   /// square of `frame` centred on the point `(u, v)` of the picture, each a
