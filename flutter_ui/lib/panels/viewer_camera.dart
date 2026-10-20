@@ -365,6 +365,32 @@ CameraPose dollyCamera(
   );
 }
 
+/// The pose after a dolly of [travel] pixels in a fixed view, which stays
+/// orthographic: the eye keeps its distance and the zoom grows instead, so
+/// the picture is magnified and its perspective never changes. [at] is the
+/// pointer in comp pixels from the middle of the picture, and what is under
+/// it stays under it. [depth] is the distance to the plane the view frames.
+CameraPose zoomView(
+  CameraPose pose,
+  double travel, {
+  Offset at = Offset.zero,
+  required double depth,
+}) {
+  final zoom = pose.zoom * math.exp(travel * dollyFraction);
+  final shift = depth * (1 / pose.zoom - 1 / zoom);
+  final a = pose.axes;
+  final (x, y) = (at.dx * shift, at.dy * shift);
+  final e = pose.position;
+  return pose.copyWith(
+    zoom: zoom,
+    position: (
+      e.$1 + a.right.$1 * x + a.up.$1 * y,
+      e.$2 + a.right.$2 * x + a.up.$2 * y,
+      e.$3 + a.right.$3 * x + a.up.$3 * y,
+    ),
+  );
+}
+
 /// Which move a mouse button asks the unified tool for: left orbits, middle
 /// tracks, right dollies (docs/impl/camera.md §4).
 ToolMode cameraMoveForButtons(int buttons) {
@@ -486,8 +512,12 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   double _trackDepth = 1;
 
   /// What a dolly goes at: the point under the pointer at the press, or null
-  /// for the camera's own pivot.
+  /// for the camera's own pivot. In a fixed view, where the pointer was in
+  /// comp pixels from the middle of the picture, and how far away the plane
+  /// the view frames is.
   (double, double, double)? _dollyToward;
+  Offset _dollyAt = Offset.zero;
+  double _framed = 0;
 
   /// The orbit's pivot while no drag runs, held against what moves it so a
   /// hover walks no boxes.
@@ -575,6 +605,22 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     }
     final held = _held;
     return held == null ? null : (layer: held.layer, pose: held.pose);
+  }
+
+  /// Whether the Viewer is in one of the six fixed views, which never turn
+  /// and stay orthographic.
+  bool get _fixedView {
+    final view = widget.uiState.viewOf(widget.viewId);
+    return view != ViewerView.activeCamera && !view.orbits;
+  }
+
+  /// How far in front of [pose]'s eye the plane through the comp centre is,
+  /// which is the plane a fixed view frames.
+  double _framedDepth(CameraPose pose) {
+    final f = pose.axes.forward;
+    final e = pose.position;
+    final c = (widget.compSize.width / 2, widget.compSize.height / 2, 0.0);
+    return (c.$1 - e.$1) * f.$1 + (c.$2 - e.$2) * f.$2 + (c.$3 - e.$3) * f.$3;
   }
 
   /// [p]'s depth in front of [pose]'s eye, over its zoom.
@@ -791,10 +837,13 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // button comes up, which is what every 3D application does.
     _anchor = at;
     _locked = freezeCursor();
+    // Everything under the pointer is found through the pose the boxes were
+    // drawn with, before an orbit carries a fixed view anywhere.
     final orbit = _activeMove == ToolMode.cameraOrbit;
-    _aimAt(at, target.pose);
-    final start = orbit ? _orbitable(target.pose) : target.pose;
-    final pivot = orbit ? _pivotFor(at, start) : null;
+    var start = target.pose;
+    var pivot = orbit ? _pivotFor(at, start) : null;
+    _aimAt(at, start);
+    if (orbit && _fixedView) (start, pivot) = _toCustom(start, pivot);
     // A wheel run still open is its own step, not the start of this one.
     _wheelRest?.cancel();
     _closeUndoStep();
@@ -810,11 +859,18 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 
   /// Where a track and a dolly begun at [at] hold on: the depth of what is
-  /// under the pointer, or of the camera's own pivot with nothing there.
+  /// under the pointer, or of the camera's own pivot with nothing there (the
+  /// framed plane in a fixed view).
   void _aimAt(Offset at, CameraPose pose) {
     final hit = _hitAt(at, pose);
-    final fallback = _depthOf(pose, pose.pivot);
+    final fixed = _fixedView;
+    final framed = fixed ? _framedDepth(pose) : 0.0;
+    final fallback =
+        fixed ? framed / pose.zoom : _depthOf(pose, pose.pivot);
     _trackDepth = hit?.depth ?? fallback;
+    _framed = framed;
+    _dollyAt = _toPicture(at) -
+        Offset(widget.compSize.width / 2, widget.compSize.height / 2);
     // A two-node camera with nothing under the pointer dollies at its point
     // of interest and keeps it.
     _dollyToward = hit?.point ??
@@ -824,34 +880,39 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 
   /// [pose] after a dolly of [travel] toward what [_aimAt] found.
-  CameraPose _dollied(CameraPose pose, double travel) =>
-      dollyCamera(pose, travel, toward: _dollyToward);
+  CameraPose _dollied(CameraPose pose, double travel) => _fixedView
+      ? zoomView(pose, travel, at: _dollyAt, depth: _framed)
+      : dollyCamera(pose, travel, toward: _dollyToward);
 
-  /// [pose] ready to orbit. A fixed view never turns, so an orbit begun in
-  /// one carries its framing into the Viewer's custom view and turns that:
-  /// the same picture on the plane through the comp centre, seen from that
-  /// view's own distance.
-  CameraPose _orbitable(CameraPose pose) {
+  /// A fixed view never turns, so an orbit begun in one carries its framing
+  /// into the Viewer's last custom view and turns that: the same picture of
+  /// the plane the fixed view frames, seen from the custom view's zoom at the
+  /// distance that keeps its size. The orbit swings round [pivot], or the
+  /// middle of that plane.
+  (CameraPose, (double, double, double)) _toCustom(
+      CameraPose pose, (double, double, double)? pivot) {
     final ui = widget.uiState;
     final id = widget.viewId;
-    final look = ui.viewOf(id);
-    if (look == ViewerView.activeCamera || look.orbits) return pose;
+    final f = pose.axes.forward;
+    final framed = _framedDepth(pose);
+    final e = pose.position;
+    final middle = (e.$1 + f.$1 * framed, e.$2 + f.$2 * framed,
+        e.$3 + f.$3 * framed);
     ui.setViewerView(ui.lastCustomViewOf(id), viewId: id);
     final custom = ui.viewPoseOf(id);
-    if (custom == null) return pose;
-    final f = pose.axes.forward;
-    final p = pose.pivot;
+    if (custom == null) return (pose, pivot ?? middle);
+    final reach = custom.zoom * framed / pose.zoom;
     final moved = CameraPose(
       position: (
-        p.$1 - f.$1 * custom.zoom,
-        p.$2 - f.$2 * custom.zoom,
-        p.$3 - f.$3 * custom.zoom,
+        middle.$1 - f.$1 * reach,
+        middle.$2 - f.$2 * reach,
+        middle.$3 - f.$3 * reach,
       ),
       rotation: pose.rotation,
       zoom: custom.zoom,
     );
     ui.setViewerViewPose(viewOfPose(moved), viewId: id);
-    return moved;
+    return (moved, pivot ?? middle);
   }
 
   void _drag(Offset at, Offset delta) {
