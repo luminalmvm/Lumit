@@ -2813,17 +2813,7 @@ impl Composition {
                     .colour
                     .each_ref()
                     .map(|c| (c.value_at(lt) as f32).max(0.0));
-                // An aimed light's turn is its aim with the rows on top, as a
-                // two-node camera's is, and both are read in the parent's space.
-                let own = placement(l, read);
-                let mut eye = crate::camera::Eye {
-                    position: own.position,
-                    rotation_deg: own.rotation_deg,
-                    point_of_interest: None,
-                };
-                if let Some(space) = parent_space(self, l, t, read, solves) {
-                    eye = space.carry(eye);
-                }
+                let eye = eye_in_comp(self, l, t, read, solves);
                 Some(ResolvedLight {
                     kind: light.kind,
                     position: (eye.position.0, eye.position.1),
@@ -3613,6 +3603,30 @@ pub fn parent_space(
     let mut placements = parent_placements(comp, layer, t, read, solves).into_iter();
     let first = placements.next()?.1.place();
     Some(placements.fold(first, |outer, (_, p)| p.place().within(&outer)))
+}
+
+/// Where camera or light `layer` is and how it is turned in the comp at comp
+/// time `t`. An aimed one's turn is its aim with the rows on top, as a
+/// two-node camera's is, and both are read in the parent's space. What a light
+/// shades from and the Viewer draws it at.
+#[must_use]
+pub fn eye_in_comp(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> crate::camera::Eye {
+    let own = placement(layer, read);
+    let eye = crate::camera::Eye {
+        position: own.position,
+        rotation_deg: own.rotation_deg,
+        point_of_interest: None,
+    };
+    match parent_space(comp, layer, t, read, solves) {
+        Some(space) => space.carry(eye),
+        None => eye,
+    }
 }
 
 /// Where camera or light `layer`'s point of interest sits in the comp at comp

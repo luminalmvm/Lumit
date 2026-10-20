@@ -639,37 +639,17 @@ impl CompositionReference {
                     if light.kind == L::Ambient {
                         continue;
                     }
-                    // Placed as the lighting pass places it: an aimed light
-                    // faces its point of interest, its rows on top, all of it
-                    // read in its parent's space.
+                    // Placed by the walk the lighting pass places it by, so
+                    // the marks sit where it lights from.
                     let context = lumit_core::model::comp_context(&doc, comp, t);
                     let read = lumit_core::model::context_reader(&context, t);
-                    let placed = lumit_core::model::placement(layer, &read);
-                    let mut eye = lumit_core::camera::Eye {
-                        position: placed.position,
-                        rotation_deg: placed.rotation_deg,
-                        point_of_interest: None,
-                    };
-                    if let Some(space) = lumit_core::model::parent_space(
-                        comp,
-                        layer,
-                        t,
-                        &read,
-                        lumit_render::track::solves_for(&doc),
-                    ) {
-                        eye = space.carry(eye);
-                    }
+                    let solves = lumit_render::track::solves_for(&doc);
+                    let eye = lumit_core::model::eye_in_comp(comp, layer, t, &read, solves);
                     let own = eye.position;
                     let poi = light
                         .two_node
                         .then(|| {
-                            lumit_core::model::point_of_interest(
-                                comp,
-                                layer,
-                                t,
-                                &read,
-                                lumit_render::track::solves_for(&doc),
-                            )
+                            lumit_core::model::point_of_interest(comp, layer, t, &read, solves)
                         })
                         .flatten();
                     let (rx, ry, rz) = eye.rotation_deg;
