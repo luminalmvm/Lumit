@@ -6024,6 +6024,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         falloff: LightFalloff::None,
         radius_px: 0.0,
         falloff_px: 0.0,
+        legacy: false,
         cone_cos: -2.0,
         cone_inner: -2.0,
         axis: [0.0, 0.0, 1.0],
@@ -6039,6 +6040,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         colour: [0.2, 0.4, 1.0],
         falloff: LightFalloff::Smooth,
         falloff_px: 120.0,
+        legacy: true,
         ..plain
     };
     let cone_cos = 25f32.to_radians().cos();
@@ -6150,6 +6152,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
                     falloff: l.falloff as u32,
                     radius_px: l.radius_px,
                     falloff_px: l.falloff_px,
+                    legacy: l.legacy,
                     cone_cos: l.cone_cos,
                     cone_inner: l.cone_inner,
                     axis: l.axis,

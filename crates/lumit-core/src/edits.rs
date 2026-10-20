@@ -1267,6 +1267,23 @@ pub fn transform_ops(
             });
         }
     }
+    // An old light's edge and falloff numbers mean the old curves. Edit one
+    // and the light moves onto After Effects' curves in the same step, so
+    // undo puts the old ones back.
+    if let LayerKind::Light { light } = &layer.kind {
+        use lumit_core::model::TransformProp as P;
+        let shape = matches!(prop, P::ConeFeather | P::LightRadius | P::FalloffDistance);
+        if light.legacy_shape && shape {
+            ops.push(Op::SetLightSettings {
+                comp,
+                layer: layer.id,
+                settings: lumit_core::model::LightSettings {
+                    legacy_shape: false,
+                    ..light.settings()
+                },
+            });
+        }
+    }
     ops
 }
 

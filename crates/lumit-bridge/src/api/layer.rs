@@ -2542,8 +2542,9 @@ impl BridgeLightSettings {
         }
     }
 
+    /// `legacy_shape` is the light's own, which the window never shows.
     #[frb(ignore)]
-    pub(crate) fn core(self) -> lumit_core::model::LightSettings {
+    pub(crate) fn core(self, legacy_shape: bool) -> lumit_core::model::LightSettings {
         use lumit_core::model::{LightFalloff as F, LightKind as K};
         lumit_core::model::LightSettings {
             kind: match self.kind {
@@ -2559,6 +2560,7 @@ impl BridgeLightSettings {
                 BridgeLightFalloff::InverseSquareClamped => F::InverseSquareClamped,
             },
             two_node: self.two_node,
+            legacy_shape,
         }
     }
 }

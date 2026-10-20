@@ -2273,6 +2273,13 @@ pub struct LightDef {
     pub casts_shadows: bool,
     pub shadow_darkness: Property,
     pub shadow_diffusion: Property,
+    /// A light from before it had rows keeps the edge and the falloff it had:
+    /// its feather measured along the cone's cosine, and a smooth falloff
+    /// that eases out, with a distance of nought meaning none. Every other
+    /// light measures its feather in angle and falls off in a straight line,
+    /// as After Effects does.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub legacy_shape: bool,
 }
 
 /// [`LightDef`] as a file holds it, old keys and new.
@@ -2303,6 +2310,8 @@ struct LightDefFile {
     shadow_darkness: Property,
     #[serde(default = "Property::zero")]
     shadow_diffusion: Property,
+    #[serde(default)]
+    legacy_shape: bool,
     // What a light held before it had rows.
     intensity: Option<Property>,
     half_size: Option<[Property; 2]>,
@@ -2320,6 +2329,8 @@ impl From<LightDefFile> for LightDef {
                 LightFalloff::None
             }
         });
+        // A file with none of the new keys was written before them.
+        let legacy_shape = f.legacy_shape || (f.cone_angle.is_none() && f.intensity_pct.is_none());
         Self {
             kind: f.kind,
             colour: f.colour,
@@ -2344,6 +2355,7 @@ impl From<LightDefFile> for LightDef {
             casts_shadows: f.casts_shadows,
             shadow_darkness: f.shadow_darkness,
             shadow_diffusion: f.shadow_diffusion,
+            legacy_shape,
         }
     }
 }
@@ -2448,6 +2460,7 @@ impl LightDef {
             kind: self.kind,
             falloff: self.falloff,
             two_node: self.two_node,
+            legacy_shape: self.legacy_shape,
         }
     }
 
@@ -2455,6 +2468,7 @@ impl LightDef {
         self.kind = s.kind;
         self.falloff = s.falloff;
         self.two_node = s.two_node;
+        self.legacy_shape = s.legacy_shape;
     }
 }
 
@@ -2477,6 +2491,7 @@ impl Default for LightDef {
             casts_shadows: false,
             shadow_darkness: Self::hundred(),
             shadow_diffusion: Property::zero(),
+            legacy_shape: false,
         }
     }
 }
@@ -2487,6 +2502,10 @@ pub struct LightSettings {
     pub kind: LightKind,
     pub falloff: LightFalloff,
     pub two_node: bool,
+    /// See [`LightDef::legacy_shape`]: carried here so the edit that moves an
+    /// old light onto the new curves undoes back off them.
+    #[serde(default)]
+    pub legacy_shape: bool,
 }
 
 /// One Light layer resolved at a comp time — what the renderer hands to the
@@ -2510,6 +2529,7 @@ pub struct ResolvedLight {
     pub falloff: LightFalloff,
     pub radius_px: f64,
     pub falloff_px: f64,
+    pub legacy_shape: bool,
     /// Depth in comp pixels, and the two out-of-plane rotations. The
     /// Lens flare ignores these — it works in the projected picture, where a
     /// light is wherever it lands. Shading needs them: a rectangle sitting in
@@ -2752,6 +2772,7 @@ impl Composition {
                     falloff: light.falloff,
                     radius_px: light.radius_px.value_at(lt).max(0.0),
                     falloff_px: light.falloff_px.value_at(lt).max(0.0),
+                    legacy_shape: light.legacy_shape,
                     z: position.2,
                     rotation_x_deg: rx,
                     rotation_y_deg: ry,
@@ -4429,6 +4450,7 @@ mod tests {
         assert_eq!(light.falloff, LightFalloff::Smooth);
         assert_eq!(light.radius_px.value_at(0.0), 0.0);
         assert!(!light.two_node, "an old spot aims by its rotation");
+        assert!(light.legacy_shape, "and keeps its old edge and falloff");
 
         // And what it is saved as now reads back unchanged.
         let again: LightDef =

@@ -408,7 +408,7 @@ fn feed_comp(
                 lumit_core::model::LightKind::Parallel => 3,
                 lumit_core::model::LightKind::Ambient => 4,
             }]);
-            h.update(&[l.falloff as u8]);
+            h.update(&[l.falloff as u8, u8::from(l.legacy_shape)]);
             for v in [
                 l.position.0,
                 l.position.1,

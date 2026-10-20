@@ -650,10 +650,20 @@ impl LayerReference {
         &self,
         settings: crate::api::layer::BridgeLightSettings,
     ) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let was = match &layer.kind {
+            lumit_core::model::LayerKind::Light { light } => light.settings(),
+            _ => return Err(BridgeError::InvalidLayer),
+        };
+        let mut settings = settings.core(was.legacy_shape);
+        // A new falloff on an old light takes After Effects' curves with it.
+        if settings.falloff != was.falloff {
+            settings.legacy_shape = false;
+        }
         self.commit(lumit_core::Op::SetLightSettings {
             comp: self.comp_id,
             layer: self.layer_id,
-            settings: settings.core(),
+            settings,
         })
     }
 

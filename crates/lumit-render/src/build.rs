@@ -1161,10 +1161,18 @@ pub fn shading_lights(
                 falloff: l.falloff as u32,
                 radius_px: l.radius_px as f32,
                 falloff_px: l.falloff_px as f32,
+                legacy: l.legacy_shape,
                 cone_cos,
-                // The feather is a share of the cone measured in its cosine,
-                // which at a tenth is the edge spots had before it was a row.
-                cone_inner: cone_cos + (1.0 - cone_cos) * (l.cone_feather / 100.0) as f32,
+                // The feather is a share of the cone's angle, as After Effects
+                // has it. An old light's is a share of its cosine, which at a
+                // tenth is the edge spots had before it was a row.
+                cone_inner: if l.legacy_shape {
+                    cone_cos + (1.0 - cone_cos) * (l.cone_feather / 100.0) as f32
+                } else {
+                    (l.cone_deg * (1.0 - l.cone_feather / 100.0))
+                        .to_radians()
+                        .cos() as f32
+                },
                 axis: unit(place_dir(&place, 0.0, 0.0, 1.0)),
             }
         })

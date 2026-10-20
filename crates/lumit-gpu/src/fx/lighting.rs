@@ -26,6 +26,8 @@ pub struct LightingLight {
     pub falloff: u32,
     pub radius_px: f32,
     pub falloff_px: f32,
+    /// A light from before it had rows, with the old smooth falloff.
+    pub legacy: bool,
     /// Cosine of a spot's half-angle; below -1 means "not a spot".
     pub cone_cos: f32,
     /// Cosine of the angle the feather starts at.
@@ -83,6 +85,7 @@ impl Default for LightingMaterial {
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 struct GpuLight {
+    /// w = 1 for a light from before it had rows.
     c0: [f32; 4],
     c1: [f32; 4],
     c2: [f32; 4],
@@ -133,7 +136,7 @@ impl FxEngine {
         let live = op.lights.len().min(MAX_LIT_LIGHTS);
         for (slot, l) in lights.iter_mut().zip(&op.lights) {
             *slot = GpuLight {
-                c0: v4(l.corners[0], 0.0),
+                c0: v4(l.corners[0], f32::from(u8::from(l.legacy))),
                 c1: v4(l.corners[1], 0.0),
                 c2: v4(l.corners[2], 0.0),
                 c3: v4(l.corners[3], 0.0),

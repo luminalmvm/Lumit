@@ -58,6 +58,9 @@ pub struct ShadingLight {
     pub radius_px: f32,
     /// How far past the radius a smooth falloff takes to reach nothing.
     pub falloff_px: f32,
+    /// A light from before it had rows: its smooth falloff eases out rather
+    /// than running straight, and a distance of nought is no falloff.
+    pub legacy: bool,
     /// Cosine of a spot's half-angle. Anything below -1 means "not a spot",
     /// which is how a point light says it shines everywhere.
     pub cone_cos: f32,
@@ -330,18 +333,27 @@ pub fn highlight(
 }
 
 /// How much of a light is left at `d` comp pixels from it, After Effects'
-/// way: full strength out to the radius, then the chosen falloff. Smooth
-/// squares its ramp so it eases out rather than ending on a crease.
+/// way: full strength out to the radius, then the chosen falloff.
 fn reach(d: f32, light: &ShadingLight) -> f32 {
     use crate::model::LightFalloff;
     let r = light.radius_px;
     match light.falloff {
         LightFalloff::None => 1.0,
         _ if d <= r => 1.0,
-        LightFalloff::Smooth if light.falloff_px <= 0.0 => 0.0,
+        LightFalloff::Smooth if light.falloff_px <= 0.0 => {
+            if light.legacy && r <= 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        }
         LightFalloff::Smooth => {
             let t = (1.0 - (d - r) / light.falloff_px).clamp(0.0, 1.0);
-            t * t
+            if light.legacy {
+                t * t
+            } else {
+                t
+            }
         }
         LightFalloff::InverseSquareClamped => (r / d) * (r / d),
     }
@@ -495,6 +507,7 @@ mod tests {
             falloff: crate::model::LightFalloff::None,
             radius_px: 0.0,
             falloff_px: 0.0,
+            legacy: false,
             cone_cos: -2.0,
             cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
@@ -524,6 +537,7 @@ mod tests {
             falloff: crate::model::LightFalloff::None,
             radius_px: 0.0,
             falloff_px: 0.0,
+            legacy: false,
             cone_cos: -2.0,
             cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
@@ -569,6 +583,7 @@ mod tests {
             falloff: LightFalloff::None,
             radius_px: 0.0,
             falloff_px: 0.0,
+            legacy: false,
             cone_cos: -2.0,
             cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
@@ -605,7 +620,15 @@ mod tests {
             ..plain
         };
         assert!(close(irradiance(below, n, &smooth(150.0, 50.0)), 1.0));
-        assert!(close(irradiance(below, n, &smooth(50.0, 100.0)), 0.25));
+        assert!(close(irradiance(below, n, &smooth(50.0, 100.0)), 0.5));
+        // An old light keeps the eased ramp it had, and a distance of nought
+        // there is no falloff at all.
+        let old = |radius_px, falloff_px| ShadingLight {
+            legacy: true,
+            ..smooth(radius_px, falloff_px)
+        };
+        assert!(close(irradiance(below, n, &old(50.0, 100.0)), 0.25));
+        assert!(close(irradiance(below, n, &old(0.0, 0.0)), 1.0));
         let inverse = ShadingLight {
             falloff: LightFalloff::InverseSquareClamped,
             radius_px: 50.0,
@@ -653,6 +676,7 @@ mod tests {
             falloff: LightFalloff::None,
             radius_px: 0.0,
             falloff_px: 0.0,
+            legacy: false,
             cone_cos: -2.0,
             cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],

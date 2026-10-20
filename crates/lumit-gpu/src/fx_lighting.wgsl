@@ -13,7 +13,8 @@ const MAX_LIT_LIGHTS: u32 = 8u;
 const INV_TWO_PI: f32 = 0.15915494;
 
 struct Light {
-    // Four corners of the emitting rectangle in comp pixels, w unused.
+    // Four corners of the emitting rectangle in comp pixels. c0.w = 1 for a
+    // light from before it had rows; the other three w are unused.
     c0: vec4<f32>,
     c1: vec4<f32>,
     c2: vec4<f32>,
@@ -129,12 +130,13 @@ fn reach(d: f32, l: Light) -> f32 {
         return 1.0;
     }
     if (mode == 1u) {
+        let legacy = l.c0.w > 0.5;
         let falloff_px = l.colour.w;
         if (falloff_px <= 0.0) {
-            return 0.0;
+            return select(0.0, 1.0, legacy && r <= 0.0);
         }
         let t = clamp(1.0 - (d - r) / falloff_px, 0.0, 1.0);
-        return t * t;
+        return select(t, t * t, legacy);
     }
     return (r / d) * (r / d);
 }
