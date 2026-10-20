@@ -239,6 +239,13 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
             if let Some(chain) = &c.chain {
                 hash_chain(&mut h, chain);
             }
+            // A Precomp's retime changes what its whole comp sounds like.
+            if let Some(bus) = &c.retime {
+                format!("{:?}", bus.retime.map).hash(&mut h);
+                bus.zero_s.to_bits().hash(&mut h);
+                format!("{:?}", bus.span).hash(&mut h);
+                bus.retime.pitch_follows_speed.hash(&mut h);
+            }
         }
         // A *Duck under* wire changes what the layer sounds like without
         // touching a keyframe, so the chain — wires and its drivers' values —
@@ -252,6 +259,13 @@ pub(crate) fn jobs_signature(jobs: &[AudioJob], duration_s: f64, master_db: f64)
         // meet the no-op gate and never be heard. Debug text, like the graph
         // above.
         format!("{:?}", j.fade).hash(&mut h);
+        // A retime changes what plays without moving the job.
+        if let Some(r) = &j.retime {
+            format!("{:?}", r.map).hash(&mut h);
+            r.origin_s.to_bits().hash(&mut h);
+            format!("{:?}", r.held).hash(&mut h);
+            r.pitch_follows_speed.hash(&mut h);
+        }
         // The clip's own rack and then the layer's. Whether each is there at
         // all is hashed beside its contents, because an fx switch turned off
         // is a chain that is simply gone.
@@ -766,6 +780,7 @@ pub(crate) fn preview(item: Uuid, sound: lumit_media::SoundSource, start_s: f64)
             chain: None,
             clip: None,
             clip_chain: None,
+            retime: None,
         }];
         let (plan, strips) = lumit_render::export::live_plan(
             &jobs,
@@ -1104,6 +1119,7 @@ mod tests {
             driven: None,
             chain: None,
             clip_chain: None,
+            retime: None,
         }
     }
 
@@ -1217,6 +1233,7 @@ mod tests {
                 offset_s: 0.0,
                 base_s: 0.0,
             })),
+            retime: None,
         };
         let row = Uuid::now_v7();
         let one = || {

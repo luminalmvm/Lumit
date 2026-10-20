@@ -6623,6 +6623,10 @@
   "@menuSplitLayer": {
     "description": "Menu item."
   },
+  "menuKeepPitch": "Keep pitch",
+  "@menuKeepPitch": {
+    "description": "Ticked menu item on a layer or clip that has sound. On, sound played faster or slower keeps its pitch. Off, the pitch rises and falls with the speed, like tape."
+  },
   "menuStretch": "Stretch…",
   "@menuStretch": {
     "description": "Layer context-menu item: opens a small dialogue asking for a new speed or a new duration for the layer."

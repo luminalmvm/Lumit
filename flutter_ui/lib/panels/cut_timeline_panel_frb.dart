@@ -104,6 +104,7 @@ typedef _Press = ({
   bool marquee,
   bool additive,
   CutTool tool,
+  bool stretch,
 });
 
 class CutTimelinePanelFrb extends StatefulWidget {
@@ -509,6 +510,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       marquee: held.marquee,
       additive: held.additive,
       tool: tool,
+      stretch: held.stretch,
     );
     if (held.moved) _showDrag(_press!);
   }
@@ -1630,13 +1632,21 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
     }
     if (event.buttons != kPrimaryMouseButton) return;
     final keys = HardwareKeyboard.instance;
-    final additive = keys.isShiftPressed || keys.isControlPressed;
     var tool = _toolOf(ui);
     // A fade handle, with Select: it takes its corner from the edge, the
     // body and the empty ground outside, as the Audio timeline's handle
     // does. The edge is still trimmed from anywhere below the handle.
     final fade = _fadeAt(ui, track, index, at, tool);
     if (fade != null) hit = (clip: fade.clip, grab: fade.grab);
+    // Shift on an edge, with Select or Ripple, changes the clip's speed
+    // instead of its trim, and leaves the selection alone.
+    final stretch = keys.isShiftPressed &&
+        fade == null &&
+        hit != null &&
+        hit.grab != BarGrab.move &&
+        (tool == CutTool.select || tool == CutTool.ripple);
+    final additive =
+        !stretch && (keys.isShiftPressed || keys.isControlPressed);
     if (hit != null && tool != CutTool.razor) {
       final id = hit.clip.id.toString();
       // A press picks the clip and, while Linked is on, the clips linked to
@@ -1690,6 +1700,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       marquee: hit == null && tool != CutTool.razor,
       additive: additive,
       tool: tool,
+      stretch: stretch,
     );
     _hover.value = null;
     // A gesture under a held tool key: the key gives its tool back on
@@ -1810,6 +1821,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       marquee: held.marquee,
       additive: held.additive,
       tool: held.tool,
+      stretch: held.stretch,
     );
     if (!moved) return;
     if (held.marquee) {
@@ -1853,7 +1865,9 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       _selectIn(Rect.fromPoints(held.from, held.at), held.additive);
       return;
     }
-    if (held.moved && held.clip != null) _commit(_dragOf(held));
+    if (held.moved && held.clip != null) {
+      _commit(_dragOf(held), stretch: held.stretch);
+    }
   }
 
   void _cancel() {
@@ -1991,12 +2005,17 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       targets: targets,
       magnet: _magnet && tool != CutTool.slip,
     );
-    final shift = cutClampShift(
-        clip: clip,
-        grab: held.grab,
-        tool: tool,
-        shift: snapped.delta,
-        next: next);
+    // A stretch isn't held to the media, only to a frame of length.
+    final shift = !held.stretch
+        ? cutClampShift(
+            clip: clip,
+            grab: held.grab,
+            tool: tool,
+            shift: snapped.delta,
+            next: next)
+        : held.grab == BarGrab.trimIn
+            ? min(snapped.delta, to - from - 1)
+            : max(snapped.delta, -(to - from - 1));
     // A target the clamp pulled the drag off is no longer where it landed.
     _caught.value = shift == snapped.delta ? snapped.caught : null;
     // A move of sound alone, with Select. Frames off, it goes where the
@@ -2093,7 +2112,7 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
   /// A gesture let go: written through the one Cut call the tool means, so
   /// the links hold and the whole of it is one undo step. The engine decides
   /// what it will take, and says why when it will not.
-  void _commit(CutDrag drag) {
+  void _commit(CutDrag drag, {bool stretch = false}) {
     final comp = _ui?.selectedComp;
     if (comp == null) return;
     if (drag.shift == 0 && drag.trackShift == 0 && drag.sub == 0) return;
@@ -2110,6 +2129,19 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
       return;
     }
     final linked = _linked;
+    // Shift on an edge: the clip plays faster or slower to fill its new
+    // length.
+    if (stretch && drag.grab != BarGrab.move) {
+      final into = drag.grab == BarGrab.trimIn;
+      _afterCut(_cut(() => comp.cutStretch(
+            clip: pressed.id,
+            startFrame: pressed.startFrame + (into ? drag.shift : 0),
+            endFrame: pressed.endFrame + (into ? 0 : drag.shift),
+            ripple: drag.tool == CutTool.ripple,
+            linked: linked,
+          )));
+      return;
+    }
     final result = _cut(() => switch ((drag.tool, drag.grab)) {
           (CutTool.roll, _) => comp.cutRoll(
               clip: pressed.id,
@@ -2274,6 +2306,22 @@ class _CutTimelinePanelFrbState extends State<CutTimelinePanelFrb>
             clip.fadeOut.seconds > 0 ? l10n.cutRemoveFadeOut : l10n.cutFadeOut,
             endEdge: true,
             frames: clip.fadeOut.seconds > 0 ? 0 : second,
+          ),
+        // Whether the track's sound keeps its pitch when it plays faster or
+        // slower. The whole layer's, so every clip on it follows.
+        if (track.sound)
+          MenuRow(
+            key: const ValueKey('ctl-menu-keep-pitch'),
+            onPressed: () {
+              close(null);
+              track.entry.layer.setPitchFollowsSpeed(
+                  follows: !track.entry.info.pitchFollowsSpeed);
+              _afterCut(BridgeCutResult.done);
+            },
+            child: Row(children: [
+              menuTick(!track.entry.info.pitchFollowsSpeed),
+              Expanded(child: Text(l10n.menuKeepPitch)),
+            ]),
           ),
         MenuRow(
           key: const ValueKey('ctl-menu-open-comp'),

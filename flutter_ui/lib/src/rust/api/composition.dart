@@ -1143,6 +1143,25 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceCutSplitAudioStreams(
               that: this, clips: clips);
 
+  /// Stretch a clip so its edges land on `start_frame` and `end_frame`: it
+  /// plays the same stretch of source at whatever speed that takes. With
+  /// `ripple` everything after it follows its change of length, and with
+  /// `linked` the clips linked to it stretch with it. On a picture layer it
+  /// is refused where it would cover a neighbour.
+  BridgeCutResult cutStretch(
+          {required UuidValue clip,
+          required PlatformInt64 startFrame,
+          required PlatformInt64 endFrame,
+          required bool ripple,
+          required bool linked}) =>
+      BridgeLib.instance.api.crateApiCompositionCompositionReferenceCutStretch(
+          that: this,
+          clip: clip,
+          startFrame: startFrame,
+          endFrame: endFrame,
+          ripple: ripple,
+          linked: linked);
+
   /// Put a transition of `frames` on one edge of a clip: its end when
   /// `end_edge` is set, and its start otherwise.
   ///

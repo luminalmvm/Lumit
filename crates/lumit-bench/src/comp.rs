@@ -262,6 +262,7 @@ pub(crate) fn layer(name: &str, kind: LayerKind, span: Rational) -> Layer {
         audio_only: false,
         audio_streams: Default::default(),
         adjustment: false,
+        pitch_follows_speed: false,
         retime: None,
         interpolation: Interpolation::default(),
         parked_flow: None,

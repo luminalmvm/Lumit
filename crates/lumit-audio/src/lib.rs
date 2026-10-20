@@ -27,6 +27,7 @@ pub mod meter;
 pub mod mix;
 pub mod peaks;
 pub mod spectra;
+pub mod speed;
 pub mod stream;
 
 #[derive(Debug, thiserror::Error)]
