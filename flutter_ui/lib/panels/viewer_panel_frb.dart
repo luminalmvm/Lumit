@@ -777,8 +777,12 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                   ui.keymap.wheelHeld(BridgeWheelAction.dropperSample)) {
                 return;
               }
-              _scrollZoom(event.localPosition, event.scrollDelta.dy,
-                  constraints, size, fitted);
+              // Through the resolver, so a camera tool's wheel dolly on the
+              // picture takes the notch instead.
+              GestureBinding.instance.pointerSignalResolver.register(
+                  event,
+                  (_) => _scrollZoom(event.localPosition,
+                      event.scrollDelta.dy, constraints, size, fitted));
             }
           },
           child: ValueListenableBuilder<int>(
