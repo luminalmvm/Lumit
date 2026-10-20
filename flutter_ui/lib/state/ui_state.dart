@@ -71,6 +71,7 @@ import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/state/keymap.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/motion_paths.dart';
+import 'package:lumit_flutter/state/view_projection.dart';
 import 'package:lumit_flutter/state/online_door.dart';
 import 'package:lumit_flutter/state/online_footage.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
@@ -534,6 +535,11 @@ class LumitUiState extends ChangeNotifier {
   /// engine samples it. Held against the document revision, so a hover asks
   /// the engine nothing and a still layer is never asked about twice.
   final MotionPaths motionPaths = MotionPaths();
+
+  /// How each Viewer's picture sees the comp's 3D space, so a 3D layer's
+  /// box is drawn through the same camera. Held against the frame, the
+  /// document and the view, so a hover asks the engine nothing.
+  final ViewProjections viewProjections = ViewProjections();
 
   /// Which tool the toolbar has armed (docs/07 §1.7).
   ///
@@ -1675,6 +1681,7 @@ class LumitUiState extends ChangeNotifier {
     for (final engineId in views.takeClosed()) {
       _controllers.remove(engineId)?.dispose();
       _pushedCamera.remove(engineId);
+      viewProjections.forget(engineId);
       try {
         _app.project?.closeViewerView(view: engineId);
       } catch (_) {

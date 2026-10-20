@@ -1,0 +1,48 @@
+// How each Viewer's picture sees its comp's 3D space, held between rebuilds.
+//
+// A 3D layer's box is drawn through the camera the picture is drawn through,
+// and the engine is the one that knows where that camera is: a keyed one, a
+// two-node one aimed at its point of interest, or one following a solve. So
+// the engine is asked, and only when the answer could have changed.
+
+import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+
+/// The engine's view rows per Viewer, asked again only when the comp, the
+/// frame, the document, a solve or the view itself has moved.
+class ViewProjections {
+  final Map<int, _Held> _byView = {};
+
+  /// Comp space to the picture, three rows of four, for [viewId] showing
+  /// [comp] at [frame] through [view] (null for the comp's own camera). Null
+  /// while the engine cannot say, in which case 3D layers are drawn flat.
+  List<double>? of({
+    required CompositionReference comp,
+    required int viewId,
+    required int frame,
+    required BigInt? revision,
+    required int generation,
+    required BridgeCameraPose? view,
+  }) {
+    final key = (comp.internalid, frame, revision, generation, view);
+    final held = _byView[viewId];
+    if (held != null && held.key == key) return held.rows;
+    List<double>? rows;
+    try {
+      rows = comp.viewProjection(frame: BigInt.from(frame), view: view);
+    } catch (_) {
+      // No worker yet, or a comp that has gone. Asked again on the next move.
+    }
+    _byView[viewId] = _Held(key, rows);
+    return rows;
+  }
+
+  /// Let go of a closed view's rows.
+  void forget(int viewId) => _byView.remove(viewId);
+}
+
+class _Held {
+  final Object key;
+  final List<double>? rows;
+  const _Held(this.key, this.rows);
+}
