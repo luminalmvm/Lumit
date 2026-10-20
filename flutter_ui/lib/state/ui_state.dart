@@ -547,6 +547,9 @@ class LumitUiState extends ChangeNotifier {
   /// document and the view, so a hover asks the engine nothing.
   final ViewProjections viewProjections = ViewProjections();
 
+  /// Where a selected camera is and which way it faces, for its 3D handles.
+  final CameraPoses cameraPoses = CameraPoses();
+
   /// Which tool the toolbar has armed (docs/07 §1.7).
   ///
   /// Session state at the shell level, like the dropper below it and for the

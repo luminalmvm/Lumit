@@ -372,6 +372,81 @@ class ViewerStage extends StatelessWidget {
     return out;
   }
 
+  /// The selected cameras, each as a mark at its eye for the 3D handles,
+  /// turned the way the engine has it aimed. Cameras ignore their parents
+  /// here as the render does, so the eye is in comp space.
+  List<LayerBox> _cameraBoxes() {
+    final ids = uiState.selectedLayerIds;
+    // Only the Selection tool draws them, so nothing else asks for the pose.
+    if (fitted.isEmpty ||
+        ids.isEmpty ||
+        !wireframes ||
+        uiState.tools.tool.group != ToolGroup.select) {
+      return const [];
+    }
+    final model = uiState.model;
+    final frame = uiState.playheadFrame.value;
+    late final at = timeOfFrame(comp, frame);
+    double read(BridgeScalar s) => switch (s) {
+          BridgeScalar_Static(:final field0) => field0,
+          _ => sampledScalar(s, at),
+        };
+    final out = <LayerBox>[];
+    for (final entry in model.heldLayers) {
+      final id = entry.layer.internallayerId;
+      if (entry.info.kind != BridgeLayerKind.camera || !ids.contains(id)) {
+        continue;
+      }
+      final tf = uiState.liveTransforms.value[id] ?? entry.info.transform;
+      final pose = uiState.cameraPoses.of(entry.layer,
+          id: id,
+          frame: frame,
+          revision: model.heldRevision,
+          generation: uiState.solveLanded.value);
+      final aim = tf.camera;
+      if (pose == null || aim == null) continue;
+      out.add(LayerBox(
+        layer: entry.layer,
+        id: id,
+        map: ViewerLayerMap.of(
+          positionX: read(tf.positionX),
+          positionY: read(tf.positionY),
+          anchorX: 0,
+          anchorY: 0,
+          scaleXPercent: 100,
+          scaleYPercent: 100,
+          rotationDegrees: pose.rotationZ,
+          origin: fitted.topLeft,
+          viewScale:
+              compSize.width == 0 ? 1.0 : fitted.width / compSize.width,
+          depth: ViewerDepth(
+            view: () => uiState.viewProjections.of(
+              comp: comp,
+              viewId: viewId,
+              frame: frame,
+              revision: model.heldRevision,
+              generation: uiState.solveLanded.value,
+              view: _viewPose(),
+            ),
+            z: read(tf.positionZ),
+            rotationX: pose.rotationX,
+            rotationY: pose.rotationY,
+          ),
+        ),
+        bounds: Size.zero,
+        draggable: false,
+        scalable: false,
+        rotationDegrees: pose.rotationZ,
+        marker: true,
+        transform: tf,
+        aim: (entry.info.camera?.twoNode ?? false)
+            ? (read(aim.poiX), read(aim.poiY), read(aim.poiZ))
+            : null,
+      ));
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
@@ -624,6 +699,7 @@ class ViewerStage extends StatelessWidget {
                         comp: comp,
                         uiState: uiState,
                         boxes: boxes,
+                        cameras: _cameraBoxes(),
                         showControls: wireframes,
                         tool: uiState.tools.tool,
                         // The pivot, while the tool that turns about it is in

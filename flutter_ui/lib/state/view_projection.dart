@@ -50,3 +50,31 @@ class _Held {
   final List<double> rows;
   const _Held(this.key, this.rows);
 }
+
+/// The engine's pose of each camera layer, aim and solve included, asked
+/// again only when the frame, the document or a solve has moved. Only a
+/// selected camera's handles ask, so a comp with cameras costs nothing until
+/// one is picked.
+class CameraPoses {
+  final Map<Object, (Object, BridgeCameraPose?)> _byLayer = {};
+
+  BridgeCameraPose? of(
+    LayerReference layer, {
+    required Object id,
+    required int frame,
+    required BigInt? revision,
+    required int generation,
+  }) {
+    final key = (frame, revision, generation);
+    final held = _byLayer[id];
+    if (held != null && held.$1 == key) return held.$2;
+    BridgeCameraPose? pose;
+    try {
+      pose = layer.cameraPoseAt(frame: BigInt.from(frame));
+    } catch (_) {
+      // A camera that has gone. Asked again once the document moves.
+    }
+    _byLayer[id] = (key, pose);
+    return pose;
+  }
+}

@@ -208,6 +208,9 @@ class LayerBox {
   /// sets, or null where nothing on the box writes it.
   final BridgeTransform? transform;
 
+  /// A two-node camera's point of interest, which gets handles of its own.
+  final Vec3? aim;
+
   const LayerBox({
     required this.layer,
     required this.id,
@@ -223,6 +226,7 @@ class LayerBox {
     this.motionPath,
     this.marker = false,
     this.transform,
+    this.aim,
   });
 
   /// A point of the layer's **art** on screen.
@@ -254,6 +258,7 @@ class LayerBox {
         motionPath: motionPath,
         marker: marker,
         transform: transform,
+        aim: aim,
       );
 
   /// The same box with the layer scaled to [sxPercent] / [syPercent] — the
@@ -894,7 +899,7 @@ class Handles3d {
   final LayerBox box;
   final Gizmo3d gizmo;
 
-  /// x, y and z of Position.
+  /// x, y and z: Position, or a two-node camera's point of interest.
   final List<BridgeTransformProp> props;
 
   const Handles3d(this.box, this.gizmo, this.props);
@@ -912,6 +917,9 @@ BridgeScalar? scalarOf(BridgeTransform tf, BridgeTransformProp prop) =>
       BridgeTransformProp.rotation => tf.rotation,
       BridgeTransformProp.rotationX => tf.rotationX,
       BridgeTransformProp.rotationY => tf.rotationY,
+      BridgeTransformProp.poiX => tf.camera?.poiX,
+      BridgeTransformProp.poiY => tf.camera?.poiY,
+      BridgeTransformProp.poiZ => tf.camera?.poiZ,
       _ => null,
     };
 
@@ -956,25 +964,44 @@ LayerBox? primary3d(List<LayerBox> boxes, UuidValue? first) {
   return deep.firstOrNull;
 }
 
-/// The move handles of a 3D layer or a light, at its anchor. None where the
-/// anchor is behind the eye or Position is an expression's.
+/// The move handles of a 3D layer, a light or a camera: one set at its
+/// anchor, and a second at a two-node camera's point of interest. None where
+/// the place is behind the eye or a value it writes is an expression's.
 List<Handles3d> handles3dOf(LayerBox box, GizmoAxes mode) {
   final tf = box.transform;
   final map = box.map;
   if (tf == null || !map.projected) return const [];
-  const props = [
-    BridgeTransformProp.positionX,
-    BridgeTransformProp.positionY,
-    BridgeTransformProp.positionZ,
-  ];
-  if (props.any((p) => scalarOf(tf, p) is BridgeScalar_Expression)) {
-    return const [];
+  final local = localAxes(turnOfBox(box));
+  final out = <Handles3d>[];
+  for (final (at, props) in [
+    (
+      (map.px, map.py, map.depth!.z),
+      const [
+        BridgeTransformProp.positionX,
+        BridgeTransformProp.positionY,
+        BridgeTransformProp.positionZ,
+      ]
+    ),
+    if (box.aim case final aim?)
+      (
+        aim,
+        const [
+          BridgeTransformProp.poiX,
+          BridgeTransformProp.poiY,
+          BridgeTransformProp.poiZ,
+        ]
+      ),
+  ]) {
+    if (props.any((p) => switch (scalarOf(tf, p)) {
+          null || BridgeScalar_Expression() => true,
+          _ => false,
+        })) {
+      continue;
+    }
+    final gizmo = Gizmo3d.of(map, at: at, local: local, mode: mode);
+    if (gizmo != null) out.add(Handles3d(box, gizmo, props));
   }
-  final gizmo = Gizmo3d.of(map,
-      at: (map.px, map.py, map.depth!.z),
-      local: localAxes(turnOfBox(box)),
-      mode: mode);
-  return gizmo == null ? const [] : [Handles3d(box, gizmo, props)];
+  return out;
 }
 
 /// What the pointer is doing to the picture right now.
@@ -1022,6 +1049,10 @@ class ViewerGizmoLayer extends StatefulWidget {
   /// Every layer of the fronted comp, top first, with its box.
   final List<LayerBox> boxes;
 
+  /// The selected cameras, as marks at their eyes: not on the picture to
+  /// click, but moved by their 3D handles once picked in the Timeline.
+  final List<LayerBox> cameras;
+
   /// Whether the boxes, handles and hover highlight are drawn at all — the
   /// Viewer bar's wireframe switch. Gestures still work when they are off:
   /// hiding the controls is about the *picture* being unobstructed, not about
@@ -1065,6 +1096,7 @@ class ViewerGizmoLayer extends StatefulWidget {
     this.showAnchors = false,
     this.viewId,
     this.onZoom,
+    this.cameras = const [],
   });
 
   @override
@@ -1896,11 +1928,14 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           _set = set;
           _part = part;
           _last3d = set.at;
-          // The rest of the selection moves with it, as a body drag does.
-          final carried = [
-            for (final box in selected)
-              if (box.id != set.box.id && box.transform != null) box
-          ];
+          // A point of interest moves alone. Position takes the rest of the
+          // selection with it, as a body drag does.
+          final carried = set.props.first == BridgeTransformProp.poiX
+              ? const <LayerBox>[]
+              : [
+                  for (final box in [...selected, ...widget.cameras])
+                    if (box.id != set.box.id && box.transform != null) box
+                ];
           final riders = ridingAlong(
               {set.box.id, for (final box in carried) box.id},
               widget.uiState.model.heldLayers);
@@ -2132,12 +2167,12 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
   // --- 3D arrows and squares ------------------------------------------------
 
-  /// The 3D handles on screen, on the selected 3D layer or light picked
-  /// first, in the axes the toolbar is set to.
+  /// The 3D handles on screen, on the selected 3D layer, light or camera
+  /// picked first, in the axes the toolbar is set to.
   List<Handles3d> _setsOf(List<LayerBox> selected) {
     if (!widget.showControls || !_selectionTool) return const [];
-    final primary =
-        primary3d(selected, widget.uiState.selectedLayer.value?.internallayerId);
+    final primary = primary3d([...selected, ...widget.cameras],
+        widget.uiState.selectedLayer.value?.internallayerId);
     return primary == null
         ? const []
         : handles3dOf(primary, widget.uiState.tools.axes);
@@ -2212,7 +2247,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// [tf] with a 3D drag's three values in it.
   BridgeTransform _with3d(
           BridgeTransform tf, List<BridgeTransformProp> props, Vec3 to) =>
-      transformWith(tf, positionX: to.$1, positionY: to.$2, positionZ: to.$3);
+      props.first == BridgeTransformProp.poiX
+          ? transformWith(tf, pointOfInterest: to)
+          : transformWith(tf,
+              positionX: to.$1, positionY: to.$2, positionZ: to.$3);
 
   /// The boxes and the picture follow the drag: the boxes are rebuilt from
   /// the provisional transforms, children included, and one layer moving
@@ -2283,7 +2321,12 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   List<String> _readout3d() {
     final set = _set, to = _last3d;
     if (set == null || to == null) return const [];
-    return _readout(l10n.transformPosition, set.at, to);
+    return _readout(
+        set.props.first == BridgeTransformProp.poiX
+            ? l10n.transformPointOfInterest
+            : l10n.transformPosition,
+        set.at,
+        to);
   }
 
   /// The same for an Alt drag across the view, on the layer the handles
@@ -2680,6 +2723,7 @@ BridgeTransform transformWith(
   double? rotation,
   double? rotationX,
   double? rotationY,
+  Vec3? pointOfInterest,
 }) {
   BridgeScalar put(double? value, BridgeScalar keep) =>
       value == null ? keep : BridgeScalar.static_(value);
@@ -2696,7 +2740,17 @@ BridgeTransform transformWith(
     rotationX: put(rotationX, tf.rotationX),
     rotationY: put(rotationY, tf.rotationY),
     opacity: tf.opacity,
-    camera: camera,
+    camera: camera == null
+        ? null
+        : BridgeCameraChannels(
+            poiX: put(pointOfInterest?.$1, camera.poiX),
+            poiY: put(pointOfInterest?.$2, camera.poiY),
+            poiZ: put(pointOfInterest?.$3, camera.poiZ),
+            zoom: camera.zoom,
+            focusDistance: camera.focusDistance,
+            aperture: camera.aperture,
+            blurLevel: camera.blurLevel,
+          ),
   );
 }
 
