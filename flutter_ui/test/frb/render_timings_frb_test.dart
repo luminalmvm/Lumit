@@ -77,6 +77,7 @@ void main() {
           scale: 1.0,
           mode: BridgePlaybackMode.everyFrame,
         view: 0,
+        active: true,
         );
         // Wait for *this* ask's profile - `isNotEmpty` was already true on
         // the second pass, so the loop never waited for the cache hit's

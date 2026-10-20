@@ -208,6 +208,24 @@ impl WorkerState {
     fn camera_view(&self) -> Option<(Uuid, lumit_core::model::CameraPose)> {
         self.camera_views.get(&self.view_id()).copied()
     }
+
+    /// The view the user is working in: the one the last active render or the
+    /// playback named, or the one being served before either has.
+    fn active_view(&self) -> u32 {
+        self.last_shown
+            .as_ref()
+            .map_or_else(|| self.view_id(), |shown| shown.0)
+    }
+
+    /// Serve the active view and look its way, for the work that follows it
+    /// rather than whichever view rendered last: the fill, the cache bar and
+    /// the drag previews.
+    fn serve_active(&mut self) -> u32 {
+        let view = self.active_view();
+        self.set_view_id(view);
+        look_at(self, view);
+        view
+    }
 }
 
 /// One outstanding ask to the disk tier: where the frame sits (for the upload
@@ -411,6 +429,9 @@ const BAR_REFINE_PER_TURN_PLAYING: u64 = 256;
 #[derive(PartialEq, Eq, Clone, Copy)]
 struct BarFingerprint {
     comp: Uuid,
+    /// The view the strip is named for: the active one, through its own 3D
+    /// view and the chip.
+    view: u32,
     frames: u64,
     scale_q: u16,
     revision: u64,
@@ -845,9 +866,15 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
         };
         (project.store.snapshot(), project.store.revision())
     };
+    // The bar shows what the active view will be served, so its frames are
+    // named the way that view's are, under its look.
+    let view = state.serve_active();
+    let camera = state.camera_views.get(&view).copied();
+    let document = viewed_kept(&mut state.viewed, state.prefix, camera, revision, document);
     let (ram_entries, disk_entries) = (crate::framecache::stats().2 as u64, state.disk.stats().1);
     let fingerprint = BarFingerprint {
         comp: comp_id,
+        view,
         frames,
         scale_q,
         revision,
@@ -872,7 +899,8 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
     // arriving in a tier leaves the names alone, so the strip stands and only its
     // values need refreshing.
     let renamed = was.is_none_or(|old| {
-        (old.comp, old.frames, old.scale_q, old.revision) != (comp_id, frames, scale_q, revision)
+        (old.comp, old.view, old.frames, old.scale_q, old.revision)
+            != (comp_id, view, frames, scale_q, revision)
     });
     state.published_bar = Some(fingerprint);
     state.bar_published_at = std::time::Instant::now();
@@ -1615,6 +1643,8 @@ fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStre
 /// nothing (or no room) left, so an idle editor stops spending the GPU.
 #[frb(ignore)]
 fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
+    // The fill banks for the view the user is working in, under its look.
+    state.serve_active();
     // A non-neutral Viewer view makes every frame unnameable, so the
     // fill would render frame after frame and bank none of them, never reach
     // the end of its list, and never stop — GPU work for nothing, for as long
@@ -2573,6 +2603,10 @@ pub struct RenderCompRequest {
     /// drag previews and the idle work that follow serve the same view without
     /// each growing a parameter (docs/impl/multi-viewer.md §2.1).
     pub view: u32,
+    /// Whether that view is the active one. Only the active view moves the
+    /// fill's anchor and the chip, so the other panes of a split Viewer can
+    /// render without pulling the fill and the cache bar over to themselves.
+    pub active: bool,
     /// Where to cut this layer's effect stack short, or `None` for the picture
     /// as the document has it. Latched onto [`WorkerState::prefix`],
     /// so it describes the Viewer from here until the next render says
@@ -4110,7 +4144,7 @@ fn handle_requests(
         // froze on its first frame while the scopes kept updating. A trace and
         // a frame are different jobs; neither is the other's replacement.
         let (pictures, scope, sample, superseded) =
-            drain_to_newest(request, receiver, classify_request, state.view_id());
+            drain_to_newest(request, receiver, classify_request, state.active_view());
         // Deliberately not logged. Superseding is the normal, healthy case —
         // it is how a drag stays attached to the pointer — and a line per
         // completed render is console I/O on the worker thread for something
@@ -4622,11 +4656,18 @@ fn render_comp(
     // (docs/impl/multi-viewer.md §2.1), and looking the way that view looks.
     state.set_view_id(req.view);
     look_at(state, req.view);
-    // The user is looking here now: anchor the idle fill on it, and wake it.
-    state.last_shown = Some((state.view_id(), req.comp.clone(), req.frame, req.scale));
-    state.fill_exhausted = false;
-    set_prefix(state, req.prefix);
-    let document = viewed_through(state.prefix, state.camera_view(), document);
+    // Only the active view moves what the user is looking at: the fill's
+    // anchor, and the chip, which only it carries. Another pane's render must
+    // not pull either over to itself.
+    let prefix = if req.active {
+        state.last_shown = Some((req.view, req.comp.clone(), req.frame, req.scale));
+        state.fill_exhausted = false;
+        set_prefix(state, req.prefix);
+        state.prefix
+    } else {
+        None
+    };
+    let document = viewed_through(prefix, state.camera_view(), document);
     watched(state, stream, req.frame, |state, stream| {
         publish_frame(
             state,
@@ -4972,6 +5013,8 @@ fn publish_preview(
     let (comp_width, comp_height) = document
         .comp(comp.id)
         .map_or((1, 1), |c| (c.width, c.height));
+    // A drag is in the active view, whichever pane rendered last.
+    state.serve_active();
     let document = viewed_through(
         state.prefix,
         state.camera_view(),
@@ -6757,6 +6800,7 @@ mod tests {
                 scale: 1.0,
                 prefix: None,
                 view: 0,
+                active: true,
             })
         };
         assert!(matches!(

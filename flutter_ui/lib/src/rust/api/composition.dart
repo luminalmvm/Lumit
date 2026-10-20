@@ -1805,19 +1805,23 @@ class CompositionReference {
   /// `view` names which Viewer view asked (docs/impl/multi-viewer.md §2.1).
   /// The worker latches it, so the drag previews and the idle work that
   /// follow serve the same view without each growing a parameter.
+  /// `active` says it is the view being worked in, which the idle fill, the
+  /// cache bar and the drags follow.
   void renderFrame(
           {required BigInt frame,
           required double scale,
           required BridgePlaybackMode mode,
           BridgePrefixPoint? prefix,
-          required int view}) =>
+          required int view,
+          required bool active}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderFrame(
           that: this,
           frame: frame,
           scale: scale,
           mode: mode,
           prefix: prefix,
-          view: view);
+          view: view,
+          active: active);
 
   /// Ask for `frame` with one clip's retime replaced — the live envelope
   /// drag, which never touches the document.
