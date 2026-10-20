@@ -7196,7 +7196,7 @@
   "@panel3dViewport": {
     "description": "The name at the top of a 3D viewport: a Viewer panel looking through a camera of its own, moved with the mouse."
   },
-  "tipViewportProjection": "Perspective or orthographic",
+  "tipViewportProjection": "Projection",
   "@tipViewportProjection": {
     "description": "Tooltip on the switch under a 3D viewport's corner axes, which reads Persp or Ortho."
   },
