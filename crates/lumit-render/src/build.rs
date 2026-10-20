@@ -363,7 +363,8 @@ fn drawn(
 ///
 /// A parented layer's values are read inside its parent's space, so the same
 /// numbers under a new parent land somewhere else. This works out the numbers
-/// that land it where it already was: position, scale and the three rotations.
+/// that land it where it already was: position, scale and the rotation, or on
+/// a 3D layer the Orientation, its X, Y and Z Rotation staying as they are.
 /// The anchor point stays, and opacity is not inherited. A property that
 /// already reads right is left out, and so is one driven by an expression.
 ///
@@ -412,24 +413,14 @@ pub fn reparented(
     let placed = lumit_gpu::concat_place(carry, own_placement(layer, t_comp, &context));
     let mut to =
         lumit_gpu::unplace_matrix(placed, (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32));
-    // The anchor's own z, and the layer's Orientation, stay where they are,
-    // so the position and the rotations take what they leave.
+    // The anchor's own z stays where it is, so the position takes what it
+    // leaves.
     if layer.switches.three_d {
         let a = [&tr.anchor_x, &tr.anchor_y, &tr.anchor_z].map(|p| at(p) as f32);
         let p = |r: usize| {
             placed[0][r] * a[0] + placed[1][r] * a[1] + placed[2][r] * a[2] + placed[3][r]
         };
         (to.position, to.z) = ((p(0), p(1)), p(2));
-        let orientation = tr.orientation_at(lt, &at);
-        let turn = (
-            f64::from(to.rotation_x_deg),
-            f64::from(to.rotation_y_deg),
-            f64::from(to.rotation_deg),
-        );
-        let rows = (at(&tr.rotation_x), at(&tr.rotation_y), at(&tr.rotation));
-        let (x, y, z) =
-            lumit_core::camera::unoriented(orientation, turn, tr.after_effects_order, rows);
-        (to.rotation_x_deg, to.rotation_y_deg, to.rotation_deg) = (x as f32, y as f32, z as f32);
     }
     // Scale Z stretches what is parented to the layer and how far Anchor Z
     // pushes it, so it is carried as the other two are.
@@ -444,13 +435,38 @@ pub fn reparented(
     };
     // A flip can be written two ways: one axis negative, or the other one
     // negative and half a turn. Keep the way the layer already has it.
-    let (sx, sy, rz) = if f64::from(to.scale.0) * at(&tr.scale_x) < 0.0 {
+    let (sx, sy, mut rz) = if f64::from(to.scale.0) * at(&tr.scale_x) < 0.0 {
         (-to.scale.0, -to.scale.1, to.rotation_deg + 180.0)
     } else {
         (to.scale.0, to.scale.1, to.rotation_deg)
     };
 
+    // A 3D layer keeps its rotations and its Orientation takes the turn, as
+    // After Effects does it, unless an expression drives the Orientation.
+    let reorient = layer.switches.three_d
+        && !tr
+            .orientation
+            .iter()
+            .any(|p| matches!(p.animation, lumit_core::anim::Animation::Expression(_)));
     let mut edits = Vec::new();
+    if layer.switches.three_d {
+        let orientation = tr.orientation_at(lt, &at);
+        let turn = (
+            f64::from(to.rotation_x_deg),
+            f64::from(to.rotation_y_deg),
+            f64::from(rz),
+        );
+        let rows = (at(&tr.rotation_x), at(&tr.rotation_y), at(&tr.rotation));
+        let ae_order = tr.after_effects_order;
+        if reorient {
+            let o = lumit_core::camera::reoriented(turn, rows, ae_order, orientation);
+            edits = orientation_edits(tr, orientation, o);
+        } else {
+            let (x, y, z) = lumit_core::camera::unoriented(orientation, turn, ae_order, rows);
+            (to.rotation_x_deg, to.rotation_y_deg, rz) = (x as f32, y as f32, z as f32);
+        }
+    }
+
     let mut edit = |prop: P, to: f32, turns: bool, gain: Option<f64>| {
         let Some(property) = tr.get(prop) else { return };
         let animation = made_up(property, at(property), f64::from(to), turns, gain);
@@ -461,15 +477,98 @@ pub fn reparented(
     edit(P::PositionY, to.position.1, false, along(1));
     edit(P::ScaleX, sx, false, None);
     edit(P::ScaleY, sy, false, None);
-    edit(P::Rotation, rz, true, Some(1.0));
+    if !reorient {
+        edit(P::Rotation, rz, true, Some(1.0));
+    }
     // A 2D layer's hidden 3D values are kept for when it goes 3D again.
     if layer.switches.three_d {
         edit(P::PositionZ, to.z, false, along(2));
-        edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
-        edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+        if !reorient {
+            edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
+            edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+        }
         edit(P::ScaleZ, sz, false, None);
     }
     edits
+}
+
+/// The edits that take `tr`'s Orientation from `from` to `to` at the moment
+/// of a reparent. A still one is written as it is; a keyed one has every key
+/// turned by the same turn, so its whole move comes along, with all three
+/// angles keyed together as After Effects keys them.
+fn orientation_edits(
+    tr: &lumit_core::model::TransformGroup,
+    from: (f64, f64, f64),
+    to: (f64, f64, f64),
+) -> Vec<(
+    lumit_core::model::TransformProp,
+    lumit_core::anim::Animation,
+)> {
+    use lumit_core::anim::{Animation, Keyframe, SideInterp};
+    use lumit_core::model::TransformProp as P;
+    const AXES: [P; 3] = [P::OrientationX, P::OrientationY, P::OrientationZ];
+
+    // The f64 maths is exact well past a thousandth; past that it is noise.
+    let differs = |a: f64, b: f64| ((a - b) * 1e3).round() != 0.0;
+    if !(differs(from.0, to.0) || differs(from.1, to.1) || differs(from.2, to.2)) {
+        return Vec::new();
+    }
+    let lanes = tr.orientation.each_ref().map(|p| match &p.animation {
+        Animation::Keyframed(keys) => keys.as_slice(),
+        _ => &[],
+    });
+    let mut times: Vec<_> = lanes.iter().copied().flatten().map(|k| k.time).collect();
+    times.sort();
+    times.dedup();
+    if times.is_empty() {
+        let to = [to.0, to.1, to.2];
+        return (0..3)
+            .filter(|&i| differs(tr.orientation[i].value_at(0.0), to[i]))
+            .map(|i| (AXES[i], Animation::Static(to[i])))
+            .collect();
+    }
+    let turned: Vec<_> = times
+        .iter()
+        .map(|time| {
+            let lt = time.to_f64();
+            let o = tr.orientation_at(lt, &|p| p.value_at(lt));
+            let o = lumit_core::camera::orientation_turned(o, from, to);
+            [o.0, o.1, o.2]
+        })
+        .collect();
+    // A key an angle didn't have borrows another's ease, but not its speed,
+    // which belonged to that one angle.
+    let borrowed = |side: SideInterp| match side {
+        SideInterp::Bezier { speed, .. } if speed != 0.0 => SideInterp::Linear,
+        other => other,
+    };
+    (0..3)
+        .map(|i| {
+            let keys = times
+                .iter()
+                .zip(&turned)
+                .map(|(&time, o)| {
+                    let own = lanes[i].iter().find(|k| k.time == time);
+                    let (interp_in, interp_out) = match own {
+                        Some(k) => (k.interp_in, k.interp_out),
+                        None => lanes
+                            .iter()
+                            .find_map(|lane| lane.iter().find(|k| k.time == time))
+                            .map_or((SideInterp::Linear, SideInterp::Linear), |k| {
+                                (borrowed(k.interp_in), borrowed(k.interp_out))
+                            }),
+                    };
+                    Keyframe {
+                        time,
+                        value: o[i],
+                        interp_in,
+                        interp_out,
+                    }
+                })
+                .collect();
+            (AXES[i], Animation::Keyframed(keys))
+        })
+        .collect()
 }
 
 /// The ops that make `parent` the parent of `layer` in `comp` and keep the
@@ -515,7 +614,7 @@ pub fn parent_ops(
 }
 
 /// [`reparented`] for a camera or a light, which has no scale or anchor of its
-/// own: the eye, the rows and an aimed one's point of interest, carried
+/// own: the eye, the Orientation and an aimed one's point of interest, carried
 /// out of the old parent's space and into the new one's.
 ///
 /// As After Effects does it, every key is carried through the same two parents
@@ -560,30 +659,22 @@ fn reparented_eye(
         LayerKind::Light { light } => light.two_node,
         _ => false,
     };
-    let mut props = vec![
-        P::PositionX,
-        P::PositionY,
-        P::PositionZ,
-        P::RotationX,
-        P::RotationY,
-        P::Rotation,
-    ];
+    // The rows stay and the Orientation takes the turn, as on any 3D layer,
+    // unless an expression drives the Orientation.
+    let reorient = !layer
+        .transform
+        .orientation
+        .iter()
+        .any(|p| matches!(p.animation, Animation::Expression(_)));
+    let mut props = vec![P::PositionX, P::PositionY, P::PositionZ];
+    if reorient {
+        props.extend([P::OrientationX, P::OrientationY, P::OrientationZ]);
+    } else {
+        props.extend([P::RotationX, P::RotationY, P::Rotation]);
+    }
     if two_node {
         props.extend([P::PoiX, P::PoiY, P::PoiZ]);
     }
-    let channels: Vec<_> = props
-        .iter()
-        .filter_map(|&p| Some((p, layer.prop(p)?)))
-        .collect();
-    let keys = |property: &lumit_core::anim::Property| match &property.animation {
-        Animation::Keyframed(keys) => keys.clone(),
-        _ => Vec::new(),
-    };
-    let lanes: Vec<Vec<Keyframe>> = channels.iter().map(|(_, p)| keys(p)).collect();
-    let mut times: Vec<_> = lanes.iter().flatten().map(|k| k.time).collect();
-    times.sort();
-    times.dedup();
-
     let ae_order = layer.transform.after_effects_order;
     // Every channel's value at layer time `lt`, carried as one eye.
     let carried = |lt: f64| {
@@ -592,7 +683,6 @@ fn reparented_eye(
                 .prop(prop)
                 .map_or(0.0, |p| p.value_at_with_context(lt, context.clone()))
         };
-        // The Orientation stays as it is, and the rows take the rest.
         let o = layer
             .transform
             .orientation_at(lt, &|p| p.value_at_with_context(lt, context.clone()));
@@ -603,24 +693,76 @@ fn reparented_eye(
             point_of_interest: two_node.then(|| (at(P::PoiX), at(P::PoiY), at(P::PoiZ))),
         });
         let poi = eye.point_of_interest.unwrap_or_default();
-        let (p, r) = (
-            eye.position,
-            lumit_core::camera::unoriented(o, eye.rotation_deg, ae_order, rows),
-        );
+        let (p, r) = if reorient {
+            let o = lumit_core::camera::reoriented(eye.rotation_deg, rows, ae_order, o);
+            (eye.position, o)
+        } else {
+            let rows = lumit_core::camera::unoriented(o, eye.rotation_deg, ae_order, rows);
+            (eye.position, rows)
+        };
         [p.0, p.1, p.2, r.0, r.1, r.2, poi.0, poi.1, poi.2]
     };
     let slot = |prop: P| props.iter().position(|p| *p == prop).unwrap_or(0);
     // The f64 maths is exact well past a thousandth; past that it is noise.
     let differs = |a: f64, b: f64| ((a - b) * 1e3).round() != 0.0;
 
-    let mut edits = Vec::new();
+    let keys = |property: &lumit_core::anim::Property| match &property.animation {
+        Animation::Keyframed(keys) => keys.clone(),
+        _ => Vec::new(),
+    };
+    let times_of = |props: &[P]| {
+        let mut times: Vec<_> = props
+            .iter()
+            .filter_map(|&p| layer.prop(p))
+            .flat_map(keys)
+            .map(|k| k.time)
+            .collect();
+        times.sort();
+        times.dedup();
+        times
+    };
+    // Where the carry turns every key alike, which it does unless an aim or a
+    // stretched parent bends it, the Orientation keeps its own keys and a
+    // still one stays still.
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let read_o = |lt: f64| {
+        layer
+            .transform
+            .orientation_at(lt, &|p| p.value_at_with_context(lt, context.clone()))
+    };
+    let (from, to) = {
+        let v = carried(lt);
+        (read_o(lt), (v[3], v[4], v[5]))
+    };
+    let mut all = props.clone();
+    all.extend([P::RotationX, P::RotationY, P::Rotation]);
+    let alike = reorient
+        && times_of(&all).iter().all(|time| {
+            let (lt, v) = (time.to_f64(), carried(time.to_f64()));
+            let want = lumit_core::camera::orientation_turned(read_o(lt), from, to);
+            lumit_core::camera::turn_between_deg((v[3], v[4], v[5]), want) < 1e-3
+        });
+    let mut edits = if alike {
+        orientation_edits(&layer.transform, from, to)
+    } else {
+        Vec::new()
+    };
+    let channels: Vec<_> = props
+        .iter()
+        .filter(|p| !(alike && matches!(p, P::OrientationX | P::OrientationY | P::OrientationZ)))
+        .filter_map(|&p| Some((p, layer.prop(p)?)))
+        .collect();
+    let lanes: Vec<Vec<Keyframe>> = channels.iter().map(|(_, p)| keys(p)).collect();
+    let mut times: Vec<_> = lanes.iter().flatten().map(|k| k.time).collect();
+    times.sort();
+    times.dedup();
+
     if times.is_empty() {
-        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
-        let to = carried(lt);
+        let now = carried(lt);
         for (prop, property) in &channels {
             if let Animation::Static(v) = property.animation {
-                if differs(v, to[slot(*prop)]) {
-                    edits.push((*prop, Animation::Static(to[slot(*prop)])));
+                if differs(v, now[slot(*prop)]) {
+                    edits.push((*prop, Animation::Static(now[slot(*prop)])));
                 }
             }
         }
@@ -6587,6 +6729,11 @@ mod parent_placement_tests {
         camera.transform.position_y = eased(50.0, 50.0, 0.0);
         camera.transform.position_z = eased(-500.0, -200.0, -100.0);
         camera.transform.rotation_y = keyed(0.0, 40.0);
+        camera.transform.orientation[0] = Property::fixed(10.0);
+        camera.transform.orientation[2] = Property {
+            animation: lumit_core::anim::Animation::Keyframed(vec![key(1, 0.0), key(3, 30.0)]),
+            ..Property::fixed(0.0)
+        };
         let poses = |c: &Composition| [0.0, 0.5, 1.0, 2.0].map(|t| c.camera_pose(t).unwrap());
         let before = poses(&comp(vec![camera.clone(), null.clone()]));
         let c = comp(vec![camera.clone(), null.clone()]);
@@ -6598,12 +6745,133 @@ mod parent_placement_tests {
         for (b, a) in before.iter().zip(&after) {
             let (pb, pa) = (b.position, a.position);
             let gap = (pb.0 - pa.0).abs() + (pb.1 - pa.1).abs() + (pb.2 - pa.2).abs();
-            let (fb, fa) = (
-                lumit_core::camera::forward(b.rotation_deg),
-                lumit_core::camera::forward(a.rotation_deg),
+            // Every axis, so a roll shows as well as where it looks.
+            let (ab, aa) = (
+                lumit_core::camera::axes(b.rotation_deg),
+                lumit_core::camera::axes(a.rotation_deg),
             );
-            let turn = (fb.0 - fa.0).abs() + (fb.1 - fa.1).abs() + (fb.2 - fa.2).abs();
+            let turn: f64 = ab
+                .iter()
+                .zip(&aa)
+                .map(|(u, v)| (u.0 - v.0).abs() + (u.1 - v.1).abs() + (u.2 - v.2).abs())
+                .sum();
             assert!(gap < 1e-2 && turn < 1e-6, "{b:?} became {a:?}");
+        }
+        // The rows keep their keys, and the Orientation keeps its own two
+        // rather than gaining one at every position key.
+        assert_eq!(camera.transform.rotation_y, keyed(0.0, 40.0));
+        for p in &camera.transform.orientation {
+            let times: Vec<_> = match &p.animation {
+                lumit_core::anim::Animation::Keyframed(keys) => {
+                    keys.iter().map(|k| k.time.to_f64()).collect()
+                }
+                _ => Vec::new(),
+            };
+            assert_eq!(times, [1.0, 3.0], "{p:?}");
+        }
+
+        // After Effects' own numbers: a 3D layer put under a turned null
+        // keeps its X, Y and Z Rotation, and Orientation takes the turn.
+        let mut rider = layer(1000.0, 600.0, None);
+        rider.switches.three_d = true;
+        rider.transform.after_effects_order = true;
+        rider.transform.anchor_x = Property::fixed(400.0);
+        rider.transform.anchor_y = Property::fixed(200.0);
+        rider.transform.rotation_x = Property::fixed(30.0);
+        rider.transform.rotation_y = Property::fixed(40.0);
+        let mut turner = layer(800.0, 500.0, None);
+        turner.switches.three_d = true;
+        turner.transform.position_z = Property::fixed(100.0);
+        turner.transform.orientation[0] = Property::fixed(20.0);
+        turner.transform.rotation_y = Property::fixed(25.0);
+        let before = world(&comp(vec![rider.clone()]), &rider);
+        let c = comp(vec![rider.clone(), turner.clone()]);
+        for (prop, animation) in reparented(&c, &rider, Some(turner.id), 0.0, ctx()) {
+            rider.transform.get_mut(prop).unwrap().animation = animation;
+        }
+        rider.parent = Some(turner.id);
+        let after = world(&comp(vec![rider.clone(), turner.clone()]), &rider);
+        for (b, a) in before.iter().flatten().zip(after.iter().flatten()) {
+            assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
+        }
+        let tr = &rider.transform;
+        let read = |p: &Property| p.value_at(0.0);
+        let turn = |a: f64, b: f64| ((a - b) % 360.0 + 360.0) % 360.0;
+        for (got, want) in [
+            (read(&tr.rotation_x), 30.0),
+            (read(&tr.rotation_y), 40.0),
+            (read(&tr.rotation), 0.0),
+            (read(&tr.orientation[0]), 338.1198),
+            (read(&tr.orientation[1]), 336.6010),
+            (read(&tr.orientation[2]), 350.9384),
+        ] {
+            let off = turn(got, want);
+            assert!(off.min(360.0 - off) < 1e-2, "{got} for {want}");
+        }
+        let at = (
+            read(&tr.position_x),
+            read(&tr.position_y),
+            read(&tr.position_z),
+        );
+        let want = (235.4291, 59.7672, -31.6390);
+        let gap = (at.0 - want.0).abs() + (at.1 - want.1).abs() + (at.2 - want.2).abs();
+        assert!(gap < 1e-2, "{at:?}");
+
+        // Under a mirrored parent with an Orientation of its own, there and
+        // back again.
+        let mut mirror = turner.clone();
+        mirror.id = uuid::Uuid::now_v7();
+        mirror.transform.scale_x = Property::fixed(-100.0);
+        mirror.transform.orientation = [15.0, -30.0, 10.0].map(Property::fixed);
+        let mut card = layer(1000.0, 600.0, None);
+        card.switches.three_d = true;
+        card.transform.anchor_x = Property::fixed(400.0);
+        card.transform.anchor_y = Property::fixed(200.0);
+        card.transform.rotation_x = Property::fixed(30.0);
+        card.transform.rotation_y = Property::fixed(40.0);
+        card.transform.orientation = [5.0, 0.0, 20.0].map(Property::fixed);
+        let before = world(&comp(vec![card.clone()]), &card);
+        for new_parent in [Some(mirror.id), None] {
+            let c = comp(vec![card.clone(), mirror.clone()]);
+            for (prop, animation) in reparented(&c, &card, new_parent, 0.0, ctx()) {
+                card.transform.get_mut(prop).unwrap().animation = animation;
+            }
+            card.parent = new_parent;
+            let after = world(&comp(vec![card.clone(), mirror.clone()]), &card);
+            for (b, a) in before.iter().flatten().zip(after.iter().flatten()) {
+                assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
+            }
+        }
+
+        // A keyed Orientation has every key turned, so the whole move stays.
+        let mut spun = layer(1000.0, 600.0, None);
+        spun.switches.three_d = true;
+        spun.transform.rotation_x = keyed(30.0, -10.0);
+        spun.transform.orientation = [keyed(0.0, 60.0), keyed(10.0, 80.0), keyed(0.0, 20.0)];
+        let worlds = |c: &Composition, l: &Layer| {
+            [0.0, 0.5, 1.0, 2.0].map(|t| {
+                let own = own_placement(l, t, &ctx());
+                match parent_world_placement(c, l, t, ctx()) {
+                    Some(pre) => lumit_gpu::concat_place(pre, own),
+                    None => own,
+                }
+            })
+        };
+        let before = worlds(&comp(vec![spun.clone()]), &spun);
+        let c = comp(vec![spun.clone(), turner.clone()]);
+        for (prop, animation) in reparented(&c, &spun, Some(turner.id), 1.0, ctx()) {
+            assert!(!matches!(prop, TransformProp::RotationX));
+            spun.transform.get_mut(prop).unwrap().animation = animation;
+        }
+        spun.parent = Some(turner.id);
+        let after = worlds(&comp(vec![spun.clone(), turner.clone()]), &spun);
+        for (b, a) in before
+            .iter()
+            .flatten()
+            .flatten()
+            .zip(after.iter().flatten().flatten())
+        {
+            assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
         }
     }
 

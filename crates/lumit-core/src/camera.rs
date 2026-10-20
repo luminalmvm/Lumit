@@ -137,6 +137,38 @@ pub fn unoriented(
     }
 }
 
+/// [`unoriented`] the other way about: the Orientation that, outside these
+/// rotations, makes the whole of `turn`, the one nearest `near`.
+#[must_use]
+pub fn reoriented(
+    turn: (f64, f64, f64),
+    rotation: (f64, f64, f64),
+    ae_order: bool,
+    near: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let r = if ae_order {
+        rotation_ae(rotation)
+    } else {
+        self::rotation(rotation)
+    };
+    let back = [0, 1, 2].map(|row| [0, 1, 2].map(|c| r[c][row]));
+    nearest_xyz(euler_xyz(&mul(&self::rotation(turn), &back)), near)
+}
+
+/// Orientation `o` turned on by the turn that takes Orientation `from` to
+/// `to`, written the way nearest `o`.
+#[must_use]
+pub fn orientation_turned(
+    o: (f64, f64, f64),
+    from: (f64, f64, f64),
+    to: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let f = rotation_ae(from);
+    let back = [0, 1, 2].map(|row| [0, 1, 2].map(|c| f[c][row]));
+    let by = mul(&rotation_ae(to), &back);
+    nearest_xyz(euler_xyz(&mul(&by, &rotation_ae(o))), o)
+}
+
 /// X, Y and Z Rotation written in one order (`from_ae`) rewritten in the other
 /// (`to_ae`) for the same turn, the way of writing it nearest `near`.
 #[must_use]
@@ -1019,6 +1051,15 @@ mod tests {
             let got = look_at_orientation(from, to);
             let off = (got.0 - want.0).abs() + (got.1 - want.1).abs() + (got.2 - want.2).abs();
             assert!(off < 1e-3, "{got:?}");
+        }
+        // Looking back down z, where the roll's quarter matters, the x axis
+        // still comes out level and z still points the right way.
+        for d in [(300.0, -100.0, -400.0), (-50.0, 200.0, -10.0)] {
+            let m = rotation_ae(look_at_orientation((0.0, 0.0, 0.0), d));
+            let len = (d.0 * d.0 + d.1 * d.1 + d.2 * d.2).sqrt();
+            assert!(m[1][0].abs() < 1e-9, "{m:?}");
+            let z = (m[0][2], m[1][2], m[2][2]);
+            assert!(close3(z, (d.0 / len, d.1 / len, d.2 / len)), "{z:?}");
         }
     }
 

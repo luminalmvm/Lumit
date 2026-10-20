@@ -58,7 +58,8 @@ selected layers one pixel, or ten with `Shift`. See [the Viewer](/panels/viewer/
 
 Parent a layer to another and it follows the parent's transform. Its own values then read
 as offsets from the parent. Parenting or unparenting a layer does not move it on the
-current frame.
+current frame. A 3D layer, camera or light keeps its X, Y and Z Rotation; the turn goes on
+its Orientation.
 
 The Viewer draws a parented layer's outline, handles and motion path through the whole parent
 chain. Drags, nudges and **Align** move its Position in the parent's space.
