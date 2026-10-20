@@ -2076,11 +2076,13 @@ Future<void> exportFrb(BuildContext context) async {
 }
 
 void undoFrb(LumitState app) {
+  app.settleHistory();
   app.project?.undo();
   app.notifyDocumentChanged();
 }
 
 void redoFrb(LumitState app) {
+  app.settleHistory();
   app.project?.redo();
   app.notifyDocumentChanged();
 }

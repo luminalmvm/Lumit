@@ -84,6 +84,7 @@ class _HistoryDialogState extends State<_HistoryDialog> {
   /// then re-read: the jump is several undos, and the list has to say so.
   void _jump(int applied) {
     if (applied == _applied) return;
+    widget.app.settleHistory();
     widget.app.project?.jumpHistory(applied: applied);
     widget.app.notifyDocumentChanged();
     setState(_read);

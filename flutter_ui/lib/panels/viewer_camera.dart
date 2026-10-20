@@ -484,7 +484,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     if (_locked) thawCursor();
     _throttle.cancel();
     _escape.dispose();
-    _wheelRest?.cancel();
     _closeUndoStep();
     super.dispose();
   }
@@ -516,7 +515,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// notches, is one step however many writes it made.
   bool _grouped = false;
 
-  /// Closes a run of wheel notches into one undo step once the wheel rests.
+  /// Whether the open group is a wheel run, which closes once the wheel
+  /// rests or anything else happens first.
+  bool _wheelRun = false;
   Timer? _wheelRest;
 
   /// What the orbit in hand swings round, in the comp, or null for the
@@ -551,6 +552,16 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 
   void _closeUndoStep() {
+    if (_wheelRun) {
+      _wheelRun = false;
+      _wheelRest?.cancel();
+      if (widget.state.closeOpenStep == _closeUndoStep) {
+        widget.state.closeOpenStep = null;
+      }
+      GestureBinding.instance.pointerRouter
+          .removeGlobalRoute(_endRunOnPointer);
+      widget.uiState.playheadFrame.removeListener(_closeUndoStep);
+    }
     if (!_grouped) return;
     _grouped = false;
     try {
@@ -558,6 +569,34 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     } catch (_) {
       // The project closed mid-drag.
     }
+  }
+
+  /// A run of wheel notches stays one undo step until the wheel rests, a
+  /// button goes down anywhere, the playhead moves, or a key or the history
+  /// is about to move ([LumitState.settleHistory]), so nothing else can land
+  /// inside it. A trackpad's coasting after the fingers lift is part of the
+  /// same run. While playing each notch is its own step, as each keys a
+  /// different frame.
+  void _openWheelRun() {
+    _wheelRest?.cancel();
+    if (widget.uiState.playing.value) {
+      _closeUndoStep();
+      return;
+    }
+    if (!_wheelRun) {
+      _closeUndoStep();
+      _openUndoStep();
+      if (!_grouped) return;
+      _wheelRun = true;
+      widget.state.closeOpenStep = _closeUndoStep;
+      GestureBinding.instance.pointerRouter.addGlobalRoute(_endRunOnPointer);
+      widget.uiState.playheadFrame.addListener(_closeUndoStep);
+    }
+    _wheelRest = Timer(const Duration(milliseconds: 500), _closeUndoStep);
+  }
+
+  void _endRunOnPointer(PointerEvent event) {
+    if (event is PointerDownEvent) _closeUndoStep();
   }
 
   /// Which move the unified tool was given by the button that started the drag.
@@ -832,9 +871,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     }
     final tf = _held?.transform;
     if (tf == null) return;
-    _openUndoStep();
-    _wheelRest?.cancel();
-    _wheelRest = Timer(const Duration(milliseconds: 500), _closeUndoStep);
+    _openWheelRun();
     _writeCamera(layer, tf, pose, _movedProps(pose, ToolMode.cameraDolly));
   }
 
@@ -864,7 +901,6 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     _revertView = target.layer == null ? _viewReverter() : null;
     if (orbit && _fixedView) (start, pivot) = _toCustom(start, pivot);
     // A wheel run still open is its own step, not the start of this one.
-    _wheelRest?.cancel();
     _closeUndoStep();
     if (target.layer != null) _openUndoStep();
     _wrote = false;

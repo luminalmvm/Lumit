@@ -404,6 +404,9 @@ class _LumitAppViewState extends State<LumitAppView> {
     // the document being replaced has nothing left to run against, and one
     // aimed at a document being worked on would race the job doing it.
     final app = context.read<LumitState>();
+    // A camera's wheel run still open is closed before any command can
+    // land inside it.
+    if (event is KeyDownEvent) app.settleHistory();
     if (app.opening.value || app.busy.value != null) return true;
     return _onKey(
             context.read<LumitState>(), context.read<LumitUiState>(), event) ==
@@ -596,9 +599,11 @@ class _LumitAppViewState extends State<LumitAppView> {
     var handled = true;
     switch (action) {
       case 'edit.redo':
+        state.settleHistory();
         project?.redo();
         state.notifyDocumentChanged();
       case 'edit.undo':
+        state.settleHistory();
         project?.undo();
         state.notifyDocumentChanged();
       case 'playback.toggle':
