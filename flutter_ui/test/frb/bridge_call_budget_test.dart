@@ -1229,7 +1229,8 @@ void main() {
 
     /// **3D boxes ask for the camera once a frame, and never on a pan or a
     /// hover.** The camera's rows are held per Viewer against the frame, the
-    /// document and the view, and asked for only once a 3D box is drawn.
+    /// document and the view, and asked for only once a 3D box is drawn. The
+    /// selected light's wireframe is held the same way.
     testWidgets('3D boxes ask for the camera once a frame and no more',
         (tester) async {
       final p = freshProject();
@@ -1240,8 +1241,9 @@ void main() {
             ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true),
       ];
       comp.addCameraLayer();
+      final light = comp.addLightLayer(kind: 1);
       p.uiState.setSelectedComp(comp);
-      p.uiState.setSelection([layers.first]);
+      p.uiState.setSelection([layers.first, light]);
       p.uiState.tools.select(ToolMode.hand);
 
       await tester.pumpWidget(hostPanel(
@@ -1277,6 +1279,9 @@ void main() {
       expect(counter.calls[rows] ?? 0, 0,
           reason: 'a pan or a hover asked for the camera:\n'
               '${counter.ranking()}');
+      expect(counter.calls['composition_reference_wireframes'] ?? 0, 0,
+          reason: 'a pan or a hover asked for the wireframes:\n'
+              '${counter.ranking()}');
 
       counter
         ..reset()
@@ -1290,6 +1295,10 @@ void main() {
       // camera, and no more than once a frame.
       expect(counter.calls[rows] ?? 0, inInclusiveRange(1, 5),
           reason: 'five frame steps asked for the camera:\n'
+              '${counter.ranking()}');
+      expect(counter.calls['composition_reference_wireframes'] ?? 0,
+          inInclusiveRange(1, 5),
+          reason: 'five frame steps asked for the wireframes:\n'
               '${counter.ranking()}');
     });
 

@@ -639,36 +639,67 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
-            // The wireframes, in every view but the composition's own camera
-            // (docs/impl/camera.md §6): a scene is arranged from a viewpoint
-            // that shows where the cameras and the lights actually are, and
-            // nothing in the picture says that by itself. The ground and the
-            // axes come with them, and the layer controls' switch hides the
-            // outlines.
-            if (_viewPose() case final view?)
-              Positioned.fill(
-                key: const ValueKey('viewer-wireframes'),
-                child: IgnorePointer(
-                  child: ListenableBuilder(
-                    listenable: uiState.selectedLayers,
-                    builder: (context, _) => ViewerWireframeLayer(
+            // The wireframes (docs/impl/camera.md §6). A 3D view outlines the
+            // whole scene: a scene is arranged from a viewpoint that shows
+            // where the cameras and the lights actually are, and nothing in
+            // the picture says that by itself. Through the comp's own camera
+            // only the selected cameras and lights are outlined, as After
+            // Effects does (a selected layer's box is the layer controls'),
+            // and the layer controls' switch hides them all. The ground and
+            // the corner axes are this view's own switches.
+            Positioned.fill(
+              key: const ValueKey('viewer-wireframes'),
+              child: IgnorePointer(
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([
+                    uiState.selectedLayers,
+                    uiState.model,
+                    uiState.playheadFrame,
+                    uiState.solveLanded,
+                  ]),
+                  builder: (context, _) {
+                    final view = _viewPose();
+                    final aids = uiState.viewerAidsOf(viewId);
+                    final selected = uiState.selectedLayerIds;
+                    final layers = uiState.model.heldLayers;
+                    final List<UuidValue>? only = !wireframes
+                        ? const []
+                        : view == null
+                            ? [
+                                for (final e in layers)
+                                  if ((e.info.kind == BridgeLayerKind.camera ||
+                                          e.info.kind ==
+                                              BridgeLayerKind.light) &&
+                                      selected
+                                          .contains(e.layer.internallayerId))
+                                    e.layer.internallayerId,
+                              ]
+                            : null;
+                    final ask = aids.ground || only == null || only.isNotEmpty;
+                    // The corner axes come from the rows the outlines hold,
+                    // so on their own they cost no call.
+                    final axes = aids.axes
+                        ? viewAxes(
+                            uiState.viewProjections.of(
+                              comp: comp,
+                              viewId: viewId,
+                              frame: uiState.playheadFrame.value,
+                              revision: uiState.model.heldRevision,
+                              generation: uiState.solveLanded.value,
+                              view: view,
+                            ),
+                            Size(compSize.width.toDouble(),
+                                compSize.height.toDouble()),
+                          )
+                        : null;
+                    if (!ask && axes == null) return const SizedBox.shrink();
+                    return ViewerWireframeLayer(
                       comp: comp,
                       view: view,
-                      ask: true,
-                      ground: true,
-                      axes: viewAxes(
-                        uiState.viewProjections.of(
-                          comp: comp,
-                          viewId: viewId,
-                          frame: uiState.playheadFrame.value,
-                          revision: uiState.model.heldRevision,
-                          generation: uiState.solveLanded.value,
-                          view: view,
-                        ),
-                        Size(compSize.width.toDouble(),
-                            compSize.height.toDouble()),
-                      ),
-                      only: wireframes ? null : const [],
+                      ask: ask,
+                      ground: aids.ground,
+                      axes: axes,
+                      only: only,
                       frame: uiState.playheadFrame.value,
                       revision: uiState.model.heldRevision,
                       mediaSizes: uiState.layerBounds.mediaSizes,
@@ -677,7 +708,7 @@ class ViewerStage extends StatelessWidget {
                         compSize.width.toDouble(),
                         compSize.height.toDouble(),
                       ),
-                      selected: uiState.selectedLayerIds,
+                      selected: selected,
                       layerLine: t.textSecondary,
                       selectedLine: t.animated,
                       cameraLine: t.layer.camera,
@@ -687,10 +718,11 @@ class ViewerStage extends StatelessWidget {
                       lightLine: t.accent,
                       groundLine: t.textMuted,
                       frameLine: t.textMuted,
-                    ),
-                  ),
+                    );
+                  },
                 ),
               ),
+            ),
             _missingSlate(),
             // The layer controls and every tool that reads the boxes, under
             // one builder: [_boxes] walks the whole model, and it used to be
