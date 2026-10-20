@@ -1369,10 +1369,36 @@ class LumitUiState extends ChangeNotifier {
   bool setViewerLayout(ViewLayout layout) {
     final pane = currentViewerPane;
     if (pane == null) return false;
+    final had = views.forPane(pane).length;
     views.setLayout(pane, layout);
+    _seedCameraViews(pane, had);
     saveLayout();
     requestFrame();
     return true;
+  }
+
+  /// New views of a 3D comp start the way After Effects lays them out: Top
+  /// beside the view you had, or Top, Front and Right in a four-up. A view
+  /// one of the others already shows is skipped.
+  void _seedCameraViews(PaneId pane, int had) {
+    final all = views.forPane(pane);
+    if (all.length <= had) return;
+    final scene = model.heldLayers.any((e) =>
+        e.info.switches.threeD ||
+        e.info.kind == BridgeLayerKind.camera ||
+        e.info.kind == BridgeLayerKind.light);
+    if (!scene) return;
+    final shown = {for (final v in all.take(had)) viewOf(v.engineId)};
+    final seeds = [
+      ViewerView.top,
+      if (all.length == 4) ...[ViewerView.front, ViewerView.right],
+    ].where((v) => !shown.contains(v)).iterator;
+    for (final view in all.skip(had)) {
+      // Only views of the comp the held layers are of.
+      if (compFor(view)?.internalid != _selectedComp?.internalid) continue;
+      if (!seeds.moveNext()) break;
+      setViewerView(seeds.current, viewId: view.engineId);
+    }
   }
 
   /// Swap a two-view layout between across and down. Nothing to turn in the
