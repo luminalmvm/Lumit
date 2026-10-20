@@ -15950,88 +15950,105 @@ fn the_matte_says_where_the_pixel_sort_spans_are() {
     );
 }
 
+/// Depth of field pro over `img` at `w` x `h`, every pixel `metres` away and
+/// focused at 3 m, through the Biotar at `fstop`: Lens shapes with no `rays`,
+/// Ray traced with them.
+#[allow(clippy::too_many_arguments)]
+fn dof_pro(
+    ctx: &crate::test_support::Lease,
+    img: &[f32],
+    w: u32,
+    h: u32,
+    metres: f32,
+    fstop: f32,
+    fringing: f32,
+    rays: u32,
+) -> Vec<f32> {
+    use lumit_core::fx::lens_blur;
+    let optics = lens_blur::BokehLens {
+        lens: 17,
+        fstop,
+        blades: 9,
+        roundness: 1.0,
+        fringing,
+        glass_dirt: 0.0,
+        sensor_w_mm: 36.0,
+        aspect: h as f32 / w as f32,
+    };
+    let bake = || {
+        let b = lens_blur::bake(&optics, None)?;
+        Some(LensBlurBakeData {
+            kernels: b.kernels,
+            span_mm: b.span_mm,
+            dz_max_mm: b.dz_max_mm,
+            field_max_mm: b.field_max_mm,
+            focal_mm: b.focal_mm,
+            field_bins: lens_blur::FIELD_BINS as u32,
+            defocus_bins: lens_blur::DEFOCUS_BINS as u32,
+            azimuth_bins: lens_blur::AZIMUTH_BINS as u32,
+            kernel_res: lens_blur::KERNEL_RES as u32,
+        })
+    };
+    let ray_lens = || {
+        let r = lens_blur::ray_lens(&optics, None)?;
+        Some(RayLensData {
+            surfaces: r.surfaces,
+            stop_r: r.stop_r,
+            sensor_z: r.sensor_z,
+            focal: r.focal,
+            ep_r: r.ep_r,
+            ep_z: r.ep_z,
+            roundness: r.roundness,
+            inf_cross_z: r.inf_cross_z,
+            focus_h: r.focus_h,
+            fringing: r.fringing,
+            glass: r.glass,
+        })
+    };
+    let op = LensBlurOp {
+        bake_key: lens_blur::bake_key(&optics, None),
+        depth_bound: true,
+        depth_metres: true,
+        display_depth: false,
+        depth_channel: 0,
+        depth_invert: false,
+        focus_m: 3.0,
+        use_focus_point: false,
+        focus_point: [0.0, 0.0],
+        near_m: 0.5,
+        far_m: 30.0,
+        sensor_w_mm: 36.0,
+        size: 1.0,
+        blades: 9,
+        rotation_deg: 0.0,
+        threshold: 1e9,
+        boost: 1.0,
+        mix: 1.0,
+        max_span_px: lens_blur::MAX_SPAN_PX,
+        zebra: false,
+        rays,
+    };
+    let src = upload_linear_f32(ctx, img, w, h);
+    let depth = upload_linear_f32(ctx, &vec![metres; (w * h * 4) as usize], w, h);
+    let out = ctx
+        .fx()
+        .lens_blur(ctx, &src, w, h, Some(&depth), &op, &bake, &ray_lens, None);
+    readback_linear_f32(ctx, &out, w, h).expect("readback")
+}
+
 /// Depth of field pro's Ray traced method against the optics it claims: a plane
 /// at the focus distance comes back as it was in the middle of the frame, and
 /// a far point spreads to the disc a thin lens gives at that distance and
 /// f-stop, keeping its light.
 #[test]
 fn ray_traced_depth_of_field_matches_the_thin_lens() {
-    use lumit_core::fx::lens_blur;
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
     };
-    let fx = ctx.fx();
     let (w, h) = (640u32, 360u32);
-    let render = |img: &[f32], metres: f32, fstop: f32| {
-        let optics = lens_blur::BokehLens {
-            lens: 17,
-            fstop,
-            blades: 9,
-            roundness: 1.0,
-            fringing: 1.0,
-            glass_dirt: 0.0,
-            sensor_w_mm: 36.0,
-            aspect: h as f32 / w as f32,
-        };
-        let bake = || {
-            let b = lens_blur::bake(&optics, None)?;
-            Some(LensBlurBakeData {
-                kernels: b.kernels,
-                span_mm: b.span_mm,
-                dz_max_mm: b.dz_max_mm,
-                field_max_mm: b.field_max_mm,
-                focal_mm: b.focal_mm,
-                field_bins: lens_blur::FIELD_BINS as u32,
-                defocus_bins: lens_blur::DEFOCUS_BINS as u32,
-                azimuth_bins: lens_blur::AZIMUTH_BINS as u32,
-                kernel_res: lens_blur::KERNEL_RES as u32,
-            })
-        };
-        let ray_lens = || {
-            let r = lens_blur::ray_lens(&optics, None)?;
-            Some(RayLensData {
-                surfaces: r.surfaces,
-                stop_r: r.stop_r,
-                sensor_z: r.sensor_z,
-                focal: r.focal,
-                ep_r: r.ep_r,
-                ep_z: r.ep_z,
-                roundness: r.roundness,
-                inf_cross_z: r.inf_cross_z,
-                focus_h: r.focus_h,
-                fringing: r.fringing,
-                glass: r.glass,
-            })
-        };
-        let op = LensBlurOp {
-            bake_key: lens_blur::bake_key(&optics, None),
-            depth_bound: true,
-            depth_metres: true,
-            display_depth: false,
-            depth_channel: 0,
-            depth_invert: false,
-            focus_m: 3.0,
-            use_focus_point: false,
-            focus_point: [0.0, 0.0],
-            near_m: 0.5,
-            far_m: 30.0,
-            sensor_w_mm: 36.0,
-            size: 1.0,
-            blades: 9,
-            rotation_deg: 0.0,
-            threshold: 1e9,
-            boost: 1.0,
-            mix: 1.0,
-            max_span_px: lens_blur::MAX_SPAN_PX,
-            zebra: false,
-            rays: 300,
-        };
-        let src = upload_linear_f32(&ctx, img, w, h);
-        let depth = upload_linear_f32(&ctx, &vec![metres; (w * h * 4) as usize], w, h);
-        let out = fx.lens_blur(&ctx, &src, w, h, Some(&depth), &op, &bake, &ray_lens, None);
-        readback_linear_f32(&ctx, &out, w, h).expect("readback")
-    };
+    let render =
+        |img: &[f32], metres: f32, fstop: f32| dof_pro(&ctx, img, w, h, metres, fstop, 1.0, 300);
 
     // A checker at the focus distance, stopped down: the middle is untouched.
     let mut checker = vec![0f32; (w * h * 4) as usize];
@@ -16078,4 +16095,40 @@ fn ray_traced_depth_of_field_matches_the_thin_lens() {
         (across / want - 1.0).abs() < 0.1,
         "the point spread {across:.1} px across, a thin lens gives {want:.1}"
     );
+}
+
+/// Depth of field pro blurs a near picture right up to the frame's edge, by
+/// either method. Every sample past the edge used to read the edge pixel,
+/// which left a strip of it down each side.
+#[test]
+fn depth_of_field_pro_blurs_up_to_the_frame_edge() {
+    let Some(ctx) = crate::test_support::lease() else {
+        crate::no_adapter();
+        return;
+    };
+    let (w, h) = (320u32, 96u32);
+    // Upright stripes 2 px wide, all of it near and far out of focus.
+    let stripes: Vec<f32> = (0..w * h)
+        .flat_map(|i| {
+            let v = if (i % w / 2) % 2 == 0 { 0.8 } else { 0.1 };
+            [v, v, v, 1.0]
+        })
+        .collect();
+    for rays in [0, 300] {
+        let px = dof_pro(&ctx, &stripes, w, h, 0.4, 1.4, 0.0, rays);
+        let mean = |x0: u32, n: u32| {
+            (x0..x0 + n)
+                .map(|x| px[((h / 2 * w + x) * 4 + 1) as usize])
+                .sum::<f32>()
+                / n as f32
+        };
+        let middle = mean(w / 2 - 8, 16);
+        for x in (0..4).chain(w - 4..w) {
+            let edge = mean(x, 1);
+            assert!(
+                (edge - middle).abs() < 0.2,
+                "{rays} rays: x {x} came out {edge}, the middle {middle}"
+            );
+        }
+    }
 }
