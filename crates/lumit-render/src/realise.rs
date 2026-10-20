@@ -551,9 +551,10 @@ impl Realiser<'_> {
         w: u32,
         h: u32,
         of: (f32, f32),
+        below: Option<&wgpu::Texture>,
     ) -> crate::fxops::LayerInput {
         crate::fxops::LayerInput::Several(
-            self.render_layer_inputs(list, w, h, of)
+            self.render_layer_inputs(list, w, h, of, below)
                 .into_iter()
                 .zip(list.iter().map(LayerInputDraw::size))
                 .collect(),
@@ -574,7 +575,7 @@ impl Realiser<'_> {
     ) -> crate::fxops::LayerInput {
         match (slot, self.late_clones) {
             (Some(LayerInputDraw::Late(spec)), Some(make)) => {
-                self.several(&make(spec, points), w, h, of)
+                self.several(&make(spec, points), w, h, of, None)
             }
             _ => crate::fxops::LayerInput::Absent,
         }
@@ -585,13 +586,15 @@ impl Realiser<'_> {
     /// hand over, so it passes through as [`LayerInput::ThisLayer`].
     ///
     /// `of` is the consuming layer's own size, px at comp size, which a map
-    /// set down where its layer sits is measured against.
+    /// set down where its layer sits is measured against. `below` is the
+    /// depth of the layers below an adjustment layer, when it was made.
     fn render_layer_inputs(
         &self,
         inputs: &[LayerInputDraw],
         w: u32,
         h: u32,
         of: (f32, f32),
+        below: Option<&wgpu::Texture>,
     ) -> Vec<crate::fxops::LayerInput> {
         use crate::fxops::LayerInput;
         inputs
@@ -600,11 +603,19 @@ impl Realiser<'_> {
                 let d = match slot {
                     LayerInputDraw::Absent => return LayerInput::Absent,
                     LayerInputDraw::ThisLayer => return LayerInput::ThisLayer,
+                    LayerInputDraw::Below(_) => {
+                        return below.map_or(LayerInput::Absent, |d| {
+                            LayerInput::Depth(
+                                lumit_gpu::fx::fit_centred(&self.ctx, d.clone(), w, h),
+                                None,
+                            )
+                        })
+                    }
                     // Made when its op comes round (`late_clones`).
                     LayerInputDraw::Late(_) => return LayerInput::Late,
                     // An op's whole list: each layer rendered as it would be
                     // alone, with its own size kept beside it.
-                    LayerInputDraw::Several(list) => return self.several(list, w, h, of),
+                    LayerInputDraw::Several(list) => return self.several(list, w, h, of, below),
                     LayerInputDraw::Layer(d) => d,
                 };
                 // Onto the consuming layer's raster, where its placement says.
@@ -901,6 +912,7 @@ impl Realiser<'_> {
                             w,
                             h,
                             (w as f32, h as f32),
+                            None,
                         )
                         .into_iter()
                         .next()
@@ -1385,6 +1397,15 @@ impl Realiser<'_> {
         let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
         let mut acc: Option<wgpu::Texture> = None;
         let mut start = 0usize;
+        // The depth of the layers below, made only when an adjustment layer's
+        // effect reads it, as metres per unit of the camera's view.
+        let metres_per_w = camera.and_then(|pose| {
+            let ppm = layers
+                .iter()
+                .find_map(|l| below_px_per_metre(&l.dof_inputs))?;
+            Some((pose.zoom / ppm.max(1e-6)) as f32)
+        });
+        let mut depth: Option<wgpu::Texture> = None;
         for (i, l) in layers.iter().enumerate() {
             if !matches!(l.source, DrawSource::Adjust) {
                 continue;
@@ -1399,6 +1420,7 @@ impl Realiser<'_> {
                 region,
                 None,
                 None,
+                metres_per_w.map(|m| (m, &mut depth)),
             );
             // An adjustment layer processes the composite below, which has no
             // footage neighbour frames. A temporal effect's neighbours are
@@ -1408,8 +1430,9 @@ impl Realiser<'_> {
             // identical to export. The adjustment stack runs on the
             // comp-sized composite, so its depth inputs resample to comp size.
             let tables = self.load_tables(&l.colour_tables);
-            let layer_inputs = self.render_layer_inputs(&l.dof_inputs, tw, th, l.natural_size);
-            let mattes = self.render_layer_inputs(&l.mattes, tw, th, l.natural_size);
+            let layer_inputs =
+                self.render_layer_inputs(&l.dof_inputs, tw, th, l.natural_size, depth.as_ref());
+            let mattes = self.render_layer_inputs(&l.mattes, tw, th, l.natural_size, None);
             let flare_lens = self.load_flare_lens(&l.flare_lens_files);
             // The stack was resolved against the comp raster; this render
             // target may be smaller (reduced-resolution preview), and every
@@ -1523,6 +1546,7 @@ impl Realiser<'_> {
             region,
             None,
             None,
+            None,
         )
     }
 
@@ -1562,6 +1586,7 @@ impl Realiser<'_> {
                 tw,
                 th,
                 (width as f32, height as f32),
+                None,
             )
             .into_iter()
             .next()
@@ -2003,6 +2028,7 @@ impl Realiser<'_> {
         region: Option<lumit_gpu::Region>,
         scene_depth: Option<f32>,
         capture: Option<&mut Option<lumit_gpu::fx::SceneLayers>>,
+        below: Option<(f32, &mut Option<wgpu::Texture>)>,
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
         // How much wider and taller each layer's finished picture is than the
@@ -2152,8 +2178,9 @@ impl Realiser<'_> {
                 // resampled to this layer's working raster (w, h), 1:1 with the
                 // stack's consuming ops (§3.22, §3.28); the same render export
                 // runs.
-                let layer_inputs = self.render_layer_inputs(&l.dof_inputs, w, h, l.natural_size);
-                let mattes = self.render_layer_inputs(&l.mattes, w, h, l.natural_size);
+                let layer_inputs =
+                    self.render_layer_inputs(&l.dof_inputs, w, h, l.natural_size, None);
+                let mattes = self.render_layer_inputs(&l.mattes, w, h, l.natural_size, None);
                 let flare_lens = self.load_flare_lens(&l.flare_lens_files);
                 // A stack resolved against a raster wider than the one it is
                 // about to run on (a Precomp layer's, under reduced-resolution
@@ -2415,6 +2442,20 @@ impl Realiser<'_> {
                 .unzip();
         let comp_layers: Vec<lumit_gpu::CompositeLayer> =
             order.iter().map(|&i| comp_layers[i].clone()).collect();
+        // The depth of everything so far, for an adjustment layer above that
+        // reads it, laid over what the segments below left.
+        if let (Some((metres_per_w, depth)), Some(cam)) = (below, cam_mat) {
+            *depth = Some(self.compositor.composite_depth(
+                &self.ctx,
+                width,
+                height,
+                &runs_of(layers, &order, &comp_layers),
+                cam,
+                metres_per_w,
+                self.render_scale,
+                depth.as_ref(),
+            ));
+        }
         if let (Some(metres_per_w), Some(cam)) = (scene_depth, cam_mat) {
             let depth = self.compositor.composite_depth(
                 &self.ctx,
@@ -2537,6 +2578,7 @@ impl Realiser<'_> {
             None,
             Some(metres_per_w),
             capture,
+            None,
         );
         self.ctx.end_frame();
         out
@@ -2630,6 +2672,15 @@ fn runs_of<'a, 'b>(
     }
     runs.push(&placed[start..]);
     runs
+}
+
+/// The pixels per metre a slot that reads the depth below carries, if one does.
+fn below_px_per_metre(slots: &[LayerInputDraw]) -> Option<f64> {
+    slots.iter().find_map(|s| match s {
+        LayerInputDraw::Below(ppm) => Some(*ppm),
+        LayerInputDraw::Several(list) => below_px_per_metre(list),
+        _ => None,
+    })
 }
 
 /// The quad a grown picture needs (docs/08 §3.39).

@@ -2725,8 +2725,10 @@ fn comp_walk(
     // [`EffectSchema::layer_input`] rather than a table of match names here: a
     // table is a second rule, and a second rule is a thing to forget when an
     // effect gains a layer row.
+    // `below` is the comp's pixels per metre on an adjustment layer with 3D
+    // layers below it, whose Depth row pointed at itself reads their depth.
     let dof_inputs_for =
-        |owner: uuid::Uuid, effects: &[lumit_core::model::EffectInstance]| -> Vec<LayerInputDraw> {
+        |owner: uuid::Uuid, effects: &[lumit_core::model::EffectInstance], below: Option<f64>| {
             use lumit_core::model::EffectNamespace;
             effects
                 .iter()
@@ -2763,6 +2765,9 @@ fn comp_walk(
                             })
                             .is_some_and(|c| c.layers.iter().any(|l| l.switches.three_d));
                         let own = e.layer_ref(param) == Some(owner);
+                        if let Some(ppm) = below.filter(|_| own && depth) {
+                            return LayerInputDraw::Below(ppm);
+                        }
                         // "This layer": a reference to the layer the effect
                         // is ON is not a second render — it is the effect's own
                         // input, which `run_ops` already holds. Except a Depth
@@ -3339,7 +3344,7 @@ fn comp_walk(
                 // neighbours or flow for the unit.
                 flow_fields: Vec::new(),
                 colour_tables: colour_tables(&group.effects, t_comp),
-                dof_inputs: dof_inputs_for(group.id, &group.effects),
+                dof_inputs: dof_inputs_for(group.id, &group.effects, None),
                 mattes: mattes_for(group.id, &group.effects, &group_graph),
                 mask_paths: mask_paths_for(&group.effects, None, t_comp),
                 // No source frames of a group's own, so nothing was ever
@@ -4125,7 +4130,14 @@ fn comp_walk(
                     // Depth inputs of the enabled built-in `dof` and
                     // `light_wrap` effects, 1:1 with the stack's
                     // layer-input-consuming ops (docs/08 §3.22, §3.28).
-                    dof_inputs: dof_inputs_for(layer.id, &layer.effects),
+                    dof_inputs: dof_inputs_for(
+                        layer.id,
+                        &layer.effects,
+                        draws
+                            .iter()
+                            .any(|d| d.three_d)
+                            .then(|| comp.px_per_metre(t_comp)),
+                    ),
                     mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
                     mask_paths: mask_paths_for(&layer.effects, Some(layer), lt),
                     // An adjustment layer has no source frames of its own, so
@@ -4381,7 +4393,7 @@ fn comp_walk(
             // effects, 1:1 with the stack's layer-input-consuming ops (docs/08
             // §3.22, §3.28); built the same way export does, so the two blur
             // identically.
-            dof_inputs: dof_inputs_for(layer.id, &layer.effects),
+            dof_inputs: dof_inputs_for(layer.id, &layer.effects, None),
             mattes: mattes_for(layer.id, &layer.effects, &layer.graph),
             mask_paths: mask_paths_for(&layer.effects, Some(layer), lt),
             roto_mattes: roto_mattes_for(&layer.effects, source_frame),

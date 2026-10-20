@@ -6668,6 +6668,57 @@ mod tests {
         assert_eq!(frames[0], frames[1], "the parent moved the adjustment");
     }
 
+    /// Depth of field pro on an adjustment layer, its Depth row pointed at
+    /// itself, reads how far the 3D layers below are: two white cards at two
+    /// distances show as two greys in its Depth display.
+    #[test]
+    fn an_adjustment_layer_reads_the_depth_of_the_3d_layers_below() {
+        use lumit_core::model::EffectValue;
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (w, h) = (64u32, 32u32);
+        let (mut doc, comp_id, solid) = matrix_base(w, h, LinearColour([1.0, 1.0, 1.0, 1.0]));
+        let card = |x: f64, z: f64| {
+            let mut l = matrix_layer("Card", LayerKind::Solid { def: solid }, w, h);
+            l.switches.three_d = true;
+            l.transform.scale_x = Property::fixed(20.0);
+            l.transform.scale_y = Property::fixed(40.0);
+            l.transform.position_x = Property::fixed(x);
+            l.transform.position_z = Property::fixed(z);
+            l
+        };
+        let mut adj = matrix_layer("Adjust", LayerKind::Adjustment, w, h);
+        let mut dof = lumit_core::fx::instantiate("dof_pro").unwrap();
+        for (id, value) in [
+            ("depth", EffectValue::Layer(Some(adj.id))),
+            ("display", EffectValue::Choice(1)),
+            ("near_m", EffectValue::Float(Property::fixed(0.05))),
+            ("far_m", EffectValue::Float(Property::fixed(0.5))),
+        ] {
+            if let Some(p) = dof.params.iter_mut().find(|p| p.id == id) {
+                p.value = value;
+            }
+        }
+        adj.effects.push(dof);
+        let comp = doc.comp_mut(comp_id).unwrap();
+        // The far card lands at x = 48 through the default camera.
+        comp.layers = vec![adj, card(16.0, 0.0), card(66.0, 100.0)];
+        let doc = DocumentStore::new(doc).snapshot();
+        let (rgba, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
+        let grey = |x: u32| i32::from(rgba[((h / 2 * w + x) * 4) as usize]);
+        assert!(
+            (grey(16) - grey(48)).abs() > 20,
+            "the near card reads {} and the far one {}",
+            grey(16),
+            grey(48)
+        );
+    }
+
     /// **Depth of field reaches the picture** (docs/impl/camera.md §5).
     ///
     /// One comp, one camera focused on its own zoom, and the same nested tile
