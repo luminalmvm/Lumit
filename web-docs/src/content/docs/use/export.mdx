@@ -78,8 +78,8 @@ limit*, *Needs alpha*, *Audio off*, *No picture*, *No sound* or *No metadata*.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **H.264 (.mp4)** | Yes | Yes | No | 8 bit | Yes | Stated in the file | Yes |
 | **HEVC (.mp4)** | Yes | Yes | No | 8 bit | Yes | Stated in the file | Yes |
-| **ProRes 422 Proxy, LT, 422, HQ (.mov)** | Yes | Yes | No | 8 bit | No | Stated in the file | Yes |
-| **ProRes 4444, 4444 XQ (.mov)** | Yes | Yes | Yes | 8 bit | No | Stated in the file | Yes |
+| **ProRes 422 Proxy, LT, 422, HQ (.mov)** | Yes | Yes | No | 8 or 16 bit | No | Stated in the file | Yes |
+| **ProRes 4444, 4444 XQ (.mov)** | Yes | Yes | Yes | 8 or 16 bit | No | Stated in the file | Yes |
 | **PNG sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **TIFF sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **M4A (AAC)** | No | Yes | — | 16 bit | Yes | — | Yes |
@@ -87,8 +87,8 @@ limit*, *Needs alpha*, *Audio off*, *No picture*, *No sound* or *No metadata*.
 
 HEVC is tagged `hvc1`, so Apple's players open it.
 
-ProRes writes a ten-bit file from the eight-bit picture. Its sound is uncompressed PCM, at
-16 or 24 bit.
+ProRes files are ten-bit. At **16 bit** they are filled from the sixteen-bit picture.
+Their sound is uncompressed PCM, at 16 or 24 bit.
 
 An image sequence writes one numbered file per frame beside the name you chose. A sequence
 has no container to carry metadata, so that section is disabled.

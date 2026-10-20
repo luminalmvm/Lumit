@@ -1104,10 +1104,10 @@ pub struct FormatCaps {
 
 use lumit_media::encode::BitDepth;
 
-/// Eight bits only — every video codec Lumit writes is fed eight-bit frames.
-/// ProRes stores ten bits, but what goes in is still the eight-bit composite.
+/// Eight bits only: H.264 and HEVC are written 4:2:0 at eight bits.
 const EIGHT_ONLY: &[BitDepth] = &[BitDepth::Eight];
-/// The still formats carry either width.
+/// The still formats and ProRes take either width. Sixteen fills a ProRes
+/// file's ten bits from the deeper composite.
 const EIGHT_OR_SIXTEEN: &[BitDepth] = &[BitDepth::Eight, BitDepth::Sixteen];
 /// OpenEXR carries floats and nothing else — writing eight-bit codes into one
 /// would be a scene file holding a picture, which is the one thing the format
@@ -1133,7 +1133,7 @@ impl ExportFormat {
                 video: true,
                 audio: true,
                 alpha: c.has_alpha(),
-                depths: EIGHT_ONLY,
+                depths: EIGHT_OR_SIXTEEN,
                 audio_rates: EXPORT_AUDIO_RATES,
                 audio_depths: PCM_DEPTHS,
                 bit_rate: false,
@@ -3124,6 +3124,7 @@ fn run(
                     bit_rate,
                     max_rate,
                     colour: spec.colour_space.tags(),
+                    depth: spec.depth,
                 }),
                 audio_settings.as_ref(),
                 &spec.metadata,

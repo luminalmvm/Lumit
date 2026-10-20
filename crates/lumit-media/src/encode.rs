@@ -215,10 +215,13 @@ pub struct VideoSettings {
     pub max_rate: Option<i64>,
     /// What the container states this stream's colour to be.
     pub colour: ColourTags,
+    /// How wide each channel of the frames [`Encoder::write_rgba`] is handed:
+    /// eight bits, or sixteen (little-endian) to fill a ten-bit ProRes.
+    pub depth: BitDepth,
 }
 
 /// How many bits each colour channel carries in the written file
-/// (docs/06-RENDER-PIPELINE.md §7.4). Only the still formats can carry more
+/// (docs/06-RENDER-PIPELINE.md §7.4). Only the still formats and ProRes take more
 /// than eight today — see the capability table in `lumit_render::export`.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, Hash,
@@ -740,6 +743,9 @@ struct VideoTrack {
     encoder: &'static str,
     sws: SwsContext,
     encode_pix_fmt: i32,
+    /// What `write_rgba` is handed: eight-bit RGBA or sixteen-bit.
+    src_pix_fmt: i32,
+    src_bytes_per_px: usize,
     width: i32,
     height: i32,
     next_pts: i64,
@@ -866,7 +872,8 @@ impl Encoder {
         self.video.is_some()
     }
 
-    /// Encode one tightly-packed RGBA frame (sRGB-encoded display output).
+    /// Encode one tightly-packed RGBA frame (sRGB-encoded display output), at
+    /// the depth the settings named.
     pub fn write_rgba(&mut self, rgba: &[u8]) -> Result<(), MediaError> {
         let Self { output, video, .. } = self;
         let Some(track) = video.as_mut() else {
@@ -874,7 +881,7 @@ impl Encoder {
                 "this export was opened without a video stream".into(),
             ));
         };
-        let expect = rgba_frame_len(track.width, track.height)?;
+        let expect = frame_len(track.width, track.height, track.src_bytes_per_px)?;
         if rgba.len() != expect {
             return Err(MediaError::Ffmpeg(format!(
                 "frame size {} != expected {expect}",
@@ -885,10 +892,17 @@ impl Encoder {
         let mut src = AVFrame::new();
         src.set_width(track.width);
         src.set_height(track.height);
-        src.set_format(ffi::AV_PIX_FMT_RGBA);
+        src.set_format(track.src_pix_fmt);
         src.alloc_buffer()
             .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-        copy_rgba_into(&mut src, rgba, track.width, track.height)?;
+        copy_pixels_into(
+            &mut src,
+            rgba,
+            track.width,
+            track.height,
+            track.src_bytes_per_px,
+            false,
+        )?;
 
         let mut dst = AVFrame::new();
         dst.set_width(track.width);
@@ -1043,7 +1057,16 @@ fn open_video(
     let height = i32::try_from(video.height)
         .map_err(|_| MediaError::Ffmpeg("frame height overflows".into()))?;
     let encode_pix_fmt = pix_fmt_for(video.codec, encoder);
-    let mut sws = sliced_scaler(width, height, encode_pix_fmt)?;
+    let (src_pix_fmt, src_bytes_per_px) = match video.depth {
+        BitDepth::Eight => (ffi::AV_PIX_FMT_RGBA, 4),
+        BitDepth::Sixteen => (ffi::AV_PIX_FMT_RGBA64LE, 8),
+        BitDepth::Half | BitDepth::Float => {
+            return Err(MediaError::Ffmpeg(
+                "video is written from eight or sixteen bits, not floats".into(),
+            ))
+        }
+    };
+    let mut sws = sliced_scaler(width, height, src_pix_fmt, encode_pix_fmt)?;
     crate::probe::use_yuv_matrix(&mut sws, video.colour.av().2, height, false);
 
     Ok(VideoTrack {
@@ -1051,6 +1074,8 @@ fn open_video(
         encoder,
         sws,
         encode_pix_fmt,
+        src_pix_fmt,
+        src_bytes_per_px,
         width,
         height,
         next_pts: 0,
@@ -1058,10 +1083,11 @@ fn open_video(
     })
 }
 
-/// The RGBA to encoder format scaler, run in slices across the machine's
-/// cores. On one core it took longer at 4K than the encoder did. Each slice
-/// works its rows out of the whole picture, so the bytes are the same.
-fn sliced_scaler(width: i32, height: i32, to: i32) -> Result<SwsContext, MediaError> {
+/// The RGBA (eight- or sixteen-bit) to encoder format scaler, run in slices
+/// across the machine's cores. On one core it took longer at 4K than the
+/// encoder did. Each slice works its rows out of the whole picture, so the
+/// bytes are the same.
+fn sliced_scaler(width: i32, height: i32, from: i32, to: i32) -> Result<SwsContext, MediaError> {
     let failed = || MediaError::Ffmpeg("swscale for encode".into());
     // SAFETY: the context is owned by the wrapper as soon as it exists, so it
     // is freed on every path. Its public fields are written before
@@ -1074,7 +1100,7 @@ fn sliced_scaler(width: i32, height: i32, to: i32) -> Result<SwsContext, MediaEr
         let c = sws.as_mut_ptr();
         (*c).src_w = width;
         (*c).src_h = height;
-        (*c).src_format = ffi::AV_PIX_FMT_RGBA;
+        (*c).src_format = from;
         (*c).dst_w = width;
         (*c).dst_h = height;
         (*c).dst_format = to;
@@ -1484,7 +1510,7 @@ fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFrame, MediaEr
 }
 
 /// Fill one frame plane with a byte value — a raw-pointer touch, kept small
-/// and auditable like `copy_rgba_into`.
+/// and auditable like `copy_pixels_into`.
 fn fill_plane(ptr: *mut u8, linesize: i32, rows: usize, value: u8) -> Result<(), MediaError> {
     if ptr.is_null() {
         return Err(MediaError::Ffmpeg("encode frame has no data plane".into()));
@@ -1575,16 +1601,10 @@ fn f32_to_i16(s: f32) -> i16 {
     (s.clamp(-1.0, 1.0) * 32767.0).round() as i16
 }
 
-/// Exact byte length of one packed RGBA frame, checked against overflow so a
-/// nonsensical width/height (bad caller input, not file input, but the rule
-/// is the same: no panics — docs/14-ENGINEERING-RULES.md §4) errors instead
-/// of overflowing `i32` arithmetic.
-fn rgba_frame_len(width: i32, height: i32) -> Result<usize, MediaError> {
-    frame_len(width, height, 4)
-}
-
-/// Exact byte length of one packed frame at `bytes_per_px`, with the same
-/// overflow discipline [`rgba_frame_len`] has always had.
+/// Exact byte length of one packed frame at `bytes_per_px`, checked against
+/// overflow so a nonsensical width/height (bad caller input, not file input,
+/// but the rule is the same: no panics — docs/14-ENGINEERING-RULES.md §4)
+/// errors instead of overflowing `i32` arithmetic.
 fn frame_len(width: i32, height: i32, bytes_per_px: usize) -> Result<usize, MediaError> {
     let bytes = i32::try_from(bytes_per_px)
         .map_err(|_| MediaError::Ffmpeg("frame dimensions overflow".into()))?;
@@ -1595,19 +1615,6 @@ fn frame_len(width: i32, height: i32, bytes_per_px: usize) -> Result<usize, Medi
         .ok_or_else(|| MediaError::Ffmpeg("frame dimensions overflow".into()))
 }
 
-/// Copy tight RGBA rows into the (possibly padded) AVFrame planes — the one
-/// raw-pointer touch of the video path, kept small and auditable.
-fn copy_rgba_into(
-    frame: &mut AVFrame,
-    rgba: &[u8],
-    width: i32,
-    height: i32,
-) -> Result<(), MediaError> {
-    copy_pixels_into(frame, rgba, width, height, 4, false)
-}
-
-/// As [`copy_rgba_into`], for any packed pixel size, optionally swapping each
-/// `u16` sample's two bytes on the way (the big-endian still formats).
 /// Scatter interleaved scene-linear float RGBA into a planar `gbrapf32le`
 /// frame — the one shape OpenEXR's encoder takes.
 ///
@@ -1663,6 +1670,10 @@ fn copy_planar_f32_into(
     Ok(())
 }
 
+/// Copy tight packed rows into the (possibly padded) AVFrame planes, any pixel
+/// size, optionally swapping each `u16` sample's two bytes on the way (the
+/// big-endian still formats). The one raw-pointer touch of the frame paths,
+/// kept small and auditable.
 fn copy_pixels_into(
     frame: &mut AVFrame,
     rgba: &[u8],
@@ -1724,6 +1735,7 @@ mod tests {
             bit_rate: None,
             max_rate: None,
             colour: ColourTags::Srgb,
+            depth: BitDepth::Eight,
         }
     }
 
@@ -1894,6 +1906,22 @@ mod tests {
             let stream_tag = input.streams()[0].codecpar().codec_tag;
             assert_eq!(&stream_tag.to_le_bytes(), tag);
         }
+
+        // Sixteen-bit frames go in little-endian: mid grey stays mid grey.
+        let path = dir.path().join("deep.mov");
+        let mut v = video_settings(VideoCodec::ProRes422Hq, 320, 240);
+        v.depth = BitDepth::Sixteen;
+        let mut enc = Encoder::open(&path, Some(&v), None, &Metadata::new()).unwrap();
+        let grey = [0x6000u16, 0x6000, 0x6000, 0xffff]
+            .map(u16::to_le_bytes)
+            .concat()
+            .repeat(320 * 240);
+        enc.write_rgba(&grey).unwrap();
+        enc.finish().unwrap();
+        let index = crate::index::build_frame_index(&path).unwrap();
+        let mut dec = crate::decode::VideoDecoder::open(&path, index).unwrap();
+        let red = dec.frame_rgba(0, None).unwrap().rgba[0];
+        assert!(red.abs_diff(0x60) <= 2, "read back {red}");
     }
 
     /// Every sample rate, sample width and channel layout the export dialog
@@ -2146,11 +2174,11 @@ mod tests {
     /// wrong, too-small size (release builds) for large-but-plausible
     /// dimensions. It must report a typed error instead.
     #[test]
-    fn rgba_frame_len_errors_instead_of_overflowing() {
+    fn frame_len_errors_instead_of_overflowing() {
         // 50,000 x 50,000 x 4 overflows i32::MAX (2,147,483,647).
-        assert!(rgba_frame_len(50_000, 50_000).is_err());
-        assert_eq!(rgba_frame_len(2, 2).unwrap(), 16);
-        assert_eq!(rgba_frame_len(320, 240).unwrap(), 320 * 240 * 4);
+        assert!(frame_len(50_000, 50_000, 4).is_err());
+        assert_eq!(frame_len(2, 2, 4).unwrap(), 16);
+        assert_eq!(frame_len(320, 240, 4).unwrap(), 320 * 240 * 4);
     }
 
     /// Metadata really lands in the container: written on the way out, read
