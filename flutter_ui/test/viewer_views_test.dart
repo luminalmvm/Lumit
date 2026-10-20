@@ -114,7 +114,9 @@ void main() {
         rotationZ: 0,
       );
       pair[1].cameraPoses['comp-b/free'] = free;
+      pair[1].orthoZooms['comp-b'] = 2666;
       pair[1].resolution = PreviewResolution.quarter;
+      pair[1].wireframeOnly = true;
 
       final project = views.toProjectJson();
       final workspace = views.toWorkspaceJson();
@@ -134,7 +136,9 @@ void main() {
       expect(back.dividerOf(Panel.viewer.pane()), 0.3);
       expect(back.viewportPanes, {Panel.viewer.pane()});
       expect(read[1].cameraPoses['comp-b/free'], free);
+      expect(read[1].orthoZooms, {'comp-b': 2666.0});
       expect(read[1].resolution, PreviewResolution.quarter);
+      expect(read[1].wireframeOnly, isTrue);
 
       // **A workspace someone sent you carries no locks.** The project half
       // is what says what a view shows; without it the views are laid out and

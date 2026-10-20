@@ -809,6 +809,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
               uiState: ui,
               fitted: fitted,
               pictureRect: canvas,
+              showPicture: !(viewport && widget.view.wireframeOnly),
               grid: ui.viewerGrid,
               overlays: ui.viewerOverlays,
               pictureKey: _pictureKey,

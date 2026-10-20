@@ -165,18 +165,24 @@ class ViewerSurface {
   final List<ViewerView> viewSlots = [...defaultViewSlots];
 
   /// In a 3D viewport: how many pixels it is drawn with, its own tier apart
-  /// from the comp's.
+  /// from the comp's, and the zoom each comp's free view goes back to when
+  /// it leaves orthographic, keyed by comp. A comp named here is orthographic.
   PreviewResolution resolution;
+  final Map<String, double> orthoZooms = {};
 
   /// Frame every layer the first time the view is drawn, which is how a new
-  /// 3D viewport opens. Not written down.
+  /// 3D viewport opens, and whether the corner axes made it orthographic,
+  /// which the next orbit takes back. Neither is written down.
   bool frameOnOpen = false;
+  bool snappedOrtho = false;
 
   /// A 3D viewport's picture: the size it fills round the comp's middle,
-  /// comp pixels, which its panel measures, and the share of its tier it is
-  /// drawn at so a wide pane costs at most twice the comp's pixels.
+  /// comp pixels, which its panel measures, the share of its tier it is drawn
+  /// at so a wide pane costs at most twice the comp's pixels, and whether it
+  /// is drawn as lines only, which skips the engine altogether.
   (int, int) canvas = (0, 0);
   double canvasShare = 1;
+  bool wireframeOnly = false;
 
   ViewerSurface({
     required this.id,
@@ -240,6 +246,8 @@ class ViewerSurface {
                   e.value.rotationZ,
                 ],
           },
+        if (orthoZooms.isNotEmpty) 'ortho': orthoZooms,
+        if (wireframeOnly) 'wireframe_only': true,
       };
 
   /// Read one back. Anything malformed reads as its default rather than
@@ -295,6 +303,14 @@ class ViewerSurface {
           rotationY: n[5],
           rotationZ: n[6],
         );
+      }
+    }
+    surface.wireframeOnly = j['wireframe_only'] == true;
+    final ortho = j['ortho'];
+    if (ortho is Map) {
+      for (final e in ortho.entries) {
+        final zoom = _finite(e.value);
+        if (zoom != null) surface.orthoZooms['${e.key}'] = zoom;
       }
     }
     if (slots is List && slots.length == defaultViewSlots.length) {

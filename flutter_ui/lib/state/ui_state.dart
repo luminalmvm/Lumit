@@ -23,6 +23,8 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart'
     show RevealFilter, effectPath;
 import 'package:lumit_flutter/panels/shader_editor.dart' show InstanceHome;
 import 'package:lumit_flutter/l10n/strings.dart';
+import 'package:lumit_flutter/panels/viewer_camera.dart'
+    show orthographic, perspective, poseOfView, viewOfPose;
 import 'package:lumit_flutter/panels/viewer_texture_controller.dart';
 import 'package:lumit_flutter/shell/about_window_frb.dart';
 import 'package:lumit_flutter/shell/live_endpoint_frb.dart';
@@ -1210,6 +1212,8 @@ class LumitUiState extends ChangeNotifier {
       setViewerView(ViewerView.free, viewId: view.engineId);
       return;
     }
+    // Drawn as lines only: nothing to ask the engine for.
+    if (viewport && view.wireframeOnly) return;
     // One picture in flight at a time beside the view being worked in.
     if (viewport && view.id != views.activeId) {
       final asked = _viewportAsked[view.engineId];
@@ -4035,6 +4039,20 @@ class LumitUiState extends ChangeNotifier {
 
   final Map<int, ((int, int), double)> _canvasDue = {};
 
+  /// Whether view [viewId], a 3D viewport, is drawn as lines only.
+  bool viewportWireframe(int viewId) =>
+      _surfaceOf(viewId)?.wireframeOnly ?? false;
+
+  /// Draw view [viewId], a 3D viewport, as lines only, or as the picture.
+  void setViewportWireframe(int viewId, bool on) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    if (view == null || comp == null || view.wireframeOnly == on) return;
+    view.wireframeOnly = on;
+    rememberSession();
+    _cameraMoved(view, comp);
+  }
+
   /// A 3D viewport's view ended a drag or a flight: the Viewer's own menu
   /// under the button that did it stays shut. Cleared by the next press.
   bool viewerNavigated = false;
@@ -4069,14 +4087,72 @@ class LumitUiState extends ChangeNotifier {
     return view != null && views.isViewport(view);
   }
 
-  /// Put view [viewId], a 3D viewport, on its free view at [pose]: where plain
-  /// navigation takes it from the comp's camera or a fixed view.
-  void dropToFreeView(int viewId, BridgeCameraPose pose) {
+  /// Whether view [viewId] is looking through its free view orthographically.
+  bool viewportOrtho(int viewId) {
     final view = _surfaceOf(viewId);
-    if (view == null || compFor(view) == null) return;
+    final id = view == null ? null : compFor(view)?.internalid.toString();
+    return id != null &&
+        view!.cameraViews[id] == ViewerView.free &&
+        view.orthoZooms.containsKey(id);
+  }
+
+  /// Turn view [viewId]'s free view orthographic, standing [distance] off,
+  /// or back to the lens it had. [snapped] is the corner axes' doing, which
+  /// the next orbit takes back.
+  void setViewportOrtho(
+    int viewId,
+    bool on, {
+    required double distance,
+    bool snapped = false,
+  }) {
+    final view = _surfaceOf(viewId);
+    final id = view == null ? null : compFor(view)?.internalid.toString();
+    final seen = viewPoseOf(viewId);
+    if (view == null ||
+        id == null ||
+        seen == null ||
+        view.cameraViews[id] != ViewerView.free) {
+      return;
+    }
+    view.snappedOrtho = on && snapped;
+    if (on == view.orthoZooms.containsKey(id)) return;
+    final pose = poseOfView(seen);
+    if (on) {
+      view.orthoZooms[id] = pose.zoom;
+      setViewerViewPose(viewOfPose(orthographic(pose, distance)),
+          viewId: viewId);
+    } else {
+      final zoom = view.orthoZooms.remove(id) ?? pose.zoom;
+      setViewerViewPose(viewOfPose(perspective(pose, distance, zoom)),
+          viewId: viewId);
+    }
+    rememberSession();
+  }
+
+  /// Put view [viewId], a 3D viewport, on its free view at [pose]: where plain
+  /// navigation takes it from the comp's camera or a fixed view. From a fixed
+  /// view it stays flat, going back to [flatLens] at the next orbit.
+  void dropToFreeView(int viewId, BridgeCameraPose pose, {double? flatLens}) {
+    final view = _surfaceOf(viewId);
+    final id = view == null ? null : compFor(view)?.internalid.toString();
+    if (view == null || id == null) return;
     setViewerView(ViewerView.free, viewId: viewId);
+    if (flatLens == null) {
+      view.orthoZooms.remove(id);
+      view.snappedOrtho = false;
+    } else {
+      view.orthoZooms[id] = flatLens;
+      view.snappedOrtho = true;
+    }
     setViewerViewPose(pose, viewId: viewId);
     rememberSession();
+  }
+
+  /// Back to perspective from an orthographic view the corner axes snapped.
+  void leaveSnappedOrtho(int viewId, {required double distance}) {
+    if (_surfaceOf(viewId)?.snappedOrtho ?? false) {
+      setViewportOrtho(viewId, false, distance: distance);
+    }
   }
 
   /// Switch the active view to its 3D view shortcut [slot]. False with no

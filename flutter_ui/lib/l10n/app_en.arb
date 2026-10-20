@@ -7176,6 +7176,34 @@
   "@panel3dViewport": {
     "description": "The name at the top of a 3D viewport: a Viewer panel looking through a camera of its own, moved with the mouse."
   },
+  "tipViewportProjection": "Perspective or orthographic",
+  "@tipViewportProjection": {
+    "description": "Tooltip on the switch under a 3D viewport's corner axes, which reads Persp or Ortho."
+  },
+  "tipViewportWireframe": "Lines only",
+  "@tipViewportWireframe": {
+    "description": "Tooltip on the switch under a 3D viewport's corner axes that draws the view as outlines on the ground, with no picture."
+  },
+  "viewportPersp": "Persp",
+  "@viewportPersp": {
+    "description": "The switch under a 3D viewport's corner axes while it draws in perspective. Short, it is a small button."
+  },
+  "viewportOrtho": "Ortho",
+  "@viewportOrtho": {
+    "description": "The same switch while the viewport draws orthographically, with no perspective. Short, it is a small button."
+  },
+  "viewportAxisX": "X",
+  "@viewportAxisX": {
+    "description": "The letter on the x axis in a 3D viewport's corner axes."
+  },
+  "viewportAxisY": "Y",
+  "@viewportAxisY": {
+    "description": "The letter on the y axis in a 3D viewport's corner axes."
+  },
+  "viewportAxisZ": "Z",
+  "@viewportAxisZ": {
+    "description": "The letter on the z axis in a 3D viewport's corner axes."
+  },
   "viewportFlySpeed": "Speed ×{speed}",
   "@viewportFlySpeed": {
     "description": "Beside the pointer for a moment while the wheel changes how fast a 3D viewport flies. {speed} is how many times its usual pace, such as 1.56.",

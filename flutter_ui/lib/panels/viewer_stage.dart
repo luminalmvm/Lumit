@@ -96,8 +96,10 @@ class ViewerStage extends StatelessWidget {
   final Rect fitted;
 
   /// Where the picture is drawn, when it reaches past the comp: a 3D
-  /// viewport's fills its pane. Null is [fitted].
+  /// viewport's fills its pane. Null is [fitted]. A viewport drawn as lines
+  /// only has no picture at all.
   final Rect? pictureRect;
+  final bool showPicture;
   final bool grid;
 
   /// Which of the guides menu's marks are drawn over the picture: the grid, the
@@ -145,6 +147,7 @@ class ViewerStage extends StatelessWidget {
     required this.uiState,
     required this.fitted,
     this.pictureRect,
+    this.showPicture = true,
     required this.grid,
     required this.overlays,
     required this.pictureKey,
@@ -627,7 +630,8 @@ class ViewerStage extends StatelessWidget {
             // and painting an 8-pixel grid over it meant half a million
             // rectangles for the few thousand actually on screen. That, and not
             // the rendering, is what made zooming in seize the whole window.
-            if (grid)
+            // A viewport's lines only have the plain surround behind them.
+            if (grid && showPicture)
               Positioned.fill(
                 // Its own layer, so the marks over the picture do not draw
                 // every square again as they move.
@@ -643,19 +647,20 @@ class ViewerStage extends StatelessWidget {
             // The picture, inside the boundary a snapshot is taken of.
             // Everything below in this stack is a sibling of it, so the
             // photograph is the picture and not the marks over it.
-            Positioned.fromRect(
-              rect: pictureRect ?? fitted,
-              child: RepaintBoundary(
-                key: pictureKey,
-                child: _Picture(
-                  uiState: uiState,
-                  channel: channel,
-                  viewId: viewId,
-                  shownScale:
-                      compSize.width == 0 ? 1 : fitted.width / compSize.width,
+            if (showPicture)
+              Positioned.fromRect(
+                rect: pictureRect ?? fitted,
+                child: RepaintBoundary(
+                  key: pictureKey,
+                  child: _Picture(
+                    uiState: uiState,
+                    channel: channel,
+                    viewId: viewId,
+                    shownScale:
+                        compSize.width == 0 ? 1 : fitted.width / compSize.width,
+                  ),
                 ),
               ),
-            ),
             // Why there is no picture, on a machine where the runner had to
             // refuse it. Over the picture's place and under everything else.
             const Positioned.fill(child: ViewerGpuMismatchNotice()),
@@ -763,7 +768,7 @@ class ViewerStage extends StatelessWidget {
                       view: view,
                       ask: ask,
                       ground: aids.ground,
-                      grid: !viewport,
+                      grid: !viewport || uiState.viewportWireframe(viewId),
                       axes: axes,
                       only: only,
                       frame: uiState.playheadFrame.value,

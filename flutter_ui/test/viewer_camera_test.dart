@@ -106,6 +106,31 @@ void main() {
     });
   });
 
+  group('Easing', () {
+    test('keeps an orbited point in the middle all the way', () {
+      // A big turn about a point nearer than the 1:1 plane, as a snap from a
+      // three-quarter view to Top makes.
+      final start = pose(rotation: (-20, 35, 0));
+      final f = start.axes.forward;
+      final p = start.position;
+      final at = (p.$1 + f.$1 * 1500, p.$2 + f.$2 * 1500, p.$3 + f.$3 * 1500);
+      final end = orbitCamera(start, 400, -300, around: at);
+      for (final k in [0.25, 0.5, 0.75]) {
+        final mid =
+            poseOfView(easedPose(viewOfPose(start), viewOfPose(end), k));
+        final e = mid.position;
+        final g = mid.axes.forward;
+        final along = (at.$1 - e.$1) * g.$1 +
+            (at.$2 - e.$2) * g.$2 +
+            (at.$3 - e.$3) * g.$3;
+        closeTriple(
+            (e.$1 + g.$1 * along, e.$2 + g.$2 * along, e.$3 + g.$3 * along), at,
+            tolerance: 1e-6);
+        expect(along, closeTo(1500, 1e-6), reason: 'at its distance');
+      }
+    });
+  });
+
   group('The unified tool', () {
     test('picks its move by the button that started the drag', () {
       expect(cameraMoveForButtons(kPrimaryMouseButton), ToolMode.cameraOrbit);
