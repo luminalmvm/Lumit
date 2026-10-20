@@ -2268,6 +2268,9 @@ impl CompositionReference {
     /// `view` names which Viewer view asked (docs/impl/multi-viewer.md §2.1).
     /// The worker latches it, so the drag previews and the idle work that
     /// follow serve the same view without each growing a parameter.
+    /// `active` says it is the view being worked in, which the idle fill, the
+    /// cache bar and the drags follow.
+    #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn render_frame(
         &self,
@@ -2276,6 +2279,7 @@ impl CompositionReference {
         mode: BridgePlaybackMode,
         prefix: Option<crate::api::state::BridgePrefixPoint>,
         view: u32,
+        active: bool,
     ) -> Result<(), BridgeError> {
         self.dispatch(RenderComp(RenderCompRequest {
             comp: self.clone(),
@@ -2284,6 +2288,7 @@ impl CompositionReference {
             mode,
             prefix,
             view,
+            active,
         }))
     }
 

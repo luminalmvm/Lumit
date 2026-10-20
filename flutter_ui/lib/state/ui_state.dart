@@ -1214,6 +1214,7 @@ class LumitUiState extends ChangeNotifier {
         // and the selection is in one view.
         prefix: view.id == views.activeId ? viewerPrefix : null,
         view: view.engineId,
+        active: view.id == views.activeId,
       );
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead

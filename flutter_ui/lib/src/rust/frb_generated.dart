@@ -747,7 +747,8 @@ abstract class BridgeLibApi extends BaseApi {
       required double scale,
       required BridgePlaybackMode mode,
       BridgePrefixPoint? prefix,
-      required int view});
+      required int view,
+      required bool active});
 
   void crateApiCompositionCompositionReferenceRenderFrameWithClipRetime(
       {required CompositionReference that,
@@ -7345,7 +7346,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required double scale,
       required BridgePlaybackMode mode,
       BridgePrefixPoint? prefix,
-      required int view}) {
+      required int view,
+      required bool active}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -7355,6 +7357,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_bridge_playback_mode(mode, serializer);
         sse_encode_opt_box_autoadd_bridge_prefix_point(prefix, serializer);
         sse_encode_u_32(view, serializer);
+        sse_encode_bool(active, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 172)!;
       },
       codec: SseCodec(
@@ -7363,7 +7366,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceRenderFrameConstMeta,
-      argValues: [that, frame, scale, mode, prefix, view],
+      argValues: [that, frame, scale, mode, prefix, view, active],
       apiImpl: this,
     ));
   }
@@ -7372,7 +7375,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceRenderFrameConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_render_frame",
-            argNames: ["that", "frame", "scale", "mode", "prefix", "view"],
+            argNames: [
+              "that",
+              "frame",
+              "scale",
+              "mode",
+              "prefix",
+              "view",
+              "active"
+            ],
           );
 
   @override

@@ -332,6 +332,7 @@ void main() {
         scale: 1.0,
         mode: BridgePlaybackMode.everyFrame,
         view: 0,
+        active: true,
       );
 
       // Fifteen seconds of patience, not five: the first render of a session
