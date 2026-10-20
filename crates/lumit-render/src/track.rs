@@ -827,7 +827,11 @@ fn test_cache_dir() -> Option<PathBuf> {
 /// is nothing here to evict piecemeal.
 fn solves() -> &'static RwLock<HashMap<Uuid, Arc<Solved>>> {
     static SOLVES: OnceLock<RwLock<HashMap<Uuid, Arc<Solved>>>> = OnceLock::new();
-    SOLVES.get_or_init(|| RwLock::new(HashMap::new()))
+    SOLVES.get_or_init(|| {
+        // From the first solve on, the model poses a linked camera with these.
+        lumit_core::track::use_solve_store(&Store);
+        RwLock::new(HashMap::new())
+    })
 }
 
 /// One planar track, as the store keeps it: the answer, the media's rate, and
@@ -1073,7 +1077,7 @@ pub fn point_centroid(media: Uuid, tracks: &[u32]) -> Option<[f64; 3]> {
 /// document holds.
 #[must_use]
 pub fn camera_pose(doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
-    linked_pose(doc, comp, t).map(|l| l.pose)
+    lumit_core::track::active_camera_pose(doc, comp, t)
 }
 
 /// As [`camera_pose`], keeping the [`lumit_core::track::LinkState`] the

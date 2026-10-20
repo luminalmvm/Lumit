@@ -1678,6 +1678,52 @@ pub struct Switches {
 }
 
 impl Layer {
+    /// Whether the layer is placed in 3D: its 3D switch is on, or it is a
+    /// camera or a light, which have no switch and always are. A 2D layer
+    /// draws as if its hidden z and X and Y Rotation were nought.
+    #[must_use]
+    pub fn is_3d(&self) -> bool {
+        self.switches.three_d
+            || matches!(
+                self.kind,
+                LayerKind::Camera { .. } | LayerKind::Light { .. }
+            )
+    }
+
+    /// The rows of the point `prop` is one number of, in order, and which of
+    /// them it is: a position is x and y, and z as well on a 3D layer. A row
+    /// that is a number on its own is a point of one.
+    #[must_use]
+    pub fn point_rows(&self, prop: TransformProp) -> (Vec<TransformProp>, usize) {
+        use TransformProp as P;
+        let rows = match prop {
+            P::AnchorX | P::AnchorY => vec![P::AnchorX, P::AnchorY],
+            P::PositionX | P::PositionY | P::PositionZ if self.is_3d() => {
+                vec![P::PositionX, P::PositionY, P::PositionZ]
+            }
+            P::PositionX | P::PositionY => vec![P::PositionX, P::PositionY],
+            P::ScaleX | P::ScaleY => vec![P::ScaleX, P::ScaleY],
+            P::PoiX | P::PoiY | P::PoiZ => vec![P::PoiX, P::PoiY, P::PoiZ],
+            other => vec![other],
+        };
+        let axis = rows.iter().position(|r| *r == prop).unwrap_or(0);
+        (rows, axis)
+    }
+
+    /// Whether `prop` is shown on a row of its own, as After Effects'
+    /// separated dimensions are, so an expression on it reads one number.
+    #[must_use]
+    pub fn separated(&self, prop: TransformProp) -> bool {
+        use TransformProp as P;
+        let pair = match prop {
+            P::AnchorX | P::AnchorY => TransformPair::Anchor,
+            P::PositionX | P::PositionY | P::PositionZ => TransformPair::Position,
+            P::ScaleX | P::ScaleY => TransformPair::Scale,
+            _ => return false,
+        };
+        self.transform.axis_modes.get(pair) == AxisMode::Separated
+    }
+
     /// One animatable channel by name: the eleven transform channels from the
     /// transform group, the seven camera channels from a Camera's own kind,
     /// and `None` for a camera channel on any other layer

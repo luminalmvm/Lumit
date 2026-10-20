@@ -3255,7 +3255,8 @@ class _GraphPainter extends CustomPainter {
             layer: channel.entry.layer,
             start: start,
             end: end,
-            samples: samples);
+            samples: samples,
+            row: channel.expressionRow);
 
         for (var i = 0; i < result.length; i++) {
           final x = size.width * (i.toDouble() / samples.toDouble());

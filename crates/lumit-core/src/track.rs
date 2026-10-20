@@ -153,6 +153,32 @@ pub fn camera_pose_at(
     camera_pose_of(doc, comp, layer, t, store)
 }
 
+/// The solves the renderer holds, once it holds any. Process-wide because the
+/// renderer's own store is.
+static SOLVES: std::sync::OnceLock<&'static (dyn CameraSolveStore + Sync)> =
+    std::sync::OnceLock::new();
+
+/// Hand the model the renderer's solves, so a camera that follows one is posed
+/// the same way everywhere. The first store given is the one kept.
+pub fn use_solve_store(store: &'static (dyn CameraSolveStore + Sync)) {
+    let _ = SOLVES.set(store);
+}
+
+/// The active camera's placement at comp time `t` as the picture is drawn
+/// with it, its solve link followed. The one reading the renderer and
+/// expressions both take.
+#[must_use]
+pub fn active_camera_pose(doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
+    match SOLVES.get() {
+        Some(store) => camera_pose_at(doc, comp, t, *store).map(|linked| linked.pose),
+        // The renderer hands its store over the first time it reads a solve,
+        // so until then nothing has been solved. That is `camera_pose_at`
+        // with an empty store exactly: a link with nothing to follow reads
+        // the stored pose. Keep the two arms equal when either changes.
+        None => comp.camera_pose(t),
+    }
+}
+
 /// One named Camera layer's placement at comp time `t`, whether or not it is
 /// the active one — what the bake walks, frame by frame.
 #[must_use]

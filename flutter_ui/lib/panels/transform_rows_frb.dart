@@ -685,6 +685,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     if (scalar case BridgeScalar_Expression scalar) {
       return EffectParamRowExpression(
           value: scalar,
+          row: BridgeExpressionRow.transform(axis.prop),
           set: (value) {
             final field = (value as BridgeEffectValue_Float).field0;
 

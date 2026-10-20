@@ -237,6 +237,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExportSpec dco_decode_box_autoadd_bridge_export_spec(dynamic raw);
 
   @protected
+  BridgeExpressionRow dco_decode_box_autoadd_bridge_expression_row(dynamic raw);
+
+  @protected
   BridgeExtension dco_decode_box_autoadd_bridge_extension(dynamic raw);
 
   @protected
@@ -680,6 +683,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExpressionLanguage dco_decode_bridge_expression_language(dynamic raw);
+
+  @protected
+  BridgeExpressionRow dco_decode_bridge_expression_row(dynamic raw);
 
   @protected
   BridgeExtension dco_decode_bridge_extension(dynamic raw);
@@ -1825,6 +1831,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeExportSpec? dco_decode_opt_box_autoadd_bridge_export_spec(dynamic raw);
 
   @protected
+  BridgeExpressionRow? dco_decode_opt_box_autoadd_bridge_expression_row(
+      dynamic raw);
+
+  @protected
   BridgeGraphPoint? dco_decode_opt_box_autoadd_bridge_graph_point(dynamic raw);
 
   @protected
@@ -2205,6 +2215,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExportSpec sse_decode_box_autoadd_bridge_export_spec(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExpressionRow sse_decode_box_autoadd_bridge_expression_row(
       SseDeserializer deserializer);
 
   @protected
@@ -2734,6 +2748,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeExpressionLanguage sse_decode_bridge_expression_language(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeExpressionRow sse_decode_bridge_expression_row(
       SseDeserializer deserializer);
 
   @protected
@@ -4086,6 +4104,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeExpressionRow? sse_decode_opt_box_autoadd_bridge_expression_row(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeGraphPoint? sse_decode_opt_box_autoadd_bridge_graph_point(
       SseDeserializer deserializer);
 
@@ -4490,6 +4512,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_export_spec(
       BridgeExportSpec self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_expression_row(
+      BridgeExpressionRow self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_extension(
@@ -5058,6 +5084,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_expression_language(
       BridgeExpressionLanguage self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_expression_row(
+      BridgeExpressionRow self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_extension(
@@ -6512,6 +6542,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_export_spec(
       BridgeExportSpec? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_expression_row(
+      BridgeExpressionRow? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_graph_point(

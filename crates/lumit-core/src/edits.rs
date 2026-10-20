@@ -1244,6 +1244,11 @@ pub fn transform_ops(
         if let Some(language) = language {
             next.set_expression_language(language);
         }
+        // A new expression on half of a point reads the whole point, as one
+        // imported from After Effects does.
+        if !held.extra.contains_key(SLOT_KEY) {
+            lumit_core::expression::note_transform_point(layer, prop, &mut next);
+        }
         let slot = next.extra.get(SLOT_KEY).cloned();
         if slot.as_ref() != held.extra.get(SLOT_KEY) {
             ops.push(Op::SetTransformExpressionSlot {

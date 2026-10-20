@@ -283,6 +283,20 @@ pub fn project(
     height: f64,
     p: (f64, f64, f64),
 ) -> ((f64, f64), bool) {
+    let (x, y, depth) = project_depth(pose, width, height, p);
+    ((x, y), depth + pose.zoom > 1e-6)
+}
+
+/// [`project`] with the depth kept as the third number: how far in front of
+/// the plane the camera sees 1:1 the point is. That is the point's own z when
+/// the camera sits where a fresh one does, and [`unproject`] takes it back.
+#[must_use]
+pub fn project_depth(
+    pose: &CameraPose,
+    width: f64,
+    height: f64,
+    p: (f64, f64, f64),
+) -> (f64, f64, f64) {
     let m = rotation(pose.rotation_deg);
     let d = (
         p.0 - pose.position.0,
@@ -298,9 +312,140 @@ pub fn project(
     // In the compositor's frame the eye is `zoom` behind the 1:1 plane, so a
     // point `a.z` in front of the eye is at `a.z - zoom` there.
     let w = a.2 / pose.zoom.max(1e-9);
-    let in_front = a.2 > 1e-6;
     let w = if w.abs() < 1e-9 { 1e-9 } else { w };
-    ((width * 0.5 + a.0 / w, height * 0.5 + a.1 / w), in_front)
+    (
+        width * 0.5 + a.0 / w,
+        height * 0.5 + a.1 / w,
+        a.2 - pose.zoom,
+    )
+}
+
+/// The comp-space point that [`project_depth`] puts at picture position
+/// `(x, y)` with that depth.
+#[must_use]
+pub fn unproject(
+    pose: &CameraPose,
+    width: f64,
+    height: f64,
+    p: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let ahead = p.2 + pose.zoom;
+    let w = ahead / pose.zoom.max(1e-9);
+    let a = ((p.0 - width * 0.5) * w, (p.1 - height * 0.5) * w, ahead);
+    let m = rotation(pose.rotation_deg);
+    let at = |r: usize| m[r][0] * a.0 + m[r][1] * a.1 + m[r][2] * a.2;
+    (
+        pose.position.0 + at(0),
+        pose.position.1 + at(1),
+        pose.position.2 + at(2),
+    )
+}
+
+/// A placement in 3D, `p ↦ m · p + t`: a layer's transform, or a whole parent
+/// chain multiplied out.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Place {
+    pub m: Mat3,
+    pub t: (f64, f64, f64),
+}
+
+impl Place {
+    /// `outer` applied after this one, the order a parent wraps its child.
+    #[must_use]
+    pub fn within(&self, outer: &Place) -> Place {
+        Place {
+            m: mul(&outer.m, &self.m),
+            t: outer.point(self.t),
+        }
+    }
+
+    #[must_use]
+    pub fn point(&self, p: (f64, f64, f64)) -> (f64, f64, f64) {
+        let v = self.vector(p);
+        (v.0 + self.t.0, v.1 + self.t.1, v.2 + self.t.2)
+    }
+
+    /// A direction carried through, which the position leaves alone.
+    #[must_use]
+    pub fn vector(&self, v: (f64, f64, f64)) -> (f64, f64, f64) {
+        let m = &self.m;
+        let at = |r: usize| m[r][0] * v.0 + m[r][1] * v.1 + m[r][2] * v.2;
+        (at(0), at(1), at(2))
+    }
+
+    /// The placement that undoes this one. `None` under a scale of nought,
+    /// which flattens everything onto a line or a point.
+    #[must_use]
+    pub fn invert(&self) -> Option<Place> {
+        let m = &self.m;
+        let cofactor = |r0: usize, r1: usize, c0: usize, c1: usize| {
+            m[r0][c0] * m[r1][c1] - m[r0][c1] * m[r1][c0]
+        };
+        let det = m[0][0] * cofactor(1, 2, 1, 2) - m[0][1] * cofactor(1, 2, 0, 2)
+            + m[0][2] * cofactor(1, 2, 0, 1);
+        if !det.is_finite() || det.abs() < 1e-12 {
+            return None;
+        }
+        let inv = [
+            [
+                cofactor(1, 2, 1, 2) / det,
+                -cofactor(0, 2, 1, 2) / det,
+                cofactor(0, 1, 1, 2) / det,
+            ],
+            [
+                -cofactor(1, 2, 0, 2) / det,
+                cofactor(0, 2, 0, 2) / det,
+                -cofactor(0, 1, 0, 2) / det,
+            ],
+            [
+                cofactor(1, 2, 0, 1) / det,
+                -cofactor(0, 2, 0, 1) / det,
+                cofactor(0, 1, 0, 1) / det,
+            ],
+        ];
+        let back = Place {
+            m: inv,
+            t: (0.0, 0.0, 0.0),
+        };
+        let t = back.vector(self.t);
+        Some(Place {
+            m: inv,
+            t: (-t.0, -t.1, -t.2),
+        })
+    }
+}
+
+/// A layer's transform as the compositor places it (`lumit_gpu::place_matrix`):
+/// `T(position) · Ry · Rx · Rz · S(scale / 100) · T(−anchor)`. There is no
+/// Scale Z or Anchor Z yet, so z passes through unscaled.
+#[must_use]
+pub fn place(
+    position: (f64, f64, f64),
+    anchor: (f64, f64),
+    scale: (f64, f64),
+    deg: (f64, f64, f64),
+) -> Place {
+    let r = rotation(deg);
+    let s = [scale.0 / 100.0, scale.1 / 100.0, 1.0];
+    let mut m = r;
+    for row in &mut m {
+        for (cell, s) in row.iter_mut().zip(s) {
+            *cell *= s;
+        }
+    }
+    let turned = Place {
+        m,
+        t: (0.0, 0.0, 0.0),
+    }
+    .vector((anchor.0, anchor.1, 0.0));
+    Place {
+        m,
+        t: (
+            position.0 - turned.0,
+            position.1 - turned.1,
+            position.2 - turned.2,
+        ),
+    }
 }
 
 /// [`project`] as three rows of a matrix, for taking many points through one

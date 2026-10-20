@@ -619,6 +619,7 @@ class EffectParamRowFrb extends StatelessWidget {
         comp: comp,
         frame: frame,
         layer: owner,
+        row: BridgeExpressionRow.effect(effect: effectId, param: param.id),
         set: _set,
         setLive: _setLive,
       );
@@ -2969,6 +2970,7 @@ class EffectParamRowExpression extends StatefulWidget {
       required this.frame,
       required this.setLive,
       required this.layer,
+      this.row,
       super.key});
   final BridgeScalar_Expression value;
   final CompositionReference comp;
@@ -2976,6 +2978,9 @@ class EffectParamRowExpression extends StatefulWidget {
   final void Function(BridgeEffectValue value) set;
   final void Function(BridgeEffectValue value) setLive;
   final LayerReference layer;
+
+  /// The row the expression sits on, so it reads its own number of a point.
+  final BridgeExpressionRow? row;
 
   @override
   State<EffectParamRowExpression> createState() =>
@@ -3060,7 +3065,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
       expression: widget.value.field0,
       language: widget.value.field1,
       time: timeOfFrame(widget.comp, playhead.value),
-      layer: widget.layer);
+      layer: widget.layer,
+      row: widget.row);
 
   @override
   void didUpdateWidget(covariant EffectParamRowExpression oldWidget) {
@@ -3093,7 +3099,8 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
   double get _value => sampleScalarWithContext(
       scalar: widget.value,
       time: timeOfFrame(widget.comp, playhead.value),
-      layer: widget.layer);
+      layer: widget.layer,
+      row: widget.row);
 
   /// Open the editor over the row. The row itself may be rebuilt away while
   /// it is up, so what it writes through is taken now.
@@ -3107,6 +3114,7 @@ class _EffectParamRowExpressionState extends State<EffectParamRowExpression> {
       value: widget.value,
       comp: widget.comp,
       layer: widget.layer,
+      row: widget.row,
       fresh: fresh,
       onLive: (draft) => setLive(BridgeEffectValue.float(draft)),
       onCommit: (next) => set(BridgeEffectValue.float(next)),

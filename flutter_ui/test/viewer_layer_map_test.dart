@@ -184,7 +184,7 @@ void main() {
         child,
         {up.layer.internallayerId: up},
         (e) => e.info.transform,
-        (s, _) => (s as BridgeScalar_Static).field0,
+        (s, _, __) => (s as BridgeScalar_Static).field0,
       );
     }
 

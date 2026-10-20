@@ -398,13 +398,15 @@ MenuEntry addExpressionRow(
                       sampleScalarWithContext(
                               scalar: was,
                               time: timeOfFrame(comp, ui.playheadFrame.value),
-                              layer: layer)
+                              layer: layer,
+                              row: first.expressionRow)
                           .toString(),
                       ui.workspace.defaultExpressionLanguage),
               fresh: was is! BridgeScalar_Expression,
               held: was,
               comp: comp,
               layer: layer,
+              row: first.expressionRow,
               onCommit: (next) {
                 // An expression goes on every picked row. Taking one off
                 // leaves a number, which is only the first row's to hold.
