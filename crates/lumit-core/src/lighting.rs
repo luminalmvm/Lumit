@@ -58,8 +58,9 @@ pub struct ShadingLight {
     pub radius_px: f32,
     /// How far past the radius a smooth falloff takes to reach nothing.
     pub falloff_px: f32,
-    /// A light from before it had rows: its smooth falloff eases out rather
-    /// than running straight, and a distance of nought is no falloff.
+    /// A light from before it had rows: its smooth falloff is the old squared
+    /// ramp rather than After Effects' S-curve, and a distance of nought is
+    /// no falloff.
     pub legacy: bool,
     /// Cosine of a spot's half-angle. Anything below -1 means "not a spot",
     /// which is how a point light says it shines everywhere.
@@ -163,11 +164,12 @@ impl ShadingMaterial {
         unlit: false,
     };
 
-    /// After Effects' Specular shininess, a percentage, as the exponent: one
-    /// more than it, so nought is the broadest highlight there is.
+    /// After Effects' Specular shininess, a percentage, as the exponent. It
+    /// is the exponent itself there, so nought spreads the highlight over the
+    /// whole layer.
     #[must_use]
     pub fn exponent_for(shininess_pct: f64) -> f32 {
-        (1.0 + shininess_pct.max(0.0)) as f32
+        shininess_pct.max(0.0) as f32
     }
 }
 
@@ -376,7 +378,8 @@ fn reach(d: f32, light: &ShadingLight) -> f32 {
             if light.legacy {
                 t * t
             } else {
-                t
+                // After Effects eases both ends: an S from the radius out.
+                t * t * (3.0 - 2.0 * t)
             }
         }
         LightFalloff::InverseSquareClamped => (r / d) * (r / d),
@@ -1011,8 +1014,8 @@ mod tests {
         assert!(s > 0.0 && s < h * 0.5, "the feather fades: {s} vs {h}");
 
         // 100 pixels away: inside a 150 radius is full strength, a smooth
-        // falloff halfway out squares to a quarter, and so does the inverse
-        // square from a radius of 50.
+        // falloff halfway out is a half, and the inverse square from a radius
+        // of 50 is a quarter.
         let below = [0.0, 0.0, 0.0];
         let smooth = |radius_px, falloff_px| ShadingLight {
             falloff: LightFalloff::Smooth,
@@ -1022,6 +1025,22 @@ mod tests {
         };
         assert!(close(irradiance(below, n, &smooth(150.0, 50.0)), 1.0));
         assert!(close(irradiance(below, n, &smooth(50.0, 100.0)), 0.5));
+        // After Effects' own, read off its render of a spot falling off from
+        // 350 over 350, at 362, 512, 637 and 687 pixels from the light.
+        for (d, ae) in [(362.0, 0.995), (512.0, 0.554), (637.0, 0.086), (687.0, 0.0)] {
+            let reach = irradiance(
+                below,
+                n,
+                &ShadingLight {
+                    corners: [[0.0, 0.0, -d]; 4],
+                    ..smooth(350.0, 350.0)
+                },
+            );
+            assert!(
+                (reach - ae).abs() < 0.01,
+                "{d} px: {reach}, After Effects {ae}"
+            );
+        }
         // An old light keeps the eased ramp it had, and a distance of nought
         // there is no falloff at all.
         let old = |radius_px, falloff_px| ShadingLight {
@@ -1099,6 +1118,24 @@ mod tests {
         assert!((under - 1.0).abs() < 1e-4, "dead on is full, got {under}");
         assert!(aside > 0.0 && aside < under * 0.5, "it fades: {aside}");
         assert!(highlight([150.0, 0.0, 0.0], n, &light, eye, 60.0) < aside);
+        // After Effects' own, from its render of a light at (420, 120, -300)
+        // on a card at Shininess 0 seen from (320, 180, -888.89). Specular and
+        // Diffuse are both 50 there, so a pixel over the same pixel with no
+        // Specular is 1 + highlight / irradiance.
+        let lamp = ShadingLight {
+            corners: [[420.0, 120.0, -300.0]; 4],
+            ..light
+        };
+        let ae_eye = [320.0, 180.0, -888.89];
+        let exponent = ShadingMaterial::exponent_for(0.0);
+        for (x, y, ae) in [(0.5, 359.5, 1.882), (60.5, 300.5, 1.684)] {
+            let p = [x, y, 0.0];
+            let ratio = highlight(p, n, &lamp, ae_eye, exponent) / irradiance(p, n, &lamp);
+            assert!(
+                (ratio - ae).abs() < 0.02,
+                "({x}, {y}): {ratio}, After Effects {ae}"
+            );
+        }
 
         let surface = ShadingSurface {
             origin: [0.0, 0.0, 0.0],

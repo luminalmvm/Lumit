@@ -179,7 +179,7 @@ fn reach(d: f32, l: Light) -> f32 {
             return select(0.0, 1.0, legacy && r <= 0.0);
         }
         let t = clamp(1.0 - (d - r) / falloff_px, 0.0, 1.0);
-        return select(t, t * t, legacy);
+        return select(t * t * (3.0 - 2.0 * t), t * t, legacy);
     }
     return (r / d) * (r / d);
 }

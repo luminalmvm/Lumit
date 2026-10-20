@@ -2629,8 +2629,8 @@ pub struct LightDef {
     /// A light from before it had rows keeps the edge and the falloff it had:
     /// its feather measured along the cone's cosine, and a smooth falloff
     /// that eases out, with a distance of nought meaning none. Every other
-    /// light measures its feather in angle and falls off in a straight line,
-    /// as After Effects does.
+    /// light measures its feather in angle and falls off in an S-curve, as
+    /// After Effects does.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub legacy_shape: bool,
 }

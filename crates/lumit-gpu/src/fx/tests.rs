@@ -6142,6 +6142,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         ("plastic", vec![spot, parallel]),
         ("after effects", vec![spot, ambient]),
         ("after effects encoded", vec![spot, ambient]),
+        ("shininess nought", vec![spot, ambient]),
     ] {
         // Two are seen through a shiny material, a metal one and then a
         // plastic one, and one lit from black as After Effects does; the rest
@@ -6178,6 +6179,14 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
                 exponent: 6.0,
                 metal: 0.5,
                 encoded: true,
+                ..plain
+            },
+            // The one exponent a pow can trip on.
+            "shininess nought" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 0.0,
                 ..plain
             },
             _ => plain,
