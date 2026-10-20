@@ -2152,10 +2152,27 @@ class CompositionReference {
   /// state, kept per view like the look, so the frontend sends it whenever a
   /// view's 3D view changes and that view's next render looks through it.
   /// Export never sees a view.
-  void setCameraView({BridgeCameraPose? pose, required int view}) =>
+  ///
+  /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
+  /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
+  /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
+  /// middle, the shape of its pane. Zero is the comp's own size.
+  void setCameraView(
+          {BridgeCameraPose? pose,
+          required int view,
+          required bool draft,
+          int? ground,
+          required int canvasWidth,
+          required int canvasHeight}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetCameraView(
-              that: this, pose: pose, view: view);
+              that: this,
+              pose: pose,
+              view: view,
+              draft: draft,
+              ground: ground,
+              canvasWidth: canvasWidth,
+              canvasHeight: canvasHeight);
 
   void setGroupLabel({required UuidValue group, required int label}) =>
       BridgeLib.instance.api
@@ -2535,13 +2552,15 @@ class CompositionReference {
   /// The wireframes at `frame`, projected through `view`, or through the
   /// comp's active camera when there is none (which is then left out, being
   /// the eye). `ground` adds the ground, the comp's frame and the axes from
-  /// the origin. `only` names the cameras and lights to outline, and then
+  /// the origin, and `grid` the ground's own lines, which a 3D viewport's
+  /// picture already has. `only` names the cameras and lights to outline, and then
   /// no other layer is; with none given everything is. Asked once per
   /// frame, view or document change, never per rebuild.
   BridgeWireframes wireframes(
           {required BigInt frame,
           BridgeCameraPose? view,
           required bool ground,
+          required bool grid,
           List<UuidValue>? only,
           required List<BridgeMediaSize> mediaSizes}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceWireframes(
@@ -2549,6 +2568,7 @@ class CompositionReference {
           frame: frame,
           view: view,
           ground: ground,
+          grid: grid,
           only: only,
           mediaSizes: mediaSizes);
 

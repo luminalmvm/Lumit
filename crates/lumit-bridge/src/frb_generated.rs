@@ -7238,10 +7238,20 @@ fn wire__crate__api__composition__composition_reference_set_camera_view_impl(
             let api_pose =
                 <Option<crate::api::layer::BridgeCameraPose>>::sse_decode(&mut deserializer);
             let api_view = <u32>::sse_decode(&mut deserializer);
+            let api_draft = <bool>::sse_decode(&mut deserializer);
+            let api_ground = <Option<u32>>::sse_decode(&mut deserializer);
+            let api_canvas_width = <u32>::sse_decode(&mut deserializer);
+            let api_canvas_height = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::set_camera_view(
-                    &api_that, api_pose, api_view,
+                    &api_that,
+                    api_pose,
+                    api_view,
+                    api_draft,
+                    api_ground,
+                    api_canvas_width,
+                    api_canvas_height,
                 )?;
                 Ok(output_ok)
             })())
@@ -8311,6 +8321,7 @@ fn wire__crate__api__composition__composition_reference_wireframes_impl(
             let api_view =
                 <Option<crate::api::layer::BridgeCameraPose>>::sse_decode(&mut deserializer);
             let api_ground = <bool>::sse_decode(&mut deserializer);
+            let api_grid = <bool>::sse_decode(&mut deserializer);
             let api_only = <Option<Vec<uuid::Uuid>>>::sse_decode(&mut deserializer);
             let api_media_sizes =
                 <Vec<crate::api::wireframes::BridgeMediaSize>>::sse_decode(&mut deserializer);
@@ -8321,6 +8332,7 @@ fn wire__crate__api__composition__composition_reference_wireframes_impl(
                     api_frame,
                     api_view,
                     api_ground,
+                    api_grid,
                     api_only,
                     api_media_sizes,
                 )?;
@@ -29189,6 +29201,7 @@ impl SseDecode for crate::api::keymap::BridgeWheelAction {
             1 => crate::api::keymap::BridgeWheelAction::ScrollSideways,
             2 => crate::api::keymap::BridgeWheelAction::ZoomValues,
             3 => crate::api::keymap::BridgeWheelAction::DropperSample,
+            4 => crate::api::keymap::BridgeWheelAction::CameraDolly,
             _ => unreachable!("Invalid variant for BridgeWheelAction: {}", inner),
         };
     }
@@ -40778,6 +40791,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::keymap::BridgeWheelAction {
             Self::ScrollSideways => 1.into_dart(),
             Self::ZoomValues => 2.into_dart(),
             Self::DropperSample => 3.into_dart(),
+            Self::CameraDolly => 4.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -45973,6 +45987,7 @@ impl SseEncode for crate::api::keymap::BridgeWheelAction {
                 crate::api::keymap::BridgeWheelAction::ScrollSideways => 1,
                 crate::api::keymap::BridgeWheelAction::ZoomValues => 2,
                 crate::api::keymap::BridgeWheelAction::DropperSample => 3,
+                crate::api::keymap::BridgeWheelAction::CameraDolly => 4,
                 _ => {
                     unimplemented!("");
                 }

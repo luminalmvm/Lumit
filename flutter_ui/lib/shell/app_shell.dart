@@ -10,7 +10,8 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
-import 'package:lumit_flutter/panels/viewer_camera.dart' show cameraFromView;
+import 'package:lumit_flutter/panels/viewer_camera.dart'
+    show cameraFromView, cameraToView, isFlyKey;
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
@@ -541,13 +542,18 @@ class _LumitAppViewState extends State<LumitAppView> {
       };
 
   /// A camera tool in hand over the Viewer gets After Effects' F and
-  /// Ctrl+Shift+F for Look at, ahead of what the keys mean elsewhere.
+  /// Ctrl+Shift+F for Look at, ahead of what the keys mean elsewhere, and so
+  /// does a 3D viewport in front, which also frames everything on Shift+F.
   String? _cameraLook(LumitUiState ui, KeyEvent event) {
-    if (ui.tools.tool.group != ToolGroup.camera ||
+    final viewport = ui.isViewport(ui.activeViewId);
+    if ((ui.tools.tool.group != ToolGroup.camera && !viewport) ||
         ui.activePanel != Panel.viewer) {
       return null;
     }
     final look = ui.keymap.actionFor(BridgeKeyContext.tools, event);
+    if (look == 'viewer.3d.frame.all') {
+      return viewport ? 'viewer.3d.look.all' : null;
+    }
     return look != null && look.startsWith('viewer.3d.look.') ? look : null;
   }
 
@@ -559,6 +565,11 @@ class _LumitAppViewState extends State<LumitAppView> {
   KeyEventResult _onKey(LumitState state, LumitUiState ui, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
+    }
+    // A 3D viewport in flight has the keys to itself, and the fly keys are
+    // its while the right button is down in one.
+    if (ui.cameraFlying || (ui.flyKeysArmed && isFlyKey(event.physicalKey))) {
+      return KeyEventResult.handled;
     }
     // A modal surface is up — a dialogue, or the FX console: its keys
     // are its own, exactly as the panels' handlers already treat it.
@@ -838,6 +849,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       // arrangement when the focus is somewhere else.
       case 'viewer.new':
         ui.addViewerPanel();
+      case 'viewer.new.viewport':
+        ui.addViewportPanel();
       case 'viewer.view.next':
         ui.views.cycle(1);
         ui.frontView(ui.views.activeId ?? '');
@@ -887,6 +900,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.requestViewerCamera(ViewerCameraCommand.reset);
       case 'viewer.3d.camera.new':
         handled = cameraFromView(state, ui);
+      case 'viewer.3d.camera.move':
+        handled = cameraToView(state, ui);
+      case 'viewer.3d.place':
+        ui.requestViewerCamera(ViewerCameraCommand.placeOnSurface);
       // The panel under the pointer fills the window and comes back
       // (docs/07 §1.1's backtick). The keymap has always carried this; this is
       // where it finally does something.

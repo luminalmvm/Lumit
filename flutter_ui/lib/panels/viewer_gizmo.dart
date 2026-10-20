@@ -1734,6 +1734,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// switches, the same rows it draws.
   void _onSecondaryTapUp(TapUpDetails details) {
     final ui = widget.uiState;
+    // The press moved a 3D viewport's view, so it was no click.
+    if (ui.viewerNavigated) return;
     final under = [
       for (final box in widget.boxes)
         if (box.contains(details.localPosition)) box

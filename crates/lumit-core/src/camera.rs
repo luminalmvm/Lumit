@@ -625,6 +625,26 @@ pub fn view_pose(view: View, width: f64, height: f64) -> CameraPose {
     }
 }
 
+/// A round number of comp pixels near `v`: 1, 2 or 5 times a power of ten.
+/// What the ground's squares are sized by.
+#[must_use]
+pub fn nice(v: f64) -> f64 {
+    if v <= 0.0 || !v.is_finite() {
+        return 100.0;
+    }
+    let ten = 10f64.powf(v.log10().floor());
+    let m = v / ten;
+    ten * if m < 1.5 {
+        1.0
+    } else if m < 3.5 {
+        2.0
+    } else if m < 7.5 {
+        5.0
+    } else {
+        10.0
+    }
+}
+
 /// Project a comp-space point through a pose the way the compositor does:
 /// `x' = cx + a.x · zoom / (a.z + zoom)` with `a` the point in the camera's
 /// frame, the eye at `a.z = -zoom`. Returns the comp-pixel position and

@@ -338,6 +338,7 @@ enum BridgeWheelAction {
   scrollSideways,
   zoomValues,
   dropperSample,
+  cameraDolly,
   ;
 }
 

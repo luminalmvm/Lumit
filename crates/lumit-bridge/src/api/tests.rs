@@ -4075,7 +4075,7 @@ fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
 
     let view = camera_view_pose(BridgeCameraView::Front, 1920.0, 1080.0);
     let wires = comp
-        .wireframes(0, Some(view), false, None, Vec::new())
+        .wireframes(0, Some(view), false, true, None, Vec::new())
         .expect("wireframes");
     let cam = match wires.cameras.as_slice() {
         [only] => only,
@@ -4148,7 +4148,7 @@ fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
         lit.rotation_y_deg as f32,
     );
     let wires = comp
-        .wireframes(0, Some(view), false, None, Vec::new())
+        .wireframes(0, Some(view), false, true, None, Vec::new())
         .expect("wireframes");
     let mark = wires
         .lights

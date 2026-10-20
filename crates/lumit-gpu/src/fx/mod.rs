@@ -19,6 +19,7 @@ mod distort;
 mod dof;
 mod engine;
 mod generate;
+mod ground;
 mod lens_blur;
 mod lens_dirt;
 mod lens_flare;
@@ -41,6 +42,7 @@ pub use distort::*;
 // effect's two dozen scalars, and a public type does need naming.
 pub use dof::*;
 pub use generate::*;
+pub use ground::*;
 pub use lens_blur::*;
 pub use lens_dirt::*;
 pub use lens_flare::*;
@@ -108,6 +110,8 @@ pub struct FxEngine {
     /// it directly, between a layer's effect stack and its composite. Its own
     /// layout, for the shadow casters it reads.
     lighting: lighting::LightingFx,
+    /// A 3D viewport's ground, drawn over its frame. Not an effect either.
+    ground: wgpu::ComputePipeline,
     temperature: wgpu::ComputePipeline,
     invert: wgpu::ComputePipeline,
     tint: wgpu::ComputePipeline,

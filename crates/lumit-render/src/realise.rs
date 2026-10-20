@@ -139,6 +139,18 @@ impl Bounds {
     }
 }
 
+/// What a 3D viewport's ground is drawn with: a linear colour with straight
+/// alpha, and where the floor is, in comp pixels: the x its lines are counted
+/// from, its height, and how far apart its lines are. The picture a viewport
+/// draws can be wider than the comp, so these come from the comp itself.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ViewGround {
+    pub colour: [f32; 4],
+    pub middle: f32,
+    pub floor: f32,
+    pub step: f32,
+}
+
 /// The GPU primitives that turn a comp draw list into a linear texture,
 /// borrowed from whichever owner is compositing — a frontend's viewer, the
 /// headless renderer, or the export renderer. Factoring the realise logic behind
@@ -767,7 +779,7 @@ impl Realiser<'_> {
         background: [f64; 4],
         layers: &[CompLayerDraw],
     ) -> wgpu::Texture {
-        self.realise_region(camera, width, height, background, layers, None)
+        self.realise_region(camera, width, height, background, layers, None, None)
     }
 
     /// A nested comp's picture: the texture held under its frame key
@@ -1287,6 +1299,11 @@ impl Realiser<'_> {
     /// no-region entry, which is also what the nested-comp recursion below
     /// calls: a Precomp renders itself entire, and this comp's window applies
     /// once, to the finished thing.
+    ///
+    /// `ground` is a 3D viewport's ground: the floor is drawn into the picture
+    /// wherever no 3D layer is nearer. Only ever given for the comp a viewport
+    /// shows, never for a Precomp inside it.
+    #[allow(clippy::too_many_arguments)]
     pub fn realise_region(
         &self,
         camera: Option<lumit_core::model::CameraPose>,
@@ -1295,6 +1312,7 @@ impl Realiser<'_> {
         background: [f64; 4],
         layers: &[CompLayerDraw],
         region: Option<lumit_gpu::Region>,
+        ground: Option<ViewGround>,
     ) -> wgpu::Texture {
         let region = region.filter(|_| region_is_safe(layers));
         // Depth is what tells the profiler which layers are rows of the
@@ -1315,7 +1333,7 @@ impl Realiser<'_> {
         // the whole frame is reserved for before a single one of them records.
         let (tw, th) = lumit_gpu::scaled_size(width, height, self.render_scale);
         self.open_frame(tw, th, layers);
-        let out = self.realise_at_depth(camera, width, height, background, layers, region);
+        let out = self.realise_at_depth(camera, width, height, background, layers, region, ground);
         self.ctx.end_frame();
         if let Some(p) = self.profiler {
             p.leave_comp();
@@ -1383,6 +1401,7 @@ impl Realiser<'_> {
             .saturating_mul(FRAME_PEAK_TEXTURES.saturating_add(staged))
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn realise_at_depth(
         &self,
         camera: Option<lumit_core::model::CameraPose>,
@@ -1391,6 +1410,7 @@ impl Realiser<'_> {
         background: [f64; 4],
         layers: &[CompLayerDraw],
         region: Option<lumit_gpu::Region>,
+        ground: Option<ViewGround>,
     ) -> wgpu::Texture {
         // The actual raster this comp's composites land on; all geometry
         // below stays in the logical `width`×`height` comp pixels.
@@ -1421,6 +1441,7 @@ impl Realiser<'_> {
                 None,
                 None,
                 metres_per_w.map(|m| (m, &mut depth)),
+                None,
             );
             // An adjustment layer processes the composite below, which has no
             // footage neighbour frames. A temporal effect's neighbours are
@@ -1547,6 +1568,7 @@ impl Realiser<'_> {
             None,
             None,
             None,
+            ground,
         )
     }
 
@@ -2029,6 +2051,7 @@ impl Realiser<'_> {
         scene_depth: Option<f32>,
         capture: Option<&mut Option<lumit_gpu::fx::SceneLayers>>,
         below: Option<(f32, &mut Option<wgpu::Texture>)>,
+        ground: Option<ViewGround>,
     ) -> wgpu::Texture {
         let mut linear_textures: Vec<wgpu::Texture> = Vec::with_capacity(layers.len());
         // How much wider and taller each layer's finished picture is than the
@@ -2467,6 +2490,7 @@ impl Realiser<'_> {
                 &runs_of(layers, &order, &comp_layers),
                 cam,
                 metres_per_w,
+                0.0,
                 self.render_scale,
                 depth.as_ref(),
             ));
@@ -2479,6 +2503,7 @@ impl Realiser<'_> {
                 &runs_of(layers, &order, &comp_layers),
                 cam,
                 metres_per_w,
+                0.0,
                 self.render_scale,
                 None,
             );
@@ -2543,18 +2568,52 @@ impl Realiser<'_> {
             }
             return depth;
         }
-        self.compositor.composite_cut(
+        // A cropped frame has no whole floor to draw, so a region goes without.
+        let ground = match (ground, camera, cam_mat) {
+            (Some(ground), Some(pose), Some(cam)) if region.is_none() => Some((ground, pose, cam)),
+            _ => None,
+        };
+        // The floor goes in after the 3D layers, so 2D layers stacked above
+        // them, titles and the like, draw over it.
+        let split = match ground {
+            Some(_) => comp_layers
+                .iter()
+                .rposition(|l| l.three_d)
+                .map_or(0, |i| i + 1),
+            None => comp_layers.len(),
+        };
+        let below = self.compositor.composite_cut(
             &self.ctx,
             width,
             height,
             background,
-            &comp_layers,
+            &comp_layers[..split],
             cam_mat,
             seed.as_ref(),
             self.render_scale,
             self.samples,
             region,
-            &cuts,
+            &cuts[..split],
+        );
+        let Some((ground, pose, cam)) = ground else {
+            return below;
+        };
+        let floored = self.ground_over(below, &comp_layers, cam, &pose, (width, height), ground);
+        if split == comp_layers.len() {
+            return floored;
+        }
+        self.compositor.composite_cut(
+            &self.ctx,
+            width,
+            height,
+            background,
+            &comp_layers[split..],
+            cam_mat,
+            Some(&floored),
+            self.render_scale,
+            self.samples,
+            region,
+            &cuts[split..],
         )
     }
 
@@ -2673,6 +2732,63 @@ impl Realiser<'_> {
         (sets, each)
     }
 
+    /// A 3D viewport's ground laid over `frame`, hidden wherever one of
+    /// `layers` is nearer the eye.
+    fn ground_over(
+        &self,
+        frame: wgpu::Texture,
+        layers: &[lumit_gpu::CompositeLayer<'_>],
+        cam: lumit_gpu::Mat4,
+        pose: &lumit_core::model::CameraPose,
+        (width, height): (u32, u32),
+        ground: ViewGround,
+    ) -> wgpu::Texture {
+        // The depth is counted from just short of the nearest corner, so a
+        // view from far off (an orthographic one is a hundred comps away)
+        // keeps a pixel's worth of precision where the layers are.
+        let mut near = f32::INFINITY;
+        for l in layers.iter().filter(|l| l.three_d) {
+            let m = cam * l.world();
+            for (u, v) in [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)] {
+                near = near.min(m.col(0).w * u + m.col(1).w * v + m.col(3).w);
+            }
+        }
+        let near = if near.is_finite() && near > 0.0 {
+            near * 0.999
+        } else {
+            0.0
+        };
+        let depth = self.compositor.composite_depth(
+            &self.ctx,
+            width,
+            height,
+            &[layers],
+            cam,
+            1.0,
+            near,
+            self.render_scale,
+            None,
+        );
+        let [right, up, forward] = lumit_core::camera::axes(pose.rotation_deg);
+        let v = |p: (f64, f64, f64)| [p.0 as f32, p.1 as f32, p.2 as f32];
+        let (tw, th) = (frame.width(), frame.height());
+        let op = lumit_gpu::fx::GroundOp {
+            eye: v(pose.position),
+            right: v(right),
+            up: v(up),
+            forward: v(forward),
+            zoom: pose.zoom.max(1.0) as f32,
+            comp: (width as f32, height as f32),
+            floor: ground.floor,
+            middle: (ground.middle, 0.0),
+            step: ground.step,
+            scale: tw as f32 / width.max(1) as f32,
+            near,
+            colour: ground.colour,
+        };
+        self.fx.ground(&self.ctx, &frame, &depth, tw, th, &op)
+    }
+
     /// **Scene depth**: a Precomp's 3D layers as how far each pixel is from its
     /// camera, metres, which is what a lens effect's Depth row reads from a
     /// Precomp. Each layer's picture is made as for colour, so what its effects
@@ -2708,6 +2824,7 @@ impl Realiser<'_> {
             None,
             Some(metres_per_w),
             capture,
+            None,
             None,
         );
         self.ctx.end_frame();

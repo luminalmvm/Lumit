@@ -103,7 +103,7 @@ pub use prefetch::{Prefetched, Prefetcher};
 pub use profile::{
     EffectTiming, FrameProfile, FrameProgress, LayerTiming, ProfileSink, ProgressSink, RenderStage,
 };
-pub use realise::Realiser;
+pub use realise::{Realiser, ViewGround};
 
 /// The anti-aliasing count this machine will actually give for `requested`, or
 /// `None` before any adapter has been opened.

@@ -94,6 +94,12 @@ class ViewerStage extends StatelessWidget {
   final int viewId;
 
   final Rect fitted;
+
+  /// Where the picture is drawn, when it reaches past the comp: a 3D
+  /// viewport's fills its pane. Null is [fitted]. A viewport drawn as lines
+  /// only has no picture at all.
+  final Rect? pictureRect;
+  final bool showPicture;
   final bool grid;
 
   /// Which of the guides menu's marks are drawn over the picture: the grid, the
@@ -140,6 +146,8 @@ class ViewerStage extends StatelessWidget {
     required this.viewId,
     required this.uiState,
     required this.fitted,
+    this.pictureRect,
+    this.showPicture = true,
     required this.grid,
     required this.overlays,
     required this.pictureKey,
@@ -622,7 +630,8 @@ class ViewerStage extends StatelessWidget {
             // and painting an 8-pixel grid over it meant half a million
             // rectangles for the few thousand actually on screen. That, and not
             // the rendering, is what made zooming in seize the whole window.
-            if (grid)
+            // A viewport's lines only have the plain surround behind them.
+            if (grid && showPicture)
               Positioned.fill(
                 // Its own layer, so the marks over the picture do not draw
                 // every square again as they move.
@@ -631,26 +640,27 @@ class ViewerStage extends StatelessWidget {
                     // Thousands of squares that rarely change: kept as one
                     // picture instead of being drawn square by square.
                     isComplex: true,
-                    painter: _CheckerPainter(t, fitted),
+                    painter: _CheckerPainter(t, pictureRect ?? fitted),
                   ),
                 ),
               ),
             // The picture, inside the boundary a snapshot is taken of.
             // Everything below in this stack is a sibling of it, so the
             // photograph is the picture and not the marks over it.
-            Positioned.fromRect(
-              rect: fitted,
-              child: RepaintBoundary(
-                key: pictureKey,
-                child: _Picture(
-                  uiState: uiState,
-                  channel: channel,
-                  viewId: viewId,
-                  shownScale:
-                      compSize.width == 0 ? 1 : fitted.width / compSize.width,
+            if (showPicture)
+              Positioned.fromRect(
+                rect: pictureRect ?? fitted,
+                child: RepaintBoundary(
+                  key: pictureKey,
+                  child: _Picture(
+                    uiState: uiState,
+                    channel: channel,
+                    viewId: viewId,
+                    shownScale:
+                        compSize.width == 0 ? 1 : fitted.width / compSize.width,
+                  ),
                 ),
               ),
-            ),
             // Why there is no picture, on a machine where the runner had to
             // refuse it. Over the picture's place and under everything else.
             const Positioned.fill(child: ViewerGpuMismatchNotice()),
@@ -717,6 +727,9 @@ class ViewerStage extends StatelessWidget {
                   builder: (context, _) {
                     final view = _viewPose();
                     final aids = uiState.viewerAidsOf(viewId);
+                    // A 3D viewport's picture has the ground's lines drawn
+                    // in, and its axes are the ones in its corner.
+                    final viewport = uiState.isViewport(viewId);
                     final selected = uiState.selectedLayerIds;
                     final layers = uiState.model.heldLayers;
                     final List<UuidValue>? only = !wireframes
@@ -735,7 +748,7 @@ class ViewerStage extends StatelessWidget {
                     final ask = aids.ground || only == null || only.isNotEmpty;
                     // The corner axes come from the rows the outlines hold,
                     // so on their own they cost no call.
-                    final axes = aids.axes
+                    final axes = aids.axes && !viewport
                         ? viewAxes(
                             uiState.viewProjections.of(
                               comp: comp,
@@ -755,6 +768,7 @@ class ViewerStage extends StatelessWidget {
                       view: view,
                       ask: ask,
                       ground: aids.ground,
+                      grid: !viewport || uiState.viewportWireframe(viewId),
                       axes: axes,
                       only: only,
                       frame: uiState.playheadFrame.value,
@@ -971,6 +985,7 @@ class ViewerStage extends StatelessWidget {
             // active camera.
             ViewerCameraLayer(
               active: uiState.tools.tool.group == ToolGroup.camera,
+              viewport: uiState.isViewport(viewId),
               tool: uiState.tools.tool,
               comp: comp,
               viewId: viewId,
@@ -1793,8 +1808,10 @@ class ViewerWireframeLayer extends StatefulWidget {
   final bool ask;
 
   /// Whether the ground, with the comp's frame and the axes from the origin,
-  /// is drawn.
+  /// is drawn, and whether the ground's own lines are, which a 3D viewport's
+  /// picture already has.
   final bool ground;
+  final bool grid;
 
   /// The corner axes, as [viewAxes] reads them, or null for none.
   final List<double>? axes;
@@ -1831,6 +1848,7 @@ class ViewerWireframeLayer extends StatefulWidget {
     required this.view,
     required this.ask,
     required this.ground,
+    this.grid = true,
     required this.axes,
     required this.only,
     required this.frame,
@@ -1870,6 +1888,7 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
         old.view != widget.view ||
         old.ask != widget.ask ||
         old.ground != widget.ground ||
+        old.grid != widget.grid ||
         !listEquals(old.only, widget.only) ||
         old.frame != widget.frame ||
         old.revision != widget.revision) {
@@ -1889,6 +1908,7 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
         frame: BigInt.from(widget.frame),
         view: widget.view,
         ground: widget.ground,
+        grid: widget.grid,
         only: widget.only,
         mediaSizes: widget.mediaSizes,
       );

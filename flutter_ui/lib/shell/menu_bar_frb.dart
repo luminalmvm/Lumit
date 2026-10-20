@@ -51,7 +51,7 @@ import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/timeline_razor.dart' show razorCut, razorTargets;
-import '../panels/viewer_camera.dart' show cameraFromView;
+import '../panels/viewer_camera.dart' show cameraFromView, cameraToView;
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/beats_notice.dart';
 import '../state/clipboard.dart';
@@ -1612,7 +1612,7 @@ List<MenuSection> lumitMenus(
             // The 3D view of the view in front, After Effects' rows: a view
             // on one of the F10 to F12 shortcuts shows its key.
             MenuEntry.submenu(l10n.menuSwitch3dView, [
-              for (final look in ViewerView.values)
+              for (final look in ui.viewsOffered(ui.activeViewId))
                 MenuEntry.option(
                   look.title,
                   () {
@@ -1665,6 +1665,14 @@ List<MenuSection> lumitMenus(
                     ? null
                     : () => cameraFromView(app, ui),
                 action: 'viewer.3d.camera.new'),
+            MenuEntry(
+                l10n.menuMoveCameraToView,
+                comp == null ||
+                        ui.views.active == null ||
+                        ui.viewPoseOf(ui.views.active!.engineId) == null
+                    ? null
+                    : () => cameraToView(app, ui),
+                action: 'viewer.3d.camera.move'),
             MenuEntry.divider(),
             // Several views in one Viewer panel (docs/07 §2, and After Effects'
             // own view-layout menu). Option rows: picking one runs it and leaves
@@ -1805,6 +1813,8 @@ List<MenuSection> lumitMenus(
             // (docs/impl/multi-viewer.md §3.1); everything else is a tick above.
             MenuEntry(l10n.menuNewViewer, ui.addViewerPanel,
                 action: 'viewer.new'),
+            MenuEntry(l10n.menuNew3dViewport, ui.addViewportPanel,
+                action: 'viewer.new.viewport'),
             MenuEntry.divider(),
             MenuEntry(l10n.menuExportQueue,
                 () => showExportQueueFrb(context: context),

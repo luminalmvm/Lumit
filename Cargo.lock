@@ -2438,6 +2438,7 @@ name = "lumit_bridge"
 version = "0.8.1"
 dependencies = [
  "flutter_rust_bridge",
+ "libloading 0.8.9",
  "lumit-aplug",
  "lumit-audio",
  "lumit-budget",

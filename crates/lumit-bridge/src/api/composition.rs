@@ -2468,16 +2468,38 @@ impl CompositionReference {
     /// state, kept per view like the look, so the frontend sends it whenever a
     /// view's 3D view changes and that view's next render looks through it.
     /// Export never sees a view.
+    ///
+    /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
+    /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
+    /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
+    /// middle, the shape of its pane. Zero is the comp's own size.
     #[frb(sync)]
     pub fn set_camera_view(
         &self,
         pose: Option<crate::api::layer::BridgeCameraPose>,
         view: u32,
+        draft: bool,
+        ground: Option<u32>,
+        canvas_width: u32,
+        canvas_height: u32,
     ) -> Result<(), BridgeError> {
+        let channel =
+            |argb: u32, shift: u32| lumit_core::pixels::srgb_decode((argb >> shift) as u8);
+        let ground = ground.map(|argb| {
+            [
+                channel(argb, 16),
+                channel(argb, 8),
+                channel(argb, 0),
+                f32::from((argb >> 24) as u8) / 255.0,
+            ]
+        });
         self.dispatch(WorkerRequest::SetCameraView {
             comp: self.id,
             pose,
             view,
+            draft,
+            ground,
+            canvas: (canvas_width, canvas_height),
         })
     }
 

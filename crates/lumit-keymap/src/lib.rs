@@ -246,6 +246,7 @@ impl ActionId {
             "viewer.rulers.toggle" => "Show or hide the rulers",
             "viewer.grid.toggle" => "Show or hide the grid",
             "viewer.new" => "Open another Viewer",
+            "viewer.new.viewport" => "Open a 3D viewport",
             "viewer.view.next" => "Front the next view",
             "viewer.view.prev" => "Front the previous view",
             "viewer.lock.toggle" => "Lock or unlock this view",
@@ -268,8 +269,11 @@ impl ActionId {
             "viewer.3d.camera" => "Back to the active camera",
             "viewer.3d.look.selected" => "Look at the selected layers",
             "viewer.3d.look.all" => "Look at all layers",
+            "viewer.3d.frame.all" => "Frame all layers in a 3D viewport",
             "viewer.3d.reset" => "Reset the 3D view",
             "viewer.3d.camera.new" => "Create a camera from the 3D view",
+            "viewer.3d.camera.move" => "Move the active camera to the 3D view",
+            "viewer.3d.place" => "Place the selected layers on a surface",
             // Panels.
             "panel.toggle.project" => "Show or hide the Project panel",
             "panel.toggle.effects" => "Show or hide Effect controls",
@@ -547,25 +551,28 @@ pub enum WheelAction {
     ZoomValues,
     /// Grow or shrink the dropper's sample in the Viewer.
     DropperSample,
+    /// Dolly a 3D view toward the pointer in the Viewer, with any tool.
+    CameraDolly,
 }
 
 impl WheelAction {
     /// Every wheel action, in the order Settings lists them.
-    pub const ALL: [WheelAction; 4] = [
+    pub const ALL: [WheelAction; 5] = [
         WheelAction::ZoomTime,
         WheelAction::ScrollSideways,
         WheelAction::ZoomValues,
         WheelAction::DropperSample,
+        WheelAction::CameraDolly,
     ];
 
     /// Whether both actions are live in one panel, so they can't share a modifier.
-    /// The first three all meet in the Graph editor, the dropper is on its own.
+    /// The first three all meet in the Graph editor, the last two in the Viewer.
     /// Zooming time and values can share one, and the Graph editor then zooms both.
     fn shares_a_panel_with(self, other: WheelAction) -> bool {
-        use WheelAction::{DropperSample, ZoomTime, ZoomValues};
+        use WheelAction::{CameraDolly, DropperSample, ZoomTime, ZoomValues};
+        let viewer = |a| matches!(a, DropperSample | CameraDolly);
         self != other
-            && self != DropperSample
-            && other != DropperSample
+            && viewer(self) == viewer(other)
             && !matches!(
                 (self, other),
                 (ZoomTime, ZoomValues) | (ZoomValues, ZoomTime)
@@ -581,6 +588,7 @@ pub struct WheelKeys {
     pub scroll_sideways: WheelModifier,
     pub zoom_values: WheelModifier,
     pub dropper_sample: WheelModifier,
+    pub camera_dolly: WheelModifier,
 }
 
 impl Default for WheelKeys {
@@ -590,6 +598,7 @@ impl Default for WheelKeys {
             scroll_sideways: WheelModifier::Shift,
             zoom_values: WheelModifier::Alt,
             dropper_sample: WheelModifier::Shift,
+            camera_dolly: WheelModifier::Alt,
         }
     }
 }
@@ -603,6 +612,7 @@ impl WheelKeys {
             WheelAction::ScrollSideways => self.scroll_sideways,
             WheelAction::ZoomValues => self.zoom_values,
             WheelAction::DropperSample => self.dropper_sample,
+            WheelAction::CameraDolly => self.camera_dolly,
         }
     }
 
@@ -612,6 +622,7 @@ impl WheelKeys {
             WheelAction::ScrollSideways => &mut self.scroll_sideways,
             WheelAction::ZoomValues => &mut self.zoom_values,
             WheelAction::DropperSample => &mut self.dropper_sample,
+            WheelAction::CameraDolly => &mut self.camera_dolly,
         }
     }
 
@@ -1021,6 +1032,9 @@ pub fn default_keymap() -> Keymap {
         // Ctrl+Shift+F look at the selected layers and at all of them.
         row(Tools, "F", "viewer.3d.look.selected"),
         row(Tools, "Mod+Shift+F", "viewer.3d.look.all"),
+        // And in a 3D viewport with no tool, F too, with Shift+F to frame
+        // everything.
+        row(Tools, "Shift+F", "viewer.3d.frame.all"),
         // --- Timeline: reveals and edits ---
         row(Timeline, "P", "reveal.position"),
         row(Timeline, "S", "reveal.scale"),
@@ -1638,6 +1652,10 @@ mod tests {
         assert_eq!(
             km.wheel.modifier(WheelAction::DropperSample),
             WheelModifier::Shift
+        );
+        assert_eq!(
+            km.wheel.modifier(WheelAction::CameraDolly),
+            WheelModifier::Alt
         );
 
         km.wheel.set(WheelAction::ZoomTime, WheelModifier::Alt);

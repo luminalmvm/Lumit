@@ -309,9 +309,10 @@ fn layer_colour(in: VsOut) -> vec4<f32> {
 
 // Scene depth: how far this layer's pixel is from the camera, metres, where
 // the layer covers at least half of it. `target_size.w` is metres per unit of
-// clip w. Hard edged, the way a depth pass is, so a soft edge never reads as
-// half way between two distances. With `params.y` set it writes as far as a
-// half float goes instead, which clears what a later run covers.
+// clip w, counted from a clip w of `target_size.z`. Hard edged, the way a
+// depth pass is, so a soft edge never reads as half way between two distances.
+// With `params.y` set it writes as far as a half float goes instead, which
+// clears what a later run covers.
 @fragment
 fn fs_layer_depth(in: VsOut) -> @location(0) vec4<f32> {
     let texel = textureSample(src, samp, in.uv);
@@ -319,7 +320,11 @@ fn fs_layer_depth(in: VsOut) -> @location(0) vec4<f32> {
     if (a < 0.5) {
         discard;
     }
-    let m = select(in.w * layer.target_size.w, 65504.0, layer.params.y > 0.5);
+    let m = select(
+        (in.w - layer.target_size.z) * layer.target_size.w,
+        65504.0,
+        layer.params.y > 0.5,
+    );
     return vec4<f32>(m, m, m, 1.0);
 }
 

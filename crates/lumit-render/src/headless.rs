@@ -244,6 +244,10 @@ pub struct HeadlessRenderer {
     /// and the export renderer — which nobody calls this on — always draws
     /// the backdrop.
     transparent_background: bool,
+    /// A 3D viewport's ground colour, linear, or `None` for no ground. Like
+    /// the backdrop above it is a way of looking, which the export renderer
+    /// is never given.
+    ground: Option<crate::realise::ViewGround>,
     /// The read-back buffer an export's last frame gave back, for its next
     /// ([`Self::finish_preview`]). Never set on the Viewer's renderer.
     spare_readback: Option<lumit_gpu::SpareReadback>,
@@ -812,6 +816,7 @@ impl HeadlessRenderer {
             colour_view: None,
             colour_output: None,
             transparent_background: false,
+            ground: None,
             spare_readback: None,
             region: None,
             #[cfg(all(windows, feature = "shared-texture"))]
@@ -1054,6 +1059,17 @@ impl HeadlessRenderer {
         self.transparent_background = transparent;
     }
 
+    /// Draw a 3D viewport's ground into the frame, or no ground with `None`.
+    /// Folded into the frame's name like the backdrop, so a frame with the
+    /// floor is never served without it.
+    pub fn set_ground(&mut self, ground: Option<crate::realise::ViewGround>) {
+        self.ground = ground.filter(|g| {
+            g.colour.iter().all(|v| v.is_finite())
+                && [g.middle, g.floor, g.step].iter().all(|v| v.is_finite())
+                && g.step > 0.0
+        });
+    }
+
     /// Composite only a sub-rectangle of the fronted comp — the Viewer's
     /// **region of interest** (docs/07 §2.2). Given as fractions of the
     /// comp (`[u0, v0, u1, v1]`, top-left to bottom-right) so the caller never
@@ -1113,6 +1129,7 @@ impl HeadlessRenderer {
         let colour_id = self.colour.frame_identity();
         if self.view.is_neutral()
             && !self.transparent_background
+            && self.ground.is_none()
             && self.region.is_none()
             && colour_id == 0
             && self.colour_view.is_none()
@@ -1151,6 +1168,13 @@ impl HeadlessRenderer {
         if let Some(r) = self.region {
             h.update(b"roi/");
             for v in r {
+                h.update(&v.to_bits().to_le_bytes());
+            }
+        }
+        if let Some(g) = self.ground {
+            h.update(b"ground/");
+            let [r, gr, b, a] = g.colour;
+            for v in [r, gr, b, a, g.middle, g.floor, g.step] {
                 h.update(&v.to_bits().to_le_bytes());
             }
         }
@@ -1507,6 +1531,7 @@ impl HeadlessRenderer {
                 background,
                 &draws,
                 roi,
+                self.ground,
             );
             let linear = match roi {
                 Some(r) if linear.width() != r.target_size(realiser.render_scale).0 => {
@@ -7316,6 +7341,114 @@ mod tests {
                 off(&parented, &placed)
             );
         }
+    }
+
+    /// **A 3D viewport's ground is hidden by the layers in front of it, pixel
+    /// by pixel.** Looking down at the floor: not one pixel of the red card
+    /// standing on it changes when the ground goes in, while the blue card
+    /// lying under the floor takes lines over it, and so does open floor. A 2D
+    /// layer stacked above them all, a title, draws over the floor.
+    #[test]
+    fn a_viewport_ground_hides_behind_nearer_layers_only() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "Floor", 128, 128);
+        let mut camera = matrix_layer(
+            "Camera",
+            LayerKind::Camera {
+                zoom: Property::fixed(120.0),
+                solve_link: None,
+                correction_base: None,
+                options: Default::default(),
+            },
+            128,
+            128,
+        );
+        // 120 back from (64, 64, 40) on the floor, looking down at 45 degrees.
+        let back = 120.0 * std::f64::consts::FRAC_1_SQRT_2;
+        camera.transform.position_x = Property::fixed(64.0);
+        camera.transform.position_y = Property::fixed(64.0 - back);
+        camera.transform.position_z = Property::fixed(40.0 - back);
+        camera.transform.rotation_x = Property::fixed(-45.0);
+        let mut card = |colour: [f32; 4], at: (f64, f64, f64), turn: f64| {
+            let def = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "Card".into(),
+                colour: LinearColour(colour),
+                width: 40,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            let mut l = matrix_layer("Card", LayerKind::Solid { def }, 40, 32);
+            l.switches.three_d = true;
+            l.transform.position_x = Property::fixed(at.0);
+            l.transform.position_y = Property::fixed(at.1);
+            l.transform.position_z = Property::fixed(at.2);
+            l.transform.rotation_x = Property::fixed(turn);
+            l
+        };
+        // Standing on the floor at half the comp's height, and lying flat
+        // under it.
+        let standing = card([1.0, 0.0, 0.0, 1.0], (40.0, 48.0, 40.0), 0.0);
+        let under = card([0.0, 0.0, 1.0, 1.0], (88.0, 84.0, 40.0), 90.0);
+        let mut title = card([1.0, 1.0, 0.0, 1.0], (64.0, 112.0, 0.0), 0.0);
+        title.switches.three_d = false;
+        doc.comp_mut(comp_id).unwrap().layers = vec![title, camera, standing, under];
+        let doc = Arc::new(doc);
+        let bare = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0;
+        r.set_ground(Some(crate::realise::ViewGround {
+            colour: [1.0, 1.0, 1.0, 1.0],
+            middle: 64.0,
+            floor: 64.0,
+            step: 20.0,
+        }));
+        let floored = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0;
+        r.set_ground(None);
+
+        // Inside a card: the pixel and its four neighbours are all its colour.
+        let px = |i: usize| &bare[i * 4..i * 4 + 3];
+        let inside = |i: usize, rgb: [u8; 3]| {
+            let (x, y) = (i % 128, i / 128);
+            x > 0
+                && y > 0
+                && x < 127
+                && y < 127
+                && [i, i - 1, i + 1, i - 128, i + 128]
+                    .iter()
+                    .all(|&j| px(j) == rgb)
+        };
+        let changed = |i: usize| bare[i * 4..i * 4 + 4] != floored[i * 4..i * 4 + 4];
+        let (mut red, mut red_changed, mut blue_changed, mut open_changed) = (0, 0, 0, 0);
+        let (mut title_px, mut title_changed) = (0, 0);
+        for i in 0..128 * 128 {
+            if inside(i, [255, 255, 0]) {
+                title_px += 1;
+                title_changed += usize::from(changed(i));
+            } else if inside(i, [255, 0, 0]) {
+                red += 1;
+                red_changed += usize::from(changed(i));
+            } else if inside(i, [0, 0, 255]) {
+                blue_changed += usize::from(changed(i));
+            } else if px(i) == [0, 0, 0] {
+                open_changed += usize::from(changed(i));
+            }
+        }
+        assert!(red > 100, "the standing card is in view ({red} pixels)");
+        assert_eq!(
+            red_changed, 0,
+            "the ground shows through the card in front of it"
+        );
+        assert!(blue_changed > 0, "the card under the floor is drawn over");
+        assert!(open_changed > 0, "the open floor has lines");
+        assert!(title_px > 100, "the title is in view ({title_px} pixels)");
+        assert_eq!(title_changed, 0, "the ground is drawn over a 2D title");
     }
 
     /// **A wire reaches the picture.**

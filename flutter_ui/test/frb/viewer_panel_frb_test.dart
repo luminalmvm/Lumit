@@ -1970,6 +1970,7 @@ void main() {
           frame: BigInt.zero,
           view: view,
           ground: false,
+          grid: false,
           only: [for (final probe in probes) probe.internallayerId],
           mediaSizes: const []);
       final layers = comp.getModel().layers;

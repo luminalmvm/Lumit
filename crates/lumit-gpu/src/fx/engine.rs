@@ -332,6 +332,7 @@ impl FxEngine {
         let stroke_mod = module(include_str!("../fx_stroke.wgsl"), "fx-stroke");
         let matte_mask_mod = module(include_str!("../fx_matte_mask.wgsl"), "fx-matte-mask");
         let vignette_mod = module(include_str!("../fx_vignette.wgsl"), "fx-vignette");
+        let ground_mod = module(include_str!("../fx_ground.wgsl"), "fx-ground");
         let exposure_mod = module(include_str!("../fx_exposure.wgsl"), "fx-exposure");
         let temperature_mod = module(include_str!("../fx_temperature.wgsl"), "fx-temperature");
         let invert_mod = module(include_str!("../fx_invert.wgsl"), "fx-invert");
@@ -501,6 +502,7 @@ impl FxEngine {
         let vignette = pipeline(&vignette_mod, "fx-vignette", "vignette");
         let exposure = pipeline(&exposure_mod, "fx-exposure", "exposure");
         let lighting = super::lighting::LightingFx::start(ctx);
+        let ground = pipeline(&ground_mod, "fx-ground", "ground");
         let temperature = pipeline(&temperature_mod, "fx-temperature", "temperature");
         let invert = pipeline(&invert_mod, "fx-invert", "invert");
         let tint = pipeline(&tint_mod, "fx-tint", "tint");
@@ -663,6 +665,7 @@ impl FxEngine {
             vignette: vignette.wait(),
             exposure: exposure.wait(),
             lighting: lighting.wait(),
+            ground: ground.wait(),
             temperature: temperature.wait(),
             invert: invert.wait(),
             tint: tint.wait(),

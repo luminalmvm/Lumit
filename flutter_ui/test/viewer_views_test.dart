@@ -7,8 +7,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart' show BridgeRational;
 import 'package:lumit_flutter/src/rust/api/footage.dart' show BridgeMediaInfo;
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraPose;
 import 'package:lumit_flutter/state/dock.dart';
 import 'package:lumit_flutter/state/ui_state.dart';
+import 'package:lumit_flutter/state/viewer_view.dart' show PreviewResolution;
 import 'package:lumit_flutter/state/viewer_views.dart';
 
 void main() {
@@ -100,6 +102,21 @@ void main() {
       views.alwaysPreviewId = pair[0].id;
       views.setCompare(Panel.viewer.pane(), CompareMode.wipe);
       views.setDivider(Panel.viewer.pane(), 0.3);
+      // A 3D viewport keeps where its free view of each comp was left.
+      views.viewportPanes.add(Panel.viewer.pane());
+      const free = BridgeCameraPose(
+        zoom: 2000,
+        x: 10,
+        y: -20,
+        z: -3000,
+        rotationX: -15,
+        rotationY: 30,
+        rotationZ: 0,
+      );
+      pair[1].cameraPoses['comp-b/free'] = free;
+      pair[1].orthoZooms['comp-b'] = 2666;
+      pair[1].resolution = PreviewResolution.quarter;
+      pair[1].wireframeOnly = true;
 
       final project = views.toProjectJson();
       final workspace = views.toWorkspaceJson();
@@ -117,6 +134,11 @@ void main() {
       expect(back.alwaysPreviewId, read[0].id);
       expect(back.compareOf(Panel.viewer.pane()), CompareMode.wipe);
       expect(back.dividerOf(Panel.viewer.pane()), 0.3);
+      expect(back.viewportPanes, {Panel.viewer.pane()});
+      expect(read[1].cameraPoses['comp-b/free'], free);
+      expect(read[1].orthoZooms, {'comp-b': 2666.0});
+      expect(read[1].resolution, PreviewResolution.quarter);
+      expect(read[1].wireframeOnly, isTrue);
 
       // **A workspace someone sent you carries no locks.** The project half
       // is what says what a view shows; without it the views are laid out and
