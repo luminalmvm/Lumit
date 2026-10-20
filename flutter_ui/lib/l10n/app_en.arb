@@ -14532,6 +14532,10 @@
   "@histMotionBlurSwitch": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
+  "histKeepPitch": "Keep pitch",
+  "@histKeepPitch": {
+    "description": "A row of the Edit > History window: the Keep pitch setting on a layer with sound was turned on or off. Sent by the engine as English and looked up here."
+  },
   "histAcceptsLightsSwitch": "Accepts lights switch",
   "@histAcceptsLightsSwitch": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."

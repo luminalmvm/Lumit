@@ -883,7 +883,7 @@ impl Op {
             Op::SetSequenceClips { .. } => "Edit clips",
             Op::SetLayerKind { .. } => "Change layer kind",
             Op::SetLayerAdjustment { .. } => "Adjustment switch",
-            Op::SetLayerPitchFollowsSpeed { .. } => "Pitch follows speed",
+            Op::SetLayerPitchFollowsSpeed { .. } => "Keep pitch",
             Op::SetLayerAudible { .. } => "Audible switch",
             Op::SetLayerVisible { .. } => "Visible switch",
             Op::SetLayerSolo { .. } => "Solo switch",
