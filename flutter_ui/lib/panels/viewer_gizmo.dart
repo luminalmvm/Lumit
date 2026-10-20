@@ -694,11 +694,30 @@ List<BridgeShapeItem>? shapeContentsWithPointsMoved(
 ///
 /// [boxes] is in stacking order, top first — the order the read model reports
 /// layers in — so the first hit is the one a user would say is "on top".
+///
+/// 3D layers next to each other in the stack are one run, as After Effects
+/// sorts them, and within a run the one nearest the eye under the pointer
+/// wins. A 2D layer ends a run.
 LayerBox? layerAtPoint(List<LayerBox> boxes, Offset point) {
+  LayerBox? nearest;
+  var nearestDepth = double.infinity;
   for (final box in boxes) {
-    if (box.contains(point)) return box;
+    if (!box.map.projected) {
+      if (nearest != null) return nearest;
+      if (box.contains(point)) return box;
+      continue;
+    }
+    if (!box.contains(point)) continue;
+    // A light's mark is as far away as the light is.
+    final depth = box.marker
+        ? box.map.depthOf(box.map.ax, box.map.ay)
+        : box.map.depthAt(point) ?? double.infinity;
+    if (depth < nearestDepth) {
+      nearest = box;
+      nearestDepth = depth;
+    }
   }
-  return null;
+  return nearest;
 }
 
 /// Which layer a *drag* at [point] picks up.

@@ -1127,13 +1127,17 @@ BridgeLayerEntry? layerAtCompPoint(
       // Seen flat, as with no camera.
     }
   }
+  final boxes = <LayerBox>[];
+  final entries = <UuidValue, BridgeLayerEntry>{};
   for (final entry in model.layers) {
     final info = entry.info;
     if (pictureless.contains(info.kind) || !info.switches.visible) continue;
     if (frame < info.inFrame || frame >= info.outFrame) continue;
-    final box = LayerBox(
+    final id = entry.layer.internallayerId;
+    entries[id] = entry;
+    boxes.add(LayerBox(
       layer: entry.layer,
-      id: entry.layer.internallayerId,
+      id: id,
       // No fitting and no pan: a "screen" pixel here is a composition pixel.
       map: layerMapOf(entry, byId, (a) => a.info.transform, read,
           origin: Offset.zero, viewScale: 1, view: view),
@@ -1142,10 +1146,9 @@ BridgeLayerEntry? layerAtCompPoint(
       draggable: false,
       scalable: false,
       rotationDegrees: read(info.transform.rotation, entry.layer),
-    );
-    if (box.contains(at)) return entry;
+    ));
   }
-  return null;
+  return entries[layerAtPoint(boxes, at)?.id];
 }
 
 /// The badge that appears only once a probe has actually found a file gone.
