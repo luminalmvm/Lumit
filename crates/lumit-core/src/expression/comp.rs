@@ -4,6 +4,7 @@ use rhai::plugin::*;
 use uuid::Uuid; // a "prelude" import for macros
 
 use crate::comp_graph::InputKind;
+use crate::expression::layer::Layer;
 use crate::expression::ExpressionContext;
 use crate::model::EffectValue;
 
@@ -77,5 +78,18 @@ pub mod comp {
         this.id
             .and_then(|id| context.document.comp(id))
             .map_or_else(|| "Invalid Comp Reference".into(), |c| c.name.clone())
+    }
+
+    /// the camera the composition is seen through now
+    #[rhai_fn(get = "active_camera")]
+    pub fn active_camera(context: NativeCallContext, this: &mut Comp) -> super::Layer {
+        let context = ExpressionContext::from_call(&context);
+        super::Layer::of(this.id.and_then(|id| {
+            let camera = context
+                .document
+                .comp(id)?
+                .active_camera(context.comp_time)?;
+            Some((id, camera.id))
+        }))
     }
 }

@@ -39,10 +39,10 @@ thread_local! {
 
 /// Held for as long as an evaluation runs on this thread. The first one in
 /// starts the count again, the ones inside it carry on from where it is.
-pub(super) struct Running;
+pub(crate) struct Running;
 
 impl Running {
-    pub(super) fn begin() -> Running {
+    pub(crate) fn begin() -> Running {
         RUNNING.with(|running| {
             if running.get() == 0 {
                 SPENT.with(|spent| spent.set(0));
@@ -69,6 +69,13 @@ pub(crate) fn sparingly<T>(steps: u32, work: impl FnOnce() -> T) -> T {
     drop(running);
     LIMIT.with(|limit| limit.set(before));
     done
+}
+
+/// Charge `work` steps to the evaluation running on this thread, from outside
+/// the interpreter. False once the budget is spent.
+pub(crate) fn charge(work: u32) -> bool {
+    SPENT.with(|spent| spent.set(spent.get().saturating_add(work)));
+    !spent_out()
 }
 
 fn spent_out() -> bool {
@@ -247,7 +254,7 @@ impl<'a> Interp<'a> {
     }
 
     /// Charge `work` steps at once: for something whose cost is its size.
-    fn spend(&mut self, work: usize) -> Res<()> {
+    pub(super) fn spend(&mut self, work: usize) -> Res<()> {
         let work = u32::try_from(work).unwrap_or(u32::MAX);
         SPENT.with(|spent| spent.set(spent.get().saturating_add(work)));
         if spent_out() {

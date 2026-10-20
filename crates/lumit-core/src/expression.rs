@@ -34,6 +34,7 @@ mod comp;
 mod layer;
 mod math;
 mod script;
+mod space;
 
 pub use script::{Language, Slot, SLOT_KEY};
 
@@ -213,6 +214,9 @@ fn eval_dynamic(
         apply_context_to_scope(&mut scope, context);
     }
 
+    // A Rhai expression shares the JavaScript budget, so what it asks of the
+    // engine (`to_comp` and the like) is counted as well.
+    let _running = script::Running::begin();
     with_engine(|engine| {
         if let Some(context) = context {
             engine.set_default_tag(Dynamic::from(context));

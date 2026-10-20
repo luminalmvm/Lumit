@@ -324,14 +324,8 @@ fn own_placement(
     context: &Arc<ExpressionContext>,
 ) -> [[f32; 4]; 4] {
     // A 2D layer draws as if its hidden z and X/Y rotation were 0, and so does
-    // its part in a parent chain. Cameras and lights have no 3D switch, so
-    // theirs always count.
-    let flat = !layer.switches.three_d
-        && !matches!(
-            layer.kind,
-            lumit_core::model::LayerKind::Camera { .. }
-                | lumit_core::model::LayerKind::Light { .. }
-        );
+    // its part in a parent chain.
+    let flat = !layer.is_3d();
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let tr = &layer.transform;
     // A layer's own expressions are about that layer: `layer()`, `cut_in` and
@@ -6129,6 +6123,133 @@ mod parent_placement_tests {
             // Back where it started, in the numbers too.
             assert!((child.transform.rotation.value_at(0.0) - 400.0).abs() < 1e-2);
             assert!((child.transform.scale_y.value_at(0.0) + 80.0).abs() < 1e-2);
+        }
+    }
+
+    /// A 2D layer pinned to a 3D null with `toComp` sits where the compositor
+    /// draws the null, through parents and a turned camera, and `fromComp`
+    /// takes a picture point back to the null's own pixels. A 2D parent's
+    /// leftover z and tilt count for nothing, as they do in the picture.
+    #[test]
+    #[allow(clippy::panic)]
+    fn to_comp_lands_where_the_compositor_draws_and_from_comp_takes_it_back() {
+        use lumit_core::expression::{evaluate_value_in, ExprValue, Language};
+
+        let mut flat = layer(40.0, -30.0, None);
+        flat.transform.position_z = Property::fixed(-50.0);
+        flat.transform.rotation_x = Property::fixed(60.0);
+        flat.transform.rotation = Property::fixed(10.0);
+        let mut card = layer(15.0, 25.0, Some(flat.id));
+        card.name = "Card".into();
+        card.transform.rotation_y = Property::fixed(40.0);
+        let mut rig = layer(900.0, 500.0, Some(flat.id));
+        rig.switches.three_d = true;
+        rig.transform.position_z = Property::fixed(300.0);
+        rig.transform.anchor_x = Property::fixed(20.0);
+        rig.transform.rotation = Property::fixed(-12.0);
+        rig.transform.rotation_y = Property::fixed(35.0);
+        rig.transform.scale_x = Property::fixed(150.0);
+        rig.transform.scale_y = Property::fixed(80.0);
+        let mut marker = layer(120.0, -60.0, Some(rig.id));
+        marker.name = "Marker".into();
+        marker.switches.three_d = true;
+        marker.transform.position_z = Property::fixed(-80.0);
+        marker.transform.rotation_x = Property::fixed(20.0);
+        let mut camera = layer(700.0, 450.0, None);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(1400.0),
+            options: Box::default(),
+            solve_link: None,
+            correction_base: None,
+        };
+        camera.transform.position_z = Property::fixed(-1500.0);
+        camera.transform.rotation_x = Property::fixed(-10.0);
+        camera.transform.rotation_y = Property::fixed(15.0);
+        camera.transform.rotation = Property::fixed(5.0);
+        let mut c = comp(vec![camera, flat, card.clone(), rig, marker.clone()]);
+        (c.width, c.height) = (1920, 1080);
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(c.clone()));
+        let context = Arc::new(ExpressionContext {
+            document: Arc::new(doc),
+            comp: Some(c.id),
+            layer: None,
+            comp_time: 0.0,
+            current_depth: 0,
+            inputs: None,
+        });
+        let run = |language, text: &str| match evaluate_value_in(
+            language,
+            text,
+            Some(context.clone()),
+            &[],
+        ) {
+            Ok(ExprValue::Number(n)) => n,
+            other => panic!("{text}: {other:?}"),
+        };
+
+        let world = world_placement(&c, &marker, 0.0, context.clone());
+        let pose = c.camera_pose(0.0).unwrap();
+        let cam = crate::export::camera_mat(c.width, c.height, pose);
+        let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
+        // The third number is the depth in the camera's own frame.
+        let frame = lumit_gpu::camera_frame(
+            c.width as f32,
+            c.height as f32,
+            pose.zoom as f32,
+            (
+                pose.position.0 as f32,
+                pose.position.1 as f32,
+                pose.position.2 as f32,
+            ),
+            (
+                pose.rotation_deg.0 as f32,
+                pose.rotation_deg.1 as f32,
+                pose.rotation_deg.2 as f32,
+            ),
+        );
+        let depth = (frame * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d()[3][2];
+        let drawn = [a[3][0] / a[3][3], a[3][1] / a[3][3], depth];
+        for (axis, want) in drawn.into_iter().enumerate() {
+            let js = run(
+                Language::JavaScript,
+                &format!("thisComp.layer('Marker').toComp([0, 0, 0])[{axis}]"),
+            );
+            let rhai = run(
+                Language::Rhai,
+                &format!("layer(\"Marker\").to_comp([0, 0, 0])[{axis}]"),
+            );
+            for got in [js, rhai] {
+                assert!((got - f64::from(want)).abs() < 1e-2, "{got} is not {want}");
+            }
+        }
+        // A 2D layer is drawn flat, with no camera.
+        let flat_world = world_placement(&c, &card, 0.0, context.clone());
+        let on_card = |r: usize| flat_world[0][r] * 5.0 + flat_world[1][r] * 7.0 + flat_world[3][r];
+        for (axis, want) in [on_card(0), on_card(1)].into_iter().enumerate() {
+            let got = run(
+                Language::JavaScript,
+                &format!("thisComp.layer('Card').toComp([5, 7])[{axis}]"),
+            );
+            assert!((got - f64::from(want)).abs() < 1e-2, "{got} is not {want}");
+        }
+        for (axis, want) in [30.0, -40.0, 25.0].into_iter().enumerate() {
+            let back = run(
+                Language::JavaScript,
+                &format!(
+                    "var m = thisComp.layer('Marker'); m.fromComp(m.toComp([30, -40, 25]))[{axis}]"
+                ),
+            );
+            assert!((back - want).abs() < 1e-6, "{back} is not {want}");
+        }
+        for (axis, want) in [30.0, -40.0].into_iter().enumerate() {
+            let back = run(
+                Language::JavaScript,
+                &format!(
+                    "var m = thisComp.layer('Marker'); m.fromCompToSurface(m.toComp([30, -40]))[{axis}]"
+                ),
+            );
+            assert!((back - want).abs() < 1e-6, "{back} is not {want}");
         }
     }
 }

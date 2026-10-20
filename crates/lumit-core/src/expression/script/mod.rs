@@ -24,7 +24,7 @@ mod lex;
 mod parse;
 
 use crate::expression::ExpressionContext;
-pub(crate) use interp::sparingly;
+pub(crate) use interp::{charge, sparingly, Running};
 use interp::{to_number, Interp, Value};
 pub(crate) use parse::Program;
 
