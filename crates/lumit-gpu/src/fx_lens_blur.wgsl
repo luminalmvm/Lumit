@@ -212,6 +212,14 @@ fn gathered(c: vec4<f32>, span: f32) -> vec4<f32> {
     return vec4<f32>(c.rgb * (1.0 + k * (b - 1.0)), c.a);
 }
 
+// A pixel past the frame's edge, read mirrored back into it, as if the picture
+// carried on. Read as the edge pixel, every sample past the edge piled that
+// pixel's colour into a strip along it.
+fn mirror_px(v: vec2<i32>, last: vec2<i32>) -> vec2<i32> {
+    let m = select(select(v, 2 * last - v, v > last), -v, v < vec2<i32>(0));
+    return clamp(m, vec2<i32>(0), last);
+}
+
 fn hash(xy: vec2<i32>) -> f32 {
     var h = u32(xy.x) * 1664525u + u32(xy.y) * 22695477u + 1013904223u;
     h = (h ^ (h >> 16u)) * 2246822519u;
@@ -355,9 +363,9 @@ fn lb_gather(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (all(step == vec2<i32>(0))) {
             continue;
         }
-        let j = clamp(xy + step, vec2<i32>(0), last);
+        let j = mirror_px(xy + step, last);
         let o = textureLoad(info, j, 0);
-        let d = vec2<f32>(xy - j);
+        let d = -vec2<f32>(step);
         let area = ring * f32(2u * k + 1u);
         if (me_front) {
             own += kernel_at(vec4<f32>(max(me.x, sqrt(area)), me.yzw), xy, d).g * area;
@@ -981,12 +989,12 @@ fn project(q: vec3<f32>) -> vec2<f32> {
 }
 
 fn depth_px(px: vec2<f32>) -> f32 {
-    let c = clamp(vec2<i32>(floor(px)), vec2<i32>(0), vec2<i32>(i32(p.w) - 1, i32(p.h) - 1));
+    let c = mirror_px(vec2<i32>(floor(px)), vec2<i32>(i32(p.w) - 1, i32(p.h) - 1));
     return textureLoad(info, c, 0).y;
 }
 
 fn min_at(px: vec2<f32>, level: u32) -> f32 {
-    let c = vec2<i32>(floor(px));
+    let c = mirror_px(vec2<i32>(floor(px)), vec2<i32>(i32(p.w) - 1, i32(p.h) - 1));
     if (level == 0u) {
         return depth_px(px);
     }
@@ -998,16 +1006,16 @@ fn min_at(px: vec2<f32>, level: u32) -> f32 {
     return textureLoad(minz2, clamp(c / 64, vec2<i32>(0), n), 0).r;
 }
 
-// The source at a pixel position, bilinear, edges held.
+// The source at a pixel position, bilinear, mirrored past the edges.
 fn source_at(px: vec2<f32>) -> vec4<f32> {
     let q = px - 0.5;
     let f = fract(q);
     let i = vec2<i32>(floor(q));
     let last = vec2<i32>(i32(p.w) - 1, i32(p.h) - 1);
-    let a = textureLoad(src, clamp(i, vec2<i32>(0), last), 0);
-    let b = textureLoad(src, clamp(i + vec2<i32>(1, 0), vec2<i32>(0), last), 0);
-    let c = textureLoad(src, clamp(i + vec2<i32>(0, 1), vec2<i32>(0), last), 0);
-    let d = textureLoad(src, clamp(i + vec2<i32>(1, 1), vec2<i32>(0), last), 0);
+    let a = textureLoad(src, mirror_px(i, last), 0);
+    let b = textureLoad(src, mirror_px(i + vec2<i32>(1, 0), last), 0);
+    let c = textureLoad(src, mirror_px(i + vec2<i32>(0, 1), last), 0);
+    let d = textureLoad(src, mirror_px(i + vec2<i32>(1, 1), last), 0);
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
@@ -1070,7 +1078,7 @@ fn lb_ray_back(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var k = 0u; k < k_n; k++) {
         let rr = reach * sqrt((f32(k) + 0.5) / f32(k_n));
         let a = f32(k) * 2.3999632 + spin;
-        let j = clamp(xy + vec2<i32>(round(vec2<f32>(cos(a), sin(a)) * rr)), vec2<i32>(0), last);
+        let j = mirror_px(xy + vec2<i32>(round(vec2<f32>(cos(a), sin(a)) * rr)), last);
         far = max(far, textureLoad(info, j, 0).y);
     }
     // The colour of what sits at that distance, the nearest of it counting
@@ -1084,7 +1092,7 @@ fn lb_ray_back(@builtin(global_invocation_id) gid: vec3<u32>) {
     for (var k = 0u; k < k_n; k++) {
         let rr = reach * sqrt((f32(k) + 0.5) / f32(k_n));
         let a = f32(k) * 2.3999632 + spin;
-        let j = clamp(xy + vec2<i32>(round(vec2<f32>(cos(a), sin(a)) * rr)), vec2<i32>(0), last);
+        let j = mirror_px(xy + vec2<i32>(round(vec2<f32>(cos(a), sin(a)) * rr)), last);
         if (textureLoad(info, j, 0).y >= far * 0.97) {
             let f = rr / (0.25 * reach);
             let wk = 1.0 / (1.0 + f * f);
@@ -1097,7 +1105,7 @@ fn lb_ray_back(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 fn back_at(px: vec2<f32>) -> vec2<f32> {
-    let c = clamp(vec2<i32>(floor(px)), vec2<i32>(0), vec2<i32>(i32(p.w) - 1, i32(p.h) - 1));
+    let c = mirror_px(vec2<i32>(floor(px)), vec2<i32>(i32(p.w) - 1, i32(p.h) - 1));
     return vec2<f32>(textureLoad(backz, c, 0).r, 0.0);
 }
 
@@ -1232,7 +1240,7 @@ fn lb_ray_trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         let hit = march(ray);
         var col = source_at(hit.xy);
         if (hit.z > 0.5) {
-            let bc = clamp(vec2<i32>(floor(hit.xy)), vec2<i32>(0), vec2<i32>(i32(p.w) - 1, i32(p.h) - 1));
+            let bc = mirror_px(vec2<i32>(floor(hit.xy)), vec2<i32>(i32(p.w) - 1, i32(p.h) - 1));
             col = textureLoad(back, bc, 0);
         }
         col = lit(col);
