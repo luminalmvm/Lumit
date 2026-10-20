@@ -11633,14 +11633,6 @@
       }
     }
   },
-  "aeOrientationNotCarried": "the layer turns by orientation as well as by rotation — the rotation is what arrives, and the orientation is not carried",
-  "@aeOrientationNotCarried": {
-    "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
-  },
-  "aeRotationOrderConverted": "the rotation was turned into Lumit's axis order, exact on each key and close between them",
-  "@aeRotationOrderConverted": {
-    "description": "Import report row reason, lower case. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
-  },
   "aeShadowSwitchKeyed": "the setting is keyframed, and Lumit keeps the first key's",
   "@aeShadowSwitchKeyed": {
     "description": "Import report row reason, lower case. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
