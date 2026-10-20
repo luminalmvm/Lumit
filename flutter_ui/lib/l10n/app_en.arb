@@ -8932,6 +8932,14 @@
   "@tipViewAxes": {
     "description": "Tooltip on a tool option for the Selection and Rotation tools: a 3D layer's move arrows and rotation rings follow the screen. After Effects calls this View Axis Mode."
   },
+  "tipRotateSetsOrientation": "Turn Orientation",
+  "@tipRotateSetsOrientation": {
+    "description": "Tooltip on a Rotation tool option shown while the comp has a 3D layer: the rings and a free turn change the layer's Orientation. After Effects calls this Set: Orientation."
+  },
+  "tipRotateSetsRotation": "Turn Rotation x, y and z",
+  "@tipRotateSetsRotation": {
+    "description": "Tooltip on a Rotation tool option shown while the comp has a 3D layer: the rings and a free turn change the layer's Rotation x, y and z. After Effects calls this Set: Rotation."
+  },
   "tipSpeedGraph": "Speed graph",
   "@tipSpeedGraph": {
     "description": "Tooltip: show how fast the value changes. One or two words."

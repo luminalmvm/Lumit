@@ -27,7 +27,7 @@ import 'package:uuid/uuid.dart';
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
 import '../state/comp_time.dart'
-    show sampledExpression, sampledScalar, timeOfFrame;
+    show sampledExpression, sampledOrientation, sampledScalar, timeOfFrame;
 import '../state/layer_bounds.dart' show shapeContentsRect, textLayerBounds;
 import '../shell/tool_bar_frb.dart';
 import '../state/share.dart';
@@ -44,7 +44,15 @@ import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_follow.dart';
 import 'viewer_gizmo.dart';
-import 'viewer_gizmo_3d.dart' show Vec3, eulerYxz, gizmoAxisColours, turnOf;
+import 'viewer_gizmo_3d.dart'
+    show
+        Vec3,
+        gizmoAxisColours,
+        mul3,
+        rowsTurn,
+        transpose3,
+        turnOf,
+        turnOfAe;
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
 import 'viewer_paint.dart';
@@ -314,6 +322,7 @@ class ViewerStage extends StatelessWidget {
           origin: fitted.topLeft,
           viewScale: viewScale,
           view: rows,
+          time: () => at,
           cameraPose: (camera) => uiState.cameraPoses.ownOf(camera.layer,
               id: camera.layer.internallayerId,
               frame: uiState.playheadFrame.value,
@@ -395,11 +404,13 @@ class ViewerStage extends StatelessWidget {
   /// own values inside its parents, so a drag writes its own values.
   List<LayerBox> _cameraBoxes() {
     final ids = uiState.selectedLayerIds;
-    // Only the Selection tool draws them, so nothing else asks for the pose.
+    // Only the Selection and Rotation tools draw them, so nothing else asks
+    // for the pose.
     if (fitted.isEmpty ||
         ids.isEmpty ||
         !wireframes ||
-        uiState.tools.tool.group != ToolGroup.select) {
+        !const {ToolGroup.select, ToolGroup.rotate}
+            .contains(uiState.tools.tool.group)) {
       return const [];
     }
     final model = uiState.model;
@@ -446,9 +457,15 @@ class ViewerStage extends StatelessWidget {
                   a.info.transform,
               (s, _, __) => read(s),
               cameraPose: ownOf,
+              time: () => at,
             );
       final own = parent == null ? pose : (ownOf(entry) ?? pose);
-      final turn = (own.rotationX, own.rotationY, own.rotationZ);
+      final Vec3 turn = (own.rotationX, own.rotationY, own.rotationZ);
+      // The mark is turned by the camera's own rows, and whatever else its
+      // turn has, its aim and its Orientation, outside them.
+      final Vec3 rows =
+          (read(tf.rotationX), read(tf.rotationY), read(tf.rotation));
+      final outside = mul3(turnOf(turn), transpose3(rowsTurnOf(tf, rows)));
       final m = parent?.storage;
       out.add(LayerBox(
         layer: entry.layer,
@@ -460,7 +477,7 @@ class ViewerStage extends StatelessWidget {
           anchorY: 0,
           scaleXPercent: 100,
           scaleYPercent: 100,
-          rotationDegrees: turn.$3,
+          rotationDegrees: rows.$3,
           origin: fitted.topLeft,
           viewScale:
               compSize.width == 0 ? 1.0 : fitted.width / compSize.width,
@@ -478,14 +495,16 @@ class ViewerStage extends StatelessWidget {
               view: _viewPose(),
             ),
             z: read(tf.positionZ),
-            rotationX: turn.$1,
-            rotationY: turn.$2,
+            rotationX: rows.$1,
+            rotationY: rows.$2,
+            outside: outside,
+            aeOrder: tf.depth?.afterEffectsOrder ?? false,
           ),
         ),
         bounds: Size.zero,
         draggable: false,
         scalable: false,
-        rotationDegrees: turn.$3,
+        rotationDegrees: rows.$3,
         marker: true,
         transform: tf,
         aim: (entry.info.camera?.twoNode ?? false)
@@ -937,7 +956,8 @@ class ViewerStage extends StatelessWidget {
                         active: uiState.tools.tool.group == ToolGroup.rotate,
                         comp: comp,
                         uiState: uiState,
-                        boxes: boxes,
+                        // A selected camera turns on its rings too.
+                        boxes: [...boxes, ..._cameraBoxes()],
                         mark: t.textPrimary,
                         outline: t.surface0,
                         onChanged: onChanged,
@@ -1170,7 +1190,8 @@ bool _seenInDepth(BridgeLayerEntry entry) =>
 /// [entry]'s map onto a picture whose corner is at [origin] and drawn
 /// [viewScale] screen pixels a comp pixel. A 3D layer or a light goes through
 /// [view], the engine's rows for whatever the picture is looked at through,
-/// asked for only when the map is first used. A 2D one is flat.
+/// asked for only when the map is first used. A 2D one is flat. [time] gives
+/// the comp time [read] reads at, which only a keyed Orientation asks for.
 ViewerLayerMap layerMapOf(
   BridgeLayerEntry entry,
   Map<UuidValue, BridgeLayerEntry> byId,
@@ -1180,11 +1201,12 @@ ViewerLayerMap layerMapOf(
   required double viewScale,
   required List<double> Function() view,
   BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
+  BridgeRational Function()? time,
 }) {
   final tf = transformOf(entry);
   double at(BridgeScalar s, BridgeTransformProp p) => read(s, entry.layer, p);
-  final parent =
-      parentMatrix(entry, byId, transformOf, read, cameraPose: cameraPose);
+  final parent = parentMatrix(entry, byId, transformOf, read,
+      cameraPose: cameraPose, time: time);
   final m = parent?.storage;
   return ViewerLayerMap.of(
     positionX: at(tf.positionX, BridgeTransformProp.positionX),
@@ -1206,9 +1228,81 @@ ViewerLayerMap layerMapOf(
             z: at(tf.positionZ, BridgeTransformProp.positionZ),
             rotationX: at(tf.rotationX, BridgeTransformProp.rotationX),
             rotationY: at(tf.rotationY, BridgeTransformProp.rotationY),
+            outside: _outsideOf(
+                entry, tf, at, outsideOf(orientationOf(tf, at, time))),
+            anchorZ: _depthAt(tf, at, BridgeTransformProp.anchorZ, 0),
+            scaleZ: _depthAt(tf, at, BridgeTransformProp.scaleZ, 100),
+            aeOrder: tf.depth?.afterEffectsOrder ?? false,
           )
         : null,
   );
+}
+
+/// [tf]'s Orientation, each angle read by [at], and turning from key to key as
+/// one at the comp time [time] gives. Nought on a 2D layer, which has none.
+Vec3 orientationOf(
+    BridgeTransform tf,
+    double Function(BridgeScalar, BridgeTransformProp) at,
+    BridgeRational Function()? time) {
+  final d = tf.depth;
+  if (d == null) return (0, 0, 0);
+  final keyed = time == null ||
+          ![d.orientationX, d.orientationY, d.orientationZ]
+              .any((s) => s is BridgeScalar_Keyframed)
+      ? null
+      : sampledOrientation(
+          d.orientationX, d.orientationY, d.orientationZ, time());
+  return keyed ??
+      (
+        at(d.orientationX, BridgeTransformProp.orientationX),
+        at(d.orientationY, BridgeTransformProp.orientationY),
+        at(d.orientationZ, BridgeTransformProp.orientationZ),
+      );
+}
+
+/// [outside] with an aimed light's aim at its point of interest outside it,
+/// as the engine places the light. Anything else comes back as it is.
+List<double>? _outsideOf(
+    BridgeLayerEntry entry,
+    BridgeTransform tf,
+    double Function(BridgeScalar, BridgeTransformProp) at,
+    List<double>? outside) {
+  final light = tf.light;
+  if (!(entry.info.light?.twoNode ?? false) || light == null) return outside;
+  final d = (
+    at(light.poiX, BridgeTransformProp.poiX) -
+        at(tf.positionX, BridgeTransformProp.positionX),
+    at(light.poiY, BridgeTransformProp.poiY) -
+        at(tf.positionY, BridgeTransformProp.positionY),
+    at(light.poiZ, BridgeTransformProp.poiZ) -
+        at(tf.positionZ, BridgeTransformProp.positionZ),
+  );
+  final len = math.sqrt(d.$1 * d.$1 + d.$2 * d.$2 + d.$3 * d.$3);
+  if (len < 1e-9) return outside;
+  // `lumit_core::camera::look_at`, with no turn of its own on top.
+  final look = turnOf((
+    math.asin((-d.$2 / len).clamp(-1.0, 1.0)) * 180 / math.pi,
+    math.atan2(d.$1, d.$3) * 180 / math.pi,
+    0,
+  ));
+  return outside == null ? look : mul3(look, outside);
+}
+
+/// [rows]' turn, row by row, in the order [tf]'s layer turns in.
+List<double> rowsTurnOf(BridgeTransform tf, Vec3 rows) =>
+    rowsTurn(rows, ae: tf.depth?.afterEffectsOrder ?? false);
+
+/// The turn an Orientation makes, row by row, null for none.
+List<double>? outsideOf(Vec3 orientation) =>
+    orientation == (0.0, 0.0, 0.0) ? null : turnOfAe(orientation);
+
+/// Anchor Z or Scale Z, [none] on a layer that has neither.
+double _depthAt(BridgeTransform tf,
+    double Function(BridgeScalar, BridgeTransformProp) at,
+    BridgeTransformProp prop, double none) {
+  final d = tf.depth;
+  if (d == null) return none;
+  return at(prop == BridgeTransformProp.anchorZ ? d.anchorZ : d.scaleZ, prop);
 }
 
 /// Where [entry]'s parents put its Position space in the comp, null when it
@@ -1226,6 +1320,7 @@ Matrix4? parentMatrix(
   BridgeTransform Function(BridgeLayerEntry) transformOf,
   double Function(BridgeScalar, LayerReference, BridgeTransformProp) read, {
   BridgeCameraPose? Function(BridgeLayerEntry camera)? cameraPose,
+  BridgeRational Function()? time,
 }) {
   Matrix4? world;
   final seen = {entry.layer.internallayerId};
@@ -1258,57 +1353,36 @@ Matrix4? parentMatrix(
       at(tf.positionY, BridgeTransformProp.positionY),
       flat ? 0.0 : at(tf.positionZ, BridgeTransformProp.positionZ),
     );
-    Vec3 deg = (
+    final Vec3 rows = (
       flat ? 0.0 : at(tf.rotationX, BridgeTransformProp.rotationX),
       flat ? 0.0 : at(tf.rotationY, BridgeTransformProp.rotationY),
       at(tf.rotation, BridgeTransformProp.rotation),
     );
-    final light = tf.light;
-    if ((up.info.light?.twoNode ?? false) && light != null) {
-      final poi = (
-        at(light.poiX, BridgeTransformProp.poiX),
-        at(light.poiY, BridgeTransformProp.poiY),
-        at(light.poiZ, BridgeTransformProp.poiZ),
-      );
-      deg = _aimed(position, poi, deg);
-    }
+    // An aimed light's aim, then the Orientation, outside the rotations.
+    final outside =
+        flat ? null : _outsideOf(up, tf, at, outsideOf(orientationOf(tf, at, time)));
+    final r = rowsTurnOf(tf, rows);
+    final m = outside == null ? r : mul3(outside, r);
     final own = Matrix4.translationValues(position.$1, position.$2, position.$3)
-      ..rotateY(deg.$2 * math.pi / 180)
-      ..rotateX(deg.$1 * math.pi / 180)
-      ..rotateZ(deg.$3 * math.pi / 180);
+      ..multiply(Matrix4(m[0], m[3], m[6], 0, m[1], m[4], m[7], 0, m[2], m[5],
+          m[8], 0, 0, 0, 0, 1));
     if (!eye) {
       own
-        ..scaleByDouble(at(tf.scaleX, BridgeTransformProp.scaleX) / 100,
-            at(tf.scaleY, BridgeTransformProp.scaleY) / 100, 1, 1)
-        ..translateByDouble(-at(tf.anchorX, BridgeTransformProp.anchorX),
-            -at(tf.anchorY, BridgeTransformProp.anchorY), 0, 1);
+        ..scaleByDouble(
+            at(tf.scaleX, BridgeTransformProp.scaleX) / 100,
+            at(tf.scaleY, BridgeTransformProp.scaleY) / 100,
+            flat ? 1 : _depthAt(tf, at, BridgeTransformProp.scaleZ, 100) / 100,
+            1)
+        ..translateByDouble(
+            -at(tf.anchorX, BridgeTransformProp.anchorX),
+            -at(tf.anchorY, BridgeTransformProp.anchorY),
+            flat ? 0 : -_depthAt(tf, at, BridgeTransformProp.anchorZ, 0),
+            1);
     }
     world = world == null ? own : own.multiplied(world);
     id = up.info.parent;
   }
   return world;
-}
-
-/// The turn that looks from [eye] at [target] with [rows] added on top, as
-/// an aimed camera or light is turned (`lumit_core::camera::look_at`).
-Vec3 _aimed(Vec3 eye, Vec3 target, Vec3 rows) {
-  final d = (target.$1 - eye.$1, target.$2 - eye.$2, target.$3 - eye.$3);
-  final len = math.sqrt(d.$1 * d.$1 + d.$2 * d.$2 + d.$3 * d.$3);
-  if (len < 1e-9) return rows;
-  final f = (d.$1 / len, d.$2 / len, d.$3 / len);
-  final look = turnOf((
-    math.asin((-f.$2).clamp(-1.0, 1.0)) * 180 / math.pi,
-    math.atan2(f.$1, f.$3) * 180 / math.pi,
-    0,
-  ));
-  final r = turnOf(rows);
-  return eulerYxz([
-    for (var row = 0; row < 3; row++)
-      for (var col = 0; col < 3; col++)
-        look[row * 3] * r[col] +
-            look[row * 3 + 1] * r[3 + col] +
-            look[row * 3 + 2] * r[6 + col],
-  ]);
 }
 
 /// Footage layers already asked whether they have a picture, by layer.
@@ -1394,6 +1468,7 @@ BridgeLayerEntry? layerAtCompPoint(
           origin: Offset.zero,
           viewScale: 1,
           view: () => rows,
+          time: () => time,
           cameraPose: (camera) {
             try {
               return camera.layer.cameraOwnPoseAt(frame: BigInt.from(frame));

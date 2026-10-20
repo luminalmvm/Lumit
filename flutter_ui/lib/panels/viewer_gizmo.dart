@@ -926,8 +926,23 @@ BridgeScalar? scalarOf(BridgeTransform tf, BridgeTransformProp prop) =>
       BridgeTransformProp.poiX => tf.camera?.poiX,
       BridgeTransformProp.poiY => tf.camera?.poiY,
       BridgeTransformProp.poiZ => tf.camera?.poiZ,
+      BridgeTransformProp.orientationX => tf.depth?.orientationX,
+      BridgeTransformProp.orientationY => tf.depth?.orientationY,
+      BridgeTransformProp.orientationZ => tf.depth?.orientationZ,
       _ => null,
     };
+
+/// [box]'s own axes in its parent's space: the columns of its whole turn,
+/// its Orientation and any aim outside its rotations included.
+List<Vec3> localAxesOfBox(LayerBox box) {
+  final depth = box.map.depth;
+  final m = rowsTurn(turnOfBox(box), ae: depth?.aeOrder ?? false);
+  final o = depth?.outside;
+  final whole = o == null ? m : mul3(o, m);
+  return [
+    for (var c = 0; c < 3; c++) (whole[c], whole[3 + c], whole[6 + c]),
+  ];
+}
 
 /// How [box] is turned, X, Y and Z Rotation in degrees.
 Vec3 turnOfBox(LayerBox box) => (
@@ -977,7 +992,7 @@ List<Handles3d> handles3dOf(LayerBox box, GizmoAxes mode) {
   final tf = box.transform;
   final map = box.map;
   if (tf == null || !map.projected) return const [];
-  final local = localAxes(turnOfBox(box));
+  final local = localAxesOfBox(box);
   final out = <Handles3d>[];
   for (final (at, props) in [
     (
@@ -2745,10 +2760,12 @@ BridgeTransform transformWith(
   double? rotationX,
   double? rotationY,
   Vec3? pointOfInterest,
+  Vec3? orientation,
 }) {
   BridgeScalar put(double? value, BridgeScalar keep) =>
       value == null ? keep : BridgeScalar.static_(value);
   final camera = tf.camera;
+  final depth = tf.depth;
   return BridgeTransform(
     anchorX: put(anchorX, tf.anchorX),
     anchorY: put(anchorY, tf.anchorY),
@@ -2771,6 +2788,16 @@ BridgeTransform transformWith(
             focusDistance: camera.focusDistance,
             aperture: camera.aperture,
             blurLevel: camera.blurLevel,
+          ),
+    depth: depth == null
+        ? null
+        : BridgeDepthChannels(
+            orientationX: put(orientation?.$1, depth.orientationX),
+            orientationY: put(orientation?.$2, depth.orientationY),
+            orientationZ: put(orientation?.$3, depth.orientationZ),
+            anchorZ: depth.anchorZ,
+            scaleZ: depth.scaleZ,
+            afterEffectsOrder: depth.afterEffectsOrder,
           ),
   );
 }

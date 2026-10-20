@@ -538,6 +538,37 @@ class _ToolOptions extends StatelessWidget {
                     color: tools.axes == axes ? t.textPrimary : t.textMuted),
               ),
             ),
+          // What the Rotation tool turns, as After Effects' Set menu does.
+          if (tools.tool.group == ToolGroup.rotate) ...[
+            const _ToolBarDivider(),
+            for (final (sets, label, tip) in [
+              (
+                RotateSets.orientation,
+                l10n.transformOrientation,
+                l10n.tipRotateSetsOrientation
+              ),
+              (
+                RotateSets.rotation,
+                l10n.transformRotation,
+                l10n.tipRotateSetsRotation
+              ),
+            ])
+              LumitTooltip(
+                message: tip,
+                child: HouseButton(
+                  key: ValueKey<String>('tool-rotate-sets-${sets.name}'),
+                  small: true,
+                  frameless: tools.rotateSets != sets,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  onPressed: () => tools.rotateSets = sets,
+                  child: Text(label,
+                      style: t.small.copyWith(
+                          color: tools.rotateSets == sets
+                              ? t.textPrimary
+                              : t.textMuted)),
+                ),
+              ),
+          ],
         ],
       );
     }
