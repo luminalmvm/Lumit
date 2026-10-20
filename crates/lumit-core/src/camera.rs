@@ -479,12 +479,30 @@ impl Place {
         }
     }
 
-    /// A camera pose seen in this space, as the comp sees it.
+    /// A camera pose seen in this space, as the comp sees it. After Effects
+    /// works depth of field out in the camera's own units, so the space's
+    /// scale along the view stretches the focus distance, and the Blur Level
+    /// with it, since that sets how long the lens is. A camera under a doubled
+    /// parent focuses twice as far and blurs a card at twice the distance as
+    /// it would unparented.
     #[must_use]
     pub fn pose(&self, pose: CameraPose) -> CameraPose {
+        let ahead = self.vector(forward(pose.rotation_deg));
+        let along = (ahead.0 * ahead.0 + ahead.1 * ahead.1 + ahead.2 * ahead.2).sqrt();
+        // Rounding off an unscaled parent shouldn't move the focus.
+        let along = if (along - 1.0).abs() < 1e-9 {
+            1.0
+        } else {
+            along
+        };
         CameraPose {
             position: self.point(pose.position),
             rotation_deg: self.turn(pose.rotation_deg),
+            dof: pose.dof.map(|dof| crate::model::CameraDof {
+                focus_distance: dof.focus_distance * along,
+                blur_level: dof.blur_level * along,
+                ..dof
+            }),
             ..pose
         }
     }
@@ -1027,6 +1045,44 @@ mod tests {
             ..dof
         };
         assert!(close(coc_px(&half, 1000.0, 2000.0), 5.0));
+
+        // After Effects' doubled rig: a camera turned -5 on Y, focused at 1500,
+        // on a null turned -10 on X and 30 on Y and scaled 200. After Effects
+        // keeps a card 3000 away sharp and blurs one 1500 away, as focus 3000
+        // and Blur Level 200 do.
+        let ae = |s: (f64, f64, f64)| {
+            let turn = from_after_effects((0.0, 0.0, 0.0), (-10.0, 30.0, 0.0), (0.0, 0.0, 0.0));
+            place((960.0, 540.0, 0.0), (0.0, 0.0, 0.0), s, turn)
+        };
+        let seen = |null: Place, rotation_deg| {
+            let own = CameraPose {
+                zoom: 1500.0,
+                position: (100.0, -50.0, -1500.0),
+                rotation_deg,
+                dof: Some(crate::model::CameraDof {
+                    focus_distance: 1500.0,
+                    aperture: 150.0,
+                    blur_level: 100.0,
+                }),
+            };
+            let dof = null.pose(own).dof.unwrap();
+            (dof.focus_distance, dof.aperture, dof.blur_level)
+        };
+        let (focus, aperture, level) = seen(ae((200.0, 200.0, 200.0)), (0.0, -5.0, 0.0));
+        assert!(close(focus, 3000.0) && close(aperture, 150.0) && close(level, 200.0));
+        let twice = crate::model::CameraDof {
+            focus_distance: focus,
+            aperture,
+            blur_level: level,
+        };
+        let card = |d: f64| coc_px(&twice, 1500.0, d);
+        assert!(card(3000.0) == 0.0 && card(1415.48) > 0.0);
+        // Only the scale along the view counts: stretched on y, a camera
+        // looking down the null's y focuses twice as far, one looking down
+        // its z as far as it says.
+        let stretched = ae((100.0, 200.0, 100.0));
+        assert!(close(seen(stretched, (90.0, 0.0, 0.0)).0, 3000.0));
+        assert!(close(seen(stretched, (0.0, -5.0, 0.0)).0, 1500.0));
     }
 
     #[test]
