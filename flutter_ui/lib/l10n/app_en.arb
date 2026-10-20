@@ -5924,6 +5924,14 @@
   "@keyOpenA3dViewport": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyMoveTheActiveCameraToThe3dView": "Move the active camera to the 3D view",
+  "@keyMoveTheActiveCameraToThe3dView": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keyPlaceTheSelectedLayersOnASurface": "Place the selected layers on a surface",
+  "@keyPlaceTheSelectedLayersOnASurface": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyResetThe3dView": "Reset the 3D view",
   "@keyResetThe3dView": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6896,6 +6904,18 @@
   "menuCameraFromView": "Create camera from 3D view",
   "@menuCameraFromView": {
     "description": "View menu: add a camera layer placed where the Viewer's custom 3D view looks from."
+  },
+  "menuMoveCameraToView": "Move active camera to 3D view",
+  "@menuMoveCameraToView": {
+    "description": "View menu: move the composition’s active camera to where the Viewer’s 3D view looks from, keying it where it is keyed."
+  },
+  "menuPlaceOnSurface": "Place on surface",
+  "@menuPlaceOnSurface": {
+    "description": "View menu: move the selected 3D layers so their anchor sits on the layer or Null under the pointer. Ctrl-click in a 3D view does the same, and Shift turns them to match."
+  },
+  "noSurfaceUnderPointer": "No layer under the pointer",
+  "@noSurfaceUnderPointer": {
+    "description": "Notice when Place on surface finds no layer or Null under the pointer to put the selected layers on."
   },
   "noLayersToLookAt": "No 3D layers to look at",
   "@noLayersToLookAt": {

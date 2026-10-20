@@ -51,7 +51,7 @@ import '../panels/project_panel_frb.dart' show importDroppedPaths;
 import '../panels/timeline_extras_frb.dart';
 import '../panels/timeline_group_row_frb.dart';
 import '../panels/timeline_razor.dart' show razorCut, razorTargets;
-import '../panels/viewer_camera.dart' show cameraFromView;
+import '../panels/viewer_camera.dart' show cameraFromView, cameraToView;
 import '../panels/viewer_panel_frb.dart' show captureViewerPicturePng;
 import '../state/beats_notice.dart';
 import '../state/clipboard.dart';
@@ -1665,6 +1665,14 @@ List<MenuSection> lumitMenus(
                     ? null
                     : () => cameraFromView(app, ui),
                 action: 'viewer.3d.camera.new'),
+            MenuEntry(
+                l10n.menuMoveCameraToView,
+                comp == null ||
+                        ui.views.active == null ||
+                        ui.viewPoseOf(ui.views.active!.engineId) == null
+                    ? null
+                    : () => cameraToView(app, ui),
+                action: 'viewer.3d.camera.move'),
             MenuEntry.divider(),
             // Several views in one Viewer panel (docs/07 §2, and After Effects'
             // own view-layout menu). Option rows: picking one runs it and leaves

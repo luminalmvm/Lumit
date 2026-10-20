@@ -11,7 +11,7 @@ import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
 import 'package:lumit_flutter/panels/viewer_camera.dart'
-    show cameraFromView, isFlyKey;
+    show cameraFromView, cameraToView, isFlyKey;
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
@@ -900,6 +900,10 @@ class _LumitAppViewState extends State<LumitAppView> {
         ui.requestViewerCamera(ViewerCameraCommand.reset);
       case 'viewer.3d.camera.new':
         handled = cameraFromView(state, ui);
+      case 'viewer.3d.camera.move':
+        handled = cameraToView(state, ui);
+      case 'viewer.3d.place':
+        ui.requestViewerCamera(ViewerCameraCommand.placeOnSurface);
       // The panel under the pointer fills the window and comes back
       // (docs/07 §1.1's backtick). The keymap has always carried this; this is
       // where it finally does something.

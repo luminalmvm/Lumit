@@ -272,6 +272,8 @@ impl ActionId {
             "viewer.3d.frame.all" => "Frame all layers in a 3D viewport",
             "viewer.3d.reset" => "Reset the 3D view",
             "viewer.3d.camera.new" => "Create a camera from the 3D view",
+            "viewer.3d.camera.move" => "Move the active camera to the 3D view",
+            "viewer.3d.place" => "Place the selected layers on a surface",
             // Panels.
             "panel.toggle.project" => "Show or hide the Project panel",
             "panel.toggle.effects" => "Show or hide Effect controls",

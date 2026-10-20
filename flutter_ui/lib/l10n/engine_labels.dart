@@ -1426,6 +1426,10 @@ Map<String, String> get _built => {
       "Look at all layers": l10n.keyLookAtAllLayers,
       "Frame all layers in a 3D viewport": l10n.keyFrameAllLayersInA3dViewport,
       "Open a 3D viewport": l10n.keyOpenA3dViewport,
+      "Move the active camera to the 3D view":
+          l10n.keyMoveTheActiveCameraToThe3dView,
+      "Place the selected layers on a surface":
+          l10n.keyPlaceTheSelectedLayersOnASurface,
       "Reset the 3D view": l10n.keyResetThe3dView,
       "Create a camera from the 3D view": l10n.keyCreateACameraFromThe3dView,
       "Focus the next panel": l10n.keyFocusTheNextPanel,

@@ -97,13 +97,17 @@ const List<ViewerView> defaultViewSlots = [
 enum ViewerCameraCommand {
   lookAtSelected,
   lookAtAll,
-  reset;
+  reset,
+
+  /// Put the selected layers on the layer or Null under the pointer.
+  placeOnSurface;
 
   /// The keymap action id this command answers.
   String get action => switch (this) {
         ViewerCameraCommand.lookAtSelected => 'viewer.3d.look.selected',
         ViewerCameraCommand.lookAtAll => 'viewer.3d.look.all',
         ViewerCameraCommand.reset => 'viewer.3d.reset',
+        ViewerCameraCommand.placeOnSurface => 'viewer.3d.place',
       };
 
   /// What the View menu's row reads.
@@ -111,6 +115,7 @@ enum ViewerCameraCommand {
         ViewerCameraCommand.lookAtSelected => l10n.menuLookAtSelectedLayers,
         ViewerCameraCommand.lookAtAll => l10n.menuLookAtAllLayers,
         ViewerCameraCommand.reset => l10n.menuReset3dView,
+        ViewerCameraCommand.placeOnSurface => l10n.menuPlaceOnSurface,
       };
 }
 

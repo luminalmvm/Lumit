@@ -247,6 +247,56 @@ Vec3? compToParent(ViewerLayerMap map, Vec3 d) {
   return inv == null ? null : _apply(inv, d);
 }
 
+/// The X, Y and Z Rotation that turn a layer under [placed]'s parents to face
+/// the way a layer under [surface]'s parents, turned by [deg], faces in the
+/// comp. Each side's Orientation and rotation order count, as the compositor
+/// places them. The parents' scale is left out, and of the two ways to write
+/// the turn the one nearer [near] comes back.
+Vec3 rotationMatching(
+    ViewerLayerMap surface, Vec3 deg, ViewerLayerMap placed, Vec3 near) {
+  List<double> turnOnly(List<double> m) {
+    final out = [...m];
+    for (var col = 0; col < 3; col++) {
+      final l = math.sqrt(m[col] * m[col] +
+          m[3 + col] * m[3 + col] +
+          m[6 + col] * m[6 + col]);
+      if (l < 1e-12) return const [1, 0, 0, 0, 1, 0, 0, 0, 1];
+      for (var row = 0; row < 3; row++) {
+        out[row * 3 + col] = m[row * 3 + col] / l;
+      }
+    }
+    return out;
+  }
+
+  List<double> times(List<double> a, List<double> b) => [
+        for (var row = 0; row < 3; row++)
+          for (var col = 0; col < 3; col++)
+            a[row * 3] * b[col] +
+                a[row * 3 + 1] * b[3 + col] +
+                a[row * 3 + 2] * b[6 + col],
+      ];
+  List<double> outside(ViewerLayerMap map) =>
+      map.depth?.outside ?? const [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  final world = times(
+      times(turnOnly(_parentLinear(surface)), outside(surface)),
+      rowsTurn(deg, ae: surface.depth?.aeOrder ?? false));
+  final p = times(turnOnly(_parentLinear(placed)), outside(placed));
+  final back = [p[0], p[3], p[6], p[1], p[4], p[7], p[2], p[5], p[8]];
+  final rows = times(back, world);
+  if (placed.depth?.aeOrder ?? false) return eulerXyz(rows, near);
+  final one = eulerYxz(rows);
+  final other = (180 - one.$1, one.$2 + 180, one.$3 + 180);
+  double wind(double a, double to) => a - ((a - to) / 360).round() * 360;
+  Vec3 wound(Vec3 v) =>
+      (wind(v.$1, near.$1), wind(v.$2, near.$2), wind(v.$3, near.$3));
+  double gap(Vec3 v) =>
+      math.pow(v.$1 - near.$1, 2) +
+      math.pow(v.$2 - near.$2, 2) +
+      math.pow(v.$3 - near.$3, 2).toDouble();
+  final (a, b) = (wound(one), wound(other));
+  return gap(b) < gap(a) ? b : a;
+}
+
 /// What part of the handles a press is on: the centre ring moves across
 /// the screen.
 enum GizmoKind { arrow, plane, ring, screen }

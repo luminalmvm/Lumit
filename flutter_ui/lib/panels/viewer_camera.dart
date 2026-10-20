@@ -72,7 +72,8 @@ import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'transform_rows_frb.dart' show read;
 import 'viewer_gizmo.dart' show LayerBox, layerAtPoint;
-import 'viewer_gizmo_3d.dart' show Vec3, eulerYxz;
+import 'viewer_gizmo_3d.dart'
+    show Vec3, compToParent, eulerYxz, rotationMatching;
 import 'viewer_layer_map.dart' show viewerNear;
 import 'viewer_tool_cursor.dart';
 import 'viewer_view_cube.dart';
@@ -588,6 +589,83 @@ bool cameraFromView(LumitState app, LumitUiState ui) {
   ui.model.refresh();
   if (made case final camera?) ui.setSelection([camera]);
   return true;
+}
+
+/// Move the comp's active camera to where the active view looks from, as
+/// one undo step that keys what is keyed: Blender's camera to view. A
+/// two-node camera's point of interest goes to the middle of the view's 1:1
+/// plane. False with no camera, or nothing but the camera to look through.
+bool cameraToView(LumitState app, LumitUiState ui) {
+  final view = ui.views.active;
+  final comp = view == null ? null : ui.compFor(view);
+  if (view == null || comp == null || ui.viewPoseOf(view.engineId) == null) {
+    return false;
+  }
+  final frame = ui.playheadFrame.value;
+  final double rate;
+  try {
+    rate = comp.fps();
+  } catch (_) {
+    // A comp that has gone.
+    return false;
+  }
+  double seconds(BridgeRational r) =>
+      r.den.toInt() == 0 ? 0 : r.num.toDouble() / r.den.toDouble();
+  final t = rate <= 0 ? 0.0 : frame / rate;
+  final camera = ui.model.heldLayers
+      .where((e) =>
+          e.info.kind == BridgeLayerKind.camera &&
+          e.info.switches.visible &&
+          t >= seconds(e.info.span.inPoint) &&
+          t < seconds(e.info.span.outPoint))
+      .firstOrNull;
+  if (camera == null) {
+    app.postNotice(l10n.noCameraToMove);
+    return false;
+  }
+  final pose = cameraPoseOfView(ui, view, comp);
+  final twoNode = camera.info.camera?.twoNode ?? false;
+  final at = pose.pivot;
+  final turn = twoNode ? (0.0, 0.0, pose.rotation.$3) : pose.rotation;
+  final moved = CameraPose(
+    position: pose.position,
+    rotation: turn,
+    zoom: pose.zoom,
+    pointOfInterest: at,
+    twoNode: twoNode,
+  );
+  var wrote = false;
+  try {
+    asOneUndoStep(app.project, () {
+      wrote = writeCameraPose(
+        camera.layer,
+        camera.info.transform,
+        moved,
+        {
+          BridgeTransformProp.positionX,
+          BridgeTransformProp.positionY,
+          BridgeTransformProp.positionZ,
+          BridgeTransformProp.rotationX,
+          BridgeTransformProp.rotationY,
+          BridgeTransformProp.rotation,
+          BridgeTransformProp.zoom,
+          if (twoNode) ...{
+            BridgeTransformProp.poiX,
+            BridgeTransformProp.poiY,
+            BridgeTransformProp.poiZ,
+          },
+        },
+        comp: comp,
+        frame: frame,
+      );
+    });
+  } catch (_) {
+    // A comp that has gone.
+    return false;
+  }
+  app.notifyDocumentChanged();
+  ui.model.refresh();
+  return wrote;
 }
 
 /// Which move a mouse button asks the unified tool for: left orbits, middle
@@ -1349,13 +1427,14 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
   }
 
   /// The navigation with no camera tool in hand: a layer that takes the
-  /// pointer only while Alt is held, and otherwise watches it go by to the
-  /// layers below, taking only the buttons a viewport moves with.
+  /// pointer only while Alt or Ctrl is held, and otherwise watches it go by
+  /// to the layers below, taking only the buttons a viewport moves with.
   Widget _navigation() => _NavigationHit(
         claims: _claims,
         child: Listener(
           behavior: HitTestBehavior.translucent,
           onPointerDown: _press,
+          onPointerHover: (e) => _hover = e.localPosition,
           onPointerUp: (_) => _release(),
           onPointerCancel: (_) => _release(),
           onPointerSignal: _wheel,
@@ -1375,6 +1454,15 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
                   ..onUpdate = ((d) => _drag(d.localPosition, d.delta))
                   ..onEnd = ((_) => _release())
                   ..onCancel = _release,
+              ),
+              TapGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+                () => TapGestureRecognizer(
+                    allowedButtonsFilter: (b) =>
+                        b == kPrimaryButton && _placeClaimed),
+                (r) => r
+                  ..onTapUp = ((d) => _placeAt(d.localPosition,
+                      align: HardwareKeyboard.instance.isShiftPressed)),
               ),
             },
             child: _start == null || _flyPose != null
@@ -1401,22 +1489,41 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     return null;
   }
 
-  /// Whether a press at [at] with Alt held moves the camera, taking it from
-  /// the layers below: anywhere but on a selected layer, which Alt moves
-  /// across the view instead. Kept for the press that follows.
+  /// Whether a press at [at] takes the pointer from the layers below, and
+  /// what for. With Alt it moves the camera, anywhere but on a selected
+  /// layer, which Alt moves across the view instead. With Ctrl or Cmd it puts
+  /// the selected layers on the layer or Null under it. Kept for the press
+  /// that follows.
   bool _claims(Offset at) {
     _altClaimed = false;
+    _placeClaimed = false;
+    final keys = HardwareKeyboard.instance;
+    final mod = keys.isControlPressed || keys.isMetaPressed;
+    if (!keys.isAltPressed && !mod) return false;
     final ui = widget.uiState;
-    if (!HardwareKeyboard.instance.isAltPressed ||
-        !altNavigates(ui, viewport: widget.viewport)) {
-      return false;
-    }
+    if (!altNavigates(ui, viewport: widget.viewport)) return false;
+    final selected = ui.selectedLayerIds;
+    // A selected layer on top keeps the press for itself, so Alt moves it
+    // and Ctrl or Cmd drags it with snapping off.
     final hit = layerAtPoint(widget.boxes(), at);
-    _altClaimed = hit == null || !ui.selectedLayerIds.contains(hit.id);
-    return _altClaimed;
+    final onSelected = hit != null && selected.contains(hit.id);
+    if (keys.isAltPressed) {
+      _altClaimed = !onSelected;
+      return _altClaimed;
+    }
+    if (selected.isEmpty || onSelected) return false;
+    final under = _surfaceAt(
+        widget.boxes().where((b) => !selected.contains(b.id)).toList(), at);
+    _placeClaimed = under != null;
+    return _placeClaimed;
   }
 
   bool _altClaimed = false;
+  bool _placeClaimed = false;
+
+  /// Where the pointer last rested over the picture, for Place on surface
+  /// from the menu.
+  Offset? _hover;
 
   /// Which presses move the camera with no tool: any button with Alt where
   /// [_claims] took it, and in a viewport the right and middle buttons on
@@ -1864,6 +1971,127 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     _writeCamera(layer, tf, pose, _movedProps(pose, ToolMode.cameraDolly));
   }
 
+  /// What a placement at [at] lands on among [boxes], with whether it is a
+  /// point: a Null whose anchor is near the pointer first, since a Null is a
+  /// place rather than a face and is often seen edge on, else the 3D layer
+  /// or light under the pointer.
+  ({LayerBox box, bool point})? _surfaceAt(List<LayerBox> boxes, Offset at) {
+    final nulls = {
+      for (final e in widget.uiState.model.heldLayers)
+        if (e.info.kind == BridgeLayerKind.nullLayer) e.layer.internallayerId,
+    };
+    LayerBox? near;
+    var reach = 10.0;
+    for (final box in boxes) {
+      if (!box.map.projected || !nulls.contains(box.id)) continue;
+      final m = box.map;
+      final d = (m.toScreen(m.ax, m.ay) - at).distance;
+      if (d < reach && m.depthOf(m.ax, m.ay) > viewerNear) {
+        reach = d;
+        near = box;
+      }
+    }
+    if (near != null) return (box: near, point: true);
+    final hit = layerAtPoint(boxes, at);
+    if (hit == null || !hit.map.projected) return null;
+    return (box: hit, point: hit.marker);
+  }
+
+  /// Put the selected layers on what is under [at]: each anchor lands on the
+  /// point of the layer's face, or the Null or light, under the pointer, and
+  /// with [align] the layer turns to match it. One undo step, keyed where
+  /// keyed.
+  void _placeAt(Offset at, {required bool align}) {
+    final ui = widget.uiState;
+    final target = _target;
+    final selected = ui.selectedLayerIds;
+    if (target == null || selected.isEmpty) return;
+    final boxes = widget.boxes();
+    final found = _surfaceAt(
+        boxes.where((b) => !selected.contains(b.id)).toList(), at);
+    if (found == null) {
+      widget.state.postNotice(l10n.noSurfaceUnderPointer);
+      return;
+    }
+    final hit = found.box;
+    final m = hit.map;
+    final w = found.point ? m.depthOf(m.ax, m.ay) : m.depthAt(at);
+    if (w == null || w <= viewerNear) return;
+    final on = found.point ? m.toScreen(m.ax, m.ay) : at;
+    final point = pointUnder(target.pose, _toPicture(on), widget.compSize, w);
+    final frame = ui.playheadFrame.value;
+    final surface = ui.model.heldLayers
+        .where((e) => e.layer.internallayerId == hit.id)
+        .firstOrNull
+        ?.info
+        .transform;
+    try {
+      asOneUndoStep(widget.state.project, () {
+        for (final box in boxes) {
+          if (!selected.contains(box.id) || !box.map.projected) continue;
+          final entry = ui.model.heldLayers
+              .where((e) => e.layer.internallayerId == box.id)
+              .firstOrNull;
+          if (entry == null) continue;
+          final bm = box.map;
+          final aw = bm.depthOf(bm.ax, bm.ay);
+          if (aw.abs() < 1e-9) continue;
+          final anchor = pointUnder(target.pose,
+              _toPicture(bm.toScreen(bm.ax, bm.ay)), widget.compSize, aw);
+          final move = compToParent(bm, (
+            point.$1 - anchor.$1,
+            point.$2 - anchor.$2,
+            point.$3 - anchor.$3,
+          ));
+          if (move == null) continue;
+          final tf = entry.info.transform;
+          final props = [
+            BridgeTransformProp.positionX,
+            BridgeTransformProp.positionY,
+            BridgeTransformProp.positionZ,
+          ];
+          final now = sampleScalars(
+              scalars: [for (final p in props) read(tf, p)],
+              time: widget.comp.timeOfFrame(frame: frame));
+          final values = [
+            for (var i = 0; i < 3; i++)
+              scalarWithValueAt(read(tf, props[i]),
+                  now[i] + [move.$1, move.$2, move.$3][i], widget.comp, frame),
+          ];
+          // Turned to face the way what it lands on faces in the comp, its
+          // parents and this layer's own taken into account.
+          final turns = [
+            BridgeTransformProp.rotationX,
+            BridgeTransformProp.rotationY,
+            BridgeTransformProp.rotation,
+          ];
+          if (align && surface != null) {
+            final time = widget.comp.timeOfFrame(frame: frame);
+            final theirs = sampleScalars(
+                scalars: [for (final p in turns) read(surface, p)], time: time);
+            final mine = sampleScalars(
+                scalars: [for (final p in turns) read(tf, p)], time: time);
+            final match = rotationMatching(
+                m,
+                (theirs[0], theirs[1], theirs[2]),
+                bm,
+                (mine[0], mine[1], mine[2]));
+            props.addAll(turns);
+            for (var i = 0; i < 3; i++) {
+              values.add(scalarWithValueAt(read(tf, turns[i]),
+                  [match.$1, match.$2, match.$3][i], widget.comp, frame));
+            }
+          }
+          entry.layer.setTransforms(props: props, values: values);
+        }
+      });
+    } catch (_) {
+      // A comp or a layer that has gone.
+      return;
+    }
+    widget.onChanged();
+  }
+
   void _sayNoCamera() => widget.state.postNotice(
       _expression ? l10n.cameraExpressionRefused : l10n.noCameraToMove);
 
@@ -2173,6 +2401,15 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
     final request = widget.uiState.viewerCameraRequest.value;
     if (request == null || !mounted || _start != null) return;
     if (widget.uiState.views.active?.engineId != widget.viewId) return;
+    if (request.$2 == ViewerCameraCommand.placeOnSurface) {
+      final at = _hover;
+      if (at == null) {
+        widget.state.postNotice(l10n.noSurfaceUnderPointer);
+      } else {
+        _placeAt(at, align: false);
+      }
+      return;
+    }
     _look(request.$2);
   }
 
@@ -2220,6 +2457,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer>
           if (!quiet) widget.state.postNotice(l10n.noLayersToLookAt);
           return;
         }
+      case ViewerCameraCommand.placeOnSurface:
+        return;
       case ViewerCameraCommand.reset:
         if (layer == null) {
           widget.uiState.resetViewerView(viewId: widget.viewId);
