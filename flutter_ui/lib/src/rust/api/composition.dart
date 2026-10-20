@@ -2509,8 +2509,8 @@ class CompositionReference {
   /// three rows of four, taking a comp-space `(x, y, z, 1)` to `(X, Y, W)`,
   /// with the comp pixel at `(X / W, Y / W)` and `W` above 0 in front of the
   /// eye. Through `view` when one is given, otherwise through the comp's
-  /// active camera as the render poses it, aim and solve link included.
-  /// With no camera at all a 3D layer is drawn flat, and so are the rows.
+  /// active camera as the render poses it, aim and solve link included, or
+  /// the default camera when the comp has none.
   /// Asked once per frame, view or document change and held.
   Float64List viewProjection({required BigInt frame, BridgeCameraPose? view}) =>
       BridgeLib.instance.api

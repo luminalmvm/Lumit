@@ -1501,7 +1501,7 @@ impl HeadlessRenderer {
             // everything downstream sees one shape.
             let roi = self.region_px(cw, ch);
             let linear = realiser.realise_region(
-                crate::track::camera_pose(doc, comp, t),
+                Some(crate::track::camera_pose(doc, comp, t)),
                 cw,
                 ch,
                 background,
@@ -6959,6 +6959,49 @@ mod tests {
             worst <= 2,
             "the cut star is {worst} levels off the one made of halves"
         );
+    }
+
+    /// **With no camera, 3D layers are seen through After Effects' default
+    /// camera**: pushed back, turned and cutting through each other exactly as
+    /// through a fresh camera layer.
+    #[test]
+    fn no_camera_draws_like_a_fresh_camera() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (doc, comp_id) = cards_scene(
+            &[
+                ([0.0, 0.0, 1.0, 1.0], 0.0, 0.0, false),
+                ([1.0, 0.0, 0.0, 1.0], 0.0, 50.0, false),
+                ([0.0, 1.0, 0.0, 1.0], 300.0, 0.0, false),
+            ],
+            100.0,
+        );
+        let mut fresh = (*doc).clone();
+        let zoom = lumit_core::camera::default_zoom(64.0);
+        let camera = &mut fresh.comp_mut(comp_id).unwrap().layers[0];
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(zoom),
+            solve_link: None,
+            correction_base: None,
+            options: Box::new(lumit_core::model::CameraOptions::fresh(
+                zoom,
+                (32.0, 32.0, 0.0),
+            )),
+        };
+        camera.transform.position_z = Property::fixed(-zoom);
+        let mut none = fresh.clone();
+        none.comp_mut(comp_id).unwrap().layers.remove(0);
+        let mut frame = |doc: Document| {
+            let doc = Arc::new(doc);
+            r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0
+        };
+        let seen = frame(fresh);
+        assert_eq!(frame(none), seen);
     }
 
     /// **A wire reaches the picture.**

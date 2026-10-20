@@ -162,6 +162,20 @@ pub fn default_zoom(width: f64) -> f64 {
     zoom_for_focal(50.0, FILM_MM, width)
 }
 
+/// What a comp with no camera layer is seen through, as in After Effects: a
+/// fresh camera's 50 mm zoom behind the comp centre, looking down +z, with no
+/// depth of field. A 3D layer at z = 0 lands exactly where a 2D one would.
+#[must_use]
+pub fn default_pose(width: f64, height: f64) -> CameraPose {
+    let zoom = default_zoom(width);
+    CameraPose {
+        zoom,
+        position: (width * 0.5, height * 0.5, -zoom),
+        rotation_deg: (0.0, 0.0, 0.0),
+        dof: None,
+    }
+}
+
 /// A fresh camera's aperture for its zoom: what reads f/5.6 in the dialog.
 #[must_use]
 pub fn default_aperture(zoom: f64) -> f64 {

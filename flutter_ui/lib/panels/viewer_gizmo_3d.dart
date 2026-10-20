@@ -244,9 +244,9 @@ class Gizmo3d {
   /// [rows] take in, unit long, and how many comp pixels on screen a unit to
   /// the right is. Through a camera right and down keep the depth, so a move
   /// across the view stays the same size, and away is the camera's forward.
-  /// A comp with no camera has flat rows and no forward, so there the axes
-  /// are measured from how the picture moves round [at]. Null behind the
-  /// eye.
+  /// Flat rows, held while the engine cannot say, have no forward, so there
+  /// the axes are measured from how the picture moves round [at]. Null behind
+  /// the eye.
   static (Vec3, Vec3, Vec3, double)? screenAxes(List<double> rows, Vec3 at) {
     final w = _row(rows, 2, at, 1);
     if (w <= viewerNear) return null;

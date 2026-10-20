@@ -530,7 +530,7 @@ pub fn parent_ops(
 /// that a particle at `z = 0` comes back to exactly where it started and one
 /// off the plane comes back to where it is seen.
 ///
-/// `None` — a 2D layer, or a comp with no active camera — is not "the identity
+/// `None` — a 2D layer, or one seen edge on — is not "the identity
 /// matrix": the render paths branch on it and leave the positions' bits alone,
 /// which is what makes an old project's picture bit-identical rather than
 /// nearly so.
@@ -545,7 +545,7 @@ pub fn points_projection(
     if !layer.switches.three_d {
         return None;
     }
-    let pose = crate::track::camera_pose(doc, comp, t_comp)?;
+    let pose = crate::track::camera_pose(doc, comp, t_comp);
     let cam = crate::export::camera_mat(comp.width, comp.height, pose);
     let tr = &layer.transform;
     let place = lumit_gpu::place_matrix(
@@ -1908,7 +1908,7 @@ fn comp_walk(
                 height: nested.height,
                 background: [0.0, 0.0, 0.0, 0.0],
                 draws,
-                camera: crate::track::camera_pose(doc, nested, slt),
+                camera: Some(crate::track::camera_pose(doc, nested, slt)),
                 key: keys
                     .filter(|_| !driven_inputs(src))
                     .and_then(|k| k.nested_key_with(nested, slt, src.graph_inputs.as_ref())),
@@ -3067,7 +3067,7 @@ fn comp_walk(
                     draws: members,
                     // The comp's own active camera, so 3D members land exactly
                     // where they did; the finished slab is one 2D picture.
-                    camera: crate::track::camera_pose(doc, comp, t_comp),
+                    camera: Some(crate::track::camera_pose(doc, comp, t_comp)),
                     // Uncached in v1 (§4): the stance the adjustment
                     // path takes for its below-composite.
                     key: None,
@@ -3441,7 +3441,7 @@ fn comp_walk(
                             height: nested.height,
                             background: [0.0, 0.0, 0.0, 0.0],
                             draws: nested_draws,
-                            camera: crate::track::camera_pose(doc, nested, st),
+                            camera: Some(crate::track::camera_pose(doc, nested, st)),
                             key: keys.and_then(|k| k.nested_key_with(nested, st, None)),
                             paint: Vec::new(),
                             paint_time: lt,
@@ -3699,7 +3699,7 @@ fn comp_walk(
                         (
                             offset,
                             neighbour,
-                            crate::track::camera_pose(doc, nested, nt),
+                            Some(crate::track::camera_pose(doc, nested, nt)),
                             measure,
                         )
                     })
@@ -3717,7 +3717,7 @@ fn comp_walk(
                         // black and hide the parent's stack behind it.
                         background: [0.0, 0.0, 0.0, 0.0],
                         draws: nested_draws,
-                        camera: crate::track::camera_pose(doc, nested, st),
+                        camera: Some(crate::track::camera_pose(doc, nested, st)),
                         // The nested frame's own name. `lt` is on the
                         // flick grid already (`layer_time`), so a Precomp
                         // layer moved by whole frames keeps its names, and a
@@ -5095,7 +5095,7 @@ impl GraphLower<'_> {
                         height: nested.height,
                         background: [0.0, 0.0, 0.0, 0.0],
                         draws,
-                        camera: crate::track::camera_pose(self.doc, nested, self.t),
+                        camera: Some(crate::track::camera_pose(self.doc, nested, self.t)),
                         // The comp's own name, whichever graph reads it - so a
                         // Read of a comp is cached exactly as a Precomp layer
                         // of it is.
@@ -5169,7 +5169,7 @@ impl GraphLower<'_> {
                 height: nested.height,
                 background: [0.0, 0.0, 0.0, 0.0],
                 draws,
-                camera: crate::track::camera_pose(self.doc, nested, self.t),
+                camera: Some(crate::track::camera_pose(self.doc, nested, self.t)),
                 key: None,
                 px_per_metre: nested.px_per_metre(self.t),
                 scene_depth: true,
@@ -5447,7 +5447,7 @@ fn below_draws_cloned(
         None,
     );
     strip_temporal_inputs(&mut draws);
-    (draws, crate::track::camera_pose(doc, comp, tau))
+    (draws, Some(crate::track::camera_pose(doc, comp, tau)))
 }
 
 /// The held below-stack for a temporal adjustment (Posterize Time everything-

@@ -351,7 +351,8 @@ impl CompositeLayer<'_> {
         // onto the result — which is why a region cannot change perspective.
         // Depth always comes out as 0, since layers stack in the order they
         // draw and a z in pixels would fall outside the GPU's 0..1 range and
-        // cut the layer away (a 3D layer off z = 0 or tilted with no camera).
+        // cut the layer away (a 3D layer off z = 0 or tilted, drawn with no
+        // camera matrix).
         // A layer that cuts through others sets its own (`vs_layer`).
         let ndc_from_comp = match region {
             Some(r) => {

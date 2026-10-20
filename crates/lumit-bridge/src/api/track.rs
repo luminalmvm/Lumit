@@ -912,10 +912,9 @@ pub fn add_layer_at_points(
         .frame_rate
         .time_of_frame(frame)
         .map_err(|_| BridgeError::InvalidTime)?;
-    let facing = doc
-        .comp(tracked.comp_id)
-        .and_then(|c| lumit_render::track::camera_pose(&doc, c, t.0.to_f64()))
-        .map_or((0.0, 0.0, 0.0), |pose| pose.rotation_deg);
+    let facing = doc.comp(tracked.comp_id).map_or((0.0, 0.0, 0.0), |c| {
+        lumit_render::track::camera_pose(&doc, c, t.0.to_f64()).rotation_deg
+    });
 
     let transform = TransformGroup {
         position_x: Property::fixed(at[0]),

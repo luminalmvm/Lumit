@@ -8,7 +8,7 @@
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 
-/// The rows that draw a 3D layer flat, as the compositor does with no camera.
+/// The rows that draw a 3D layer flat, for while the engine can't say.
 const List<double> flatView = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1];
 
 /// The engine's view rows per Viewer, asked again only when the comp, the

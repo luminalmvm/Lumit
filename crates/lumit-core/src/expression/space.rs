@@ -40,7 +40,8 @@ impl Drop for Walking {
 /// One layer's spaces at one time.
 pub(crate) struct Space {
     world: Place,
-    /// The camera a 3D layer is seen through, and the comp's size.
+    /// The camera a 3D layer is seen through, the default one with no camera
+    /// layer, and the comp's size. `None` for a 2D layer.
     camera: Option<(CameraPose, f64, f64)>,
     three_d: bool,
     /// How many layers were read to place it, for the step budget.
@@ -104,10 +105,12 @@ pub(crate) fn space(
         cost += 1;
     }
     let three_d = layer.is_3d();
-    let camera = three_d
-        .then(|| crate::track::active_camera_pose(doc, comp, t))
-        .flatten()
-        .map(|pose| (pose, f64::from(comp.width), f64::from(comp.height)));
+    let (width, height) = (f64::from(comp.width), f64::from(comp.height));
+    let camera = three_d.then(|| {
+        let pose = crate::track::active_camera_pose(doc, comp, t)
+            .unwrap_or_else(|| camera::default_pose(width, height));
+        (pose, width, height)
+    });
     Space {
         world,
         camera,
@@ -159,13 +162,11 @@ impl Space {
     }
 
     /// On the picture. A 3D layer's third number is its depth in front of the
-    /// plane the camera sees 1:1, which is plain z with no camera. A 2D
-    /// layer's is nought.
+    /// plane the camera sees 1:1. A 2D layer's is nought.
     fn to_comp(&self, p: P3) -> P3 {
         let w = self.world.point(p);
         match &self.camera {
             Some((pose, width, height)) => camera::project_depth(pose, *width, *height, w),
-            None if self.three_d => w,
             None => (w.0, w.1, 0.0),
         }
     }
@@ -178,7 +179,6 @@ impl Space {
                 .world
                 .invert()?
                 .point(camera::unproject(pose, *width, *height, p)),
-            None if self.three_d => self.world.invert()?.point(p),
             None => self.flat_to_layer(p)?,
         })
     }

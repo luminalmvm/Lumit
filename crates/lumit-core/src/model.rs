@@ -2308,7 +2308,8 @@ impl Composition {
     }
 
     /// The topmost visible Camera layer whose span contains `t` — the one that
-    /// is *active*. None → the comp renders flat (3D switches ignored).
+    /// is *active*. None → 3D layers are seen through
+    /// [`crate::camera::default_pose`].
     ///
     /// Split out of [`Self::camera_pose`] because the solve link needs
     /// the layer as well as the numbers: a linked camera's placement is derived
@@ -2325,7 +2326,7 @@ impl Composition {
     }
 
     /// The active camera's placement at comp time `t`, read off its **own**
-    /// stored properties at its layer time. None → the comp renders flat.
+    /// stored properties at its layer time. None with no camera layer.
     ///
     /// A camera carrying a solve link derives its placement from the tracked
     /// layer instead ([`crate::track::camera_pose_at`]); this answers

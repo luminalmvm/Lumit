@@ -191,8 +191,8 @@ pub fn resolve_drivers_in(
 /// comp's camera (the draw builder, from `lumit_gpu`'s own matrices), and
 /// handed down as plain numbers; nothing in this crate derives a camera.
 ///
-/// `Projection::FLAT` — what plain [`resolve_drivers`] passes — is a 2D layer,
-/// a comp with no camera, and every caller that is not placing layers.
+/// `Projection::FLAT` — what plain [`resolve_drivers`] passes — is a 2D layer
+/// and every caller that is not placing layers.
 #[must_use]
 pub fn resolve_drivers_projected(
     graph: &LayerGraph,
