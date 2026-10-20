@@ -5160,6 +5160,9 @@ fn sample_pixels(
         Some(layer) => sample_layer_alone(&document, revision, layer.layer_id, &req, state)
             .and_then(|(w, h, rgba)| cut_patch(&rgba, w, h, u, v, req.window).map(|p| (p, w, h))),
         None => {
+            // The picture this view shows, through its own 3D view.
+            let document =
+                viewed_through(None, state.camera_views.get(&req.view).copied(), document);
             // **The frame the Viewer is showing, wherever it is being kept.**
             // The dropper reads what is on screen, so the ladder is the same
             // one `trace_scope` walks, and in the same order — and naming the
