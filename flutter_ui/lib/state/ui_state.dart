@@ -4025,6 +4025,26 @@ class LumitUiState extends ChangeNotifier {
 
   final Map<int, ((int, int), double)> _canvasDue = {};
 
+  /// The view Scopes and Levels read: the active one, or with a 3D viewport
+  /// in front, a view of the same comp beside it, as a viewport's picture has
+  /// the ground drawn in.
+  int get measuredViewId {
+    final active = views.active;
+    if (active == null || !views.isViewport(active)) return activeViewId;
+    for (final view in views.views) {
+      if (!views.isViewport(view) &&
+          view.mode == ViewMode.composition &&
+          view.compId == active.compId) {
+        return view.engineId;
+      }
+    }
+    return activeViewId;
+  }
+
+  /// The scale [measuredViewId] is drawn at.
+  double get measuredScale =>
+      previewResolutionOf(measuredViewId).scaleFor(_panelScale);
+
   /// Whether Viewer view [viewId] is in a 3D viewport.
   bool isViewport(int viewId) {
     final view = _surfaceOf(viewId);

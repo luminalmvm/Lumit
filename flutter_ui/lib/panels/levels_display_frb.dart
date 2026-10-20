@@ -180,11 +180,11 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
     try {
       widget.comp.renderScope(
         frame: BigInt.from(widget.playheadFrame),
-        scale: state.viewerScale,
+        scale: state.measuredScale,
         kind: _histogramKind,
         colours: levelsHistogramColours(t,
             themed: state.workspace.themedEffectGraphs),
-        view: state.activeViewId,
+        view: state.measuredViewId,
       );
     } catch (_) {
       // A comp that went away under the row is not worth an error here: the
