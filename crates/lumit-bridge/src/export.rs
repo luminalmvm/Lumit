@@ -255,6 +255,8 @@ fn export_format(codec: &str) -> Result<lumit_render::export::ExportFormat, Stri
     Ok(match codec {
         "h264" => ExportFormat::Video(VideoCodec::H264),
         "hevc" => ExportFormat::Video(VideoCodec::Hevc),
+        "prores_hq" => ExportFormat::Video(VideoCodec::ProRes422Hq),
+        "prores_4444" => ExportFormat::Video(VideoCodec::ProRes4444),
         "png" => ExportFormat::Images(ImageFormat::Png),
         "tiff" => ExportFormat::Images(ImageFormat::Tiff),
         "exr" => ExportFormat::Images(ImageFormat::Exr),
@@ -297,6 +299,8 @@ fn format_key(format: lumit_render::export::ExportFormat) -> &'static str {
     match format {
         ExportFormat::Video(VideoCodec::H264) => "h264",
         ExportFormat::Video(VideoCodec::Hevc) => "hevc",
+        ExportFormat::Video(VideoCodec::ProRes422Hq) => "prores_hq",
+        ExportFormat::Video(VideoCodec::ProRes4444) => "prores_4444",
         ExportFormat::Images(ImageFormat::Png) => "png",
         ExportFormat::Images(ImageFormat::Tiff) => "tiff",
         ExportFormat::Images(ImageFormat::Exr) => "exr",
@@ -334,9 +338,10 @@ pub(crate) fn format_caps(codec: &str) -> BridgeFormatCaps {
             })
             .collect(),
         bit_rate: caps.bit_rate,
-        // Uncompressed PCM is exactly what it is; everything else Lumit writes
-        // sound into is AAC, which has a rate to choose.
-        audio_bit_rate: caps.audio && codec != "wav",
+        // Uncompressed PCM is exactly what it is; AAC has a rate to choose.
+        audio_bit_rate: caps.audio
+            && format.audio_codec(lumit_render::export::AudioDepth::Sixteen)
+                == lumit_media::encode::AudioCodec::Aac,
         audio_24_bit: caps
             .audio_depths
             .contains(&lumit_render::export::AudioDepth::TwentyFour),
@@ -1551,7 +1556,16 @@ mod tests {
 
         assert_eq!(audio_rates(), EXPORT_AUDIO_RATES.to_vec());
 
-        for codec in ["h264", "hevc", "png", "tiff", "m4a", "wav"] {
+        for codec in [
+            "h264",
+            "hevc",
+            "prores_hq",
+            "prores_4444",
+            "png",
+            "tiff",
+            "m4a",
+            "wav",
+        ] {
             let caps = format_caps(codec);
             let engine = export_format(codec).unwrap().caps();
 

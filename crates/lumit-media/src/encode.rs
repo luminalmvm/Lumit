@@ -2,8 +2,9 @@
 //!
 //! In plain terms: the compositor hands over finished RGBA frames (and the
 //! mixer hands over finished stereo samples); this module compresses them
-//! into an .mp4. The video encoder is picked from a ladder — NVENC (NVIDIA),
-//! then AMF (AMD), then Quick Sync (Intel), then software x264/x265 — and
+//! into an .mp4 (a .mov for ProRes). The video encoder is picked from a
+//! ladder — NVENC (NVIDIA), then AMF (AMD), then Quick Sync (Intel), then
+//! software x264/x265 — and
 //! each rung is *proven* with a short test encode before it is trusted,
 //! because hardware encoders can exist in the FFmpeg build yet fail at
 //! runtime (wrong vendor's GPU, driver sessions exhausted). Whatever rung
@@ -25,6 +26,11 @@ use std::path::Path;
 pub enum VideoCodec {
     H264,
     Hevc,
+    /// ProRes 422 HQ in a `.mov`: ten-bit 4:2:2, every frame a keyframe. The
+    /// usual master to hand an editor.
+    ProRes422Hq,
+    /// ProRes 4444 in a `.mov`: ten-bit 4:4:4 with an alpha channel.
+    ProRes4444,
 }
 
 impl VideoCodec {
@@ -33,6 +39,22 @@ impl VideoCodec {
         match self {
             VideoCodec::H264 => "H.264",
             VideoCodec::Hevc => "HEVC",
+            VideoCodec::ProRes422Hq => "ProRes 422 HQ",
+            VideoCodec::ProRes4444 => "ProRes 4444",
+        }
+    }
+
+    pub fn is_prores(self) -> bool {
+        matches!(self, VideoCodec::ProRes422Hq | VideoCodec::ProRes4444)
+    }
+
+    /// The container's extension. ProRes lives in a `.mov`; the mp4 muxer
+    /// refuses it.
+    pub fn extension(self) -> &'static str {
+        if self.is_prores() {
+            "mov"
+        } else {
+            "mp4"
         }
     }
 }
@@ -340,10 +362,11 @@ impl Metadata {
 /// The encoder ladder for a codec, best first (docs/impl/media-io.md §7):
 /// NVIDIA NVENC → AMD AMF → Intel Quick Sync → software. Pure data so the
 /// priority is unit-tested, not folklore.
-pub fn encoder_candidates(codec: VideoCodec) -> [&'static str; 4] {
+pub fn encoder_candidates(codec: VideoCodec) -> &'static [&'static str] {
     match codec {
-        VideoCodec::H264 => ["h264_nvenc", "h264_amf", "h264_qsv", "libx264"],
-        VideoCodec::Hevc => ["hevc_nvenc", "hevc_amf", "hevc_qsv", "libx265"],
+        VideoCodec::H264 => &["h264_nvenc", "h264_amf", "h264_qsv", "libx264"],
+        VideoCodec::Hevc => &["hevc_nvenc", "hevc_amf", "hevc_qsv", "libx265"],
+        VideoCodec::ProRes422Hq | VideoCodec::ProRes4444 => &["prores_ks"],
     }
 }
 
@@ -358,12 +381,15 @@ pub fn pick_first_working<'a>(
 }
 
 /// The pixel format each encoder is fed. Quick Sync encoders take NV12 only;
-/// everything else on the ladder accepts planar 4:2:0.
-pub fn pix_fmt_for(encoder: &str) -> i32 {
-    if encoder.ends_with("_qsv") {
-        ffi::AV_PIX_FMT_NV12
-    } else {
-        ffi::AV_PIX_FMT_YUV420P
+/// everything else on the H.264 and HEVC ladders accepts planar 4:2:0. ProRes
+/// is ten-bit, and `prores_ks` picks its profile from the format: 4:2:2 makes
+/// 422 HQ, 4:4:4 with alpha makes 4444.
+pub fn pix_fmt_for(codec: VideoCodec, encoder: &str) -> i32 {
+    match codec {
+        VideoCodec::ProRes422Hq => ffi::AV_PIX_FMT_YUV422P10LE,
+        VideoCodec::ProRes4444 => ffi::AV_PIX_FMT_YUVA444P10LE,
+        _ if encoder.ends_with("_qsv") => ffi::AV_PIX_FMT_NV12,
+        _ => ffi::AV_PIX_FMT_YUV420P,
     }
 }
 
@@ -375,6 +401,7 @@ pub fn encoder_label(encoder: &str) -> &'static str {
         "h264_qsv" | "hevc_qsv" => "Intel Quick Sync",
         "libx264" => "software x264",
         "libx265" => "software x265",
+        "prores_ks" => "software ProRes",
         _ => "software",
     }
 }
@@ -919,7 +946,7 @@ fn open_video(
     // The ladder: prove each rung with a test encode, then open the real
     // context; a rung that proves but won't re-open also falls through.
     let mut opened: Option<AVCodecContext> = None;
-    let picked = pick_first_working(&encoder_candidates(video.codec), |name| {
+    let picked = pick_first_working(encoder_candidates(video.codec), |name| {
         match test_encode(name, video).and_then(|()| build_video_ctx(name, video, global_header)) {
             Ok(ctx) => {
                 opened = Some(ctx);
@@ -971,7 +998,7 @@ fn open_video(
         .map_err(|_| MediaError::Ffmpeg("frame width overflows".into()))?;
     let height = i32::try_from(video.height)
         .map_err(|_| MediaError::Ffmpeg("frame height overflows".into()))?;
-    let encode_pix_fmt = pix_fmt_for(encoder);
+    let encode_pix_fmt = pix_fmt_for(video.codec, encoder);
     let sws = sliced_scaler(width, height, encode_pix_fmt)?;
 
     Ok(VideoTrack {
@@ -1078,7 +1105,7 @@ fn build_video_ctx(
         num: v.fps_num,
         den: v.fps_den,
     });
-    ctx.set_pix_fmt(pix_fmt_for(name));
+    ctx.set_pix_fmt(pix_fmt_for(v.codec, name));
     ctx.set_gop_size(30);
     if let Some(rate) = v.bit_rate {
         ctx.set_bit_rate(rate);
@@ -1107,7 +1134,7 @@ fn build_video_ctx(
 /// rung, please", never a failed export.
 fn test_encode(name: &str, v: &VideoSettings) -> Result<(), MediaError> {
     let mut ctx = build_video_ctx(name, v, false)?;
-    let mut frame = blank_frame(pix_fmt_for(name), v.width, v.height)?;
+    let mut frame = blank_frame(pix_fmt_for(v.codec, name), v.width, v.height)?;
     for n in 0..16 {
         frame.set_pts(n);
         ctx.send_frame(Some(&frame))?;
@@ -1368,6 +1395,22 @@ fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFrame, MediaEr
         .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
     let rows = usize::try_from(h).unwrap_or(0);
     let chroma_rows = rows.div_ceil(2);
+    // The ten-bit ProRes layouts: every plane is full height, and zero is a
+    // valid sample, which is all a test encode needs.
+    if matches!(
+        pix_fmt,
+        ffi::AV_PIX_FMT_YUV422P10LE | ffi::AV_PIX_FMT_YUVA444P10LE
+    ) {
+        let planes = if pix_fmt == ffi::AV_PIX_FMT_YUVA444P10LE {
+            4
+        } else {
+            3
+        };
+        for p in 0..planes {
+            fill_plane(frame.data[p], frame.linesize[p], rows, 0)?;
+        }
+        return Ok(frame);
+    }
     // Y = 16, chroma = 128 is video-range black for both layouts we feed.
     fill_plane(frame.data[0], frame.linesize[0], rows, 16)?;
     match pix_fmt {
@@ -1633,10 +1676,10 @@ mod tests {
         let candidates = encoder_candidates(VideoCodec::H264);
         // Simulate a machine where NVENC and AMF exist but cannot open
         // (wrong GPU vendor) and QSV is absent: software must win.
-        let picked = pick_first_working(&candidates, |name| name == "libx264");
+        let picked = pick_first_working(candidates, |name| name == "libx264");
         assert_eq!(picked, Some("libx264"));
         // Simulate a working NVIDIA machine: the first rung wins.
-        let picked = pick_first_working(&candidates, |name| {
+        let picked = pick_first_working(candidates, |name| {
             name.ends_with("_nvenc") || name.starts_with("libx")
         });
         assert_eq!(picked, Some("h264_nvenc"));
@@ -1716,6 +1759,45 @@ mod tests {
         let input = crate::probe::open_input(&(&path).into()).unwrap();
         let tag = input.streams()[0].codecpar().codec_tag;
         assert_eq!(&tag.to_le_bytes(), b"hvc1");
+    }
+
+    /// Both ProRes flavours open, write a .mov with PCM sound, and come back
+    /// tagged as the profile they claim: `apch` for 422 HQ, `ap4h` for 4444,
+    /// which is what an editor reads to know the file holds alpha.
+    #[test]
+    fn prores_round_trips_through_our_own_probe() {
+        let dir = tempfile::tempdir().unwrap();
+        for (codec, tag) in [
+            (VideoCodec::ProRes422Hq, b"apch"),
+            (VideoCodec::ProRes4444, b"ap4h"),
+        ] {
+            let path = dir.path().join(format!("{}.mov", codec.label()));
+            let mut enc = Encoder::open(
+                &path,
+                Some(&video_settings(codec, 320, 240)),
+                Some(&AudioSettings {
+                    rate: 48_000,
+                    bit_rate: 0,
+                    codec: AudioCodec::PcmS24,
+                    channels: 2,
+                }),
+                &Metadata::new(),
+            )
+            .unwrap();
+            let rgba = vec![90u8; 320 * 240 * 4];
+            for _ in 0..30 {
+                enc.write_rgba(&rgba).unwrap();
+                enc.write_audio(&[0.0; 1600 * 2]).unwrap();
+            }
+            enc.finish().unwrap();
+            let probe = crate::probe::probe(&path).unwrap();
+            let video = probe.video.unwrap();
+            assert_eq!(video.codec, "prores");
+            assert_eq!((video.width, video.height), (320, 240));
+            let input = crate::probe::open_input(&(&path).into()).unwrap();
+            let stream_tag = input.streams()[0].codecpar().codec_tag;
+            assert_eq!(&stream_tag.to_le_bytes(), tag);
+        }
     }
 
     /// Every sample rate, sample width and channel layout the export dialog

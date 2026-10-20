@@ -1104,8 +1104,8 @@ pub struct FormatCaps {
 
 use lumit_media::encode::BitDepth;
 
-/// Eight bits only — every video codec Lumit writes in v1 (docs/06 §7.4:
-/// ProRes and DNxHR, which is where 4444 and deeper live, are not in v1).
+/// Eight bits only — every video codec Lumit writes is fed eight-bit frames.
+/// ProRes stores ten bits, but what goes in is still the eight-bit composite.
 const EIGHT_ONLY: &[BitDepth] = &[BitDepth::Eight];
 /// The still formats carry either width.
 const EIGHT_OR_SIXTEEN: &[BitDepth] = &[BitDepth::Eight, BitDepth::Sixteen];
@@ -1127,6 +1127,19 @@ impl ExportFormat {
     /// This format's capability row.
     pub fn caps(self) -> FormatCaps {
         match self {
+            // ProRes in mov: no bitrate to choose, PCM sound, and 4444 holds
+            // alpha.
+            ExportFormat::Video(c) if c.is_prores() => FormatCaps {
+                video: true,
+                audio: true,
+                alpha: c == lumit_media::encode::VideoCodec::ProRes4444,
+                depths: EIGHT_ONLY,
+                audio_rates: EXPORT_AUDIO_RATES,
+                audio_depths: PCM_DEPTHS,
+                bit_rate: false,
+                metadata: true,
+                colour_spaces: BUILT_IN_COLOUR_SPACES,
+            },
             // H.264/HEVC in mp4: 4:2:0, eight bits, no alpha, a bitrate to
             // choose, and a container that holds metadata.
             ExportFormat::Video(_) => FormatCaps {
@@ -1179,9 +1192,19 @@ impl ExportFormat {
     /// The file extension this format writes.
     pub fn extension(self) -> &'static str {
         match self {
-            ExportFormat::Video(_) => "mp4",
+            ExportFormat::Video(c) => c.extension(),
             ExportFormat::Images(f) => f.extension(),
             ExportFormat::Audio(f) => f.extension(),
+        }
+    }
+
+    /// The codec this format's sound is written with: PCM beside ProRes, as
+    /// an editor expects of a master, and AAC beside H.264 and HEVC.
+    pub fn audio_codec(self, depth: AudioDepth) -> lumit_media::encode::AudioCodec {
+        match self {
+            ExportFormat::Video(c) if c.is_prores() => AudioFormat::Wav.codec(depth),
+            ExportFormat::Audio(f) => f.codec(depth),
+            _ => lumit_media::encode::AudioCodec::Aac,
         }
     }
 }
@@ -1740,6 +1763,8 @@ pub fn auto_bitrate(
     let bits_per_px = match codec {
         lumit_media::encode::VideoCodec::H264 => H264_BITS_PER_PIXEL,
         lumit_media::encode::VideoCodec::Hevc => HEVC_BITS_PER_PIXEL,
+        // ProRes has no bitrate to choose, so this is never asked.
+        _ => H264_BITS_PER_PIXEL,
     };
     let pixels_per_second = f64::from(w) * f64::from(h) * fps.clamp(1.0, 1000.0);
     let mbps = (pixels_per_second * bits_per_px / 1e6)
@@ -3080,7 +3105,7 @@ fn run(
                 .map(|_| lumit_media::encode::AudioSettings {
                     rate,
                     bit_rate: spec.audio_bit_rate,
-                    codec: lumit_media::encode::AudioCodec::Aac,
+                    codec: spec.format.audio_codec(spec.audio_depth),
                     channels: spec.audio_layout.channels(),
                 });
             let (bit_rate, max_rate) = match spec.resolved_bitrate((tw, th), out_fps) {

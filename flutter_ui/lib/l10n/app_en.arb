@@ -2083,6 +2083,18 @@
   "@formatMp4Picker": {
     "description": "The file type shown in the system Save dialogue. MP4 stays as it is."
   },
+  "formatProRes422Hq": "ProRes 422 HQ (.mov)",
+  "@formatProRes422Hq": {
+    "description": "Export format. ProRes 422 HQ and .mov are technical names and stay as they are."
+  },
+  "formatProRes4444": "ProRes 4444 (.mov)",
+  "@formatProRes4444": {
+    "description": "Export format that can carry transparency. ProRes 4444 and .mov are technical names and stay as they are."
+  },
+  "formatMovPicker": "QuickTime movie",
+  "@formatMovPicker": {
+    "description": "The file type shown in the system Save dialogue for a .mov file. QuickTime stays as it is."
+  },
   "formatPngPicker": "PNG image",
   "@formatPngPicker": {
     "description": "The file type shown in the system Save dialogue. PNG stays as it is."
