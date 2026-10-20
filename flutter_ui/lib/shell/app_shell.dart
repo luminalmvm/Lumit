@@ -20,6 +20,7 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
     show showExportQueueFrb;
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
+import 'package:lumit_flutter/shell/light_settings_dialog.dart';
 import 'package:lumit_flutter/shell/layer_settings_frb.dart'
     show showLayerSettingsFrb;
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
@@ -773,10 +774,21 @@ class _LumitAppViewState extends State<LumitAppView> {
         }
       // Layer ▸ New from the keyboard: the same engine call the menu row
       // makes, on the fronted composition.
+      // A light asks for its settings first, as the menu row does.
+      case 'layer.new.light.point':
+        if (comp == null) {
+          handled = false;
+        } else {
+          newLightFrb(
+            context: context,
+            comp: comp,
+            row: newLayerRow(ui, comp),
+            onDone: state.notifyDocumentChanged,
+          );
+        }
       case 'layer.new.solid' ||
             'layer.new.text' ||
             'layer.new.camera' ||
-            'layer.new.light.point' ||
             'layer.new.adjustment' ||
             'layer.new.null':
         if (comp == null) {
@@ -791,8 +803,6 @@ class _LumitAppViewState extends State<LumitAppView> {
               comp.addTextLayer(row: row);
             case 'layer.new.camera':
               comp.addCameraLayer(row: row);
-            case 'layer.new.light.point':
-              comp.addLightLayer(kind: 0, row: row);
             case 'layer.new.adjustment':
               comp.addAdjustmentLayer(row: row);
             case 'layer.new.null':

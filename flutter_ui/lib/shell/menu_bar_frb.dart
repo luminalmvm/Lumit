@@ -76,6 +76,7 @@ import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
 import 'layer_settings_frb.dart';
+import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
 import 'precompose_dialog_frb.dart';
@@ -1269,16 +1270,18 @@ List<MenuSection> lumitMenus(
               MenuEntry(
                   l10n.menuCamera, onComp((c) => c.addCameraLayer(row: row(c))),
                   action: 'layer.new.camera'),
-              // The three light kinds are their own rows rather than one row and
-              // a dropdown: which kind you want is known before you make it, and
-              // an area light is a different thing to reach for than a point.
-              MenuEntry(l10n.menuPointLight,
-                  onComp((c) => c.addLightLayer(kind: 0, row: row(c))),
+              // One row and the settings window, as After Effects asks: the
+              // kind is chosen there, with everything else about the light.
+              MenuEntry(
+                  l10n.menuLight,
+                  comp == null
+                      ? null
+                      : () => newLightFrb(
+                          context: context,
+                          comp: comp,
+                          row: row(comp),
+                          onDone: app.notifyDocumentChanged),
                   action: 'layer.new.light.point'),
-              MenuEntry(l10n.menuSpotLight,
-                  onComp((c) => c.addLightLayer(kind: 1, row: row(c)))),
-              MenuEntry(l10n.menuAreaLight,
-                  onComp((c) => c.addLightLayer(kind: 2, row: row(c)))),
               MenuEntry(l10n.menuAdjustment,
                   onComp((c) => c.addAdjustmentLayer(row: row(c))),
                   action: 'layer.new.adjustment'),
@@ -1439,6 +1442,7 @@ List<MenuSection> lumitMenus(
             ]),
             MenuEntry.divider(),
             cameraSettingsRow(context, app, ui),
+            lightSettingsRow(context, app, ui),
             MenuEntry.todo(l10n.menuAutoOutline),
             // Pre-compose… is live only with a comp open and something selected in
             // it — the menu says so by greying out rather than by failing.

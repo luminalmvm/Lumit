@@ -5759,10 +5759,6 @@
   "@menuApplyAnimationPreset": {
     "description": "Menu item."
   },
-  "menuAreaLight": "区域光",
-  "@menuAreaLight": {
-    "description": "Layer ▸ New menu item. Creates a light with a real width and height — a softbox, a window, a strip light — rather than a single point."
-  },
   "menuAssignWorkspaceShortcut": "为此工作区分配快捷键",
   "@menuAssignWorkspaceShortcut": {
     "description": "Menu item (a feature that is not built yet — it appears greyed out)."
@@ -6049,10 +6045,6 @@
   "@menuPaste": {
     "description": "Menu item."
   },
-  "menuPointLight": "点光源",
-  "@menuPointLight": {
-    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
-  },
   "menuPreCompose": "预合成…",
   "@menuPreCompose": {
     "description": "Menu item."
@@ -6186,10 +6178,6 @@
   "menuSplitLayer": "拆分图层",
   "@menuSplitLayer": {
     "description": "Menu item."
-  },
-  "menuSpotLight": "聚光灯",
-  "@menuSpotLight": {
-    "description": "Layer ▸ New menu item. Creates a cone of light, aimed by the layer's own rotation."
   },
   "menuStretch": "拉伸…",
   "@menuStretch": {

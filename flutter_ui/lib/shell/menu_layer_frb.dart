@@ -35,6 +35,7 @@ import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
     show TransformSection, hasThreeDSwitch, transformGroups;
 import 'camera_settings_dialog.dart';
+import 'light_settings_dialog.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
 import 'number_dialog_frb.dart';
 
@@ -514,6 +515,31 @@ MenuEntry cameraSettingsRow(
               settings: picked.info.camera!,
               channels: channels,
               compWidth: comp.getSettings().width.toDouble(),
+            );
+            if (applied) app.notifyDocumentChanged();
+          },
+  );
+}
+
+/// Layer ▸ Light settings: the light's window again, greyed until a light is
+/// picked.
+MenuEntry lightSettingsRow(
+    BuildContext context, LumitState app, LumitUiState ui) {
+  final picked = selectedEntries(ui)
+      .where((entry) => entry.info.light != null)
+      .firstOrNull;
+  final channels = picked?.info.transform.light;
+  return MenuEntry(
+    l10n.lightSettings,
+    picked == null || channels == null
+        ? null
+        : () async {
+            final applied = await showLightSettingsFrb(
+              context: context,
+              layer: picked.layer,
+              name: picked.info.name,
+              settings: picked.info.light!,
+              channels: channels,
             );
             if (applied) app.notifyDocumentChanged();
           },

@@ -2887,10 +2887,6 @@
   "@menuPaste": {
     "description": "Menu item."
   },
-  "menuPointLight": "Нүктелік жарық",
-  "@menuPointLight": {
-    "description": "Layer ▸ New menu item. Creates a light that is a single point, like a bare bulb."
-  },
   "menuPreCompose": "Pre-compose…",
   "@menuPreCompose": {
     "description": "Menu item."

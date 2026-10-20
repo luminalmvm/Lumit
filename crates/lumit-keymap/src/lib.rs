@@ -203,7 +203,7 @@ impl ActionId {
             "layer.new.solid" => "New Solid layer",
             "layer.new.text" => "New Text layer",
             "layer.new.camera" => "New Camera layer",
-            "layer.new.light.point" => "New Point light layer",
+            "layer.new.light.point" => "New Light layer",
             "layer.new.adjustment" => "New Adjustment layer",
             "layer.new.null" => "New Null layer",
             "layer.settings" => "Layer settings",
