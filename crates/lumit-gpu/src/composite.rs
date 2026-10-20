@@ -906,6 +906,8 @@ struct PipelineSet {
     /// that draws the front of a depth cut, the draw that lays a layer's own
     /// depth down, and None in the set that draws behind it.
     depth: Option<wgpu::RenderPipeline>,
+    /// Scene depth's clear, for a run that lies over what is below it.
+    depth_clear: Option<wgpu::RenderPipeline>,
 }
 
 /// A running weighted sum of textures, in fp32, fed one at a time.
@@ -1442,6 +1444,9 @@ impl Compositor {
                 )),
                 Some(_) => None,
             },
+            depth_clear: cut
+                .is_none()
+                .then(|| make("fs_layer_depth", None, "composite-depth-clear")),
         }
     }
 
@@ -1507,14 +1512,17 @@ impl Compositor {
     }
 
     /// **Scene depth**: how far from the camera each pixel of the 3D layers is,
-    /// metres, the nearest layer at each pixel, so layers that pass through
-    /// each other cut as they do in the picture. A pixel no 3D layer covers at
-    /// least half reads as far as a half float goes. `metres_per_w` is the
-    /// camera's zoom over its pixels per metre.
+    /// metres, so an effect can read it. Each run of 3D layers keeps its
+    /// nearest layer at each pixel, so layers that pass through each other cut
+    /// as they do in the picture, and a run higher in the stack replaces what
+    /// is below it wherever it covers, as it does in the picture. A pixel no
+    /// 3D layer covers at least half reads as far as a half float goes, or as
+    /// `under` where that is given: the depth of the layers below these.
+    /// `metres_per_w` is the camera's zoom over its pixels per metre.
     ///
-    /// The nearest wins across the whole comp, so where a 2D layer splits the
-    /// 3D layers into groups, a nearer layer of the lower group still reads
-    /// through an upper group that covers it in the picture.
+    /// 2D layers draw nothing here, so a 3D layer still reads through a 2D
+    /// one in front of it. A 2D layer inside a collapsed 3D precomp lies on the
+    /// precomp's plane, so it has a distance like any 3D layer.
     ///
     /// ponytail: track mattes and blend modes are not read here, so a layer
     /// a matte cuts away still has a distance. Read them if a scene needs it.
@@ -1524,10 +1532,11 @@ impl Compositor {
         ctx: &GpuContext,
         width: u32,
         height: u32,
-        layers: &[CompositeLayer<'_>],
+        runs: &[&[CompositeLayer<'_>]],
         camera: Mat4,
         metres_per_w: f32,
         render_scale: f32,
+        under: Option<&wgpu::Texture>,
     ) -> wgpu::Texture {
         let (tw, th) = scaled_size(width, height, render_scale);
         let target = ctx.device.create_texture(&wgpu::TextureDescriptor {
@@ -1543,92 +1552,134 @@ impl Compositor {
             format: ctx.working(),
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
+        let under = under.filter(|u| (u.width(), u.height()) == (tw, th));
         let pipelines = self.pipelines(ctx, 1, None);
-        let binds: Vec<wgpu::BindGroup> = layers
-            .iter()
-            .filter(|l| l.three_d)
-            .map(|layer| {
-                let uniform = LayerUniform {
-                    matrix: layer
-                        .matrix(width as f32, height as f32, Some(&camera), None)
-                        .to_cols_array_2d(),
-                    params: [(layer.opacity / 100.0).clamp(0.0, 1.0), 0.0, 0.0, 0.0],
-                    target: [tw as f32, th as f32, 0.0, metres_per_w],
-                    cut: [0.0; 4],
-                    piece: [[0.0; 4]; PIECE_CORNERS / 2],
-                };
-                let buffer = wgpu::util::DeviceExt::create_buffer_init(
-                    &ctx.device,
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("layer-depth-uniform"),
-                        contents: bytemuck::bytes_of(&uniform),
-                        usage: wgpu::BufferUsages::UNIFORM,
+        let bind = |layer: &CompositeLayer<'_>, clear: bool| {
+            let uniform = LayerUniform {
+                matrix: layer
+                    .matrix(width as f32, height as f32, Some(&camera), None)
+                    .to_cols_array_2d(),
+                params: [
+                    (layer.opacity / 100.0).clamp(0.0, 1.0),
+                    f32::from(u8::from(clear)),
+                    0.0,
+                    0.0,
+                ],
+                target: [tw as f32, th as f32, 0.0, metres_per_w],
+                cut: [0.0; 4],
+                piece: [[0.0; 4]; PIECE_CORNERS / 2],
+            };
+            let buffer = wgpu::util::DeviceExt::create_buffer_init(
+                &ctx.device,
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("layer-depth-uniform"),
+                    contents: bytemuck::bytes_of(&uniform),
+                    usage: wgpu::BufferUsages::UNIFORM,
+                },
+            );
+            let view = |t: &wgpu::Texture| t.create_view(&Default::default());
+            ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("composite-depth-layer"),
+                layout: &self.layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&view(layer.texture)),
                     },
-                );
-                let view = |t: &wgpu::Texture| t.create_view(&Default::default());
-                ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("composite-depth-layer"),
-                    layout: &self.layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&view(layer.texture)),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&self.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: wgpu::BindingResource::TextureView(&view(&self.white)),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 4,
-                            resource: wgpu::BindingResource::TextureView(&view(&self.black)),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 5,
-                            resource: wgpu::BindingResource::TextureView(&view(
-                                layer.layer_mask.unwrap_or(&self.white),
-                            )),
-                        },
-                    ],
-                })
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::TextureView(&view(&self.white)),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(&view(&self.black)),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: wgpu::BindingResource::TextureView(&view(
+                            layer.layer_mask.unwrap_or(&self.white),
+                        )),
+                    },
+                ],
             })
-            .collect();
+        };
+        // Each run's 3D layers, after a clear of where they cover when the run
+        // lies over something. The first run over nothing needs no clear.
+        let mut over = under.is_some();
+        let mut draws: Vec<(Vec<wgpu::BindGroup>, Vec<wgpu::BindGroup>)> = Vec::new();
+        for run in runs {
+            let solid: Vec<&CompositeLayer<'_>> = run.iter().filter(|l| l.three_d).collect();
+            if solid.is_empty() {
+                continue;
+            }
+            let clears = if over {
+                solid.iter().map(|l| bind(l, true)).collect()
+            } else {
+                Vec::new()
+            };
+            draws.push((clears, solid.iter().map(|l| bind(l, false)).collect()));
+            over = true;
+        }
         let target_view = target.create_view(&Default::default());
         let mut encoder = ctx.encoder("composite-depth");
+        if let Some(u) = under {
+            encoder.copy_texture_to_texture(
+                u.as_image_copy(),
+                target.as_image_copy(),
+                wgpu::Extent3d {
+                    width: tw,
+                    height: th,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
         {
             let far = f64::from(half::f16::MAX.to_f32());
+            let load = match under {
+                Some(_) => wgpu::LoadOp::Load,
+                None => wgpu::LoadOp::Clear(wgpu::Color {
+                    r: far,
+                    g: far,
+                    b: far,
+                    a: 1.0,
+                }),
+            };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("composite-depth"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &target_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: far,
-                            g: far,
-                            b: far,
-                            a: 1.0,
-                        }),
+                        load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
                 ..Default::default()
             });
-            if let Some(depth) = &pipelines.depth {
-                pass.set_pipeline(depth);
-                for bind in &binds {
-                    pass.set_bind_group(0, bind, &[0]);
-                    pass.draw(0..6, 0..1);
+            if let (Some(depth), Some(clear)) = (&pipelines.depth, &pipelines.depth_clear) {
+                for (clears, binds) in &draws {
+                    for (pipeline, list) in [(clear, clears), (depth, binds)] {
+                        if list.is_empty() {
+                            continue;
+                        }
+                        pass.set_pipeline(pipeline);
+                        for bind in list {
+                            pass.set_bind_group(0, bind, &[0]);
+                            pass.draw(0..6, 0..1);
+                        }
+                    }
                 }
             }
         }
@@ -3589,8 +3640,16 @@ mod tests {
             layer_mask: None,
             pre: None,
         };
-        let depth =
-            compositor.composite_depth(&ctx, 32, 32, &[card(30.0), card(-30.0)], cam, 1.0, 1.0);
+        let depth = compositor.composite_depth(
+            &ctx,
+            32,
+            32,
+            &[&[card(30.0), card(-30.0)]],
+            cam,
+            1.0,
+            1.0,
+            None,
+        );
         let px = crate::fx::readback_linear_f32(&ctx, &depth, 32, 32).unwrap();
         // The ray from the eye through the pixel's spot on the z = 0 plane
         // meets a card turned `deg` at this many zooms along the view.
@@ -3630,6 +3689,25 @@ mod tests {
                 (red_nearer, !red_nearer),
                 "pixel {x} shows {p:?}"
             );
+        }
+        // Split into two runs, as a 2D layer between them does, the blue card
+        // above covers the red one wherever it is, nearer or not. Laid over
+        // the red card's depth as what is below, it does the same.
+        let red = compositor.composite_depth(&ctx, 32, 32, &[&[card(30.0)]], cam, 1.0, 1.0, None);
+        for under in [None, Some(&red)] {
+            let runs: &[&[CompositeLayer<'_>]] = match under {
+                None => &[&[card(30.0)], &[card(-30.0)]],
+                Some(_) => &[&[card(-30.0)]],
+            };
+            let depth = compositor.composite_depth(&ctx, 32, 32, runs, cam, 1.0, 1.0, under);
+            let px = crate::fx::readback_linear_f32(&ctx, &depth, 32, 32).unwrap();
+            for x in [10u32, 21] {
+                let (got, blue) = (px[((16 * 32 + x) * 4) as usize], hit(x as f32 + 0.5, -30.0));
+                assert!(
+                    (got - blue).abs() < 0.01 * blue,
+                    "pixel {x}: depth {got}, blue at {blue}"
+                );
+            }
         }
     }
 

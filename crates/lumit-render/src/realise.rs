@@ -2420,10 +2420,11 @@ impl Realiser<'_> {
                 &self.ctx,
                 width,
                 height,
-                &comp_layers,
+                &runs_of(layers, &order, &comp_layers),
                 cam,
                 metres_per_w,
                 self.render_scale,
+                None,
             );
             // The 3D layers themselves too, for rays to meet: each picture and
             // its plane in the camera's frame, and the 2D layers drawn flat
@@ -2609,6 +2610,26 @@ fn draw_order(
         start = end + 1;
     }
     order
+}
+
+/// The draws in their order cut into the runs [`draw_order`] sorted: each
+/// run of 3D layers, and each layer that ended one on its own.
+fn runs_of<'a, 'b>(
+    layers: &[CompLayerDraw],
+    order: &[usize],
+    placed: &'b [lumit_gpu::CompositeLayer<'a>],
+) -> Vec<&'b [lumit_gpu::CompositeLayer<'a>]> {
+    let mut runs = Vec::new();
+    let mut start = 0;
+    for (k, &i) in order.iter().enumerate() {
+        if layers.get(i).is_some_and(|l| !l.three_d || l.ends_run) {
+            runs.push(&placed[start..k]);
+            runs.push(&placed[k..=k]);
+            start = k + 1;
+        }
+    }
+    runs.push(&placed[start..]);
+    runs
 }
 
 /// The quad a grown picture needs (docs/08 §3.39).
