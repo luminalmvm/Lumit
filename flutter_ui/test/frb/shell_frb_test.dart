@@ -28,6 +28,7 @@ import 'package:lumit_flutter/src/rust/api/retime.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart';
 import 'package:lumit_flutter/theme/theme.dart';
 import 'package:lumit_flutter/widgets/controls.dart';
+import 'package:uuid/uuid.dart' show UuidValue;
 
 import 'frb_test_support.dart';
 
@@ -1095,6 +1096,7 @@ void main() {
                 const BridgeExportQueueState.waiting()}) =>
         BridgeExportQueueItem(
           id: id,
+          comp: UuidValue.fromString('00000000-0000-0000-0000-000000000000'),
           compName: name,
           path: 'C:/exports/$name.mp4',
           preset: '',

@@ -12281,6 +12281,65 @@
       }
     }
   },
+  "exportQueueAddComps": "Add compositions…",
+  "@exportQueueAddComps": {
+    "description": "Export queue window: footer button that opens a list of the project's compositions to queue several at once."
+  },
+  "exportQueueSettings": "Settings",
+  "@exportQueueSettings": {
+    "description": "Export queue window: tooltip on the mark that opens a waiting item's export settings."
+  },
+  "exportQueueNotWaiting": "No longer waiting",
+  "@exportQueueNotWaiting": {
+    "description": "Export dialog, opened from a queue item: shown in the footer when the item started or was removed before its changes were saved."
+  },
+  "exportPickTitle": "Add compositions",
+  "@exportPickTitle": {
+    "description": "Add compositions window, from the export queue: the window's title."
+  },
+  "exportPickNone": "No compositions",
+  "@exportPickNone": {
+    "description": "Add compositions window: shown in place of the list when the project has no compositions."
+  },
+  "exportPickComposition": "Composition",
+  "@exportPickComposition": {
+    "description": "Add compositions window: heading over the column of composition names."
+  },
+  "exportPickFile": "File",
+  "@exportPickFile": {
+    "description": "Add compositions window: heading over the column of file names each composition would write."
+  },
+  "exportPickSummary": "{count} to export",
+  "@exportPickSummary": {
+    "description": "Add compositions window: the footer line counting the compositions in the list.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exportPickAdd": "Add a composition",
+  "@exportPickAdd": {
+    "description": "Add compositions window: tooltip on the + under the list, which opens a dropdown of every composition to add one more."
+  },
+  "exportPickTaken": "{count} of these files are already there.",
+  "@exportPickTaken": {
+    "description": "Add compositions window: the question asked when several of the files would write over files already there. Answered with Overwrite or Keep both.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "exportPickRefused": "Not queued: {names}",
+  "@exportPickRefused": {
+    "description": "Add compositions window: footer line naming the compositions that could not be queued, comma separated.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
   "menuExportQueue": "Export queue…",
   "@menuExportQueue": {
     "description": "Window menu: opens the export queue window."
