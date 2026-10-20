@@ -1074,10 +1074,13 @@ pub fn point_centroid(media: Uuid, tracks: &[u32]) -> Option<[f64; 3]> {
 /// The **active** camera's placement at comp time `t`, with its solve link
 /// followed. The reading the render path takes, replacing
 /// [`lumit_core::model::Composition::camera_pose`], which answers only what the
-/// document holds.
+/// document holds. With no camera layer it is the default camera After
+/// Effects draws 3D layers through.
 #[must_use]
-pub fn camera_pose(doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
-    lumit_core::track::active_camera_pose(doc, comp, t)
+pub fn camera_pose(doc: &Document, comp: &Composition, t: f64) -> CameraPose {
+    lumit_core::track::active_camera_pose(doc, comp, t).unwrap_or_else(|| {
+        lumit_core::camera::default_pose(f64::from(comp.width), f64::from(comp.height))
+    })
 }
 
 /// As [`camera_pose`], keeping the [`lumit_core::track::LinkState`] the

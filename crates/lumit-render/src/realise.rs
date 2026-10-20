@@ -2501,8 +2501,8 @@ impl Realiser<'_> {
     /// **Scene depth**: a Precomp's 3D layers as how far each pixel is from its
     /// camera, metres, which is what a lens effect's Depth row reads from a
     /// Precomp. Each layer's picture is made as for colour, so what its effects
-    /// cut away is not there. Adjustment and 2D layers draw nothing, and a comp
-    /// with no camera is all far away.
+    /// cut away is not there. Adjustment and 2D layers draw nothing, so a comp
+    /// with no 3D layer is all far away.
     pub fn realise_scene_depth(
         &self,
         n: &crate::draw::NestedInputDraw,
@@ -2510,7 +2510,14 @@ impl Realiser<'_> {
     ) -> wgpu::Texture {
         // ponytail: 2D layers are still made here and only dropped by the depth
         // pass. Skip them before making them if a heavy 2D layer ever shows.
-        let draws: &[CompLayerDraw] = if n.camera.is_some() { &n.draws } else { &[] };
+        // With no 3D layer nothing is made, unless rays want the 2D ones as
+        // their backdrop.
+        let made = capture.is_some() || n.draws.iter().any(|d| d.three_d);
+        let draws: &[CompLayerDraw] = if n.camera.is_some() && made {
+            &n.draws
+        } else {
+            &[]
+        };
         let metres_per_w = n
             .camera
             .map_or(1.0, |c| (c.zoom / n.px_per_metre.max(1e-6)) as f32);
@@ -2564,15 +2571,15 @@ fn placed_in_3d<'a>(
 /// where layers pass through each other (a layer cut into pieces draws once
 /// per piece). A 2D layer ends a run, even one drawn on a collapsed 3D
 /// precomp's plane, and so does an adjustment layer, which already splits
-/// the segments. With no camera 3D layers draw flat, so the
-/// stack order stands.
+/// the segments. With no 3D layer, or no camera (only a Sequence mix, whose
+/// parts are 2D), the stack order stands.
 fn draw_order(
     layers: &[CompLayerDraw],
     textures: &[wgpu::Texture],
     grown: &[(f32, f32)],
     camera: Option<(lumit_gpu::Mat4, [f32; 3])>,
 ) -> Vec<(usize, Option<lumit_gpu::Cut>)> {
-    let Some((view_proj, eye)) = camera else {
+    let Some((view_proj, eye)) = camera.filter(|_| layers.iter().any(|l| l.three_d)) else {
         return (0..layers.len()).map(|i| (i, None)).collect();
     };
     let mut order = Vec::with_capacity(layers.len());

@@ -135,7 +135,7 @@ pub struct LinkedPose {
 const MAX_NESTING: u32 = 16;
 
 /// The **active** camera's placement at comp time `t`, following its solve link
-/// where it has one. `None` → the comp renders flat, exactly as
+/// where it has one. `None` with no camera layer, exactly as
 /// [`Composition::camera_pose`] means it.
 ///
 /// This is the reading the render path wants once solves exist; today's callers

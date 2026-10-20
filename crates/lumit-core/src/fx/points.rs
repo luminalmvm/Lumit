@@ -88,10 +88,9 @@ pub const CAP_HARD: i64 = 1_000_000;
 /// `1/W` of the size it would have had on the plane.
 ///
 /// [`FLAT`](Self::FLAT) is the identity: `(x, y, 1)` for any `z`, which is a
-/// 2D layer, a composition with no camera, and every project saved before the
-/// axis existed. It is applied without a branch and lands on exactly the bits
-/// it was handed, which is what makes that compatibility guarantee arithmetic
-/// rather than a promise.
+/// 2D layer and every project saved before the axis existed. It is applied
+/// without a branch and lands on exactly the bits it was handed, which is what
+/// makes that compatibility guarantee arithmetic rather than a promise.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Projection {
     /// Row-major 3×4: `[x, y, z, 1] → (X, Y, W)`, in the units the particle
@@ -115,7 +114,7 @@ impl Projection {
         ],
     };
 
-    /// Whether this is the identity — a 2D layer, or a comp with no camera.
+    /// Whether this is the identity: a 2D layer.
     #[must_use]
     pub fn is_flat(&self) -> bool {
         *self == Projection::FLAT

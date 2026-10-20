@@ -71,8 +71,8 @@ impl CompositionReference {
     /// three rows of four, taking a comp-space `(x, y, z, 1)` to `(X, Y, W)`,
     /// with the comp pixel at `(X / W, Y / W)` and `W` above 0 in front of the
     /// eye. Through `view` when one is given, otherwise through the comp's
-    /// active camera as the render poses it, aim and solve link included.
-    /// With no camera at all a 3D layer is drawn flat, and so are the rows.
+    /// active camera as the render poses it, aim and solve link included, or
+    /// the default camera when the comp has none.
     /// Asked once per frame, view or document change and held.
     #[frb(sync)]
     pub fn view_projection(
@@ -93,19 +93,11 @@ impl CompositionReference {
             .0
             .to_f64();
         let pose = match view {
-            Some(view) => Some(view.core()),
+            Some(view) => view.core(),
             None => lumit_render::track::camera_pose(&doc, comp, t),
         };
-        let rows = match pose {
-            Some(pose) => {
-                lumit_core::camera::projection(&pose, f64::from(comp.width), f64::from(comp.height))
-            }
-            None => [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ],
-        };
+        let rows =
+            lumit_core::camera::projection(&pose, f64::from(comp.width), f64::from(comp.height));
         Ok(rows.concat())
     }
 

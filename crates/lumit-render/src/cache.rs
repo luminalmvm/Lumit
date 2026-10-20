@@ -81,14 +81,15 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
     /// read. Without this a linked camera's frames would be named by the
     /// transform the document happens to hold, which is not the transform they
     /// were drawn with, and a solve landing would hand back every frame made
-    /// before it.
+    /// before it. `None` with no camera layer, which the key reads as the
+    /// default camera.
     fn camera(
         &self,
         doc: &Document,
         comp: &lumit_core::model::Composition,
         t: f64,
     ) -> Option<lumit_core::model::CameraPose> {
-        crate::track::camera_pose(doc, comp, t)
+        crate::track::linked_pose(doc, comp, t).map(|l| l.pose)
     }
 
     /// What the comp's mix sounds like, for a driver reading *This comp*

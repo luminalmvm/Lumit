@@ -65,7 +65,8 @@ pub mod schedule;
 ///   of the edge pixel.
 /// * 12: 3D layers draw farthest first and cut where they pass through each
 ///   other, so a 3D comp with a camera can look different.
-pub const ALGO_VERSION: u32 = 12;
+/// * 13: with no camera layer, 3D layers are seen through the default camera.
+pub const ALGO_VERSION: u32 = 13;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -374,6 +375,8 @@ fn feed_comp(
                 }
             }
         }
+        // No camera layer: the default camera, which the comp's size above
+        // already pins down.
         None => {
             h.update(b"flat");
         }
@@ -4546,12 +4549,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 12, which renamed every frame.
+        // Pinned under ALGO_VERSION 13, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                61_653_449_784_439_162_505_009_470_931_868_136_354,
-                291_320_008_273_123_335_629_101_331_896_518_863_007
+                311_780_279_161_583_965_545_020_857_864_894_950_438,
+                289_357_039_625_610_062_062_196_736_817_795_363_776
             )
         );
 
