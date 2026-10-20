@@ -273,6 +273,7 @@ class ViewerBar extends StatelessWidget {
           onWireframes: onWireframes,
           comp: comp,
           background: background,
+          viewId: viewId,
         ),
         viewerBarGapBox(viewerBarGap),
         // The channel as a mark tinted by its own answer: the face is read at

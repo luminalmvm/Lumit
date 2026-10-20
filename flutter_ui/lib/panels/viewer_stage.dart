@@ -10,8 +10,10 @@
 // a local of that name would shadow the prefix where it is needed.
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as dartui;
 
+import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
@@ -42,6 +44,7 @@ import 'viewer_dropper_layer.dart';
 import 'viewer_effect_points.dart';
 import 'viewer_follow.dart';
 import 'viewer_gizmo.dart';
+import 'viewer_gizmo_3d.dart' show gizmoAxisColours;
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart';
 import 'viewer_paint.dart';
@@ -636,34 +639,90 @@ class ViewerStage extends StatelessWidget {
                   ),
                 ),
               ),
-            // The wireframes, in every view but the composition's own camera
-            // (docs/impl/camera.md §6): a scene is arranged from a viewpoint
-            // that shows where the cameras and the lights actually are, and
-            // nothing in the picture says that by itself.
-            if (_viewPose() case final view?)
-              Positioned.fill(
-                key: const ValueKey('viewer-wireframes'),
-                child: IgnorePointer(
-                  child: ViewerWireframeLayer(
-                    comp: comp,
-                    view: view,
-                    frame: uiState.playheadFrame.value,
-                    revision: uiState.model.heldRevision,
-                    mediaSizes: uiState.layerBounds.mediaSizes,
-                    fitted: fitted,
-                    compSize: Size(
-                      compSize.width.toDouble(),
-                      compSize.height.toDouble(),
-                    ),
-                    layerLine: t.textPrimary,
-                    cameraLine: t.layer.camera,
-                    // The theme names no light colour, so the accent stands
-                    // for one: a light is the other thing in the scene you
-                    // place by hand.
-                    lightLine: t.accent,
-                  ),
+            // The wireframes (docs/impl/camera.md §6). A 3D view outlines the
+            // whole scene: a scene is arranged from a viewpoint that shows
+            // where the cameras and the lights actually are, and nothing in
+            // the picture says that by itself. Through the comp's own camera
+            // only the selected cameras and lights are outlined, as After
+            // Effects does (a selected layer's box is the layer controls'),
+            // and the layer controls' switch hides them all. The ground and
+            // the corner axes are this view's own switches.
+            Positioned.fill(
+              key: const ValueKey('viewer-wireframes'),
+              child: IgnorePointer(
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([
+                    uiState.selectedLayers,
+                    uiState.model,
+                    uiState.playheadFrame,
+                    uiState.solveLanded,
+                  ]),
+                  builder: (context, _) {
+                    final view = _viewPose();
+                    final aids = uiState.viewerAidsOf(viewId);
+                    final selected = uiState.selectedLayerIds;
+                    final layers = uiState.model.heldLayers;
+                    final List<UuidValue>? only = !wireframes
+                        ? const []
+                        : view == null
+                            ? [
+                                for (final e in layers)
+                                  if ((e.info.kind == BridgeLayerKind.camera ||
+                                          e.info.kind ==
+                                              BridgeLayerKind.light) &&
+                                      selected
+                                          .contains(e.layer.internallayerId))
+                                    e.layer.internallayerId,
+                              ]
+                            : null;
+                    final ask = aids.ground || only == null || only.isNotEmpty;
+                    // The corner axes come from the rows the outlines hold,
+                    // so on their own they cost no call.
+                    final axes = aids.axes
+                        ? viewAxes(
+                            uiState.viewProjections.of(
+                              comp: comp,
+                              viewId: viewId,
+                              frame: uiState.playheadFrame.value,
+                              revision: uiState.model.heldRevision,
+                              generation: uiState.solveLanded.value,
+                              view: view,
+                            ),
+                            Size(compSize.width.toDouble(),
+                                compSize.height.toDouble()),
+                          )
+                        : null;
+                    if (!ask && axes == null) return const SizedBox.shrink();
+                    return ViewerWireframeLayer(
+                      comp: comp,
+                      view: view,
+                      ask: ask,
+                      ground: aids.ground,
+                      axes: axes,
+                      only: only,
+                      frame: uiState.playheadFrame.value,
+                      revision: uiState.model.heldRevision,
+                      mediaSizes: uiState.layerBounds.mediaSizes,
+                      fitted: fitted,
+                      compSize: Size(
+                        compSize.width.toDouble(),
+                        compSize.height.toDouble(),
+                      ),
+                      selected: selected,
+                      layerLine: t.textSecondary,
+                      selectedLine: t.animated,
+                      cameraLine: t.layer.camera,
+                      // The theme names no light colour, so the accent stands
+                      // for one: a light is the other thing in the scene you
+                      // place by hand.
+                      lightLine: t.accent,
+                      groundLine: t.textMuted,
+                      frameLine: t.textMuted,
+                    );
+                  },
                 ),
               ),
+            ),
             _missingSlate(),
             // The layer controls and every tool that reads the boxes, under
             // one builder: [_boxes] walks the whole model, and it used to be
@@ -1533,18 +1592,34 @@ Rect snapToDevicePixels(Rect rect, double dpr) {
 }
 
 /// The wireframes over the picture in a 3D view (docs/impl/camera.md §6): every
-/// 3D layer's rectangle, every camera's frustum, and every light.
+/// 3D layer's rectangle, every camera's frustum, every light, and the ground,
+/// the comp's frame and the axes.
 ///
 /// **Asked for once per change, never in a build.** The engine gathers them and
 /// projects them through the view's own matrix, which is a walk of the whole
-/// composition; three things can change the answer - the frame, the document
-/// and the view - and this asks when one of them does and holds the reply.
+/// composition; the frame, the document, the view and what is asked for can
+/// change the answer, and this asks when one of them does and holds the reply.
 class ViewerWireframeLayer extends StatefulWidget {
   final CompositionReference comp;
 
   /// The pose the picture is being drawn through, which is also the pose the
-  /// wireframes are projected through.
-  final BridgeCameraPose view;
+  /// wireframes are projected through. Null for the comp's own camera.
+  final BridgeCameraPose? view;
+
+  /// Whether the engine is asked at all: the corner axes alone need nothing
+  /// from it.
+  final bool ask;
+
+  /// Whether the ground, with the comp's frame and the axes from the origin,
+  /// is drawn.
+  final bool ground;
+
+  /// The corner axes, as [viewAxes] reads them, or null for none.
+  final List<double>? axes;
+
+  /// The cameras and lights to outline and nothing else, or null for
+  /// everything.
+  final List<UuidValue>? only;
 
   final int frame;
   final BigInt? revision;
@@ -1559,22 +1634,35 @@ class ViewerWireframeLayer extends StatefulWidget {
   final Rect fitted;
   final Size compSize;
 
+  final Set<UuidValue> selected;
+
   final Color layerLine;
+  final Color selectedLine;
   final Color cameraLine;
   final Color lightLine;
+  final Color groundLine;
+  final Color frameLine;
 
   const ViewerWireframeLayer({
     super.key,
     required this.comp,
     required this.view,
+    required this.ask,
+    required this.ground,
+    required this.axes,
+    required this.only,
     required this.frame,
     required this.revision,
     required this.mediaSizes,
     required this.fitted,
     required this.compSize,
+    required this.selected,
     required this.layerLine,
+    required this.selectedLine,
     required this.cameraLine,
     required this.lightLine,
+    required this.groundLine,
+    required this.frameLine,
   });
 
   @override
@@ -1593,10 +1681,14 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
   @override
   void didUpdateWidget(ViewerWireframeLayer old) {
     super.didUpdateWidget(old);
-    // The rectangle and the colours move with the panel and the theme, and
-    // neither changes what the engine would answer.
+    // The rectangle, the selection and the colours move with the panel, the
+    // Timeline and the theme, and none of them changes what the engine would
+    // answer.
     if (old.comp != widget.comp ||
         old.view != widget.view ||
+        old.ask != widget.ask ||
+        old.ground != widget.ground ||
+        !listEquals(old.only, widget.only) ||
         old.frame != widget.frame ||
         old.revision != widget.revision) {
       _fetch();
@@ -1606,10 +1698,16 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
   /// Assigned rather than set: this runs from [initState] and
   /// [didUpdateWidget], both of which are followed by a build anyway.
   void _fetch() {
+    if (!widget.ask) {
+      _wires = null;
+      return;
+    }
     try {
       _wires = widget.comp.wireframes(
         frame: BigInt.from(widget.frame),
         view: widget.view,
+        ground: widget.ground,
+        only: widget.only,
         mediaSizes: widget.mediaSizes,
       );
     } catch (_) {
@@ -1624,94 +1722,156 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
           wires: _wires,
           fitted: widget.fitted,
           compSize: widget.compSize,
+          selected: widget.selected,
+          ground: widget.ground,
+          axes: widget.axes,
           layerLine: widget.layerLine,
+          selectedLine: widget.selectedLine,
           cameraLine: widget.cameraLine,
           lightLine: widget.lightLine,
+          groundLine: widget.groundLine,
+          frameLine: widget.frameLine,
         ),
       );
 }
 
+/// Which way the world's x, y and z point as the view with [rows] sees them,
+/// three numbers each: across, down, and away from the eye. Each is a column
+/// of the view's turn, read off the rows `ViewProjections` holds.
+List<double> viewAxes(List<double> rows, Size comp) => [
+      for (var k = 0; k < 3; k++) ...() {
+        final x = rows[k] - comp.width / 2 * rows[8 + k];
+        final y = rows[4 + k] - comp.height / 2 * rows[8 + k];
+        return [
+          x,
+          y,
+          rows[8 + k].sign * math.sqrt(math.max(0.0, 1 - x * x - y * y)),
+        ];
+      }(),
+    ];
+
+/// How far in from the panel's bottom left corner the corner axes' middle
+/// sits, and how long their arms are, in screen pixels.
+const double _triadInset = 30;
+const double _triadArm = 18;
+
 /// The wireframes themselves, in comp pixels taken through the picture's own
-/// rectangle. A point behind the view's eye carries a number that means
-/// nothing, so any line with an end behind is left out.
+/// rectangle. The engine has already cut every line at the eye.
 class ViewerWireframePainter extends CustomPainter {
   final BridgeWireframes? wires;
   final Rect fitted;
   final Size compSize;
+  final Set<UuidValue> selected;
+  final bool ground;
+  final List<double>? axes;
   final Color layerLine;
+  final Color selectedLine;
   final Color cameraLine;
   final Color lightLine;
+  final Color groundLine;
+  final Color frameLine;
 
   const ViewerWireframePainter({
     required this.wires,
     required this.fitted,
     required this.compSize,
+    required this.selected,
+    required this.ground,
+    required this.axes,
     required this.layerLine,
+    required this.selectedLine,
     required this.cameraLine,
     required this.lightLine,
+    required this.groundLine,
+    required this.frameLine,
   });
 
-  Offset _at(BridgeWirePoint p) => Offset(
-        fitted.left +
-            (compSize.width == 0 ? 0 : p.x / compSize.width * fitted.width),
-        fitted.top +
-            (compSize.height == 0 ? 0 : p.y / compSize.height * fitted.height),
-      );
+  double get _sx => compSize.width == 0 ? 0 : fitted.width / compSize.width;
+  double get _sy => compSize.height == 0 ? 0 : fitted.height / compSize.height;
 
-  void _line(Canvas canvas, BridgeWirePoint a, BridgeWirePoint b, Paint paint) {
-    if (!a.inFront || !b.inFront) return;
-    canvas.drawLine(_at(a), _at(b), paint);
-  }
+  Offset _at(double x, double y) =>
+      Offset(fitted.left + x * _sx, fitted.top + y * _sy);
 
-  /// A closed outline round [corners], each edge drawn on its own so one
-  /// corner behind the eye costs that edge and not the whole shape.
-  void _loop(Canvas canvas, List<BridgeWirePoint> corners, Paint paint) {
-    for (var i = 0; i < corners.length; i++) {
-      _line(canvas, corners[i], corners[(i + 1) % corners.length], paint);
+  /// Every line in [lines], [stride] numbers to a line, the first four its
+  /// two ends.
+  void _lines(Canvas canvas, Float64List lines, Paint paint, {int stride = 4}) {
+    for (var i = 0; i + 3 < lines.length; i += stride) {
+      canvas.drawLine(_at(lines[i], lines[i + 1]),
+          _at(lines[i + 2], lines[i + 3]), paint);
     }
   }
+
+  Paint _stroke(Color colour, [double width = 1]) => Paint()
+    ..color = colour
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = width;
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (axes case final axes?) _triad(canvas, size, axes);
     final wires = this.wires;
     if (wires == null) return;
-    Paint stroke(Color colour) => Paint()
-      ..color = colour
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
 
-    final layers = stroke(layerLine);
+    if (ground) {
+      // Each square of the ground fades on its own, so the floor thins out
+      // towards its edge rather than stopping at a hard line.
+      final g = wires.ground;
+      final paint = _stroke(groundLine);
+      for (var i = 0; i + 4 < g.length; i += 5) {
+        paint.color = groundLine.withValues(alpha: groundLine.a * g[i + 4]);
+        canvas.drawLine(_at(g[i], g[i + 1]), _at(g[i + 2], g[i + 3]), paint);
+      }
+      _lines(canvas, wires.frame, _stroke(frameLine));
+      final a = wires.axes;
+      for (var i = 0; i + 4 < a.length; i += 5) {
+        canvas.drawLine(_at(a[i], a[i + 1]), _at(a[i + 2], a[i + 3]),
+            _stroke(gizmoAxisColours[a[i + 4].round().clamp(0, 2)], 1.5));
+      }
+    }
+
+    Color colour(UuidValue id, Color quiet) =>
+        selected.contains(id) ? selectedLine : quiet;
     for (final layer in wires.layers) {
-      _loop(canvas, layer.corners, layers);
+      _lines(canvas, layer.lines, _stroke(colour(layer.layer, layerLine)));
     }
-
-    final cameras = stroke(cameraLine);
     for (final camera in wires.cameras) {
-      _loop(canvas, camera.corners, cameras);
-      for (final corner in camera.corners) {
-        _line(canvas, camera.eye, corner, cameras);
-      }
-      if (camera.pointOfInterest case final poi?) {
-        _line(canvas, camera.eye, poi, cameras);
+      _lines(canvas, camera.lines, _stroke(colour(camera.layer, cameraLine)));
+    }
+    for (final light in wires.lights) {
+      final paint = _stroke(colour(light.layer, lightLine));
+      _lines(canvas, light.lines, paint);
+      // A selected light already wears the layer controls' mark.
+      if (light.at.inFront && !selected.contains(light.layer)) {
+        _lightMark(canvas, _at(light.at.x, light.at.y), light.kind, paint);
       }
     }
+  }
 
-    final lights = stroke(lightLine);
-    for (final light in wires.lights) {
-      if (!light.at.inFront) continue;
-      // A small diamond: a light has no shape of its own to draw, and a mark
-      // that is not a rectangle tells itself apart from everything that has.
-      const reach = 6.0;
-      final at = _at(light.at);
-      canvas.drawPath(
-        Path()
-          ..moveTo(at.dx, at.dy - reach)
-          ..lineTo(at.dx + reach, at.dy)
-          ..lineTo(at.dx, at.dy + reach)
-          ..lineTo(at.dx - reach, at.dy)
-          ..close(),
-        lights,
-      );
+  /// A light's own mark at its place: a bulb with rays for a point light, a
+  /// plain ring where the cone or the rectangle already says what it is.
+  void _lightMark(
+      Canvas canvas, Offset at, BridgeWireLightKind kind, Paint paint) {
+    canvas.drawCircle(at, 3.5, paint);
+    if (kind != BridgeWireLightKind.point) return;
+    for (var i = 0; i < 8; i++) {
+      final d = Offset(math.cos(i * math.pi / 4), math.sin(i * math.pi / 4));
+      canvas.drawLine(at + d * 6, at + d * 9, paint);
+    }
+  }
+
+  /// The view's axes as a small triad in the panel's corner, the far ones
+  /// first and fainter so the near ones read on top.
+  void _triad(Canvas canvas, Size size, List<double> o) {
+    if (o.length < 9) return;
+    final centre = Offset(_triadInset, size.height - _triadInset);
+    final order = [0, 1, 2]..sort((a, b) => o[b * 3 + 2].compareTo(o[a * 3 + 2]));
+    for (final k in order) {
+      final end = centre + Offset(o[k * 3], o[k * 3 + 1]) * _triadArm;
+      final colour = o[k * 3 + 2] > 0
+          ? gizmoAxisColours[k].withValues(alpha: 0.5)
+          : gizmoAxisColours[k];
+      canvas.drawLine(centre, end, _stroke(colour, 2));
+      canvas.drawCircle(end, 2.5, Paint()..color = colour);
     }
   }
 
@@ -1720,9 +1880,15 @@ class ViewerWireframePainter extends CustomPainter {
       old.wires != wires ||
       old.fitted != fitted ||
       old.compSize != compSize ||
+      !setEquals(old.selected, selected) ||
+      old.ground != ground ||
+      !listEquals(old.axes, axes) ||
       old.layerLine != layerLine ||
+      old.selectedLine != selectedLine ||
       old.cameraLine != cameraLine ||
-      old.lightLine != lightLine;
+      old.lightLine != lightLine ||
+      old.groundLine != groundLine ||
+      old.frameLine != frameLine;
 }
 
 /// Where the other people in a shared project are pointing over [comp]'s

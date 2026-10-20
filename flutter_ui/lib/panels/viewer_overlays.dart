@@ -14,6 +14,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerKind;
 import 'package:lumit_flutter/src/rust/lib.dart';
 import 'package:provider/provider.dart';
 
@@ -60,12 +61,17 @@ class ViewerGuidesMenu extends StatelessWidget {
   final CompositionReference comp;
   final F32Array4? background;
 
+  /// The Viewer view this bar belongs to, whose own 3D ground and axes the
+  /// menu shows and switches.
+  final int viewId;
+
   const ViewerGuidesMenu({
     super.key,
     required this.wireframes,
     required this.onWireframes,
     required this.comp,
     required this.background,
+    required this.viewId,
   });
 
   @override
@@ -79,6 +85,11 @@ class ViewerGuidesMenu extends StatelessWidget {
         on.safeAreas ||
         on.rulers ||
         (on.reach && ui.model.isNodeGraph) ||
+        // The ground through the camera is the one 3D aid that is off until
+        // asked for.
+        (_offers3d(ui) &&
+            ui.viewPoseOf(viewId) == null &&
+            ui.viewerAidsOf(viewId).ground) ||
         ui.guides.isNotEmpty ||
         ui.regionOfInterest != null ||
         ui.armingRegion;
@@ -106,11 +117,22 @@ class ViewerGuidesMenu extends StatelessWidget {
     );
   }
 
+  /// Whether this view can show anything in 3D: it looks from a fixed or
+  /// custom view, or its comp has something in depth, which with no camera
+  /// layer is seen through the default camera.
+  bool _offers3d(LumitUiState ui) =>
+      ui.viewPoseOf(viewId) != null ||
+      ui.model.heldLayers.any((e) =>
+          e.info.switches.threeD ||
+          e.info.kind == BridgeLayerKind.camera ||
+          e.info.kind == BridgeLayerKind.light);
+
   void _open(BuildContext context, LumitUiState ui) {
     final box = context.findRenderObject();
     if (box is! RenderBox) return;
     final t = ThemeScope.of(context).theme;
     final region = ui.regionOfInterest != null;
+    final aids = ui.viewerAidsOf(viewId);
     // The bar sits at the bottom of the panel, so a menu anchored under it
     // would hang off the window — showLumitPopup's layout pulls it back on
     // screen, which is the same thing the background picker relies on.
@@ -121,6 +143,20 @@ class ViewerGuidesMenu extends StatelessWidget {
       rows: (close) => [
         for (final row in <ViewerToggle>[
           ...viewerOverlayToggles(ui),
+          if (_offers3d(ui)) ...[
+            (
+              key: 'viewer-guides-ground',
+              text: l10n.viewerOverlayGround,
+              on: aids.ground,
+              pick: () => ui.setViewerAids(viewId, ground: !aids.ground),
+            ),
+            (
+              key: 'viewer-guides-axes',
+              text: l10n.viewerOverlayAxes,
+              on: aids.axes,
+              pick: () => ui.setViewerAids(viewId, axes: !aids.axes),
+            ),
+          ],
           (
             key: 'viewer-wireframes',
             text: l10n.viewerOverlayLayerControls,

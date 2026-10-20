@@ -138,6 +138,13 @@ class ViewerSurface {
   bool wireframe;
   bool layerControls;
 
+  /// Whether this view draws the 3D ground (with the comp's frame and the
+  /// axes from the origin) and the small axes in its corner. Null until
+  /// picked, which reads as After Effects has them: both on in a fixed or
+  /// custom view, and only the corner axes through the comp's own camera.
+  bool? ground;
+  bool? axes;
+
   /// Which way this view looks at each comp it shows, keyed by comp id, and
   /// the pose each of those views is drawn through, keyed by comp and view.
   /// Not written down and not shared with the other views: a comp opens on
@@ -173,6 +180,8 @@ class ViewerSurface {
     this.colourView,
     this.wireframe = false,
     this.layerControls = true,
+    this.ground,
+    this.axes,
   });
 
   /// What the project remembers about this view. The display half rides in the
@@ -197,6 +206,8 @@ class ViewerSurface {
         if (!layerControls) 'layer_controls': false,
         if (!listEquals(viewSlots, defaultViewSlots))
           'view_slots': [for (final v in viewSlots) v.name],
+        if (ground != null) 'ground': ground,
+        if (axes != null) 'axes': axes,
       };
 
   /// Read one back. Anything malformed reads as its default rather than
@@ -229,6 +240,8 @@ class ViewerSurface {
       colourView: _pair(j['colour_view']),
       wireframe: j['wireframe'] == true,
       layerControls: j['layer_controls'] != false,
+      ground: j['ground'] is bool ? j['ground'] as bool : null,
+      axes: j['axes'] is bool ? j['axes'] as bool : null,
     );
     if (slots is List && slots.length == defaultViewSlots.length) {
       final named = ViewerView.values.asNameMap();

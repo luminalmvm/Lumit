@@ -3928,6 +3928,27 @@ class LumitUiState extends ChangeNotifier {
   ViewerView lastCustomViewOf(int viewId) =>
       _surfaceOf(viewId)?.lastCustom ?? ViewerView.custom1;
 
+  /// Whether Viewer view [viewId] draws the 3D ground and the corner axes:
+  /// its own pick, or both in a fixed or custom view and only the axes
+  /// through the comp's own camera, as After Effects has them.
+  ({bool ground, bool axes}) viewerAidsOf(int viewId) {
+    final view = _surfaceOf(viewId);
+    return (
+      ground: view?.ground ?? viewPoseOf(viewId) != null,
+      axes: view?.axes ?? true,
+    );
+  }
+
+  /// Turn view [viewId]'s 3D ground or corner axes on or off.
+  void setViewerAids(int viewId, {bool? ground, bool? axes}) {
+    final view = _surfaceOf(viewId);
+    if (view == null) return;
+    view.ground = ground ?? view.ground;
+    view.axes = axes ?? view.axes;
+    notifyListeners();
+    rememberSession();
+  }
+
   /// Look at view [viewId]'s comp through [look], and render it again.
   void setViewerView(ViewerView look, {required int viewId}) {
     final view = _surfaceOf(viewId);

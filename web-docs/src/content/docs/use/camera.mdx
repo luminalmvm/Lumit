@@ -35,7 +35,18 @@ motion-blurred 3D layers do not cut each other.
 
 A 3D layer's box, handles, mask outlines and motion path are drawn in perspective, through
 the active camera or the chosen view. A click picks the nearest 3D layer under the pointer.
-A light shows as a small diamond at its position.
+A selected light shows as a small diamond at its position.
+
+A fixed or custom view outlines every 3D layer, camera and light, the selected ones in the
+selection colour: a camera with its frustum and body, a spot light with its cone and where
+its feather starts, a point light as a bulb, an area light with its rectangle, and a Null
+with its square and a cross. Through the active camera only selected cameras and lights are
+outlined. **Layer controls** in the Guides menu hides all of them.
+
+**3D ground** draws a grid through the middle of the composition, its frame, and the x, y
+and z axes from the origin. Parts behind a layer's picture are left out. **3D axes** draws
+the view's axes in the corner. Both are kept per view: in a fixed or custom view both start
+on, and through the active camera only **3D axes** does.
 
 ## Camera tools
 

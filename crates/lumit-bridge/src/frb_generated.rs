@@ -8239,7 +8239,10 @@ fn wire__crate__api__composition__composition_reference_wireframes_impl(
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
             let api_frame = <u64>::sse_decode(&mut deserializer);
-            let api_view = <crate::api::layer::BridgeCameraPose>::sse_decode(&mut deserializer);
+            let api_view =
+                <Option<crate::api::layer::BridgeCameraPose>>::sse_decode(&mut deserializer);
+            let api_ground = <bool>::sse_decode(&mut deserializer);
+            let api_only = <Option<Vec<uuid::Uuid>>>::sse_decode(&mut deserializer);
             let api_media_sizes =
                 <Vec<crate::api::wireframes::BridgeMediaSize>>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -8248,6 +8251,8 @@ fn wire__crate__api__composition__composition_reference_wireframes_impl(
                     &api_that,
                     api_frame,
                     api_view,
+                    api_ground,
+                    api_only,
                     api_media_sizes,
                 )?;
                 Ok(output_ok)
@@ -28744,15 +28749,11 @@ impl SseDecode for crate::api::wireframes::BridgeWireCamera {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_layer = <uuid::Uuid>::sse_decode(deserializer);
         let mut var_eye = <crate::api::wireframes::BridgeWirePoint>::sse_decode(deserializer);
-        let mut var_corners =
-            <Vec<crate::api::wireframes::BridgeWirePoint>>::sse_decode(deserializer);
-        let mut var_pointOfInterest =
-            <Option<crate::api::wireframes::BridgeWirePoint>>::sse_decode(deserializer);
+        let mut var_lines = <Vec<f64>>::sse_decode(deserializer);
         return crate::api::wireframes::BridgeWireCamera {
             layer: var_layer,
             eye: var_eye,
-            corners: var_corners,
-            point_of_interest: var_pointOfInterest,
+            lines: var_lines,
         };
     }
 }
@@ -28761,11 +28762,10 @@ impl SseDecode for crate::api::wireframes::BridgeWireLayer {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_layer = <uuid::Uuid>::sse_decode(deserializer);
-        let mut var_corners =
-            <Vec<crate::api::wireframes::BridgeWirePoint>>::sse_decode(deserializer);
+        let mut var_lines = <Vec<f64>>::sse_decode(deserializer);
         return crate::api::wireframes::BridgeWireLayer {
             layer: var_layer,
-            corners: var_corners,
+            lines: var_lines,
         };
     }
 }
@@ -28774,10 +28774,27 @@ impl SseDecode for crate::api::wireframes::BridgeWireLight {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_layer = <uuid::Uuid>::sse_decode(deserializer);
+        let mut var_kind = <crate::api::wireframes::BridgeWireLightKind>::sse_decode(deserializer);
         let mut var_at = <crate::api::wireframes::BridgeWirePoint>::sse_decode(deserializer);
+        let mut var_lines = <Vec<f64>>::sse_decode(deserializer);
         return crate::api::wireframes::BridgeWireLight {
             layer: var_layer,
+            kind: var_kind,
             at: var_at,
+            lines: var_lines,
+        };
+    }
+}
+
+impl SseDecode for crate::api::wireframes::BridgeWireLightKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::wireframes::BridgeWireLightKind::Point,
+            1 => crate::api::wireframes::BridgeWireLightKind::Spot,
+            2 => crate::api::wireframes::BridgeWireLightKind::Area,
+            _ => unreachable!("Invalid variant for BridgeWireLightKind: {}", inner),
         };
     }
 }
@@ -28805,10 +28822,16 @@ impl SseDecode for crate::api::wireframes::BridgeWireframes {
             <Vec<crate::api::wireframes::BridgeWireCamera>>::sse_decode(deserializer);
         let mut var_lights =
             <Vec<crate::api::wireframes::BridgeWireLight>>::sse_decode(deserializer);
+        let mut var_ground = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_frame = <Vec<f64>>::sse_decode(deserializer);
+        let mut var_axes = <Vec<f64>>::sse_decode(deserializer);
         return crate::api::wireframes::BridgeWireframes {
             layers: var_layers,
             cameras: var_cameras,
             lights: var_lights,
+            ground: var_ground,
+            frame: var_frame,
+            axes: var_axes,
         };
     }
 }
@@ -30296,20 +30319,6 @@ impl SseDecode for Vec<crate::api::wireframes::BridgeWireLight> {
     }
 }
 
-impl SseDecode for Vec<crate::api::wireframes::BridgeWirePoint> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut len_ = <i32>::sse_decode(deserializer);
-        let mut ans_ = Vec::with_capacity(len_ as usize);
-        for idx_ in 0..len_ {
-            ans_.push(<crate::api::wireframes::BridgeWirePoint>::sse_decode(
-                deserializer,
-            ));
-        }
-        return ans_;
-    }
-}
-
 impl SseDecode for Vec<crate::api::composition::CompositionReference> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -31238,19 +31247,6 @@ impl SseDecode for Option<crate::api::layer::BridgeTransform> {
     }
 }
 
-impl SseDecode for Option<crate::api::wireframes::BridgeWirePoint> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        if (<bool>::sse_decode(deserializer)) {
-            return Some(<crate::api::wireframes::BridgeWirePoint>::sse_decode(
-                deserializer,
-            ));
-        } else {
-            return None;
-        }
-    }
-}
-
 impl SseDecode for Option<crate::api::composition::CompositionReference> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -31396,6 +31392,17 @@ impl SseDecode for Option<Vec<String>> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<Vec<String>>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<Vec<uuid::Uuid>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<Vec<uuid::Uuid>>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -40027,8 +40034,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::wireframes::BridgeWireCamera 
         [
             self.layer.into_into_dart().into_dart(),
             self.eye.into_into_dart().into_dart(),
-            self.corners.into_into_dart().into_dart(),
-            self.point_of_interest.into_into_dart().into_dart(),
+            self.lines.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -40049,7 +40055,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::wireframes::BridgeWireLayer {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.layer.into_into_dart().into_dart(),
-            self.corners.into_into_dart().into_dart(),
+            self.lines.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -40070,7 +40076,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::wireframes::BridgeWireLight {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
             self.layer.into_into_dart().into_dart(),
+            self.kind.into_into_dart().into_dart(),
             self.at.into_into_dart().into_dart(),
+            self.lines.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -40083,6 +40091,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::wireframes::BridgeWireLight>
     for crate::api::wireframes::BridgeWireLight
 {
     fn into_into_dart(self) -> crate::api::wireframes::BridgeWireLight {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::wireframes::BridgeWireLightKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Point => 0.into_dart(),
+            Self::Spot => 1.into_dart(),
+            Self::Area => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::wireframes::BridgeWireLightKind
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::wireframes::BridgeWireLightKind>
+    for crate::api::wireframes::BridgeWireLightKind
+{
+    fn into_into_dart(self) -> crate::api::wireframes::BridgeWireLightKind {
         self
     }
 }
@@ -40115,6 +40145,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::wireframes::BridgeWireframes 
             self.layers.into_into_dart().into_dart(),
             self.cameras.into_into_dart().into_dart(),
             self.lights.into_into_dart().into_dart(),
+            self.ground.into_into_dart().into_dart(),
+            self.frame.into_into_dart().into_dart(),
+            self.axes.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -45017,11 +45050,7 @@ impl SseEncode for crate::api::wireframes::BridgeWireCamera {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <uuid::Uuid>::sse_encode(self.layer, serializer);
         <crate::api::wireframes::BridgeWirePoint>::sse_encode(self.eye, serializer);
-        <Vec<crate::api::wireframes::BridgeWirePoint>>::sse_encode(self.corners, serializer);
-        <Option<crate::api::wireframes::BridgeWirePoint>>::sse_encode(
-            self.point_of_interest,
-            serializer,
-        );
+        <Vec<f64>>::sse_encode(self.lines, serializer);
     }
 }
 
@@ -45029,7 +45058,7 @@ impl SseEncode for crate::api::wireframes::BridgeWireLayer {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <uuid::Uuid>::sse_encode(self.layer, serializer);
-        <Vec<crate::api::wireframes::BridgeWirePoint>>::sse_encode(self.corners, serializer);
+        <Vec<f64>>::sse_encode(self.lines, serializer);
     }
 }
 
@@ -45037,7 +45066,26 @@ impl SseEncode for crate::api::wireframes::BridgeWireLight {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <uuid::Uuid>::sse_encode(self.layer, serializer);
+        <crate::api::wireframes::BridgeWireLightKind>::sse_encode(self.kind, serializer);
         <crate::api::wireframes::BridgeWirePoint>::sse_encode(self.at, serializer);
+        <Vec<f64>>::sse_encode(self.lines, serializer);
+    }
+}
+
+impl SseEncode for crate::api::wireframes::BridgeWireLightKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::wireframes::BridgeWireLightKind::Point => 0,
+                crate::api::wireframes::BridgeWireLightKind::Spot => 1,
+                crate::api::wireframes::BridgeWireLightKind::Area => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -45056,6 +45104,9 @@ impl SseEncode for crate::api::wireframes::BridgeWireframes {
         <Vec<crate::api::wireframes::BridgeWireLayer>>::sse_encode(self.layers, serializer);
         <Vec<crate::api::wireframes::BridgeWireCamera>>::sse_encode(self.cameras, serializer);
         <Vec<crate::api::wireframes::BridgeWireLight>>::sse_encode(self.lights, serializer);
+        <Vec<f64>>::sse_encode(self.ground, serializer);
+        <Vec<f64>>::sse_encode(self.frame, serializer);
+        <Vec<f64>>::sse_encode(self.axes, serializer);
     }
 }
 
@@ -46176,16 +46227,6 @@ impl SseEncode for Vec<crate::api::wireframes::BridgeWireLight> {
     }
 }
 
-impl SseEncode for Vec<crate::api::wireframes::BridgeWirePoint> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <i32>::sse_encode(self.len() as _, serializer);
-        for item in self {
-            <crate::api::wireframes::BridgeWirePoint>::sse_encode(item, serializer);
-        }
-    }
-}
-
 impl SseEncode for Vec<crate::api::composition::CompositionReference> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -46956,16 +46997,6 @@ impl SseEncode for Option<crate::api::layer::BridgeTransform> {
     }
 }
 
-impl SseEncode for Option<crate::api::wireframes::BridgeWirePoint> {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <bool>::sse_encode(self.is_some(), serializer);
-        if let Some(value) = self {
-            <crate::api::wireframes::BridgeWirePoint>::sse_encode(value, serializer);
-        }
-    }
-}
-
 impl SseEncode for Option<crate::api::composition::CompositionReference> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -47092,6 +47123,16 @@ impl SseEncode for Option<Vec<String>> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <Vec<String>>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<Vec<uuid::Uuid>> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <Vec<uuid::Uuid>>::sse_encode(value, serializer);
         }
     }
 }
