@@ -7016,6 +7016,7 @@ fn wire__crate__api__composition__composition_reference_render_scope_impl(
             let api_scale = <f32>::sse_decode(&mut deserializer);
             let api_kind = <u32>::sse_decode(&mut deserializer);
             let api_colours = <Vec<Vec<u8>>>::sse_decode(&mut deserializer);
+            let api_view = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::render_scope(
@@ -7024,6 +7025,7 @@ fn wire__crate__api__composition__composition_reference_render_scope_impl(
                     api_scale,
                     api_kind,
                     api_colours,
+                    api_view,
                 )?;
                 Ok(output_ok)
             })())

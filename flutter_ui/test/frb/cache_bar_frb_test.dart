@@ -92,6 +92,7 @@ void main() {
           scale: p.uiState.viewerScale,
           kind: 0,
           colours: scopeColoursFor(LumitTheme.dark()),
+          view: 0,
         );
         await settleFrb(
           tester,

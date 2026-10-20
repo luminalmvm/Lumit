@@ -2748,7 +2748,8 @@ impl CompositionReference {
     /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.
     /// `colours` is background, trace, then the R, G and B tints, each as
     /// `[r, g, b]` — the panel's theme decides them, so the engine never has to
-    /// know what a Lumit surface looks like.
+    /// know what a Lumit surface looks like. `view` is the Viewer view whose
+    /// picture is read.
     #[frb(sync)]
     pub fn render_scope(
         &self,
@@ -2756,6 +2757,7 @@ impl CompositionReference {
         scale: f32,
         kind: u32,
         colours: Vec<Vec<u8>>,
+        view: u32,
     ) -> Result<(), BridgeError> {
         // Five triples, and anything else is a caller bug rather than something
         // to pad out with a colour nobody chose.
@@ -2773,6 +2775,7 @@ impl CompositionReference {
             scale,
             kind,
             colours: packed,
+            view,
         }))
     }
 

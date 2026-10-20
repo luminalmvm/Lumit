@@ -219,6 +219,7 @@ class _ScopesPanelFrbState extends State<ScopesPanelFrb> {
       scale: state.viewerScale,
       kind: _kind.index,
       colours: scopeColoursFor(t, themed: state.workspace.themedScopes),
+      view: state.activeViewId,
     );
   }
 
