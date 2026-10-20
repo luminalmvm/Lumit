@@ -264,12 +264,12 @@ fn frame_name(
 /// One soloed-layer render, held for the dropper (see [`sample_layer_alone`]).
 #[frb(ignore)]
 struct LayerSample {
-    /// `(comp, frame, layer, document revision)` — what this render is of. The
-    /// revision is what retires it when an edit lands: the frame cache has no
-    /// generation counter any more (every frame is named by its content), and
-    /// a soloed render is of a document nobody else holds, thus it cannot be
-    /// named the same way.
-    stamp: (Uuid, u64, Uuid, u64),
+    /// `(comp, frame, layer, document revision, view)`, what this render is
+    /// of. The revision is what retires it when an edit lands: the frame
+    /// cache has no generation counter any more (every frame is named by its
+    /// content), and a soloed render is of a document nobody else holds, thus
+    /// it cannot be named the same way.
+    stamp: (Uuid, u64, Uuid, u64, u32),
     width: u32,
     height: u32,
     rgba: Vec<u8>,
@@ -5359,10 +5359,11 @@ fn sample_pixels(
 /// The composition rendered with one layer soloed — that layer alone, in its
 /// own place, on nothing.
 ///
-/// Held in `state.layer_sample` against `(comp, frame, layer, revision)`: the
-/// dropper asks again on every pointer move, and re-compositing the whole
-/// composition per move is not a thing to do while someone is dragging a
-/// pointer. An edit moves the document's revision, which retires the entry.
+/// Held in `state.layer_sample` against `(comp, frame, layer, revision,
+/// view)`: the dropper asks again on every pointer move, and re-compositing
+/// the whole composition per move is not a thing to do while someone is
+/// dragging a pointer. An edit moves the document's revision, which retires
+/// the entry.
 #[frb(ignore)]
 fn sample_layer_alone(
     document: &lumit_core::Document,
@@ -5371,7 +5372,7 @@ fn sample_layer_alone(
     req: &SamplePixelsRequest,
     state: &mut WorkerState,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    let stamp = (req.comp.id, req.frame, layer, revision);
+    let stamp = (req.comp.id, req.frame, layer, revision, req.view);
     if let Some(held) = &state.layer_sample {
         if held.stamp == stamp {
             return Some((held.width, held.height, held.rgba.clone()));
@@ -5391,10 +5392,17 @@ fn sample_layer_alone(
         }
     }
 
+    // Seen through the view's own 3D view, so the read lands where the
+    // pointer is.
+    let patched = viewed_through(
+        None,
+        state.camera_views.get(&req.view).copied(),
+        std::sync::Arc::new(patched),
+    );
     let (rgba, w, h) = state
         .renderer
         .render_preview(
-            &std::sync::Arc::new(patched),
+            &patched,
             req.comp.id,
             req.frame,
             quality_for(req.scale),
