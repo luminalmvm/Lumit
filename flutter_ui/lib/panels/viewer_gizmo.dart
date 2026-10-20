@@ -309,13 +309,12 @@ class LayerBox {
       (0.0, bounds.height),
     ];
     // Cut on the layer itself, a hair in front of the eye.
-    const near = 1e-3;
     final kept = <(double, double)>[];
     for (var i = 0; i < quad.length; i++) {
       final a = quad[i];
       final b = quad[(i + 1) % quad.length];
-      final da = map.depthOf(a.$1, a.$2) - near;
-      final db = map.depthOf(b.$1, b.$2) - near;
+      final da = map.depthOf(a.$1, a.$2) - viewerNear;
+      final db = map.depthOf(b.$1, b.$2) - viewerNear;
       if (da >= 0) kept.add(a);
       if ((da >= 0) != (db >= 0)) {
         final t = da / (da - db);
@@ -454,6 +453,8 @@ List<PathPoint> pathPointsOf(LayerBox box) {
   for (final mask in box.masks) {
     for (var i = 0; i < mask.vertices.length; i++) {
       final v = mask.vertices[i];
+      // Behind the eye a point is not drawn, so it can't be aimed at.
+      if (!box.map.inFront(v.x, v.y)) continue;
       out.add((
         key: maskPointKey(box.id, mask.id, i),
         at: box.map.toScreen(v.x, v.y),
@@ -466,6 +467,9 @@ List<PathPoint> pathPointsOf(LayerBox box) {
   for (final item in box.shapeContents) {
     for (var i = 0; i < item.vertices.length; i++) {
       final v = item.vertices[i];
+      if (!box.map.inFront(v.x - box.artOrigin.dx, v.y - box.artOrigin.dy)) {
+        continue;
+      }
       out.add((
         key: shapePointKey(box.id, item.id, i),
         at: box.shapePoint(v.x, v.y),
@@ -559,22 +563,64 @@ Offset? nudgeIn3D(LayerBox box, Offset by) {
 Offset compToScreen(LayerBox box, double x, double y, [double? z]) =>
     box.map.parentToScreen(x, y, z);
 
-/// [box]'s motion path on screen, one point per comp frame; empty when the
-/// layer has none.
-List<Offset> motionPathScreen(LayerBox box) {
+/// [box]'s motion path in its parent's space, one point per comp frame, with
+/// a 3D layer's depth; empty when the layer has none.
+List<(double, double, double?)> _motionPathSamples(LayerBox box) {
   final path = box.motionPath;
   if (path == null) return const [];
   final depths = path.depths;
   return [
     for (var i = 0; i + 1 < path.samples.length; i += 2)
-      compToScreen(box, path.samples[i], path.samples[i + 1],
-          i ~/ 2 < depths.length ? depths[i ~/ 2] : null),
+      (
+        path.samples[i],
+        path.samples[i + 1],
+        i ~/ 2 < depths.length ? depths[i ~/ 2] : null,
+      ),
   ];
+}
+
+/// [box]'s motion path on screen, one point per comp frame in front of the
+/// eye; empty when the layer has none.
+List<Offset> motionPathScreen(LayerBox box) => [
+      for (final (x, y, z) in _motionPathSamples(box))
+        if (box.map.parentInFront(x, y, z)) compToScreen(box, x, y, z),
+    ];
+
+/// [box]'s motion path as lines on screen, cut where it passes behind the
+/// eye: a path flying past the camera is drawn up to the eye and on again
+/// after it.
+List<List<Offset>> motionPathRuns(LayerBox box) {
+  final samples = _motionPathSamples(box);
+  final runs = <List<Offset>>[];
+  var run = <Offset>[];
+  for (var i = 0; i < samples.length; i++) {
+    final (x, y, z) = samples[i];
+    final da = box.map.parentDepthOf(x, y, z) - viewerNear;
+    if (da >= 0) run.add(compToScreen(box, x, y, z));
+    if (i + 1 == samples.length) break;
+    final (nx, ny, nz) = samples[i + 1];
+    final db = box.map.parentDepthOf(nx, ny, nz) - viewerNear;
+    if ((da >= 0) == (db >= 0)) continue;
+    final t = da / (da - db);
+    final az = z ?? 0;
+    run.add(compToScreen(box, x + (nx - x) * t, y + (ny - y) * t,
+        z == null ? null : az + ((nz ?? az) - az) * t));
+    if (da >= 0) {
+      runs.add(run);
+      run = <Offset>[];
+    }
+  }
+  if (run.isNotEmpty) runs.add(run);
+  return runs;
 }
 
 /// Where [key] of [box]'s motion path is on screen.
 Offset motionKeyScreen(LayerBox box, BridgeMotionKey key) =>
     compToScreen(box, key.x, key.y, box.map.projected ? key.z : null);
+
+/// Whether [key] is in front of the eye, where it can be drawn and grabbed.
+bool _keyInFront(LayerBox box, BridgeMotionKey key) =>
+    box.map.parentInFront(key.x, key.y, box.map.projected ? key.z : null);
 
 /// The motion-path key under [point] across [boxes], or null when none is
 /// near enough. Nearest wins, as it does for a path's points.
@@ -589,6 +635,7 @@ Offset motionKeyScreen(LayerBox box, BridgeMotionKey key) =>
     final keys = box.motionPath?.keys;
     if (keys == null) continue;
     for (var i = 0; i < keys.length; i++) {
+      if (!_keyInFront(box, keys[i])) continue;
       final d = (motionKeyScreen(box, keys[i]) - point).distance;
       if (d <= bestDistance) {
         bestDistance = d;
@@ -1202,7 +1249,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         anchors: widget.showControls && widget.showAnchors
             ? [
                 for (final box in selected)
-                  box.anchorScreen +
+                  if (box.map.inFront(box.map.ax, box.map.ay))
+                    box.anchorScreen +
                       (box.map.projected
                           ? Offset.zero
                           : move?.delta ?? Offset.zero),
@@ -2427,10 +2475,12 @@ class _GizmoPainter extends CustomPainter {
       ..color = accent
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    final points = motionPathScreen(box);
-    if (points.length >= 2) {
-      canvas.drawPath(Path()..addPolygon(points, false), line);
+    for (final run in motionPathRuns(box)) {
+      if (run.length >= 2) {
+        canvas.drawPath(Path()..addPolygon(run, false), line);
+      }
     }
+    final points = motionPathScreen(box);
     canvas.drawPoints(
       PointMode.points,
       points,
@@ -2442,12 +2492,15 @@ class _GizmoPainter extends CustomPainter {
     final inHand = keyInHand;
     for (var i = 0; i < path.keys.length; i++) {
       final key = path.keys[i];
+      if (!_keyInFront(box, key)) continue;
       final held = inHand != null && inHand.layer == box.id && inHand.index == i;
       final nudge = held ? inHand.nudge : Offset.zero;
       final at = motionKeyScreen(box, key) + nudge;
       final z = box.map.projected ? key.z : null;
       for (final handle in [key.handleIn, key.handleOut]) {
-        if (handle == null) continue;
+        if (handle == null || !box.map.parentInFront(handle[0], handle[1], z)) {
+          continue;
+        }
         final h = compToScreen(box, handle[0], handle[1], z) + nudge;
         canvas.drawLine(at, h, line);
         canvas.drawCircle(h, 3, Paint()..color = surface);
@@ -2511,8 +2564,6 @@ class _GizmoPainter extends CustomPainter {
   }) {
     if (vertices.length < 2) return;
     final projected = box.map.projected;
-    // Behind the eye a point has no place on screen to draw.
-    if (projected && !box.wholeInFront) return;
     final moved = _shift(box);
     // A selected point follows the pointer while it is being dragged, so the
     // path bends live rather than jumping on release. Seen through a camera
@@ -2532,6 +2583,11 @@ class _GizmoPainter extends CustomPainter {
     Offset screen(double x, double y) =>
         art ? box.shapePoint(x, y) : box.map.toScreen(x, y);
     Offset shown(Offset p) => screen(p.dx, p.dy) + moved;
+    // How far in front of the eye a point of the path is, on the layer.
+    double depth(Offset p) => art
+        ? box.map.depthOf(p.dx - box.artOrigin.dx, p.dy - box.artOrigin.dy)
+        : box.map.depthOf(p.dx, p.dy);
+    bool seen(int i) => depth(onLayer(i, 0, 0)) > viewerNear;
     Offset at(int i) => shown(onLayer(i, 0, 0)) + nudgeFor(i);
     Offset out(int i) => shown(onLayer(
             i, vertices[i].tanOutX, vertices[i].tanOutY)) +
@@ -2542,7 +2598,7 @@ class _GizmoPainter extends CustomPainter {
 
     canvas.drawPath(
       projected
-          ? _walkedPath(vertices, closed, onLayer, shown)
+          ? _walkedPath(vertices, closed, onLayer, shown, depth)
           : bezierPath(
               count: vertices.length,
               at: at,
@@ -2561,7 +2617,9 @@ class _GizmoPainter extends CustomPainter {
     // to a width and not a path anybody can grab: they say where the feather
     // reaches, which is the only way a feather that varies from point to point
     // can be seen before the frame is drawn.
-    if (feather != null && vertices.length >= 2) {
+    if (feather != null &&
+        vertices.length >= 2 &&
+        Iterable<int>.generate(vertices.length).every(seen)) {
       final perPx = (screen(1, 0) - screen(0, 0)).distance;
       final segments = closed ? vertices.length : vertices.length - 1;
       final inside = <Offset>[];
@@ -2604,6 +2662,7 @@ class _GizmoPainter extends CustomPainter {
     // it is merely there, filled when it is selected — the same "outline means
     // available, fill means chosen" the keyframe diamonds use.
     for (var i = 0; i < vertices.length; i++) {
+      if (!seen(i)) continue;
       final selected = selectedPoints.contains(keyOf(i));
       final rect = Rect.fromCenter(center: at(i), width: 6, height: 6);
       canvas.drawRect(rect, Paint()..color = selected ? accent : surface);
@@ -2621,37 +2680,73 @@ class _GizmoPainter extends CustomPainter {
 
   /// A path through a camera. Perspective bends a curve the way it bends the
   /// layer, so each span is walked on the layer and every step is put through
-  /// the camera, rather than the handles alone.
+  /// the camera, rather than the handles alone. Steps behind the eye are cut
+  /// out, the line ending a hair in front of it.
   Path _walkedPath(
     List<BridgeVertex> vertices,
     bool closed,
     Offset Function(int i, double dx, double dy) onLayer,
     Offset Function(Offset layerPoint) shown,
+    double Function(Offset layerPoint) depth,
   ) {
-    const steps = 16;
     final path = Path();
     final spans = closed && vertices.length > 2
         ? vertices.length
         : vertices.length - 1;
-    final first = shown(onLayer(0, 0, 0));
-    path.moveTo(first.dx, first.dy);
+    Offset? last;
+    var lastDepth = 0.0;
+    var drawing = false;
+    var whole = true;
+    void step(Offset p) {
+      final d = depth(p) - viewerNear;
+      if (d < 0) whole = false;
+      final was = last;
+      if (was != null && (d >= 0) != (lastDepth >= 0)) {
+        final cut = shown(was + (p - was) * (lastDepth / (lastDepth - d)));
+        if (drawing) {
+          path.lineTo(cut.dx, cut.dy);
+        } else {
+          path.moveTo(cut.dx, cut.dy);
+        }
+        drawing = d >= 0;
+      }
+      if (d >= 0) {
+        final at = shown(p);
+        if (drawing) {
+          path.lineTo(at.dx, at.dy);
+        } else {
+          path.moveTo(at.dx, at.dy);
+          drawing = true;
+        }
+      }
+      last = p;
+      lastDepth = d;
+    }
+
+    step(onLayer(0, 0, 0));
     for (var i = 0; i < spans; i++) {
       final j = (i + 1) % vertices.length;
       final p0 = onLayer(i, 0, 0);
       final p1 = onLayer(i, vertices[i].tanOutX, vertices[i].tanOutY);
       final p2 = onLayer(j, vertices[j].tanInX, vertices[j].tanInY);
       final p3 = onLayer(j, 0, 0);
-      for (var step = 1; step <= steps; step++) {
-        final t = step / steps;
+      // A step for every eight pixels the span reaches on screen, up to
+      // sixteen: a small path needs few, and a big shape layer's many spans
+      // stay cheap.
+      final reach = (shown(p1) - shown(p0)).distance +
+          (shown(p2) - shown(p1)).distance +
+          (shown(p3) - shown(p2)).distance;
+      final steps = reach.isFinite ? (reach / 8).ceil().clamp(1, 16) : 16;
+      for (var k = 1; k <= steps; k++) {
+        final t = k / steps;
         final u = 1 - t;
-        final p = shown(p0 * (u * u * u) +
+        step(p0 * (u * u * u) +
             p1 * (3 * u * u * t) +
             p2 * (3 * u * t * t) +
             p3 * (t * t * t));
-        path.lineTo(p.dx, p.dy);
       }
     }
-    if (closed && vertices.length > 2) path.close();
+    if (whole && closed && vertices.length > 2) path.close();
     return path;
   }
 
