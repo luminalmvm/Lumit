@@ -1163,6 +1163,11 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
   Rect _marqueeRect() => Rect.fromPoints(_origin, _pointer);
 
+  /// Whether the marquee in flight adds to the selection: Shift or Ctrl held
+  /// as it started, the rule every other selection box keeps
+  /// ([MarqueeSelect.onSelect]).
+  bool _additive = false;
+
   // --- Snapping (docs/07 §2.2 item 6) ---------------------------------------
   //
   // The drag the *layer* takes, as against the travel the pointer asked for:
@@ -1572,6 +1577,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       // partly because a sweep over a *selected* layer's mask points gathers
       // points, which it could not do if the press had already dropped
       // the layer they belong to.
+      final keys = HardwareKeyboard.instance;
+      _additive =
+          keys.isShiftPressed || keys.isControlPressed || keys.isMetaPressed;
       setState(() => _drag = _GizmoDrag.marquee);
       return;
     }
@@ -2068,20 +2076,19 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       final caughtPoints = pathPointsInRect(_editablePointBoxes, rect);
       if (caughtPoints.isNotEmpty) {
         setState(() {
-          if (!HardwareKeyboard.instance.isShiftPressed) _points.clear();
+          if (!_additive) _points.clear();
           _points.addAll(caughtPoints);
         });
         return;
       }
     }
-    setState(_points.clear);
+    if (!_additive) setState(_points.clear);
     final caught = layersInsideRect(widget.boxes, rect);
-    final shift = HardwareKeyboard.instance.isShiftPressed;
     final layers = <LayerReference>[
-      if (shift)
+      if (_additive)
         for (final box in _selected) box.layer,
       for (final box in caught)
-        if (!shift || !widget.uiState.selectedLayerIds.contains(box.id))
+        if (!_additive || !widget.uiState.selectedLayerIds.contains(box.id))
           box.layer,
     ];
     widget.uiState.setSelection(layers);
