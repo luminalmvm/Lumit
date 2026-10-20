@@ -1207,6 +1207,15 @@ class LumitUiState extends ChangeNotifier {
       setViewerView(ViewerView.free, viewId: view.engineId);
       return;
     }
+    // One picture in flight at a time beside the view being worked in.
+    if (viewport && view.id != views.activeId) {
+      final asked = _viewportAsked[view.engineId];
+      if (asked != null &&
+          DateTime.now().difference(asked) < const Duration(seconds: 1)) {
+        _viewportWaiting.add(view.engineId);
+        return;
+      }
+    }
     final frame = frameFor(view);
     // A viewport draws at its own tier, every other view at the comp's.
     final scale = viewport
@@ -1235,6 +1244,7 @@ class LumitUiState extends ChangeNotifier {
         view: view.engineId,
         active: view.id == views.activeId,
       );
+      if (viewport) _viewportAsked[view.engineId] = DateTime.now();
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead
       // move or edit asks again; there is nothing to recover here.
@@ -1532,8 +1542,8 @@ class LumitUiState extends ChangeNotifier {
   }
 
   /// Which frame a view is standing on: the live playhead for the view the
-  /// user is working in, and the frame its own composition was left at for
-  /// every other.
+  /// user is working in and a 3D viewport of its comp, and the frame its own
+  /// composition was left at for every other.
   int frameFor(ViewerSurface view) {
     if (_followsPlayhead(view)) return playheadFrame.value;
     return compViews[view.compId]?.frame ?? 0;
@@ -1545,7 +1555,11 @@ class LumitUiState extends ChangeNotifier {
   /// the active view, and the composition beside it must go on following the
   /// playhead.
   bool _followsPlayhead(ViewerSurface view) =>
-      view.id == views.activeId || view.id == views.previewing?.id;
+      view.id == views.activeId ||
+      view.id == views.previewing?.id ||
+      (view.compId != null &&
+          view.compId == _selectedComp?.internalid.toString() &&
+          views.isViewport(view));
 
   /// A frame arrived. While playing, the picture leads and the playhead follows
   /// it — that is what makes the transport show the frame actually on screen
@@ -1715,6 +1729,8 @@ class LumitUiState extends ChangeNotifier {
     for (final engineId in views.takeClosed()) {
       _controllers.remove(engineId)?.dispose();
       _pushedCamera.remove(engineId);
+      _viewportAsked.remove(engineId);
+      _viewportWaiting.remove(engineId);
       viewProjections.forget(engineId);
       try {
         _app.project?.closeViewerView(view: engineId);
@@ -2655,6 +2671,10 @@ class LumitUiState extends ChangeNotifier {
       // Viewer on screen to ask for one, it is the sign that the worker is
       // up, and the card goes on it.
       if (msg case WorkerResponse_RenderProgress(:final field0)
+          when field0.done) {
+        _viewportLanded(field0.view);
+      }
+      if (msg case WorkerResponse_RenderProgress(:final field0)
           when !field0.done) {
         state.previewProgress(field0.fraction);
       } else if (msg is! WorkerResponse_CacheFilled || _askedFor.isEmpty) {
@@ -2799,7 +2819,25 @@ class LumitUiState extends ChangeNotifier {
   /// letting one drive the transport would make a locked view's first frame
   /// drag the playhead somewhere nobody asked for.
   void _followFrame(int frame, int engineId) {
+    _viewportLanded(engineId);
     if (engineId == activeViewId) _arrived(frame);
+  }
+
+  /// When each 3D viewport's last picture was asked for, while it is on its
+  /// way, and the viewports asked again meanwhile. A viewport beside the view
+  /// being worked in has one picture in flight at a time, so it never holds
+  /// that view's own up for long.
+  final Map<int, DateTime> _viewportAsked = {};
+  final Set<int> _viewportWaiting = {};
+
+  /// A 3D viewport's render has ended, with a picture or without one, as a
+  /// failed or dropped one ends too: the picture asked for meanwhile goes.
+  void _viewportLanded(int engineId) {
+    if (_viewportAsked.remove(engineId) != null &&
+        _viewportWaiting.remove(engineId)) {
+      final view = _surfaceOf(engineId);
+      if (view != null) _askForView(view);
+    }
   }
 
   /// A registered texture is now current: mark a frame available and, if the id
