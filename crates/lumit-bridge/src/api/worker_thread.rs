@@ -45,9 +45,9 @@ pub struct WorkerState {
     /// Whether this thread is running at its playing priority
     /// ([`playback_priority`]).
     prioritised: bool,
-    /// The document as the Viewer looks at it, kept between frames
+    /// The document as the Viewer's views look at it, kept between frames
     /// ([`viewed_kept`]).
-    viewed: Option<Viewed>,
+    viewed: Vec<Viewed>,
     /// The newest Scopes trace asked for while playing, kept for the moment
     /// after the next picture.
     scope_waiting: Option<RenderScopeRequest>,
@@ -3185,7 +3185,7 @@ fn worker_loop(
         unparked: std::collections::VecDeque::new(),
         last_leg: None,
         scope_waiting: None,
-        viewed: None,
+        viewed: Vec::new(),
         prioritised: false,
         prefetcher: lumit_render::Prefetcher::default(),
         last_shown: None,
@@ -4542,34 +4542,49 @@ const VIEW_CAMERA_ID: Uuid = Uuid::from_u128(0x6c75_6d69_7420_7669_6577_2063_616
 /// A view or a prefix point makes a copy of the whole document, which for a
 /// large project is several milliseconds, and playback and the idle fill asked
 /// for one every frame. The copy made for a revision and a way of looking is
-/// the copy for the next frame too.
+/// the copy for the next frame too. A few are kept, so a 3D viewport playing
+/// along beside the Viewer doesn't throw away the Viewer's copy, or its own.
 #[frb(ignore)]
 fn viewed_kept(
-    kept: &mut Option<Viewed>,
+    kept: &mut Vec<Viewed>,
     prefix: Option<crate::api::state::BridgePrefixPoint>,
     view: Option<ViewLatch>,
     revision: u64,
     document: std::sync::Arc<lumit_core::Document>,
 ) -> std::sync::Arc<lumit_core::Document> {
+    // Nothing is copied, so there is nothing to keep.
     if prefix.is_none() && view.is_none() {
-        // Nothing is copied, so there is nothing to keep.
-        *kept = None;
         return document;
     }
-    if let Some(was) = kept {
-        if (was.revision, was.prefix, was.view) == (revision, prefix, view) {
-            return was.document.clone();
-        }
+    if let Some(at) = kept
+        .iter()
+        .position(|was| (was.revision, was.prefix, was.view) == (revision, prefix, view))
+    {
+        let was = kept.remove(at);
+        let document = was.document.clone();
+        kept.insert(0, was);
+        return document;
     }
     let document = viewed_through(prefix, view, document);
-    *kept = Some(Viewed {
-        revision,
-        prefix,
-        view,
-        document: document.clone(),
-    });
+    // A copy of an older revision is never asked for again.
+    kept.retain(|was| was.revision == revision);
+    kept.insert(
+        0,
+        Viewed {
+            revision,
+            prefix,
+            view,
+            document: document.clone(),
+        },
+    );
+    kept.truncate(VIEWED_KEPT);
     document
 }
+
+/// How many looks at the document [`viewed_kept`] keeps: the Viewer's, a 3D
+/// viewport's, and one more.
+#[frb(ignore)]
+const VIEWED_KEPT: usize = 3;
 
 /// What [`viewed_kept`] keeps.
 #[frb(ignore)]
@@ -4822,6 +4837,11 @@ fn render_comp(
             cacheable,
         );
     });
+    // A view drawn while another plays hands the renderer back to the run.
+    if let Some(playing) = state.playback.as_ref().map(|p| p.view) {
+        state.set_view_id(playing);
+        look_at(state, playing);
+    }
     Ok(())
 }
 
@@ -6523,7 +6543,7 @@ mod tests {
             unparked: std::collections::VecDeque::new(),
             last_leg: None,
             scope_waiting: None,
-            viewed: None,
+            viewed: Vec::new(),
             prioritised: false,
             prefetcher: lumit_render::Prefetcher::default(),
             last_shown: None,

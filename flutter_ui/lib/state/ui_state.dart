@@ -2769,7 +2769,7 @@ class LumitUiState extends ChangeNotifier {
             primaryMajor: f.primaryNode?.major,
             primaryMinor: f.primaryNode?.minor)
         .then((id) => _adoptTexture(id, f.view));
-    _followFrame(f.frame.toInt(), f.view);
+    _followFrame(f.frame.toInt(), f.view, f.tier);
   }
 
   /// Windows and macOS zero-copy: register the surface by the one integer that
@@ -2780,7 +2780,7 @@ class LumitUiState extends ChangeNotifier {
     controllerFor(f.view)
         .ensureRegistered(f.handle.toInt(), f.width, f.height)
         .then((id) => _adoptTexture(id, f.view));
-    _followFrame(f.frame.toInt(), f.view);
+    _followFrame(f.frame.toInt(), f.view, f.tier);
   }
 
   /// Which texture each view is drawing, by the engine's view id. A view with
@@ -2818,9 +2818,11 @@ class LumitUiState extends ChangeNotifier {
   /// background view says nothing about where the user is standing, and
   /// letting one drive the transport would make a locked view's first frame
   /// drag the playhead somewhere nobody asked for.
-  void _followFrame(int frame, int engineId) {
+  void _followFrame(int frame, int engineId, int tier) {
     _viewportLanded(engineId);
-    if (engineId == activeViewId) _arrived(frame);
+    if (engineId != activeViewId) return;
+    _arrived(frame);
+    _playAlong(tier);
   }
 
   /// When each 3D viewport's last picture was asked for, while it is on its
@@ -2829,6 +2831,7 @@ class LumitUiState extends ChangeNotifier {
   /// that view's own up for long.
   final Map<int, DateTime> _viewportAsked = {};
   final Set<int> _viewportWaiting = {};
+  int _playedAlong = 0;
 
   /// A 3D viewport's render has ended, with a picture or without one, as a
   /// failed or dropped one ends too: the picture asked for meanwhile goes.
@@ -2837,6 +2840,44 @@ class LumitUiState extends ChangeNotifier {
         _viewportWaiting.remove(engineId)) {
       final view = _surfaceOf(engineId);
       if (view != null) _askForView(view);
+    }
+  }
+
+  /// The Viewer's last frame while playing, its best tier this time round,
+  /// and how many frames in a row have come on time at that tier.
+  DateTime? _lastPlayed;
+  int _playTier = 0;
+  int _onTime = 0;
+
+  /// While playing, a 3D viewport of the playing comp plays along at its own
+  /// tier, but only while the Viewer has time to spare: its last ten frames
+  /// came on time and at the best tier it has played at. Then a picture every
+  /// third frame at most and one at a time, so the Viewer never drops a frame
+  /// or a tier for it.
+  void _playAlong(int tier) {
+    if (!playing.value) {
+      _lastPlayed = null;
+      _playTier = 0;
+      _onTime = 0;
+      return;
+    }
+    final now = DateTime.now();
+    final last = _lastPlayed;
+    _lastPlayed = now;
+    if (_playTier == 0 || tier < _playTier) _playTier = tier;
+    final period = Duration.microsecondsPerSecond / model.fps;
+    final onTime = last != null &&
+        now.difference(last).inMicroseconds <= period * 1.15 &&
+        tier <= _playTier;
+    _onTime = onTime ? _onTime + 1 : 0;
+    if (_onTime < 10 || ++_playedAlong % 3 != 0) return;
+    final comp = _selectedComp?.internalid.toString();
+    for (final view in views.views) {
+      if (view.id != views.previewing?.id &&
+          view.compId == comp &&
+          views.isViewport(view)) {
+        _askForView(view);
+      }
     }
   }
 
