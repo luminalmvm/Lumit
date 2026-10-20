@@ -59,6 +59,12 @@ impl NameCache {
         self.map.clear();
     }
 
+    /// Forget one view's names, for when only that view's way of looking has
+    /// changed (its 3D view) or the view has closed.
+    pub(crate) fn forget_view(&mut self, view: u32) {
+        self.map.retain(|key, _| key.0 != view);
+    }
+
     /// `compute` returning `None` (frame not nameable yet) is passed through
     /// and NOT remembered — the next ask tries again, which is what lets a
     /// finishing probe make a frame nameable mid-session.
