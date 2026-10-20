@@ -357,16 +357,13 @@ pub fn reparented(
     lumit_core::model::TransformProp,
     lumit_core::anim::Animation,
 )> {
-    use lumit_core::anim::Animation;
     use lumit_core::model::TransformProp as P;
 
-    // A camera or a light does not follow its parent yet, so it has nothing
-    // to make up.
     if matches!(
         layer.kind,
         lumit_core::model::LayerKind::Camera { .. } | lumit_core::model::LayerKind::Light { .. }
     ) {
-        return Vec::new();
+        return reparented_eye(comp, layer, new_parent, t_comp, &context);
     }
     let identity = lumit_gpu::Mat4::IDENTITY.to_cols_array_2d();
     let was = parent_world_placement(comp, layer, t_comp, context.clone()).unwrap_or(identity);
@@ -402,26 +399,9 @@ pub fn reparented(
     };
 
     let mut edits = Vec::new();
-    // `gain` is what a keyed property's other keys are scaled by. `None` is a
-    // scale, which goes by its own ratio.
     let mut edit = |prop: P, to: f32, turns: bool, gain: Option<f64>| {
         let Some(property) = tr.get(prop) else { return };
-        let from = at(property);
-        let mut delta = f64::from(to) - from;
-        if turns {
-            // The nearest way round, so a layer three turns in stays there.
-            delta = (delta + 180.0).rem_euclid(360.0) - 180.0;
-        }
-        // The matrices are f32. Past a thousandth it is their noise.
-        let delta = (delta * 1e3).round() / 1e3;
-        if delta == 0.0 || !delta.is_finite() {
-            return;
-        }
-        let gain = gain.unwrap_or((from + delta) / from);
-        let animation = match &property.animation {
-            Animation::Static(v) => Some(Animation::Static(v + delta)),
-            keyed => lumit_core::ops::remapped(keyed, gain, from + delta - gain * from),
-        };
+        let animation = made_up(property, at(property), f64::from(to), turns, gain);
         edits.extend(animation.map(|a| (prop, a)));
     };
     let along = |axis: usize| Some(f64::from(carry[axis][axis]));
@@ -479,6 +459,220 @@ pub fn parent_ops(
             }),
     );
     ops
+}
+
+/// [`reparented`] for a camera or a light, which has no scale or anchor of its
+/// own: the eye, the rows and an aimed one's point of interest, carried
+/// out of the old parent's space and into the new one's.
+///
+/// As After Effects does it, every key is carried through the same two parents
+/// as they stand at `t_comp`, so a keyed camera keeps its whole move. The
+/// channels are carried together as one eye, so a key on any of them is a key
+/// on all of them, and a key already there keeps its ease.
+fn reparented_eye(
+    comp: &lumit_core::model::Composition,
+    layer: &lumit_core::model::Layer,
+    new_parent: Option<Uuid>,
+    t_comp: f64,
+    context: &Arc<ExpressionContext>,
+) -> Vec<(
+    lumit_core::model::TransformProp,
+    lumit_core::anim::Animation,
+)> {
+    use lumit_core::anim::{Animation, Keyframe, SideInterp};
+    use lumit_core::camera::{Eye, Space};
+    use lumit_core::model::{parent_space, LayerKind, TransformProp as P};
+
+    let identity = Space::of_layer((0.0, 0.0, 0.0), (0.0, 0.0), (100.0, 100.0), (0.0, 0.0, 0.0));
+    let solves = Some(&crate::track::Store as &dyn lumit_core::track::CameraSolveStore);
+    let was = parent_space(comp, layer, t_comp, context, solves).unwrap_or(identity);
+    let now = match new_parent.and_then(|id| comp.layers.iter().find(|l| l.id == id)) {
+        Some(parent) => lumit_core::model::layer_space(comp, parent, t_comp, context, solves),
+        None => identity,
+    };
+    if was == now {
+        return Vec::new();
+    }
+    let Some(carry) = now.inverse().map(|back| back.compose(&was)) else {
+        return Vec::new();
+    };
+    let two_node = match &layer.kind {
+        LayerKind::Camera { options, .. } => options.two_node,
+        LayerKind::Light { light } => light.two_node,
+        _ => false,
+    };
+    let mut props = vec![
+        P::PositionX,
+        P::PositionY,
+        P::PositionZ,
+        P::RotationX,
+        P::RotationY,
+        P::Rotation,
+    ];
+    if two_node {
+        props.extend([P::PoiX, P::PoiY, P::PoiZ]);
+    }
+    let channels: Vec<_> = props
+        .iter()
+        .filter_map(|&p| Some((p, layer.prop(p)?)))
+        .collect();
+    let keys = |property: &lumit_core::anim::Property| match &property.animation {
+        Animation::Keyframed(keys) => keys.clone(),
+        _ => Vec::new(),
+    };
+    let lanes: Vec<Vec<Keyframe>> = channels.iter().map(|(_, p)| keys(p)).collect();
+    let mut times: Vec<_> = lanes.iter().flatten().map(|k| k.time).collect();
+    times.sort();
+    times.dedup();
+
+    // Every channel's value at layer time `lt`, carried as one eye.
+    let carried = |lt: f64| {
+        let at = |prop: P| {
+            layer
+                .prop(prop)
+                .map_or(0.0, |p| p.value_at_with_context(lt, context.clone()))
+        };
+        let eye = carry.carry(Eye {
+            position: (at(P::PositionX), at(P::PositionY), at(P::PositionZ)),
+            rotation_deg: (at(P::RotationX), at(P::RotationY), at(P::Rotation)),
+            point_of_interest: two_node.then(|| (at(P::PoiX), at(P::PoiY), at(P::PoiZ))),
+        });
+        let poi = eye.point_of_interest.unwrap_or_default();
+        let (p, r) = (eye.position, eye.rotation_deg);
+        [p.0, p.1, p.2, r.0, r.1, r.2, poi.0, poi.1, poi.2]
+    };
+    let slot = |prop: P| props.iter().position(|p| *p == prop).unwrap_or(0);
+    // The f64 maths is exact well past a thousandth; past that it is noise.
+    let differs = |a: f64, b: f64| ((a - b) * 1e3).round() != 0.0;
+
+    let mut edits = Vec::new();
+    if times.is_empty() {
+        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+        let to = carried(lt);
+        for (prop, property) in &channels {
+            if let Animation::Static(v) = property.animation {
+                if differs(v, to[slot(*prop)]) {
+                    edits.push((*prop, Animation::Static(to[slot(*prop)])));
+                }
+            }
+        }
+        return edits;
+    }
+    // A key already here lends its ease, unless that ease carries a speed of
+    // its own that belonged to the one axis.
+    let side = |side: SideInterp| match side {
+        SideInterp::Bezier { speed, .. } if speed != 0.0 => SideInterp::Linear,
+        other => other,
+    };
+    let holds = |lane: &[Keyframe], time| {
+        lane.iter()
+            .rev()
+            .find(|k| k.time <= time)
+            .is_none_or(|k| k.is_hold() || lane.last().is_some_and(|last| last.time <= time))
+    };
+    // Position and the point of interest are points, so where all three axes
+    // share a key, the speeds of their eases are carried as one vector.
+    let pointed = |i: usize, time, pick: fn(&Keyframe) -> SideInterp| {
+        let first = match i {
+            0..=2 => 0,
+            6..=8 => 6,
+            _ => return None,
+        };
+        let eases: Option<Vec<(f64, f64)>> = (first..first + 3)
+            .map(
+                |axis| match lanes.get(axis)?.iter().find(|k| k.time == time).map(pick) {
+                    Some(SideInterp::Bezier { speed, influence }) => Some((speed, influence)),
+                    _ => None,
+                },
+            )
+            .collect();
+        let eases = eases?;
+        let row = carry.linear[i - first];
+        Some(SideInterp::Bezier {
+            speed: row[0] * eases[0].0 + row[1] * eases[1].0 + row[2] * eases[2].0,
+            influence: eases[i - first].1,
+        })
+    };
+    let values: Vec<_> = times.iter().map(|time| carried(time.to_f64())).collect();
+    for ((prop, property), lane) in channels.iter().zip(&lanes) {
+        if matches!(property.animation, Animation::Expression(_)) {
+            continue;
+        }
+        let i = slot(*prop);
+        let new: Vec<Keyframe> = times
+            .iter()
+            .zip(&values)
+            .map(|(&time, v)| {
+                let here = lane.iter().find(|k| k.time == time);
+                let interp_out = if lanes.iter().all(|l| holds(l, time)) {
+                    SideInterp::Hold
+                } else if let Some(ease) = pointed(i, time, |k| k.interp_out) {
+                    ease
+                } else {
+                    match here.map(|k| side(k.interp_out)) {
+                        Some(SideInterp::Hold) | None => SideInterp::Linear,
+                        Some(other) => other,
+                    }
+                };
+                let interp_in = pointed(i, time, |k| k.interp_in)
+                    .unwrap_or_else(|| here.map_or(SideInterp::Linear, |k| side(k.interp_in)));
+                Keyframe {
+                    time,
+                    value: v[i],
+                    interp_in,
+                    interp_out,
+                }
+            })
+            .collect();
+        // A still channel the carry leaves still stays a single value.
+        if let Animation::Static(v) = property.animation {
+            let first = new.first().map_or(v, |k| k.value);
+            if new.iter().all(|k| !differs(k.value, first)) {
+                if differs(first, v) {
+                    edits.push((*prop, Animation::Static(first)));
+                }
+                continue;
+            }
+        }
+        // A lane the carry leaves where it was keeps its own keys and eases.
+        let same = new
+            .iter()
+            .all(|k| !differs(k.value, property.value_at(k.time.to_f64())));
+        if !same {
+            edits.push((*prop, Animation::Keyframed(new)));
+        }
+    }
+    edits
+}
+
+/// The animation that takes `property` from `from` to `to` at the moment of a
+/// reparent, or `None` when it already reads right or an expression drives
+/// it. `gain` is what a keyed property's other keys are scaled by; `None` is
+/// a scale, which goes by its own ratio.
+fn made_up(
+    property: &lumit_core::anim::Property,
+    from: f64,
+    to: f64,
+    turns: bool,
+    gain: Option<f64>,
+) -> Option<lumit_core::anim::Animation> {
+    use lumit_core::anim::Animation;
+
+    let mut delta = to - from;
+    if turns {
+        // The nearest way round, so a layer three turns in stays there.
+        delta = (delta + 180.0).rem_euclid(360.0) - 180.0;
+    }
+    // The matrices are f32. Past a thousandth it is their noise.
+    let delta = (delta * 1e3).round() / 1e3;
+    if delta == 0.0 || !delta.is_finite() {
+        return None;
+    }
+    let gain = gain.unwrap_or((from + delta) / from);
+    match &property.animation {
+        Animation::Static(v) => Some(Animation::Static(v + delta)),
+        keyed => lumit_core::ops::remapped(keyed, gain, from + delta - gain * from),
+    }
 }
 
 /// Where the composition's camera puts a particle that sits off `layer`'s own
@@ -6194,6 +6388,116 @@ mod parent_placement_tests {
             // Back where it started, in the numbers too.
             assert!((child.transform.rotation.value_at(0.0) - 400.0).abs() < 1e-2);
             assert!((child.transform.scale_y.value_at(0.0) + 80.0).abs() < 1e-2);
+
+            // A camera keeps its eye, its turn and what it is aimed at, under
+            // the same parents.
+            for two_node in [false, true] {
+                let mut camera = layer(30.0, 70.0, None);
+                camera.kind = LayerKind::Camera {
+                    zoom: Property::fixed(800.0),
+                    solve_link: None,
+                    correction_base: None,
+                    options: Box::new(CameraOptions {
+                        two_node,
+                        ..CameraOptions::fresh(800.0, (90.0, 20.0, 300.0))
+                    }),
+                };
+                camera.transform.position_z = Property::fixed(-500.0);
+                camera.transform.rotation_x = Property::fixed(12.0);
+                camera.transform.rotation = Property::fixed(-25.0);
+                let seen = |c: &Composition, l: &Layer| {
+                    let pose = c.camera_pose(0.0).unwrap();
+                    let own = |p: TransformProp| l.prop(p).unwrap().value_at(0.0);
+                    let poi = (
+                        own(TransformProp::PoiX),
+                        own(TransformProp::PoiY),
+                        own(TransformProp::PoiZ),
+                    );
+                    // A one-node camera's point of interest is inert.
+                    let poi = match parent_space(c, l, 0.0, &ctx(), None) {
+                        _ if !two_node => (0.0, 0.0, 0.0),
+                        Some(s) => s.point(poi),
+                        None => poi,
+                    };
+                    let axes = lumit_core::camera::axes(pose.rotation_deg);
+                    [pose.position, poi, axes[0], axes[1], axes[2]]
+                };
+                let before = seen(&comp(vec![camera.clone()]), &camera);
+                for new_parent in [Some(parent.id), None] {
+                    let c = comp(vec![camera.clone(), gp.clone(), parent.clone()]);
+                    let edits = reparented(&c, &camera, new_parent, 0.0, ctx());
+                    assert!(!edits.is_empty());
+                    for (prop, animation) in edits {
+                        camera.prop_mut(prop).unwrap().animation = animation;
+                    }
+                    camera.parent = new_parent;
+                    let c = comp(vec![camera.clone(), gp.clone(), parent.clone()]);
+                    let after = seen(&c, &camera);
+                    for (b, a) in before.iter().zip(&after) {
+                        let gap = (b.0 - a.0).abs() + (b.1 - a.1).abs() + (b.2 - a.2).abs();
+                        assert!(gap < 1e-2, "{two_node}: {before:?} became {after:?}");
+                    }
+                }
+            }
+        }
+
+        // A keyed camera keeps its whole move under a null turned a quarter
+        // round, where x and z trade places: every key is carried, not just
+        // the one under the playhead, and an eased move keeps its ease.
+        let mut null = layer(200.0, 100.0, None);
+        null.switches.three_d = true;
+        null.transform.rotation_y = Property::fixed(90.0);
+        let mut camera = layer(0.0, 50.0, None);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(800.0),
+            solve_link: None,
+            correction_base: None,
+            options: Box::new(CameraOptions::fresh(800.0, (0.0, 0.0, 0.0))),
+        };
+        let key = |s: i64, v: f64| lumit_core::anim::Keyframe {
+            time: Rational::new(s, 1).unwrap(),
+            value: v,
+            interp_in: lumit_core::anim::SideInterp::Linear,
+            interp_out: lumit_core::anim::SideInterp::Linear,
+        };
+        let keyed = |a: f64, b: f64| Property {
+            animation: lumit_core::anim::Animation::Keyframed(vec![key(0, a), key(2, b)]),
+            ..Property::fixed(0.0)
+        };
+        let eased = |a: f64, b: f64, speed: f64| {
+            let ease = lumit_core::anim::SideInterp::Bezier {
+                speed,
+                influence: 0.4,
+            };
+            let mut keys = [key(0, a), key(2, b)];
+            keys[0].interp_out = ease;
+            keys[1].interp_in = ease;
+            Property {
+                animation: lumit_core::anim::Animation::Keyframed(keys.to_vec()),
+                ..Property::fixed(0.0)
+            }
+        };
+        camera.transform.position_x = eased(0.0, 300.0, 400.0);
+        camera.transform.position_y = eased(50.0, 50.0, 0.0);
+        camera.transform.position_z = eased(-500.0, -200.0, -100.0);
+        camera.transform.rotation_y = keyed(0.0, 40.0);
+        let poses = |c: &Composition| [0.0, 0.5, 1.0, 2.0].map(|t| c.camera_pose(t).unwrap());
+        let before = poses(&comp(vec![camera.clone(), null.clone()]));
+        let c = comp(vec![camera.clone(), null.clone()]);
+        for (prop, animation) in reparented(&c, &camera, Some(null.id), 1.0, ctx()) {
+            camera.prop_mut(prop).unwrap().animation = animation;
+        }
+        camera.parent = Some(null.id);
+        let after = poses(&comp(vec![camera.clone(), null.clone()]));
+        for (b, a) in before.iter().zip(&after) {
+            let (pb, pa) = (b.position, a.position);
+            let gap = (pb.0 - pa.0).abs() + (pb.1 - pa.1).abs() + (pb.2 - pa.2).abs();
+            let (fb, fa) = (
+                lumit_core::camera::forward(b.rotation_deg),
+                lumit_core::camera::forward(a.rotation_deg),
+            );
+            let turn = (fb.0 - fa.0).abs() + (fb.1 - fa.1).abs() + (fb.2 - fa.2).abs();
+            assert!(gap < 1e-2 && turn < 1e-6, "{b:?} became {a:?}");
         }
     }
 
