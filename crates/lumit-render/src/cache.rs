@@ -85,11 +85,16 @@ impl lumit_eval::SourceStamper for Stamper<'_> {
     /// default camera.
     fn camera(
         &self,
-        doc: &Document,
+        doc: &std::sync::Arc<Document>,
         comp: &lumit_core::model::Composition,
         t: f64,
     ) -> Option<lumit_core::model::CameraPose> {
         crate::track::linked_pose(doc, comp, t).map(|l| l.pose)
+    }
+
+    /// The same store, for a solved camera that is a parent.
+    fn solves(&self) -> Option<&dyn lumit_core::track::CameraSolveStore> {
+        Some(&crate::track::Store)
     }
 
     /// What the comp's mix sounds like, for a driver reading *This comp*

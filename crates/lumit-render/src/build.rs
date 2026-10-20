@@ -284,16 +284,11 @@ pub fn parent_world_placement(
     t_comp: f64,
     context: Arc<ExpressionContext>,
 ) -> Option<[[f32; 4]; 4]> {
-    layer.parent?;
-    let chain = lumit_core::model::layer_parent_chain(comp, layer.id);
     let mut world: Option<[[f32; 4]; 4]> = None;
-    // Fold from the farthest ancestor inward so the topmost transform is the
-    // outermost: concat_place(outer, inner) = outer × inner.
-    for ancestor_id in chain.iter().rev() {
-        let Some(a) = comp.layers.iter().find(|l| l.id == *ancestor_id) else {
-            continue;
-        };
-        let p = own_placement(a, t_comp, &context);
+    // Outermost first, so concat_place(outer, inner) = outer × inner.
+    let solves = Some(&crate::track::Store as &dyn lumit_core::track::CameraSolveStore);
+    for (_, p) in lumit_core::model::parent_placements(comp, layer, t_comp, &context, solves) {
+        let p = place_of(&p);
         world = Some(match world {
             Some(w) => lumit_gpu::concat_place(w, p),
             None => p,
@@ -323,42 +318,18 @@ fn own_placement(
     t_comp: f64,
     context: &Arc<ExpressionContext>,
 ) -> [[f32; 4]; 4] {
-    // A 2D layer draws as if its hidden z and X/Y rotation were 0, and so does
-    // its part in a parent chain.
-    let flat = !layer.is_3d();
-    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
-    let tr = &layer.transform;
-    // A layer's own expressions are about that layer: `layer()`, `cut_in` and
-    // `cut_out` must resolve to the layer being evaluated, not to the child
-    // that started the walk up the chain.
-    let context = Arc::new(ExpressionContext {
-        layer: Some(layer.id),
-        ..(**context).clone()
-    });
-    let hidden = |p: &lumit_core::anim::Property| {
-        if flat {
-            0.0
-        } else {
-            p.value_at_with_context(lt, context.clone()) as f32
-        }
-    };
+    place_of(&lumit_core::model::placement(layer, t_comp, context))
+}
+
+fn place_of(p: &lumit_core::model::Placement) -> [[f32; 4]; 4] {
     lumit_gpu::place_matrix(
-        (
-            tr.position_x.value_at_with_context(lt, context.clone()) as f32,
-            tr.position_y.value_at_with_context(lt, context.clone()) as f32,
-        ),
-        (
-            tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
-            tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
-        ),
-        (
-            tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
-            tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
-        ),
-        tr.rotation.value_at_with_context(lt, context.clone()) as f32,
-        hidden(&tr.position_z),
-        hidden(&tr.rotation_x),
-        hidden(&tr.rotation_y),
+        (p.position.0 as f32, p.position.1 as f32),
+        (p.anchor.0 as f32, p.anchor.1 as f32),
+        (p.scale.0 as f32, p.scale.1 as f32),
+        p.rotation_deg.2 as f32,
+        p.position.2 as f32,
+        p.rotation_deg.0 as f32,
+        p.rotation_deg.1 as f32,
     )
 }
 
@@ -535,7 +506,7 @@ pub fn parent_ops(
 /// which is what makes an old project's picture bit-identical rather than
 /// nearly so.
 pub fn points_projection(
-    doc: &lumit_core::model::Document,
+    doc: &Arc<lumit_core::model::Document>,
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
     t_comp: f64,
@@ -1089,6 +1060,7 @@ pub fn shading_lights(
     comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
     t_comp: f64,
+    context: &Arc<ExpressionContext>,
 ) -> Vec<lumit_gpu::fx::LightingLight> {
     use lumit_core::model::{LayerKind, LightKind};
 
@@ -1103,7 +1075,7 @@ pub fn shading_lights(
         return Vec::new();
     }
     let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
-    let mut lights = comp.lights_at(t_comp);
+    let mut lights = comp.lights_at(t_comp, context);
     if lights.is_empty() {
         return Vec::new();
     }
@@ -1661,7 +1633,7 @@ fn comp_walk(
                     // A light falls differently on every pixel, so lit on the
                     // tile its pool would come out as a smear of sixty-four
                     // pixels stretched over the whole solid.
-                    && !(layer.switches.accepts_lights && !comp.lights_at(t_comp).is_empty());
+                    && !(layer.switches.accepts_lights && !comp.lights_at(t_comp, &context).is_empty());
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
                     Arc::new(px_tile(&px, tw, th)),
@@ -4223,7 +4195,7 @@ fn comp_walk(
             // Built the same way export does, so the two smear identically.
             mb: motion_blur_samples(comp, layer, t_comp, context.clone()),
             // The comp's lights, if this layer takes them (docs/06).
-            lights: shading_lights(comp, layer, t_comp),
+            lights: shading_lights(comp, layer, t_comp, &context),
             material: shading_material(comp, layer, t_comp),
             // Ordinary layers never carry a temporal re-render — that is an
             // adjustment-only capability in v1 (docs/08 §3.25, §3.26).
@@ -6136,6 +6108,39 @@ mod parent_placement_tests {
         let c = comp(vec![tilted, parent, child.clone()]);
         let flat = parent_world_placement(&c, &child, 0.0, Arc::new(ExpressionContext::detached()));
         assert_eq!(flat, Some(expected));
+
+        // A layer on a two-node camera turns with its aim, and an imported
+        // camera's anchor (After Effects' point of interest) moves nothing.
+        let mut camera = layer(100.0, 50.0, None);
+        camera.transform.anchor_x = Property::fixed(400.0);
+        camera.transform.position_z = Property::fixed(-300.0);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(800.0),
+            solve_link: None,
+            correction_base: None,
+            options: Box::new(CameraOptions {
+                two_node: true,
+                ..CameraOptions::fresh(800.0, (400.0, 0.0, 0.0))
+            }),
+        };
+        let mut hud = layer(0.0, 0.0, Some(camera.id));
+        hud.switches.three_d = true;
+        let c = comp(vec![camera, hud.clone()]);
+        let aim =
+            lumit_core::camera::look_at((100.0, 50.0, -300.0), (400.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+                .unwrap();
+        let expected = lumit_gpu::place_matrix(
+            (100.0, 50.0),
+            (0.0, 0.0),
+            (100.0, 100.0),
+            aim.2 as f32,
+            -300.0,
+            aim.0 as f32,
+            aim.1 as f32,
+        );
+        let on_camera =
+            parent_world_placement(&c, &hud, 0.0, Arc::new(ExpressionContext::detached()));
+        assert_eq!(on_camera, Some(expected));
     }
 
     #[test]

@@ -129,8 +129,16 @@ pub trait SourceStamper {
     ///
     /// The default answers what the document holds, which is what every camera
     /// with no link resolves to anyway.
-    fn camera(&self, _doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
+    fn camera(&self, _doc: &Arc<Document>, comp: &Composition, t: f64) -> Option<CameraPose> {
         comp.camera_pose(t)
+    }
+
+    /// The camera solves a solved camera is placed by, when it is a parent.
+    /// Asked for the reason [`Self::camera`] is: a layer parented to a solved
+    /// camera moves with a solve the document doesn't hold. The default has
+    /// none, which places such a camera by its own values.
+    fn solves(&self) -> Option<&dyn lumit_core::track::CameraSolveStore> {
+        None
     }
 
     /// A fingerprint of what `comp`'s **mix** sounds like
@@ -397,7 +405,7 @@ fn feed_comp(
     // only when the comp actually has one, so every key made before lighting
     // existed stays valid. A Light layer draws no pixels of its own, so
     // nothing else in this walk would notice it moving.
-    let lights = comp.lights_at(t);
+    let lights = comp.lights_at(t, &lumit_core::model::comp_context(doc, comp, t));
     if !lights.is_empty() {
         h.update(b"lights/");
         if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
@@ -1570,40 +1578,27 @@ fn feed_layer(
     // (there is nothing to look at), which makes that the common case
     // rather than a corner.
     //
-    // Sampled the way [`lumit_render::build::parent_world_placement`] samples —
-    // each ancestor at its own local time, farthest ancestor first, and only the
-    // values `place_matrix` consumes (opacity does not inherit, so it is not
-    // content here). Hashed only for a layer that HAS a parent, so an unparented
-    // layer's contribution is unchanged.
+    // Read through the same parent walk the renderer places with
+    // ([`lumit_core::model::parent_placements`]), expressions and all, so a
+    // two-node camera's aim and a 2D ancestor's flattening are content too.
+    // Hashed only for a layer that HAS a parent, so an unparented layer's
+    // contribution is unchanged.
     if layer.parent.is_some() {
         h.update(b"parents/");
-        for ancestor in lumit_core::model::layer_parent_chain(comp, layer.id)
-            .iter()
-            .rev()
-            .filter_map(|id| comp.layers.iter().find(|l| l.id == *id))
-        {
-            let alt = lumit_core::time::layer_time(t, ancestor.start_offset.0);
-            let atr = &ancestor.transform;
-            // A 2D ancestor's hidden z and X/Y rotation count as 0, as the
-            // renderer places it. Cameras and lights have no 3D switch.
-            let flat = !ancestor.switches.three_d
-                && !matches!(
-                    ancestor.kind,
-                    lumit_core::model::LayerKind::Camera { .. }
-                        | lumit_core::model::LayerKind::Light { .. }
-                );
-            let hidden = |p: &lumit_core::anim::Property| if flat { 0.0 } else { p.value_at(alt) };
+        let context = lumit_core::model::comp_context(doc, comp, t);
+        let solves = stamper.solves();
+        for (_, p) in lumit_core::model::parent_placements(comp, layer, t, &context, solves) {
             for v in [
-                atr.position_x.value_at(alt),
-                atr.position_y.value_at(alt),
-                hidden(&atr.position_z),
-                atr.anchor_x.value_at(alt),
-                atr.anchor_y.value_at(alt),
-                atr.scale_x.value_at(alt),
-                atr.scale_y.value_at(alt),
-                atr.rotation.value_at(alt),
-                hidden(&atr.rotation_x),
-                hidden(&atr.rotation_y),
+                p.position.0,
+                p.position.1,
+                p.position.2,
+                p.anchor.0,
+                p.anchor.1,
+                p.scale.0,
+                p.scale.1,
+                p.rotation_deg.2,
+                p.rotation_deg.0,
+                p.rotation_deg.1,
             ] {
                 feed_f64(h, v);
             }
@@ -3144,6 +3139,66 @@ mod tests {
         let before = key(&doc, &chain, 1.0);
         chain.layers[2].transform.rotation = Property::fixed(30.0);
         assert_ne!(before, key(&doc, &chain, 1.0), "the whole chain is content");
+    }
+
+    /// A layer on a hidden solved camera moves with the solve, which the
+    /// document doesn't hold, so the solve has to be in its name or every
+    /// frame of it is served from the first.
+    #[test]
+    fn a_layer_on_a_hidden_solved_camera_is_named_by_the_solve() {
+        use lumit_core::model::{CameraOptions, CameraPose};
+        use lumit_core::track::{CameraSolveStore, SolvedRange};
+        struct Drifting;
+        impl CameraSolveStore for Drifting {
+            fn solved_range(&self, _media: Uuid) -> Option<SolvedRange> {
+                Some(SolvedRange {
+                    fps: 30.0,
+                    first_frame: 0,
+                    last_frame: 299,
+                })
+            }
+            fn solved_pose(&self, _media: Uuid, frame: i64) -> Option<CameraPose> {
+                Some(CameraPose {
+                    zoom: 1000.0,
+                    position: (frame as f64, 0.0, -1000.0),
+                    rotation_deg: (0.0, 0.0, 0.0),
+                    dof: None,
+                })
+            }
+        }
+        struct Solved;
+        impl SourceStamper for Solved {
+            fn stamp(&self, item: Uuid, lt: f64, _native: bool) -> Option<(String, u64)> {
+                StubStamper.stamp(item, lt, false)
+            }
+            fn solves(&self) -> Option<&dyn CameraSolveStore> {
+                Some(&Drifting)
+            }
+        }
+
+        let doc = Arc::new(Document::new());
+        let mut plate = text_layer("plate", 0.0, 10.0, 0.0);
+        plate.kind = LayerKind::Footage {
+            item: Uuid::now_v7(),
+        };
+        plate.switches.visible = false;
+        let mut camera = text_layer("camera", 0.0, 10.0, 0.0);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(1000.0),
+            solve_link: Some(plate.id),
+            correction_base: None,
+            options: Box::new(CameraOptions::fresh(1000.0, (0.0, 0.0, 0.0))),
+        };
+        camera.switches.visible = false;
+        let mut child = text_layer("child", 0.0, 10.0, 0.0);
+        child.switches.three_d = true;
+        child.parent = Some(camera.id);
+        let comp = comp_with(vec![child, camera, plate]);
+        let at = |t: f64, stamper: &dyn SourceStamper| {
+            comp_frame_key(&doc, &comp, t, Quality::default(), stamper).unwrap()
+        };
+        assert_eq!(at(1.0, &StubStamper), at(2.0, &StubStamper));
+        assert_ne!(at(1.0, &Solved), at(2.0, &Solved));
     }
 
     /// Edits that cannot reach a pixel keep every key — the whole reason the

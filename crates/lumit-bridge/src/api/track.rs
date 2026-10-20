@@ -915,6 +915,22 @@ pub fn add_layer_at_points(
     let facing = doc.comp(tracked.comp_id).map_or((0.0, 0.0, 0.0), |c| {
         lumit_render::track::camera_pose(&doc, c, t.0.to_f64()).rotation_deg
     });
+    // The solve's points sit in the space of the camera it drives, so a
+    // parented camera takes them with it.
+    let at = doc
+        .comp(tracked.comp_id)
+        .and_then(|c| {
+            let camera = c.active_camera(t.0.to_f64()).filter(|l| {
+                matches!(l.kind, lumit_core::model::LayerKind::Camera { solve_link: Some(id), .. } if id == tracked.layer_id)
+            })?;
+            let context = lumit_core::model::comp_context(&doc, c, t.0.to_f64());
+            let solves = Some(&lumit_render::track::Store as &dyn lumit_core::track::CameraSolveStore);
+            lumit_core::model::parent_space(c, camera, t.0.to_f64(), &context, solves)
+        })
+        .map_or(at, |space| {
+            let p = space.point((at[0], at[1], at[2]));
+            [p.0, p.1, p.2]
+        });
 
     let transform = TransformGroup {
         position_x: Property::fixed(at[0]),

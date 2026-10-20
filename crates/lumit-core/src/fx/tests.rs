@@ -5087,7 +5087,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     light_layer(LightKind::Point, 900.0, 80.0, true);
     light_layer(LightKind::Area, 1500.0, 40.0, false);
 
-    let lights = comp.lights_at(1.0);
+    let lights = comp.lights_at(1.0, &crate::model::timed_context(&comp, 1.0));
     assert_eq!(lights.len(), 2, "a light switched off is not a light");
 
     // Top of the stack first — the order the effects that read lights take
@@ -5108,7 +5108,9 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     );
 
     // Outside every span there are no lights at all.
-    assert!(comp.lights_at(99.0).is_empty());
+    assert!(comp
+        .lights_at(99.0, &crate::model::timed_context(&comp, 99.0))
+        .is_empty());
 
     // A default light is white at full intensity — a fresh one should light
     // something rather than land as a black source nobody can see.

@@ -7007,6 +7007,216 @@ mod tests {
         assert_eq!(frame(none), seen);
     }
 
+    /// **A camera and a light follow their parent**, the After Effects rig of
+    /// a camera on a turned 3D null.
+    ///
+    /// The same scene is drawn through a camera and a light parented to the
+    /// null, then through an unparented pair holding the poses the null puts
+    /// them at, worked out here with the compositor's own matrices. The two
+    /// pictures match. Dropping the parent changes the picture, so a camera
+    /// that ignored its parent would fail. A two-node camera aims at its point
+    /// of interest read in the null's space too. The null is turned by an
+    /// expression on time, as a handheld rig's wiggle is, and placed by one
+    /// reading another layer, as a null linked to a scene marker is.
+    #[test]
+    fn a_camera_and_a_light_on_a_turned_null_see_what_their_poses_say() {
+        use lumit_core::model::{CameraOptions, LightDef, LightKind};
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (cw, ch) = (128u32, 64u32);
+        let place = |l: &lumit_core::model::Layer| {
+            let tr = &l.transform;
+            let v = |p: &Property| p.value_at(0.0) as f32;
+            lumit_gpu::Mat4::from_cols_array_2d(&lumit_gpu::place_matrix(
+                (v(&tr.position_x), v(&tr.position_y)),
+                (v(&tr.anchor_x), v(&tr.anchor_y)),
+                (v(&tr.scale_x), v(&tr.scale_y)),
+                v(&tr.rotation),
+                v(&tr.position_z),
+                v(&tr.rotation_x),
+                v(&tr.rotation_y),
+            ))
+        };
+
+        for two_node in [false, true] {
+            let mut doc = Document::new();
+            let comp_id = push_comp(&mut doc, "Scene", cw, ch);
+            let mut solids = Vec::new();
+            for (colour, (w, h), at, turn) in [
+                ([0.25, 0.25, 0.25], (60, 40), (40.0, 32.0, 0.0), 20.0),
+                ([0.05, 0.1, 0.3], (40, 40), (90.0, 30.0, 80.0), -30.0),
+            ] {
+                let id = Uuid::now_v7();
+                doc.items.push(ProjectItem::Solid(SolidDef {
+                    id,
+                    name: "Card".into(),
+                    colour: LinearColour([colour[0], colour[1], colour[2], 1.0]),
+                    width: w,
+                    height: h,
+                    extra: serde_json::Map::new(),
+                }));
+                let mut l = matrix_layer("Card", LayerKind::Solid { def: id }, w, h);
+                l.switches.three_d = true;
+                l.transform.position_x = Property::fixed(at.0);
+                l.transform.position_y = Property::fixed(at.1);
+                l.transform.position_z = Property::fixed(at.2);
+                l.transform.rotation_y = Property::fixed(turn);
+                solids.push(l);
+            }
+
+            // A 100 px null, anchored in its middle as After Effects makes one.
+            let mut null = matrix_layer("Null", LayerKind::Null, 100, 100);
+            null.switches.three_d = true;
+            // Placed by another layer, as a null is linked to a scene marker.
+            null.transform.position_x = Property {
+                animation: lumit_core::anim::Animation::Expression("layer(\"Marker\").x".into()),
+                ..Property::fixed(0.0)
+            };
+            let mut marker = matrix_layer("Marker", LayerKind::Null, 100, 100);
+            marker.transform.position_x = Property::fixed(64.0);
+            null.transform.position_y = Property::fixed(32.0);
+            null.transform.position_z = Property::fixed(10.0);
+            null.transform.rotation_x = Property::fixed(10.0);
+            null.transform.rotation_y = Property {
+                animation: lumit_core::anim::Animation::Expression("-35.0 + time * 30.0".into()),
+                ..Property::fixed(0.0)
+            };
+            null.transform.rotation = Property::fixed(15.0);
+            // The null at the frame drawn, half a second in.
+            let mut still = null.clone();
+            still.transform.rotation_y = Property::fixed(-20.0);
+            still.transform.position_x = Property::fixed(64.0);
+
+            // Keyed like a game camera export: the three rows and the eye.
+            let mut camera = matrix_layer(
+                "Camera",
+                LayerKind::Camera {
+                    zoom: Property::fixed(150.0),
+                    solve_link: None,
+                    correction_base: None,
+                    options: Box::new(CameraOptions {
+                        two_node,
+                        ..CameraOptions::fresh(150.0, (55.0, 45.0, 0.0))
+                    }),
+                },
+                cw,
+                ch,
+            );
+            camera.transform = TransformGroup::default();
+            camera.transform.position_x = ramp(50.0, 60.0, 5);
+            camera.transform.position_y = Property::fixed(50.0);
+            camera.transform.position_z = Property::fixed(-150.0);
+            camera.transform.rotation_x = Property::fixed(3.0);
+            camera.transform.rotation_y = Property::fixed(-4.0);
+            camera.transform.rotation = Property::fixed(6.0);
+
+            let mut light = matrix_layer(
+                "Light",
+                LayerKind::Light {
+                    light: Box::new(LightDef {
+                        kind: LightKind::Point,
+                        falloff_px: Property::fixed(160.0),
+                        ..LightDef::default()
+                    }),
+                },
+                cw,
+                ch,
+            );
+            light.transform = TransformGroup::default();
+            light.transform.position_x = Property::fixed(-10.0);
+            light.transform.position_y = Property::fixed(110.0);
+            light.transform.position_z = Property::fixed(-30.0);
+
+            // Where the null puts the two, by the compositor's matrices. The
+            // camera's local turn is its aim on a two-node camera.
+            let mut seen = camera.clone();
+            if two_node {
+                let aim = lumit_core::camera::look_at(
+                    (51.0, 50.0, -150.0),
+                    (55.0, 45.0, 0.0),
+                    (3.0, -4.0, 6.0),
+                )
+                .expect("an aim");
+                seen.transform.rotation_x = Property::fixed(aim.0);
+                seen.transform.rotation_y = Property::fixed(aim.1);
+                seen.transform.rotation = Property::fixed(aim.2);
+                if let LayerKind::Camera { options, .. } = &mut seen.kind {
+                    options.two_node = false;
+                }
+            }
+            seen.transform.position_x = Property::fixed(51.0);
+            let world = |l: &lumit_core::model::Layer| {
+                lumit_gpu::unplace_matrix((place(&still) * place(l)).to_cols_array_2d(), (0.0, 0.0))
+            };
+            let put = |l: &mut lumit_core::model::Layer, at: lumit_gpu::MbSample| {
+                let tr = &mut l.transform;
+                tr.position_x = Property::fixed(f64::from(at.position.0));
+                tr.position_y = Property::fixed(f64::from(at.position.1));
+                tr.position_z = Property::fixed(f64::from(at.z));
+                tr.rotation_x = Property::fixed(f64::from(at.rotation_x_deg));
+                tr.rotation_y = Property::fixed(f64::from(at.rotation_y_deg));
+                tr.rotation = Property::fixed(f64::from(at.rotation_deg));
+            };
+            let at = world(&seen);
+            put(&mut seen, at);
+            let mut lit = light.clone();
+            let at = world(&light);
+            put(&mut lit, at);
+
+            let mut draw = |camera: &lumit_core::model::Layer, light: &lumit_core::model::Layer| {
+                let mut doc = doc.clone();
+                let scene = doc.comp_mut(comp_id).unwrap();
+                scene.layers = vec![camera.clone(), light.clone(), null.clone(), marker.clone()];
+                scene.layers.extend(solids.iter().cloned());
+                r.render_rgba(&Arc::new(doc), comp_id, 15, 1.0)
+                    .expect("a frame")
+                    .0
+            };
+            let mut on_null = (camera.clone(), light.clone());
+            on_null.0.parent = Some(null.id);
+            on_null.1.parent = Some(null.id);
+            let parented = draw(&on_null.0, &on_null.1);
+            let placed = draw(&seen, &lit);
+            let unparented = draw(&camera, &light);
+            let light_unparented = draw(&on_null.0, &light);
+
+            let worst = |a: &[u8], b: &[u8]| {
+                a.iter()
+                    .zip(b)
+                    .map(|(x, y)| x.abs_diff(*y))
+                    .max()
+                    .unwrap_or(0)
+            };
+            let off = |a: &[u8], b: &[u8]| {
+                a.chunks(4)
+                    .zip(b.chunks(4))
+                    .filter(|(x, y)| worst(x, y) > 8)
+                    .count()
+            };
+            assert!(
+                off(&placed, &unparented) > 200,
+                "two_node {two_node}: the null moves too little to tell"
+            );
+            assert!(
+                off(&parented, &light_unparented) > 100,
+                "two_node {two_node}: the light on the null lights nothing differently"
+            );
+            // Edges land within f32 noise of each other, so a few pixels of
+            // antialiasing may differ by a step or two.
+            assert!(
+                off(&parented, &placed) <= 8,
+                "two_node {two_node}: the parented camera and light drew {} pixels off \
+                 the poses their null puts them at",
+                off(&parented, &placed)
+            );
+        }
+    }
+
     /// **A wire reaches the picture.**
     ///
     /// The matrix above proves the two walks agree; this proves there is

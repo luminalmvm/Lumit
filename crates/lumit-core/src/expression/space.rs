@@ -54,7 +54,7 @@ pub(crate) struct Space {
 /// the numbers under its expressions, as After Effects reads a property that
 /// refers to itself.
 pub(crate) fn space(
-    doc: &Document,
+    doc: &Arc<Document>,
     comp: &Composition,
     layer: &Layer,
     t: f64,

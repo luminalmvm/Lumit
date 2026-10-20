@@ -576,13 +576,18 @@ impl CompositionReference {
                     let cam = cam.pose;
                     let eye = cam.position;
                     reach_to.push(eye);
-                    let poi = options.two_node.then(|| {
-                        (
-                            options.point_of_interest[0].value_at(lt),
-                            options.point_of_interest[1].value_at(lt),
-                            options.point_of_interest[2].value_at(lt),
-                        )
-                    });
+                    // In the parent's space, like the eye.
+                    let poi = options
+                        .two_node
+                        .then(|| {
+                            let context = lumit_core::model::comp_context(&doc, comp, t);
+                            let solves = Some(
+                                &lumit_render::track::Store
+                                    as &dyn lumit_core::track::CameraSolveStore,
+                            );
+                            lumit_core::model::point_of_interest(comp, layer, t, &context, solves)
+                        })
+                        .flatten();
                     reach_to.extend(poi);
                     if !wanted(layer.id) {
                         continue;
@@ -637,43 +642,38 @@ impl CompositionReference {
                         continue;
                     }
                     // Placed as the lighting pass places it: an aimed light
-                    // faces its point of interest, its rows on top.
-                    let own = (
-                        tr.position_x.value_at(lt),
-                        tr.position_y.value_at(lt),
-                        tr.position_z.value_at(lt),
-                    );
-                    let stored = (
-                        tr.rotation_x.value_at(lt),
-                        tr.rotation_y.value_at(lt),
-                        tr.rotation.value_at(lt),
-                    );
-                    let poi = light.two_node.then(|| {
-                        (
-                            light.point_of_interest[0].value_at(lt),
-                            light.point_of_interest[1].value_at(lt),
-                            light.point_of_interest[2].value_at(lt),
-                        )
-                    });
-                    let (rx, ry, rz) = poi
-                        .and_then(|poi| lumit_core::camera::look_at(own, poi, stored))
-                        .unwrap_or(stored);
-                    let m = {
-                        let aimed = lumit_render::place_matrix(
-                            (own.0 as f32, own.1 as f32),
-                            (0.0, 0.0),
-                            (100.0, 100.0),
-                            rz as f32,
-                            own.2 as f32,
-                            rx as f32,
-                            ry as f32,
-                        )
-                        .map(|c| c.map(f64::from));
-                        match &parent {
-                            Some(p) => compose(p, &aimed),
-                            None => aimed,
-                        }
+                    // faces its point of interest, its rows on top, all of it
+                    // read in its parent's space.
+                    let context = lumit_core::model::comp_context(&doc, comp, t);
+                    let placed = lumit_core::model::placement(layer, t, &context);
+                    let mut eye = lumit_core::camera::Eye {
+                        position: placed.position,
+                        rotation_deg: placed.rotation_deg,
+                        point_of_interest: None,
                     };
+                    if let Some(space) =
+                        lumit_core::model::parent_space(comp, layer, t, &context, None)
+                    {
+                        eye = space.carry(eye);
+                    }
+                    let own = eye.position;
+                    let poi = light
+                        .two_node
+                        .then(|| {
+                            lumit_core::model::point_of_interest(comp, layer, t, &context, None)
+                        })
+                        .flatten();
+                    let (rx, ry, rz) = eye.rotation_deg;
+                    let m = lumit_render::place_matrix(
+                        (own.0 as f32, own.1 as f32),
+                        (0.0, 0.0),
+                        (100.0, 100.0),
+                        rz as f32,
+                        own.2 as f32,
+                        rx as f32,
+                        ry as f32,
+                    )
+                    .map(|c| c.map(f64::from));
                     let at = apply(&m, (0.0, 0.0, 0.0));
                     reach_to.push(at);
                     reach_to.extend(poi);
