@@ -4195,10 +4195,7 @@ fn handle_requests(
                 }
                 WorkerRequest::RenderItem(req) => render_item(req, state, stream),
                 WorkerRequest::CloseView(view) => {
-                    state.looks.remove(&view);
-                    state.camera_views.remove(&view);
-                    state.stand_ins.retain(|(v, ..)| *v != view);
-                    state.renderer.drop_view_targets(view);
+                    close_view(state, view);
                     Ok(())
                 }
                 WorkerRequest::SetViewerLook {
@@ -4575,9 +4572,19 @@ fn viewed_through(
     std::sync::Arc::new(doc)
 }
 
+/// Let go of everything held for a closed view.
+#[frb(ignore)]
+fn close_view(state: &mut WorkerState, view: u32) {
+    state.looks.remove(&view);
+    state.camera_views.remove(&view);
+    state.names.forget_view(view);
+    state.stand_ins.retain(|(v, ..)| *v != view);
+    state.renderer.drop_view_targets(view);
+}
+
 /// Latch one view's 3D view, the way [`set_prefix`] latches the chip: a
-/// change renames every frame of the comp in that view, so the name memo and
-/// both of its readers start over.
+/// change renames every frame of the comp in that view, so that view's names,
+/// the bar and the fill start over.
 #[frb(ignore)]
 fn set_view(
     state: &mut WorkerState,
@@ -4591,7 +4598,8 @@ fn set_view(
         Some(pose) => state.camera_views.insert(view, pose),
         None => state.camera_views.remove(&view),
     };
-    state.names.clear();
+    state.names.forget_view(view);
+    state.layer_sample = None;
     state.published_bar = None;
     state.fill_exhausted = false;
 }
@@ -6096,6 +6104,67 @@ mod tests {
         assert!(
             std::sync::Arc::ptr_eq(&super::viewed_through(None, None, two.clone()), &two),
             "no view, no copy"
+        );
+    }
+
+    /// **Two views of one comp never trade frames.** With one looking from
+    /// Top and the other through the comp's camera, each names its own frame
+    /// and is served only its own, and closing the Top view lets go of its
+    /// view and its names.
+    #[test]
+    fn two_views_of_one_comp_never_trade_frames() {
+        use crate::api::layer::{camera_view_pose, BridgeCameraView, BridgeLayerSwitch};
+
+        let (project, comp) = project_with_solid_of(4);
+        let layer = {
+            let state = project.state().expect("state");
+            let state = state.read().expect("read");
+            state.store.snapshot().comp(comp).expect("comp").layers[0].id
+        };
+        // 3D, so a camera changes the picture.
+        crate::api::layer::LayerReference::new(project.id, comp, layer)
+            .set_switch(BridgeLayerSwitch::ThreeD, true)
+            .expect("3D");
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        let (document, revision) = {
+            let document = state.project.state().expect("state");
+            let document = document.read().expect("read");
+            (document.store.snapshot(), document.store.revision())
+        };
+        state.renderer.sync_colour(&document);
+        let quality = super::still_quality(1.0);
+        let top = camera_view_pose(BridgeCameraView::Top, 64.0, 32.0).core();
+        super::set_view(&mut state, 1, Some((comp, top)));
+        let name = |state: &mut super::WorkerState, view: u32| {
+            state.set_view_id(view);
+            let document = super::viewed_through(None, state.camera_view(), document.clone());
+            super::frame_name(state, &document, revision, comp, 0, quality).expect("named")
+        };
+
+        let from_top = name(&mut state, 1);
+        let through_camera = name(&mut state, 2);
+        assert_ne!(
+            from_top, through_camera,
+            "Top and the comp's camera are different pictures"
+        );
+        assert_eq!(
+            name(&mut state, 1),
+            from_top,
+            "each view is served its own name"
+        );
+        assert_eq!(name(&mut state, 2), through_camera);
+
+        super::close_view(&mut state, 1);
+        assert!(
+            state.camera_views.is_empty(),
+            "a closed view lets go of its 3D view"
+        );
+        assert_eq!(
+            name(&mut state, 1),
+            through_camera,
+            "and of its names, so the id looks through the comp's camera again"
         );
     }
 
