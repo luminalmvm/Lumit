@@ -1855,8 +1855,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
   /// Write new Positions, in composition pixels: one op a layer for both axes,
   /// and the lot as one undo step. A move, a nudge and an align all land here.
-  /// A z where one is given goes in the same op, keyed at the playhead where
-  /// Position z is keyed.
+  /// A z where one is given goes in the same op, and a keyed value takes a
+  /// key at the playhead, as the 3D handles do.
   void _place(List<(LayerBox, double, double, double?)> moves) {
     if (moves.isEmpty) return;
     var landed = false;
@@ -1872,21 +1872,22 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           // steps: Ctrl+Z put the layer back half way, along one axis, which
           // reads as the undo being broken rather than as two honest edits.
           try {
+            BridgeScalar keyed(BridgeScalar? was, double v) =>
+                scalarWithValueAt(was ?? BridgeScalar.static_(v), v,
+                    widget.comp, widget.uiState.playheadFrame.value);
+            final tf = box.transform;
+            final deep =
+                z != null && tf?.positionZ is! BridgeScalar_Expression;
             box.layer.setTransforms(
               props: [
                 BridgeTransformProp.positionX,
                 BridgeTransformProp.positionY,
-                if (z != null) BridgeTransformProp.positionZ,
+                if (deep) BridgeTransformProp.positionZ,
               ],
               values: [
-                BridgeScalar.static_(x),
-                BridgeScalar.static_(y),
-                if (z != null)
-                  scalarWithValueAt(
-                      box.transform?.positionZ ?? BridgeScalar.static_(z),
-                      z,
-                      widget.comp,
-                      widget.uiState.playheadFrame.value),
+                keyed(tf?.positionX, x),
+                keyed(tf?.positionY, y),
+                if (deep) keyed(tf?.positionZ, z),
               ],
             );
             landed = true;
@@ -2481,7 +2482,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     try {
       // One op for all of it: half of this edit moves the picture, which is
       // the one thing panning behind promises not to do.
-      setPannedBehind(box, anchor);
+      setPannedBehind(box, anchor,
+          comp: widget.comp, frame: widget.uiState.playheadFrame.value);
       widget.onChanged();
     } catch (_) {
       // The layer went away mid-drag.

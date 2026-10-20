@@ -330,8 +330,12 @@ class ViewerStage extends StatelessWidget {
             : textLayerBounds(live),
         // A keyed position has no one value for a body drag to add to; its
         // keys are dragged on the motion path instead. Keyed scale or
-        // rotation likewise grows no handles.
-        draggable: positionStill,
+        // rotation likewise grows no handles. A 3D layer keys at the playhead
+        // instead, as its 3D handles do, unless an expression drives it.
+        draggable: positionStill ||
+            (map.projected &&
+                tf.positionX is! BridgeScalar_Expression &&
+                tf.positionY is! BridgeScalar_Expression),
         // A light is a place, with nothing to scale or turn on the picture.
         scalable: !light &&
             isStill(tf.scaleX) &&

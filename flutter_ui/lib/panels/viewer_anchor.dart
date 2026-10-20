@@ -35,6 +35,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
+import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_tool_cursor.dart';
@@ -131,12 +132,15 @@ Offset wantedAnchorAt(LayerBox box, Offset screen, {Offset? lockFrom}) {
 }
 
 /// Whether a pan-behind on [box] would write over keys or an expression: on
-/// the anchor, on Position, or on Position z where it moves too. Asks the
-/// engine, so it is for a press and never for a build.
+/// the anchor, on Position, or on Position z where it moves too. A 3D layer
+/// keys at the playhead as its handles do, so only an expression stops it.
+/// Asks the engine, so it is for a press and never for a build.
 bool panBehindHitsKeys(LayerBox box) {
   try {
     final tf = box.layer.getTransform();
-    bool keyed(BridgeScalar s) => s is! BridgeScalar_Static;
+    bool keyed(BridgeScalar s) => box.map.projected
+        ? s is BridgeScalar_Expression
+        : s is! BridgeScalar_Static;
     return keyed(tf.anchorX) ||
         keyed(tf.anchorY) ||
         keyed(tf.positionX) ||
@@ -149,9 +153,14 @@ bool panBehindHitsKeys(LayerBox box) {
 }
 
 /// The one op a pan-behind writes: the anchor and Position, with Position z
-/// on a 3D layer that is turned in depth.
-void setPannedBehind(LayerBox box, Offset anchor) {
+/// on a 3D layer that is turned in depth. A keyed value takes a key at
+/// [frame].
+void setPannedBehind(LayerBox box, Offset anchor,
+    {required CompositionReference comp, required int frame}) {
   final (:position, :z) = panBehindFor(box, anchor);
+  final tf = box.layer.getTransform();
+  BridgeScalar at(BridgeScalar was, double v) =>
+      scalarWithValueAt(was, v, comp, frame);
   box.layer.setTransforms(
     props: [
       BridgeTransformProp.anchorX,
@@ -161,11 +170,11 @@ void setPannedBehind(LayerBox box, Offset anchor) {
       if (z != null) BridgeTransformProp.positionZ,
     ],
     values: [
-      BridgeScalar.static_(anchor.dx),
-      BridgeScalar.static_(anchor.dy),
-      BridgeScalar.static_(position.dx),
-      BridgeScalar.static_(position.dy),
-      if (z != null) BridgeScalar.static_(z),
+      at(tf.anchorX, anchor.dx),
+      at(tf.anchorY, anchor.dy),
+      at(tf.positionX, position.dx),
+      at(tf.positionY, position.dy),
+      if (z != null) at(tf.positionZ, z),
     ],
   );
 }
@@ -320,7 +329,8 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
   void _place(LayerBox box, Offset at) {
     final anchor = _wantedAnchor(box, at);
     try {
-      setPannedBehind(box, anchor);
+      setPannedBehind(box, anchor,
+          comp: widget.comp, frame: widget.uiState.playheadFrame.value);
       widget.onChanged();
     } catch (_) {
       // The layer went away between the press and the release.
