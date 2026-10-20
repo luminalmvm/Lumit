@@ -1,0 +1,115 @@
+---
+title: Addons and models
+description: The optional models behind Flow, Depth, Remove background and the Roto brush, and how to install them.
+sidebar:
+  order: 9.9
+---
+
+import Shot from "../../../components/Shot.astro";
+import Clip from "../../../components/Clip.astro";
+
+An **addon** is an optional download: the model runtime, or a model pack. Each pack is one
+trained model that reads your footage and hands back one thing: an in-between frame, a
+depth map, a matte, or the outline of what you clicked. They run on your own graphics card.
+Lumit works without any of them.
+
+<Shot file="models-installed.png" caption="Settings ▸ Addons with the runtime and all five packs installed." eager/>
+
+## What each one is for
+
+| Addon | Size | What it makes | Used by |
+| --- | --- | --- | --- |
+| **Model runtime** | | Nothing on its own. Every pack needs it. | All of them |
+| **RIFE 4.9** | 20 MB | The frame between two real ones. | [Flow](#flow-rife) |
+| **Depth Anything V2 Small** | 94 MB | A depth map from a single frame. | [Depth](#depth) |
+| **Robust Video Matting** | 14 MB | A matte for a person, carried frame to frame. | [Remove background](#remove-background) |
+| **BiRefNet Lite** | 214 MB | A matte for the main subject of a frame. | [Remove background](#remove-background) |
+| **SAM 2.1 Hiera Tiny** | 111 MB | The outline of the thing you click on. | [Roto brush](#roto-brush) |
+
+Every addon is an analysis model. Nothing generative is listed.
+
+## Install them
+
+**1. Open Edit ▸ Settings… ▸ Addons.** Nothing is installed yet.
+
+**2. Press Check for addons.** Lumit fetches the catalogue. This button is the only time it
+looks. Each pack lists its licence and size, and reads **Needs the runtime** until the
+runtime is in.
+
+<Shot file="models-catalogue.png" caption="The catalogue, before the runtime is installed."/>
+
+**3. Install the Model runtime.** Press **Install** on its row.
+
+**4. Install the packs you want.** Each download is checked against its published hash
+before Lumit uses it.
+
+**5. Press Load now**, or leave the runtime to load the first time an effect asks for it.
+The line under it names the graphics provider it is running on.
+
+**Install from file** installs a pack from an `addon.json` with its files beside it, for a
+machine with no network. **Where they are kept ▸ Show** opens the folder. **Remove** on a
+row deletes that addon. **Licence** opens its licence in the browser.
+
+Without the pack it needs, an effect wears a badge naming the pack and leaves the picture
+alone.
+
+## Where they are used
+
+### Flow: RIFE
+
+[Flow](/use/retime/#frames-in-between) makes the frames between real ones when a layer is
+slowed down. Turn it on with the **Flow** switch in the layer's **Modes** column, or
+**Layer ▸ Flow**, then set **Engine** in its **Flow** group to **RIFE**.
+
+<Clip name="addons-rife" caption="Engine set to RIFE on a shot slowed to 25%, then played through."/>
+
+The Flow group is in the layer's rows in the Timeline, and in Effect controls while
+**Settings ▸ Timeline ▸ Transform in Effect controls** is on.
+
+A machine without RIFE previews the layer with the built-in engine and says so on the row.
+An export of that layer is **refused**.
+
+### Depth
+
+**Effect ▸ Utility ▸ [Depth](/effects/utility/depth/)**, then **Analyse**. The shot is read
+once, in the background, and nearer is brighter.
+
+<Shot file="models-depth.jpg" caption="Depth on the whole shot, read by DirectML."/>
+
+Point a [Depth of field](/effects/blur-sharpen/depth-of-field/)'s Matte row, a **Set matte**
+or a track matte at the layer to use it.
+
+### Remove background
+
+**Effect ▸ Utility ▸ [Remove background](/effects/utility/remove-background/)**, then
+**Analyse**. **Model** picks the pack:
+
+- **Robust Video Matting** for a person in video. **Detail** sets **Portrait** or **Full
+  body**.
+- **BiRefNet** for the main subject, whatever it is, a frame at a time.
+
+<Shot file="models-remove-background.jpg" caption="Remove background with BiRefNet, and the Model list open."/>
+
+**View** shows the cut-out or the matte. Another layer reads the matte through its Matte
+row, a **Set matte** or a track matte.
+
+### Roto brush
+
+Set **Seed from** on the [Roto brush](/effects/utility/roto-brush/) to **Segment**. Pick the
+**Roto brush** tool (`Alt+W`) and click the subject on the base frame. Each click refines
+the outline, and `Alt`-click marks what is not the subject. Then press **Propagate**.
+
+<Shot file="models-roto.jpg" caption="Three clicks on the runner, propagated through the shot. View is Boundary."/>
+
+Without SAM 2.1, a propagation seeded by **Segment** is **refused**.
+
+## Licences
+
+Each pack keeps its own licence, named on its row. BiRefNet's weights are trained on
+DIS5K, whose terms are non-commercial.
+
+## Related
+
+- [Settings](/use/settings/#addons)
+- [Retime](/use/retime/)
+- [Cutting out a subject with the Roto brush](/tutorials/roto-brush/)
