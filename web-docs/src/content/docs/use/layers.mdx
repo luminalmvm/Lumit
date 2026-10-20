@@ -216,7 +216,9 @@ Shadows. An After Effects project's shadow settings are kept with it.
 ## Parenting
 
 Parent a layer to another and it inherits the parent's transform and can apply its own
-on top of them.
+on top of them. Cameras and lights follow their parents too. A two-node camera's point of
+interest is read in the parent's space, as its position is. A parent's scale moves a camera
+or a light but never stretches or mirrors it.
 
 ## Related
 

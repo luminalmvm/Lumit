@@ -79,7 +79,12 @@ pub fn from_after_effects(
     near: (f64, f64, f64),
 ) -> (f64, f64, f64) {
     let ae = |deg: (f64, f64, f64)| mul(&mul(&rot_x(deg.0), &rot_y(deg.1)), &rot_z(deg.2));
-    let one = euler_yxz(&mul(&ae(orientation), &ae(rotation)));
+    nearest_turn(euler_yxz(&mul(&ae(orientation), &ae(rotation))), near)
+}
+
+/// `one`, or the other way of writing the same turn in Lumit's order,
+/// whichever is nearer `near` once both are wound on by whole turns.
+fn nearest_turn(one: (f64, f64, f64), near: (f64, f64, f64)) -> (f64, f64, f64) {
     let other = (180.0 - one.0, one.1 + 180.0, one.2 + 180.0);
     let wound = |v: (f64, f64, f64)| {
         let wind = |a: f64, n: f64| a - ((a - n) / 360.0).round() * 360.0;
@@ -148,6 +153,91 @@ pub fn eye_behind(pivot: (f64, f64, f64), deg: (f64, f64, f64), distance: f64) -
         pivot.1 - f.1 * distance,
         pivot.2 - f.2 * distance,
     )
+}
+
+/// A camera's or a light's own values: the eye, the rotation rows and, on a
+/// two-node camera, the point of interest. All of them are read in the parent's
+/// space, the point of interest too, as After Effects reads them.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Eye {
+    pub position: (f64, f64, f64),
+    pub rotation_deg: (f64, f64, f64),
+    pub point_of_interest: Option<(f64, f64, f64)>,
+}
+
+/// How a camera or a light is read in a parent's space, which has no turn
+/// of its own to give it when the parent is stretched.
+impl Place {
+    /// A turn made in this space, as the comp sees it. A camera has no scale,
+    /// so a stretched space is squared up, forward first: the camera still
+    /// looks exactly where the stretched space says, and only its up is
+    /// nudged square to that.
+    #[must_use]
+    pub fn turn(&self, deg: (f64, f64, f64)) -> (f64, f64, f64) {
+        let m = mul(&self.m, &rotation(deg));
+        let unit = |v: (f64, f64, f64)| {
+            let len = (v.0 * v.0 + v.1 * v.1 + v.2 * v.2).sqrt();
+            (len > 1e-12).then(|| (v.0 / len, v.1 / len, v.2 / len))
+        };
+        let dot = |a: (f64, f64, f64), b: (f64, f64, f64)| a.0 * b.0 + a.1 * b.1 + a.2 * b.2;
+        let Some(f) = unit((m[0][2], m[1][2], m[2][2])) else {
+            return deg;
+        };
+        let up = (m[0][1], m[1][1], m[2][1]);
+        let along = dot(up, f);
+        let Some(u) = unit((up.0 - f.0 * along, up.1 - f.1 * along, up.2 - f.2 * along)) else {
+            return deg;
+        };
+        let r = (
+            u.1 * f.2 - u.2 * f.1,
+            u.2 * f.0 - u.0 * f.2,
+            u.0 * f.1 - u.1 * f.0,
+        );
+        let squared = [[r.0, u.0, f.0], [r.1, u.1, f.1], [r.2, u.2, f.2]];
+        nearest_turn(euler_yxz(&squared), deg)
+    }
+
+    /// A camera or light's own values carried through this space: where it
+    /// is in the comp from its values in a parent's space, or, through an
+    /// inverse, the other way. A two-node camera is aimed on both sides, and
+    /// its rows stay what is added on top of the aim.
+    #[must_use]
+    pub fn carry(&self, eye: Eye) -> Eye {
+        let position = self.point(eye.position);
+        let Some(poi) = eye.point_of_interest else {
+            return Eye {
+                position,
+                rotation_deg: self.turn(eye.rotation_deg),
+                point_of_interest: None,
+            };
+        };
+        let aimed = look_at(eye.position, poi, eye.rotation_deg).unwrap_or(eye.rotation_deg);
+        let point_of_interest = self.point(poi);
+        let total = self.turn(aimed);
+        let rotation_deg = match look_at(position, point_of_interest, (0.0, 0.0, 0.0)) {
+            Some(aim) => {
+                let a = rotation(aim);
+                let at = [0, 1, 2].map(|r| [0, 1, 2].map(|c| a[c][r]));
+                nearest_turn(euler_yxz(&mul(&at, &rotation(total))), eye.rotation_deg)
+            }
+            None => total,
+        };
+        Eye {
+            position,
+            rotation_deg,
+            point_of_interest: Some(point_of_interest),
+        }
+    }
+
+    /// A camera pose seen in this space, as the comp sees it.
+    #[must_use]
+    pub fn pose(&self, pose: CameraPose) -> CameraPose {
+        CameraPose {
+            position: self.point(pose.position),
+            rotation_deg: self.turn(pose.rotation_deg),
+            ..pose
+        }
+    }
 }
 
 /// The After Effects focal lengths the settings dialog offers, millimetres.

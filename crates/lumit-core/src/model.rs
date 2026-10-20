@@ -2599,15 +2599,30 @@ pub struct CameraDof {
     pub blur_level: f64,
 }
 
-/// One Camera layer's placement at comp time `t`, from its own properties.
-/// `None` when `layer` is not a Camera.
+/// One Camera layer's placement at comp time `t`, from its own properties,
+/// each read by `read`. `None` when `layer` is not a Camera.
 #[must_use]
-pub fn stored_camera_pose(layer: &Layer, t: f64) -> Option<CameraPose> {
-    stored_camera_pose_lt(layer, crate::time::layer_time(t, layer.start_offset.0))
+pub fn stored_camera_pose(layer: &Layer, read: &Read<'_>) -> Option<CameraPose> {
+    let LayerKind::Camera { zoom, options, .. } = &layer.kind else {
+        return None;
+    };
+    let at = |p: &Property| read(layer, p);
+    // The eye and the turn, a two-node camera's aim in it, as its children see it.
+    let own = placement(layer, read);
+    Some(CameraPose {
+        zoom: at(zoom),
+        position: own.position,
+        rotation_deg: own.rotation_deg,
+        dof: options.depth_of_field.then(|| CameraDof {
+            focus_distance: at(&options.focus_distance),
+            aperture: at(&options.aperture),
+            blur_level: at(&options.blur_level),
+        }),
+    })
 }
 
 /// [`stored_camera_pose`] at a **layer** time, which is the clock every property
-/// is actually evaluated at.
+/// is actually evaluated at, with no document behind its expressions.
 ///
 /// Split out because the correction lane's zero is captured at layer
 /// time nought — a fixed moment of the layer's own clock, so moving the layer
@@ -2719,14 +2734,22 @@ impl Composition {
     }
 
     /// The active camera's placement at comp time `t`, read off its **own**
-    /// stored properties at its layer time. None with no camera layer.
+    /// stored properties at its layer time and carried out of its parent's
+    /// space. None with no camera layer.
     ///
     /// A camera carrying a solve link derives its placement from the tracked
     /// layer instead ([`crate::track::camera_pose_at`]); this answers
-    /// what the document itself holds, which is what the link's fallback reads
-    /// and what **Convert to keyframes** writes back.
+    /// what the document itself holds, which is what the link's fallback reads.
+    ///
+    /// No document is to hand here, so expressions that read another layer
+    /// don't work; the render reads [`crate::track::camera_pose_at`].
     pub fn camera_pose(&self, t: f64) -> Option<CameraPose> {
-        self.active_camera(t).and_then(|l| stored_camera_pose(l, t))
+        let camera = self.active_camera(t)?;
+        let context = timed_context(self, t);
+        let read = context_reader(&context, t);
+        let pose = stored_camera_pose(camera, &read)?;
+        let space = parent_space(self, camera, t, &read, None);
+        Some(space.map_or(pose, |space| space.pose(pose)))
     }
 
     /// How many comp pixels make a metre at comp time `t`: the active
@@ -2747,7 +2770,10 @@ impl Composition {
     /// spends its slots on the ones nearest the top, the same rule the layer
     /// stack uses everywhere else. A light switched off is not a light, exactly
     /// as a layer switched off is not on the picture.
-    pub fn lights_at(&self, t: f64) -> Vec<ResolvedLight> {
+    ///
+    /// `read` reads their properties and their parents', and with `solves` a
+    /// light on a solved camera follows the solve.
+    pub fn lights_at(&self, t: f64, read: &Read<'_>, solves: Solves<'_>) -> Vec<ResolvedLight> {
         self.layers
             .iter()
             .filter_map(|l| {
@@ -2758,38 +2784,26 @@ impl Composition {
                     return None;
                 }
                 let lt = crate::time::layer_time(t, l.start_offset.0);
-                let tr = &l.transform;
                 // Negative, as in After Effects, takes light away.
                 let gain = (light.intensity.value_at(lt) / 100.0) as f32;
                 let tint = light
                     .colour
                     .each_ref()
                     .map(|c| (c.value_at(lt) as f32).max(0.0));
-                let position = (
-                    tr.position_x.value_at(lt),
-                    tr.position_y.value_at(lt),
-                    tr.position_z.value_at(lt),
-                );
-                let stored = (
-                    tr.rotation_x.value_at(lt),
-                    tr.rotation_y.value_at(lt),
-                    tr.rotation.value_at(lt),
-                );
-                // An aimed light faces its point of interest and the rows add
-                // on top, exactly as a two-node camera does.
-                let (rx, ry, rz) = if light.two_node {
-                    let poi = (
-                        light.point_of_interest[0].value_at(lt),
-                        light.point_of_interest[1].value_at(lt),
-                        light.point_of_interest[2].value_at(lt),
-                    );
-                    crate::camera::look_at(position, poi, stored).unwrap_or(stored)
-                } else {
-                    stored
+                // An aimed light's turn is its aim with the rows on top, as a
+                // two-node camera's is, and both are read in the parent's space.
+                let own = placement(l, read);
+                let mut eye = crate::camera::Eye {
+                    position: own.position,
+                    rotation_deg: own.rotation_deg,
+                    point_of_interest: None,
                 };
+                if let Some(space) = parent_space(self, l, t, read, solves) {
+                    eye = space.carry(eye);
+                }
                 Some(ResolvedLight {
                     kind: light.kind,
-                    position: (position.0, position.1),
+                    position: (eye.position.0, eye.position.1),
                     colour: tint.map(|c| c * gain),
                     tint,
                     gain,
@@ -2803,15 +2817,15 @@ impl Composition {
                         _ => (0.0, 0.0),
                     },
                     cone_deg: (light.cone_angle.value_at(lt) / 2.0).clamp(0.0, 180.0),
-                    rotation_deg: rz,
+                    rotation_deg: eye.rotation_deg.2,
                     cone_feather: light.cone_feather.value_at(lt).clamp(0.0, 100.0),
                     falloff: light.falloff,
                     radius_px: light.radius_px.value_at(lt).max(0.0),
                     falloff_px: light.falloff_px.value_at(lt).max(0.0),
                     legacy_shape: light.legacy_shape,
-                    z: position.2,
-                    rotation_x_deg: rx,
-                    rotation_y_deg: ry,
+                    z: eye.position.2,
+                    rotation_x_deg: eye.rotation_deg.0,
+                    rotation_y_deg: eye.rotation_deg.1,
                 })
             })
             .collect()
@@ -3372,6 +3386,236 @@ pub fn layer_parent_chain(comp: &Composition, layer: Uuid) -> Vec<Uuid> {
         current = parent;
     }
     chain
+}
+
+/// One layer's placement at comp time `t`, read the way the compositor places
+/// it and the way it places the layer's children.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Placement {
+    pub position: (f64, f64, f64),
+    pub anchor: (f64, f64),
+    pub scale: (f64, f64),
+    /// Degrees about x, y and z, the compositor's `Ry · Rx · Rz`.
+    pub rotation_deg: (f64, f64, f64),
+}
+
+impl Placement {
+    #[must_use]
+    pub fn place(&self) -> crate::camera::Place {
+        crate::camera::place(self.position, self.anchor, self.scale, self.rotation_deg)
+    }
+}
+
+/// How a property is read: its value at its layer's own time, whatever runs
+/// its expression. The compositor, the frame cache and expressions each hand
+/// the parent walk their own.
+pub type Read<'a> = dyn Fn(&Layer, &Property) -> f64 + 'a;
+
+/// A camera solve store, with the document a solved camera is read against.
+pub type Solves<'a> = Option<(&'a Arc<Document>, &'a dyn crate::track::CameraSolveStore)>;
+
+/// Reads properties at comp time `t` the way the renderer does: an expression
+/// runs under `context` with its own layer as `layer()`.
+pub fn context_reader(
+    context: &Arc<ExpressionContext>,
+    t: f64,
+) -> impl Fn(&Layer, &Property) -> f64 + '_ {
+    // The last layer's context, kept: a layer's properties are read together.
+    let held: std::cell::RefCell<Option<Arc<ExpressionContext>>> = std::cell::RefCell::new(None);
+    move |layer, property| {
+        let lt = crate::time::layer_time(t, layer.start_offset.0);
+        if !matches!(property.animation, crate::anim::Animation::Expression(_)) {
+            return property.value_at(lt);
+        }
+        let own = {
+            let mut held = held.borrow_mut();
+            match held.as_ref().filter(|c| c.layer == Some(layer.id)) {
+                Some(own) => own.clone(),
+                None => {
+                    let own = Arc::new(ExpressionContext {
+                        layer: Some(layer.id),
+                        ..(**context).clone()
+                    });
+                    *held = Some(own.clone());
+                    own
+                }
+            }
+        };
+        property.value_at_with_context(lt, own)
+    }
+}
+
+/// `layer`'s placement, each property read by `read`.
+///
+/// A 2D layer counts its hidden z and X/Y Rotation as 0. A camera or a light
+/// has no anchor or scale (an imported one keeps After Effects' point of
+/// interest in its anchor), and a two-node camera or light is turned by its
+/// aim, so what is parented to it turns with it.
+#[must_use]
+pub fn placement(layer: &Layer, read: &Read<'_>) -> Placement {
+    let eye = matches!(
+        layer.kind,
+        LayerKind::Camera { .. } | LayerKind::Light { .. }
+    );
+    let flat = !layer.switches.three_d && !eye;
+    let at = |p: &Property| read(layer, p);
+    let hidden = |p: &Property| if flat { 0.0 } else { at(p) };
+    let tr = &layer.transform;
+    let mut out = Placement {
+        position: (
+            at(&tr.position_x),
+            at(&tr.position_y),
+            hidden(&tr.position_z),
+        ),
+        anchor: (at(&tr.anchor_x), at(&tr.anchor_y)),
+        scale: (at(&tr.scale_x), at(&tr.scale_y)),
+        rotation_deg: (
+            hidden(&tr.rotation_x),
+            hidden(&tr.rotation_y),
+            at(&tr.rotation),
+        ),
+    };
+    if eye {
+        out.anchor = (0.0, 0.0);
+        out.scale = (100.0, 100.0);
+    }
+    let aim = match &layer.kind {
+        LayerKind::Camera { options, .. } if options.two_node => Some(&options.point_of_interest),
+        LayerKind::Light { light } if light.two_node => Some(&light.point_of_interest),
+        _ => None,
+    };
+    if let Some(poi) = aim {
+        let [x, y, z] = poi.each_ref().map(at);
+        out.rotation_deg = crate::camera::look_at(out.position, (x, y, z), out.rotation_deg)
+            .unwrap_or(out.rotation_deg);
+    }
+    out
+}
+
+/// What a layer's expressions in `comp` read at comp time `t`, the whole
+/// document behind them.
+#[must_use]
+pub fn comp_context(doc: &Arc<Document>, comp: &Composition, t: f64) -> Arc<ExpressionContext> {
+    Arc::new(ExpressionContext {
+        document: doc.clone(),
+        comp: Some(comp.id),
+        layer: None,
+        comp_time: t,
+        current_depth: 0,
+        inputs: None,
+    })
+}
+
+/// What a layer's expressions read at comp time `t` when there is no document
+/// to hand: `time`, `value` and `wiggle` work, other layers do not.
+#[must_use]
+pub fn timed_context(comp: &Composition, t: f64) -> Arc<ExpressionContext> {
+    Arc::new(ExpressionContext {
+        comp: Some(comp.id),
+        comp_time: t,
+        ..ExpressionContext::detached()
+    })
+}
+
+/// The placements of `layer`'s parents at comp time `t`, outermost first. The
+/// one parent walk the compositor, the frame cache, expressions, cameras and
+/// lights all read.
+///
+/// With `solves`, a solved camera among the parents is placed by its solve, so
+/// what is parented to it follows the shot.
+#[must_use]
+pub fn parent_placements(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> Vec<(Uuid, Placement)> {
+    if layer.parent.is_none() {
+        return Vec::new();
+    }
+    let chain = layer_parent_chain(comp, layer.id);
+    let ancestors = chain
+        .iter()
+        .rev()
+        .filter_map(|id| comp.layers.iter().find(|l| l.id == *id));
+    ancestors
+        .map(|a| (a.id, parent_placement(comp, a, t, read, solves)))
+        .collect()
+}
+
+/// `layer`'s placement as a parent: a solved camera is placed by its solve.
+fn parent_placement(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> Placement {
+    let mut p = placement(layer, read);
+    let solved = matches!(
+        layer.kind,
+        LayerKind::Camera {
+            solve_link: Some(_),
+            ..
+        }
+    );
+    if let Some((doc, store)) = solves.filter(|_| solved) {
+        if let Some(own) = crate::track::own_camera_pose_of(doc, comp, layer, t, store) {
+            p.position = own.pose.position;
+            p.rotation_deg = own.pose.rotation_deg;
+        }
+    }
+    p
+}
+
+/// The space `layer`'s parents put it in at comp time `t`. `None` with no
+/// parent. What a camera and a light are read in.
+#[must_use]
+pub fn parent_space(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> Option<crate::camera::Place> {
+    let mut placements = parent_placements(comp, layer, t, read, solves).into_iter();
+    let first = placements.next()?.1.place();
+    Some(placements.fold(first, |outer, (_, p)| p.place().within(&outer)))
+}
+
+/// Where camera or light `layer`'s point of interest sits in the comp at comp
+/// time `t`, read in its parent's space like the eye. `None` on any other kind.
+#[must_use]
+pub fn point_of_interest(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> Option<(f64, f64, f64)> {
+    let poi = match &layer.kind {
+        LayerKind::Camera { options, .. } => &options.point_of_interest,
+        LayerKind::Light { light } => &light.point_of_interest,
+        _ => return None,
+    };
+    let [x, y, z] = poi.each_ref().map(|p| read(layer, p));
+    let space = parent_space(comp, layer, t, read, solves);
+    Some(space.map_or((x, y, z), |space| space.point((x, y, z))))
+}
+
+/// The space `layer`'s own children are read in at comp time `t`, its parents
+/// and all.
+#[must_use]
+pub fn layer_space(
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    read: &Read<'_>,
+    solves: Solves<'_>,
+) -> crate::camera::Place {
+    let own = parent_placement(comp, layer, t, read, solves).place();
+    parent_space(comp, layer, t, read, solves).map_or(own, |outer| own.within(&outer))
 }
 
 /// Would pointing `layer`'s parent at `new_parent` form a cycle — either a

@@ -45,6 +45,8 @@
 //! to [`CameraSolveStore`], so the model half is complete and testable now with
 //! a written-down solve standing in for a real one.
 
+use std::sync::Arc;
+
 use uuid::Uuid;
 
 use crate::anim::{Animation, Keyframe, SideInterp};
@@ -144,7 +146,7 @@ const MAX_NESTING: u32 = 16;
 /// what stage 2 replaces by threading the real store.
 #[must_use]
 pub fn camera_pose_at(
-    doc: &Document,
+    doc: &Arc<Document>,
     comp: &Composition,
     t: f64,
     store: &dyn CameraSolveStore,
@@ -164,32 +166,65 @@ pub fn use_solve_store(store: &'static (dyn CameraSolveStore + Sync)) {
     let _ = SOLVES.set(store);
 }
 
-/// The active camera's placement at comp time `t` as the picture is drawn
-/// with it, its solve link followed. The one reading the renderer and
-/// expressions both take.
-#[must_use]
-pub fn active_camera_pose(doc: &Document, comp: &Composition, t: f64) -> Option<CameraPose> {
-    match SOLVES.get() {
-        Some(store) => camera_pose_at(doc, comp, t, *store).map(|linked| linked.pose),
-        // The renderer hands its store over the first time it reads a solve,
-        // so until then nothing has been solved. That is `camera_pose_at`
-        // with an empty store exactly: a link with nothing to follow reads
-        // the stored pose. Keep the two arms equal when either changes.
-        None => comp.camera_pose(t),
+/// The renderer's solves, once it has handed them over.
+pub(crate) fn solve_store() -> Option<&'static dyn CameraSolveStore> {
+    SOLVES.get().map(|store| *store as &dyn CameraSolveStore)
+}
+
+/// Nothing solved yet: a link with nothing to follow reads the stored pose.
+struct Unsolved;
+
+impl CameraSolveStore for Unsolved {
+    fn solved_range(&self, _media: Uuid) -> Option<SolvedRange> {
+        None
+    }
+    fn solved_pose(&self, _media: Uuid, _frame: i64) -> Option<CameraPose> {
+        None
     }
 }
 
-/// One named Camera layer's placement at comp time `t`, whether or not it is
-/// the active one — what the bake walks, frame by frame.
+/// The active camera's placement at comp time `t` as the picture is drawn
+/// with it, its solve link and its parents followed. The one reading the
+/// renderer and expressions both take.
+#[must_use]
+pub fn active_camera_pose(doc: &Arc<Document>, comp: &Composition, t: f64) -> Option<CameraPose> {
+    // The renderer hands its store over the first time it reads a solve, so
+    // until then nothing has been solved.
+    let store = solve_store().unwrap_or(&Unsolved);
+    camera_pose_at(doc, comp, t, store).map(|linked| linked.pose)
+}
+
+/// One named Camera layer's placement in the comp at comp time `t`, whether
+/// or not it is the active one, carried out of its parent's space.
 #[must_use]
 pub fn camera_pose_of(
-    doc: &Document,
+    doc: &Arc<Document>,
     comp: &Composition,
     layer: &Layer,
     t: f64,
     store: &dyn CameraSolveStore,
 ) -> Option<LinkedPose> {
-    let stored = stored_camera_pose(layer, t)?;
+    let mut linked = own_camera_pose_of(doc, comp, layer, t, store)?;
+    let context = crate::model::comp_context(doc, comp, t);
+    let read = crate::model::context_reader(&context, t);
+    if let Some(space) = crate::model::parent_space(comp, layer, t, &read, Some((doc, store))) {
+        linked.pose = space.pose(linked.pose);
+    }
+    Some(linked)
+}
+
+/// [`camera_pose_of`] in the camera's own values, before its parent: what the
+/// bake walks, frame by frame, and writes back.
+#[must_use]
+pub fn own_camera_pose_of(
+    doc: &Arc<Document>,
+    comp: &Composition,
+    layer: &Layer,
+    t: f64,
+    store: &dyn CameraSolveStore,
+) -> Option<LinkedPose> {
+    let context = crate::model::comp_context(doc, comp, t);
+    let stored = stored_camera_pose(layer, &crate::model::context_reader(&context, t))?;
     let LayerKind::Camera {
         solve_link,
         correction_base,
@@ -525,13 +560,13 @@ pub fn tracked_layer(comp: &Composition) -> Option<Uuid> {
 /// transforms go back, then the link, which re-derives the base it had.
 ///
 /// Deterministic: the frames come from the comp's own rate, the poses from the
-/// same [`camera_pose_of`] the render reads, and a frame the link cannot
+/// same [`own_camera_pose_of`] the render reads, and a frame the link cannot
 /// resolve bakes the same fallback the render would have shown. `None` when
 /// `camera` is not a Camera layer in `comp`, when it carries no link, or when
 /// its span holds no frames.
 #[must_use]
 pub fn bake_solve_link(
-    doc: &Document,
+    doc: &Arc<Document>,
     comp: Uuid,
     camera: Uuid,
     store: &dyn CameraSolveStore,
@@ -557,7 +592,7 @@ pub fn bake_solve_link(
     let mut keys: [Vec<Keyframe>; 7] = Default::default();
     for n in first..last {
         let ct = rate.time_of_frame(n).ok()?;
-        let pose = camera_pose_of(doc, c, layer, ct.0.to_f64(), store)?.pose;
+        let pose = own_camera_pose_of(doc, c, layer, ct.0.to_f64(), store)?.pose;
         // Keyframe times are LAYER time, which is what every property is
         // evaluated at — the same subtraction `stored_camera_pose` makes.
         let time = ct.0.checked_sub(layer.start_offset.0).ok()?;
@@ -1166,7 +1201,7 @@ mod tests {
         let store = Synthetic::new(media);
 
         // Half speed: comp frame 10 is 1/3 s, source 1/6 s, solved frame 5.
-        let got = camera_pose_at(&doc, &c, 10.0 / 30.0, &store).unwrap();
+        let got = camera_pose_at(&Arc::new(doc.clone()), &c, 10.0 / 30.0, &store).unwrap();
         assert_eq!(got.state, LinkState::Derived);
         assert_eq!(got.pose, Synthetic::pose(5));
 
@@ -1174,7 +1209,8 @@ mod tests {
         // solved frame 15 — and it is a *derived* read, not a held one. The
         // solve has that frame; the retime simply keeps asking for it.
         for n in [31, 40, 59] {
-            let got = camera_pose_at(&doc, &c, f64::from(n) / 30.0, &store).unwrap();
+            let got =
+                camera_pose_at(&Arc::new(doc.clone()), &c, f64::from(n) / 30.0, &store).unwrap();
             assert_eq!(got.state, LinkState::Derived, "frame {n}");
             assert_eq!(got.pose, Synthetic::pose(15), "frame {n}");
         }
@@ -1203,7 +1239,7 @@ mod tests {
         let doc = document(vec![inner, outer.clone()]);
         let store = Synthetic::new(media);
 
-        let got = camera_pose_at(&doc, &outer, 20.0 / 30.0, &store).unwrap();
+        let got = camera_pose_at(&Arc::new(doc.clone()), &outer, 20.0 / 30.0, &store).unwrap();
         assert_eq!(got.state, LinkState::Derived);
         assert_eq!(got.pose, Synthetic::pose(10));
 
@@ -1217,7 +1253,9 @@ mod tests {
         let outer = comp("outer", vec![camera(Some(lone.id)), lone]);
         let doc = document(vec![bare, outer.clone()]);
         assert_eq!(
-            camera_pose_at(&doc, &outer, 0.0, &store).unwrap().state,
+            camera_pose_at(&Arc::new(doc.clone()), &outer, 0.0, &store)
+                .unwrap()
+                .state,
             LinkState::Unresolved
         );
     }
@@ -1234,12 +1272,12 @@ mod tests {
         let doc = document(vec![c.clone()]);
 
         // Three seconds in is past the sixty solved frames: the last one holds.
-        let got = camera_pose_at(&doc, &c, 3.0, &Synthetic::new(media)).unwrap();
+        let got = camera_pose_at(&Arc::new(doc.clone()), &c, 3.0, &Synthetic::new(media)).unwrap();
         assert_eq!(got.state, LinkState::Held);
         assert_eq!(got.pose, Synthetic::pose(59));
 
         // Nothing solved at all: the document's own numbers, flagged.
-        let got = camera_pose_at(&doc, &c, 0.0, &Empty).unwrap();
+        let got = camera_pose_at(&Arc::new(doc.clone()), &c, 0.0, &Empty).unwrap();
         assert_eq!(got.state, LinkState::Unresolved);
         assert_eq!(got.pose.zoom, 777.0);
 
@@ -1248,7 +1286,7 @@ mod tests {
         orphan.layers.retain(|l| l.id != footage_id);
         let doc = document(vec![orphan.clone()]);
         assert_eq!(
-            camera_pose_at(&doc, &orphan, 0.0, &Synthetic::new(media))
+            camera_pose_at(&Arc::new(doc.clone()), &orphan, 0.0, &Synthetic::new(media))
                 .unwrap()
                 .state,
             LinkState::Unresolved
@@ -1257,9 +1295,14 @@ mod tests {
         // A camera with no link is none of those.
         let plain = comp("plain", vec![camera(None)]);
         assert_eq!(
-            camera_pose_at(&document(vec![plain.clone()]), &plain, 0.0, &Empty)
-                .unwrap()
-                .state,
+            camera_pose_at(
+                &Arc::new(document(vec![plain.clone()])),
+                &plain,
+                0.0,
+                &Empty
+            )
+            .unwrap()
+            .state,
             LinkState::Unlinked
         );
     }
@@ -1289,7 +1332,7 @@ mod tests {
         // Uncorrected, the derived pose is the solve exactly.
         let at = |doc: &Document, n: i64| {
             let c = doc.comp(comp_id).unwrap();
-            camera_pose_at(doc, c, n as f64 / 30.0, &store).unwrap()
+            camera_pose_at(&Arc::new(doc.clone()), c, n as f64 / 30.0, &store).unwrap()
         };
         assert_eq!(at(&doc, 10).pose, Synthetic::pose(10));
 
@@ -1352,7 +1395,7 @@ mod tests {
         // Unresolved: nothing is being corrected, so the numbers are read as a
         // pose. The camera keeps drawing from where it was put.
         let c = doc.comp(comp_id).unwrap();
-        let lost = camera_pose_at(&doc, c, 0.0, &Empty).unwrap();
+        let lost = camera_pose_at(&Arc::new(doc.clone()), c, 0.0, &Empty).unwrap();
         assert_eq!(lost.state, LinkState::Unresolved);
         assert_eq!(lost.pose.position.0, base.position.0 + 40.0);
         assert_eq!(lost.pose.zoom, base.zoom + 7.0);
@@ -1527,7 +1570,7 @@ mod tests {
         let want: Vec<CameraPose> = (0..120)
             .map(|n| {
                 let c = doc.comp(comp_id).unwrap();
-                camera_pose_at(&doc, c, f64::from(n) / 30.0, &store)
+                camera_pose_at(&Arc::new(doc.clone()), c, f64::from(n) / 30.0, &store)
                     .unwrap()
                     .pose
             })
@@ -1539,7 +1582,8 @@ mod tests {
         assert_eq!(want[..60], (0..60).map(Synthetic::pose).collect::<Vec<_>>());
         assert!(want[60..].iter().all(|p| *p == Synthetic::pose(59)));
 
-        let bake = bake_solve_link(&doc, comp_id, cam_id, &store).expect("there is a link to bake");
+        let bake = bake_solve_link(&Arc::new(doc.clone()), comp_id, cam_id, &store)
+            .expect("there is a link to bake");
         assert!(
             matches!(&bake, Op::Batch { ops } if ops.len() == 8),
             "one batch: the link, six transform tracks and the zoom"

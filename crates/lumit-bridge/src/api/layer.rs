@@ -2656,6 +2656,17 @@ impl BridgeCameraPose {
     }
 }
 
+/// A camera's pose and the point it is aimed at, what the camera tools drag.
+/// The point means something only on a two-node camera.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BridgeCameraAim {
+    pub pose: BridgeCameraPose,
+    pub poi_x: f64,
+    pub poi_y: f64,
+    pub poi_z: f64,
+}
+
 /// The Viewer's fixed 3D views ([`lumit_core::camera::View`]).
 #[frb(non_opaque)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

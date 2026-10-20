@@ -25,7 +25,7 @@ part 'layer.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// Where a fixed view looks from, for a comp of this size
@@ -190,6 +190,36 @@ enum BridgeBrushShape {
   /// A square with flat sides and square corners.
   square,
   ;
+}
+
+/// A camera's pose and the point it is aimed at, what the camera tools drag.
+/// The point means something only on a two-node camera.
+class BridgeCameraAim {
+  final BridgeCameraPose pose;
+  final double poiX;
+  final double poiY;
+  final double poiZ;
+
+  const BridgeCameraAim({
+    required this.pose,
+    required this.poiX,
+    required this.poiY,
+    required this.poiZ,
+  });
+
+  @override
+  int get hashCode =>
+      pose.hashCode ^ poiX.hashCode ^ poiY.hashCode ^ poiZ.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeCameraAim &&
+          runtimeType == other.runtimeType &&
+          pose == other.pose &&
+          poiX == other.poiX &&
+          poiY == other.poiY &&
+          poiZ == other.poiZ;
 }
 
 /// The seven animatable channels a Camera layer has beyond its transform.
@@ -2783,13 +2813,30 @@ class LayerReference {
         that: this,
       );
 
-  /// This camera's evaluated placement at `frame`: the eye, the effective
-  /// rotation with a two-node camera's aim already in it, and the zoom, with
-  /// a solve link followed (docs/impl/camera.md §2). What the camera tools
-  /// start a drag from. `None` on any other kind.
-  BridgeCameraPose? cameraPoseAt({required BigInt frame}) =>
+  /// This camera's evaluated placement in the comp at `frame`: the eye, the
+  /// effective rotation with a two-node camera's aim already in it, and the
+  /// zoom, with a solve link and its parents followed (docs/impl/camera.md
+  /// §2). The point of interest comes out of the parent's space the same way.
+  /// What the camera tools start a drag from. `None` on any other kind.
+  BridgeCameraAim? cameraAimAt({required BigInt frame}) =>
       BridgeLib.instance.api
-          .crateApiLayerLayerReferenceCameraPoseAt(that: this, frame: frame);
+          .crateApiLayerLayerReferenceCameraAimAt(that: this, frame: frame);
+
+  /// The camera's own values that put it at `aim` in the comp at `frame`:
+  /// the eye, the rotation rows and the point of interest carried back into
+  /// its parent's space. What a camera drag writes, so a parented camera
+  /// lands where the drag put it. `aim` comes back as it is with no parent.
+  BridgeCameraAim cameraOwnAim(
+          {required BigInt frame, required BridgeCameraAim aim}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceCameraOwnAim(
+          that: this, frame: frame, aim: aim);
+
+  /// This camera's own placement at `frame`, inside its parents: its eye, and
+  /// its turn with a two-node camera's aim and a solve link in it. What a
+  /// layer parented to it is placed by. `None` on any other kind.
+  BridgeCameraPose? cameraOwnPoseAt({required BigInt frame}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceCameraOwnPoseAt(that: this, frame: frame);
 
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///

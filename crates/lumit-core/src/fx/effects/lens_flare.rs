@@ -1081,7 +1081,10 @@ impl EffectDef for LensFlareDef {
         };
         let mut count = 0u32;
         // An ambient light is not anywhere, so it has no place to flare from.
-        let placed = owner.lights_at(cx.context.comp_time).into_iter();
+        let t = cx.context.comp_time;
+        let read = crate::model::context_reader(&cx.context, t);
+        let solves = crate::track::solve_store().map(|store| (&cx.context.document, store));
+        let placed = owner.lights_at(t, &read, solves).into_iter();
         for resolved in placed.filter(|l| l.kind != crate::model::LightKind::Ambient) {
             let Some(&(geom, rgb)) = LensFlare::DERIVED_LIGHTS.get(count as usize) else {
                 break;

@@ -2,9 +2,8 @@
 //! on the picture. What `toComp`, `fromComp`, `toWorld` and `fromWorld` read in
 //! both languages.
 //!
-//! It is the compositor's placement worked in `f64`: each parent's transform
-//! outside the layer's own, every one read at its own layer time
-//! (`parent_world_placement` in the renderer), and a 3D layer seen through the
+//! It is the compositor's placement worked in `f64`, through the same parent
+//! walk ([`crate::model::parent_placements`]), and a 3D layer seen through the
 //! active camera ([`crate::camera::project_depth`]). A 2D layer is never seen
 //! through the camera, so on the picture it is its placement with z dropped.
 
@@ -54,7 +53,7 @@ pub(crate) struct Space {
 /// the numbers under its expressions, as After Effects reads a property that
 /// refers to itself.
 pub(crate) fn space(
-    doc: &Document,
+    doc: &Arc<Document>,
     comp: &Composition,
     layer: &Layer,
     t: f64,
@@ -72,38 +71,17 @@ pub(crate) fn space(
     let plain =
         |l: &Layer, p: &Property| underneath(p, crate::time::layer_time(t, l.start_offset.0));
     let read: &dyn Fn(&Layer, &Property) -> f64 = if again { &plain } else { read };
-    let own = |l: &Layer| {
-        let tr = &l.transform;
-        let v = |p: &Property| read(l, p);
-        // The renderer's own rule: a 2D layer's hidden z and tilt count for
-        // nothing, in its own placement and as a parent.
-        let hidden = |p: &Property| if l.is_3d() { v(p) } else { 0.0 };
-        camera::place(
-            (v(&tr.position_x), v(&tr.position_y), hidden(&tr.position_z)),
-            (v(&tr.anchor_x), v(&tr.anchor_y)),
-            (v(&tr.scale_x), v(&tr.scale_y)),
-            (
-                hidden(&tr.rotation_x),
-                hidden(&tr.rotation_y),
-                v(&tr.rotation),
-            ),
-        )
-    };
-    let mut world = own(layer);
-    let mut cost = 1;
-    // Nearest parent first, each one wrapping what is inside it, and a loop
-    // in a broken file walked once.
-    let mut seen = vec![layer.id];
-    let mut child = layer;
-    while let Some(id) = child.parent.filter(|id| !seen.contains(id)) {
-        let Some(parent) = comp.layers.iter().find(|l| l.id == id) else {
-            break;
-        };
-        world = world.within(&own(parent));
-        seen.push(id);
-        child = parent;
-        cost += 1;
+    // The compositor's own walk, so a point lands where the picture has it:
+    // 2D parents flat, a camera or light parent aimed and with no anchor or
+    // scale, a solved camera on its solve.
+    let solves = crate::track::solve_store().map(|store| (doc, store));
+    let mut world = crate::model::placement(layer, read).place();
+    let parents = crate::model::parent_placements(comp, layer, t, read, solves);
+    // Nearest parent first, each one wrapping what is inside it.
+    for (_, parent) in parents.iter().rev() {
+        world = world.within(&parent.place());
     }
+    let cost = 1 + u32::try_from(parents.len()).unwrap_or(u32::MAX);
     let three_d = layer.is_3d();
     let (width, height) = (f64::from(comp.width), f64::from(comp.height));
     let camera = three_d.then(|| {
