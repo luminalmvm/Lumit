@@ -676,6 +676,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         axis_modes: lumit_core::model::AxisModes::default(),
         material: Box::default(),
         extra: serde_json::Map::new(),
+        ..TransformGroup::default()
     };
     let orientation = orientation(conv, path, props, &mut out);
     turn_into_lumits_order(conv, path, orientation, &mut out);

@@ -157,6 +157,10 @@ fn placement(layer: &Layer, lt: f64) -> Option<Affine> {
         &tr.rotation_x,
         &tr.rotation_y,
         &tr.opacity,
+        &tr.anchor_z,
+        &tr.orientation[0],
+        &tr.orientation[1],
+        &tr.orientation[2],
     ];
     if props
         .iter()
@@ -166,7 +170,9 @@ fn placement(layer: &Layer, lt: f64) -> Option<Affine> {
     }
     let flat = tr.rotation_x.value_at(lt) == 0.0
         && tr.rotation_y.value_at(lt) == 0.0
-        && tr.position_z.value_at(lt) == 0.0;
+        && tr.position_z.value_at(lt) == 0.0
+        && tr.anchor_z.value_at(lt) == 0.0
+        && tr.orientation.iter().all(|p| p.value_at(lt) == 0.0);
     if !flat {
         return None;
     }

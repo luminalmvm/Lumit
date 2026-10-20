@@ -3436,7 +3436,7 @@ pub mod shared_metal;
 pub mod test_support;
 pub use composite::{
     camera_frame, camera_matrix, concat_place, depth_order, invert_place, place_matrix,
-    scaled_size, unplace_matrix, Blend, CompositeLayer, Compositor, Cut, MatteInput, MbSample,
-    Region,
+    place_matrix_3d, scaled_size, unplace_matrix, Blend, CompositeLayer, Compositor, Cut,
+    MatteInput, MbSample, Region,
 };
 pub use glam::{Mat4, Vec3};

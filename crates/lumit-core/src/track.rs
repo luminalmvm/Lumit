@@ -224,7 +224,7 @@ pub fn own_camera_pose_of(
     store: &dyn CameraSolveStore,
 ) -> Option<LinkedPose> {
     let context = crate::model::comp_context(doc, comp, t);
-    let stored = stored_camera_pose(layer, &crate::model::context_reader(&context, t))?;
+    let stored = stored_camera_pose(layer, t, &crate::model::context_reader(&context, t))?;
     let LayerKind::Camera {
         solve_link,
         correction_base,
@@ -590,9 +590,18 @@ pub fn bake_solve_link(
     // Six transform tracks plus the zoom, filled in one walk of the frames so
     // the derived pose is asked for once per frame rather than seven times.
     let mut keys: [Vec<Keyframe>; 7] = Default::default();
+    let mut near = (0.0, 0.0, 0.0);
     for n in first..last {
         let ct = rate.time_of_frame(n).ok()?;
-        let pose = own_camera_pose_of(doc, c, layer, ct.0.to_f64(), store)?.pose;
+        let mut pose = own_camera_pose_of(doc, c, layer, ct.0.to_f64(), store)?.pose;
+        // The rows in the camera's own order, with no Orientation left on top.
+        pose.rotation_deg = crate::camera::unoriented(
+            (0.0, 0.0, 0.0),
+            pose.rotation_deg,
+            layer.transform.after_effects_order,
+            near,
+        );
+        near = pose.rotation_deg;
         // Keyframe times are LAYER time, which is what every property is
         // evaluated at — the same subtraction `stored_camera_pose` makes.
         let time = ct.0.checked_sub(layer.start_offset.0).ok()?;
@@ -639,6 +648,22 @@ pub fn bake_solve_link(
         layer: camera,
         animation: Animation::Keyframed(track.next()?),
     });
+    // The baked rows hold the whole turn, so an Orientation would turn it twice.
+    let orientation = [
+        TransformProp::OrientationX,
+        TransformProp::OrientationY,
+        TransformProp::OrientationZ,
+    ];
+    for (prop, o) in orientation.into_iter().zip(&layer.transform.orientation) {
+        if o.animation != Animation::Static(0.0) {
+            ops.push(Op::SetTransformProperty {
+                comp,
+                layer: camera,
+                prop,
+                animation: Animation::Static(0.0),
+            });
+        }
+    }
     Some(Op::Batch { ops })
 }
 

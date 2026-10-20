@@ -543,18 +543,15 @@ impl CompositionReference {
                 lumit_render::build::parent_world_placement(comp, layer, t, context)
                     .map(|m| m.map(|c| c.map(f64::from)))
             };
+            // Orientation in the rotations, and the z of anchor and scale.
+            let placed = tr.placement_at(lt, !layer.is_3d(), &|p| p.value_at(lt));
             let place = |anchor: P2, scale: P2| -> Place {
-                let own = lumit_render::place_matrix(
-                    (
-                        tr.position_x.value_at(lt) as f32,
-                        tr.position_y.value_at(lt) as f32,
-                    ),
-                    (anchor.0 as f32, anchor.1 as f32),
-                    (scale.0 as f32, scale.1 as f32),
-                    tr.rotation.value_at(lt) as f32,
-                    tr.position_z.value_at(lt) as f32,
-                    tr.rotation_x.value_at(lt) as f32,
-                    tr.rotation_y.value_at(lt) as f32,
+                let f = |v: (f64, f64, f64)| (v.0 as f32, v.1 as f32, v.2 as f32);
+                let own = lumit_render::place_matrix_3d(
+                    f(placed.position),
+                    f((anchor.0, anchor.1, placed.anchor.2)),
+                    f((scale.0, scale.1, placed.scale.2)),
+                    f(placed.rotation_deg),
                 )
                 .map(|c| c.map(f64::from));
                 match &parent {

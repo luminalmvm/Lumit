@@ -5,7 +5,8 @@
 //!
 //! Everything here is plain `f64` on plain tuples, because four crates and one
 //! Dart file have to agree on it and none of them should have to agree on a
-//! matrix type as well. The rotation order is the compositor's, `Ry · Rx · Rz`.
+//! matrix type as well. The rotation order is the compositor's, `Ry · Rx · Rz`,
+//! with Orientation outside it in After Effects' own `Rx · Ry · Rz`.
 
 use crate::model::CameraPose;
 
@@ -64,6 +65,102 @@ pub fn euler_yxz(m: &Mat3) -> (f64, f64, f64) {
     )
 }
 
+/// `Rx(x) · Ry(y) · Rz(z)` for angles in degrees: After Effects' order, which
+/// Orientation turns by.
+#[must_use]
+pub fn rotation_ae(deg: (f64, f64, f64)) -> Mat3 {
+    mul(&mul(&rot_x(deg.0), &rot_y(deg.1)), &rot_z(deg.2))
+}
+
+/// The `(x, y, z)` angles in degrees of a matrix built as `Rx · Ry · Rz`.
+///
+/// `M[0][2] = sin y`, `M[1][2] = -sin x cos y`, `M[2][2] = cos x cos y`,
+/// `M[0][1] = -cos y sin z`, `M[0][0] = cos y cos z`. Looking straight along
+/// x, x and z name the same turn and the whole of it goes on x.
+#[must_use]
+pub fn euler_xyz(m: &Mat3) -> (f64, f64, f64) {
+    let sin_y = m[0][2].clamp(-1.0, 1.0);
+    let ry = sin_y.asin();
+    let cos_y = (1.0 - sin_y * sin_y).max(0.0).sqrt();
+    if cos_y < 1e-9 {
+        return (m[2][1].atan2(m[1][1]).to_degrees(), ry.to_degrees(), 0.0);
+    }
+    (
+        (-m[1][2]).atan2(m[2][2]).to_degrees(),
+        ry.to_degrees(),
+        (-m[0][1]).atan2(m[0][0]).to_degrees(),
+    )
+}
+
+/// The turn a layer draws with: its Orientation, After Effects' angles, outside
+/// its X, Y and Z Rotation, which turn in Lumit's own `Ry · Rx · Rz`, or in
+/// After Effects' `Rx · Ry · Rz` on a layer brought from there (`ae_order`).
+/// Written back as Lumit's three angles, the ones nearest the rotations. With
+/// no Orientation and Lumit's order, which is every file from before them, the
+/// rotations come back exactly as they are.
+#[must_use]
+pub fn oriented(
+    orientation: (f64, f64, f64),
+    rotation: (f64, f64, f64),
+    ae_order: bool,
+) -> (f64, f64, f64) {
+    if orientation == (0.0, 0.0, 0.0) && !ae_order {
+        return rotation;
+    }
+    let rows = if ae_order {
+        rotation_ae(rotation)
+    } else {
+        self::rotation(rotation)
+    };
+    nearest_turn(euler_yxz(&mul(&rotation_ae(orientation), &rows)), rotation)
+}
+
+/// [`oriented`] backwards: the rotations that, with this Orientation outside
+/// them, make the whole of `turn`, the ones nearest `near`.
+#[must_use]
+pub fn unoriented(
+    orientation: (f64, f64, f64),
+    turn: (f64, f64, f64),
+    ae_order: bool,
+    near: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    if orientation == (0.0, 0.0, 0.0) && !ae_order {
+        return turn;
+    }
+    let o = rotation_ae(orientation);
+    let back = [0, 1, 2].map(|r| [0, 1, 2].map(|c| o[c][r]));
+    let rows = mul(&back, &rotation(turn));
+    if ae_order {
+        nearest_xyz(euler_xyz(&rows), near)
+    } else {
+        nearest_turn(euler_yxz(&rows), near)
+    }
+}
+
+/// X, Y and Z Rotation written in one order (`from_ae`) rewritten in the other
+/// (`to_ae`) for the same turn, the way of writing it nearest `near`.
+#[must_use]
+pub fn reordered(
+    rows: (f64, f64, f64),
+    from_ae: bool,
+    to_ae: bool,
+    near: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    if from_ae == to_ae {
+        return rows;
+    }
+    let m = if from_ae {
+        rotation_ae(rows)
+    } else {
+        rotation(rows)
+    };
+    if to_ae {
+        nearest_xyz(euler_xyz(&m), near)
+    } else {
+        nearest_turn(euler_yxz(&m), near)
+    }
+}
+
 /// Lumit's angles for a turn After Effects writes as Orientation and X, Y and
 /// Z Rotation, all in degrees.
 ///
@@ -78,8 +175,143 @@ pub fn from_after_effects(
     rotation: (f64, f64, f64),
     near: (f64, f64, f64),
 ) -> (f64, f64, f64) {
-    let ae = |deg: (f64, f64, f64)| mul(&mul(&rot_x(deg.0), &rot_y(deg.1)), &rot_z(deg.2));
-    nearest_turn(euler_yxz(&mul(&ae(orientation), &ae(rotation))), near)
+    nearest_turn(
+        euler_yxz(&mul(&rotation_ae(orientation), &rotation_ae(rotation))),
+        near,
+    )
+}
+
+/// How far apart two Orientations are, in degrees: the one turn that takes
+/// `a` to `b`.
+#[must_use]
+pub fn turn_between_deg(a: (f64, f64, f64), b: (f64, f64, f64)) -> f64 {
+    let (qa, qb) = (quaternion(&rotation_ae(a)), quaternion(&rotation_ae(b)));
+    let dot: f64 = qa.iter().zip(&qb).map(|(p, q)| p * q).sum();
+    2.0 * dot.abs().min(1.0).acos().to_degrees()
+}
+
+/// A turn as a unit quaternion `(w, x, y, z)`.
+fn quaternion(m: &Mat3) -> [f64; 4] {
+    let trace = m[0][0] + m[1][1] + m[2][2];
+    let q = if trace > 0.0 {
+        let s = (trace + 1.0).sqrt() * 2.0;
+        [
+            0.25 * s,
+            (m[2][1] - m[1][2]) / s,
+            (m[0][2] - m[2][0]) / s,
+            (m[1][0] - m[0][1]) / s,
+        ]
+    } else if m[0][0] > m[1][1] && m[0][0] > m[2][2] {
+        let s = (1.0 + m[0][0] - m[1][1] - m[2][2]).sqrt() * 2.0;
+        [
+            (m[2][1] - m[1][2]) / s,
+            0.25 * s,
+            (m[0][1] + m[1][0]) / s,
+            (m[0][2] + m[2][0]) / s,
+        ]
+    } else if m[1][1] > m[2][2] {
+        let s = (1.0 + m[1][1] - m[0][0] - m[2][2]).sqrt() * 2.0;
+        [
+            (m[0][2] - m[2][0]) / s,
+            (m[0][1] + m[1][0]) / s,
+            0.25 * s,
+            (m[1][2] + m[2][1]) / s,
+        ]
+    } else {
+        let s = (1.0 + m[2][2] - m[0][0] - m[1][1]).sqrt() * 2.0;
+        [
+            (m[1][0] - m[0][1]) / s,
+            (m[0][2] + m[2][0]) / s,
+            (m[1][2] + m[2][1]) / s,
+            0.25 * s,
+        ]
+    };
+    let len = q.iter().map(|v| v * v).sum::<f64>().sqrt().max(1e-12);
+    q.map(|v| v / len)
+}
+
+fn from_quaternion([w, x, y, z]: [f64; 4]) -> Mat3 {
+    [
+        [
+            1.0 - 2.0 * (y * y + z * z),
+            2.0 * (x * y - w * z),
+            2.0 * (x * z + w * y),
+        ],
+        [
+            2.0 * (x * y + w * z),
+            1.0 - 2.0 * (x * x + z * z),
+            2.0 * (y * z - w * x),
+        ],
+        [
+            2.0 * (x * z - w * y),
+            2.0 * (y * z + w * x),
+            1.0 - 2.0 * (x * x + y * y),
+        ],
+    ]
+}
+
+/// The Orientation `u` of the way from `a` to `b`, as After Effects moves
+/// between two Orientation keys: along the shortest turn, not axis by axis.
+/// The angles come back written the way `a` is and wound nearest the plain
+/// blend of the two, so they don't jump about between.
+#[must_use]
+pub fn orientation_between(a: (f64, f64, f64), b: (f64, f64, f64), u: f64) -> (f64, f64, f64) {
+    let blend = (
+        a.0 + (b.0 - a.0) * u,
+        a.1 + (b.1 - a.1) * u,
+        a.2 + (b.2 - a.2) * u,
+    );
+    let qa = quaternion(&rotation_ae(a));
+    let mut qb = quaternion(&rotation_ae(b));
+    let mut dot: f64 = qa.iter().zip(&qb).map(|(p, q)| p * q).sum();
+    // The same turn two ways round: take the short one.
+    if dot < 0.0 {
+        qb = qb.map(|v| -v);
+        dot = -dot;
+    }
+    let q = if dot > 1.0 - 1e-12 {
+        std::array::from_fn(|i| qa[i] + (qb[i] - qa[i]) * u)
+    } else {
+        let angle = dot.min(1.0).acos();
+        let (wa, wb) = (
+            ((1.0 - u) * angle).sin() / angle.sin(),
+            (u * angle).sin() / angle.sin(),
+        );
+        std::array::from_fn(|i| qa[i] * wa + qb[i] * wb)
+    };
+    let len = q.iter().map(|v: &f64| v * v).sum::<f64>().sqrt().max(1e-12);
+    let m = from_quaternion(q.map(|v| v / len));
+    // The way of writing the turn that `a` is written in, so the numbers
+    // don't swap to the other way part way between the keys.
+    let one = euler_xyz(&m);
+    let one = if a.1.to_radians().cos() >= 0.0 {
+        one
+    } else {
+        (one.0 + 180.0, 180.0 - one.1, one.2 + 180.0)
+    };
+    let wind = |v: f64, n: f64| v - ((v - n) / 360.0).round() * 360.0;
+    (
+        wind(one.0, blend.0),
+        wind(one.1, blend.1),
+        wind(one.2, blend.2),
+    )
+}
+
+/// [`nearest_turn`] for After Effects' order, whose other way of writing a
+/// turn is `(x + 180, 180 - y, z + 180)`.
+fn nearest_xyz(one: (f64, f64, f64), near: (f64, f64, f64)) -> (f64, f64, f64) {
+    let other = (one.0 + 180.0, 180.0 - one.1, one.2 + 180.0);
+    let wind = |a: f64, n: f64| a - ((a - n) / 360.0).round() * 360.0;
+    let wound = |v: (f64, f64, f64)| (wind(v.0, near.0), wind(v.1, near.1), wind(v.2, near.2));
+    let gap = |v: (f64, f64, f64)| {
+        (v.0 - near.0).powi(2) + (v.1 - near.1).powi(2) + (v.2 - near.2).powi(2)
+    };
+    let (one, other) = (wound(one), wound(other));
+    if gap(other) < gap(one) {
+        other
+    } else {
+        one
+    }
 }
 
 /// `one`, or the other way of writing the same turn in Lumit's order,
@@ -519,18 +751,18 @@ impl Place {
     }
 }
 
-/// A layer's transform as the compositor places it (`lumit_gpu::place_matrix`):
-/// `T(position) · Ry · Rx · Rz · S(scale / 100) · T(−anchor)`. There is no
-/// Scale Z or Anchor Z yet, so z passes through unscaled.
+/// A layer's transform as the compositor places it (`lumit_gpu::place_matrix_3d`):
+/// `T(position) · Ry · Rx · Rz · S(scale / 100) · T(−anchor)`, with any
+/// Orientation already in the three angles ([`oriented`]).
 #[must_use]
 pub fn place(
     position: (f64, f64, f64),
-    anchor: (f64, f64),
-    scale: (f64, f64),
+    anchor: (f64, f64, f64),
+    scale: (f64, f64, f64),
     deg: (f64, f64, f64),
 ) -> Place {
     let r = rotation(deg);
-    let s = [scale.0 / 100.0, scale.1 / 100.0, 1.0];
+    let s = [scale.0 / 100.0, scale.1 / 100.0, scale.2 / 100.0];
     let mut m = r;
     for row in &mut m {
         for (cell, s) in row.iter_mut().zip(s) {
@@ -541,7 +773,7 @@ pub fn place(
         m,
         t: (0.0, 0.0, 0.0),
     }
-    .vector((anchor.0, anchor.1, 0.0));
+    .vector(anchor);
     Place {
         m,
         t: (
@@ -613,6 +845,111 @@ mod tests {
             let got = rotation(deg);
             let mut cells = got.iter().flatten().zip(want.iter().flatten());
             assert!(cells.all(|(a, b)| close(*a, *b)), "{deg:?}");
+        }
+    }
+
+    /// A 200 by 100 card on its centre, Orientation X 40 outside a Y Rotation
+    /// of 30: After Effects turns it by Rx(40) · Ry(30), which Lumit's own rows
+    /// can't write as X 40 and Y 30. The corners are worked out by hand.
+    #[test]
+    fn orientation_turns_outside_the_rotations_as_after_effects_does() {
+        use crate::anim::Property;
+        let mut tr = crate::model::TransformGroup {
+            anchor_x: Property::fixed(100.0),
+            anchor_y: Property::fixed(50.0),
+            position_x: Property::fixed(960.0),
+            position_y: Property::fixed(540.0),
+            rotation_y: Property::fixed(30.0),
+            ..Default::default()
+        };
+        tr.orientation[0] = Property::fixed(40.0);
+        let place = tr.placement_at(0.0, false, &|p| p.value_at(0.0)).place();
+        let corners = [
+            ((0.0, 0.0), (873.397_46, 469.558_40, 6.162_84)),
+            ((200.0, 0.0), (1_046.602_54, 533.837_16, -70.441_60)),
+            ((200.0, 100.0), (1_046.602_54, 610.441_60, -6.162_84)),
+            ((0.0, 100.0), (873.397_46, 546.162_84, 70.441_60)),
+        ];
+        // The same turn on the rotations alone, X 40 and Y 30 in After
+        // Effects' order, as an imported layer has them.
+        let mut imported = tr.clone();
+        imported.orientation[0] = Property::zero();
+        imported.rotation_x = Property::fixed(40.0);
+        imported.after_effects_order = true;
+        let imported = imported
+            .placement_at(0.0, false, &|p| p.value_at(0.0))
+            .place();
+        for ((x, y), want) in corners {
+            for place in [place, imported] {
+                let got = place.point((x, y, 0.0));
+                let near = (got.0 - want.0).abs() + (got.1 - want.1).abs() + (got.2 - want.2).abs();
+                assert!(near < 1e-3, "corner {x}, {y} at {got:?}");
+            }
+        }
+        // Anchor Z pushes the card back along its own z, by Scale Z.
+        tr.anchor_z = Property::fixed(20.0);
+        tr.scale_z = Property::fixed(50.0);
+        let pushed = tr.placement_at(0.0, false, &|p| p.value_at(0.0));
+        let at = pushed.flat_position();
+        let back = forward(pushed.rotation_deg);
+        let want = (960.0 - back.0 * 10.0, 540.0 - back.1 * 10.0, -back.2 * 10.0);
+        assert!(close3(at, want), "{at:?}");
+        // Switching a layer's rotation order keeps its pose.
+        let mut lumit = tr.clone();
+        lumit.rotation_x = Property::fixed(25.0);
+        lumit.rotation = Property::fixed(-40.0);
+        let before = lumit.placement_at(0.0, false, &|p| p.value_at(0.0)).place();
+        let mut switched = lumit.clone();
+        for (prop, animation) in lumit.rotations_in_order(true).unwrap() {
+            switched.get_mut(prop).unwrap().animation = animation;
+        }
+        switched.after_effects_order = true;
+        let after = switched
+            .placement_at(0.0, false, &|p| p.value_at(0.0))
+            .place();
+        for (x, y) in [(0.0, 0.0), (200.0, 100.0)] {
+            assert!(close3(before.point((x, y, 0.0)), after.point((x, y, 0.0))));
+        }
+        // With no Orientation the rotations come back exactly as they were.
+        assert_eq!(
+            oriented((0.0, 0.0, 0.0), (10.0, 20.0, 30.0), false),
+            (10.0, 20.0, 30.0)
+        );
+    }
+
+    /// After Effects keys an Orientation as one turn, so a key written on one
+    /// angle gives the other two a key there, holding the turn as it was, and
+    /// the picture only moves by the angle that was written.
+    #[test]
+    fn a_key_on_one_orientation_angle_keys_all_three() {
+        use crate::anim::{Animation, Keyframe, Property, SideInterp};
+        use crate::model::TransformProp as P;
+        use crate::time::Rational;
+        let key = |t: i64, v: f64| Keyframe {
+            time: Rational::new(t, 1).unwrap(),
+            value: v,
+            interp_in: SideInterp::Linear,
+            interp_out: SideInterp::Linear,
+        };
+        let keyed = |a: f64, b: f64| Property {
+            animation: Animation::Keyframed(vec![key(0, a), key(2, b)]),
+            extra: serde_json::Map::new(),
+        };
+        let mut tr = crate::model::TransformGroup {
+            orientation: [keyed(0.0, 60.0), keyed(0.0, 80.0), keyed(0.0, 20.0)],
+            ..Default::default()
+        };
+        let before = tr.orientation_at(1.0, &|p| p.value_at(1.0));
+        let Animation::Keyframed(mut x) = tr.orientation[0].animation.clone() else {
+            unreachable!()
+        };
+        x.insert(1, key(1, 45.0));
+        let undo = tr.set_orientation_angle(P::OrientationX, Animation::Keyframed(x));
+        assert_eq!(undo.len(), 3, "all three angles keyed");
+        let after = tr.orientation_at(1.0, &|p| p.value_at(1.0));
+        assert!(close3(after, (45.0, before.1, before.2)), "{after:?}");
+        for (t, want) in [(0.0, (0.0, 0.0, 0.0)), (2.0, (60.0, 80.0, 20.0))] {
+            assert!(close3(tr.orientation_at(t, &|p| p.value_at(t)), want));
         }
     }
 

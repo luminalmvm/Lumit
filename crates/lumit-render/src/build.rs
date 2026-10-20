@@ -321,20 +321,39 @@ fn own_placement(
 ) -> [[f32; 4]; 4] {
     place_of(&lumit_core::model::placement(
         layer,
+        t_comp,
         &lumit_core::model::context_reader(context, t_comp),
     ))
 }
 
 fn place_of(p: &lumit_core::model::Placement) -> [[f32; 4]; 4] {
-    lumit_gpu::place_matrix(
-        (p.position.0 as f32, p.position.1 as f32),
-        (p.anchor.0 as f32, p.anchor.1 as f32),
-        (p.scale.0 as f32, p.scale.1 as f32),
-        p.rotation_deg.2 as f32,
-        p.position.2 as f32,
-        p.rotation_deg.0 as f32,
-        p.rotation_deg.1 as f32,
-    )
+    let f = |v: (f64, f64, f64)| (v.0 as f32, v.1 as f32, v.2 as f32);
+    lumit_gpu::place_matrix_3d(f(p.position), f(p.anchor), f(p.scale), f(p.rotation_deg))
+}
+
+/// What the compositor draws `layer`'s own picture with at layer time `lt`,
+/// each property read under `context`: any Orientation turned into the
+/// rotations and Anchor Z into the position. A 2D layer's hidden 3D values
+/// count as nought, as the compositor draws them.
+fn drawn(
+    layer: &lumit_core::model::Layer,
+    lt: f64,
+    context: &Arc<ExpressionContext>,
+) -> lumit_gpu::MbSample {
+    let read = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
+    let p = layer
+        .transform
+        .placement_at(lt, !layer.switches.three_d, &read);
+    let at = p.flat_position();
+    lumit_gpu::MbSample {
+        position: (at.0 as f32, at.1 as f32),
+        anchor: (p.anchor.0 as f32, p.anchor.1 as f32),
+        scale: (p.scale.0 as f32, p.scale.1 as f32),
+        rotation_deg: p.rotation_deg.2 as f32,
+        z: at.2 as f32,
+        rotation_x_deg: p.rotation_deg.0 as f32,
+        rotation_y_deg: p.rotation_deg.1 as f32,
+    }
 }
 
 /// The transform edits that keep `layer` where it is at comp time `t_comp`
@@ -390,10 +409,39 @@ pub fn reparented(
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let tr = &layer.transform;
     let at = |p: &lumit_core::anim::Property| p.value_at_with_context(lt, context.clone());
-    let to = lumit_gpu::unplace_matrix(
-        lumit_gpu::concat_place(carry, own_placement(layer, t_comp, &context)),
-        (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32),
-    );
+    let placed = lumit_gpu::concat_place(carry, own_placement(layer, t_comp, &context));
+    let mut to =
+        lumit_gpu::unplace_matrix(placed, (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32));
+    // The anchor's own z, and the layer's Orientation, stay where they are,
+    // so the position and the rotations take what they leave.
+    if layer.switches.three_d {
+        let a = [&tr.anchor_x, &tr.anchor_y, &tr.anchor_z].map(|p| at(p) as f32);
+        let p = |r: usize| {
+            placed[0][r] * a[0] + placed[1][r] * a[1] + placed[2][r] * a[2] + placed[3][r]
+        };
+        (to.position, to.z) = ((p(0), p(1)), p(2));
+        let orientation = tr.orientation_at(lt, &at);
+        let turn = (
+            f64::from(to.rotation_x_deg),
+            f64::from(to.rotation_y_deg),
+            f64::from(to.rotation_deg),
+        );
+        let rows = (at(&tr.rotation_x), at(&tr.rotation_y), at(&tr.rotation));
+        let (x, y, z) =
+            lumit_core::camera::unoriented(orientation, turn, tr.after_effects_order, rows);
+        (to.rotation_x_deg, to.rotation_y_deg, to.rotation_deg) = (x as f32, y as f32, z as f32);
+    }
+    // Scale Z stretches what is parented to the layer and how far Anchor Z
+    // pushes it, so it is carried as the other two are.
+    let sz = {
+        let c = placed[2];
+        let len = (c[0] * c[0] + c[1] * c[1] + c[2] * c[2]).sqrt() * 100.0;
+        if at(&tr.scale_z) < 0.0 {
+            -len
+        } else {
+            len
+        }
+    };
     // A flip can be written two ways: one axis negative, or the other one
     // negative and half a turn. Keep the way the layer already has it.
     let (sx, sy, rz) = if f64::from(to.scale.0) * at(&tr.scale_x) < 0.0 {
@@ -419,6 +467,7 @@ pub fn reparented(
         edit(P::PositionZ, to.z, false, along(2));
         edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
         edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+        edit(P::ScaleZ, sz, false, None);
     }
     edits
 }
@@ -487,7 +536,12 @@ fn reparented_eye(
     use lumit_core::camera::{place, Eye};
     use lumit_core::model::{parent_space, LayerKind, TransformProp as P};
 
-    let identity = place((0.0, 0.0, 0.0), (0.0, 0.0), (100.0, 100.0), (0.0, 0.0, 0.0));
+    let identity = place(
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (100.0, 100.0, 100.0),
+        (0.0, 0.0, 0.0),
+    );
     let read = lumit_core::model::context_reader(context, t_comp);
     let solves = crate::track::solves_for(&context.document);
     let was = parent_space(comp, layer, t_comp, &read, solves).unwrap_or(identity);
@@ -530,6 +584,7 @@ fn reparented_eye(
     times.sort();
     times.dedup();
 
+    let ae_order = layer.transform.after_effects_order;
     // Every channel's value at layer time `lt`, carried as one eye.
     let carried = |lt: f64| {
         let at = |prop: P| {
@@ -537,13 +592,21 @@ fn reparented_eye(
                 .prop(prop)
                 .map_or(0.0, |p| p.value_at_with_context(lt, context.clone()))
         };
+        // The Orientation stays as it is, and the rows take the rest.
+        let o = layer
+            .transform
+            .orientation_at(lt, &|p| p.value_at_with_context(lt, context.clone()));
+        let rows = (at(P::RotationX), at(P::RotationY), at(P::Rotation));
         let eye = carry.carry(Eye {
             position: (at(P::PositionX), at(P::PositionY), at(P::PositionZ)),
-            rotation_deg: (at(P::RotationX), at(P::RotationY), at(P::Rotation)),
+            rotation_deg: lumit_core::camera::oriented(o, rows, ae_order),
             point_of_interest: two_node.then(|| (at(P::PoiX), at(P::PoiY), at(P::PoiZ))),
         });
         let poi = eye.point_of_interest.unwrap_or_default();
-        let (p, r) = (eye.position, eye.rotation_deg);
+        let (p, r) = (
+            eye.position,
+            lumit_core::camera::unoriented(o, eye.rotation_deg, ae_order, rows),
+        );
         [p.0, p.1, p.2, r.0, r.1, r.2, poi.0, poi.1, poi.2]
     };
     let slot = |prop: P| props.iter().position(|p| *p == prop).unwrap_or(0);
@@ -717,24 +780,15 @@ pub fn points_projection(
     }
     let pose = crate::track::camera_pose(doc, comp, t_comp);
     let cam = crate::export::camera_mat(comp.width, comp.height, pose);
-    let tr = &layer.transform;
+    let d = drawn(layer, lt, &context);
     let place = lumit_gpu::place_matrix(
-        (
-            tr.position_x.value_at_with_context(lt, context.clone()) as f32,
-            tr.position_y.value_at_with_context(lt, context.clone()) as f32,
-        ),
-        (
-            tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
-            tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
-        ),
-        (
-            tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
-            tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
-        ),
-        tr.rotation.value_at_with_context(lt, context.clone()) as f32,
-        tr.position_z.value_at_with_context(lt, context.clone()) as f32,
-        tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
-        tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
+        d.position,
+        d.anchor,
+        d.scale,
+        d.rotation_deg,
+        d.z,
+        d.rotation_x_deg,
+        d.rotation_y_deg,
     );
     // Parenting composes exactly as the compositor composes it: `pre × own`.
     let place = match parent_world_placement(comp, layer, t_comp, context) {
@@ -1203,7 +1257,6 @@ pub fn motion_blur_samples(
         return Vec::new();
     }
     let dt = 1.0 / comp.frame_rate.fps().max(1.0);
-    let tr = &layer.transform;
 
     offsets
         .iter()
@@ -1217,24 +1270,7 @@ pub fn motion_blur_samples(
                 comp_time: t_comp + off * dt,
                 ..(*context).clone()
             });
-            lumit_gpu::MbSample {
-                position: (
-                    tr.position_x.value_at_with_context(lt, context.clone()) as f32,
-                    tr.position_y.value_at_with_context(lt, context.clone()) as f32,
-                ),
-                anchor: (
-                    tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
-                    tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
-                ),
-                scale: (
-                    tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
-                    tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
-                ),
-                rotation_deg: tr.rotation.value_at_with_context(lt, context.clone()) as f32,
-                z: tr.position_z.value_at_with_context(lt, context.clone()) as f32,
-                rotation_x_deg: tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
-                rotation_y_deg: tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
-            }
+            drawn(layer, lt, &context)
         })
         .collect()
 }
@@ -3564,29 +3600,21 @@ fn comp_walk(
                     planes_for(&src.effects, matte_frame),
                 )
             };
+            let placed = drawn(src, mlt, &context);
             Some(MatteDraw {
                 rgba: m_rgba.to_vec(),
                 tex_w: m_w,
                 tex_h: m_h,
                 format: m_fmt,
                 natural_size: m_nat,
-                position: (
-                    mtr.position_x.value_at_with_context(mlt, context.clone()) as f32,
-                    mtr.position_y.value_at_with_context(mlt, context.clone()) as f32,
-                ),
-                anchor: (
-                    mtr.anchor_x.value_at_with_context(mlt, context.clone()) as f32,
-                    mtr.anchor_y.value_at_with_context(mlt, context.clone()) as f32,
-                ),
-                scale: (
-                    mtr.scale_x.value_at_with_context(mlt, context.clone()) as f32,
-                    mtr.scale_y.value_at_with_context(mlt, context.clone()) as f32,
-                ),
-                rotation_deg: mtr.rotation.value_at_with_context(mlt, context.clone()) as f32,
+                position: placed.position,
+                anchor: placed.anchor,
+                scale: placed.scale,
+                rotation_deg: placed.rotation_deg,
                 opacity: mtr.opacity.value_at_with_context(mlt, context.clone()) as f32,
-                z: mtr.position_z.value_at_with_context(mlt, context.clone()) as f32,
-                rotation_x_deg: mtr.rotation_x.value_at_with_context(mlt, context.clone()) as f32,
-                rotation_y_deg: mtr.rotation_y.value_at_with_context(mlt, context.clone()) as f32,
+                z: placed.z,
+                rotation_x_deg: placed.rotation_x_deg,
+                rotation_y_deg: placed.rotation_y_deg,
                 three_d: src.switches.three_d,
                 pre: parent_world_placement(comp, src, t_comp, context.clone()),
                 luma: matches!(mr.channel, lumit_core::model::MatteChannel::Luma),
@@ -4088,27 +4116,19 @@ fn comp_walk(
                     continue;
                 }
 
+                let placed = drawn(layer, lt, &context);
                 draws.push(CompLayerDraw {
                     layer: layer.id,
                     source: DrawSource::Adjust,
                     natural_size: (comp.width as f32, comp.height as f32),
-                    position: (
-                        tr.position_x.value_at_with_context(lt, context.clone()) as f32,
-                        tr.position_y.value_at_with_context(lt, context.clone()) as f32,
-                    ),
-                    anchor: (
-                        tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
-                        tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
-                    ),
-                    scale: (
-                        tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
-                        tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
-                    ),
-                    rotation_deg: tr.rotation.value_at_with_context(lt, context.clone()) as f32,
+                    position: placed.position,
+                    anchor: placed.anchor,
+                    scale: placed.scale,
+                    rotation_deg: placed.rotation_deg,
                     opacity: tr.opacity.value_at_with_context(lt, context.clone()) as f32,
-                    z: tr.position_z.value_at_with_context(lt, context.clone()) as f32,
-                    rotation_x_deg: tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
-                    rotation_y_deg: tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
+                    z: placed.z,
+                    rotation_x_deg: placed.rotation_x_deg,
+                    rotation_y_deg: placed.rotation_y_deg,
                     three_d: layer.switches.three_d,
                     ends_run: false,
                     // The adjustment's own Matte gates where its stack lands,
@@ -4347,27 +4367,19 @@ fn comp_walk(
             _ => None,
         };
 
+        let placed = drawn(layer, lt, &context);
         draws.push(CompLayerDraw {
             layer: layer.id,
             source,
             natural_size: natural,
-            position: (
-                tr.position_x.value_at_with_context(lt, context.clone()) as f32,
-                tr.position_y.value_at_with_context(lt, context.clone()) as f32,
-            ),
-            anchor: (
-                tr.anchor_x.value_at_with_context(lt, context.clone()) as f32,
-                tr.anchor_y.value_at_with_context(lt, context.clone()) as f32,
-            ),
-            scale: (
-                tr.scale_x.value_at_with_context(lt, context.clone()) as f32,
-                tr.scale_y.value_at_with_context(lt, context.clone()) as f32,
-            ),
-            rotation_deg: tr.rotation.value_at_with_context(lt, context.clone()) as f32,
+            position: placed.position,
+            anchor: placed.anchor,
+            scale: placed.scale,
+            rotation_deg: placed.rotation_deg,
             opacity: tr.opacity.value_at_with_context(lt, context.clone()) as f32 * clip_share,
-            z: tr.position_z.value_at_with_context(lt, context.clone()) as f32,
-            rotation_x_deg: tr.rotation_x.value_at_with_context(lt, context.clone()) as f32,
-            rotation_y_deg: tr.rotation_y.value_at_with_context(lt, context.clone()) as f32,
+            z: placed.z,
+            rotation_x_deg: placed.rotation_x_deg,
+            rotation_y_deg: placed.rotation_y_deg,
             three_d: layer.switches.three_d,
             ends_run: false,
             matte,
@@ -6547,6 +6559,8 @@ mod parent_placement_tests {
     /// draws the null, through parents and a turned camera, and `fromComp`
     /// takes a picture point back to the null's own pixels. A 2D parent's
     /// leftover z and tilt count for nothing, as they do in the picture.
+    /// Orientation, Anchor Z and Scale Z are on the way, and the picture's own
+    /// placement, with Anchor Z in its position, lands where the walk does.
     #[test]
     #[allow(clippy::panic)]
     fn to_comp_lands_where_the_compositor_draws_and_from_comp_takes_it_back() {
@@ -6567,11 +6581,16 @@ mod parent_placement_tests {
         rig.transform.rotation_y = Property::fixed(35.0);
         rig.transform.scale_x = Property::fixed(150.0);
         rig.transform.scale_y = Property::fixed(80.0);
+        rig.transform.orientation = [10.0, -25.0, 5.0].map(Property::fixed);
+        rig.transform.anchor_z = Property::fixed(30.0);
+        rig.transform.scale_z = Property::fixed(60.0);
         let mut marker = layer(120.0, -60.0, Some(rig.id));
         marker.name = "Marker".into();
         marker.switches.three_d = true;
         marker.transform.position_z = Property::fixed(-80.0);
         marker.transform.rotation_x = Property::fixed(20.0);
+        marker.transform.orientation[1] = Property::fixed(20.0);
+        marker.transform.anchor_z = Property::fixed(-15.0);
         let mut camera = layer(700.0, 450.0, None);
         camera.kind = LayerKind::Camera {
             zoom: Property::fixed(1400.0),
@@ -6644,6 +6663,24 @@ mod parent_placement_tests {
         };
 
         let world = world_placement(&c, &marker, 0.0, context.clone());
+        let d = drawn(&marker, 0.0, &context);
+        let own = lumit_gpu::place_matrix(
+            d.position,
+            d.anchor,
+            d.scale,
+            d.rotation_deg,
+            d.z,
+            d.rotation_x_deg,
+            d.rotation_y_deg,
+        );
+        let pre = parent_world_placement(&c, &marker, 0.0, context.clone()).unwrap();
+        let picture = lumit_gpu::concat_place(pre, own);
+        for (x, y) in [(0.0, 0.0), (64.0, 0.0), (0.0, 48.0)] {
+            let at = |m: &[[f32; 4]; 4], r: usize| m[0][r] * x + m[1][r] * y + m[3][r];
+            for r in 0..3 {
+                assert!((at(&world, r) - at(&picture, r)).abs() < 1e-2, "{x}, {y}");
+            }
+        }
         let pose = c.camera_pose(0.0).unwrap();
         let cam = crate::export::camera_mat(c.width, c.height, pose);
         let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
