@@ -402,8 +402,9 @@ class ViewerLayerMap {
 /// for.
 class ViewerDepth {
   /// Comp space `(x, y, z, 1)` to `(X, Y, W)`, three rows of four, as the
-  /// engine's `viewProjection` answers it.
-  final List<double> view;
+  /// engine's `viewProjection` answers it. Asked for only once something is
+  /// drawn or aimed at, so playback with nothing outlined asks nothing.
+  final List<double> Function() view;
 
   /// The parent chain, parent space to comp space, null with no parent.
   final Matrix4? parent;
@@ -423,12 +424,13 @@ class ViewerDepth {
 
   /// The view's rows times the parent chain.
   List<double> parentRows() {
+    final rows = view();
     final m = parent?.storage;
-    if (m == null) return view;
+    if (m == null) return rows;
     return [
       for (var row = 0; row < 3; row++)
         for (var col = 0; col < 4; col++)
-          _dot(view, row, m[col * 4], m[col * 4 + 1], m[col * 4 + 2],
+          _dot(rows, row, m[col * 4], m[col * 4 + 1], m[col * 4 + 2],
               m[col * 4 + 3]),
     ];
   }
