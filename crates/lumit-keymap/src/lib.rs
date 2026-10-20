@@ -549,25 +549,28 @@ pub enum WheelAction {
     ZoomValues,
     /// Grow or shrink the dropper's sample in the Viewer.
     DropperSample,
+    /// Dolly a 3D view toward the pointer in the Viewer, with any tool.
+    CameraDolly,
 }
 
 impl WheelAction {
     /// Every wheel action, in the order Settings lists them.
-    pub const ALL: [WheelAction; 4] = [
+    pub const ALL: [WheelAction; 5] = [
         WheelAction::ZoomTime,
         WheelAction::ScrollSideways,
         WheelAction::ZoomValues,
         WheelAction::DropperSample,
+        WheelAction::CameraDolly,
     ];
 
     /// Whether both actions are live in one panel, so they can't share a modifier.
-    /// The first three all meet in the Graph editor, the dropper is on its own.
+    /// The first three all meet in the Graph editor, the last two in the Viewer.
     /// Zooming time and values can share one, and the Graph editor then zooms both.
     fn shares_a_panel_with(self, other: WheelAction) -> bool {
-        use WheelAction::{DropperSample, ZoomTime, ZoomValues};
+        use WheelAction::{CameraDolly, DropperSample, ZoomTime, ZoomValues};
+        let viewer = |a| matches!(a, DropperSample | CameraDolly);
         self != other
-            && self != DropperSample
-            && other != DropperSample
+            && viewer(self) == viewer(other)
             && !matches!(
                 (self, other),
                 (ZoomTime, ZoomValues) | (ZoomValues, ZoomTime)
@@ -583,6 +586,7 @@ pub struct WheelKeys {
     pub scroll_sideways: WheelModifier,
     pub zoom_values: WheelModifier,
     pub dropper_sample: WheelModifier,
+    pub camera_dolly: WheelModifier,
 }
 
 impl Default for WheelKeys {
@@ -592,6 +596,7 @@ impl Default for WheelKeys {
             scroll_sideways: WheelModifier::Shift,
             zoom_values: WheelModifier::Alt,
             dropper_sample: WheelModifier::Shift,
+            camera_dolly: WheelModifier::Alt,
         }
     }
 }
@@ -605,6 +610,7 @@ impl WheelKeys {
             WheelAction::ScrollSideways => self.scroll_sideways,
             WheelAction::ZoomValues => self.zoom_values,
             WheelAction::DropperSample => self.dropper_sample,
+            WheelAction::CameraDolly => self.camera_dolly,
         }
     }
 
@@ -614,6 +620,7 @@ impl WheelKeys {
             WheelAction::ScrollSideways => &mut self.scroll_sideways,
             WheelAction::ZoomValues => &mut self.zoom_values,
             WheelAction::DropperSample => &mut self.dropper_sample,
+            WheelAction::CameraDolly => &mut self.camera_dolly,
         }
     }
 
@@ -1643,6 +1650,10 @@ mod tests {
         assert_eq!(
             km.wheel.modifier(WheelAction::DropperSample),
             WheelModifier::Shift
+        );
+        assert_eq!(
+            km.wheel.modifier(WheelAction::CameraDolly),
+            WheelModifier::Alt
         );
 
         km.wheel.set(WheelAction::ZoomTime, WheelModifier::Alt);

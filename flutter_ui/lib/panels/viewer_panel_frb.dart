@@ -78,6 +78,7 @@ import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
 import 'placeholder.dart';
 import 'viewer_bar.dart';
+import 'viewer_camera.dart' show altNavigates;
 import 'viewer_compare.dart';
 import 'viewer_deck.dart';
 import 'viewer_rulers.dart' show viewerRulerBand;
@@ -770,12 +771,13 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             );
 
         return Listener(
-          // The middle button pans, like in other software, except in a 3D
-          // viewport, where it moves the view.
+          // The middle button pans, like in other software, except where it
+          // moves the camera: in a 3D viewport, and with Alt in a 3D scene.
           onPointerMove: (event) {
             if (event.buttons == kMiddleMouseButton &&
                 ui.dropper.value == null &&
-                !viewport) {
+                !viewport &&
+                !(HardwareKeyboard.instance.isAltPressed && altNavigates(ui))) {
               _panBy(event.delta);
             }
           },

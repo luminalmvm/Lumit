@@ -29201,6 +29201,7 @@ impl SseDecode for crate::api::keymap::BridgeWheelAction {
             1 => crate::api::keymap::BridgeWheelAction::ScrollSideways,
             2 => crate::api::keymap::BridgeWheelAction::ZoomValues,
             3 => crate::api::keymap::BridgeWheelAction::DropperSample,
+            4 => crate::api::keymap::BridgeWheelAction::CameraDolly,
             _ => unreachable!("Invalid variant for BridgeWheelAction: {}", inner),
         };
     }
@@ -40790,6 +40791,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::keymap::BridgeWheelAction {
             Self::ScrollSideways => 1.into_dart(),
             Self::ZoomValues => 2.into_dart(),
             Self::DropperSample => 3.into_dart(),
+            Self::CameraDolly => 4.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -45985,6 +45987,7 @@ impl SseEncode for crate::api::keymap::BridgeWheelAction {
                 crate::api::keymap::BridgeWheelAction::ScrollSideways => 1,
                 crate::api::keymap::BridgeWheelAction::ZoomValues => 2,
                 crate::api::keymap::BridgeWheelAction::DropperSample => 3,
+                crate::api::keymap::BridgeWheelAction::CameraDolly => 4,
                 _ => {
                     unimplemented!("");
                 }

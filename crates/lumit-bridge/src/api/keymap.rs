@@ -349,6 +349,7 @@ pub enum BridgeWheelAction {
     ScrollSideways,
     ZoomValues,
     DropperSample,
+    CameraDolly,
 }
 
 /// A modifier held with the wheel. Ctrl is the Control key on every platform.
@@ -375,6 +376,7 @@ fn wheel_action(action: BridgeWheelAction) -> WheelAction {
         BridgeWheelAction::ScrollSideways => WheelAction::ScrollSideways,
         BridgeWheelAction::ZoomValues => WheelAction::ZoomValues,
         BridgeWheelAction::DropperSample => WheelAction::DropperSample,
+        BridgeWheelAction::CameraDolly => WheelAction::CameraDolly,
     }
 }
 
@@ -387,6 +389,7 @@ pub fn keymap_wheel() -> Vec<BridgeWheelBinding> {
         BridgeWheelAction::ScrollSideways,
         BridgeWheelAction::ZoomValues,
         BridgeWheelAction::DropperSample,
+        BridgeWheelAction::CameraDolly,
     ];
     with_keymap(|km| {
         actions

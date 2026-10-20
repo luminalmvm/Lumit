@@ -6131,6 +6131,10 @@
   "@keymapWheelDropperSample": {
     "description": "Scroll wheel row: the modifier that grows or shrinks the colour dropper's sampled area in the Viewer."
   },
+  "keymapWheelCameraDolly": "Dolly a 3D view",
+  "@keymapWheelCameraDolly": {
+    "description": "Settings → Keymap, the scroll wheel section: the modifier that makes the wheel dolly the Viewer’s 3D view toward the pointer, with any tool."
+  },
   "keymapWheelScrollSideways": "Scroll the Timeline sideways",
   "@keymapWheelScrollSideways": {
     "description": "Scroll wheel row: the modifier that scrolls the Timeline, Audio timeline and Graph editor left and right."
