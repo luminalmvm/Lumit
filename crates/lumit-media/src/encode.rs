@@ -158,6 +158,21 @@ fn set_colour_tags(ctx: &mut AVCodecContext, tags: ColourTags) {
     }
 }
 
+/// The same statement on one frame. ProRes writes each frame's header from the
+/// frame, not the context, and leaves it unknown otherwise.
+fn stamp_colour(frame: &mut AVFrame, tags: ColourTags) {
+    let (pri, trc, spc) = tags.av();
+    // SAFETY: the frame is ours alone and these are plain enum fields.
+    #[allow(unsafe_code)]
+    unsafe {
+        let raw = frame.as_mut_ptr();
+        (*raw).color_primaries = pri;
+        (*raw).color_trc = trc;
+        (*raw).colorspace = spc;
+        (*raw).color_range = ffi::AVCOL_RANGE_MPEG;
+    }
+}
+
 /// Everything the video stream needs to open.
 #[derive(Debug, Clone)]
 pub struct VideoSettings {
@@ -701,6 +716,7 @@ struct VideoTrack {
     width: i32,
     height: i32,
     next_pts: i64,
+    colour: ColourTags,
 }
 
 pub struct Encoder {
@@ -863,6 +879,7 @@ impl Encoder {
         }
         dst.set_pts(track.next_pts);
         track.next_pts += 1;
+        stamp_colour(&mut dst, track.colour);
 
         track.ctx.send_frame(Some(&dst))?;
         drain_packets(&mut track.ctx, output, 0, false)
@@ -999,7 +1016,8 @@ fn open_video(
     let height = i32::try_from(video.height)
         .map_err(|_| MediaError::Ffmpeg("frame height overflows".into()))?;
     let encode_pix_fmt = pix_fmt_for(video.codec, encoder);
-    let sws = sliced_scaler(width, height, encode_pix_fmt)?;
+    let mut sws = sliced_scaler(width, height, encode_pix_fmt)?;
+    crate::probe::use_yuv_matrix(&mut sws, video.colour.av().2, height, false);
 
     Ok(VideoTrack {
         ctx,
@@ -1009,6 +1027,7 @@ fn open_video(
         width,
         height,
         next_pts: 0,
+        colour: video.colour,
     })
 }
 
@@ -1759,6 +1778,40 @@ mod tests {
         let input = crate::probe::open_input(&(&path).into()).unwrap();
         let tag = input.streams()[0].codecpar().codec_tag;
         assert_eq!(&tag.to_le_bytes(), b"hvc1");
+    }
+
+    /// A file tagged BT.709 holds BT.709 YUV, and reads back as the colour
+    /// that went in. Writing BT.601 under a 709 tag turned red orange in every
+    /// other player while Lumit, reading 601 too, saw nothing wrong.
+    #[test]
+    fn video_is_written_and_read_in_the_matrix_it_states() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("matrix.mp4");
+        let (w, h) = (1280u32, 720u32);
+        let mut enc = Encoder::open(
+            &path,
+            Some(&video_settings(VideoCodec::H264, w, h)),
+            None,
+            &Metadata::new(),
+        )
+        .unwrap();
+        let rgba = [200u8, 60, 40, 255].repeat((w * h) as usize);
+        for _ in 0..4 {
+            enc.write_rgba(&rgba).unwrap();
+        }
+        enc.finish().unwrap();
+
+        let index = crate::index::build_frame_index(&path).unwrap();
+        let mut dec = crate::decode::VideoDecoder::open(&path, index).unwrap();
+        let mid = (h / 2 * w + w / 2) as usize;
+        // The luma tap reads full range: BT.709 luma of (200, 60, 40) is 88,
+        // BT.601's is 100.
+        let y = dec.frame_luma(0).unwrap().luma[mid] * 255.0;
+        assert!((y - 88.0).abs() < 2.0, "stored luma {y}");
+        let px = &dec.frame_rgba(0, None).unwrap().rgba[mid * 4..mid * 4 + 3];
+        for (got, want) in px.iter().zip([200u8, 60, 40]) {
+            assert!(got.abs_diff(want) <= 3, "read back {px:?}");
+        }
     }
 
     /// Both ProRes flavours open, write a .mov with PCM sound, and come back
