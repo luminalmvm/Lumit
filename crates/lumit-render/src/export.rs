@@ -1127,12 +1127,12 @@ impl ExportFormat {
     /// This format's capability row.
     pub fn caps(self) -> FormatCaps {
         match self {
-            // ProRes in mov: no bitrate to choose, PCM sound, and 4444 holds
-            // alpha.
+            // ProRes in mov: no bitrate to choose, PCM sound, and the 4444 kinds
+            // hold alpha.
             ExportFormat::Video(c) if c.is_prores() => FormatCaps {
                 video: true,
                 audio: true,
-                alpha: c == lumit_media::encode::VideoCodec::ProRes4444,
+                alpha: c.has_alpha(),
                 depths: EIGHT_ONLY,
                 audio_rates: EXPORT_AUDIO_RATES,
                 audio_depths: PCM_DEPTHS,

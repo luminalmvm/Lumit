@@ -26,11 +26,17 @@ use std::path::Path;
 pub enum VideoCodec {
     H264,
     Hevc,
-    /// ProRes 422 HQ in a `.mov`: ten-bit 4:2:2, every frame a keyframe. The
-    /// usual master to hand an editor.
+    /// The ProRes family, in a `.mov`, every frame a keyframe. The four 422
+    /// kinds are ten-bit 4:2:2 at rising data rates; 422 HQ is the usual
+    /// master to hand an editor.
+    ProRes422Proxy,
+    ProRes422Lt,
+    ProRes422,
     ProRes422Hq,
-    /// ProRes 4444 in a `.mov`: ten-bit 4:4:4 with an alpha channel.
+    /// Ten-bit 4:4:4 with an alpha channel.
     ProRes4444,
+    /// 4444 at a higher data rate.
+    ProRes4444Xq,
 }
 
 impl VideoCodec {
@@ -39,13 +45,35 @@ impl VideoCodec {
         match self {
             VideoCodec::H264 => "H.264",
             VideoCodec::Hevc => "HEVC",
+            VideoCodec::ProRes422Proxy => "ProRes 422 Proxy",
+            VideoCodec::ProRes422Lt => "ProRes 422 LT",
+            VideoCodec::ProRes422 => "ProRes 422",
             VideoCodec::ProRes422Hq => "ProRes 422 HQ",
             VideoCodec::ProRes4444 => "ProRes 4444",
+            VideoCodec::ProRes4444Xq => "ProRes 4444 XQ",
+        }
+    }
+
+    /// `prores_ks`'s own number for the profile, None for the other codecs.
+    fn prores_profile(self) -> Option<i64> {
+        match self {
+            VideoCodec::H264 | VideoCodec::Hevc => None,
+            VideoCodec::ProRes422Proxy => Some(0),
+            VideoCodec::ProRes422Lt => Some(1),
+            VideoCodec::ProRes422 => Some(2),
+            VideoCodec::ProRes422Hq => Some(3),
+            VideoCodec::ProRes4444 => Some(4),
+            VideoCodec::ProRes4444Xq => Some(5),
         }
     }
 
     pub fn is_prores(self) -> bool {
-        matches!(self, VideoCodec::ProRes422Hq | VideoCodec::ProRes4444)
+        self.prores_profile().is_some()
+    }
+
+    /// The 4444 kinds, which carry alpha.
+    pub fn has_alpha(self) -> bool {
+        matches!(self, VideoCodec::ProRes4444 | VideoCodec::ProRes4444Xq)
     }
 
     /// The container's extension. ProRes lives in a `.mov`; the mp4 muxer
@@ -381,7 +409,7 @@ pub fn encoder_candidates(codec: VideoCodec) -> &'static [&'static str] {
     match codec {
         VideoCodec::H264 => &["h264_nvenc", "h264_amf", "h264_qsv", "libx264"],
         VideoCodec::Hevc => &["hevc_nvenc", "hevc_amf", "hevc_qsv", "libx265"],
-        VideoCodec::ProRes422Hq | VideoCodec::ProRes4444 => &["prores_ks"],
+        _ => &["prores_ks"],
     }
 }
 
@@ -397,12 +425,11 @@ pub fn pick_first_working<'a>(
 
 /// The pixel format each encoder is fed. Quick Sync encoders take NV12 only;
 /// everything else on the H.264 and HEVC ladders accepts planar 4:2:0. ProRes
-/// is ten-bit, and `prores_ks` picks its profile from the format: 4:2:2 makes
-/// 422 HQ, 4:4:4 with alpha makes 4444.
+/// is ten-bit: 4:4:4 with alpha for the 4444 kinds, 4:2:2 for the rest.
 pub fn pix_fmt_for(codec: VideoCodec, encoder: &str) -> i32 {
     match codec {
-        VideoCodec::ProRes422Hq => ffi::AV_PIX_FMT_YUV422P10LE,
-        VideoCodec::ProRes4444 => ffi::AV_PIX_FMT_YUVA444P10LE,
+        c if c.has_alpha() => ffi::AV_PIX_FMT_YUVA444P10LE,
+        c if c.is_prores() => ffi::AV_PIX_FMT_YUV422P10LE,
         _ if encoder.ends_with("_qsv") => ffi::AV_PIX_FMT_NV12,
         _ => ffi::AV_PIX_FMT_YUV420P,
     }
@@ -1142,6 +1169,18 @@ fn build_video_ctx(
     let profile = (v.codec == VideoCodec::H264).then_some(ffi::AV_PROFILE_H264_HIGH as i32);
     set_rate_and_profile(&mut ctx, profile, v.max_rate);
     set_colour_tags(&mut ctx, v.colour);
+    if let Some(p) = v.codec.prores_profile() {
+        // SAFETY: the context is ours and not yet open, `priv_data` is the
+        // prores_ks options block `AVCodecContext::new` allocated, and the
+        // name is a NUL-terminated literal. Both are plain option writes.
+        #[allow(unsafe_code)]
+        unsafe {
+            let raw = ctx.as_mut_ptr();
+            ffi::av_opt_set_int((*raw).priv_data, c"profile".as_ptr(), p, 0);
+            // libavcodec runs one thread unless told; ProRes splits well.
+            (*raw).thread_count = 0;
+        }
+    }
     ctx.open(None)?;
     Ok(ctx)
 }
@@ -1814,15 +1853,19 @@ mod tests {
         }
     }
 
-    /// Both ProRes flavours open, write a .mov with PCM sound, and come back
-    /// tagged as the profile they claim: `apch` for 422 HQ, `ap4h` for 4444,
-    /// which is what an editor reads to know the file holds alpha.
+    /// Every ProRes kind opens, writes a .mov with PCM sound, and comes back
+    /// tagged as the profile it claims. The tag is what an editor reads to
+    /// know which ProRes it has, and whether it holds alpha.
     #[test]
     fn prores_round_trips_through_our_own_probe() {
         let dir = tempfile::tempdir().unwrap();
         for (codec, tag) in [
+            (VideoCodec::ProRes422Proxy, b"apco"),
+            (VideoCodec::ProRes422Lt, b"apcs"),
+            (VideoCodec::ProRes422, b"apcn"),
             (VideoCodec::ProRes422Hq, b"apch"),
             (VideoCodec::ProRes4444, b"ap4h"),
+            (VideoCodec::ProRes4444Xq, b"ap4x"),
         ] {
             let path = dir.path().join(format!("{}.mov", codec.label()));
             let mut enc = Encoder::open(

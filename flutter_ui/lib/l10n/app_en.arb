@@ -2083,6 +2083,18 @@
   "@formatMp4Picker": {
     "description": "The file type shown in the system Save dialogue. MP4 stays as it is."
   },
+  "formatProRes422Proxy": "ProRes 422 Proxy (.mov)",
+  "@formatProRes422Proxy": {
+    "description": "Export format. ProRes 422 Proxy and .mov are technical names and stay as they are."
+  },
+  "formatProRes422Lt": "ProRes 422 LT (.mov)",
+  "@formatProRes422Lt": {
+    "description": "Export format. ProRes 422 LT and .mov are technical names and stay as they are."
+  },
+  "formatProRes422": "ProRes 422 (.mov)",
+  "@formatProRes422": {
+    "description": "Export format. ProRes 422 and .mov are technical names and stay as they are."
+  },
   "formatProRes422Hq": "ProRes 422 HQ (.mov)",
   "@formatProRes422Hq": {
     "description": "Export format. ProRes 422 HQ and .mov are technical names and stay as they are."
@@ -2090,6 +2102,10 @@
   "formatProRes4444": "ProRes 4444 (.mov)",
   "@formatProRes4444": {
     "description": "Export format that can carry transparency. ProRes 4444 and .mov are technical names and stay as they are."
+  },
+  "formatProRes4444Xq": "ProRes 4444 XQ (.mov)",
+  "@formatProRes4444Xq": {
+    "description": "Export format that can carry transparency, at a higher data rate than ProRes 4444. ProRes 4444 XQ and .mov are technical names and stay as they are."
   },
   "formatMovPicker": "QuickTime movie",
   "@formatMovPicker": {
