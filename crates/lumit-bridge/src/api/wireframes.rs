@@ -14,6 +14,7 @@ use uuid::Uuid;
 use super::composition::CompositionReference;
 use super::layer::BridgeCameraPose;
 use super::BridgeError;
+use lumit_core::camera::nice;
 
 /// A comp-space point taken through the view: where it lands in comp pixels,
 /// and whether it sits in front of the view's eye. A point behind it still
@@ -146,24 +147,6 @@ fn compose(a: &Place, b: &Place) -> Place {
 fn ring(corners: &[P3], out: &mut Vec<Seg>) {
     for (i, a) in corners.iter().enumerate() {
         out.push((*a, corners[(i + 1) % corners.len()]));
-    }
-}
-
-/// A round number of comp pixels near `v`: 1, 2 or 5 times a power of ten.
-fn nice(v: f64) -> f64 {
-    if v <= 0.0 || !v.is_finite() {
-        return 100.0;
-    }
-    let ten = 10f64.powf(v.log10().floor());
-    let m = v / ten;
-    ten * if m < 1.5 {
-        1.0
-    } else if m < 3.5 {
-        2.0
-    } else if m < 7.5 {
-        5.0
-    } else {
-        10.0
     }
 }
 
@@ -449,7 +432,8 @@ impl CompositionReference {
     /// The wireframes at `frame`, projected through `view`, or through the
     /// comp's active camera when there is none (which is then left out, being
     /// the eye). `ground` adds the ground, the comp's frame and the axes from
-    /// the origin. `only` names the cameras and lights to outline, and then
+    /// the origin, and `grid` the ground's own lines, which a 3D viewport's
+    /// picture already has. `only` names the cameras and lights to outline, and then
     /// no other layer is; with none given everything is. Asked once per
     /// frame, view or document change, never per rebuild.
     #[frb(sync)]
@@ -458,6 +442,7 @@ impl CompositionReference {
         frame: u64,
         view: Option<BridgeCameraPose>,
         ground: bool,
+        grid: bool,
         only: Option<Vec<Uuid>>,
         media_sizes: Vec<BridgeMediaSize>,
     ) -> Result<BridgeWireframes, BridgeError> {
@@ -837,7 +822,7 @@ impl CompositionReference {
             let step = nice(far / 10.0);
             let n = ((far / step).ceil() as i32).clamp(1, 20);
             let reach = f64::from(n) * step;
-            for k in -n..=n {
+            for k in (-n..=n).filter(|_| grid) {
                 let across = f64::from(k) * step;
                 // The two lines through the middle a little stronger.
                 let weight = if k == 0 { 1.0 } else { 0.6 };

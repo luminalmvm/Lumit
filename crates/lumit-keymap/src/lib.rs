@@ -246,6 +246,7 @@ impl ActionId {
             "viewer.rulers.toggle" => "Show or hide the rulers",
             "viewer.grid.toggle" => "Show or hide the grid",
             "viewer.new" => "Open another Viewer",
+            "viewer.new.viewport" => "Open a 3D viewport",
             "viewer.view.next" => "Front the next view",
             "viewer.view.prev" => "Front the previous view",
             "viewer.lock.toggle" => "Lock or unlock this view",

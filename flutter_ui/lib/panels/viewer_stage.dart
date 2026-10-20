@@ -94,6 +94,7 @@ class ViewerStage extends StatelessWidget {
   final int viewId;
 
   final Rect fitted;
+
   final bool grid;
 
   /// Which of the guides menu's marks are drawn over the picture: the grid, the
@@ -717,6 +718,9 @@ class ViewerStage extends StatelessWidget {
                   builder: (context, _) {
                     final view = _viewPose();
                     final aids = uiState.viewerAidsOf(viewId);
+                    // A 3D viewport's picture has the ground's lines drawn
+                    // in, and its axes are the ones in its corner.
+                    final viewport = uiState.isViewport(viewId);
                     final selected = uiState.selectedLayerIds;
                     final layers = uiState.model.heldLayers;
                     final List<UuidValue>? only = !wireframes
@@ -735,7 +739,7 @@ class ViewerStage extends StatelessWidget {
                     final ask = aids.ground || only == null || only.isNotEmpty;
                     // The corner axes come from the rows the outlines hold,
                     // so on their own they cost no call.
-                    final axes = aids.axes
+                    final axes = aids.axes && !viewport
                         ? viewAxes(
                             uiState.viewProjections.of(
                               comp: comp,
@@ -755,6 +759,7 @@ class ViewerStage extends StatelessWidget {
                       view: view,
                       ask: ask,
                       ground: aids.ground,
+                      grid: !viewport,
                       axes: axes,
                       only: only,
                       frame: uiState.playheadFrame.value,
@@ -1793,8 +1798,10 @@ class ViewerWireframeLayer extends StatefulWidget {
   final bool ask;
 
   /// Whether the ground, with the comp's frame and the axes from the origin,
-  /// is drawn.
+  /// is drawn, and whether the ground's own lines are, which a 3D viewport's
+  /// picture already has.
   final bool ground;
+  final bool grid;
 
   /// The corner axes, as [viewAxes] reads them, or null for none.
   final List<double>? axes;
@@ -1831,6 +1838,7 @@ class ViewerWireframeLayer extends StatefulWidget {
     required this.view,
     required this.ask,
     required this.ground,
+    this.grid = true,
     required this.axes,
     required this.only,
     required this.frame,
@@ -1870,6 +1878,7 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
         old.view != widget.view ||
         old.ask != widget.ask ||
         old.ground != widget.ground ||
+        old.grid != widget.grid ||
         !listEquals(old.only, widget.only) ||
         old.frame != widget.frame ||
         old.revision != widget.revision) {
@@ -1889,6 +1898,7 @@ class _ViewerWireframeLayerState extends State<ViewerWireframeLayer> {
         frame: BigInt.from(widget.frame),
         view: widget.view,
         ground: widget.ground,
+        grid: widget.grid,
         only: widget.only,
         mediaSizes: widget.mediaSizes,
       );

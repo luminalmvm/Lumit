@@ -25,7 +25,8 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraPose;
 import 'package:uuid/uuid.dart';
 
 import 'dock.dart';
-import 'viewer_view.dart' show ViewerChannel, ViewerView, defaultViewSlots;
+import 'viewer_view.dart'
+    show PreviewResolution, ViewerChannel, ViewerView, defaultViewSlots;
 import 'workspace.dart' show ViewerLook, neutralLook;
 
 /// Which of the three display modes a view is in (docs/07 §2.1).
@@ -163,6 +164,10 @@ class ViewerSurface {
   /// The 3D views F10, F11 and F12 switch this view to.
   final List<ViewerView> viewSlots = [...defaultViewSlots];
 
+  /// In a 3D viewport: how many pixels it is drawn with, its own tier apart
+  /// from the comp's.
+  PreviewResolution resolution;
+
   ViewerSurface({
     required this.id,
     required this.engineId,
@@ -182,6 +187,7 @@ class ViewerSurface {
     this.layerControls = true,
     this.ground,
     this.axes,
+    this.resolution = PreviewResolution.half,
   });
 
   /// What the project remembers about this view. The display half rides in the
@@ -208,6 +214,22 @@ class ViewerSurface {
           'view_slots': [for (final v in viewSlots) v.name],
         if (ground != null) 'ground': ground,
         if (axes != null) 'axes': axes,
+        if (resolution != PreviewResolution.half) 'resolution': resolution.name,
+        // A 3D viewport's free view of each comp, so it is where it was left.
+        if (cameraPoses.keys.any((k) => k.endsWith('/${ViewerView.free.name}')))
+          'free': {
+            for (final e in cameraPoses.entries)
+              if (e.key.endsWith('/${ViewerView.free.name}'))
+                e.key.substring(0, e.key.lastIndexOf('/')): [
+                  e.value.zoom,
+                  e.value.x,
+                  e.value.y,
+                  e.value.z,
+                  e.value.rotationX,
+                  e.value.rotationY,
+                  e.value.rotationZ,
+                ],
+          },
       };
 
   /// Read one back. Anything malformed reads as its default rather than
@@ -242,7 +264,29 @@ class ViewerSurface {
       layerControls: j['layer_controls'] != false,
       ground: j['ground'] is bool ? j['ground'] as bool : null,
       axes: j['axes'] is bool ? j['axes'] as bool : null,
+      resolution: PreviewResolution.values.asNameMap()[j['resolution']] ??
+          PreviewResolution.half,
     );
+    final free = j['free'];
+    if (free is Map) {
+      for (final e in free.entries) {
+        final v = e.value;
+        if (v is! List || v.length != 7 || v.any((n) => _finite(n) == null)) {
+          continue;
+        }
+        final n = [for (final x in v) _finite(x)!];
+        surface.cameraPoses['${e.key}/${ViewerView.free.name}'] =
+            BridgeCameraPose(
+          zoom: n[0],
+          x: n[1],
+          y: n[2],
+          z: n[3],
+          rotationX: n[4],
+          rotationY: n[5],
+          rotationZ: n[6],
+        );
+      }
+    }
     if (slots is List && slots.length == defaultViewSlots.length) {
       final named = ViewerView.values.asNameMap();
       for (var i = 0; i < slots.length; i++) {
@@ -300,6 +344,15 @@ class ViewerViews extends ChangeNotifier {
   /// Share view options across views, as After Effects has it. With it on,
   /// every view reads the active view's way of looking rather than its own.
   bool shareViewOptions = false;
+
+  /// The Viewer panes that are 3D viewports, where each view looks through a
+  /// free camera of its own and is moved without a tool. Workspace state,
+  /// like the layout.
+  final Set<PaneId> viewportPanes = {};
+
+  /// Whether [view] is in a 3D viewport.
+  bool isViewport(ViewerSurface view) => viewportPanes
+      .any((pane) => paneViews[pane]?.contains(view.id) ?? false);
 
   /// The next engine id to mint. Small integers, one per view, per open
   /// project; never reused, so a frame in flight for a closed view can never
@@ -437,6 +490,7 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.remove(pane);
     paneCompare.remove(pane);
     paneDivider.remove(pane);
+    viewportPanes.remove(pane);
     notifyListeners();
   }
 
@@ -519,6 +573,8 @@ class ViewerViews extends ChangeNotifier {
         if (_activeId != null) 'active': _activeId,
         if (alwaysPreviewId != null) 'always_preview': alwaysPreviewId,
         if (shareViewOptions) 'share_options': true,
+        if (viewportPanes.isNotEmpty)
+          'viewports': [for (final pane in viewportPanes) _paneKey(pane)],
       };
 
   static String _paneKey(PaneId pane) => '${pane.panel.name}:${pane.instance}';
@@ -545,6 +601,7 @@ class ViewerViews extends ChangeNotifier {
     paneLayouts.clear();
     paneCompare.clear();
     paneDivider.clear();
+    viewportPanes.clear();
     _activeId = null;
     alwaysPreviewId = null;
     shareViewOptions = false;
@@ -620,5 +677,12 @@ class ViewerViews extends ChangeNotifier {
     final preview = workspace['always_preview'];
     if (preview is String && byId(preview) != null) alwaysPreviewId = preview;
     shareViewOptions = workspace['share_options'] == true;
+    final viewports = workspace['viewports'];
+    if (viewports is List) {
+      for (final key in viewports) {
+        final pane = _paneFromKey('$key');
+        if (pane != null) viewportPanes.add(pane);
+      }
+    }
   }
 }

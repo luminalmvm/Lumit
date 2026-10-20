@@ -5916,6 +5916,10 @@
   "@keyLookAtAllLayers": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyOpenA3dViewport": "Open a 3D viewport",
+  "@keyOpenA3dViewport": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyResetThe3dView": "Reset the 3D view",
   "@keyResetThe3dView": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -6820,6 +6824,10 @@
   "@menuNewViewer": {
     "description": "A row of the Window menu: open another Viewer panel, beside the one being worked in."
   },
+  "menuNew3dViewport": "New 3D viewport",
+  "@menuNew3dViewport": {
+    "description": "A row of the Window menu: open a 3D viewport beside the Viewer, a Viewer panel looking at the same composition through a camera of its own that the mouse moves."
+  },
   "menuShowRuler": "Show ruler",
   "@menuShowRuler": {
     "description": "Menu item."
@@ -7155,6 +7163,10 @@
   "panelViewer": "Viewer",
   "@panelViewer": {
     "description": "The name of the panel showing the picture."
+  },
+  "panel3dViewport": "3D viewport",
+  "@panel3dViewport": {
+    "description": "The name at the top of a 3D viewport: a Viewer panel looking through a camera of its own, moved with the mouse."
   },
   "sourceTitle": "Source",
   "@sourceTitle": {
@@ -10402,6 +10414,14 @@
   "viewerViewCustom3": "Custom view 3",
   "@viewerViewCustom3": {
     "description": "Entry in the Viewer bar's 3D view menu: the third of three viewpoints that start at an angle and keep wherever the camera tools move them."
+  },
+  "viewerViewFree": "Free view",
+  "@viewerViewFree": {
+    "description": "Entry in the Viewer bar's 3D view menu, offered only in a 3D viewport: the viewport's own viewpoint, moved with the mouse and kept with the session."
+  },
+  "menuOpenIn3dViewport": "Open in new 3D viewport",
+  "@menuOpenIn3dViewport": {
+    "description": "Last row of the Viewer bar's 3D view menu: open a 3D viewport beside this Viewer, looking at the same composition."
   },
   "viewerViewFront": "Front",
   "@viewerViewFront": {

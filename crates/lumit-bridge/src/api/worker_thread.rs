@@ -110,7 +110,10 @@ pub struct WorkerState {
     /// prefix is: it says what the Viewer is looking through, and every render,
     /// playback and drag preview looks through the same. Keyed by view like
     /// [`Self::looks`], so a two-up can show the active camera beside Top.
-    camera_views: std::collections::HashMap<u32, (Uuid, lumit_core::model::CameraPose)>,
+    camera_views: std::collections::HashMap<u32, ViewLatch>,
+    /// A 3D viewport's ground, by view. Put on the renderer with that view's
+    /// look.
+    grounds: std::collections::HashMap<u32, lumit_render::ViewGround>,
     /// The disk tier (docs/06 §5.4) and its IO thread. Owned here because this
     /// is the thread that has both halves of every hand-off: the renderer whose
     /// evictions fall to disk, and the frame keys to file them under.
@@ -204,7 +207,7 @@ impl WorkerState {
     }
 
     /// The 3D view of the view being served, or `None` for its comp's camera.
-    fn camera_view(&self) -> Option<(Uuid, lumit_core::model::CameraPose)> {
+    fn camera_view(&self) -> Option<ViewLatch> {
         self.camera_views.get(&self.view_id()).copied()
     }
 
@@ -289,6 +292,19 @@ struct ViewerLook {
     transparent_background: bool,
     region: Option<[f32; 4]>,
     colour_view: Option<(String, String)>,
+    /// A 3D viewport's ground, from [`WorkerState::grounds`] rather than the
+    /// look message.
+    ground: Option<lumit_render::ViewGround>,
+}
+
+/// One view's 3D view of a comp as the worker holds it: the pose it is drawn
+/// through, and for a 3D viewport the draft that leaves out motion blur.
+#[frb(ignore)]
+#[derive(Clone, Copy, PartialEq)]
+struct ViewLatch {
+    comp: Uuid,
+    pose: lumit_core::model::CameraPose,
+    draft: bool,
 }
 
 /// Make the renderer look the way `view` looks, if it does not already.
@@ -304,7 +320,8 @@ struct ViewerLook {
 /// differently bank separate frames and neither can be served the other's.
 #[frb(ignore)]
 fn look_at(state: &mut WorkerState, view: u32) {
-    let want = state.looks.get(&view).cloned().unwrap_or_default();
+    let mut want = state.looks.get(&view).cloned().unwrap_or_default();
+    want.ground = state.grounds.get(&view).copied();
     if state.applied_look.0 == view && state.applied_look.1 == want {
         return;
     }
@@ -322,6 +339,7 @@ fn apply_viewer_look(renderer: &mut HeadlessRenderer, look: &ViewerLook) {
     renderer.set_transparent_background(look.transparent_background);
     renderer.set_region(look.region);
     renderer.set_colour_view(look.colour_view.clone());
+    renderer.set_ground(look.ground);
 }
 
 /// The device and engines between one worker's renderer and the next, and
@@ -1644,6 +1662,12 @@ fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStre
 fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // The fill banks for the view the user is working in, under its look.
     state.serve_active();
+    // A 3D viewport is a draft that moves all the time: filling through it
+    // would only push the Viewer's own frames out.
+    if state.camera_view().is_some_and(|v| v.draft) {
+        state.fill_exhausted = true;
+        return;
+    }
     // A non-neutral Viewer view makes every frame unnameable, so the
     // fill would render frame after frame and bank none of them, never reach
     // the end of its list, and never stop — GPU work for nothing, for as long
@@ -1875,6 +1899,9 @@ pub enum WorkerRequest {
         pose: Option<crate::api::layer::BridgeCameraPose>,
         /// Whose view this is.
         view: u32,
+        /// A 3D viewport's: no motion blur, and its ground in this colour.
+        draft: bool,
+        ground: Option<[f32; 4]>,
     },
     SetViewerLook {
         stops: f64,
@@ -3165,6 +3192,7 @@ fn worker_loop(
         applied_look: (0, ViewerLook::default()),
         prefix: None,
         camera_views: std::collections::HashMap::new(),
+        grounds: std::collections::HashMap::new(),
         disk: lumit_render::diskio::spawn(),
         disk_wanted: std::collections::HashMap::new(),
         names: crate::names::NameCache::default(),
@@ -4187,8 +4215,20 @@ fn handle_requests(
                     state.playback = None;
                     Ok(())
                 }
-                WorkerRequest::SetCameraView { comp, pose, view } => {
-                    set_view(state, view, pose.map(|p| (comp, p.core())));
+                WorkerRequest::SetCameraView {
+                    comp,
+                    pose,
+                    view,
+                    draft,
+                    ground,
+                } => {
+                    let latch = pose.map(|p| ViewLatch {
+                        comp,
+                        pose: p.core(),
+                        draft,
+                    });
+                    let ground = ground.and_then(|colour| ground_of(state, comp, colour));
+                    set_view(state, view, latch, ground);
                     Ok(())
                 }
                 WorkerRequest::RenderItem(req) => render_item(req, state, stream),
@@ -4214,6 +4254,7 @@ fn handle_requests(
                             transparent_background,
                             region,
                             colour_view,
+                            ground: None,
                         },
                     );
                     look_at(state, view);
@@ -4499,7 +4540,7 @@ const VIEW_CAMERA_ID: Uuid = Uuid::from_u128(0x6c75_6d69_7420_7669_6577_2063_616
 fn viewed_kept(
     kept: &mut Option<Viewed>,
     prefix: Option<crate::api::state::BridgePrefixPoint>,
-    view: Option<(Uuid, lumit_core::model::CameraPose)>,
+    view: Option<ViewLatch>,
     revision: u64,
     document: std::sync::Arc<lumit_core::Document>,
 ) -> std::sync::Arc<lumit_core::Document> {
@@ -4528,7 +4569,7 @@ fn viewed_kept(
 struct Viewed {
     revision: u64,
     prefix: Option<crate::api::state::BridgePrefixPoint>,
-    view: Option<(Uuid, lumit_core::model::CameraPose)>,
+    view: Option<ViewLatch>,
     document: std::sync::Arc<lumit_core::Document>,
 }
 
@@ -4537,15 +4578,21 @@ struct Viewed {
 /// the top of the named comp, where it is the active camera for the render,
 /// the frame key and every nested reading alike. No second render path: a
 /// patched copy of the snapshot goes down the ordinary one. Another comp's
-/// view leaves the document alone.
+/// view leaves the document alone. A 3D viewport's draft view also leaves out
+/// the comp's motion blur.
 #[frb(ignore)]
 fn viewed_through(
     prefix: Option<crate::api::state::BridgePrefixPoint>,
-    view: Option<(Uuid, lumit_core::model::CameraPose)>,
+    view: Option<ViewLatch>,
     document: std::sync::Arc<lumit_core::Document>,
 ) -> std::sync::Arc<lumit_core::Document> {
     let document = viewed(prefix, document);
-    let Some((comp_id, pose)) = view else {
+    let Some(ViewLatch {
+        comp: comp_id,
+        pose,
+        draft,
+    }) = view
+    else {
         return document;
     };
     let Some(comp) = document.comp(comp_id) else {
@@ -4566,8 +4613,30 @@ fn viewed_through(
     let mut doc = (*document).clone();
     if let Some(c) = doc.comp_mut(comp_id) {
         c.layers.insert(0, layer);
+        c.motion_blur.enabled &= !draft;
     }
     std::sync::Arc::new(doc)
+}
+
+/// A 3D viewport's ground in `colour`, on the floor through the middle of
+/// `comp` at half its height, as the Viewer's own ground sits.
+#[frb(ignore)]
+fn ground_of(
+    state: &WorkerState,
+    comp: Uuid,
+    colour: [f32; 4],
+) -> Option<lumit_render::ViewGround> {
+    let project = state.project.state().ok()?;
+    let project = project.read().ok()?;
+    let document = project.store.snapshot();
+    let c = document.comp(comp)?;
+    let (w, h) = (f64::from(c.width), f64::from(c.height));
+    Some(lumit_render::ViewGround {
+        colour,
+        middle: (w * 0.5) as f32,
+        floor: (h * 0.5) as f32,
+        step: lumit_core::camera::nice(w.max(h) / 8.0) as f32,
+    })
 }
 
 /// Let go of everything held for a closed view.
@@ -4582,26 +4651,33 @@ fn close_view(state: &mut WorkerState, view: u32) {
     }
     state.looks.remove(&view);
     state.camera_views.remove(&view);
+    state.grounds.remove(&view);
     state.names.forget_view(view);
     state.stand_ins.retain(|(v, ..)| *v != view);
     state.renderer.drop_view_targets(view);
 }
 
-/// Latch one view's 3D view, the way [`set_prefix`] latches the chip: a
-/// change renames every frame of the comp in that view, so that view's names,
-/// the bar and the fill start over.
+/// Latch one view's 3D view and its ground, the way [`set_prefix`] latches
+/// the chip: a change renames every frame of the comp in that view, so that
+/// view's names, the bar and the fill start over.
 #[frb(ignore)]
 fn set_view(
     state: &mut WorkerState,
     view: u32,
-    pose: Option<(Uuid, lumit_core::model::CameraPose)>,
+    pose: Option<ViewLatch>,
+    ground: Option<lumit_render::ViewGround>,
 ) {
-    if state.camera_views.get(&view).copied() == pose {
+    if state.camera_views.get(&view).copied() == pose && state.grounds.get(&view).copied() == ground
+    {
         return;
     }
     match pose {
         Some(pose) => state.camera_views.insert(view, pose),
         None => state.camera_views.remove(&view),
+    };
+    match ground {
+        Some(ground) => state.grounds.insert(view, ground),
+        None => state.grounds.remove(&view),
     };
     state.names.forget_view(view);
     state.layer_sample = None;
@@ -4682,7 +4758,12 @@ fn render_comp(
     } else {
         None
     };
-    let document = viewed_through(prefix, state.camera_view(), document);
+    let view = state.camera_view();
+    let document = viewed_through(prefix, view, document);
+    // A committed document: cacheable, and a held frame serves the scrub.
+    // Not a 3D viewport's draft, which is never banked, so it never pushes
+    // the Viewer's own frames out.
+    let cacheable = !view.is_some_and(|v| v.draft);
     watched(state, stream, req.frame, |state, stream| {
         publish_frame(
             state,
@@ -4692,8 +4773,7 @@ fn render_comp(
             &document,
             stream,
             req.mode,
-            // A committed document: cacheable, and a held frame serves the scrub.
-            true,
+            cacheable,
         );
     });
     Ok(())
@@ -6098,7 +6178,12 @@ mod tests {
             rotation_deg: (5.0, -10.0, 15.0),
             dof: None,
         };
-        let through = super::viewed_through(None, Some((comp, pose)), two.clone());
+        let latch = super::ViewLatch {
+            comp,
+            pose,
+            draft: false,
+        };
+        let through = super::viewed_through(None, Some(latch), two.clone());
         let layers = &through.comp(comp).expect("comp").layers;
         assert_eq!(layers.len(), two.comp(comp).expect("comp").layers.len() + 1);
         assert_eq!(layers[0].id, super::VIEW_CAMERA_ID);
@@ -6150,7 +6235,12 @@ mod tests {
         state.renderer.sync_colour(&document);
         let quality = super::still_quality(1.0);
         let top = camera_view_pose(BridgeCameraView::Top, 64.0, 32.0).core();
-        super::set_view(&mut state, 1, Some((comp, top)));
+        let latch = super::ViewLatch {
+            comp,
+            pose: top,
+            draft: false,
+        };
+        super::set_view(&mut state, 1, Some(latch), None);
 
         // Only the Top frame is made, so a bar naming frames any other way
         // finds nothing held.
@@ -6282,6 +6372,7 @@ mod tests {
                 transparent_background: true,
                 region: None,
                 colour_view: None,
+                ground: None,
             },
         );
         super::look_at(&mut state, 0);
@@ -6393,6 +6484,7 @@ mod tests {
             applied_look: (0, super::ViewerLook::default()),
             prefix: None,
             camera_views: std::collections::HashMap::new(),
+            grounds: std::collections::HashMap::new(),
             disk: lumit_render::diskio::spawn(),
             disk_wanted: std::collections::HashMap::new(),
             names: crate::names::NameCache::default(),

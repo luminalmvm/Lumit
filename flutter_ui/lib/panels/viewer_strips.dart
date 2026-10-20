@@ -206,8 +206,15 @@ class ViewerHeader extends StatelessWidget {
   final ValueChanged<double?> onZoom;
   final bool detached;
 
+  /// A 3D viewport's header, which says so, and the view it heads, whose
+  /// preview tier its picker shows.
+  final bool viewport;
+  final int? viewId;
+
   const ViewerHeader({
     super.key,
+    this.viewport = false,
+    this.viewId,
     required this.zoom,
     required this.shownScale,
     required this.look,
@@ -236,8 +243,11 @@ class ViewerHeader extends StatelessWidget {
           // The panel's name, a kicker like every other container label
           // (§7.1), and lit because this is the container rather than one of
           // several tabs in it.
-          final word = Text(t.kickerCase(l10n.panelViewer),
-              style: t.kickerOn, maxLines: 1, overflow: TextOverflow.ellipsis);
+          final word = Text(
+              t.kickerCase(viewport ? l10n.panel3dViewport : l10n.panelViewer),
+              style: t.kickerOn,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis);
           // Lantern puts a small accent dot before the title; the other
           // shapes draw the word alone.
           final title = t.tokens.headerDot
@@ -253,6 +263,7 @@ class ViewerHeader extends StatelessWidget {
                 ])
               : word;
           final pickers = viewerPickers(
+            viewId: viewId,
             zoom: zoom,
             shownScale: shownScale,
             look: look,
@@ -339,6 +350,8 @@ List<Widget> viewerPickers({
   required ValueChanged<double?> onZoom,
   // False under the deck, whose own two pickers answer the quality question.
   bool quality = true,
+  // The view whose tier the quality picker shows, or the one in front.
+  int? viewId,
 }) =>
     [
       // The picture's scale. The face hugs its own label: "Fit" and "400%"
@@ -360,7 +373,8 @@ List<Widget> viewerPickers({
       ),
       const SizedBox(width: viewerHeaderGap),
       if (quality) ...[
-        const _QualityDropdown(key: ValueKey('viewer-resolution')),
+        _QualityDropdown(
+            key: const ValueKey('viewer-resolution'), viewId: viewId),
         const SizedBox(width: viewerHeaderGap),
       ],
       _ColourDropdown(
@@ -380,7 +394,10 @@ List<Widget> viewerPickers({
 /// allowed to spend — and asking it in two places was how a soft picture and a
 /// slow transport came to look like two unrelated faults.
 class _QualityDropdown extends StatelessWidget {
-  const _QualityDropdown({super.key});
+  /// The view whose tier this shows: a 3D viewport keeps its own.
+  final int? viewId;
+
+  const _QualityDropdown({super.key, this.viewId});
 
   @override
   Widget build(BuildContext context) {
@@ -400,7 +417,8 @@ class _QualityDropdown extends StatelessWidget {
           t: t,
           dense: true,
           onPressed: () => _open(context, t, ui),
-          face: dropdownFace(t, ui.previewResolution.title),
+          face: dropdownFace(
+              t, ui.previewResolutionOf(viewId ?? ui.activeViewId).title),
         ),
       ),
     );
@@ -429,11 +447,12 @@ class _QualityDropdown extends StatelessWidget {
                 MenuRow.option(
                   key: ValueKey<String>('viewer-quality-${resolution.name}'),
                   onPressed: () {
-                    ui.setPreviewResolution(resolution);
+                    ui.setPreviewResolution(resolution, viewId: viewId);
                     redraw(() {});
                   },
                   child: Row(children: [
-                    menuTick(resolution == ui.previewResolution),
+                    menuTick(resolution ==
+                        ui.previewResolutionOf(viewId ?? ui.activeViewId)),
                     Text(resolution.title),
                   ]),
                 ),

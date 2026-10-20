@@ -7238,10 +7238,12 @@ fn wire__crate__api__composition__composition_reference_set_camera_view_impl(
             let api_pose =
                 <Option<crate::api::layer::BridgeCameraPose>>::sse_decode(&mut deserializer);
             let api_view = <u32>::sse_decode(&mut deserializer);
+            let api_draft = <bool>::sse_decode(&mut deserializer);
+            let api_ground = <Option<u32>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::set_camera_view(
-                    &api_that, api_pose, api_view,
+                    &api_that, api_pose, api_view, api_draft, api_ground,
                 )?;
                 Ok(output_ok)
             })())
@@ -8311,6 +8313,7 @@ fn wire__crate__api__composition__composition_reference_wireframes_impl(
             let api_view =
                 <Option<crate::api::layer::BridgeCameraPose>>::sse_decode(&mut deserializer);
             let api_ground = <bool>::sse_decode(&mut deserializer);
+            let api_grid = <bool>::sse_decode(&mut deserializer);
             let api_only = <Option<Vec<uuid::Uuid>>>::sse_decode(&mut deserializer);
             let api_media_sizes =
                 <Vec<crate::api::wireframes::BridgeMediaSize>>::sse_decode(&mut deserializer);
@@ -8321,6 +8324,7 @@ fn wire__crate__api__composition__composition_reference_wireframes_impl(
                     api_frame,
                     api_view,
                     api_ground,
+                    api_grid,
                     api_only,
                     api_media_sizes,
                 )?;

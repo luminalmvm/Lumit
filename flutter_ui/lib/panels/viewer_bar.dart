@@ -798,7 +798,7 @@ class _ViewPicker extends StatelessWidget {
               context: context,
               position: box.localToGlobal(Offset(0, box.size.height + 2)),
               rows: (close) => [
-                for (final v in ViewerView.values)
+                for (final v in ui.viewsOffered(viewId))
                   MenuRow(
                     key: ValueKey<String>('viewer-view-${v.name}'),
                     onPressed: () {
@@ -810,6 +810,21 @@ class _ViewPicker extends StatelessWidget {
                       Text(v.title),
                     ]),
                   ),
+                Container(
+                    height: 1,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    color: t.hairline),
+                MenuRow(
+                  key: const ValueKey('viewer-view-viewport'),
+                  onPressed: () {
+                    close(null);
+                    ui.addViewportPanel();
+                  },
+                  child: Row(children: [
+                    menuTick(false),
+                    Text(l10n.menuOpenIn3dViewport),
+                  ]),
+                ),
               ],
             );
           },

@@ -657,8 +657,12 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
     // what the measured rectangle in the layout builder knows.
     void goToNamedZoom(double? z) =>
         _goToZoom(z, Offset.zero, from: _shownScale);
+    // A 3D viewport says so where the panel's name goes.
+    final viewport = ui.isViewport(widget.view.engineId);
     final header = split
         ? ViewerHeader(
+            viewport: viewport,
+            viewId: widget.view.engineId,
             zoom: _zoom,
             shownScale: _shownScale,
             look: ui.viewerLook,
@@ -713,7 +717,10 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                 ? const []
                 : [
                     DockPaneHandle(
-                      child: Text(t.kickerCase(l10n.panelViewer),
+                      child: Text(
+                          t.kickerCase(viewport
+                              ? l10n.panel3dViewport
+                              : l10n.panelViewer),
                           style: t.kickerOn),
                     ),
                     viewerBarGapBox(viewerBarGap),
@@ -725,6 +732,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
                       onToneMap: ui.toggleViewerToneMap,
                       onZoom: goToNamedZoom,
                       quality: !deck,
+                      viewId: widget.view.engineId,
                     ),
                   ],
           ),

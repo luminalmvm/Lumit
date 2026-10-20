@@ -857,7 +857,9 @@ abstract class BridgeLibApi extends BaseApi {
   void crateApiCompositionCompositionReferenceSetCameraView(
       {required CompositionReference that,
       BridgeCameraPose? pose,
-      required int view});
+      required int view,
+      required bool draft,
+      int? ground});
 
   void crateApiCompositionCompositionReferenceSetGroupLabel(
       {required CompositionReference that,
@@ -993,6 +995,7 @@ abstract class BridgeLibApi extends BaseApi {
       required BigInt frame,
       BridgeCameraPose? view,
       required bool ground,
+      required bool grid,
       List<UuidValue>? only,
       required List<BridgeMediaSize> mediaSizes});
 
@@ -8007,13 +8010,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   void crateApiCompositionCompositionReferenceSetCameraView(
       {required CompositionReference that,
       BridgeCameraPose? pose,
-      required int view}) {
+      required int view,
+      required bool draft,
+      int? ground}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
         sse_encode_opt_box_autoadd_bridge_camera_pose(pose, serializer);
         sse_encode_u_32(view, serializer);
+        sse_encode_bool(draft, serializer);
+        sse_encode_opt_box_autoadd_u_32(ground, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 189)!;
       },
       codec: SseCodec(
@@ -8022,7 +8029,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceSetCameraViewConstMeta,
-      argValues: [that, pose, view],
+      argValues: [that, pose, view, draft, ground],
       apiImpl: this,
     ));
   }
@@ -8031,7 +8038,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceSetCameraViewConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_set_camera_view",
-            argNames: ["that", "pose", "view"],
+            argNames: ["that", "pose", "view", "draft", "ground"],
           );
 
   @override
@@ -8942,6 +8949,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       required BigInt frame,
       BridgeCameraPose? view,
       required bool ground,
+      required bool grid,
       List<UuidValue>? only,
       required List<BridgeMediaSize> mediaSizes}) {
     return handler.executeSync(SyncTask(
@@ -8951,6 +8959,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_u_64(frame, serializer);
         sse_encode_opt_box_autoadd_bridge_camera_pose(view, serializer);
         sse_encode_bool(ground, serializer);
+        sse_encode_bool(grid, serializer);
         sse_encode_opt_list_Uuid(only, serializer);
         sse_encode_list_bridge_media_size(mediaSizes, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 219)!;
@@ -8961,7 +8970,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceWireframesConstMeta,
-      argValues: [that, frame, view, ground, only, mediaSizes],
+      argValues: [that, frame, view, ground, grid, only, mediaSizes],
       apiImpl: this,
     ));
   }
@@ -8970,7 +8979,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceWireframesConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_wireframes",
-            argNames: ["that", "frame", "view", "ground", "only", "mediaSizes"],
+            argNames: [
+              "that",
+              "frame",
+              "view",
+              "ground",
+              "grid",
+              "only",
+              "mediaSizes"
+            ],
           );
 
   @override

@@ -838,6 +838,8 @@ class _LumitAppViewState extends State<LumitAppView> {
       // arrangement when the focus is somewhere else.
       case 'viewer.new':
         ui.addViewerPanel();
+      case 'viewer.new.viewport':
+        ui.addViewportPanel();
       case 'viewer.view.next':
         ui.views.cycle(1);
         ui.frontView(ui.views.activeId ?? '');

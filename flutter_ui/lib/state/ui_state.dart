@@ -1200,8 +1200,18 @@ class LumitUiState extends ChangeNotifier {
     // picture when it lands.
     if (view.mode != ViewMode.composition) return;
     view.compId ??= comp.internalid.toString();
+    // A 3D viewport opens on its free view of whichever comp it is shown,
+    // and that asks for the picture itself.
+    final viewport = views.isViewport(view);
+    if (viewport && !view.cameraViews.containsKey(view.compId)) {
+      setViewerView(ViewerView.free, viewId: view.engineId);
+      return;
+    }
     final frame = frameFor(view);
-    final scale = viewerScale;
+    // A viewport draws at its own tier, every other view at the comp's.
+    final scale = viewport
+        ? view.resolution.scaleFor(_panelScale)
+        : _compResolution.scaleFor(_panelScale);
     final stamp = '${comp.internalid}/$frame/$scale/${model.heldRevision}/'
         '${view.look.stops}/${view.look.toneMap}/${view.region}/'
         '${view.colourView}/$viewerPrefixStamp';
@@ -1360,6 +1370,21 @@ class LumitUiState extends ChangeNotifier {
     // Its first view opens on whatever the active view was showing, which is
     // what makes a second Viewer immediately useful.
     views.forPane(made);
+    requestFrame();
+  }
+
+  /// Window ▸ 3D viewport, and the 3D view menu's own row: a Viewer panel
+  /// beside the one being worked in, whose view looks at the same comp
+  /// through a free camera of its own.
+  void addViewportPanel() {
+    final made = addPane(split, Panel.viewer, beside: currentViewerPane);
+    views.viewportPanes.add(made);
+    activePane.value = made;
+    workspace.touch();
+    saveLayout();
+    final view = views.forPane(made).first;
+    frontView(view.id);
+    setViewerView(ViewerView.free, viewId: view.engineId);
     requestFrame();
   }
 
@@ -2311,16 +2336,39 @@ class LumitUiState extends ChangeNotifier {
   /// and a first look at a shot that is soft for a reason nobody can see. A
   /// comp that has been given a tier keeps it; only "never chosen" reads
   /// differently now.
-  PreviewResolution get previewResolution =>
+  ///
+  /// A 3D viewport in front has a tier of its own, Half until it is given
+  /// another, so it never slows the Viewer beside it.
+  PreviewResolution get previewResolution => previewResolutionOf(activeViewId);
+
+  /// The tier Viewer view [viewId] draws at: a 3D viewport's own, and the
+  /// comp's for every other view.
+  PreviewResolution previewResolutionOf(int viewId) {
+    final view = _surfaceOf(viewId);
+    if (view != null && views.isViewport(view)) return view.resolution;
+    return _compResolution;
+  }
+
+  PreviewResolution get _compResolution =>
       previewResolutions[_selectedComp?.internalid.toString()] ??
       PreviewResolution.full;
 
   /// Choose the preview resolution for the fronted comp, and ask for the frame
   /// again — the setting changes what the *next* frame is made of, so without
-  /// the ask the picture would not change until something else moved.
-  void setPreviewResolution(PreviewResolution resolution) {
+  /// the ask the picture would not change until something else moved. With
+  /// [viewId], or with a 3D viewport in front, the viewport's own.
+  void setPreviewResolution(PreviewResolution resolution, {int? viewId}) {
     final id = _selectedComp?.internalid.toString();
-    if (id == null || previewResolution == resolution) return;
+    final at = viewId ?? activeViewId;
+    if (id == null || previewResolutionOf(at) == resolution) return;
+    final view = _surfaceOf(at);
+    if (view != null && views.isViewport(view)) {
+      view.resolution = resolution;
+      notifyListeners();
+      rememberSession();
+      requestFrame();
+      return;
+    }
     // Every tier is stored, Auto included: with Full the default, an absent
     // entry means "never chosen" and Auto is a choice like any other.
     previewResolutions[id] = resolution;
@@ -2440,6 +2488,8 @@ class LumitUiState extends ChangeNotifier {
     // Appearance and layout live in the workspace, so a change there is a
     // change here as far as any listening widget is concerned.
     this.workspace.addListener(notifyListeners);
+    // A viewport's ground is drawn in the theme's colour.
+    this.workspace.addListener(_recolourGrounds);
     // How fast footage crosses in a shared project, and whether this
     // computer sends and asks for any, are the person's settings and the
     // engine's to keep to.
@@ -2612,12 +2662,16 @@ class LumitUiState extends ChangeNotifier {
       }
       switch (msg) {
         case WorkerResponse_RenderedDMABuf frame:
-          previewTier.value = frame.field0.tier;
+          if (!isViewport(frame.field0.view)) {
+            previewTier.value = frame.field0.tier;
+          }
           _showReach(frame.field0.view, frame.field0.reach,
               frame.field0.reachAtLimit);
           _showDmabuf(frame.field0);
         case WorkerResponse_RenderedSharedTexture frame:
-          previewTier.value = frame.field0.tier;
+          if (!isViewport(frame.field0.view)) {
+            previewTier.value = frame.field0.tier;
+          }
           _showReach(frame.field0.view, frame.field0.reach,
               frame.field0.reachAtLimit);
           _showSharedTexture(frame.field0);
@@ -3861,6 +3915,19 @@ class LumitUiState extends ChangeNotifier {
   /// until it ends.
   bool cameraDragging = false;
 
+  /// The 3D views view [viewId] can be switched to: a 3D viewport's free
+  /// view only in a viewport.
+  List<ViewerView> viewsOffered(int viewId) => [
+        for (final v in ViewerView.values)
+          if (v != ViewerView.free || isViewport(viewId)) v,
+      ];
+
+  /// Whether Viewer view [viewId] is in a 3D viewport.
+  bool isViewport(int viewId) {
+    final view = _surfaceOf(viewId);
+    return view != null && views.isViewport(view);
+  }
+
   /// Switch the active view to its 3D view shortcut [slot]. False with no
   /// composition in it.
   bool recallViewSlot(int slot) {
@@ -3947,6 +4014,9 @@ class LumitUiState extends ChangeNotifier {
     view.axes = axes ?? view.axes;
     notifyListeners();
     rememberSession();
+    // A 3D viewport's ground is drawn into its picture.
+    final comp = compFor(view);
+    if (views.isViewport(view) && comp != null) _cameraMoved(view, comp);
   }
 
   /// Look at view [viewId]'s comp through [look], and render it again.
@@ -3958,7 +4028,12 @@ class LumitUiState extends ChangeNotifier {
     final was = view.cameraViews[id] ?? ViewerView.activeCamera;
     final fixed = look.fixed;
     if (fixed == null) {
-      view.cameraViews.remove(id);
+      // A 3D viewport keeps the choice, or it would go back to its free view.
+      if (views.isViewport(view)) {
+        view.cameraViews[id] = look;
+      } else {
+        view.cameraViews.remove(id);
+      }
     } else {
       // Asked once: where a Top view looks from depends on the comp's size and
       // nothing else, and a custom view starts from the three-quarter pose and
@@ -4009,23 +4084,47 @@ class LumitUiState extends ChangeNotifier {
 
   /// What each view was last told it looks through, by engine id. A worker is
   /// born knowing no view, which reads here as null.
-  final Map<int, (String, BridgeCameraPose)?> _pushedCamera = {};
+  final Map<int, (String, BridgeCameraPose?, int?)?> _pushedCamera = {};
 
   /// Tell the engine which pose [view] draws [comp] through, when that has
   /// changed. The engine latches it per view, so this is said when the view
-  /// or its comp changes and not once per render.
+  /// or its comp changes and not once per render. A 3D viewport's is a draft
+  /// with its ground drawn in.
   void _pushCameraView(ViewerSurface view, CompositionReference comp) {
     final id = comp.internalid.toString();
     final pose = _poseIn(view, id);
-    final target = pose == null ? null : (id, pose);
+    final viewport = views.isViewport(view);
+    final ground = viewport && viewerAidsOf(view.engineId).ground
+        ? theme.textMuted.toARGB32()
+        : null;
+    final target = pose == null && !viewport ? null : (id, pose, ground);
     if (_pushedCamera[view.engineId] == target) return;
     try {
-      comp.setCameraView(pose: pose, view: view.engineId);
+      comp.setCameraView(
+        pose: pose,
+        view: view.engineId,
+        draft: viewport,
+        ground: ground,
+      );
     } catch (_) {
       // No worker yet, or a comp that has gone.
       return;
     }
     _pushedCamera[view.engineId] = target;
+  }
+
+  /// Say each 3D viewport's ground colour again when the theme has changed it.
+  void _recolourGrounds() {
+    for (final view in views.views) {
+      final comp = compFor(view);
+      if (comp == null || !views.isViewport(view)) continue;
+      final was = _pushedCamera[view.engineId];
+      _pushCameraView(view, comp);
+      if (_pushedCamera[view.engineId] != was) {
+        _askedFor.remove(view.engineId);
+        requestFrame();
+      }
+    }
   }
 
   // --- The per-project session ---------------------------------------------
