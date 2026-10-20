@@ -1000,7 +1000,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   /// The boxes whose points may be aimed at: the selected layers, plus the
-  /// layer owning a mask whose Path row is picked. Picking that row is
+  /// layer owning a mask or shape whose Path row is picked. Picking that row is
   /// saying "this is the shape I am editing", so its points become reachable
   /// without having to click the layer first.
   List<LayerBox> get _editablePointBoxes {
@@ -1015,16 +1015,16 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return out;
   }
 
-  /// The mask whose **Path** row is picked, if one is — the shape the
+  /// The mask or shape whose **Path** row is picked, if one is — the shape the
   /// author is editing, so it is the one whose points are offered even when
   /// the layer itself was never clicked.
   (UuidValue, UuidValue)? get _pathBeingEdited {
     for (final path in widget.uiState.selectedProperties.value) {
       final parts = path.split('/');
-      // <layer>/masks/<mask>/path
+      // <layer>/masks/<mask>/path or <layer>/contents/<item>/path
       if (parts.length == 4 &&
-          parts[1] == 'masks' &&
-          parts[3] == MaskValue.path.name) {
+          ((parts[1] == 'masks' && parts[3] == MaskValue.path.name) ||
+              (parts[1] == 'contents' && parts[3] == ShapeValue.path.name))) {
         try {
           return (
             UuidValue.fromString(parts[0]),
@@ -1162,6 +1162,11 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   Rect _marqueeRect() => Rect.fromPoints(_origin, _pointer);
+
+  /// Whether the marquee in flight adds to the selection: Shift or Ctrl held
+  /// as it started, the rule every other selection box keeps
+  /// ([MarqueeSelect.onSelect]).
+  bool _additive = false;
 
   // --- Snapping (docs/07 §2.2 item 6) ---------------------------------------
   //
@@ -1572,6 +1577,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       // partly because a sweep over a *selected* layer's mask points gathers
       // points, which it could not do if the press had already dropped
       // the layer they belong to.
+      final keys = HardwareKeyboard.instance;
+      _additive =
+          keys.isShiftPressed || keys.isControlPressed || keys.isMetaPressed;
       setState(() => _drag = _GizmoDrag.marquee);
       return;
     }
@@ -2068,20 +2076,19 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       final caughtPoints = pathPointsInRect(_editablePointBoxes, rect);
       if (caughtPoints.isNotEmpty) {
         setState(() {
-          if (!HardwareKeyboard.instance.isShiftPressed) _points.clear();
+          if (!_additive) _points.clear();
           _points.addAll(caughtPoints);
         });
         return;
       }
     }
-    setState(_points.clear);
+    if (!_additive) setState(_points.clear);
     final caught = layersInsideRect(widget.boxes, rect);
-    final shift = HardwareKeyboard.instance.isShiftPressed;
     final layers = <LayerReference>[
-      if (shift)
+      if (_additive)
         for (final box in _selected) box.layer,
       for (final box in caught)
-        if (!shift || !widget.uiState.selectedLayerIds.contains(box.id))
+        if (!_additive || !widget.uiState.selectedLayerIds.contains(box.id))
           box.layer,
     ];
     widget.uiState.setSelection(layers);
