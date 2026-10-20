@@ -182,8 +182,8 @@ pub fn from_after_effects(
 }
 
 /// The Orientation that turns a layer's z axis from `from` to look at `to`, as
-/// After Effects' `lookAt` gives it: no turn about z, and nought when the two
-/// points are the same.
+/// After Effects' `lookAt` gives it: rolled about z so the layer's x axis
+/// stays level, and nought when the two points are the same.
 #[must_use]
 pub fn look_at_orientation(from: (f64, f64, f64), to: (f64, f64, f64)) -> (f64, f64, f64) {
     let d = (to.0 - from.0, to.1 - from.1, to.2 - from.2);
@@ -192,11 +192,11 @@ pub fn look_at_orientation(from: (f64, f64, f64), to: (f64, f64, f64)) -> (f64, 
         return (0.0, 0.0, 0.0);
     }
     // Rx · Ry turns z to (sin y, -sin x cos y, cos x cos y).
-    (
-        (-d.1).atan2(d.2).to_degrees(),
-        (d.0 / len).clamp(-1.0, 1.0).asin().to_degrees(),
-        0.0,
-    )
+    let x = (-d.1).atan2(d.2);
+    let y = (d.0 / len).clamp(-1.0, 1.0).asin();
+    // The roll that brings the x axis back down to y = 0.
+    let z = (-x.sin() * y.sin()).atan2(x.cos());
+    (x.to_degrees(), y.to_degrees(), z.to_degrees())
 }
 
 /// How far apart two Orientations are, in degrees: the one turn that takes
@@ -1002,6 +1002,24 @@ mod tests {
         let z = (m[0][2], m[1][2], m[2][2]);
         let d: (f64, f64, f64) = (-300.0 / 538.516_48, 400.0 / 538.516_48, -200.0 / 538.516_48);
         assert!(close3(z, d), "{z:?}");
+        // And it gives After Effects' own numbers, roll and all.
+        for (from, to, want) in [
+            (
+                (10.0, 20.0, 30.0),
+                (-290.0, 420.0, -170.0),
+                (-116.5651, -33.8545, -131.9088),
+            ),
+            (
+                (960.0, 540.0, 0.0),
+                (1200.0, 300.0, 800.0),
+                (16.6992, 16.0319, -4.7362),
+            ),
+            ((0.0, 0.0, 0.0), (0.0, -500.0, 10.0), (88.8542, 0.0, 0.0)),
+        ] {
+            let got = look_at_orientation(from, to);
+            let off = (got.0 - want.0).abs() + (got.1 - want.1).abs() + (got.2 - want.2).abs();
+            assert!(off < 1e-3, "{got:?}");
+        }
     }
 
     /// After Effects keys an Orientation as one turn, so a key written on one

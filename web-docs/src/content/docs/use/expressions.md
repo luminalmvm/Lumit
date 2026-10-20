@@ -136,7 +136,7 @@ thisComp.layer("Marker").toComp([0, 0, 0]) // on Position X and Y, pin a 2D laye
 A 3D layer's, a camera's and a light's `position`, `anchorPoint`, `scale` and `orientation`
 are three numbers. `orientation` reads the turn between keys as the picture has it.
 `lookAt(from, to)` gives the Orientation that points a layer's z axis from one point at the
-other, with no turn about z.
+other, rolled so the layer's x axis stays level.
 
 - **`toComp`** carries a point in the layer's own pixels to the picture. A 3D layer is
   seen through the active camera, and the third number is After Effects' own:
