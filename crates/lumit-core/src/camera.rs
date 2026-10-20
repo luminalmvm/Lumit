@@ -181,6 +181,24 @@ pub fn from_after_effects(
     )
 }
 
+/// The Orientation that turns a layer's z axis from `from` to look at `to`, as
+/// After Effects' `lookAt` gives it: no turn about z, and nought when the two
+/// points are the same.
+#[must_use]
+pub fn look_at_orientation(from: (f64, f64, f64), to: (f64, f64, f64)) -> (f64, f64, f64) {
+    let d = (to.0 - from.0, to.1 - from.1, to.2 - from.2);
+    let len = (d.0 * d.0 + d.1 * d.1 + d.2 * d.2).sqrt();
+    if len < 1e-9 {
+        return (0.0, 0.0, 0.0);
+    }
+    // Rx · Ry turns z to (sin y, -sin x cos y, cos x cos y).
+    (
+        (-d.1).atan2(d.2).to_degrees(),
+        (d.0 / len).clamp(-1.0, 1.0).asin().to_degrees(),
+        0.0,
+    )
+}
+
 /// How far apart two Orientations are, in degrees: the one turn that takes
 /// `a` to `b`.
 #[must_use]
@@ -915,6 +933,14 @@ mod tests {
             oriented((0.0, 0.0, 0.0), (10.0, 20.0, 30.0), false),
             (10.0, 20.0, 30.0)
         );
+        // lookAt's Orientation points the layer's z from one point to the other.
+        let m = rotation_ae(look_at_orientation(
+            (10.0, 20.0, 30.0),
+            (-290.0, 420.0, -170.0),
+        ));
+        let z = (m[0][2], m[1][2], m[2][2]);
+        let d: (f64, f64, f64) = (-300.0 / 538.516_48, 400.0 / 538.516_48, -200.0 / 538.516_48);
+        assert!(close3(z, d), "{z:?}");
     }
 
     /// After Effects keys an Orientation as one turn, so a key written on one
