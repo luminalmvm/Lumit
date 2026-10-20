@@ -422,6 +422,47 @@ BridgeCameraPose viewOfPose(CameraPose pose) => BridgeCameraPose(
       rotationZ: pose.rotation.$3,
     );
 
+/// Put [pose]'s [props] on the camera [layer] at [frame], starting from its
+/// transform [tf]: a keyed property takes a key there and a still one stays
+/// still, as typing the value into its row would. Every camera write goes
+/// through here, with the pose in the comp's own space. False when the
+/// camera has gone.
+bool writeCameraPose(
+  LayerReference layer,
+  BridgeTransform tf,
+  CameraPose pose,
+  Set<BridgeTransformProp> props, {
+  required CompositionReference comp,
+  required int frame,
+}) {
+  double valueOf(BridgeTransformProp prop) => switch (prop) {
+        BridgeTransformProp.positionX => pose.position.$1,
+        BridgeTransformProp.positionY => pose.position.$2,
+        BridgeTransformProp.positionZ => pose.position.$3,
+        BridgeTransformProp.rotationX => pose.rotation.$1,
+        BridgeTransformProp.rotationY => pose.rotation.$2,
+        BridgeTransformProp.rotation => pose.rotation.$3,
+        BridgeTransformProp.zoom => pose.zoom,
+        BridgeTransformProp.poiX => pose.pointOfInterest.$1,
+        BridgeTransformProp.poiY => pose.pointOfInterest.$2,
+        BridgeTransformProp.poiZ => pose.pointOfInterest.$3,
+        // Nothing else is a camera's placement, so nothing else is asked.
+        _ => 0,
+      };
+  try {
+    layer.setTransforms(
+      props: props.toList(),
+      values: [
+        for (final prop in props)
+          scalarWithValueAt(read(tf, prop), valueOf(prop), comp, frame),
+      ],
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// The camera tools over the picture.
 class ViewerCameraLayer extends StatefulWidget {
   /// Whether a camera tool is armed. Inert otherwise.
@@ -1251,41 +1292,12 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     };
   }
 
-  /// Put [pose]'s [props] on [layer] at the playhead, starting from [tf]: a
-  /// keyed property takes a key there and a still one stays still, as typing
-  /// the value into its row would. Every camera write goes through here, with
-  /// the pose in the comp's own space.
   bool _writeCamera(LayerReference layer, BridgeTransform tf, CameraPose pose,
       Set<BridgeTransformProp> props) {
-    double valueOf(BridgeTransformProp prop) => switch (prop) {
-          BridgeTransformProp.positionX => pose.position.$1,
-          BridgeTransformProp.positionY => pose.position.$2,
-          BridgeTransformProp.positionZ => pose.position.$3,
-          BridgeTransformProp.rotationX => pose.rotation.$1,
-          BridgeTransformProp.rotationY => pose.rotation.$2,
-          BridgeTransformProp.rotation => pose.rotation.$3,
-          BridgeTransformProp.poiX => pose.pointOfInterest.$1,
-          BridgeTransformProp.poiY => pose.pointOfInterest.$2,
-          BridgeTransformProp.poiZ => pose.pointOfInterest.$3,
-          // Nothing else is a camera's placement, so nothing else is asked.
-          _ => 0,
-        };
-    final frame = widget.uiState.playheadFrame.value;
-    try {
-      layer.setTransforms(
-        props: props.toList(),
-        values: [
-          for (final prop in props)
-            scalarWithValueAt(
-                read(tf, prop), valueOf(prop), widget.comp, frame),
-        ],
-      );
-      widget.onChanged();
-      return true;
-    } catch (_) {
-      // The camera was deleted mid-drag.
-      return false;
-    }
+    final wrote = writeCameraPose(layer, tf, pose, props,
+        comp: widget.comp, frame: widget.uiState.playheadFrame.value);
+    if (wrote) widget.onChanged();
+    return wrote;
   }
 }
 
