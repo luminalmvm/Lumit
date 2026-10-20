@@ -69,15 +69,16 @@ import 'viewer_tool_cursor.dart';
 /// gesture, gentle enough to aim with.
 const double orbitDegreesPerPixel = 0.25;
 
-/// How much of the camera's focal distance a pixel of dolly drag covers.
+/// How much of the distance left a pixel of dolly drag covers.
 ///
-/// Proportional rather than absolute, so a dolly feels the same in a comp built
-/// at 500 px and one built at 5000: dragging the width of the picture roughly
-/// halves or doubles the distance to what you are looking at.
+/// A share rather than a length, so a dolly feels the same in a comp built at
+/// 500 px and one built at 5000: dragging about 460 pixels halves the distance
+/// to what you are dollying to, or doubles it going back.
 const double dollyFraction = 0.0015;
 
-/// How many pixels of dolly drag a pixel of wheel scroll is worth: a notch
-/// is half what it would be dragged.
+/// How many pixels of dolly drag a pixel of wheel scroll is worth. A
+/// Windows notch is 100 pixels of scroll, so a notch takes about 7% of the
+/// distance.
 const double wheelDollyPixels = 0.5;
 
 /// A camera's pose in the shape the tools work in: where the eye is, which way
@@ -291,16 +292,20 @@ Offset? pictureOf(CameraPose pose, (double, double, double) p, Size size) {
 /// sense the Hand tool has.
 ///
 /// [scale] converts screen pixels to composition pixels (the Viewer's
-/// magnification), so a drag moves the picture the distance the pointer moved.
+/// magnification). [depth] is how far away the point that stays under the
+/// pointer is, as depth over the zoom: 1 is the plane the camera sees 1:1.
+/// After Effects' Pan under cursor gives it the depth of whatever was under
+/// the pointer at the press.
 CameraPose trackCamera(
   CameraPose pose,
   double dx,
   double dy, {
   required double scale,
   bool lockAxis = false,
+  double depth = 1,
 }) {
   final (ax, ay) = _onOneAxis(dx, dy, lockAxis);
-  final k = scale <= 0 ? 1.0 : 1 / scale;
+  final k = (scale <= 0 ? 1.0 : 1 / scale) * depth;
   final right = pose.axes.right;
   final up = pose.axes.up;
   final mx = -ax * k;
@@ -326,23 +331,37 @@ CameraPose trackCamera(
   );
 }
 
-/// The pose after a **dolly** drag: the eye moves along its forward axis, in or
-/// out of the scene, leaving what it is aimed at where it is.
+/// The pose after a **dolly** of [travel] pixels, After Effects' Dolly toward
+/// cursor: the eye moves straight at [toward], and positive goes in.
 ///
-/// Dragging **down or right** goes in, which is After Effects' sense. The
-/// distance moved is proportional to how far away the camera already is, so a
-/// dolly across a wide shot covers ground and one in a close-up creeps.
-CameraPose dollyCamera(CameraPose pose, double dx, double dy) {
-  // Whichever axis carries the movement, so the gesture works either way round.
-  final travel = dx.abs() >= dy.abs() ? dx : dy;
-  final step = travel * dollyFraction * pose.zoom;
-  final forward = pose.axes.forward;
+/// Each pixel takes a share of the distance that is left, so the eye slows as
+/// it closes in and never reaches the point. Without [toward] the camera goes
+/// at its own pivot and a two-node camera's point of interest stays where it
+/// is; towards anything else the point of interest travels with the eye, so
+/// the aim is kept.
+CameraPose dollyCamera(
+  CameraPose pose,
+  double travel, {
+  (double, double, double)? toward,
+}) {
+  final t = toward ?? pose.pivot;
+  final k = math.exp(-travel * dollyFraction);
+  final e = pose.position;
+  final eye = (
+    t.$1 - (t.$1 - e.$1) * k,
+    t.$2 - (t.$2 - e.$2) * k,
+    t.$3 - (t.$3 - e.$3) * k,
+  );
+  final poi = pose.pointOfInterest;
   return pose.copyWith(
-    position: (
-      pose.position.$1 + forward.$1 * step,
-      pose.position.$2 + forward.$2 * step,
-      pose.position.$3 + forward.$3 * step,
-    ),
+    position: eye,
+    pointOfInterest: pose.twoNode && toward != null
+        ? (
+            poi.$1 + eye.$1 - e.$1,
+            poi.$2 + eye.$2 - e.$2,
+            poi.$3 + eye.$3 - e.$3,
+          )
+        : poi,
   );
 }
 
@@ -451,8 +470,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// playhead rather than piling them up.
   BridgeTransform? _startTransform;
 
-  /// Whether an undo group is open for the drag, so the whole of it is one
-  /// step however many moves it wrote.
+  /// Whether an undo group is open, so a whole drag, or a run of wheel
+  /// notches, is one step however many writes it made.
   bool _grouped = false;
 
   /// Closes a run of wheel notches into one undo step once the wheel rests.
@@ -462,10 +481,28 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// camera's own pivot.
   (double, double, double)? _pivot;
 
+  /// How far away the point a track keeps under the pointer is, as depth over
+  /// the zoom: what was under the pointer at the press.
+  double _trackDepth = 1;
+
+  /// What a dolly goes at: the point under the pointer at the press, or null
+  /// for the camera's own pivot.
+  (double, double, double)? _dollyToward;
+
   /// The orbit's pivot while no drag runs, held against what moves it so a
   /// hover walks no boxes.
   Object? _idleKey;
   (double, double, double)? _idlePivot;
+
+  void _openUndoStep() {
+    if (_grouped) return;
+    try {
+      widget.state.project?.beginUndoGroup();
+      _grouped = true;
+    } catch (_) {
+      // No project, so no history to keep tidy.
+    }
+  }
 
   void _closeUndoStep() {
     if (!_grouped) return;
@@ -538,6 +575,14 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     }
     final held = _held;
     return held == null ? null : (layer: held.layer, pose: held.pose);
+  }
+
+  /// [p]'s depth in front of [pose]'s eye, over its zoom.
+  static double _depthOf(CameraPose pose, (double, double, double) p) {
+    final f = pose.axes.forward;
+    final e = pose.position;
+    return ((p.$1 - e.$1) * f.$1 + (p.$2 - e.$2) * f.$2 + (p.$3 - e.$3) * f.$3) /
+        pose.zoom;
   }
 
   /// The walk itself. Everything but the two reads noted above comes off the
@@ -700,32 +745,30 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// wheel zoom stands aside for it. With nothing to move it is left to the
   /// zoom.
   void _wheel(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent || _start != null) return;
-    final target = _target;
-    if (target == null) return;
-    GestureBinding.instance.pointerSignalResolver
-        .register(event, (_) => _dollyBy(target, event.scrollDelta.dy));
+    if (event is! PointerScrollEvent || _start != null || _target == null) {
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver.register(
+        event,
+        (_) => _dollyBy(
+            event.localPosition, -event.scrollDelta.dy * wheelDollyPixels));
   }
 
-  /// One notch of the wheel: away from you dollies in, as in After Effects.
-  /// A run of notches is one undo step, closed once the wheel rests.
-  void _dollyBy(({LayerReference? layer, CameraPose pose}) target, double dy) {
-    final pose = dollyCamera(target.pose, -dy * wheelDollyPixels, 0);
+  /// One notch of the wheel: [travel] pixels of dolly toward
+  /// what is under [at], away from you going in, as in After Effects.
+  void _dollyBy(Offset at, double travel) {
+    final target = _target;
+    if (_start != null || target == null || travel == 0) return;
+    _aimAt(at, target.pose);
+    final pose = _dollied(target.pose, travel);
     final layer = target.layer;
-    final tf = _held?.transform;
     if (layer == null) {
       widget.uiState.setViewerViewPose(viewOfPose(pose), viewId: widget.viewId);
       return;
     }
+    final tf = _held?.transform;
     if (tf == null) return;
-    if (!_grouped) {
-      try {
-        widget.state.project?.beginUndoGroup();
-        _grouped = true;
-      } catch (_) {
-        // No project, so no history to keep tidy.
-      }
-    }
+    _openUndoStep();
     _wheelRest?.cancel();
     _wheelRest = Timer(const Duration(milliseconds: 500), _closeUndoStep);
     _writeCamera(layer, tf, pose, _movedProps(pose, ToolMode.cameraDolly));
@@ -748,30 +791,41 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // button comes up, which is what every 3D application does.
     _anchor = at;
     _locked = freezeCursor();
-    final start = _activeMove == ToolMode.cameraOrbit
-        ? _orbitable(target.pose)
-        : target.pose;
+    final orbit = _activeMove == ToolMode.cameraOrbit;
+    _aimAt(at, target.pose);
+    final start = orbit ? _orbitable(target.pose) : target.pose;
+    final pivot = orbit ? _pivotFor(at, start) : null;
     // A wheel run still open is its own step, not the start of this one.
     _wheelRest?.cancel();
     _closeUndoStep();
-    if (target.layer != null) {
-      try {
-        widget.state.project?.beginUndoGroup();
-        _grouped = true;
-      } catch (_) {
-        // No project, so no history to keep tidy.
-      }
-    }
+    if (target.layer != null) _openUndoStep();
     setState(() {
       _acting = target.layer;
       _actingView = target.layer == null;
       _start = start;
       _startTransform = _held?.transform;
-      _pivot =
-          _activeMove == ToolMode.cameraOrbit ? _pivotFor(at, start) : null;
+      _pivot = pivot;
       _delta = Offset.zero;
     });
   }
+
+  /// Where a track and a dolly begun at [at] hold on: the depth of what is
+  /// under the pointer, or of the camera's own pivot with nothing there.
+  void _aimAt(Offset at, CameraPose pose) {
+    final hit = _hitAt(at, pose);
+    final fallback = _depthOf(pose, pose.pivot);
+    _trackDepth = hit?.depth ?? fallback;
+    // A two-node camera with nothing under the pointer dollies at its point
+    // of interest and keeps it.
+    _dollyToward = hit?.point ??
+        (pose.twoNode
+            ? null
+            : pointUnder(pose, _toPicture(at), widget.compSize, fallback));
+  }
+
+  /// [pose] after a dolly of [travel] toward what [_aimAt] found.
+  CameraPose _dollied(CameraPose pose, double travel) =>
+      dollyCamera(pose, travel, toward: _dollyToward);
 
   /// [pose] ready to orbit. A fixed view never turns, so an orbit begun in
   /// one carries its framing into the Viewer's custom view and turns that:
@@ -848,25 +902,32 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// A point on screen as comp pixels of the picture.
   Offset _toPicture(Offset at) => (at - widget.fitted.topLeft) / _scale;
 
+  /// The nearest 3D layer under [at] seen through [pose]: where the pointer
+  /// meets it, and its depth over the zoom. A light is its own point.
+  ({(double, double, double) point, double depth})? _hitAt(
+      Offset at, CameraPose pose) {
+    final hit = layerAtPoint(widget.boxes(), at);
+    if (hit == null || !hit.map.projected) return null;
+    final m = hit.map;
+    final on = hit.marker ? m.toScreen(m.ax, m.ay) : at;
+    final w = hit.marker ? m.depthOf(m.ax, m.ay) : m.depthAt(at);
+    if (w == null || w <= viewerNear) return null;
+    return (
+      point: pointUnder(pose, _toPicture(on), widget.compSize, w),
+      depth: w,
+    );
+  }
+
   /// What an orbit begun at [at] swings round under the tool options' choice,
   /// in the comp, or null for the camera's own pivot, which is also where a
   /// choice that finds nothing falls back to.
   (double, double, double)? _pivotFor(Offset? at, CameraPose pose) {
     final choice = widget.uiState.tools.cameraPivot;
     if (choice == CameraPivot.pointOfInterest) return null;
-    if (choice == CameraPivot.cursor && at == null) return null;
-    final boxes = widget.boxes();
-    if (at != null && choice == CameraPivot.cursor) {
-      // The nearest 3D layer under the pointer, where the pointer meets it.
-      // A light is its own point.
-      final hit = layerAtPoint(boxes, at);
-      if (hit == null || !hit.map.projected) return null;
-      final m = hit.map;
-      final on = hit.marker ? m.toScreen(m.ax, m.ay) : at;
-      final w = hit.marker ? m.depthOf(m.ax, m.ay) : m.depthAt(at);
-      if (w == null || w <= viewerNear) return null;
-      return pointUnder(pose, _toPicture(on), widget.compSize, w);
+    if (choice == CameraPivot.cursor) {
+      return at == null ? null : _hitAt(at, pose)?.point;
     }
+    final boxes = widget.boxes();
     final selected = widget.uiState.selectedLayerIds;
     final picked = choice == CameraPivot.selection
         ? _middleOf(boxes.where((b) => selected.contains(b.id)), pose)
@@ -962,8 +1023,11 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       ToolMode.cameraOrbit => orbitCamera(start, _delta.dx, _delta.dy,
           lockAxis: shift, around: _pivot),
       ToolMode.cameraPan => trackCamera(start, _delta.dx, _delta.dy,
-          scale: _scale, lockAxis: shift),
-      ToolMode.cameraDolly => dollyCamera(start, _delta.dx, _delta.dy),
+          scale: _scale, lockAxis: shift, depth: _trackDepth),
+      // Whichever axis carries the movement, so the gesture works either way
+      // round. Down or right goes in, which is After Effects' sense.
+      ToolMode.cameraDolly => _dollied(start,
+          _delta.dx.abs() >= _delta.dy.abs() ? _delta.dx : _delta.dy),
       _ => start,
     };
   }
@@ -998,14 +1062,18 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 
   /// What [move] changes on the camera. Only what moved is written, so a
-  /// keyed camera gains no keys on rows the drag left alone: a
-  /// two-node camera's rotation rows stay put, as its aim follows the eye,
-  /// and its point of interest travels with a track or an orbit round
-  /// something else.
+  /// keyed camera gains no keys on rows the drag left alone: a two-node
+  /// camera's rotation rows stay put, as its aim follows the eye, and its
+  /// point of interest travels with a track, and with an orbit or a dolly
+  /// that is not round or at it.
   Set<BridgeTransformProp> _movedProps(CameraPose pose, ToolMode move) {
     final poiMoves = pose.twoNode &&
-        (move == ToolMode.cameraPan ||
-            (move == ToolMode.cameraOrbit && _pivot != null));
+        switch (move) {
+          ToolMode.cameraPan => true,
+          ToolMode.cameraOrbit => _pivot != null,
+          ToolMode.cameraDolly => _dollyToward != null,
+          _ => false,
+        };
     return {
       BridgeTransformProp.positionX,
       BridgeTransformProp.positionY,
@@ -1026,7 +1094,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// keyed property takes a key there and a still one stays still, as typing
   /// the value into its row would. Every camera write goes through here, with
   /// the pose in the comp's own space.
-  void _writeCamera(LayerReference layer, BridgeTransform tf, CameraPose pose,
+  bool _writeCamera(LayerReference layer, BridgeTransform tf, CameraPose pose,
       Set<BridgeTransformProp> props) {
     double valueOf(BridgeTransformProp prop) => switch (prop) {
           BridgeTransformProp.positionX => pose.position.$1,
@@ -1052,8 +1120,10 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
         ],
       );
       widget.onChanged();
+      return true;
     } catch (_) {
       // The camera was deleted mid-drag.
+      return false;
     }
   }
 }

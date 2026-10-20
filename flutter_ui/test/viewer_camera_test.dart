@@ -94,13 +94,15 @@ void main() {
   });
 
   group('Dolly', () {
-    test('moves the eye along the view axis, in proportion to the distance',
+    test('moves the eye at what it dollies to, a share of the way at a time',
         () {
-      final inward = dollyCamera(pose(), 100, 0);
+      final inward = dollyCamera(pose(), 100);
       expect(inward.position.$3,
-          closeTo(-2667 + 100 * dollyFraction * 2667, 1e-9),
-          reason: 'dragging right goes in, along +z for an unturned camera');
+          closeTo(-2667 * math.exp(-100 * dollyFraction), 1e-9),
+          reason: 'going in, along +z for an unturned camera');
       expect(inward.rotation, pose().rotation);
+      expect(dollyCamera(pose(), 100000).position.$3, lessThan(0),
+          reason: 'it never reaches the point, however far it goes');
     });
   });
 
