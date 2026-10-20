@@ -547,7 +547,7 @@ class ViewerStage extends StatelessWidget {
             // (docs/impl/camera.md §6): a scene is arranged from a viewpoint
             // that shows where the cameras and the lights actually are, and
             // nothing in the picture says that by itself.
-            if (uiState.viewerViewPose case final view?)
+            if (uiState.viewPoseOf(viewId) case final view?)
               Positioned.fill(
                 key: const ValueKey('viewer-wireframes'),
                 child: IgnorePointer(
@@ -760,6 +760,7 @@ class ViewerStage extends StatelessWidget {
               active: uiState.tools.tool.group == ToolGroup.camera,
               tool: uiState.tools.tool,
               comp: comp,
+              viewId: viewId,
               state: Provider.of<LumitState>(context, listen: false),
               uiState: uiState,
               fitted: fitted,

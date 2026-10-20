@@ -96,6 +96,10 @@ class ViewerBar extends StatelessWidget {
   final LoopMode loop;
   final ValueChanged<LoopMode> onLoop;
 
+  /// The engine id of the view this bar belongs to, whose 3D view the picker
+  /// reads and sets.
+  final int viewId;
+
   const ViewerBar({
     super.key,
     required this.channel,
@@ -122,6 +126,7 @@ class ViewerBar extends StatelessWidget {
     required this.detached,
     required this.loop,
     required this.onLoop,
+    required this.viewId,
     this.leading = const [],
     this.transport = true,
   });
@@ -278,7 +283,7 @@ class ViewerBar extends StatelessWidget {
         // Which way the composition is looked at (docs/impl/camera.md §6):
         // through its own camera, or from one of the fixed and custom
         // viewpoints a 3D scene is arranged from.
-        const _ViewPicker(),
+        _ViewPicker(viewId: viewId),
         viewerBarGapBox(viewerBarGap),
         // **The aperture names the number, and is the way back to nothing**
         // (owner ruling, superseding the appears-with-the-value reading):
@@ -764,11 +769,12 @@ class _Readout extends StatelessWidget {
 /// The 3D view picker: the camera glyph, lit while the Viewer is looking
 /// through anything but the composition's own camera.
 ///
-/// It reads and writes the view kept for the comp directly, as the guides menu beside it
-/// does: the view is not the panel's, it is the comp's, and a picker that took
-/// it as a parameter would have to be threaded through the bar for no gain.
+/// It reads and writes this view's own 3D view of its comp, so the two panes
+/// of a two-up each have their own.
 class _ViewPicker extends StatelessWidget {
-  const _ViewPicker();
+  final int viewId;
+
+  const _ViewPicker({required this.viewId});
 
   @override
   Widget build(BuildContext context) {
@@ -776,7 +782,7 @@ class _ViewPicker extends StatelessWidget {
     // Watched, not read: the menu closes on a pick, so the face has to catch up
     // from the state rather than from its own rebuild.
     final ui = context.watch<LumitUiState>();
-    final view = ui.viewerView;
+    final view = ui.viewOf(viewId);
     return LumitTooltip(
       message: l10n.tipViewerView,
       child: Builder(
@@ -796,7 +802,7 @@ class _ViewPicker extends StatelessWidget {
                     key: ValueKey<String>('viewer-view-${v.name}'),
                     onPressed: () {
                       close(null);
-                      ui.setViewerView(v);
+                      ui.setViewerView(v, viewId: viewId);
                     },
                     child: Row(children: [
                       menuTick(v == view),

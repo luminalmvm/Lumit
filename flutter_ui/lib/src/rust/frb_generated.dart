@@ -850,7 +850,9 @@ abstract class BridgeLibApi extends BaseApi {
       {required CompositionReference that, BridgeBeatGrid? grid});
 
   void crateApiCompositionCompositionReferenceSetCameraView(
-      {required CompositionReference that, BridgeCameraPose? view});
+      {required CompositionReference that,
+      BridgeCameraPose? pose,
+      required int view});
 
   void crateApiCompositionCompositionReferenceSetGroupLabel(
       {required CompositionReference that,
@@ -7923,12 +7925,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
   @override
   void crateApiCompositionCompositionReferenceSetCameraView(
-      {required CompositionReference that, BridgeCameraPose? view}) {
+      {required CompositionReference that,
+      BridgeCameraPose? pose,
+      required int view}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
-        sse_encode_opt_box_autoadd_bridge_camera_pose(view, serializer);
+        sse_encode_opt_box_autoadd_bridge_camera_pose(pose, serializer);
+        sse_encode_u_32(view, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 188)!;
       },
       codec: SseCodec(
@@ -7937,7 +7942,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceSetCameraViewConstMeta,
-      argValues: [that, view],
+      argValues: [that, pose, view],
       apiImpl: this,
     ));
   }
@@ -7946,7 +7951,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceSetCameraViewConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_set_camera_view",
-            argNames: ["that", "view"],
+            argNames: ["that", "pose", "view"],
           );
 
   @override

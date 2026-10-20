@@ -7198,12 +7198,13 @@ fn wire__crate__api__composition__composition_reference_set_camera_view_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_that =
                 <crate::api::composition::CompositionReference>::sse_decode(&mut deserializer);
-            let api_view =
+            let api_pose =
                 <Option<crate::api::layer::BridgeCameraPose>>::sse_decode(&mut deserializer);
+            let api_view = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::set_camera_view(
-                    &api_that, api_view,
+                    &api_that, api_pose, api_view,
                 )?;
                 Ok(output_ok)
             })())
