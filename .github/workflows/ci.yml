@@ -166,7 +166,9 @@ jobs:
 
   linux:
     name: tests (Linux, with media)
-    runs-on: ubuntu-latest
+    # Held on 24.04: on 26.04's software Vulkan driver (Mesa 26.0.8) the
+    # lumit-render GPU tests crash. Back to ubuntu-latest once that's solved.
+    runs-on: ubuntu-24.04
     env:
       # The same BtbN "shared, GPL" n8.1 build the Windows job takes, so all
       # three platforms link an identical FFmpeg. The distro's own is 6.x,
@@ -478,7 +480,9 @@ jobs:
 
   flutter-linux:
     name: flutter frontend (Linux build + analyze + test)
-    runs-on: ubuntu-latest
+    # Held on 24.04 with the tests job: the Flutter tests' engine crashes on
+    # 26.04's software Vulkan driver as it shuts down.
+    runs-on: ubuntu-24.04
     env:
       # The same BtbN "shared, GPL" n8.1 build the other jobs take, so the
       # bridge .so links the identical FFmpeg lumit-media expects.
