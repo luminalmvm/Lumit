@@ -65,6 +65,7 @@ void main() {
   BridgeMotionPath path() => BridgeMotionPath(
         firstFrame: 0,
         samples: Float64List.fromList([100, 200, 200, 300, 300, 400, 400, 500]),
+        depths: Float64List(0),
         keys: [
           for (final (frame, x, y) in [(0, 100.0, 200.0), (3, 400.0, 500.0)])
             BridgeMotionKey(
@@ -72,6 +73,7 @@ void main() {
               frame: frame,
               x: x,
               y: y,
+              z: 0,
               xIndex: frame == 0 ? 0 : 1,
               yIndex: frame == 0 ? 0 : 1,
               handleIn: null,
@@ -213,6 +215,7 @@ void main() {
           frame: last.frame,
           x: last.x,
           y: last.y,
+          z: 0,
           xIndex: 1,
           yIndex: null,
           handleIn: null,

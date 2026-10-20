@@ -1293,6 +1293,9 @@ class BridgeMotionKey {
   final PlatformInt64 frame;
   final double x;
   final double y;
+
+  /// Position z at the key, for a 3D layer; nought on a 2D one.
+  final double z;
   final int? xIndex;
   final int? yIndex;
 
@@ -1309,6 +1312,7 @@ class BridgeMotionKey {
     required this.frame,
     required this.x,
     required this.y,
+    required this.z,
     this.xIndex,
     this.yIndex,
     this.handleIn,
@@ -1321,6 +1325,7 @@ class BridgeMotionKey {
       frame.hashCode ^
       x.hashCode ^
       y.hashCode ^
+      z.hashCode ^
       xIndex.hashCode ^
       yIndex.hashCode ^
       handleIn.hashCode ^
@@ -1335,6 +1340,7 @@ class BridgeMotionKey {
           frame == other.frame &&
           x == other.x &&
           y == other.y &&
+          z == other.z &&
           xIndex == other.xIndex &&
           yIndex == other.yIndex &&
           handleIn == other.handleIn &&
@@ -1353,16 +1359,22 @@ class BridgeMotionPath {
   /// x and y interleaved, in comp pixels: `samples[2 * i]` and
   /// `samples[2 * i + 1]` are the position at `first_frame + i`.
   final Float64List samples;
+
+  /// A 3D layer's Position z at each sample, so the path can be seen
+  /// through a camera. Empty on a 2D layer.
+  final Float64List depths;
   final List<BridgeMotionKey> keys;
 
   const BridgeMotionPath({
     required this.firstFrame,
     required this.samples,
+    required this.depths,
     required this.keys,
   });
 
   @override
-  int get hashCode => firstFrame.hashCode ^ samples.hashCode ^ keys.hashCode;
+  int get hashCode =>
+      firstFrame.hashCode ^ samples.hashCode ^ depths.hashCode ^ keys.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1371,6 +1383,7 @@ class BridgeMotionPath {
           runtimeType == other.runtimeType &&
           firstFrame == other.firstFrame &&
           samples == other.samples &&
+          depths == other.depths &&
           keys == other.keys;
 }
 

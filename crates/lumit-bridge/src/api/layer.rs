@@ -1944,6 +1944,8 @@ pub struct BridgeMotionKey {
     pub frame: i64,
     pub x: f64,
     pub y: f64,
+    /// Position z at the key, for a 3D layer; nought on a 2D one.
+    pub z: f64,
     pub x_index: Option<u32>,
     pub y_index: Option<u32>,
     /// The tangent handles in comp pixels: on each side, the first control
@@ -1968,6 +1970,9 @@ pub struct BridgeMotionPath {
     /// x and y interleaved, in comp pixels: `samples[2 * i]` and
     /// `samples[2 * i + 1]` are the position at `first_frame + i`.
     pub samples: Vec<f64>,
+    /// A 3D layer's Position z at each sample, so the path can be seen
+    /// through a camera. Empty on a 2D layer.
+    pub depths: Vec<f64>,
     pub keys: Vec<BridgeMotionKey>,
 }
 
@@ -1989,25 +1994,39 @@ pub(crate) fn motion_path_of(
     }
     let (px, py) = (&layer.transform.position_x, &layer.transform.position_y);
     let (kx, ky) = (keys_of(px), keys_of(py));
-    if kx.is_none() && ky.is_none() {
+    // A 3D layer moving only in depth still has a path to show.
+    let pz = layer
+        .switches
+        .three_d
+        .then_some(&layer.transform.position_z);
+    let kz = pz.and_then(keys_of);
+    if kx.is_none() && ky.is_none() && kz.is_none() {
         return None;
     }
     let offset = layer.start_offset.0;
     let comp_time = |t: Rational| CompTime(t.checked_add(offset).unwrap_or(t));
 
     // Every time either axis has a key at, on the layer's clock, oldest first.
-    let mut times: Vec<Rational> = kx.into_iter().chain(ky).flatten().map(|k| k.time).collect();
+    let mut times: Vec<Rational> = kx
+        .into_iter()
+        .chain(ky)
+        .chain(kz)
+        .flatten()
+        .map(|k| k.time)
+        .collect();
     times.sort_by(|a, b| a.to_f64().total_cmp(&b.to_f64()));
     times.dedup();
     let first_frame = comp.frame_rate.frame_at(comp_time(*times.first()?));
     let last_frame = comp.frame_rate.frame_at(comp_time(*times.last()?));
 
     let mut samples = Vec::new();
+    let mut depths = Vec::new();
     for frame in first_frame..=last_frame {
         let t = comp.frame_rate.time_of_frame(frame).ok()?.0;
         let local = lumit_core::time::layer_time(t.to_f64(), offset);
         samples.push(px.value_at(local));
         samples.push(py.value_at(local));
+        depths.extend(pz.map(|z| z.value_at(local)));
     }
 
     // How far one axis' handle sits from its key on one side: the cubic's
@@ -2057,6 +2076,7 @@ pub(crate) fn motion_path_of(
                 frame: comp.frame_rate.frame_at(comp_time(time)),
                 x,
                 y,
+                z: pz.map_or(0.0, |z| z.value_at(local)),
                 x_index: ix.and_then(|i| u32::try_from(i).ok()),
                 y_index: iy.and_then(|i| u32::try_from(i).ok()),
                 handle_in: handle(false),
@@ -2067,6 +2087,7 @@ pub(crate) fn motion_path_of(
     Some(BridgeMotionPath {
         first_frame,
         samples,
+        depths,
         keys,
     })
 }
