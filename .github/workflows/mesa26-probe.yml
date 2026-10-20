@@ -1,0 +1,63 @@
+name: mesa26 probe
+
+on:
+  push:
+    branches: [ci/mesa26-probe]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    env:
+      FFMPEG_ASSET: ffmpeg-n8.1.2-50-g1a748fe2cd-linux64-gpl-shared-8.1
+      FFMPEG_SHA256: 35dc428bf78d3f8a4447a68707338ecf9560ebcc7459967974f9ff5b1f84be24
+      LUMIT_REQUIRE_GPU: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: stable
+      - name: Install desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev libgl-dev libegl-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxcb1-dev \
+            libwayland-dev mesa-vulkan-drivers libclang-dev gdb
+      - name: Install FFmpeg 8.1 (BtbN shared build)
+        run: |
+          url="https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-08-31-13-27/${FFMPEG_ASSET}.tar.xz"
+          curl -fsSL --retry 5 --retry-all-errors "$url" -o "$RUNNER_TEMP/ffmpeg.tar.xz"
+          echo "$FFMPEG_SHA256  $RUNNER_TEMP/ffmpeg.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/ffmpeg"
+          tar -xJf "$RUNNER_TEMP/ffmpeg.tar.xz" -C "$RUNNER_TEMP/ffmpeg" --strip-components=1
+          root="$RUNNER_TEMP/ffmpeg"
+          sed -i "s|^prefix=.*|prefix=$root|" "$root"/lib/pkgconfig/*.pc
+          echo "PKG_CONFIG_PATH=$root/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$root/lib" >> "$GITHUB_ENV"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - name: Point bindgen at libclang
+        run: echo "LIBCLANG_PATH=$(llvm-config --libdir 2>/dev/null || ls -d /usr/lib/llvm-*/lib | tail -1)" >> "$GITHUB_ENV"
+      - name: Which test crashes, one at a time
+        run: |
+          bin=$(cargo test -p lumit-render --lib --no-run 2>&1 | grep -o 'target/debug/deps/lumit_render-[0-9a-f]*' | head -1)
+          echo "binary: $bin"
+          set +e
+          "$bin" --test-threads=1 2>&1 | tee one.log | tail -40
+          echo "exit: ${PIPESTATUS[0]}"
+          last=$(grep -oE '^test [^ ]+ \.\.\. ' one.log | tail -1 | awk '{print $2}')
+          echo "last started: $last"
+          echo "LAST=$last" >> "$GITHUB_ENV"
+          echo "BIN=$bin" >> "$GITHUB_ENV"
+      - name: Backtrace of that test
+        run: |
+          set +e
+          gdb -batch -ex run -ex 'thread apply all bt 25' --args "$BIN" "$LAST" --exact --test-threads=1 2>&1 | tail -150
+      - name: Backtrace of the whole binary, in parallel as cargo runs it
+        run: |
+          set +e
+          gdb -batch -ex run -ex 'bt 40' --args "$BIN" 2>&1 | grep -vE '^\[(New|Thread) ' | tail -80
