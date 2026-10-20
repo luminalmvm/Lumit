@@ -6784,9 +6784,10 @@ mod tests {
     }
 
     /// A 64 px comp seen through the default camera, holding 32 px 3D cards
-    /// at its centre, the first given at the top of the stack. Each card is
-    /// a colour, a z and a turn about y in degrees.
-    fn cards_scene(cards: &[([f32; 4], f64, f64)]) -> (Arc<Document>, Uuid) {
+    /// at its centre, the first given at the top of the stack, all at
+    /// `opacity`. Each card is a colour, a z, a turn about y in degrees, and
+    /// whether it is only the card's right half, turning about its left edge.
+    fn cards_scene(cards: &[([f32; 4], f64, f64, bool)], opacity: f64) -> (Arc<Document>, Uuid) {
         const ZOOM: f64 = 128.0;
         let mut doc = Document::new();
         let comp_id = push_comp(&mut doc, "Cards", 64, 64);
@@ -6803,18 +6804,23 @@ mod tests {
         );
         camera.transform.position_z = Property::fixed(-ZOOM);
         let mut layers = vec![camera];
-        for &(colour, z, turn) in cards {
+        for &(colour, z, turn, half) in cards {
             let def = Uuid::now_v7();
+            let width = if half { 16 } else { 32 };
             doc.items.push(ProjectItem::Solid(SolidDef {
                 id: def,
                 name: "Card".into(),
                 colour: LinearColour(colour),
-                width: 32,
+                width,
                 height: 32,
                 extra: serde_json::Map::new(),
             }));
-            let mut card = matrix_layer("Card", LayerKind::Solid { def }, 32, 32);
+            let mut card = matrix_layer("Card", LayerKind::Solid { def }, width, 32);
             card.switches.three_d = true;
+            if half {
+                card.transform.anchor_x = Property::fixed(0.0);
+            }
+            card.transform.opacity = Property::fixed(opacity);
             card.transform.position_x = Property::fixed(32.0);
             card.transform.position_y = Property::fixed(32.0);
             card.transform.position_z = Property::fixed(z);
@@ -6837,16 +6843,59 @@ mod tests {
                 return;
             }
         };
-        let (doc, comp_id) = cards_scene(&[
-            ([0.0, 0.0, 1.0, 1.0], 40.0, 0.0),
-            ([1.0, 0.0, 0.0, 1.0], -40.0, 0.0),
-        ]);
+        let (doc, comp_id) = cards_scene(
+            &[
+                ([0.0, 0.0, 1.0, 1.0], 40.0, 0.0, false),
+                ([1.0, 0.0, 0.0, 1.0], -40.0, 0.0, false),
+            ],
+            100.0,
+        );
         let (rgba, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
         let i = ((32 * w + 32) * 4) as usize;
         assert!(
             rgba[i] > 200 && rgba[i + 2] < 50,
             "the centre should be the near red card, got {:?}",
             &rgba[i..i + 4]
+        );
+    }
+
+    /// **3D layers that pass through each other cut where they meet**, as in
+    /// After Effects, and come out right at any opacity. Three see-through
+    /// cards crossing on one axis, which no order of the three can draw, must
+    /// match the same star built from six half cards that only touch.
+    #[test]
+    fn crossing_3d_layers_cut_through_each_other() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let colours = [
+            [0.0, 0.0, 1.0, 1.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 1.0],
+        ];
+        let turn = |k: usize| -40.0 + 40.0 * (k % 3) as f64;
+        let whole: Vec<_> = (0..3).map(|k| (colours[k], 0.0, turn(k), false)).collect();
+        let halves: Vec<_> = (0..6)
+            .map(|k| (colours[k % 3], 0.0, turn(k) + 180.0 * (k / 3) as f64, true))
+            .collect();
+        let mut frame = |cards: &[([f32; 4], f64, f64, bool)]| {
+            let (doc, comp_id) = cards_scene(cards, 60.0);
+            r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0
+        };
+        let (star, truth) = (frame(&whole), frame(&halves));
+        let worst = star
+            .iter()
+            .zip(&truth)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            worst <= 2,
+            "the cut star is {worst} levels off the one made of halves"
         );
     }
 

@@ -23,6 +23,11 @@ If you have multiple cameras in your scene, the topmost visible camera is the ac
 
 A 3D layer gains a Z position. Adjusting this moves the layer forwards and backwards in the composition space.
 
+Nearer 3D layers draw in front of farther ones, whatever their stack order, and 3D layers
+that pass through each other cut where they meet. A 2D layer or an adjustment layer between
+3D layers splits them into groups, which stack in timeline order. Two motion-blurred 3D
+layers do not cut each other.
+
 ## In the Viewer
 
 A 3D layer's box, handles, mask outlines and motion path are drawn in perspective, through

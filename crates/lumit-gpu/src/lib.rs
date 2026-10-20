@@ -1540,7 +1540,9 @@ pub fn texture_bytes(format: wgpu::TextureFormat, width: u32, height: u32) -> u6
         wgpu::TextureFormat::Rgba32Float => 16,
         wgpu::TextureFormat::R8Unorm => 1,
         wgpu::TextureFormat::R16Float => 2,
-        wgpu::TextureFormat::R32Float | wgpu::TextureFormat::Rg16Float => 4,
+        wgpu::TextureFormat::R32Float
+        | wgpu::TextureFormat::Rg16Float
+        | wgpu::TextureFormat::Depth32Float => 4,
         wgpu::TextureFormat::Rg32Float => 8,
         // Not one of ours: count it as the widest we use, so an unfamiliar
         // format makes the budget cautious rather than blind.
@@ -3414,6 +3416,7 @@ pub mod shared_metal;
 pub mod test_support;
 pub use composite::{
     camera_frame, camera_matrix, concat_place, depth_order, invert_place, place_matrix,
-    scaled_size, unplace_matrix, Blend, CompositeLayer, Compositor, MatteInput, MbSample, Region,
+    scaled_size, unplace_matrix, Blend, CompositeLayer, Compositor, Cut, MatteInput, MbSample,
+    Region,
 };
 pub use glam::Mat4;

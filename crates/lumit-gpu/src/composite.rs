@@ -26,6 +26,11 @@ struct LayerUniform {
     params: [f32; 4],
     /// comp target size (xy) + padding
     target: [f32; 4],
+    /// x: the clip z a layer cut by depth draws at, y: how many corners of
+    /// `piece` a piece of a layer draws, 0 for every other draw
+    cut: [f32; 4],
+    /// A piece's corners in the layer's own 0..1 space, two to a row.
+    piece: [[f32; 4]; PIECE_CORNERS / 2],
 }
 
 /// Composite operator (docs/06-RENDER-PIPELINE.md §blend). Normal / Add /
@@ -119,7 +124,35 @@ impl Blend {
     }
 }
 
+/// The depth a run cut by depth is tested against.
+const CUT_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+/// A depth-cut layer's clip z, in clip w: the nearest it can be to the eye.
+const CUT_NEAR: f32 = 1e-4;
+/// How much nearer each flush layer below draws a depth-cut layer, as a share
+/// of its distance: eight steps of a float, so 255 of them still move it
+/// under a fiftieth of a percent.
+const CUT_LIFT: f32 = 1.0 / 1_048_576.0;
+/// The most planes one layer is cut along before its run is cut by depth.
+const CUT_PLANES: usize = 6;
+/// The most corners a piece can have: the quad's four and one per plane.
+pub const PIECE_CORNERS: usize = 4 + CUT_PLANES;
+
+/// How one draw of a 3D layer is cut where it meets others
+/// ([`Compositor::composite_cut`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Cut {
+    /// Only this convex part of the layer draws: its first `count` corners,
+    /// in the layer's own 0..1 space.
+    Piece {
+        corners: [[f32; 2]; PIECE_CORNERS],
+        count: usize,
+    },
+    /// Its run is cut by depth, and it draws at this clip z.
+    Depth(f32),
+}
+
 /// A comp-space matte gating a layer (docs/06-RENDER-PIPELINE.md mattes).
+#[derive(Clone)]
 pub struct MatteInput<'a> {
     /// The matte layer rendered alone at comp size (linear fp16).
     pub texture: &'a wgpu::Texture,
@@ -129,6 +162,7 @@ pub struct MatteInput<'a> {
 }
 
 /// One layer to draw: a linear texture plus its placement in comp space.
+#[derive(Clone)]
 pub struct CompositeLayer<'a> {
     /// Linear-light texture (run sources through ColourEngine::linearise).
     pub texture: &'a wgpu::Texture,
@@ -315,9 +349,10 @@ impl CompositeLayer<'_> {
         // divides by the region's size rather than the comp's. The camera
         // matrix is untouched: it projects comp space, and this maps a window
         // onto the result — which is why a region cannot change perspective.
-        // Depth always comes out as 0, since layers stack in timeline order and
-        // a z in pixels would fall outside the GPU's 0..1 range and cut the
-        // layer away (a 3D layer off z = 0 or tilted with no camera).
+        // Depth always comes out as 0, since layers stack in the order they
+        // draw and a z in pixels would fall outside the GPU's 0..1 range and
+        // cut the layer away (a 3D layer off z = 0 or tilted with no camera).
+        // A layer that cuts through others sets its own (`vs_layer`).
         let ndc_from_comp = match region {
             Some(r) => {
                 Mat4::from_translation(glam::vec3(-1.0, 1.0, 0.0))
@@ -385,8 +420,8 @@ pub fn camera_matrix(
         // column-major: each inner array is one column
         [1.0, 0.0, 0.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],
-        // z output is flattened to 0: layer order is painter's (timeline
-        // stacking), so depth only feeds the divide, never the depth test.
+        // z output is flattened to 0: depth only feeds the divide. A layer
+        // cut by depth sets its own z (`vs_layer`).
         [cx / zoom, cy / zoom, 0.0, 1.0 / zoom],
         [0.0, 0.0, 0.0, 1.0],
     ]);
@@ -417,67 +452,119 @@ pub fn camera_frame(
     cam_place.inverse()
 }
 
-/// The order a run of adjacent 3D layers draws in, as indices into `worlds`
-/// (each layer's [`CompositeLayer::world`], bottom of the stack first),
-/// farthest first. `view_proj` is the [`camera_matrix`] and `eye` the
-/// camera's position in comp pixels.
-///
-/// After Effects cuts 3D layers where they meet, so what it shows is always
-/// the true order, not a sort by some one point. So of two layers that
-/// overlap on screen, the one wholly behind the other's plane draws first, and
-/// two on one plane keep their stack order. Layers that pass through each
-/// other, or three that overlap in a loop, have no such answer and go by how
-/// far each one's centre is along the view, the stack breaking ties.
-pub fn depth_order(worlds: &[Mat4], view_proj: Mat4, eye: [f32; 3]) -> Vec<usize> {
+/// One flat part of a run of 3D layers, as the order sees it: a whole layer,
+/// or a piece of one cut along the planes of the layers it crosses.
+struct Shape {
+    layer: usize,
+    /// Its corners in the layer's own 0..1 space, and in comp pixels.
+    uv: Vec<glam::Vec2>,
+    pts: Vec<glam::Vec3>,
+    /// Clip w at its middle, which is how far along the view it is.
+    depth: f32,
+    /// Where it lands on screen. None when a corner is behind the eye, which
+    /// could reach anywhere.
+    bounds: Option<[f32; 4]>,
+}
+
+impl Shape {
+    fn new(layer: usize, uv: Vec<glam::Vec2>, world: Mat4, view_proj: Mat4) -> Self {
+        let pts: Vec<glam::Vec3> = uv
+            .iter()
+            .map(|c| world.transform_point3(c.extend(0.0)))
+            .collect();
+        let middle = pts.iter().copied().sum::<glam::Vec3>() / pts.len().max(1) as f32;
+        let bounds = pts
+            .iter()
+            .try_fold([f32::MAX, f32::MAX, f32::MIN, f32::MIN], |b, p| {
+                let q = view_proj * p.extend(1.0);
+                (q.w > 0.0).then(|| {
+                    let (x, y) = (q.x / q.w, q.y / q.w);
+                    [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)]
+                })
+            });
+        Self {
+            layer,
+            uv,
+            depth: (view_proj * middle.extend(1.0)).w,
+            pts,
+            bounds,
+        }
+    }
+
+    fn overlaps(&self, other: &Self) -> bool {
+        match (self.bounds, other.bounds) {
+            (Some(p), Some(q)) => p[0] < q[2] && q[0] < p[2] && p[1] < q[3] && q[1] < p[3],
+            _ => true,
+        }
+    }
+
+    /// Where this shape crosses `plane`, as a span along `along`.
+    fn chord(
+        &self,
+        (normal, origin): (glam::Vec3, glam::Vec3),
+        along: glam::Vec3,
+    ) -> Option<(f32, f32)> {
+        let mut span: Option<(f32, f32)> = None;
+        for (k, &p) in self.pts.iter().enumerate() {
+            let q = self.pts[(k + 1) % self.pts.len()];
+            let (dp, dq) = (normal.dot(p - origin), normal.dot(q - origin));
+            if (dp >= 0.0) != (dq >= 0.0) {
+                let t = along.dot(p + (q - p) * (dp / (dp - dq)));
+                span = Some(span.map_or((t, t), |(lo, hi)| (lo.min(t), hi.max(t))));
+            }
+        }
+        span
+    }
+}
+
+/// Farther first, then lower in the stack.
+struct Far(f32, usize);
+
+impl PartialEq for Far {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl Eq for Far {}
+
+impl PartialOrd for Far {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Far {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0).then(other.1.cmp(&self.1))
+    }
+}
+
+/// Pairs of shapes, by index.
+type Pairs = Vec<(usize, usize)>;
+
+/// The order `shapes` draw in, farthest first, with the flush and crossing
+/// pairs it found. Of two that overlap on screen, the one wholly behind the
+/// other's plane draws first. Two that only straddle each other's planes,
+/// without meeting, go by how far their middles are. `planes` is each layer's
+/// normal and a point on it, and `eye` the camera's position.
+fn arrange(
+    shapes: &[Shape],
+    planes: &[Option<(glam::Vec3, glam::Vec3)>],
+    eye: glam::Vec3,
+) -> (Vec<usize>, Pairs, Pairs) {
     // Closer than this to a plane, in comp pixels, is on it.
     const ON: f32 = 0.01;
-    let n = worlds.len();
-    let eye = glam::Vec3::from(eye);
-    let corners: Vec<[glam::Vec3; 4]> = worlds
-        .iter()
-        .map(|m| {
-            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-                .map(|(u, v)| m.transform_point3(glam::vec3(u, v, 0.0)))
-        })
-        .collect();
-    // Clip w is the distance along the view over the zoom.
-    let depth: Vec<f32> = worlds
-        .iter()
-        .map(|m| (view_proj * *m * glam::vec4(0.5, 0.5, 0.0, 1.0)).w)
-        .collect();
-    // Where each lands on screen. A corner behind the eye could reach
-    // anywhere, so that layer overlaps everything.
-    let bounds: Vec<Option<[f32; 4]>> = corners
-        .iter()
-        .map(|c| {
-            c.iter()
-                .try_fold([f32::MAX, f32::MAX, f32::MIN, f32::MIN], |b, p| {
-                    let q = view_proj * p.extend(1.0);
-                    (q.w > 0.0).then(|| {
-                        let (x, y) = (q.x / q.w, q.y / q.w);
-                        [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)]
-                    })
-                })
-        })
-        .collect();
-    let overlap = |a: usize, b: usize| match (bounds[a], bounds[b]) {
-        (Some(p), Some(q)) => p[0] < q[2] && q[0] < p[2] && p[1] < q[3] && q[1] < p[3],
-        _ => true,
-    };
-    let planes: Vec<Option<(glam::Vec3, glam::Vec3)>> = corners
-        .iter()
-        .map(|c| Some(((c[1] - c[0]).cross(c[3] - c[0]).try_normalize()?, c[0])))
-        .collect();
-    // Which side of `b`'s plane `a` lies on: in front (the eye's side),
-    // behind, on it, or across it. A plane seen edge on decides nothing.
+    // Which side of `b`'s plane `a` lies on. A plane seen edge on decides
+    // nothing.
     enum Side {
         Front,
         Behind,
         On,
         Across,
     }
-    let side = |a: usize, b: usize| {
-        let Some((normal, origin)) = planes[b] else {
+    let side = |a: &Shape, b: &Shape| {
+        let Some((normal, origin)) = planes[b.layer] else {
             return Side::Across;
         };
         let toward = normal.dot(eye - origin);
@@ -485,7 +572,7 @@ pub fn depth_order(worlds: &[Mat4], view_proj: Mat4, eye: [f32; 3]) -> Vec<usize
             return Side::Across;
         }
         let (mut front, mut behind) = (false, false);
-        for p in &corners[a] {
+        for p in &a.pts {
             let d = normal.dot(*p - origin) * toward.signum();
             front |= d > ON;
             behind |= d < -ON;
@@ -497,69 +584,67 @@ pub fn depth_order(worlds: &[Mat4], view_proj: Mat4, eye: [f32; 3]) -> Vec<usize
             (true, true) => Side::Across,
         }
     };
-    // Each layer's list of layers that must wait for it, and how many it waits
-    // for itself.
+    // Two that straddle each other's planes really cross when their chords
+    // along the line the planes share overlap.
+    let meet = |a: &Shape, b: &Shape| {
+        let (Some(pa), Some(pb)) = (planes[a.layer], planes[b.layer]) else {
+            return false;
+        };
+        let along = pa.0.cross(pb.0);
+        match (a.chord(pb, along), b.chord(pa, along)) {
+            (Some((a0, a1)), Some((b0, b1))) => a0 < b1 && b0 < a1,
+            _ => false,
+        }
+    };
+    let n = shapes.len();
+    // Each shape's list of shapes that must wait for it, and how many it
+    // waits for itself.
     let mut then: Vec<Vec<usize>> = vec![Vec::new(); n];
     let mut waits = vec![0usize; n];
-    // Past this many the pairs cost more than a frame can spare (a millisecond
-    // at 256), so a run that big goes by its centres alone.
-    const PAIRED: usize = 256;
-    for a in 0..if n > PAIRED { 0 } else { n } {
+    let (mut flush, mut cross) = (Vec::new(), Vec::new());
+    for a in 0..n {
         for b in a + 1..n {
-            if !overlap(a, b) {
+            let (sa, sb) = (&shapes[a], &shapes[b]);
+            if sa.layer == sb.layer || !sa.overlaps(sb) {
                 continue;
             }
-            let a_first = match side(a, b) {
-                Side::On | Side::Behind => Some(true),
-                Side::Front => Some(false),
-                Side::Across => match side(b, a) {
-                    Side::Behind => Some(false),
-                    Side::Front => Some(true),
-                    Side::On | Side::Across => None,
+            let (first, second) = match side(sa, sb) {
+                Side::On => {
+                    flush.push((a, b));
+                    (a, b)
+                }
+                Side::Behind => (a, b),
+                Side::Front => (b, a),
+                Side::Across => match side(sb, sa) {
+                    Side::Behind => (b, a),
+                    Side::Front => (a, b),
+                    Side::On | Side::Across => {
+                        if meet(sa, sb) {
+                            cross.push((a, b));
+                        }
+                        continue;
+                    }
                 },
-            };
-            let (first, second) = match a_first {
-                Some(true) => (a, b),
-                Some(false) => (b, a),
-                None => continue,
             };
             then[first].push(second);
             waits[second] += 1;
         }
     }
-    // Farther first, then lower in the stack.
-    struct Far(f32, usize);
-    impl PartialEq for Far {
-        fn eq(&self, other: &Self) -> bool {
-            self.cmp(other).is_eq()
-        }
-    }
-    impl Eq for Far {}
-    impl PartialOrd for Far {
-        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-    impl Ord for Far {
-        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-            self.0.total_cmp(&other.0).then(other.1.cmp(&self.1))
-        }
-    }
     let mut free: std::collections::BinaryHeap<Far> = (0..n)
         .filter(|&i| waits[i] == 0)
-        .map(|i| Far(depth[i], i))
+        .map(|i| Far(shapes[i].depth, i))
         .collect();
     let mut done = vec![false; n];
     let mut order = Vec::with_capacity(n);
     while order.len() < n {
-        // The farthest layer free to go, or when a loop leaves none free, the
-        // farthest of all.
-        let next = match free.pop() {
-            Some(Far(_, i)) => Some(i),
-            None => (0..n)
+        // The farthest shape free to go. When a loop leaves none free, the
+        // farthest of those waiting on the fewest, so the shapes that only
+        // follow the loop keep their place.
+        let next = free.pop().map(|Far(_, i)| i).or_else(|| {
+            (0..n)
                 .filter(|&i| !done[i])
-                .max_by_key(|&i| Far(depth[i], i)),
-        };
+                .max_by_key(|&i| (std::cmp::Reverse(waits[i]), Far(shapes[i].depth, i)))
+        });
         let Some(i) = next else {
             break;
         };
@@ -568,11 +653,234 @@ pub fn depth_order(worlds: &[Mat4], view_proj: Mat4, eye: [f32; 3]) -> Vec<usize
         for &j in &then[i] {
             waits[j] = waits[j].saturating_sub(1);
             if waits[j] == 0 && !done[j] {
-                free.push(Far(depth[j], j));
+                free.push(Far(shapes[j].depth, j));
             }
         }
     }
-    order
+    (order, flush, cross)
+}
+
+/// The part of the convex `poly` where `line.x * u + line.y * v + line.z` is
+/// not negative. A crossing point is worked out from the same end of its edge
+/// whichever side is kept, so the two halves meet without a crack, and it
+/// stays exactly on an edge of the layer it falls on, so the outline keeps no
+/// nick.
+fn keep_side(poly: &[glam::Vec2], line: glam::Vec3) -> Vec<glam::Vec2> {
+    let f = |p: glam::Vec2| line.x * p.x + line.y * p.y + line.z;
+    let mut out = Vec::with_capacity(poly.len() + 1);
+    for (k, &p) in poly.iter().enumerate() {
+        let q = poly[(k + 1) % poly.len()];
+        let (fp, fq) = (f(p), f(q));
+        if fp >= 0.0 {
+            out.push(p);
+        }
+        if (fp >= 0.0) != (fq >= 0.0) {
+            let (a, b, fa, fb) = if (p.x, p.y) < (q.x, q.y) {
+                (p, q, fp, fq)
+            } else {
+                (q, p, fq, fp)
+            };
+            let mut at = a + (b - a) * (fa / (fa - fb));
+            if a.x == b.x {
+                at.x = a.x;
+            }
+            if a.y == b.y {
+                at.y = a.y;
+            }
+            out.push(at);
+        }
+    }
+    out
+}
+
+/// Twice the area of `poly`, in the layer's own 0..1 space.
+fn area(poly: &[glam::Vec2]) -> f32 {
+    (0..poly.len())
+        .map(|k| poly[k].perp_dot(poly[(k + 1) % poly.len()]))
+        .sum::<f32>()
+        .abs()
+}
+
+/// How a run of adjacent 3D layers draws, as layers of `worlds` (each one's
+/// [`CompositeLayer::world`], bottom of the stack first) farthest first, each
+/// with how it is cut. `flat` marks a layer drawn as a flat smear (motion
+/// blur), which can't be cut itself. `view_proj` is the [`camera_matrix`] and
+/// `eye` the camera's position in comp pixels.
+///
+/// After Effects splits 3D layers where they pass through each other, so what
+/// it shows is always the true order, not a sort by some one point. So here
+/// of two layers that overlap on screen, the one wholly behind the other's
+/// plane draws first, and two on one plane keep their stack order. Of two that
+/// cross, the one that crosses fewer layers is cut into pieces along the
+/// other's plane (both, when they cross as many), and the pieces take their
+/// place the same way, which is exact at any opacity. A group of crossing
+/// layers that would need too many pieces is cut by depth instead, which is
+/// exact for what is solid.
+///
+/// ponytail: the eye-side test and the depth by clip w assume a perspective
+/// camera. An orthographic view needs its view direction here instead.
+pub fn depth_order(
+    worlds: &[Mat4],
+    flat: &[bool],
+    view_proj: Mat4,
+    eye: [f32; 3],
+) -> Vec<(usize, Option<Cut>)> {
+    // Past this many layers the pairs, and past this many pieces their pairs,
+    // cost more than a frame can spare (a millisecond at 256), so the run is
+    // cut by depth throughout.
+    const PAIRED: usize = 256;
+    const PIECES: usize = 1024;
+    // A sliver of a piece, in twice the layer's own area, is left out.
+    const SLIVER: f32 = 1e-7;
+    let eye = glam::Vec3::from(eye);
+    let flat = |i: usize| flat.get(i) == Some(&true);
+    let square: Vec<glam::Vec2> = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+        .map(|(u, v)| glam::vec2(u, v))
+        .to_vec();
+    let layers: Vec<Shape> = worlds
+        .iter()
+        .enumerate()
+        .map(|(i, m)| Shape::new(i, square.clone(), *m, view_proj))
+        .collect();
+    let n = layers.len();
+    // Cut by depth: a smear draws as a card at its middle's distance, and
+    // each layer a hair nearer per `lift`.
+    let by_depth = |i: usize, lift: u32| {
+        Cut::Depth(if flat(i) {
+            CUT_NEAR / layers[i].depth.max(CUT_NEAR)
+        } else {
+            CUT_NEAR * (1.0 + lift as f32 * CUT_LIFT)
+        })
+    };
+    if n > PAIRED {
+        // Lifted by stack order, so layers on one plane keep it.
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by_key(|&i| std::cmp::Reverse(Far(layers[i].depth, i)));
+        return order
+            .into_iter()
+            .map(|i| (i, Some(by_depth(i, i as u32))))
+            .collect();
+    }
+    let planes: Vec<Option<(glam::Vec3, glam::Vec3)>> = layers
+        .iter()
+        .map(|s| {
+            let normal = (s.pts[1] - s.pts[0]).cross(s.pts[3] - s.pts[0]);
+            Some((normal.try_normalize()?, s.pts[0]))
+        })
+        .collect();
+    let (order, flush, cross) = arrange(&layers, &planes, eye);
+    if cross.is_empty() {
+        return order.into_iter().map(|i| (i, None)).collect();
+    }
+    let mut lift = vec![0u32; n];
+    for &(a, b) in &flush {
+        lift[b] = lift[b].max(lift[a] + 1);
+    }
+    // Of a crossing pair, the one that crosses fewer is cut along the other's
+    // plane, so a floor that many cards dip into stays whole and each card is
+    // cut once. A flat smear can't be cut, so its partner always is, and two
+    // smears that cross just go by the order.
+    let mut degree = vec![0usize; n];
+    for &(a, b) in &cross {
+        degree[a] += 1;
+        degree[b] += 1;
+    }
+    let mut cuts: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for &(a, b) in &cross {
+        if !flat(a) && (flat(b) || degree[a] <= degree[b]) {
+            cuts[a].push(b);
+        }
+        if !flat(b) && (flat(a) || degree[b] <= degree[a]) {
+            cuts[b].push(a);
+        }
+    }
+    // Layers that cross each other, directly or through others, are one
+    // group, and a group with a layer cut too many times is cut by depth.
+    let mut group: Vec<usize> = (0..n).collect();
+    fn root(group: &mut [usize], mut i: usize) -> usize {
+        while group[i] != i {
+            group[i] = group[group[i]];
+            i = group[i];
+        }
+        i
+    }
+    for &(a, b) in &cross {
+        let (ra, rb) = (root(&mut group, a), root(&mut group, b));
+        group[ra.max(rb)] = ra.min(rb);
+    }
+    let mut tangled = vec![false; n];
+    for (i, by) in cuts.iter().enumerate() {
+        if by.len() > CUT_PLANES {
+            let r = root(&mut group, i);
+            tangled[r] = true;
+        }
+    }
+    let tangled: Vec<bool> = (0..n).map(|i| tangled[root(&mut group, i)]).collect();
+    let mut pieces = Vec::new();
+    for (i, layer) in layers.iter().enumerate() {
+        let (origin, u, v) = (
+            layer.pts[0],
+            layer.pts[1] - layer.pts[0],
+            layer.pts[3] - layer.pts[0],
+        );
+        let mut polys = vec![square.clone()];
+        for &by in cuts[i].iter().filter(|_| !tangled[i]) {
+            let Some((normal, at)) = planes[by] else {
+                continue;
+            };
+            // That plane, as a line across this layer's own 0..1 space.
+            let line = glam::vec3(normal.dot(u), normal.dot(v), normal.dot(origin - at));
+            polys = polys
+                .into_iter()
+                .flat_map(|p| [keep_side(&p, line), keep_side(&p, -line)])
+                .filter(|p| p.len() >= 3 && area(p) > SLIVER)
+                .collect();
+        }
+        pieces.extend(
+            polys
+                .into_iter()
+                .map(|p| Shape::new(i, p, worlds[i], view_proj)),
+        );
+    }
+    if pieces.len() > PIECES {
+        return order
+            .into_iter()
+            .map(|i| (i, Some(by_depth(i, lift[i]))))
+            .collect();
+    }
+    let (pieces_order, _, _) = arrange(&pieces, &planes, eye);
+    let mut drawn = vec![false; n];
+    let mut out = Vec::with_capacity(pieces.len());
+    for k in pieces_order {
+        let piece = &pieces[k];
+        let i = piece.layer;
+        if tangled[i] {
+            // A group cut by depth draws together where its first layer
+            // comes, in its own order.
+            if !drawn[i] {
+                let r = root(&mut group, i);
+                for &j in &order {
+                    if root(&mut group, j) == r {
+                        drawn[j] = true;
+                        out.push((j, Some(by_depth(j, lift[j]))));
+                    }
+                }
+            }
+            continue;
+        }
+        let cut = (!cuts[i].is_empty()).then(|| {
+            let mut corners = [[0.0; 2]; PIECE_CORNERS];
+            for (c, p) in corners.iter_mut().zip(&piece.uv) {
+                *c = p.to_array();
+            }
+            Cut::Piece {
+                corners,
+                count: piece.uv.len().min(PIECE_CORNERS),
+            }
+        });
+        out.push((i, cut));
+    }
+    out
 }
 
 /// The geometry pipelines at ONE multisample count.
@@ -591,9 +899,12 @@ struct PipelineSet {
     /// The adjustment-layer seed, as a **draw** rather than a copy (trap 1):
     /// `copy_texture_to_texture` cannot cross sample counts, and copying into
     /// the resolve target instead would be discarded by the first pass's load.
-    seed: wgpu::RenderPipeline,
-    /// Scene depth: each 3D layer's distance, replacing what is under it.
-    depth: wgpu::RenderPipeline,
+    /// None in a set that cuts by depth, which never seeds.
+    seed: Option<wgpu::RenderPipeline>,
+    /// Scene depth: each 3D layer's distance, keeping the nearest. In the set
+    /// that draws the front of a depth cut, the draw that lays a layer's own
+    /// depth down, and None in the set that draws behind it.
+    depth: Option<wgpu::RenderPipeline>,
 }
 
 /// A running weighted sum of textures, in fp32, fed one at a time.
@@ -616,13 +927,16 @@ pub struct Accumulator {
     height: u32,
 }
 
+/// What a [`PipelineSet`] is built for: the sample count, the format, and
+/// for a set that cuts, the depth test its draws make.
+type PipelineKey = (u32, wgpu::TextureFormat, Option<wgpu::CompareFunction>);
+
 pub struct Compositor {
     /// Built per multisample count on demand and kept — see [`PipelineSet`].
     /// The lock is held only long enough to look one up or insert it, never
     /// across a pass or a submit (docs/14-ENGINEERING-RULES.md).
-    pipelines: std::sync::Mutex<
-        std::collections::HashMap<(u32, wgpu::TextureFormat), std::sync::Arc<PipelineSet>>,
-    >,
+    pipelines:
+        std::sync::Mutex<std::collections::HashMap<PipelineKey, std::sync::Arc<PipelineSet>>>,
     /// Kept so a set for a count not yet seen can be built later.
     shader: wgpu::ShaderModule,
     pipeline_layout: wgpu::PipelineLayout,
@@ -680,10 +994,14 @@ impl Compositor {
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,
                         visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        // Offset per draw, so a composite's draws share one
+                        // buffer, and the pieces of a layer one bind group.
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
+                            has_dynamic_offset: true,
+                            min_binding_size: wgpu::BufferSize::new(
+                                std::mem::size_of::<LayerUniform>() as u64,
+                            ),
                         },
                         count: None,
                     },
@@ -920,13 +1238,14 @@ impl Compositor {
         // it always did. Higher counts arrive on first use.
         let mut pipelines = std::collections::HashMap::new();
         pipelines.insert(
-            (1, ctx.working()),
+            (1, ctx.working(), None),
             std::sync::Arc::new(Self::build_set(
                 &ctx.device,
                 &shader,
                 &pipeline_layout,
                 1,
                 ctx.working(),
+                None,
             )),
         );
         Self {
@@ -999,6 +1318,7 @@ impl Compositor {
         layout: &wgpu::PipelineLayout,
         samples: u32,
         format: wgpu::TextureFormat,
+        cut: Option<wgpu::CompareFunction>,
     ) -> PipelineSet {
         // Linear-light blend states (docs/06-RENDER-PIPELINE.md §blend):
         // Normal = premultiplied over; Add = pure light addition; Multiply
@@ -1036,7 +1356,26 @@ impl Compositor {
             count: samples,
             ..Default::default()
         };
-        let make = |entry: &str, state: Option<wgpu::BlendState>, label: &str| {
+        // A cut set tests every draw against the depth its run has laid
+        // down, nearer being larger, and lays a layer's own down with `depth`.
+        let tested = |write: bool| {
+            cut.map(|compare| wgpu::DepthStencilState {
+                format: CUT_DEPTH,
+                depth_write_enabled: write,
+                depth_compare: if write {
+                    wgpu::CompareFunction::GreaterEqual
+                } else {
+                    compare
+                },
+                stencil: Default::default(),
+                bias: Default::default(),
+            })
+        };
+        let draw = |entry: &str,
+                    state: Option<wgpu::BlendState>,
+                    label: &str,
+                    write_mask: wgpu::ColorWrites,
+                    depth_stencil: Option<wgpu::DepthStencilState>| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(layout),
@@ -1052,16 +1391,26 @@ impl Compositor {
                     targets: &[Some(wgpu::ColorTargetState {
                         format,
                         blend: state,
-                        write_mask: wgpu::ColorWrites::ALL,
+                        write_mask,
                     })],
                     compilation_options: Default::default(),
                 }),
                 primitive: Default::default(),
-                depth_stencil: None,
+                depth_stencil,
                 multisample,
                 multiview: None,
                 cache: None,
             })
+        };
+        let make = |entry: &str, state: Option<wgpu::BlendState>, label: &str| {
+            draw(entry, state, label, wgpu::ColorWrites::ALL, tested(false))
+        };
+        // The nearest wins: layers that pass through each other cut in depth
+        // as they do in the picture.
+        let nearest = wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::One,
+            dst_factor: wgpu::BlendFactor::One,
+            operation: wgpu::BlendOperation::Min,
         };
         PipelineSet {
             normal: make("fs_layer", Some(blend), "composite-normal"),
@@ -1071,8 +1420,27 @@ impl Compositor {
             // Snapshot blends: no fixed-function blending — the fragment
             // composites itself from the dst snapshot and writes the final value.
             snapshot: make("fs_layer_snapshot", None, "composite-snapshot"),
-            seed: make("fs_seed", None, "composite-seed"),
-            depth: make("fs_layer_depth", None, "composite-depth"),
+            seed: cut
+                .is_none()
+                .then(|| make("fs_seed", None, "composite-seed")),
+            depth: match cut {
+                None => Some(make(
+                    "fs_layer_depth",
+                    Some(wgpu::BlendState {
+                        color: nearest,
+                        alpha: nearest,
+                    }),
+                    "composite-depth",
+                )),
+                Some(wgpu::CompareFunction::Equal) => Some(draw(
+                    "fs_layer_cut",
+                    None,
+                    "composite-cut",
+                    wgpu::ColorWrites::empty(),
+                    tested(true),
+                )),
+                Some(_) => None,
+            },
         }
     }
 
@@ -1111,11 +1479,16 @@ impl Compositor {
     /// must not panic if it somehow did, so the fallback is to build a set and
     /// not cache it: a slower frame, never a dead engine
     /// (docs/14-ENGINEERING-RULES.md — no panics in engine crates).
-    fn pipelines(&self, ctx: &GpuContext, samples: u32) -> std::sync::Arc<PipelineSet> {
+    fn pipelines(
+        &self,
+        ctx: &GpuContext,
+        samples: u32,
+        cut: Option<wgpu::CompareFunction>,
+    ) -> std::sync::Arc<PipelineSet> {
         // Keyed on the working format as well as the sample count, because
         // wgpu bakes both into a pipeline: a project switched to thirty-two
         // bits builds its own set once and then costs nothing (docs/06 §3.4).
-        let key = (samples, ctx.working());
+        let key = (samples, ctx.working(), cut);
         let build = || {
             std::sync::Arc::new(Self::build_set(
                 &ctx.device,
@@ -1123,6 +1496,7 @@ impl Compositor {
                 &self.pipeline_layout,
                 samples,
                 ctx.working(),
+                cut,
             ))
         };
         match self.pipelines.lock() {
@@ -1132,10 +1506,14 @@ impl Compositor {
     }
 
     /// **Scene depth**: how far from the camera each pixel of the 3D layers is,
-    /// metres, drawn in the colour pass's own order so it matches what the
-    /// picture shows. A pixel no 3D layer covers at least half reads as far as
-    /// a half float goes. `metres_per_w` is the camera's zoom over its pixels
-    /// per metre.
+    /// metres, the nearest layer at each pixel, so layers that pass through
+    /// each other cut as they do in the picture. A pixel no 3D layer covers at
+    /// least half reads as far as a half float goes. `metres_per_w` is the
+    /// camera's zoom over its pixels per metre.
+    ///
+    /// The nearest wins across the whole comp, so where a 2D layer splits the
+    /// 3D layers into groups, a nearer layer of the lower group still reads
+    /// through an upper group that covers it in the picture.
     ///
     /// ponytail: track mattes and blend modes are not read here, so a layer
     /// a matte cuts away still has a distance. Read them if a scene needs it.
@@ -1167,7 +1545,7 @@ impl Compositor {
                 | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
-        let pipelines = self.pipelines(ctx, 1);
+        let pipelines = self.pipelines(ctx, 1, None);
         let binds: Vec<wgpu::BindGroup> = layers
             .iter()
             .filter(|l| l.three_d)
@@ -1178,6 +1556,8 @@ impl Compositor {
                         .to_cols_array_2d(),
                     params: [(layer.opacity / 100.0).clamp(0.0, 1.0), 0.0, 0.0, 0.0],
                     target: [tw as f32, th as f32, 0.0, metres_per_w],
+                    cut: [0.0; 4],
+                    piece: [[0.0; 4]; PIECE_CORNERS / 2],
                 };
                 let buffer = wgpu::util::DeviceExt::create_buffer_init(
                     &ctx.device,
@@ -1243,10 +1623,12 @@ impl Compositor {
                 })],
                 ..Default::default()
             });
-            pass.set_pipeline(&pipelines.depth);
-            for bind in &binds {
-                pass.set_bind_group(0, bind, &[]);
-                pass.draw(0..6, 0..1);
+            if let Some(depth) = &pipelines.depth {
+                pass.set_pipeline(depth);
+                for bind in &binds {
+                    pass.set_bind_group(0, bind, &[0]);
+                    pass.draw(0..6, 0..1);
+                }
             }
         }
         drop(encoder);
@@ -1326,6 +1708,41 @@ impl Compositor {
         samples: u32,
         region: Option<Region>,
     ) -> wgpu::Texture {
+        self.composite_cut(
+            ctx,
+            width,
+            height,
+            background,
+            layers,
+            camera,
+            seed,
+            render_scale,
+            samples,
+            region,
+            &[],
+        )
+    }
+
+    /// As [`Self::composite_seeded`], with `cuts` (one per layer, or empty)
+    /// from [`depth_order`]. A piece draws only that part of its layer. An
+    /// unbroken run of layers cut by depth cuts where its layers meet, and a
+    /// layer not cut that way ends the run.
+    #[allow(clippy::too_many_arguments)]
+    pub fn composite_cut(
+        &self,
+        ctx: &GpuContext,
+        width: u32,
+        height: u32,
+        background: [f64; 4],
+        layers: &[CompositeLayer<'_>],
+        camera: Option<Mat4>,
+        seed: Option<&wgpu::Texture>,
+        render_scale: f32,
+        samples: u32,
+        region: Option<Region>,
+        cuts: &[Option<Cut>],
+    ) -> wgpu::Texture {
+        let cut_of = |i: usize| cuts.get(i).copied().flatten();
         let (tw, th) = match region {
             Some(r) => r.target_size(render_scale),
             None => scaled_size(width, height, render_scale),
@@ -1375,7 +1792,7 @@ impl Compositor {
             )
         });
         let msaa_view = msaa.as_ref().map(|t| t.create_view(&Default::default()));
-        let pipelines = self.pipelines(ctx, samples);
+        let pipelines = self.pipelines(ctx, samples, None);
         // Where a pass draws, and where its result lands. Without MSAA the two
         // are the same texture and there is no resolve; with it, geometry goes
         // to the multisample attachment and each pass resolves into `target` —
@@ -1419,80 +1836,130 @@ impl Compositor {
             })
         });
 
-        // Per-layer bind groups first (uniforms are tiny; pooling later).
-        let binds: Vec<wgpu::BindGroup> = layers
+        // Every draw's uniform in one buffer, each at its own offset.
+        let size = std::mem::size_of::<LayerUniform>() as u64;
+        let stride = wgpu::util::align_to(
+            size,
+            u64::from(ctx.device.limits().min_uniform_buffer_offset_alignment),
+        );
+        let mut bytes = vec![0u8; (stride * layers.len().max(1) as u64) as usize];
+        for (i, layer) in layers.iter().enumerate() {
+            let uniform = LayerUniform {
+                matrix: layer
+                    .matrix(width as f32, height as f32, camera.as_ref(), region)
+                    .to_cols_array_2d(),
+                params: [
+                    (layer.opacity / 100.0).clamp(0.0, 1.0),
+                    f32::from(layer.matte.is_some()),
+                    f32::from(layer.matte.as_ref().is_some_and(|m| m.luma)),
+                    f32::from(layer.matte.as_ref().is_some_and(|m| m.inverted)),
+                ],
+                target: [tw as f32, th as f32, layer.blend.snapshot_mode(), 0.0],
+                cut: match cut_of(i) {
+                    Some(Cut::Depth(z)) => [z, 0.0, 0.0, 0.0],
+                    Some(Cut::Piece { count, .. }) => [0.0, count as f32, 0.0, 0.0],
+                    None => [0.0; 4],
+                },
+                piece: match cut_of(i) {
+                    Some(Cut::Piece { corners, .. }) => std::array::from_fn(|k| {
+                        let (a, b) = (corners[2 * k], corners[2 * k + 1]);
+                        [a[0], a[1], b[0], b[1]]
+                    }),
+                    _ => [[0.0; 4]; PIECE_CORNERS / 2],
+                },
+            };
+            bytes[i * stride as usize..][..size as usize]
+                .copy_from_slice(bytemuck::bytes_of(&uniform));
+        }
+        let uniforms = wgpu::util::DeviceExt::create_buffer_init(
+            &ctx.device,
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("layer-uniforms"),
+                contents: &bytes,
+                usage: wgpu::BufferUsages::UNIFORM,
+            },
+        );
+        // The draws of one picture, the pieces of a split layer, share one
+        // bind group.
+        type Picture = (
+            wgpu::Texture,
+            Option<wgpu::Texture>,
+            Option<wgpu::Texture>,
+            bool,
+        );
+        // A texture hashes by its id, which never changes.
+        #[allow(clippy::mutable_key_type)]
+        let mut pictures: std::collections::HashMap<Picture, usize> =
+            std::collections::HashMap::new();
+        let mut groups: Vec<wgpu::BindGroup> = Vec::new();
+        let picture_of: Vec<usize> = layers
             .iter()
             .map(|layer| {
-                let uniform = LayerUniform {
-                    matrix: layer
-                        .matrix(width as f32, height as f32, camera.as_ref(), region)
-                        .to_cols_array_2d(),
-                    params: [
-                        (layer.opacity / 100.0).clamp(0.0, 1.0),
-                        f32::from(layer.matte.is_some()),
-                        f32::from(layer.matte.as_ref().is_some_and(|m| m.luma)),
-                        f32::from(layer.matte.as_ref().is_some_and(|m| m.inverted)),
-                    ],
-                    target: [tw as f32, th as f32, layer.blend.snapshot_mode(), 0.0],
-                };
-                let buffer = wgpu::util::DeviceExt::create_buffer_init(
-                    &ctx.device,
-                    &wgpu::util::BufferInitDescriptor {
-                        label: Some("layer-uniform"),
-                        contents: bytemuck::bytes_of(&uniform),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    },
+                let key = (
+                    layer.texture.clone(),
+                    layer.matte.as_ref().map(|m| m.texture.clone()),
+                    layer.layer_mask.cloned(),
+                    layer.blend.uses_snapshot(),
                 );
-                ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("composite-layer"),
-                    layout: &self.layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(
-                                &layer.texture.create_view(&Default::default()),
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&self.sampler),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: wgpu::BindingResource::TextureView(
-                                &layer
-                                    .matte
-                                    .as_ref()
-                                    .map(|m| m.texture)
-                                    .unwrap_or(&self.white)
-                                    .create_view(&Default::default()),
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 5,
-                            resource: wgpu::BindingResource::TextureView(
-                                &layer
-                                    .layer_mask
-                                    .unwrap_or(&self.white)
-                                    .create_view(&Default::default()),
-                            ),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 4,
-                            resource: wgpu::BindingResource::TextureView(
-                                &if layer.blend.uses_snapshot() {
-                                    snapshot.as_ref().unwrap_or(&self.black)
-                                } else {
-                                    &self.black
-                                }
-                                .create_view(&Default::default()),
-                            ),
-                        },
-                    ],
+                *pictures.entry(key).or_insert_with(|| {
+                    groups.push(
+                        ctx.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                            label: Some("composite-layer"),
+                            layout: &self.layout,
+                            entries: &[
+                                wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: wgpu::BindingResource::TextureView(
+                                        &layer.texture.create_view(&Default::default()),
+                                    ),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 1,
+                                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 2,
+                                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                        buffer: &uniforms,
+                                        offset: 0,
+                                        size: wgpu::BufferSize::new(size),
+                                    }),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 3,
+                                    resource: wgpu::BindingResource::TextureView(
+                                        &layer
+                                            .matte
+                                            .as_ref()
+                                            .map(|m| m.texture)
+                                            .unwrap_or(&self.white)
+                                            .create_view(&Default::default()),
+                                    ),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 5,
+                                    resource: wgpu::BindingResource::TextureView(
+                                        &layer
+                                            .layer_mask
+                                            .unwrap_or(&self.white)
+                                            .create_view(&Default::default()),
+                                    ),
+                                },
+                                wgpu::BindGroupEntry {
+                                    binding: 4,
+                                    resource: wgpu::BindingResource::TextureView(
+                                        &if layer.blend.uses_snapshot() {
+                                            snapshot.as_ref().unwrap_or(&self.black)
+                                        } else {
+                                            &self.black
+                                        }
+                                        .create_view(&Default::default()),
+                                    ),
+                                },
+                            ],
+                        }),
+                    );
+                    groups.len() - 1
                 })
             })
             .collect();
@@ -1533,6 +2000,8 @@ impl Compositor {
                         matrix: self.full_frame_matrix(width, height),
                         params: [1.0, 0.0, 0.0, 0.0],
                         target: [tw as f32, th as f32, -1.0, 0.0],
+                        cut: [0.0; 4],
+                        piece: [[0.0; 4]; PIECE_CORNERS / 2],
                     };
                     let buffer = wgpu::util::DeviceExt::create_buffer_init(
                         &ctx.device,
@@ -1589,18 +2058,90 @@ impl Compositor {
                         })],
                         ..Default::default()
                     });
-                    rpass.set_pipeline(&pipelines.seed);
-                    rpass.set_bind_group(0, &bind, &[]);
+                    if let Some(seed) = &pipelines.seed {
+                        rpass.set_pipeline(seed);
+                    }
+                    rpass.set_bind_group(0, &bind, &[0]);
                     rpass.draw(0..6, 0..1);
                     drop(rpass);
                     seed_keep = Some((buffer, bind));
                 }
             }
         }
-        let mut first_pass = seed.is_none();
+        // A run cut by depth draws in three goes. Each layer lays its depth
+        // down, so the nearest one at every pixel is known. Then all that
+        // lies behind that nearest one draws, farthest first, and then the
+        // nearest one over it. What is solid comes out right whatever the
+        // order, and where see-through layers meet, all but the front one go
+        // by the sort.
+        #[derive(Clone, Copy, PartialEq)]
+        enum Go {
+            Plain,
+            Depth,
+            Behind,
+            Front,
+        }
+        let by_depth = |j: usize| matches!(cut_of(j), Some(Cut::Depth(_)));
+        let mut draws: Vec<(usize, Go, Option<usize>)> = Vec::with_capacity(layers.len());
         let mut i = 0usize;
         while i < layers.len() {
-            if layers[i].blend.uses_snapshot() {
+            let end = (i..layers.len())
+                .find(|&j| !by_depth(j))
+                .unwrap_or(layers.len());
+            if end == i {
+                draws.push((i, Go::Plain, None));
+                i += 1;
+                continue;
+            }
+            for go in [Go::Depth, Go::Behind, Go::Front] {
+                draws.extend((i..end).map(|j| (j, go, Some(i))));
+            }
+            i = end;
+        }
+        // The depth they test against, made only when a layer is cut.
+        let cut_depth = (draws.len() > layers.len()).then(|| {
+            let depth = ctx.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("comp-cut-depth"),
+                size: wgpu::Extent3d {
+                    width: tw,
+                    height: th,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: samples,
+                dimension: wgpu::TextureDimension::D2,
+                format: CUT_DEPTH,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            ctx.charge_vram(
+                crate::texture_bytes(CUT_DEPTH, tw, th).saturating_mul(u64::from(samples)),
+            );
+            (
+                self.pipelines(ctx, samples, Some(wgpu::CompareFunction::Less)),
+                self.pipelines(ctx, samples, Some(wgpu::CompareFunction::Equal)),
+                depth.create_view(&Default::default()),
+            )
+        });
+        // A draw that reads the snapshot, which has to be taken first, unless
+        // it is the next piece of the picture just drawn: pieces of a layer
+        // never overlap, so they read the same one.
+        let piece = |idx: usize| matches!(cut_of(idx), Some(Cut::Piece { .. }));
+        let snaps = |k: usize| {
+            let (idx, go, _) = draws[k];
+            go != Go::Depth
+                && layers[idx].blend.uses_snapshot()
+                && !(k > 0 && piece(idx) && piece(draws[k - 1].0) && {
+                    let before = draws[k - 1].0;
+                    picture_of[before] == picture_of[idx] && before != idx
+                })
+        };
+        let mut cleared: Option<usize> = None;
+        let mut first_pass = seed.is_none();
+        let mut k = 0usize;
+        while k < draws.len() {
+            let run = draws[k].2;
+            if snaps(k) {
                 if let Some(snap) = &snapshot {
                     if first_pass {
                         // Materialise the background before snapshotting. With
@@ -1624,11 +2165,32 @@ impl Compositor {
                     );
                 }
             }
-            // One pass: this layer plus any following fixed-function layers.
-            let mut end = i + 1;
-            while end < layers.len() && !layers[end].blend.uses_snapshot() {
+            // One pass: this draw plus any following fixed-function draws,
+            // and only those of the same run, if it has one.
+            let mut end = k + 1;
+            while end < draws.len() && !snaps(end) && draws[end].2 == run {
                 end += 1;
             }
+            let depth = match (run, &cut_depth) {
+                (Some(run), Some((_, _, view))) => {
+                    // A run starts with nothing in the way.
+                    let load = if cleared == Some(run) {
+                        wgpu::LoadOp::Load
+                    } else {
+                        wgpu::LoadOp::Clear(0.0)
+                    };
+                    cleared = Some(run);
+                    Some(wgpu::RenderPassDepthStencilAttachment {
+                        view,
+                        depth_ops: Some(wgpu::Operations {
+                            load,
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        stencil_ops: None,
+                    })
+                }
+                _ => None,
+            };
             {
                 // `LoadOp::Load` loads the MULTISAMPLE attachment, whose
                 // contents persist between passes — not the resolve target,
@@ -1641,22 +2203,42 @@ impl Compositor {
                     } else {
                         wgpu::LoadOp::Load
                     }))],
+                    depth_stencil_attachment: depth,
                     ..Default::default()
                 });
                 first_pass = false;
-                for idx in i..end {
-                    rpass.set_pipeline(match layers[idx].blend {
-                        Blend::Normal => &pipelines.normal,
-                        Blend::Add => &pipelines.add,
-                        Blend::Multiply => &pipelines.multiply,
-                        Blend::Plus => &pipelines.plus,
-                        _ => &pipelines.snapshot,
-                    });
-                    rpass.set_bind_group(0, &binds[idx], &[]);
-                    rpass.draw(0..6, 0..1);
+                for &(idx, go, _) in &draws[k..end] {
+                    let set = match (go, &cut_depth) {
+                        (Go::Behind, Some((behind, _, _))) => behind,
+                        (Go::Depth | Go::Front, Some((_, front, _))) => front,
+                        _ => &pipelines,
+                    };
+                    let pipeline = match (go, layers[idx].blend) {
+                        (Go::Depth, _) => set.depth.as_ref(),
+                        (_, Blend::Normal) => Some(&set.normal),
+                        (_, Blend::Add) => Some(&set.add),
+                        (_, Blend::Multiply) => Some(&set.multiply),
+                        (_, Blend::Plus) => Some(&set.plus),
+                        _ => Some(&set.snapshot),
+                    };
+                    let Some(pipeline) = pipeline else {
+                        continue;
+                    };
+                    // A piece draws as a fan of triangles over its corners.
+                    let vertices = match cut_of(idx) {
+                        Some(Cut::Piece { count, .. }) => count.saturating_sub(2) as u32 * 3,
+                        _ => 6,
+                    };
+                    rpass.set_pipeline(pipeline);
+                    rpass.set_bind_group(
+                        0,
+                        &groups[picture_of[idx]],
+                        &[(idx as u64 * stride) as u32],
+                    );
+                    rpass.draw(0..vertices, 0..1);
                 }
             }
-            i = end;
+            k = end;
         }
         if first_pass {
             // No layers at all: still clear to the background.
@@ -1792,6 +2374,8 @@ impl Compositor {
                     // the 1/N weight is applied later, in f32, by the add pass.
                     params: [1.0, 0.0, 0.0, 0.0],
                     target: [tw as f32, th as f32, -1.0, 0.0],
+                    cut: [0.0; 4],
+                    piece: [[0.0; 4]; PIECE_CORNERS / 2],
                 };
                 let buffer = wgpu::util::DeviceExt::create_buffer_init(
                     &ctx.device,
@@ -1895,7 +2479,7 @@ impl Compositor {
         let temp_msaa_view = temp_msaa
             .as_ref()
             .map(|t| t.create_view(&Default::default()));
-        let pipelines = self.pipelines(ctx, aa_samples);
+        let pipelines = self.pipelines(ctx, aa_samples, None);
         let accum_a = mk_f32("mb-accum-a");
         let accum_b = mk_f32("mb-accum-b");
         let a_view = accum_a.create_view(&Default::default());
@@ -1910,6 +2494,8 @@ impl Compositor {
                 matrix: ident_matrix,
                 params: [px, 0.0, 0.0, 0.0],
                 target: [tw as f32, th as f32, -1.0, 0.0],
+                cut: [0.0; 4],
+                piece: [[0.0; 4]; PIECE_CORNERS / 2],
             };
             wgpu::util::DeviceExt::create_buffer_init(
                 &ctx.device,
@@ -1960,7 +2546,7 @@ impl Compositor {
                     ..Default::default()
                 });
                 rp.set_pipeline(&pipelines.normal);
-                rp.set_bind_group(0, bind, &[]);
+                rp.set_bind_group(0, bind, &[0]);
                 rp.draw(0..6, 0..1);
             }
             // Add the temp into the fp32 running sum (whole frame at once).
@@ -2329,6 +2915,8 @@ impl Compositor {
             matrix: self.full_frame_matrix(width, height),
             params: [weight, 0.0, 0.0, 0.0],
             target: [width as f32, height as f32, -1.0, 0.0],
+            cut: [0.0; 4],
+            piece: [[0.0; 4]; PIECE_CORNERS / 2],
         };
         wgpu::util::DeviceExt::create_buffer_init(
             &ctx.device,
@@ -2362,6 +2950,8 @@ impl Compositor {
                 matrix: ident_matrix,
                 params: [weight, 0.0, 0.0, 0.0],
                 target: [width as f32, height as f32, -1.0, 0.0],
+                cut: [0.0; 4],
+                piece: [[0.0; 4]; PIECE_CORNERS / 2],
             };
             wgpu::util::DeviceExt::create_buffer_init(
                 &ctx.device,
@@ -2957,6 +3547,120 @@ mod tests {
             (ratio - 0.25).abs() < 0.08,
             "depth scaling ratio {ratio} (≈0.25)"
         );
+    }
+
+    /// Scene depth keeps the nearest layer at each pixel, so two cards that
+    /// cross read as the nearer one on each side of the line, against where
+    /// the ray through the pixel meets each card, worked out here. The same
+    /// two cards cut by depth, the way a run too tangled to cut into pieces
+    /// draws, show the nearer one's colour there too.
+    #[test]
+    fn crossing_layers_by_depth_show_the_nearer() {
+        let Some(ctx) = crate::test_support::lease() else {
+            crate::no_adapter();
+            return;
+        };
+        let colour = ctx.colour();
+        let compositor = ctx.compositor();
+        let red = solid_linear(&ctx, colour, [255, 0, 0, 255], 16, 16);
+        let blue = solid_linear(&ctx, colour, [0, 0, 255, 255], 16, 16);
+        let cam = camera_matrix(32.0, 32.0, 100.0, (16.0, 16.0, -100.0), (0.0, 0.0, 0.0));
+        let card = |deg: f32| CompositeLayer {
+            texture: if deg > 0.0 { &red } else { &blue },
+            size: (16.0, 16.0),
+            position: (16.0, 16.0),
+            anchor: (8.0, 8.0),
+            scale: (100.0, 100.0),
+            rotation_deg: 0.0,
+            opacity: 100.0,
+            matte: None,
+            blend: Blend::Normal,
+            z: 0.0,
+            rotation_x_deg: 0.0,
+            rotation_y_deg: deg,
+            three_d: true,
+            layer_mask: None,
+            pre: None,
+        };
+        let depth =
+            compositor.composite_depth(&ctx, 32, 32, &[card(30.0), card(-30.0)], cam, 1.0, 1.0);
+        let px = crate::fx::readback_linear_f32(&ctx, &depth, 32, 32).unwrap();
+        // The ray from the eye through the pixel's spot on the z = 0 plane
+        // meets a card turned `deg` at this many zooms along the view.
+        let hit = |x: f32, deg: f32| {
+            let (s, c) = deg.to_radians().sin_cos();
+            100.0 * c / (s * (x - 16.0) + 100.0 * c)
+        };
+        let cut = Some(Cut::Depth(CUT_NEAR));
+        let linear = compositor.composite_cut(
+            &ctx,
+            32,
+            32,
+            [0.0, 0.0, 0.0, 1.0],
+            &[card(30.0), card(-30.0)],
+            Some(cam),
+            None,
+            1.0,
+            1,
+            None,
+            &[cut, cut],
+        );
+        let shown = colour.display(&ctx, &linear, crate::DisplayParams::NEUTRAL);
+        let rgba = colour.readback8(&ctx, &shown).unwrap();
+        for x in [10u32, 21] {
+            let at = x as f32 + 0.5;
+            let near = hit(at, 30.0).min(hit(at, -30.0));
+            let got = px[((16 * 32 + x) * 4) as usize];
+            assert!(
+                (got - near).abs() < 0.01 * near,
+                "pixel {x}: depth {got}, the nearer card is at {near}"
+            );
+            // Red is the card turned 30 degrees.
+            let red_nearer = hit(at, 30.0) < hit(at, -30.0);
+            let p = &rgba[((16 * 32 + x) * 4) as usize..][..3];
+            assert_eq!(
+                (p[0] > 200, p[2] > 200),
+                (red_nearer, !red_nearer),
+                "pixel {x} shows {p:?}"
+            );
+        }
+    }
+
+    /// A card standing at the far end of a floor draws over it, though the
+    /// floor is on top of the stack and its middle is nearer the camera:
+    /// where the stack order and a sort by middles are both wrong. No GPU.
+    #[test]
+    fn a_card_standing_on_a_floor_draws_over_it() {
+        let place = |size: (f32, f32), anchor: (f32, f32), z: f32, rx: f32| {
+            Mat4::from_cols_array_2d(&place_matrix(
+                (960.0, 800.0),
+                anchor,
+                (100.0, 100.0),
+                0.0,
+                z,
+                rx,
+                0.0,
+            )) * Mat4::from_scale(glam::vec3(size.0, size.1, 1.0))
+        };
+        let card = place((400.0, 200.0), (200.0, 200.0), 1800.0, 0.0);
+        let floor = place((1600.0, 2000.0), (800.0, 1000.0), 1000.0, 90.0);
+        let cam = camera_matrix(
+            1920.0,
+            1080.0,
+            1500.0,
+            (960.0, 540.0, -1500.0),
+            (0.0, 0.0, 0.0),
+        );
+        let order: Vec<usize> = depth_order(
+            &[card, floor],
+            &[false, false],
+            cam,
+            [960.0, 540.0, -1500.0],
+        )
+        .into_iter()
+        .map(|(i, _)| i)
+        .collect();
+        assert_eq!(order, [1, 0], "the floor should draw first, then the card");
     }
 
     /// Every encoded-domain (perceptual) blend mode matches a Rust reference of

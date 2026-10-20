@@ -2406,13 +2406,12 @@ impl Realiser<'_> {
                 pose.position.2 as f32,
             ]
         });
-        let mut slots: Vec<Option<lumit_gpu::CompositeLayer>> =
-            comp_layers.into_iter().map(Some).collect();
-        let comp_layers: Vec<lumit_gpu::CompositeLayer> =
+        let (order, cuts): (Vec<usize>, Vec<Option<lumit_gpu::Cut>>) =
             draw_order(layers, &linear_textures, &grown, cam_mat.zip(eye))
                 .into_iter()
-                .filter_map(|i| slots[i].take())
-                .collect();
+                .unzip();
+        let comp_layers: Vec<lumit_gpu::CompositeLayer> =
+            order.iter().map(|&i| comp_layers[i].clone()).collect();
         if let (Some(metres_per_w), Some(cam)) = (scene_depth, cam_mat) {
             let depth = self.compositor.composite_depth(
                 &self.ctx,
@@ -2484,7 +2483,7 @@ impl Realiser<'_> {
             }
             return depth;
         }
-        self.compositor.composite_seeded(
+        self.compositor.composite_cut(
             &self.ctx,
             width,
             height,
@@ -2495,6 +2494,7 @@ impl Realiser<'_> {
             self.render_scale,
             self.samples,
             region,
+            &cuts,
         )
     }
 
@@ -2560,34 +2560,40 @@ fn placed_in_3d<'a>(
 }
 
 /// The order a segment's layers draw in: each run of adjacent 3D layers
-/// farthest first, as After Effects draws them. A 2D layer ends a run, and so
-/// does an adjustment layer, which already splits the segments. With no camera
-/// 3D layers draw flat, so the stack order stands.
+/// farthest first, as After Effects draws them, with how each draw is cut
+/// where layers pass through each other (a layer cut into pieces draws once
+/// per piece). A 2D layer ends a run, and so does an adjustment layer, which
+/// already splits the segments. With no camera 3D layers draw flat, so the
+/// stack order stands.
 fn draw_order(
     layers: &[CompLayerDraw],
     textures: &[wgpu::Texture],
     grown: &[(f32, f32)],
     camera: Option<(lumit_gpu::Mat4, [f32; 3])>,
-) -> Vec<usize> {
-    let mut order: Vec<usize> = (0..layers.len()).collect();
+) -> Vec<(usize, Option<lumit_gpu::Cut>)> {
     let Some((view_proj, eye)) = camera else {
-        return order;
+        return (0..layers.len()).map(|i| (i, None)).collect();
     };
+    let mut order = Vec::with_capacity(layers.len());
     let mut start = 0;
     while start < layers.len() {
         let end = (start..layers.len())
             .find(|&i| !layers[i].three_d)
             .unwrap_or(layers.len());
-        if end - start > 1 {
-            let worlds: Vec<lumit_gpu::Mat4> = (start..end)
-                .map(|i| placed_in_3d(&textures[i], &layers[i], grown[i]).world())
-                .collect();
-            for (slot, i) in lumit_gpu::depth_order(&worlds, view_proj, eye)
+        let worlds: Vec<lumit_gpu::Mat4> = (start..end)
+            .map(|i| placed_in_3d(&textures[i], &layers[i], grown[i]).world())
+            .collect();
+        // A motion-blurred layer draws as a flat smear, which can't be cut
+        // itself, so whatever it crosses is cut along its plane instead.
+        let flat: Vec<bool> = (start..end).map(|i| !layers[i].mb.is_empty()).collect();
+        order.extend(
+            lumit_gpu::depth_order(&worlds, &flat, view_proj, eye)
                 .into_iter()
-                .enumerate()
-            {
-                order[start + slot] = start + i;
-            }
+                .map(|(i, cut)| (start + i, cut)),
+        );
+        // The 2D layer that ended the run keeps its place.
+        if end < layers.len() {
+            order.push((end, None));
         }
         start = end + 1;
     }
