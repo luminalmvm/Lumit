@@ -54,6 +54,8 @@ import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 
+import 'keyframe_controls_frb.dart' show scalarWithValueAt;
+import 'transform_rows_frb.dart' show read;
 import 'viewer_tool_cursor.dart';
 
 /// How many degrees a pixel of drag turns the camera.
@@ -365,6 +367,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // state, and only this widget knows it was asked for.
     if (_locked) thawCursor();
     _throttle.cancel();
+    _closeUndoStep();
     super.dispose();
   }
 
@@ -375,6 +378,25 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   bool _actingView = false;
   CameraPose? _start;
   Offset _delta = Offset.zero;
+
+  /// The camera's transform as the drag found it. Every step of the drag
+  /// writes from this, so a keyed camera keeps replacing the one key at the
+  /// playhead rather than piling them up.
+  BridgeTransform? _startTransform;
+
+  /// Whether an undo group is open for the drag, so the whole of it is one
+  /// step however many moves it wrote.
+  bool _grouped = false;
+
+  void _closeUndoStep() {
+    if (!_grouped) return;
+    _grouped = false;
+    try {
+      widget.state.project?.endUndoGroup();
+    } catch (_) {
+      // The project closed mid-drag.
+    }
+  }
 
   /// Which move the unified tool was given by the button that started the drag.
   ToolMode _move = ToolMode.cameraOrbit;
@@ -397,9 +419,13 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// bridge. Moving the mouse over the picture with a camera tool in hand was
   /// making both of them, dozens of times a second, to re-answer a question
   /// only an edit or the playhead can change.
-  ({LayerReference layer, CameraPose pose})? _held;
+  ({LayerReference layer, CameraPose pose, BridgeTransform transform})? _held;
   BigInt? _heldRevision;
   int? _heldFrame;
+
+  /// Whether the active camera was passed over because an expression places
+  /// it, which is a different thing to say than there being no camera.
+  bool _expression = false;
 
   /// The comp's rate, held against the revision the walk last crossed the
   /// bridge at. Only an edit can move it, so a playhead move re-walks the held
@@ -409,7 +435,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
 
   /// What a drag moves: the fronted comp's active camera, or the Viewer's own
   /// custom view. Null when there is nothing to move, which is a comp with no
-  /// live camera, one whose camera is keyframed, or a fixed view.
+  /// live camera, one placed by an expression, or a fixed view.
   ({LayerReference? layer, CameraPose pose})? get _target {
     final view = widget.uiState.viewOf(widget.viewId);
     if (view != ViewerView.activeCamera) {
@@ -437,7 +463,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
 
   /// The walk itself. Everything but the two reads noted above comes off the
   /// read model.
-  ({LayerReference layer, CameraPose pose})? _findCamera(int frame) {
+  ({LayerReference layer, CameraPose pose, BridgeTransform transform})?
+      _findCamera(int frame) {
+    _expression = false;
     for (final entry in widget.uiState.model.heldLayers) {
       final info = entry.info;
       if (info.kind != BridgeLayerKind.camera) continue;
@@ -445,28 +473,34 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       if (!_liveAt(info.span, frame)) continue;
       final channels = info.transform.camera;
       if (channels == null) continue;
-      double still(BridgeScalar s) =>
-          s is BridgeScalar_Static ? s.field0 : double.nan;
       final tf = info.transform;
       final twoNode = info.camera?.twoNode ?? false;
-      // A camera whose placement is keyframed has no single value for a drag to
-      // add to - the same rule the layer gizmo follows. The point of interest
-      // only counts on a camera that is aimed by it.
+      // A keyed camera moves like a still one, the drag landing a key at the
+      // playhead. An expression has no value of its own for a drag to change.
+      // The point of interest only counts on a camera that is aimed by it.
       final placement = [
-        still(tf.positionX),
-        still(tf.positionY),
-        still(tf.positionZ),
-        still(tf.rotationX),
-        still(tf.rotationY),
-        still(tf.rotation),
-        still(channels.zoom),
-        if (twoNode) ...[
-          still(channels.poiX),
-          still(channels.poiY),
-          still(channels.poiZ),
-        ],
+        tf.positionX,
+        tf.positionY,
+        tf.positionZ,
+        tf.rotationX,
+        tf.rotationY,
+        tf.rotation,
+        if (twoNode) ...[channels.poiX, channels.poiY, channels.poiZ],
       ];
-      if (placement.any((v) => v.isNaN)) return null;
+      if (placement.any((s) => s is BridgeScalar_Expression)) {
+        _expression = true;
+        return null;
+      }
+      final poi = [channels.poiX, channels.poiY, channels.poiZ];
+      var aim = [for (final s in poi) s is BridgeScalar_Static ? s.field0 : 0.0];
+      if (poi.any((s) => s is! BridgeScalar_Static)) {
+        try {
+          aim = sampleScalars(
+              scalars: poi, time: widget.comp.timeOfFrame(frame: frame));
+        } catch (_) {
+          // A comp that has gone.
+        }
+      }
       // The *effective* pose: a two-node camera's aim and a solve link are
       // already composed into it, which the rows on their own do not carry.
       BridgeCameraPose? evaluated;
@@ -486,13 +520,10 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
             evaluated.rotationZ
           ),
           zoom: evaluated.zoom,
-          pointOfInterest: (
-            still(channels.poiX),
-            still(channels.poiY),
-            still(channels.poiZ),
-          ),
+          pointOfInterest: (aim[0], aim[1], aim[2]),
           twoNode: twoNode,
         ),
+        transform: tf,
       );
     }
     return null;
@@ -587,7 +618,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     );
   }
 
-  void _sayNoCamera() => widget.state.postNotice(l10n.noCameraToMove);
+  void _sayNoCamera() => widget.state.postNotice(
+      _expression ? l10n.cameraExpressionRefused : l10n.noCameraToMove);
 
   void _begin(Offset at) {
     final target = _target;
@@ -603,10 +635,19 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     // button comes up, which is what every 3D application does.
     _anchor = at;
     _locked = freezeCursor();
+    if (target.layer != null && !_grouped) {
+      try {
+        widget.state.project?.beginUndoGroup();
+        _grouped = true;
+      } catch (_) {
+        // No project, so no history to keep tidy.
+      }
+    }
     setState(() {
       _acting = target.layer;
       _actingView = target.layer == null;
       _start = target.pose;
+      _startTransform = _held?.transform;
       _delta = Offset.zero;
     });
   }
@@ -632,6 +673,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
 
   void _end() {
     if (_start != null && _delta != Offset.zero) _write(preview: false);
+    _closeUndoStep();
     if (_locked) thawCursor();
     _locked = false;
     _anchor = null;
@@ -639,9 +681,15 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       _acting = null;
       _actingView = false;
       _start = null;
+      _startTransform = null;
       _delta = Offset.zero;
     });
   }
+
+  /// Which move the drag is: the armed tool's, or the button's under the
+  /// unified tool.
+  ToolMode get _activeMove =>
+      widget.tool == ToolMode.cameraUnified ? _move : widget.tool;
 
   /// The pose the drag so far implies.
   CameraPose? _moved() {
@@ -651,9 +699,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     final scale = widget.compSize.width == 0
         ? 1.0
         : widget.fitted.width / widget.compSize.width;
-    final move =
-        widget.tool == ToolMode.cameraUnified ? _move : widget.tool;
-    return switch (move) {
+    return switch (_activeMove) {
       ToolMode.cameraOrbit =>
         orbitCamera(start, _delta.dx, _delta.dy, lockAxis: shift),
       ToolMode.cameraPan =>
@@ -663,9 +709,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     };
   }
 
-  /// Write the pose. Every camera drag is one undo step per property, the same
-  /// as the layer gizmo's — the properties are separate in the model and there
-  /// is no batched op for a camera move (docs/TODO.md).
+  /// Write the pose. A drag on the camera is one undo step, the group opened
+  /// when it began.
   ///
   /// [preview] is a live update while the drag is in flight; the values are the
   /// same either way, because a camera has no preview path of its own (a
@@ -688,39 +733,62 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       return;
     }
     final layer = _acting;
-    if (layer == null) return;
-    // A two-node camera's rows are left alone by an orbit, and its point of
-    // interest travels with a track: what is written is what moved.
-    final props = <BridgeTransformProp>[
+    final tf = _startTransform;
+    if (layer == null || tf == null) return;
+    _writeCamera(layer, tf, pose, _movedProps(pose, _activeMove));
+  }
+
+  /// What [move] changes on the camera. Only what moved is written, so a
+  /// keyed camera gains no keys on rows the drag left alone: a
+  /// two-node camera's rotation rows stay put, as its aim follows the eye,
+  /// and its point of interest only travels with a track.
+  Set<BridgeTransformProp> _movedProps(CameraPose pose, ToolMode move) {
+    final poiMoves = pose.twoNode && move == ToolMode.cameraPan;
+    return {
       BridgeTransformProp.positionX,
       BridgeTransformProp.positionY,
       BridgeTransformProp.positionZ,
-      if (!pose.twoNode) ...[
+      if (!pose.twoNode && move == ToolMode.cameraOrbit) ...{
         BridgeTransformProp.rotationX,
         BridgeTransformProp.rotationY,
-      ],
-      if (pose.twoNode) ...[
+      },
+      if (poiMoves) ...{
         BridgeTransformProp.poiX,
         BridgeTransformProp.poiY,
         BridgeTransformProp.poiZ,
-      ],
-    ];
-    final values = <BridgeScalar>[
-      BridgeScalar.static_(pose.position.$1),
-      BridgeScalar.static_(pose.position.$2),
-      BridgeScalar.static_(pose.position.$3),
-      if (!pose.twoNode) ...[
-        BridgeScalar.static_(pose.rotation.$1),
-        BridgeScalar.static_(pose.rotation.$2),
-      ],
-      if (pose.twoNode) ...[
-        BridgeScalar.static_(pose.pointOfInterest.$1),
-        BridgeScalar.static_(pose.pointOfInterest.$2),
-        BridgeScalar.static_(pose.pointOfInterest.$3),
-      ],
-    ];
+      },
+    };
+  }
+
+  /// Put [pose]'s [props] on [layer] at the playhead, starting from [tf]: a
+  /// keyed property takes a key there and a still one stays still, as typing
+  /// the value into its row would. Every camera write goes through here, with
+  /// the pose in the comp's own space.
+  void _writeCamera(LayerReference layer, BridgeTransform tf, CameraPose pose,
+      Set<BridgeTransformProp> props) {
+    double valueOf(BridgeTransformProp prop) => switch (prop) {
+          BridgeTransformProp.positionX => pose.position.$1,
+          BridgeTransformProp.positionY => pose.position.$2,
+          BridgeTransformProp.positionZ => pose.position.$3,
+          BridgeTransformProp.rotationX => pose.rotation.$1,
+          BridgeTransformProp.rotationY => pose.rotation.$2,
+          BridgeTransformProp.rotation => pose.rotation.$3,
+          BridgeTransformProp.poiX => pose.pointOfInterest.$1,
+          BridgeTransformProp.poiY => pose.pointOfInterest.$2,
+          BridgeTransformProp.poiZ => pose.pointOfInterest.$3,
+          // Nothing else is a camera's placement, so nothing else is asked.
+          _ => 0,
+        };
+    final frame = widget.uiState.playheadFrame.value;
     try {
-      layer.setTransforms(props: props, values: values);
+      layer.setTransforms(
+        props: props.toList(),
+        values: [
+          for (final prop in props)
+            scalarWithValueAt(
+                read(tf, prop), valueOf(prop), widget.comp, frame),
+        ],
+      );
       widget.onChanged();
     } catch (_) {
       // The camera was deleted mid-drag.
