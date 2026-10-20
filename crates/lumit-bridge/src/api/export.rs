@@ -561,6 +561,8 @@ pub fn export_cancel() {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeExportQueueItem {
     pub id: u32,
+    /// The composition it was made from. It may have been deleted since.
+    pub comp: uuid::Uuid,
     pub comp_name: String,
     /// Where it writes. The interface shows the file's own name and keeps the
     /// whole path for the tooltip.
@@ -668,6 +670,7 @@ pub fn export_queue_list() -> Vec<BridgeExportQueueItem> {
         .into_iter()
         .map(|row| BridgeExportQueueItem {
             id: row.id,
+            comp: row.comp,
             comp_name: row.comp_name,
             path: row.out_path,
             preset: row.preset,
@@ -727,6 +730,25 @@ pub fn export_queue_remove(id: u32) {
 #[frb(sync)]
 pub fn export_queue_move(id: u32, index: u32) -> Result<(), BridgeError> {
     crate::export::queue_move(id, index as usize).map_err(BridgeError::ExportFailed)
+}
+
+/// The settings one item was queued with, for the export dialogue to open on.
+/// `None` once the item has left the list.
+#[frb(sync)]
+pub fn export_queue_spec(id: u32) -> Option<BridgeExportSpec> {
+    crate::export::queue_spec(id)
+}
+
+/// Give a waiting item new settings and a new file. It still renders the
+/// composition as it was when it was added. The same refusals as a move: an
+/// item that is running, has run, or has gone.
+#[frb(sync)]
+pub fn export_queue_update(
+    id: u32,
+    spec: BridgeExportSpec,
+    path: String,
+) -> Result<(), BridgeError> {
+    crate::export::queue_update(id, &spec, &path).map_err(BridgeError::ExportFailed)
 }
 
 /// Whether an export in format `codec` to `path` would write over a file
