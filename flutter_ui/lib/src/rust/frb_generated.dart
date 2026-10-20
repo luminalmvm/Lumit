@@ -985,7 +985,9 @@ abstract class BridgeLibApi extends BaseApi {
   BridgeWireframes crateApiCompositionCompositionReferenceWireframes(
       {required CompositionReference that,
       required BigInt frame,
-      required BridgeCameraPose view,
+      BridgeCameraPose? view,
+      required bool ground,
+      List<UuidValue>? only,
       required List<BridgeMediaSize> mediaSizes});
 
   Future<List<BridgeFileComp>?> crateApiProjectCompsInFile(
@@ -8853,14 +8855,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeWireframes crateApiCompositionCompositionReferenceWireframes(
       {required CompositionReference that,
       required BigInt frame,
-      required BridgeCameraPose view,
+      BridgeCameraPose? view,
+      required bool ground,
+      List<UuidValue>? only,
       required List<BridgeMediaSize> mediaSizes}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_box_autoadd_composition_reference(that, serializer);
         sse_encode_u_64(frame, serializer);
-        sse_encode_box_autoadd_bridge_camera_pose(view, serializer);
+        sse_encode_opt_box_autoadd_bridge_camera_pose(view, serializer);
+        sse_encode_bool(ground, serializer);
+        sse_encode_opt_list_Uuid(only, serializer);
         sse_encode_list_bridge_media_size(mediaSizes, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 217)!;
       },
@@ -8870,7 +8876,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceWireframesConstMeta,
-      argValues: [that, frame, view, mediaSizes],
+      argValues: [that, frame, view, ground, only, mediaSizes],
       apiImpl: this,
     ));
   }
@@ -8879,7 +8885,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceWireframesConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_wireframes",
-            argNames: ["that", "frame", "view", "mediaSizes"],
+            argNames: ["that", "frame", "view", "ground", "only", "mediaSizes"],
           );
 
   @override
@@ -21439,12 +21445,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  BridgeWirePoint dco_decode_box_autoadd_bridge_wire_point(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_bridge_wire_point(raw);
-  }
-
-  @protected
   CompositionReference dco_decode_box_autoadd_composition_reference(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -25826,13 +25826,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeWireCamera dco_decode_bridge_wire_camera(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return BridgeWireCamera(
       layer: dco_decode_Uuid(arr[0]),
       eye: dco_decode_bridge_wire_point(arr[1]),
-      corners: dco_decode_list_bridge_wire_point(arr[2]),
-      pointOfInterest: dco_decode_opt_box_autoadd_bridge_wire_point(arr[3]),
+      lines: dco_decode_list_prim_f_64_strict(arr[2]),
     );
   }
 
@@ -25844,7 +25843,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return BridgeWireLayer(
       layer: dco_decode_Uuid(arr[0]),
-      corners: dco_decode_list_bridge_wire_point(arr[1]),
+      lines: dco_decode_list_prim_f_64_strict(arr[1]),
     );
   }
 
@@ -25852,12 +25851,20 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeWireLight dco_decode_bridge_wire_light(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return BridgeWireLight(
       layer: dco_decode_Uuid(arr[0]),
-      at: dco_decode_bridge_wire_point(arr[1]),
+      kind: dco_decode_bridge_wire_light_kind(arr[1]),
+      at: dco_decode_bridge_wire_point(arr[2]),
+      lines: dco_decode_list_prim_f_64_strict(arr[3]),
     );
+  }
+
+  @protected
+  BridgeWireLightKind dco_decode_bridge_wire_light_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return BridgeWireLightKind.values[raw as int];
   }
 
   @protected
@@ -25877,12 +25884,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeWireframes dco_decode_bridge_wireframes(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return BridgeWireframes(
       layers: dco_decode_list_bridge_wire_layer(arr[0]),
       cameras: dco_decode_list_bridge_wire_camera(arr[1]),
       lights: dco_decode_list_bridge_wire_light(arr[2]),
+      ground: dco_decode_list_prim_f_64_strict(arr[3]),
+      frame: dco_decode_list_prim_f_64_strict(arr[4]),
+      axes: dco_decode_list_prim_f_64_strict(arr[5]),
     );
   }
 
@@ -26664,12 +26674,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  List<BridgeWirePoint> dco_decode_list_bridge_wire_point(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return (raw as List<dynamic>).map(dco_decode_bridge_wire_point).toList();
-  }
-
-  @protected
   List<CompositionReference> dco_decode_list_composition_reference(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -27195,12 +27199,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  BridgeWirePoint? dco_decode_opt_box_autoadd_bridge_wire_point(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_bridge_wire_point(raw);
-  }
-
-  @protected
   CompositionReference? dco_decode_opt_box_autoadd_composition_reference(
       dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -27279,6 +27277,12 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   List<String>? dco_decode_opt_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_list_String(raw);
+  }
+
+  @protected
+  List<UuidValue>? dco_decode_opt_list_Uuid(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_Uuid(raw);
   }
 
   @protected
@@ -28154,13 +28158,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_transform(deserializer));
-  }
-
-  @protected
-  BridgeWirePoint sse_decode_box_autoadd_bridge_wire_point(
-      SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_bridge_wire_point(deserializer));
   }
 
   @protected
@@ -32845,30 +32842,35 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_layer = sse_decode_Uuid(deserializer);
     var var_eye = sse_decode_bridge_wire_point(deserializer);
-    var var_corners = sse_decode_list_bridge_wire_point(deserializer);
-    var var_pointOfInterest =
-        sse_decode_opt_box_autoadd_bridge_wire_point(deserializer);
-    return BridgeWireCamera(
-        layer: var_layer,
-        eye: var_eye,
-        corners: var_corners,
-        pointOfInterest: var_pointOfInterest);
+    var var_lines = sse_decode_list_prim_f_64_strict(deserializer);
+    return BridgeWireCamera(layer: var_layer, eye: var_eye, lines: var_lines);
   }
 
   @protected
   BridgeWireLayer sse_decode_bridge_wire_layer(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_layer = sse_decode_Uuid(deserializer);
-    var var_corners = sse_decode_list_bridge_wire_point(deserializer);
-    return BridgeWireLayer(layer: var_layer, corners: var_corners);
+    var var_lines = sse_decode_list_prim_f_64_strict(deserializer);
+    return BridgeWireLayer(layer: var_layer, lines: var_lines);
   }
 
   @protected
   BridgeWireLight sse_decode_bridge_wire_light(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_layer = sse_decode_Uuid(deserializer);
+    var var_kind = sse_decode_bridge_wire_light_kind(deserializer);
     var var_at = sse_decode_bridge_wire_point(deserializer);
-    return BridgeWireLight(layer: var_layer, at: var_at);
+    var var_lines = sse_decode_list_prim_f_64_strict(deserializer);
+    return BridgeWireLight(
+        layer: var_layer, kind: var_kind, at: var_at, lines: var_lines);
+  }
+
+  @protected
+  BridgeWireLightKind sse_decode_bridge_wire_light_kind(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return BridgeWireLightKind.values[inner];
   }
 
   @protected
@@ -32886,8 +32888,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     var var_layers = sse_decode_list_bridge_wire_layer(deserializer);
     var var_cameras = sse_decode_list_bridge_wire_camera(deserializer);
     var var_lights = sse_decode_list_bridge_wire_light(deserializer);
+    var var_ground = sse_decode_list_prim_f_64_strict(deserializer);
+    var var_frame = sse_decode_list_prim_f_64_strict(deserializer);
+    var var_axes = sse_decode_list_prim_f_64_strict(deserializer);
     return BridgeWireframes(
-        layers: var_layers, cameras: var_cameras, lights: var_lights);
+        layers: var_layers,
+        cameras: var_cameras,
+        lights: var_lights,
+        ground: var_ground,
+        frame: var_frame,
+        axes: var_axes);
   }
 
   @protected
@@ -34284,19 +34294,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  List<BridgeWirePoint> sse_decode_list_bridge_wire_point(
-      SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    var len_ = sse_decode_i_32(deserializer);
-    var ans_ = <BridgeWirePoint>[];
-    for (var idx_ = 0; idx_ < len_; ++idx_) {
-      ans_.add(sse_decode_bridge_wire_point(deserializer));
-    }
-    return ans_;
-  }
-
-  @protected
   List<CompositionReference> sse_decode_list_composition_reference(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -35140,18 +35137,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  BridgeWirePoint? sse_decode_opt_box_autoadd_bridge_wire_point(
-      SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_bridge_wire_point(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
   CompositionReference? sse_decode_opt_box_autoadd_composition_reference(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -35293,6 +35278,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_list_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  List<UuidValue>? sse_decode_opt_list_Uuid(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_Uuid(deserializer));
     } else {
       return null;
     }
@@ -36230,13 +36226,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeTransform self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_transform(self, serializer);
-  }
-
-  @protected
-  void sse_encode_box_autoadd_bridge_wire_point(
-      BridgeWirePoint self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_bridge_wire_point(self, serializer);
   }
 
   @protected
@@ -39798,9 +39787,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_Uuid(self.layer, serializer);
     sse_encode_bridge_wire_point(self.eye, serializer);
-    sse_encode_list_bridge_wire_point(self.corners, serializer);
-    sse_encode_opt_box_autoadd_bridge_wire_point(
-        self.pointOfInterest, serializer);
+    sse_encode_list_prim_f_64_strict(self.lines, serializer);
   }
 
   @protected
@@ -39808,7 +39795,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeWireLayer self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_Uuid(self.layer, serializer);
-    sse_encode_list_bridge_wire_point(self.corners, serializer);
+    sse_encode_list_prim_f_64_strict(self.lines, serializer);
   }
 
   @protected
@@ -39816,7 +39803,16 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeWireLight self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_Uuid(self.layer, serializer);
+    sse_encode_bridge_wire_light_kind(self.kind, serializer);
     sse_encode_bridge_wire_point(self.at, serializer);
+    sse_encode_list_prim_f_64_strict(self.lines, serializer);
+  }
+
+  @protected
+  void sse_encode_bridge_wire_light_kind(
+      BridgeWireLightKind self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 
   @protected
@@ -39835,6 +39831,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_list_bridge_wire_layer(self.layers, serializer);
     sse_encode_list_bridge_wire_camera(self.cameras, serializer);
     sse_encode_list_bridge_wire_light(self.lights, serializer);
+    sse_encode_list_prim_f_64_strict(self.ground, serializer);
+    sse_encode_list_prim_f_64_strict(self.frame, serializer);
+    sse_encode_list_prim_f_64_strict(self.axes, serializer);
   }
 
   @protected
@@ -40922,16 +40921,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  void sse_encode_list_bridge_wire_point(
-      List<BridgeWirePoint> self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_i_32(self.length, serializer);
-    for (final item in self) {
-      sse_encode_bridge_wire_point(item, serializer);
-    }
-  }
-
-  @protected
   void sse_encode_list_composition_reference(
       List<CompositionReference> self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -41703,17 +41692,6 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_bridge_wire_point(
-      BridgeWirePoint? self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_box_autoadd_bridge_wire_point(self, serializer);
-    }
-  }
-
-  @protected
   void sse_encode_opt_box_autoadd_composition_reference(
       CompositionReference? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -41846,6 +41824,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_list_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_list_Uuid(
+      List<UuidValue>? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_Uuid(self, serializer);
     }
   }
 

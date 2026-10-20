@@ -4024,20 +4024,22 @@ fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
     comp.add_camera_layer(None).expect("a camera");
 
     let view = camera_view_pose(BridgeCameraView::Front, 1920.0, 1080.0);
-    let wires = comp.wireframes(0, view, Vec::new()).expect("wireframes");
+    let wires = comp
+        .wireframes(0, Some(view), false, None, Vec::new())
+        .expect("wireframes");
     let cam = match wires.cameras.as_slice() {
         [only] => only,
         other => panic!("one camera, not {}", other.len()),
     };
     let close = |got: f64, want: f64| assert!((got - want).abs() < 1.0, "{got} is not {want}");
-    for (corner, (x, y)) in
-        cam.corners
-            .iter()
+    // The first four lines go round the frustum's far end, each from a corner.
+    for (line, (x, y)) in
+        cam.lines
+            .chunks(4)
             .zip([(0.0, 0.0), (1920.0, 0.0), (1920.0, 1080.0), (0.0, 1080.0)])
     {
-        assert!(corner.in_front, "the frustum is in front of the Front view");
-        close(corner.x, x);
-        close(corner.y, y);
+        close(line[0], x);
+        close(line[1], y);
     }
     close(cam.eye.x, 960.0);
     close(cam.eye.y, 540.0);
@@ -4045,10 +4047,9 @@ fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
         cam.eye.in_front,
         "the eye sits between the view and the comp"
     );
-    assert!(
-        cam.point_of_interest.is_none(),
-        "a one-node camera has no line to draw"
-    );
+    // The far end, a line to each corner and the body's twelve edges: a
+    // one-node camera has no line to a point of interest.
+    assert_eq!(cam.lines.len(), 20 * 4);
 }
 
 /// Editing a solid changes the **asset**, so every layer drawing it changes at

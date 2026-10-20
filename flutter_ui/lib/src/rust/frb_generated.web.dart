@@ -419,9 +419,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeTransform dco_decode_box_autoadd_bridge_transform(dynamic raw);
 
   @protected
-  BridgeWirePoint dco_decode_box_autoadd_bridge_wire_point(dynamic raw);
-
-  @protected
   CompositionReference dco_decode_box_autoadd_composition_reference(
       dynamic raw);
 
@@ -1343,6 +1340,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeWireLight dco_decode_bridge_wire_light(dynamic raw);
 
   @protected
+  BridgeWireLightKind dco_decode_bridge_wire_light_kind(dynamic raw);
+
+  @protected
   BridgeWirePoint dco_decode_bridge_wire_point(dynamic raw);
 
   @protected
@@ -1695,9 +1695,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   List<BridgeWireLight> dco_decode_list_bridge_wire_light(dynamic raw);
 
   @protected
-  List<BridgeWirePoint> dco_decode_list_bridge_wire_point(dynamic raw);
-
-  @protected
   List<CompositionReference> dco_decode_list_composition_reference(dynamic raw);
 
   @protected
@@ -1949,9 +1946,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeTransform? dco_decode_opt_box_autoadd_bridge_transform(dynamic raw);
 
   @protected
-  BridgeWirePoint? dco_decode_opt_box_autoadd_bridge_wire_point(dynamic raw);
-
-  @protected
   CompositionReference? dco_decode_opt_box_autoadd_composition_reference(
       dynamic raw);
 
@@ -1990,6 +1984,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<String>? dco_decode_opt_list_String(dynamic raw);
+
+  @protected
+  List<UuidValue>? dco_decode_opt_list_Uuid(dynamic raw);
 
   @protected
   List<BridgeFileComp>? dco_decode_opt_list_bridge_file_comp(dynamic raw);
@@ -2441,10 +2438,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeTransform sse_decode_box_autoadd_bridge_transform(
-      SseDeserializer deserializer);
-
-  @protected
-  BridgeWirePoint sse_decode_box_autoadd_bridge_wire_point(
       SseDeserializer deserializer);
 
   @protected
@@ -3512,6 +3505,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeWireLight sse_decode_bridge_wire_light(SseDeserializer deserializer);
 
   @protected
+  BridgeWireLightKind sse_decode_bridge_wire_light_kind(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeWirePoint sse_decode_bridge_wire_point(SseDeserializer deserializer);
 
   @protected
@@ -3946,10 +3943,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
-  List<BridgeWirePoint> sse_decode_list_bridge_wire_point(
-      SseDeserializer deserializer);
-
-  @protected
   List<CompositionReference> sse_decode_list_composition_reference(
       SseDeserializer deserializer);
 
@@ -4239,10 +4232,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
-  BridgeWirePoint? sse_decode_opt_box_autoadd_bridge_wire_point(
-      SseDeserializer deserializer);
-
-  @protected
   CompositionReference? sse_decode_opt_box_autoadd_composition_reference(
       SseDeserializer deserializer);
 
@@ -4284,6 +4273,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<UuidValue>? sse_decode_opt_list_Uuid(SseDeserializer deserializer);
 
   @protected
   List<BridgeFileComp>? sse_decode_opt_list_bridge_file_comp(
@@ -4742,10 +4734,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_transform(
       BridgeTransform self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_box_autoadd_bridge_wire_point(
-      BridgeWirePoint self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_composition_reference(
@@ -5939,6 +5927,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeWireLight self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bridge_wire_light_kind(
+      BridgeWireLightKind self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bridge_wire_point(
       BridgeWirePoint self, SseSerializer serializer);
 
@@ -6382,10 +6374,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       List<BridgeWireLight> self, SseSerializer serializer);
 
   @protected
-  void sse_encode_list_bridge_wire_point(
-      List<BridgeWirePoint> self, SseSerializer serializer);
-
-  @protected
   void sse_encode_list_composition_reference(
       List<CompositionReference> self, SseSerializer serializer);
 
@@ -6678,10 +6666,6 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       BridgeTransform? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_opt_box_autoadd_bridge_wire_point(
-      BridgeWirePoint? self, SseSerializer serializer);
-
-  @protected
   void sse_encode_opt_box_autoadd_composition_reference(
       CompositionReference? self, SseSerializer serializer);
 
@@ -6724,6 +6708,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_Uuid(
+      List<UuidValue>? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_list_bridge_file_comp(

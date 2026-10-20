@@ -2517,14 +2517,25 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceViewProjection(
               that: this, frame: frame, view: view);
 
-  /// The wireframes at `frame`, projected through `view`. Asked once per
-  /// frame change or view change, never per rebuild.
+  /// The wireframes at `frame`, projected through `view`, or through the
+  /// comp's active camera when there is none (which is then left out, being
+  /// the eye). `ground` adds the ground, the comp's frame and the axes from
+  /// the origin. `only` names the cameras and lights to outline, and then
+  /// no other layer is; with none given everything is. Asked once per
+  /// frame, view or document change, never per rebuild.
   BridgeWireframes wireframes(
           {required BigInt frame,
-          required BridgeCameraPose view,
+          BridgeCameraPose? view,
+          required bool ground,
+          List<UuidValue>? only,
           required List<BridgeMediaSize> mediaSizes}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceWireframes(
-          that: this, frame: frame, view: view, mediaSizes: mediaSizes);
+          that: this,
+          frame: frame,
+          view: view,
+          ground: ground,
+          only: only,
+          mediaSizes: mediaSizes);
 
   @override
   int get hashCode => internalproject.hashCode ^ internalid.hashCode;
