@@ -706,6 +706,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             transport: !deck,
             loop: ui.workspace.performance.loop,
             onLoop: ui.workspace.setLoopMode,
+            viewId: widget.view.engineId,
             // Gathered: the header's contents lead the one strip, in the
             // order the two strips read.
             leading: split

@@ -229,6 +229,12 @@ enum LumitIcon {
   cameraPan,
   cameraDolly,
 
+  /// The three ways the 3D handles can point: the layer's own axes, the
+  /// comp's, and the screen's.
+  localAxes,
+  worldAxes,
+  viewAxes,
+
   /// The Viewer bar's layer-controls switch: a box with a handle on
   /// each corner — the mark it governs, drawn small.
   ///
@@ -456,6 +462,9 @@ String? _ownGlyph(LumitIcon icon) => switch (icon) {
       LumitIcon.cameraOrbit => LumitIcons.cameraOrbit,
       LumitIcon.cameraPan => LumitIcons.cameraPan,
       LumitIcon.cameraDolly => LumitIcons.cameraDolly,
+      LumitIcon.localAxes => LumitIcons.localAxes,
+      LumitIcon.worldAxes => LumitIcons.worldAxes,
+      LumitIcon.viewAxes => LumitIcons.viewAxes,
       // Switches and columns.
       LumitIcon.collapse => LumitIcons.collapseTransformations,
       LumitIcon.label => LumitIcons.label,

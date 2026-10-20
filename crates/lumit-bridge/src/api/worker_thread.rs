@@ -105,11 +105,12 @@ pub struct WorkerState {
     /// a parameter. Set by the render request that carries it — the chip
     /// toggling is a render — and cleared by the first request that does not.
     prefix: Option<crate::api::state::BridgePrefixPoint>,
-    /// The Viewer's 3D view (docs/impl/camera.md §6): a camera placement that
-    /// stands in for the named comp's active camera while set. Held here for
-    /// the reason the prefix is: it says what the Viewer is looking through,
-    /// and every render, playback and drag preview looks through the same.
-    view: Option<(Uuid, lumit_core::model::CameraPose)>,
+    /// Each Viewer view's 3D view: a camera placement that stands in for the
+    /// named comp's active camera while set. Held here for the reason the
+    /// prefix is: it says what the Viewer is looking through, and every render,
+    /// playback and drag preview looks through the same. Keyed by view like
+    /// [`Self::looks`], so a two-up can show the active camera beside Top.
+    camera_views: std::collections::HashMap<u32, (Uuid, lumit_core::model::CameraPose)>,
     /// The disk tier (docs/06 §5.4) and its IO thread. Owned here because this
     /// is the thread that has both halves of every hand-off: the renderer whose
     /// evictions fall to disk, and the frame keys to file them under.
@@ -201,6 +202,29 @@ impl WorkerState {
         self.view_id
             .store(view, std::sync::atomic::Ordering::Relaxed);
     }
+
+    /// The 3D view of the view being served, or `None` for its comp's camera.
+    fn camera_view(&self) -> Option<(Uuid, lumit_core::model::CameraPose)> {
+        self.camera_views.get(&self.view_id()).copied()
+    }
+
+    /// The view the user is working in: the one the last active render or the
+    /// playback named, or the one being served before either has.
+    fn active_view(&self) -> u32 {
+        self.last_shown
+            .as_ref()
+            .map_or_else(|| self.view_id(), |shown| shown.0)
+    }
+
+    /// Serve the active view and look its way, for the work that follows it
+    /// rather than whichever view rendered last: the fill, the cache bar and
+    /// the drag previews.
+    fn serve_active(&mut self) -> u32 {
+        let view = self.active_view();
+        self.set_view_id(view);
+        look_at(self, view);
+        view
+    }
 }
 
 /// One outstanding ask to the disk tier: where the frame sits (for the upload
@@ -239,12 +263,12 @@ fn frame_name(
 /// One soloed-layer render, held for the dropper (see [`sample_layer_alone`]).
 #[frb(ignore)]
 struct LayerSample {
-    /// `(comp, frame, layer, document revision)` — what this render is of. The
-    /// revision is what retires it when an edit lands: the frame cache has no
-    /// generation counter any more (every frame is named by its content), and
-    /// a soloed render is of a document nobody else holds, thus it cannot be
-    /// named the same way.
-    stamp: (Uuid, u64, Uuid, u64),
+    /// `(comp, frame, layer, document revision, view)`, what this render is
+    /// of. The revision is what retires it when an edit lands: the frame
+    /// cache has no generation counter any more (every frame is named by its
+    /// content), and a soloed render is of a document nobody else holds, thus
+    /// it cannot be named the same way.
+    stamp: (Uuid, u64, Uuid, u64, u32),
     width: u32,
     height: u32,
     rgba: Vec<u8>,
@@ -404,6 +428,9 @@ const BAR_REFINE_PER_TURN_PLAYING: u64 = 256;
 #[derive(PartialEq, Eq, Clone, Copy)]
 struct BarFingerprint {
     comp: Uuid,
+    /// The view the strip is named for: the active one, through its own 3D
+    /// view and the chip.
+    view: u32,
     frames: u64,
     scale_q: u16,
     revision: u64,
@@ -838,9 +865,15 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
         };
         (project.store.snapshot(), project.store.revision())
     };
+    // The bar shows what the active view will be served, so its frames are
+    // named the way that view's are, under its look.
+    let view = state.serve_active();
+    let camera = state.camera_views.get(&view).copied();
+    let document = viewed_kept(&mut state.viewed, state.prefix, camera, revision, document);
     let (ram_entries, disk_entries) = (crate::framecache::stats().2 as u64, state.disk.stats().1);
     let fingerprint = BarFingerprint {
         comp: comp_id,
+        view,
         frames,
         scale_q,
         revision,
@@ -865,7 +898,8 @@ fn publish_cache_bar(state: &mut WorkerState, stream: &mut WorkerResponseStream)
     // arriving in a tier leaves the names alone, so the strip stands and only its
     // values need refreshing.
     let renamed = was.is_none_or(|old| {
-        (old.comp, old.frames, old.scale_q, old.revision) != (comp_id, frames, scale_q, revision)
+        (old.comp, old.view, old.frames, old.scale_q, old.revision)
+            != (comp_id, view, frames, scale_q, revision)
     });
     state.published_bar = Some(fingerprint);
     state.bar_published_at = std::time::Instant::now();
@@ -1589,7 +1623,7 @@ fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStre
     drop(project);
     // The chip is part of what the Viewer is showing, so the republish shows it
     // too — otherwise a finished bake quietly put the full stack back.
-    let document = viewed_through(state.prefix, state.view, document);
+    let document = viewed_through(state.prefix, state.camera_view(), document);
     publish_frame(
         state,
         comp_ref.id,
@@ -1608,6 +1642,8 @@ fn republish_last_frame(state: &mut WorkerState, stream: &mut WorkerResponseStre
 /// nothing (or no room) left, so an idle editor stops spending the GPU.
 #[frb(ignore)]
 fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
+    // The fill banks for the view the user is working in, under its look.
+    state.serve_active();
     // A non-neutral Viewer view makes every frame unnameable, so the
     // fill would render frame after frame and bank none of them, never reach
     // the end of its list, and never stop — GPU work for nothing, for as long
@@ -1642,13 +1678,8 @@ fn idle_fill(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
     // The fill banks what the Viewer will ask for, and while the chip is on
     // that is the cut picture — a fill under the other name would be work
     // nothing ever reads back.
-    let document = viewed_kept(
-        &mut state.viewed,
-        state.prefix,
-        state.view,
-        revision,
-        document,
-    );
+    let view = state.camera_view();
+    let document = viewed_kept(&mut state.viewed, state.prefix, view, revision, document);
     let Some(comp) = document.comp(comp_ref.id) else {
         state.fill_exhausted = true;
         return;
@@ -1837,12 +1868,13 @@ pub enum WorkerRequest {
     /// an export builds its own renderer, which nobody sends this to. One
     /// message rather than one per control, so the renderer can never hold
     /// half a look.
-    /// The Viewer's 3D view for `comp` (docs/impl/camera.md §6), or `None`
-    /// for the active camera. Latched like the prefix chip; see
-    /// [`viewed_through`].
+    /// A Viewer view's 3D view of `comp`, or `None` for the active camera.
+    /// Latched per view like the look, see [`viewed_through`].
     SetCameraView {
         comp: Uuid,
-        view: Option<crate::api::layer::BridgeCameraPose>,
+        pose: Option<crate::api::layer::BridgeCameraPose>,
+        /// Whose view this is.
+        view: u32,
     },
     SetViewerLook {
         stops: f64,
@@ -1863,8 +1895,8 @@ pub enum WorkerRequest {
         view: u32,
     },
     /// A Viewer view has closed. Its pooled shared textures go with it, and
-    /// so does its stored look: a view id is minted per view and never
-    /// reused, so nothing here can be wanted again.
+    /// so do its stored look and 3D view: a view id is minted per view and
+    /// never reused, so nothing here can be wanted again.
     CloseView(u32),
     /// Draw a footage item or one layer's source on its own, for a footage
     /// view or a layer view (docs/impl/multi-viewer.md §3.6). The picture is
@@ -2569,6 +2601,10 @@ pub struct RenderCompRequest {
     /// drag previews and the idle work that follow serve the same view without
     /// each growing a parameter (docs/impl/multi-viewer.md §2.1).
     pub view: u32,
+    /// Whether that view is the active one. Only the active view moves the
+    /// fill's anchor and the chip, so the other panes of a split Viewer can
+    /// render without pulling the fill and the cache bar over to themselves.
+    pub active: bool,
     /// Where to cut this layer's effect stack short, or `None` for the picture
     /// as the document has it. Latched onto [`WorkerState::prefix`],
     /// so it describes the Viewer from here until the next render says
@@ -2603,6 +2639,8 @@ pub struct RenderScopeRequest {
     pub kind: u32,
     /// Background, trace, then the R, G and B channel tints, each `[r, g, b]`.
     pub colours: [[u8; 3]; 5],
+    /// Which Viewer view the trace reads, so it reads that view's picture.
+    pub view: u32,
 }
 
 /// One read of the pixels under the dropper — the magnifier's request.
@@ -3126,7 +3164,7 @@ fn worker_loop(
         looks: std::collections::HashMap::new(),
         applied_look: (0, ViewerLook::default()),
         prefix: None,
-        view: None,
+        camera_views: std::collections::HashMap::new(),
         disk: lumit_render::diskio::spawn(),
         disk_wanted: std::collections::HashMap::new(),
         names: crate::names::NameCache::default(),
@@ -3490,7 +3528,7 @@ fn play_one_frame(state: &mut WorkerState, stream: &mut WorkerResponseStream) {
             let document = viewed_kept(
                 &mut state.viewed,
                 state.prefix,
-                state.view,
+                state.camera_views.get(&playback.view).copied(),
                 revision,
                 document,
             );
@@ -3937,7 +3975,7 @@ fn start_playback(req: PlayRequest, state: &mut WorkerState) -> Result<(), Bridg
     };
     // The pre-roll names the frames it is about to ask the disk for, so it has
     // to name them under the picture the run will actually play.
-    let document = viewed_through(state.prefix, state.view, document);
+    let document = viewed_through(state.prefix, state.camera_view(), document);
     let comp = document.comp(req.comp.id).ok_or(BridgeError::InvalidComp)?;
     let comp_id = req.comp.id;
     let fps = comp.frame_rate.fps();
@@ -4106,7 +4144,7 @@ fn handle_requests(
         // froze on its first frame while the scopes kept updating. A trace and
         // a frame are different jobs; neither is the other's replacement.
         let (pictures, scope, sample, superseded) =
-            drain_to_newest(request, receiver, classify_request, state.view_id());
+            drain_to_newest(request, receiver, classify_request, state.active_view());
         // Deliberately not logged. Superseding is the normal, healthy case —
         // it is how a drag stays attached to the pointer — and a line per
         // completed render is console I/O on the worker thread for something
@@ -4149,15 +4187,13 @@ fn handle_requests(
                     state.playback = None;
                     Ok(())
                 }
-                WorkerRequest::SetCameraView { comp, view } => {
-                    set_view(state, view.map(|v| (comp, v.core())));
+                WorkerRequest::SetCameraView { comp, pose, view } => {
+                    set_view(state, view, pose.map(|p| (comp, p.core())));
                     Ok(())
                 }
                 WorkerRequest::RenderItem(req) => render_item(req, state, stream),
                 WorkerRequest::CloseView(view) => {
-                    state.looks.remove(&view);
-                    state.stand_ins.retain(|(v, ..)| *v != view);
-                    state.renderer.drop_view_targets(view);
+                    close_view(state, view);
                     Ok(())
                 }
                 WorkerRequest::SetViewerLook {
@@ -4534,16 +4570,41 @@ fn viewed_through(
     std::sync::Arc::new(doc)
 }
 
-/// Latch the Viewer's 3D view, the way [`set_prefix`] latches the chip: a
-/// change renames every frame of the comp, so the name memo and both of its
-/// readers start over.
+/// Let go of everything held for a closed view.
 #[frb(ignore)]
-fn set_view(state: &mut WorkerState, view: Option<(Uuid, lumit_core::model::CameraPose)>) {
-    if state.view == view {
+fn close_view(state: &mut WorkerState, view: u32) {
+    if state
+        .last_shown
+        .as_ref()
+        .is_some_and(|shown| shown.0 == view)
+    {
+        state.last_shown = None;
+    }
+    state.looks.remove(&view);
+    state.camera_views.remove(&view);
+    state.names.forget_view(view);
+    state.stand_ins.retain(|(v, ..)| *v != view);
+    state.renderer.drop_view_targets(view);
+}
+
+/// Latch one view's 3D view, the way [`set_prefix`] latches the chip: a
+/// change renames every frame of the comp in that view, so that view's names,
+/// the bar and the fill start over.
+#[frb(ignore)]
+fn set_view(
+    state: &mut WorkerState,
+    view: u32,
+    pose: Option<(Uuid, lumit_core::model::CameraPose)>,
+) {
+    if state.camera_views.get(&view).copied() == pose {
         return;
     }
-    state.view = view;
-    state.names.clear();
+    match pose {
+        Some(pose) => state.camera_views.insert(view, pose),
+        None => state.camera_views.remove(&view),
+    };
+    state.names.forget_view(view);
+    state.layer_sample = None;
     state.published_bar = None;
     state.fill_exhausted = false;
 }
@@ -4610,11 +4671,18 @@ fn render_comp(
     // (docs/impl/multi-viewer.md §2.1), and looking the way that view looks.
     state.set_view_id(req.view);
     look_at(state, req.view);
-    // The user is looking here now: anchor the idle fill on it, and wake it.
-    state.last_shown = Some((state.view_id(), req.comp.clone(), req.frame, req.scale));
-    state.fill_exhausted = false;
-    set_prefix(state, req.prefix);
-    let document = viewed_through(state.prefix, state.view, document);
+    // Only the active view moves what the user is looking at: the fill's
+    // anchor, and the chip, which only it carries. Another pane's render must
+    // not pull either over to itself.
+    let prefix = if req.active {
+        state.last_shown = Some((req.view, req.comp.clone(), req.frame, req.scale));
+        state.fill_exhausted = false;
+        set_prefix(state, req.prefix);
+        state.prefix
+    } else {
+        None
+    };
+    let document = viewed_through(prefix, state.camera_view(), document);
     watched(state, stream, req.frame, |state, stream| {
         publish_frame(
             state,
@@ -4675,14 +4743,9 @@ fn render_item(
     };
     state.set_view_id(req.view);
     look_at(state, req.view);
+    // Not `last_shown`: the fill, the cache bar and the drags follow the
+    // active composition view, and this item's scratch comp is none of those.
     let comp = req.of.comp_id();
-    state.last_shown = Some((
-        req.view,
-        CompositionReference::new(req.project.id, comp),
-        req.frame,
-        req.scale,
-    ));
-    state.fill_exhausted = false;
     watched(state, stream, req.frame, |state, stream| {
         publish_frame(
             state,
@@ -4960,7 +5023,13 @@ fn publish_preview(
     let (comp_width, comp_height) = document
         .comp(comp.id)
         .map_or((1, 1), |c| (c.width, c.height));
-    let document = viewed_through(state.prefix, state.view, std::sync::Arc::new(document));
+    // A drag is in the active view, whichever pane rendered last.
+    state.serve_active();
+    let document = viewed_through(
+        state.prefix,
+        state.camera_view(),
+        std::sync::Arc::new(document),
+    );
     let scale = crate::realtime::drag_scale(comp_width, comp_height, asked);
     watched(state, stream, frame, |state, stream| {
         publish_frame(
@@ -4989,11 +5058,20 @@ fn trace_scope(
     state: &mut WorkerState,
     stream: &mut WorkerResponseStream,
 ) -> Result<(), BridgeError> {
-    let document = {
+    let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        document.store.snapshot()
+        (document.store.snapshot(), document.store.revision())
     };
+    // The picture that view shows: through its own 3D view, and the chip.
+    // The kept copy, which playback has usually made already.
+    let document = viewed_kept(
+        &mut state.viewed,
+        state.prefix,
+        state.camera_views.get(&req.view).copied(),
+        revision,
+        document,
+    );
 
     // Reuse the picture the Viewer already has, at whatever resolution it was
     // made at. Scopes read the *values* in a frame, so any size answers the
@@ -5144,6 +5222,9 @@ fn sample_pixels(
         Some(layer) => sample_layer_alone(&document, revision, layer.layer_id, &req, state)
             .and_then(|(w, h, rgba)| cut_patch(&rgba, w, h, u, v, req.window).map(|p| (p, w, h))),
         None => {
+            // The picture this view shows, through its own 3D view.
+            let document =
+                viewed_through(None, state.camera_views.get(&req.view).copied(), document);
             // **The frame the Viewer is showing, wherever it is being kept.**
             // The dropper reads what is on screen, so the ladder is the same
             // one `trace_scope` walks, and in the same order — and naming the
@@ -5281,10 +5362,11 @@ fn sample_pixels(
 /// The composition rendered with one layer soloed — that layer alone, in its
 /// own place, on nothing.
 ///
-/// Held in `state.layer_sample` against `(comp, frame, layer, revision)`: the
-/// dropper asks again on every pointer move, and re-compositing the whole
-/// composition per move is not a thing to do while someone is dragging a
-/// pointer. An edit moves the document's revision, which retires the entry.
+/// Held in `state.layer_sample` against `(comp, frame, layer, revision,
+/// view)`: the dropper asks again on every pointer move, and re-compositing
+/// the whole composition per move is not a thing to do while someone is
+/// dragging a pointer. An edit moves the document's revision, which retires
+/// the entry.
 #[frb(ignore)]
 fn sample_layer_alone(
     document: &lumit_core::Document,
@@ -5293,7 +5375,7 @@ fn sample_layer_alone(
     req: &SamplePixelsRequest,
     state: &mut WorkerState,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    let stamp = (req.comp.id, req.frame, layer, revision);
+    let stamp = (req.comp.id, req.frame, layer, revision, req.view);
     if let Some(held) = &state.layer_sample {
         if held.stamp == stamp {
             return Some((held.width, held.height, held.rgba.clone()));
@@ -5313,10 +5395,17 @@ fn sample_layer_alone(
         }
     }
 
+    // Seen through the view's own 3D view, so the read lands where the
+    // pointer is.
+    let patched = viewed_through(
+        None,
+        state.camera_views.get(&req.view).copied(),
+        std::sync::Arc::new(patched),
+    );
     let (rgba, w, h) = state
         .renderer
         .render_preview(
-            &std::sync::Arc::new(patched),
+            &patched,
             req.comp.id,
             req.frame,
             quality_for(req.scale),
@@ -6029,6 +6118,100 @@ mod tests {
         );
     }
 
+    /// **Two views of one comp never trade frames.** With one looking from
+    /// Top and the other through the comp's camera, the cache bar reads the
+    /// active Top view's frame, each view names its own frame and is served
+    /// only its own, and closing the Top view lets go of its view, its names
+    /// and the fill's anchor.
+    #[test]
+    fn two_views_of_one_comp_never_trade_frames() {
+        use crate::api::layer::{camera_view_pose, BridgeCameraView, BridgeLayerSwitch};
+
+        let _cache = crate::framecache::test_guard();
+        let (project, comp) = project_with_solid_of(4);
+        let layer = {
+            let state = project.state().expect("state");
+            let state = state.read().expect("read");
+            state.store.snapshot().comp(comp).expect("comp").layers[0].id
+        };
+        // 3D, so a camera changes the picture.
+        crate::api::layer::LayerReference::new(project.id, comp, layer)
+            .set_switch(BridgeLayerSwitch::ThreeD, true)
+            .expect("3D");
+        let Some(mut state) = worker_state(project) else {
+            return;
+        };
+        let (document, revision) = {
+            let document = state.project.state().expect("state");
+            let document = document.read().expect("read");
+            (document.store.snapshot(), document.store.revision())
+        };
+        state.renderer.sync_colour(&document);
+        let quality = super::still_quality(1.0);
+        let top = camera_view_pose(BridgeCameraView::Top, 64.0, 32.0).core();
+        super::set_view(&mut state, 1, Some((comp, top)));
+
+        // Only the Top frame is made, so a bar naming frames any other way
+        // finds nothing held.
+        let mut stream = crate::frb_generated::StreamSink::deserialize("0".into());
+        super::render_comp(
+            super::RenderCompRequest {
+                comp: CompositionReference::new(state.project.id, comp),
+                frame: 0,
+                view: 1,
+                active: true,
+                prefix: None,
+                mode: BridgePlaybackMode::EveryFrame,
+                scale: 1.0,
+            },
+            &mut state,
+            &mut stream,
+        )
+        .expect("the Top frame");
+        crate::framecache::bar::want(comp, 4, 1000);
+        super::publish_cache_bar(&mut state, &mut stream);
+        let strip = crate::framecache::bar::read(comp, 4, 1000);
+        assert_eq!(
+            crate::framecache::bar::storage_of(strip[0]),
+            2,
+            "the bar reads the frame the active Top view shows"
+        );
+
+        let name = |state: &mut super::WorkerState, view: u32| {
+            state.set_view_id(view);
+            let document = super::viewed_through(None, state.camera_view(), document.clone());
+            super::frame_name(state, &document, revision, comp, 0, quality).expect("named")
+        };
+
+        let from_top = name(&mut state, 1);
+        let through_camera = name(&mut state, 2);
+        assert_ne!(
+            from_top, through_camera,
+            "Top and the comp's camera are different pictures"
+        );
+        assert_eq!(
+            name(&mut state, 1),
+            from_top,
+            "each view is served its own name"
+        );
+        assert_eq!(name(&mut state, 2), through_camera);
+
+        super::close_view(&mut state, 1);
+        assert!(
+            state.camera_views.is_empty(),
+            "a closed view lets go of its 3D view"
+        );
+        assert!(
+            state.last_shown.is_none(),
+            "and the fill no longer anchors on it"
+        );
+        assert_eq!(
+            name(&mut state, 1),
+            through_camera,
+            "and of its names, so the id looks through the comp's camera again"
+        );
+    }
+
     /// **The idle measure lets the document go before it renders** (docs/14
     /// §"no locks across GPU").
     ///
@@ -6208,7 +6391,7 @@ mod tests {
             looks: std::collections::HashMap::new(),
             applied_look: (0, super::ViewerLook::default()),
             prefix: None,
-            view: None,
+            camera_views: std::collections::HashMap::new(),
             disk: lumit_render::diskio::spawn(),
             disk_wanted: std::collections::HashMap::new(),
             names: crate::names::NameCache::default(),
@@ -6738,6 +6921,7 @@ mod tests {
                 scale: 1.0,
                 prefix: None,
                 view: 0,
+                active: true,
             })
         };
         assert!(matches!(

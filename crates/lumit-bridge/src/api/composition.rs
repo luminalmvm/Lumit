@@ -2268,6 +2268,9 @@ impl CompositionReference {
     /// `view` names which Viewer view asked (docs/impl/multi-viewer.md §2.1).
     /// The worker latches it, so the drag previews and the idle work that
     /// follow serve the same view without each growing a parameter.
+    /// `active` says it is the view being worked in, which the idle fill, the
+    /// cache bar and the drags follow.
+    #[allow(clippy::too_many_arguments)]
     #[frb(sync)]
     pub fn render_frame(
         &self,
@@ -2276,6 +2279,7 @@ impl CompositionReference {
         mode: BridgePlaybackMode,
         prefix: Option<crate::api::state::BridgePrefixPoint>,
         view: u32,
+        active: bool,
     ) -> Result<(), BridgeError> {
         self.dispatch(RenderComp(RenderCompRequest {
             comp: self.clone(),
@@ -2284,6 +2288,7 @@ impl CompositionReference {
             mode,
             prefix,
             view,
+            active,
         }))
     }
 
@@ -2424,18 +2429,20 @@ impl CompositionReference {
         })
     }
 
-    /// Look at this comp through `view` rather than its active camera
-    /// (docs/impl/camera.md §6), or through the active camera again with
-    /// `None`. Panel state, so the frontend sends it whenever the Viewer's
-    /// 3D view changes and the next render looks through it. Export never
-    /// sees a view.
+    /// Look at this comp in Viewer view `view` through `pose` rather than its
+    /// active camera, or through the active camera again with `None`. Panel
+    /// state, kept per view like the look, so the frontend sends it whenever a
+    /// view's 3D view changes and that view's next render looks through it.
+    /// Export never sees a view.
     #[frb(sync)]
     pub fn set_camera_view(
         &self,
-        view: Option<crate::api::layer::BridgeCameraPose>,
+        pose: Option<crate::api::layer::BridgeCameraPose>,
+        view: u32,
     ) -> Result<(), BridgeError> {
         self.dispatch(WorkerRequest::SetCameraView {
             comp: self.id,
+            pose,
             view,
         })
     }
@@ -2741,7 +2748,8 @@ impl CompositionReference {
     /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.
     /// `colours` is background, trace, then the R, G and B tints, each as
     /// `[r, g, b]` — the panel's theme decides them, so the engine never has to
-    /// know what a Lumit surface looks like.
+    /// know what a Lumit surface looks like. `view` is the Viewer view whose
+    /// picture is read.
     #[frb(sync)]
     pub fn render_scope(
         &self,
@@ -2749,6 +2757,7 @@ impl CompositionReference {
         scale: f32,
         kind: u32,
         colours: Vec<Vec<u8>>,
+        view: u32,
     ) -> Result<(), BridgeError> {
         // Five triples, and anything else is a caller bug rather than something
         // to pad out with a colour nobody chose.
@@ -2766,6 +2775,7 @@ impl CompositionReference {
             scale,
             kind,
             colours: packed,
+            view,
         }))
     }
 

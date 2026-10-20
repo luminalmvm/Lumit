@@ -234,6 +234,9 @@ const Map<String, ToolGroup> toolActions = {
   'tool.camera': ToolGroup.camera,
 };
 
+/// The axes a 3D layer's move arrows and rotation rings follow.
+enum GizmoAxes { local, world, view }
+
 /// A colour the toolbar holds, in the document's own scene-linear channels — the
 /// same numbers a fill crosses the bridge as, so nothing is converted twice.
 @immutable
@@ -335,6 +338,16 @@ class ToolsState extends ChangeNotifier {
   set snapToGrid(bool value) {
     if (_snapToGrid == value) return;
     _snapToGrid = value;
+    notifyListeners();
+  }
+
+  /// Which way the 3D handles point: along the layer's own axes, the comp's,
+  /// or the screen's, as After Effects' three axis modes do.
+  GizmoAxes _axes = GizmoAxes.local;
+  GizmoAxes get axes => _axes;
+  set axes(GizmoAxes value) {
+    if (_axes == value) return;
+    _axes = value;
     notifyListeners();
   }
 

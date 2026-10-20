@@ -303,6 +303,33 @@ pub fn project(
     ((width * 0.5 + a.0 / w, height * 0.5 + a.1 / w), in_front)
 }
 
+/// [`project`] as three rows of a matrix, for taking many points through one
+/// pose: `(x, y, z, 1)` goes to `(X, Y, W)` and the comp pixel is
+/// `(X / W, Y / W)`. `W` is the depth over the zoom, so it is 1 on the plane
+/// the camera sees 1:1 and above 0 for anything in front of the eye.
+#[must_use]
+pub fn projection(pose: &CameraPose, width: f64, height: f64) -> [[f64; 4]; 3] {
+    let m = rotation(pose.rotation_deg);
+    let e = pose.position;
+    // One axis of the camera's own frame: `Rᵀ · (p - eye)`, as in `project`.
+    let axis = |k: usize| {
+        [
+            m[0][k],
+            m[1][k],
+            m[2][k],
+            -(m[0][k] * e.0 + m[1][k] * e.1 + m[2][k] * e.2),
+        ]
+    };
+    let (ax, ay) = (axis(0), axis(1));
+    let zoom = pose.zoom.max(1e-9);
+    let w = axis(2).map(|v| v / zoom);
+    [
+        std::array::from_fn(|i| width * 0.5 * w[i] + ax[i]),
+        std::array::from_fn(|i| height * 0.5 * w[i] + ay[i]),
+        w,
+    ]
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
@@ -402,5 +429,19 @@ mod tests {
         assert!(close(x, 960.0 - 480.0));
         let (_, front) = project(&pose, 1920.0, 1080.0, (0.0, 0.0, -2000.0));
         assert!(!front);
+
+        // The matrix form lands every point where `project` does.
+        let turned = CameraPose {
+            zoom: 1500.0,
+            position: (300.0, -200.0, -900.0),
+            rotation_deg: (20.0, -35.0, 10.0),
+            dof: None,
+        };
+        let rows = projection(&turned, 1920.0, 1080.0);
+        let p = (400.0, 600.0, 250.0);
+        let at = |r: [f64; 4]| r[0] * p.0 + r[1] * p.1 + r[2] * p.2 + r[3];
+        let ((x, y), _) = project(&turned, 1920.0, 1080.0, p);
+        let w = at(rows[2]);
+        assert!(w > 0.0 && close(at(rows[0]) / w, x) && close(at(rows[1]) / w, y));
     }
 }

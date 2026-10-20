@@ -73,6 +73,7 @@ import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/state/keymap.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/motion_paths.dart';
+import 'package:lumit_flutter/state/view_projection.dart';
 import 'package:lumit_flutter/state/online_door.dart';
 import 'package:lumit_flutter/state/online_footage.dart';
 import 'package:lumit_flutter/state/layer_bounds.dart';
@@ -540,6 +541,14 @@ class LumitUiState extends ChangeNotifier {
   /// engine samples it. Held against the document revision, so a hover asks
   /// the engine nothing and a still layer is never asked about twice.
   final MotionPaths motionPaths = MotionPaths();
+
+  /// How each Viewer's picture sees the comp's 3D space, so a 3D layer's
+  /// box is drawn through the same camera. Held against the frame, the
+  /// document and the view, so a hover asks the engine nothing.
+  final ViewProjections viewProjections = ViewProjections();
+
+  /// Where a selected camera is and which way it faces, for its 3D handles.
+  final CameraPoses cameraPoses = CameraPoses();
 
   /// Which tool the toolbar has armed (docs/07 §1.7).
   ///
@@ -1198,6 +1207,9 @@ class LumitUiState extends ChangeNotifier {
         '${view.colourView}/$viewerPrefixStamp';
     if (!force && _askedFor[view.engineId] == stamp) return;
     _askedFor[view.engineId] = stamp;
+    // Its 3D view first, should it have moved to a comp it looks at another
+    // way: the render reads whatever the engine holds for this view.
+    _pushCameraView(view, comp);
     try {
       comp.renderFrame(
         frame: BigInt.from(frame),
@@ -1211,6 +1223,7 @@ class LumitUiState extends ChangeNotifier {
         // and the selection is in one view.
         prefix: view.id == views.activeId ? viewerPrefix : null,
         view: view.engineId,
+        active: view.id == views.activeId,
       );
     } catch (_) {
       // No worker yet, or a composition that has gone away. The next playhead
@@ -1321,6 +1334,9 @@ class LumitUiState extends ChangeNotifier {
       }
     }
     pushViewerLook();
+    // The engine's fill, cache bar and drags follow the active view, and a
+    // render is how it hears which one that is.
+    requestFrame();
     notifyListeners();
     rememberSession();
   }
@@ -1365,10 +1381,36 @@ class LumitUiState extends ChangeNotifier {
   bool setViewerLayout(ViewLayout layout) {
     final pane = currentViewerPane;
     if (pane == null) return false;
+    final had = views.forPane(pane).length;
     views.setLayout(pane, layout);
+    _seedCameraViews(pane, had);
     saveLayout();
     requestFrame();
     return true;
+  }
+
+  /// New views of a 3D comp start the way After Effects lays them out: Top
+  /// beside the view you had, or Top, Front and Right in a four-up. A view
+  /// one of the others already shows is skipped.
+  void _seedCameraViews(PaneId pane, int had) {
+    final all = views.forPane(pane);
+    if (all.length <= had) return;
+    final scene = model.heldLayers.any((e) =>
+        e.info.switches.threeD ||
+        e.info.kind == BridgeLayerKind.camera ||
+        e.info.kind == BridgeLayerKind.light);
+    if (!scene) return;
+    final shown = {for (final v in all.take(had)) viewOf(v.engineId)};
+    final seeds = [
+      ViewerView.top,
+      if (all.length == 4) ...[ViewerView.front, ViewerView.right],
+    ].where((v) => !shown.contains(v)).iterator;
+    for (final view in all.skip(had)) {
+      // Only views of the comp the held layers are of.
+      if (compFor(view)?.internalid != _selectedComp?.internalid) continue;
+      if (!seeds.moveNext()) break;
+      setViewerView(seeds.current, viewId: view.engineId);
+    }
   }
 
   /// Swap a two-view layout between across and down. Nothing to turn in the
@@ -1647,6 +1689,8 @@ class LumitUiState extends ChangeNotifier {
   void _releaseClosedViews() {
     for (final engineId in views.takeClosed()) {
       _controllers.remove(engineId)?.dispose();
+      _pushedCamera.remove(engineId);
+      viewProjections.forget(engineId);
       try {
         _app.project?.closeViewerView(view: engineId);
       } catch (_) {
@@ -3766,50 +3810,57 @@ class LumitUiState extends ChangeNotifier {
 
   // --- The Viewer's 3D view -------------------------------------------------
 
-  /// Which way each comp is being looked at (docs/impl/camera.md §6). Beside
-  /// [viewerLooks] and for the same reason - a view is a way of looking, not an
-  /// edit - but not written down: a view is where you are in the middle of
-  /// something, and a comp opens on its own camera.
-  final Map<String, ViewerView> viewerViews = {};
-
-  /// The pose each view is drawn through, keyed by comp and view. A fixed view
-  /// is asked of the engine once and kept; a custom one keeps whatever the
-  /// camera tools do to it, until the comp is closed.
-  final Map<String, BridgeCameraPose> viewerViewPoses = {};
-
-  String _viewKey(String comp, ViewerView view) => '$comp/${view.name}';
-
-  /// How the fronted comp is being looked at.
-  ViewerView get viewerView =>
-      viewerViews[_selectedComp?.internalid.toString()] ??
-      ViewerView.activeCamera;
-
-  /// The pose the fronted comp renders through, or null for its own camera.
-  /// A map read, so the Viewer may ask on every rebuild.
-  BridgeCameraPose? get viewerViewPose {
-    final id = _selectedComp?.internalid.toString();
-    if (id == null) return null;
-    return viewerViewPoses[_viewKey(id, viewerView)];
+  /// The view the engine knows by [viewId], or null when there is none.
+  ViewerSurface? _surfaceOf(int viewId) {
+    for (final view in views.views) {
+      if (view.engineId == viewId) return view;
+    }
+    return null;
   }
 
-  /// Look at the fronted comp through [view], and render it again.
-  void setViewerView(ViewerView view) {
-    final comp = selectedComp;
-    final id = comp?.internalid.toString();
-    if (comp == null || id == null) return;
-    final fixed = view.fixed;
+  /// The pose [view] draws [comp] through, or null for the comp's own camera.
+  BridgeCameraPose? _poseIn(ViewerSurface view, String? comp) {
+    final looking = view.cameraViews[comp];
+    if (comp == null || looking == null) return null;
+    return view.cameraPoses['$comp/${looking.name}'];
+  }
+
+  /// How Viewer view [viewId] is looking at its comp. Each view keeps its
+  /// own, per comp, beside its own look.
+  ViewerView viewOf(int viewId) {
+    final view = _surfaceOf(viewId);
+    if (view == null) return ViewerView.activeCamera;
+    return view.cameraViews[compFor(view)?.internalid.toString()] ??
+        ViewerView.activeCamera;
+  }
+
+  /// The pose Viewer view [viewId] renders through, or null for its comp's
+  /// own camera. The one place the overlays read it from. A map read, so it
+  /// may be asked on every rebuild.
+  BridgeCameraPose? viewPoseOf(int viewId) {
+    final view = _surfaceOf(viewId);
+    if (view == null) return null;
+    return _poseIn(view, compFor(view)?.internalid.toString());
+  }
+
+  /// Look at view [viewId]'s comp through [look], and render it again.
+  void setViewerView(ViewerView look, {required int viewId}) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    if (view == null || comp == null) return;
+    final id = comp.internalid.toString();
+    final fixed = look.fixed;
     if (fixed == null) {
-      viewerViews.remove(id);
+      view.cameraViews.remove(id);
     } else {
-      viewerViews[id] = view;
       // Asked once: where a Top view looks from depends on the comp's size and
       // nothing else, and a custom view starts from the three-quarter pose and
       // is its own from then on.
-      final key = _viewKey(id, view);
-      if (!viewerViewPoses.containsKey(key)) {
+      final key = '$id/${look.name}';
+      if (!view.cameraPoses.containsKey(key)) {
         try {
           final size = comp.getSize();
-          viewerViewPoses[key] = cameraViewPose(
+          view.cameraPoses[key] = cameraViewPose(
             view: fixed,
             width: size.width.toDouble(),
             height: size.height.toDouble(),
@@ -3819,36 +3870,53 @@ class LumitUiState extends ChangeNotifier {
           return;
         }
       }
+      view.cameraViews[id] = look;
     }
-    notifyListeners();
-    pushViewerView();
+    _cameraMoved(view, comp);
   }
 
-  /// Keep what a camera drag did to the fronted comp's custom view, and show
+  /// Keep what a camera drag did to view [viewId]'s custom view, and show
   /// it. A fixed view has nothing to keep, so it is left as the engine built
   /// it.
-  void setViewerViewPose(BridgeCameraPose pose) {
-    final id = _selectedComp?.internalid.toString();
-    final view = viewerView;
-    if (id == null || !view.movable) return;
-    viewerViewPoses[_viewKey(id, view)] = pose;
-    notifyListeners();
-    pushViewerView();
+  void setViewerViewPose(BridgeCameraPose pose, {required int viewId}) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    if (view == null || comp == null) return;
+    final id = comp.internalid.toString();
+    final looking = view.cameraViews[id];
+    if (looking == null || !looking.movable) return;
+    view.cameraPoses['$id/${looking.name}'] = pose;
+    _cameraMoved(view, comp);
   }
 
-  /// Tell the engine which pose the fronted comp is drawn through and ask for
-  /// the frame again. The engine latches it, so this is said when the view
-  /// changes and not once per render.
-  void pushViewerView() {
-    final comp = selectedComp;
-    if (comp == null) return;
+  /// Say a view's new 3D view at once, playing or not, and ask that view for
+  /// its picture again whichever view is active.
+  void _cameraMoved(ViewerSurface view, CompositionReference comp) {
+    _pushCameraView(view, comp);
+    _askedFor.remove(view.engineId);
+    notifyListeners();
+    requestFrame();
+  }
+
+  /// What each view was last told it looks through, by engine id. A worker is
+  /// born knowing no view, which reads here as null.
+  final Map<int, (String, BridgeCameraPose)?> _pushedCamera = {};
+
+  /// Tell the engine which pose [view] draws [comp] through, when that has
+  /// changed. The engine latches it per view, so this is said when the view
+  /// or its comp changes and not once per render.
+  void _pushCameraView(ViewerSurface view, CompositionReference comp) {
+    final id = comp.internalid.toString();
+    final pose = _poseIn(view, id);
+    final target = pose == null ? null : (id, pose);
+    if (_pushedCamera[view.engineId] == target) return;
     try {
-      comp.setCameraView(view: viewerViewPose);
+      comp.setCameraView(pose: pose, view: view.engineId);
     } catch (_) {
       // No worker yet, or a comp that has gone.
       return;
     }
-    requestFrame();
+    _pushedCamera[view.engineId] = target;
   }
 
   // --- The per-project session ---------------------------------------------
@@ -4003,6 +4071,7 @@ class LumitUiState extends ChangeNotifier {
       _controllers.clear();
       _viewTextures.clear();
       _askedFor.clear();
+      _pushedCamera.clear();
       // Another project's colour config names another project's views.
       _colourView = null;
       // A new project is a new worker, and a new worker is born knowing
@@ -4217,8 +4286,10 @@ class LumitUiState extends ChangeNotifier {
   void closeComp(UuidValue id, {CompositionReference? fallback}) {
     openComps.remove(id);
     // A custom view is kept for as long as the comp is open and no longer.
-    viewerViews.remove(id.toString());
-    viewerViewPoses.removeWhere((key, _) => key.startsWith('$id/'));
+    for (final view in views.views) {
+      view.cameraViews.remove(id.toString());
+      view.cameraPoses.removeWhere((key, _) => key.startsWith('$id/'));
+    }
     if (_selectedComp?.internalid == id) {
       setSelectedComp(fallback);
     } else {

@@ -184,6 +184,7 @@ class _LevelsDisplayFrbState extends State<LevelsDisplayFrb> {
         kind: _histogramKind,
         colours: levelsHistogramColours(t,
             themed: state.workspace.themedEffectGraphs),
+        view: state.activeViewId,
       );
     } catch (_) {
       // A comp that went away under the row is not worth an error here: the

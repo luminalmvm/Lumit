@@ -2,8 +2,15 @@
 // hand-computed cases for the layer↔screen round trip, the pan-behind position,
 // and the scale-handle solve. No widget tree: pure geometry.
 
+import 'package:flutter/widgets.dart' show Matrix4;
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lumit_flutter/panels/viewer_layer_map.dart';
+import 'package:lumit_flutter/panels/viewer_stage.dart' show parentMatrix;
+import 'package:lumit_flutter/src/rust/api/composition.dart';
+import 'package:lumit_flutter/src/rust/api/effect.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:uuid/uuid.dart';
 
 void expectOffset(Offset a, Offset b, {double eps = 1e-9}) {
   expect((a.dx - b.dx).abs() < eps, isTrue, reason: 'dx: ${a.dx} vs ${b.dx}');
@@ -51,6 +58,138 @@ void main() {
         expectOffset(back, p, eps: 1e-6);
       }
     });
+  });
+
+  group('A 3D layer seen through a camera', () {
+    // A camera at rest over a 1920 by 1080 comp, its zoom 1000.
+    const rows = <double>[1, 0, 0.96, 0, 0, 1, 0.54, 0, 0, 0, 0.001, 1];
+    ViewerLayerMap map({double z = 0, double tilt = 0}) => ViewerLayerMap.of(
+          positionX: 700,
+          positionY: 400,
+          anchorX: 50,
+          anchorY: 30,
+          scaleXPercent: 120,
+          scaleYPercent: 90,
+          rotationDegrees: 20,
+          origin: const Offset(12, 7),
+          viewScale: 0.5,
+          depth: ViewerDepth(
+              view: () => rows, z: z, rotationX: tilt, rotationY: tilt / 2),
+        );
+
+    test('lands where the flat map does on the plane the camera sees 1:1', () {
+      final flat = ViewerLayerMap.of(
+        positionX: 700,
+        positionY: 400,
+        anchorX: 50,
+        anchorY: 30,
+        scaleXPercent: 120,
+        scaleYPercent: 90,
+        rotationDegrees: 20,
+        origin: const Offset(12, 7),
+        viewScale: 0.5,
+      );
+      for (final p in const [Offset(0, 0), Offset(100, 60), Offset(-20, 80)]) {
+        expectOffset(map().toScreen(p.dx, p.dy), flat.toScreen(p.dx, p.dy),
+            eps: 1e-9);
+      }
+    });
+
+    test('a tilted layer pushed back comes back from the screen', () {
+      final m = map(z: 800, tilt: 35);
+      for (final p in const [Offset(0, 0), Offset(100, 60), Offset(-20, 80)]) {
+        final screen = m.toScreen(p.dx, p.dy);
+        expectOffset(m.layerOf(screen), p, eps: 1e-6);
+        expect(m.depthAt(screen)! - m.depthOf(p.dx, p.dy), closeTo(0, 1e-9));
+      }
+      // Pushed back, it is further away than the plane seen 1:1.
+      expect(m.depthOf(50, 30), greaterThan(1));
+    });
+  });
+
+  test('a 2D parent\'s hidden tilt and depth never reach a 3D child', () {
+    BridgeLayerEntry entry(
+        {required bool threeD, UuidValue? parent, double tilt = 0}) {
+      final id = UuidValue.fromString(const Uuid().v4());
+      BridgeScalar v(double x) => BridgeScalar.static_(x);
+      return BridgeLayerEntry(
+        layer: LayerReference(
+            internalprojectId: id, internalcompId: id, internallayerId: id),
+        info: BridgeLayerInfo(
+          name: 'Layer',
+          kind: BridgeLayerKind.nullLayer,
+          switches: BridgeLayerSwitches(
+            visible: true,
+            audible: true,
+            locked: false,
+            solo: false,
+            threeD: threeD,
+            fx: true,
+            motionBlur: false,
+            collapse: false,
+            shy: false,
+            acceptsLights: true,
+          ),
+          blend: 0,
+          span: const BridgeSpan(
+            inPoint: BridgeRational(num: 0, den: 1),
+            outPoint: BridgeRational(num: 1, den: 1),
+            startOffset: BridgeRational(num: 0, den: 1),
+          ),
+          inFrame: 0,
+          outFrame: 10,
+          clipFrames: Int64List(0),
+          clips: const [],
+          parent: parent,
+          transform: BridgeTransform(
+            anchorX: v(50),
+            anchorY: v(50),
+            positionX: v(400),
+            positionY: v(300),
+            positionZ: v(tilt == 0 ? 0 : 250),
+            scaleX: v(100),
+            scaleY: v(100),
+            rotation: v(15),
+            rotationX: v(tilt),
+            rotationY: v(0),
+            opacity: v(100),
+          ),
+          axisModes: const BridgeAxisModes(
+            anchor: BridgeAxisMode.combined,
+            position: BridgeAxisMode.combined,
+            scale: BridgeAxisMode.linked,
+          ),
+          effects: const [],
+          styles: const [],
+          collapseForced: false,
+          label: 0,
+          masks: const [],
+          paint: const [],
+          shapeContents: const [],
+          markers: const [],
+          flow: false,
+          flowInputRate: v(0),
+          trackCorrected: false,
+          textAnimators: const [],
+          volumeDb: v(0),
+          pan: v(0),
+          wired: false,
+        ),
+      );
+    }
+
+    Matrix4? under(BridgeLayerEntry up) {
+      final child = entry(threeD: true, parent: up.layer.internallayerId);
+      return parentMatrix(
+        child,
+        {up.layer.internallayerId: up},
+        (e) => e.info.transform,
+        (s, _) => (s as BridgeScalar_Static).field0,
+      );
+    }
+
+    expect(under(entry(threeD: false, tilt: 60))!.storage,
+        under(entry(threeD: false))!.storage);
   });
 
   group('panBehindPosition', () {

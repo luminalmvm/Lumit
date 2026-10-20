@@ -316,6 +316,10 @@ class ViewerCameraLayer extends StatefulWidget {
 
   final ToolMode tool;
   final CompositionReference comp;
+
+  /// The engine id of the view the tools are used in, which is the view a
+  /// custom view drag moves.
+  final int viewId;
   final LumitState state;
   final LumitUiState uiState;
 
@@ -336,6 +340,7 @@ class ViewerCameraLayer extends StatefulWidget {
     required this.active,
     required this.tool,
     required this.comp,
+    required this.viewId,
     required this.state,
     required this.uiState,
     required this.fitted,
@@ -406,9 +411,9 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// custom view. Null when there is nothing to move, which is a comp with no
   /// live camera, one whose camera is keyframed, or a fixed view.
   ({LayerReference? layer, CameraPose pose})? get _target {
-    final view = widget.uiState.viewerView;
+    final view = widget.uiState.viewOf(widget.viewId);
     if (view != ViewerView.activeCamera) {
-      final pose = widget.uiState.viewerViewPose;
+      final pose = widget.uiState.viewPoseOf(widget.viewId);
       if (!view.movable || pose == null) return null;
       // Read fresh rather than held: a custom view moves without the document
       // or the playhead moving, and this costs nothing to build.
@@ -674,10 +679,11 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       // nothing else. Throttled while the drag runs, sent outright at the end.
       final view = viewOfPose(pose);
       if (preview) {
-        _throttle.request(() => widget.uiState.setViewerViewPose(view));
+        _throttle.request(() =>
+            widget.uiState.setViewerViewPose(view, viewId: widget.viewId));
       } else {
         _throttle.cancel();
-        widget.uiState.setViewerViewPose(view);
+        widget.uiState.setViewerViewPose(view, viewId: widget.viewId);
       }
       return;
     }

@@ -1823,19 +1823,23 @@ class CompositionReference {
   /// `view` names which Viewer view asked (docs/impl/multi-viewer.md §2.1).
   /// The worker latches it, so the drag previews and the idle work that
   /// follow serve the same view without each growing a parameter.
+  /// `active` says it is the view being worked in, which the idle fill, the
+  /// cache bar and the drags follow.
   void renderFrame(
           {required BigInt frame,
           required double scale,
           required BridgePlaybackMode mode,
           BridgePrefixPoint? prefix,
-          required int view}) =>
+          required int view,
+          required bool active}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderFrame(
           that: this,
           frame: frame,
           scale: scale,
           mode: mode,
           prefix: prefix,
-          view: view);
+          view: view,
+          active: active);
 
   /// Ask for `frame` with one clip's retime replaced — the live envelope
   /// drag, which never touches the document.
@@ -2040,14 +2044,21 @@ class CompositionReference {
   /// `kind` is the trace: 0 waveform, 1 parade, 2 vectorscope, 3 histogram.
   /// `colours` is background, trace, then the R, G and B tints, each as
   /// `[r, g, b]` — the panel's theme decides them, so the engine never has to
-  /// know what a Lumit surface looks like.
+  /// know what a Lumit surface looks like. `view` is the Viewer view whose
+  /// picture is read.
   void renderScope(
           {required BigInt frame,
           required double scale,
           required int kind,
-          required List<Uint8List> colours}) =>
+          required List<Uint8List> colours,
+          required int view}) =>
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceRenderScope(
-          that: this, frame: frame, scale: scale, kind: kind, colours: colours);
+          that: this,
+          frame: frame,
+          scale: scale,
+          kind: kind,
+          colours: colours,
+          view: view);
 
   /// Ask the worker for the pixels under the dropper: a `window × window`
   /// square of `frame` centred on the point `(u, v)` of the picture, each a
@@ -2127,14 +2138,15 @@ class CompositionReference {
       BridgeLib.instance.api.crateApiCompositionCompositionReferenceSetBeatGrid(
           that: this, grid: grid);
 
-  /// Look at this comp through `view` rather than its active camera
-  /// (docs/impl/camera.md §6), or through the active camera again with
-  /// `None`. Panel state, so the frontend sends it whenever the Viewer's
-  /// 3D view changes and the next render looks through it. Export never
-  /// sees a view.
-  void setCameraView({BridgeCameraPose? view}) => BridgeLib.instance.api
-      .crateApiCompositionCompositionReferenceSetCameraView(
-          that: this, view: view);
+  /// Look at this comp in Viewer view `view` through `pose` rather than its
+  /// active camera, or through the active camera again with `None`. Panel
+  /// state, kept per view like the look, so the frontend sends it whenever a
+  /// view's 3D view changes and that view's next render looks through it.
+  /// Export never sees a view.
+  void setCameraView({BridgeCameraPose? pose, required int view}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetCameraView(
+              that: this, pose: pose, view: view);
 
   void setGroupLabel({required UuidValue group, required int label}) =>
       BridgeLib.instance.api
@@ -2492,6 +2504,18 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceUngroupSelection(
               that: this, layerIds: layerIds);
+
+  /// How the picture sees the comp's 3D space at `frame`: twelve numbers,
+  /// three rows of four, taking a comp-space `(x, y, z, 1)` to `(X, Y, W)`,
+  /// with the comp pixel at `(X / W, Y / W)` and `W` above 0 in front of the
+  /// eye. Through `view` when one is given, otherwise through the comp's
+  /// active camera as the render poses it, aim and solve link included.
+  /// With no camera at all a 3D layer is drawn flat, and so are the rows.
+  /// Asked once per frame, view or document change and held.
+  Float64List viewProjection({required BigInt frame, BridgeCameraPose? view}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceViewProjection(
+              that: this, frame: frame, view: view);
 
   /// The wireframes at `frame`, projected through `view`. Asked once per
   /// frame change or view change, never per rebuild.

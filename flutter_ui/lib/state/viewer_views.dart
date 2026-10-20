@@ -21,10 +21,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraPose;
 import 'package:uuid/uuid.dart';
 
 import 'dock.dart';
-import 'viewer_view.dart' show ViewerChannel;
+import 'viewer_view.dart' show ViewerChannel, ViewerView;
 import 'workspace.dart' show ViewerLook, neutralLook;
 
 /// Which of the three display modes a view is in (docs/07 §2.1).
@@ -136,6 +137,13 @@ class ViewerSurface {
   List<String>? colourView;
   bool wireframe;
   bool layerControls;
+
+  /// Which way this view looks at each comp it shows, keyed by comp id, and
+  /// the pose each of those views is drawn through, keyed by comp and view.
+  /// Not written down and not shared with the other views: a comp opens on
+  /// its own camera, and a two-up of Active camera beside Top is the point.
+  final Map<String, ViewerView> cameraViews = {};
+  final Map<String, BridgeCameraPose> cameraPoses = {};
 
   ViewerSurface({
     required this.id,
