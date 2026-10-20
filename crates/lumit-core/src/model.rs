@@ -2599,15 +2599,39 @@ pub struct CameraDof {
     pub blur_level: f64,
 }
 
-/// One Camera layer's placement at comp time `t`, from its own properties.
-/// `None` when `layer` is not a Camera.
+/// One Camera layer's placement at comp time `t`, from its own properties, its
+/// expressions run under `context`. `None` when `layer` is not a Camera.
 #[must_use]
-pub fn stored_camera_pose(layer: &Layer, t: f64) -> Option<CameraPose> {
-    stored_camera_pose_lt(layer, crate::time::layer_time(t, layer.start_offset.0))
+pub fn stored_camera_pose(
+    layer: &Layer,
+    t: f64,
+    context: &Arc<ExpressionContext>,
+) -> Option<CameraPose> {
+    let LayerKind::Camera { zoom, options, .. } = &layer.kind else {
+        return None;
+    };
+    let lt = crate::time::layer_time(t, layer.start_offset.0);
+    let context = Arc::new(ExpressionContext {
+        layer: Some(layer.id),
+        ..(**context).clone()
+    });
+    let at = |p: &Property| p.value_at_with_context(lt, context.clone());
+    // The eye and the turn, a two-node camera's aim in it, as its children see it.
+    let own = placement(layer, t, &context);
+    Some(CameraPose {
+        zoom: at(zoom),
+        position: own.position,
+        rotation_deg: own.rotation_deg,
+        dof: options.depth_of_field.then(|| CameraDof {
+            focus_distance: at(&options.focus_distance),
+            aperture: at(&options.aperture),
+            blur_level: at(&options.blur_level),
+        }),
+    })
 }
 
 /// [`stored_camera_pose`] at a **layer** time, which is the clock every property
-/// is actually evaluated at.
+/// is actually evaluated at, with no document behind its expressions.
 ///
 /// Split out because the correction lane's zero is captured at layer
 /// time nought — a fixed moment of the layer's own clock, so moving the layer
@@ -2731,7 +2755,7 @@ impl Composition {
     pub fn camera_pose(&self, t: f64) -> Option<CameraPose> {
         let camera = self.active_camera(t)?;
         let context = timed_context(self, t);
-        let pose = stored_camera_pose(camera, t)?;
+        let pose = stored_camera_pose(camera, t, &context)?;
         let space = parent_space(self, camera, t, &context, None);
         Some(space.map_or(pose, |space| space.pose(pose)))
     }

@@ -220,7 +220,7 @@ pub fn own_camera_pose_of(
     t: f64,
     store: &dyn CameraSolveStore,
 ) -> Option<LinkedPose> {
-    let stored = stored_camera_pose(layer, t)?;
+    let stored = stored_camera_pose(layer, t, &crate::model::comp_context(doc, comp, t))?;
     let LayerKind::Camera {
         solve_link,
         correction_base,
