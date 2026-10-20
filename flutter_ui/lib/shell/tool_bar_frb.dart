@@ -488,6 +488,9 @@ enum ToolOptions {
   /// Which way a 3D layer's arrows and rings point: Local, World or View,
   /// while the comp has a 3D layer, a light or a camera.
   axes,
+
+  /// The camera tools: what an orbit swings round.
+  camera,
 }
 
 /// The options [tool] shows on the toolbar.
@@ -499,6 +502,7 @@ ToolOptions toolOptionsFor(ToolMode tool, {bool inDepth = false}) =>
       ToolGroup.puppet => ToolOptions.puppet,
       ToolGroup.roto => ToolOptions.roto,
       ToolGroup.select || ToolGroup.rotate when inDepth => ToolOptions.axes,
+      ToolGroup.camera => ToolOptions.camera,
       _ => ToolOptions.none,
     };
 
@@ -550,6 +554,22 @@ class _ToolOptions extends StatelessWidget {
             max: 2000,
             suffix: ' px',
             onChanged: (v) => tools.rotoSize = v,
+          ),
+        ],
+      );
+    }
+    if (shows == ToolOptions.camera) {
+      return Row(
+        children: [
+          Text(l10n.toolOrbitAround,
+              style: t.small.copyWith(color: t.textSecondary)),
+          const SizedBox(width: 5),
+          BareDropdown<CameraPivot>(
+            key: const ValueKey<String>('tool-camera-pivot'),
+            value: tools.cameraPivot,
+            options: CameraPivot.values,
+            label: (pivot) => pivot.label,
+            onChanged: (v) => tools.cameraPivot = v,
           ),
         ],
       );

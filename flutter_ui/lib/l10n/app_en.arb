@@ -9134,6 +9134,26 @@
   "@toolCameraUnified": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip. One tool that does all three camera moves, picked by which mouse button is dragged."
   },
+  "toolOrbitAround": "Orbit around",
+  "@toolOrbitAround": {
+    "description": "Label before a dropdown on the toolbar's options while a camera tool is armed: what a camera orbit swings round. Followed by Point of interest, Cursor, Scene or Selection."
+  },
+  "cameraPivotPointOfInterest": "Point of interest",
+  "@cameraPivotPointOfInterest": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round what the camera is looking at."
+  },
+  "cameraPivotCursor": "Cursor",
+  "@cameraPivotCursor": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the point on the layer under the mouse pointer."
+  },
+  "cameraPivotScene": "Scene",
+  "@cameraPivotScene": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the middle of all the 3D layers."
+  },
+  "cameraPivotSelection": "Selection",
+  "@cameraPivotSelection": {
+    "description": "An option in the camera tools' Orbit around dropdown: orbit round the middle of the selected 3D layers."
+  },
   "toolCloneStamp": "Clone stamp",
   "@toolCloneStamp": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
