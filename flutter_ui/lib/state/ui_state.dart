@@ -2881,6 +2881,7 @@ class LumitUiState extends ChangeNotifier {
     paletteRequest.dispose();
     consoleRequest.dispose();
     viewerZoomRequest.dispose();
+    viewerCameraRequest.dispose();
     panelSearchRequest.dispose();
     selectAllRequest.dispose();
     super.dispose();
@@ -3902,6 +3903,26 @@ class LumitUiState extends ChangeNotifier {
     setViewerView(last, viewId: view.engineId);
     return true;
   }
+
+  /// Put Viewer view [viewId]'s 3D view back where it started.
+  void resetViewerView({required int viewId}) {
+    final view = _surfaceOf(viewId);
+    final comp = view == null ? null : compFor(view);
+    if (view == null || comp == null) return;
+    final look = viewOf(viewId);
+    if (look == ViewerView.activeCamera) return;
+    view.cameraPoses.remove('${comp.internalid}/${look.name}');
+    setViewerView(look, viewId: viewId);
+  }
+
+  /// A Look at or a Reset the active Viewer view has been asked for. A
+  /// notifier, as [viewerZoomRequest] is: the Viewer holds what it needs.
+  final ValueNotifier<(int, ViewerCameraCommand)?> viewerCameraRequest =
+      ValueNotifier(null);
+  int _viewerCameraRequests = 0;
+
+  void requestViewerCamera(ViewerCameraCommand command) =>
+      viewerCameraRequest.value = (++_viewerCameraRequests, command);
 
   /// The custom view Viewer view [viewId] last looked through.
   ViewerView lastCustomViewOf(int viewId) =>

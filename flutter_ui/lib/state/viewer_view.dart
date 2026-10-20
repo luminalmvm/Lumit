@@ -86,6 +86,29 @@ const List<ViewerView> defaultViewSlots = [
   ViewerView.activeCamera,
 ];
 
+/// What the View menu and the keyboard ask a Viewer's 3D view to do. The
+/// Viewer answers, since it holds the layers' boxes and the camera tools'
+/// way of writing a camera.
+enum ViewerCameraCommand {
+  lookAtSelected,
+  lookAtAll,
+  reset;
+
+  /// The keymap action id this command answers.
+  String get action => switch (this) {
+        ViewerCameraCommand.lookAtSelected => 'viewer.3d.look.selected',
+        ViewerCameraCommand.lookAtAll => 'viewer.3d.look.all',
+        ViewerCameraCommand.reset => 'viewer.3d.reset',
+      };
+
+  /// What the View menu's row reads.
+  String get title => switch (this) {
+        ViewerCameraCommand.lookAtSelected => l10n.menuLookAtSelectedLayers,
+        ViewerCameraCommand.lookAtAll => l10n.menuLookAtAllLayers,
+        ViewerCameraCommand.reset => l10n.menuReset3dView,
+      };
+}
+
 /// Which channel a view shows (docs/07 §2.2 item 3): the three colours on
 /// their own, or the alpha as the greyscale matte it is.
 ///

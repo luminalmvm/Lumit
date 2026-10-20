@@ -266,6 +266,10 @@ impl ActionId {
             "viewer.3d.assign.3" => "Assign the 3D view to shortcut 3",
             "viewer.3d.last" => "Switch to the last 3D view",
             "viewer.3d.camera" => "Back to the active camera",
+            "viewer.3d.look.selected" => "Look at the selected layers",
+            "viewer.3d.look.all" => "Look at all layers",
+            "viewer.3d.reset" => "Reset the 3D view",
+            "viewer.3d.camera.new" => "Create a camera from the 3D view",
             // Panels.
             "panel.toggle.project" => "Show or hide the Project panel",
             "panel.toggle.effects" => "Show or hide Effect controls",
@@ -992,6 +996,8 @@ pub fn default_keymap() -> Keymap {
         row(Global, "Shift+F10", "viewer.3d.assign.1"),
         row(Global, "Shift+F11", "viewer.3d.assign.2"),
         row(Global, "Shift+F12", "viewer.3d.assign.3"),
+        row(Global, "Mod+Alt+Shift+\\", "viewer.3d.look.selected"),
+        row(Global, "Mod+Shift+\\", "viewer.3d.look.all"),
         // --- Tools ---
         row(Tools, "V", "tool.select"),
         row(Tools, "H", "tool.hand"),
@@ -1011,6 +1017,10 @@ pub fn default_keymap() -> Keymap {
         row(Tools, "Alt+W", "tool.roto"),
         row(Tools, "Mod+P", "tool.puppet"),
         row(Tools, "Shift+C", "tool.camera"),
+        // With a camera tool in hand over the Viewer, After Effects' F and
+        // Ctrl+Shift+F look at the selected layers and at all of them.
+        row(Tools, "F", "viewer.3d.look.selected"),
+        row(Tools, "Mod+Shift+F", "viewer.3d.look.all"),
         // --- Timeline: reveals and edits ---
         row(Timeline, "P", "reveal.position"),
         row(Timeline, "S", "reveal.scale"),
@@ -1463,8 +1473,9 @@ mod tests {
     }
 
     /// `L` reveals a layer's Audio in the Timeline and shuttles forward
-    /// everywhere else. That and the Cut timeline's editing keys are the
-    /// shadows the default ships with, and they are deliberate.
+    /// everywhere else. That, the Cut timeline's editing keys and a camera
+    /// tool's Look at all are the shadows the default ships with, and they
+    /// are deliberate.
     #[test]
     fn the_default_gives_the_timeline_l_and_leaves_the_shuttle_elsewhere() {
         let km = default_keymap();
@@ -1487,7 +1498,18 @@ mod tests {
                 .iter()
                 .map(|s| s.chord.to_string())
                 .collect::<Vec<_>>(),
-            ["L", "I", "O", ",", ".", "B", "N", "Mod+K", "Mod+Shift+K"],
+            [
+                "Mod+Shift+F",
+                "L",
+                "I",
+                "O",
+                ",",
+                ".",
+                "B",
+                "N",
+                "Mod+K",
+                "Mod+Shift+K"
+            ],
             "the deliberate shadows, and no others"
         );
     }

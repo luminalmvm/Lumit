@@ -384,6 +384,19 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
     ),
     (
         "CSwitchboard",
+        "LookAtSelected",
+        Global,
+        "viewer.3d.look.selected",
+    ),
+    (
+        "CameraToolUI",
+        "LookAtSelected",
+        Tools,
+        "viewer.3d.look.selected",
+    ),
+    ("CameraToolUI", "LookAtAll", Tools, "viewer.3d.look.all"),
+    (
+        "CSwitchboard",
         "ToggleLayerControls",
         Viewer,
         "viewer.controls.toggle",

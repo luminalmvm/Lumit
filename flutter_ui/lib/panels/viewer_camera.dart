@@ -58,6 +58,7 @@ import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/widgets/drag_escape.dart';
 
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
+import 'layer_fold_frb.dart' show asOneUndoStep;
 import 'transform_rows_frb.dart' show read;
 import 'viewer_gizmo.dart' show LayerBox, layerAtPoint;
 import 'viewer_layer_map.dart' show viewerNear;
@@ -396,6 +397,131 @@ CameraPose zoomView(
   );
 }
 
+/// [pose] moved along its own forward axis, its aim kept, so that [points]
+/// fill nine tenths of a picture [size]: After Effects' Look at. A two-node
+/// camera's point of interest goes to their middle. Null with no points.
+CameraPose? framePoints(
+    CameraPose pose, List<(double, double, double)> points, Size size) {
+  if (points.isEmpty || size.isEmpty) return null;
+  final lo = [double.infinity, double.infinity, double.infinity];
+  final hi = [-double.infinity, -double.infinity, -double.infinity];
+  for (final p in points) {
+    final xyz = [p.$1, p.$2, p.$3];
+    for (var i = 0; i < 3; i++) {
+      lo[i] = math.min(lo[i], xyz[i]);
+      hi[i] = math.max(hi[i], xyz[i]);
+    }
+  }
+  final c = ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
+  final a = pose.axes;
+  final halfW = size.width * 0.45;
+  final halfH = size.height * 0.45;
+  double dot((double, double, double) u, (double, double, double) v) =>
+      u.$1 * v.$1 + u.$2 * v.$2 + u.$3 * v.$3;
+  // How far back from the middle the eye has to stand for each point to land
+  // inside the frame, and in front of the eye.
+  var reach = 0.0;
+  for (final p in points) {
+    final r = (p.$1 - c.$1, p.$2 - c.$2, p.$3 - c.$3);
+    final z = dot(r, a.forward);
+    reach = math.max(reach, dot(r, a.right).abs() * pose.zoom / halfW - z);
+    reach = math.max(reach, dot(r, a.up).abs() * pose.zoom / halfH - z);
+    reach = math.max(reach, pose.zoom * 0.05 - z);
+  }
+  final f = a.forward;
+  return pose.copyWith(
+    position: (c.$1 - f.$1 * reach, c.$2 - f.$2 * reach, c.$3 - f.$3 * reach),
+    pointOfInterest: pose.twoNode ? c : pose.pointOfInterest,
+  );
+}
+
+/// [framePoints]' twin for a fixed view, which stays orthographic: the eye
+/// slides sideways until the middle of [points] is on its axis and keeps its
+/// distance, and the zoom grows or shrinks until they fill nine tenths of a
+/// picture [size]. [depth] is the distance to the plane the view frames.
+/// Null with no points.
+CameraPose? frameFlat(CameraPose pose, List<(double, double, double)> points,
+    Size size, double depth) {
+  if (points.isEmpty || size.isEmpty || depth <= 0) return null;
+  final a = pose.axes;
+  final e = pose.position;
+  double dot((double, double, double) u, (double, double, double) p) =>
+      u.$1 * (p.$1 - e.$1) + u.$2 * (p.$2 - e.$2) + u.$3 * (p.$3 - e.$3);
+  final xs = [for (final p in points) dot(a.right, p)];
+  final ys = [for (final p in points) dot(a.up, p)];
+  final (x0, x1) = (xs.reduce(math.min), xs.reduce(math.max));
+  final (y0, y1) = (ys.reduce(math.min), ys.reduce(math.max));
+  final (mx, my) = ((x0 + x1) / 2, (y0 + y1) / 2);
+  // A point `x` off the axis on the framed plane sits `x · zoom / depth`
+  // from the middle of the picture.
+  final fits = [
+    if (x1 - x0 > 1e-9) size.width * 0.45 / ((x1 - x0) / 2),
+    if (y1 - y0 > 1e-9) size.height * 0.45 / ((y1 - y0) / 2),
+  ];
+  return pose.copyWith(
+    position: (
+      e.$1 + a.right.$1 * mx + a.up.$1 * my,
+      e.$2 + a.right.$2 * mx + a.up.$2 * my,
+      e.$3 + a.right.$3 * mx + a.up.$3 * my,
+    ),
+    zoom: fits.isEmpty ? pose.zoom : depth * fits.reduce(math.min),
+  );
+}
+
+/// A camera layer at the top of the active view's comp, placed where that
+/// custom view looks from, as one undo step. False in any other view.
+bool cameraFromView(LumitState app, LumitUiState ui) {
+  final view = ui.views.active;
+  final comp = view == null ? null : ui.compFor(view);
+  if (view == null || comp == null || !ui.viewOf(view.engineId).orbits) {
+    return false;
+  }
+  final seen = ui.viewPoseOf(view.engineId);
+  if (seen == null) return false;
+  final pose = poseOfView(seen);
+  final at = pose.pivot;
+  LayerReference? made;
+  try {
+    asOneUndoStep(app.project, () {
+      final camera = comp.addCameraLayer();
+      made = camera;
+      camera.setTransforms(props: const [
+        BridgeTransformProp.positionX,
+        BridgeTransformProp.positionY,
+        BridgeTransformProp.positionZ,
+        BridgeTransformProp.rotationX,
+        BridgeTransformProp.rotationY,
+        BridgeTransformProp.rotation,
+        BridgeTransformProp.zoom,
+        BridgeTransformProp.poiX,
+        BridgeTransformProp.poiY,
+        BridgeTransformProp.poiZ,
+      ], values: [
+        for (final v in [
+          pose.position.$1,
+          pose.position.$2,
+          pose.position.$3,
+          pose.rotation.$1,
+          pose.rotation.$2,
+          pose.rotation.$3,
+          pose.zoom,
+          at.$1,
+          at.$2,
+          at.$3,
+        ])
+          BridgeScalar.static_(v),
+      ]);
+    });
+  } catch (_) {
+    // A comp that has gone.
+    return false;
+  }
+  app.notifyDocumentChanged();
+  ui.model.refresh();
+  if (made case final camera?) ui.setSelection([camera]);
+  return true;
+}
+
 /// Which move a mouse button asks the unified tool for: left orbits, middle
 /// tracks, right dollies (docs/impl/camera.md §4).
 ToolMode cameraMoveForButtons(int buttons) {
@@ -518,7 +644,22 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   Offset? _pointer;
 
   @override
+  void initState() {
+    super.initState();
+    widget.uiState.viewerCameraRequest.addListener(_onCommand);
+  }
+
+  @override
+  void didUpdateWidget(ViewerCameraLayer old) {
+    super.didUpdateWidget(old);
+    if (old.uiState == widget.uiState) return;
+    old.uiState.viewerCameraRequest.removeListener(_onCommand);
+    widget.uiState.viewerCameraRequest.addListener(_onCommand);
+  }
+
+  @override
   void dispose() {
+    widget.uiState.viewerCameraRequest.removeListener(_onCommand);
     // A drag cut short by a tool switch or the panel closing must not leave
     // the pointer frozen where the drag began: the freeze is a platform-wide
     // state, and only this widget knows it was asked for.
@@ -1142,18 +1283,30 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// null with none.
   (double, double, double)? _middleOf(
       Iterable<LayerBox> boxes, CameraPose pose) {
+    final points = _cornersOf(boxes, pose);
+    if (points.isEmpty) return null;
     final lo = [double.infinity, double.infinity, double.infinity];
     final hi = [-double.infinity, -double.infinity, -double.infinity];
-    void take(LayerBox box, double x, double y) {
-      final w = box.map.depthOf(x, y);
-      if (w.abs() < 1e-9) return;
-      final p = pointUnder(
-          pose, _toPicture(box.map.toScreen(x, y)), widget.compSize, w);
+    for (final p in points) {
       final xyz = [p.$1, p.$2, p.$3];
       for (var i = 0; i < 3; i++) {
         lo[i] = math.min(lo[i], xyz[i]);
         hi[i] = math.max(hi[i], xyz[i]);
       }
+    }
+    return ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
+  }
+
+  /// The corners of every 3D layer in [boxes], and a light's own point, in
+  /// the comp.
+  List<(double, double, double)> _cornersOf(
+      Iterable<LayerBox> boxes, CameraPose pose) {
+    final out = <(double, double, double)>[];
+    void take(LayerBox box, double x, double y) {
+      final w = box.map.depthOf(x, y);
+      if (w.abs() < 1e-9) return;
+      out.add(pointUnder(
+          pose, _toPicture(box.map.toScreen(x, y)), widget.compSize, w));
     }
 
     for (final box in boxes) {
@@ -1168,8 +1321,76 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       take(box, 0, s.height);
       take(box, s.width, s.height);
     }
-    if (lo[0] > hi[0]) return null;
-    return ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
+    return out;
+  }
+
+  /// Answer a Look at or a Reset from the View menu, in the active view only.
+  /// The active camera moves as one undo step, keyed where it is keyed; any
+  /// other view just moves.
+  void _onCommand() {
+    final request = widget.uiState.viewerCameraRequest.value;
+    if (request == null || !mounted || _start != null) return;
+    if (widget.uiState.views.active?.engineId != widget.viewId) return;
+    final target = _target;
+    if (target == null) {
+      _sayNoCamera();
+      return;
+    }
+    final layer = target.layer;
+    final CameraPose? to;
+    switch (request.$2) {
+      case ViewerCameraCommand.lookAtSelected ||
+            ViewerCameraCommand.lookAtAll:
+        final selected = widget.uiState.selectedLayerIds;
+        final boxes = widget.boxes().where((b) =>
+            request.$2 == ViewerCameraCommand.lookAtAll ||
+            selected.contains(b.id));
+        final points = _cornersOf(boxes, target.pose);
+        // A fixed view magnifies to fit, so it stays flat.
+        to = _fixedView
+            ? frameFlat(target.pose, points, widget.compSize,
+                _framedDepth(target.pose))
+            : framePoints(target.pose, points, widget.compSize);
+        if (to == null) {
+          widget.state.postNotice(l10n.noLayersToLookAt);
+          return;
+        }
+      case ViewerCameraCommand.reset:
+        if (layer == null) {
+          widget.uiState.resetViewerView(viewId: widget.viewId);
+          return;
+        }
+        // Where a new camera stands: square on to the middle of the comp,
+        // seeing it whole at its own zoom.
+        final (w, h) = (widget.compSize.width, widget.compSize.height);
+        to = target.pose.copyWith(
+          position: (w / 2, h / 2, -target.pose.zoom),
+          rotation: (0, 0, 0),
+          pointOfInterest: (w / 2, h / 2, 0),
+        );
+    }
+    if (layer == null) {
+      widget.uiState.setViewerViewPose(viewOfPose(to), viewId: widget.viewId);
+      return;
+    }
+    final tf = _held?.transform;
+    if (tf == null) return;
+    final reset = request.$2 == ViewerCameraCommand.reset;
+    _writeCamera(layer, tf, to, {
+      BridgeTransformProp.positionX,
+      BridgeTransformProp.positionY,
+      BridgeTransformProp.positionZ,
+      if (reset) ...{
+        BridgeTransformProp.rotationX,
+        BridgeTransformProp.rotationY,
+        BridgeTransformProp.rotation,
+      },
+      if (to.twoNode) ...{
+        BridgeTransformProp.poiX,
+        BridgeTransformProp.poiY,
+        BridgeTransformProp.poiZ,
+      },
+    });
   }
 
   /// Where the pivot mark goes on screen, or null for none: the drag's pivot

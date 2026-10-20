@@ -220,7 +220,7 @@ class ViewerStage extends StatelessWidget {
   /// where the picture has it and can be picked there. The sampler holds its
   /// answers per frame and per document, so a hover still asks nothing; only
   /// a playhead move or an edit costs the one crossing the rows already make.
-  List<LayerBox> _boxes() {
+  List<LayerBox> _boxes({bool locked = false}) {
     if (fitted.isEmpty) return const [];
     final model = uiState.model;
     // The held copy, not a checked one: this runs on every rebuild, and
@@ -296,7 +296,8 @@ class ViewerStage extends StatelessWidget {
       // Nor does a layer that only makes a sound: a box the size of the comp
       // round nothing, and a click on the picture that picked it.
       if (!_drawsPicture(entry)) continue;
-      if (!entry.info.switches.visible || entry.info.switches.locked) continue;
+      if (!entry.info.switches.visible) continue;
+      if (entry.info.switches.locked && !locked) continue;
       // A value scrub in the property rows previews the picture at a
       // provisional transform while the document still holds the old one, so
       // the box is drawn from that same provisional value and the two move
@@ -863,7 +864,9 @@ class ViewerStage extends StatelessWidget {
                 compSize.width.toDouble(),
                 compSize.height.toDouble(),
               ),
-              boxes: _boxes,
+              // Locked layers too: they are still there to be looked at
+              // and orbited round.
+              boxes: () => _boxes(locked: true),
               mark: t.textPrimary,
               outline: t.surface0,
               accent: t.accent,

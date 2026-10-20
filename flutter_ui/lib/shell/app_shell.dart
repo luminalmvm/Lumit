@@ -10,6 +10,7 @@ import 'package:lumit_flutter/panels/layer_fold_frb.dart' show layerKeys;
 import 'package:lumit_flutter/panels/panels_frb.dart';
 import 'package:lumit_flutter/panels/timeline_extras_frb.dart';
 import 'package:lumit_flutter/panels/timeline_group_row_frb.dart';
+import 'package:lumit_flutter/panels/viewer_camera.dart' show cameraFromView;
 import 'package:lumit_flutter/shell/precompose_dialog_frb.dart';
 import 'package:lumit_flutter/shell/dock_widget.dart';
 import 'package:lumit_flutter/shell/first_run_frb.dart';
@@ -50,6 +51,7 @@ import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
 import 'package:lumit_flutter/state/app_state.dart';
 import 'package:lumit_flutter/state/share.dart';
+import 'package:lumit_flutter/state/tools.dart' show ToolGroup;
 import 'package:lumit_flutter/state/ui_state.dart';
 import 'package:lumit_flutter/state/viewer_views.dart';
 import 'package:lumit_flutter/theme/motion.dart';
@@ -539,6 +541,17 @@ class _LumitAppViewState extends State<LumitAppView> {
         _ => BridgeKeyContext.global,
       };
 
+  /// A camera tool in hand over the Viewer gets After Effects' F and
+  /// Ctrl+Shift+F for Look at, ahead of what the keys mean elsewhere.
+  String? _cameraLook(LumitUiState ui, KeyEvent event) {
+    if (ui.tools.tool.group != ToolGroup.camera ||
+        ui.activePanel != Panel.viewer) {
+      return null;
+    }
+    final look = ui.keymap.actionFor(BridgeKeyContext.tools, event);
+    return look != null && look.startsWith('viewer.3d.look.') ? look : null;
+  }
+
   /// The keyboard shortcuts, restored from the shell the port replaced.
   ///
   /// Only the ones whose engine calls exist on this bridge; the rest are on the
@@ -580,7 +593,8 @@ class _LumitAppViewState extends State<LumitAppView> {
     // panel is active — the engine falls back to Global itself, so one call
     // answers both. (This handler runs wherever focus is; the active panel is
     // what the dock last fronted, which is what a user would call "where I am".)
-    var action = ui.keymap.actionFor(_contextOf(ui, ui.activePanel), event);
+    var action = _cameraLook(ui, event) ??
+        ui.keymap.actionFor(_contextOf(ui, ui.activePanel), event);
     if (action == null) {
       // The Tools context is a context no panel *is* (docs/07 §15 scopes it to
       // the toolbar, not to a pane), so it is asked for separately and only
@@ -857,6 +871,14 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = chordText(event) != 'Escape' && ui.switchToLastView();
       case 'viewer.3d.camera':
         handled = ui.backToActiveCamera();
+      case 'viewer.3d.look.selected':
+        ui.requestViewerCamera(ViewerCameraCommand.lookAtSelected);
+      case 'viewer.3d.look.all':
+        ui.requestViewerCamera(ViewerCameraCommand.lookAtAll);
+      case 'viewer.3d.reset':
+        ui.requestViewerCamera(ViewerCameraCommand.reset);
+      case 'viewer.3d.camera.new':
+        handled = cameraFromView(state, ui);
       // The panel under the pointer fills the window and comes back
       // (docs/07 §1.1's backtick). The keymap has always carried this; this is
       // where it finally does something.
