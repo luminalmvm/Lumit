@@ -257,8 +257,8 @@ class LayerBox {
   /// The same box with the pivot moved and Position compensating — the shape a
   /// pan-behind in flight has. The box does not move; the anchor mark
   /// on it does, which is the whole of what panning behind looks like.
-  LayerBox pivotedAt(Offset anchor, Offset position) =>
-      copyWith(map: map.pivotedAt(anchor.dx, anchor.dy, position: position));
+  LayerBox pivotedAt(Offset anchor, Offset position, {double? z}) => copyWith(
+      map: map.pivotedAt(anchor.dx, anchor.dy, position: position, z: z));
 
   /// The same box with the layer turned to [degrees] — the shape a rotation in
   /// flight has, before it is committed.
@@ -519,11 +519,37 @@ Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect) => {
 /// Two points on the picture, subtracted, so the layer's scale and rotation are
 /// undone exactly — which is what lets a selection spanning two layers with
 /// different transforms still move together on screen. Seen through a camera
-/// the two points are taken about the anchor, since perspective makes a step
-/// depend on where it is taken.
-Offset pointDeltaIn(LayerBox box, Offset screenDelta) {
-  final base = box.map.projected ? box.anchorScreen : Offset.zero;
+/// a step depends on where it is taken, so it is taken from [from], the
+/// press, which keeps the grabbed point under the pointer.
+Offset pointDeltaIn(LayerBox box, Offset screenDelta, {Offset? from}) {
+  final base = box.map.projected ? from ?? box.anchorScreen : Offset.zero;
   return box.map.layerOf(base + screenDelta) - box.map.layerOf(base);
+}
+
+/// An arrow key's nudge on a 3D layer, as the change it makes to Position: a
+/// whole step of [by]'s length on the Position axis that runs most nearly the
+/// arrow's way on screen, with that axis's sign, however near or far the
+/// layer is. Null when neither axis runs anywhere near it, as with Up in a
+/// Top view, where only z could.
+Offset? nudgeIn3D(LayerBox box, Offset by) {
+  final m = box.map;
+  if (!m.inFront(m.ax, m.ay)) return null;
+  final at = m.parentToScreen(m.px, m.py);
+  final arrow = by / by.distance;
+  Offset? best;
+  var nearest = 0.5;
+  for (final (axis, run) in [
+    (const Offset(1, 0), m.parentToScreen(m.px + 1, m.py) - at),
+    (const Offset(0, 1), m.parentToScreen(m.px, m.py + 1) - at),
+  ]) {
+    if (run.distance < 1e-9) continue;
+    final along = (run.dx * arrow.dx + run.dy * arrow.dy) / run.distance;
+    if (along.abs() > nearest) {
+      nearest = along.abs();
+      best = axis * (along.sign * by.distance);
+    }
+  }
+  return best;
 }
 
 /// A Position-space point on screen. A motion path is in the parent's pixels
@@ -1057,7 +1083,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final moves = [
       for (final box in _selected)
         if (box.draggable)
-          if (box.map.positionStep(by) case final step)
+          if ((box.map.projected
+                  ? nudgeIn3D(box, by)
+                  : box.map.positionStep(by))
+              case final step?)
             (box, box.map.px + step.dx, box.map.py + step.dy),
     ];
     if (moves.isEmpty) return false;
@@ -1169,6 +1198,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         maskedBoxes: widget.showControls ? outlined : const [],
         selectedPoints: _points,
         pointNudge: _drag == _GizmoDrag.points ? _delta : Offset.zero,
+        pointFrom: _origin,
         anchors: widget.showControls && widget.showAnchors
             ? [
                 for (final box in selected)
@@ -1242,9 +1272,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         box.draggable &&
         widget.uiState.selectedLayerIds.contains(box.id)) {
       final (x, y) = _movedPosition(box);
-      return box.copyWith(
-          map: box.map.pivotedAt(box.map.ax, box.map.ay,
-              position: Offset(x, y)));
+      return box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(x, y));
     }
     if (_acting?.id == box.id) {
       switch (_drag) {
@@ -1257,7 +1285,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         case _GizmoDrag.anchor:
           final anchor = _anchorNow();
           if (anchor != null) {
-            return box.pivotedAt(anchor, panBehindFor(box, anchor));
+            final (:position, :z) = panBehindFor(box, anchor);
+            return box.pivotedAt(anchor, position, z: z);
           }
         default:
           break;
@@ -1648,6 +1677,12 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
 
     if (aimedAt == null && selected.length == 1 && selected.single.scalable) {
       final handle = selected.single.handleHit(at);
+      if (handle == GizmoHandle.anchor &&
+          panBehindHitsKeys(selected.single)) {
+        Provider.of<LumitState>(context, listen: false)
+            .postNotice(l10n.anchorKeyedRefused);
+        return;
+      }
       if (handle != null) {
         setState(() {
           _acting = selected.single;
@@ -1879,10 +1914,19 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   double? _rotationNow() {
     final box = _acting;
     if (box == null) return null;
+    final map = box.map;
+    // Seen through a camera the turn is measured on the layer's own plane,
+    // round its anchor, so the knob stays under the pointer on a tilted
+    // layer.
+    Offset onPlane(Offset at) {
+      final p = map.layerOf(at);
+      return Offset((p.dx - map.ax) * map.sx, (p.dy - map.ay) * map.sy);
+    }
+
     return rotationForDrag(
-      anchor: box.anchorScreen,
-      from: _origin,
-      to: _pointer,
+      anchor: map.projected ? Offset.zero : box.anchorScreen,
+      from: map.projected ? onPlane(_origin) : _origin,
+      to: map.projected ? onPlane(_pointer) : _pointer,
       current: box.rotationDegrees,
       uniform: HardwareKeyboard.instance.isShiftPressed,
     );
@@ -1924,16 +1968,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final box = _acting;
     final anchor = _anchorNow();
     if (box == null || anchor == null) return;
-    final position = panBehindFor(box, anchor);
     _throttle.request(() => _sendPreview(
           box,
-          (tf) => transformWith(
-            tf,
-            anchorX: anchor.dx,
-            anchorY: anchor.dy,
-            positionX: position.dx,
-            positionY: position.dy,
-          ),
+          (tf) => transformPannedBehind(box, tf, anchor),
         ));
   }
 
@@ -1941,24 +1978,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     final box = _acting;
     final anchor = _anchorNow();
     if (box == null || anchor == null || _delta == Offset.zero) return;
-    final position = panBehindFor(box, anchor);
     try {
-      // One op for the four properties: half of this edit moves the picture,
-      // which is the one thing panning behind promises not to do.
-      box.layer.setTransforms(
-        props: const [
-          BridgeTransformProp.anchorX,
-          BridgeTransformProp.anchorY,
-          BridgeTransformProp.positionX,
-          BridgeTransformProp.positionY,
-        ],
-        values: [
-          BridgeScalar.static_(anchor.dx),
-          BridgeScalar.static_(anchor.dy),
-          BridgeScalar.static_(position.dx),
-          BridgeScalar.static_(position.dy),
-        ],
-      );
+      // One op for all of it: half of this edit moves the picture, which is
+      // the one thing panning behind promises not to do.
+      setPannedBehind(box, anchor);
       widget.onChanged();
     } catch (_) {
       // The layer went away mid-drag.
@@ -1979,7 +2002,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // The same boxes a point can be grabbed from, so a picked Path row's
     // layer gets the write even when the layer isn't selected.
     for (final box in _editablePointBoxes) {
-      final d = pointDeltaIn(box, _delta);
+      final d = pointDeltaIn(box, _delta, from: _origin);
       for (final mask in box.masks) {
         final moved = maskWithPointsMoved(box, mask, _points, d);
         if (moved == null) continue;
@@ -2059,7 +2082,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   void _sendPointsPreview(LayerBox box) {
-    final d = pointDeltaIn(box, _delta);
+    final d = pointDeltaIn(box, _delta, from: _origin);
     final contents = shapeContentsWithPointsMoved(box, _points, d);
     try {
       if (contents != null) {
@@ -2213,6 +2236,7 @@ BridgeTransform transformWith(
   double? anchorY,
   double? positionX,
   double? positionY,
+  double? positionZ,
   double? scaleX,
   double? scaleY,
   double? rotation,
@@ -2224,7 +2248,7 @@ BridgeTransform transformWith(
     anchorY: put(anchorY, tf.anchorY),
     positionX: put(positionX, tf.positionX),
     positionY: put(positionY, tf.positionY),
-    positionZ: tf.positionZ,
+    positionZ: put(positionZ, tf.positionZ),
     scaleX: put(scaleX, tf.scaleX),
     scaleY: put(scaleY, tf.scaleY),
     rotation: put(rotation, tf.rotation),
@@ -2254,6 +2278,10 @@ class _GizmoPainter extends CustomPainter {
   /// far — so the path follows the pointer before the document hears about it.
   final Set<String> selectedPoints;
   final Offset pointNudge;
+
+  /// Where the point drag was pressed, which a layer seen through a camera
+  /// measures the drag from.
+  final Offset pointFrom;
   final LayerBox? hover;
   final LayerBox? handlesFor;
 
@@ -2282,6 +2310,7 @@ class _GizmoPainter extends CustomPainter {
     required this.maskedBoxes,
     required this.selectedPoints,
     required this.pointNudge,
+    required this.pointFrom,
     required this.hover,
     required this.handlesFor,
     required this.anchors,
@@ -2488,7 +2517,9 @@ class _GizmoPainter extends CustomPainter {
     // A selected point follows the pointer while it is being dragged, so the
     // path bends live rather than jumping on release. Seen through a camera
     // the drag is carried on the layer, where the release writes it.
-    final drag = projected ? pointDeltaIn(box, pointNudge) : Offset.zero;
+    final drag = projected
+        ? pointDeltaIn(box, pointNudge, from: pointFrom)
+        : Offset.zero;
     bool picked(int i) => selectedPoints.contains(keyOf(i));
     Offset nudgeFor(int i) =>
         picked(i) && !projected ? pointNudge : Offset.zero;

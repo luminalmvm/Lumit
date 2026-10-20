@@ -31,7 +31,9 @@ import 'package:lumit_flutter/main.dart';
 import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/effect.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
+import 'package:provider/provider.dart';
 
+import '../l10n/strings.dart';
 import '../state/preview_throttle.dart';
 import 'viewer_gizmo.dart';
 import 'viewer_layer_map.dart';
@@ -106,14 +108,81 @@ Offset wantedAnchorAt(LayerBox box, Offset screen, {Offset? lockFrom}) {
 /// [anchor] — the pan-behind sum bound to a box's own numbers, shared by every
 /// gesture that slides a pivot. The maths itself is `panBehindPosition` in
 /// viewer_layer_map.dart, ported and unit-tested.
-Offset panBehindFor(LayerBox box, Offset anchor) => panBehindPosition(
+///
+/// A 3D layer can be turned in depth, so its new Position is wherever the new
+/// anchor already sits in the parent's space, z and all. [z] is null where
+/// Position z stays as it is: a 2D layer, or a 3D one with no X or Y turn.
+({Offset position, double? z}) panBehindFor(LayerBox box, Offset anchor) {
+  if (box.map.projected) {
+    final (x, y, z) = box.map.inParent(anchor.dx, anchor.dy);
+    return (position: Offset(x, y), z: box.map.tilted ? z : null);
+  }
+  return (
+    position: panBehindPosition(
       oldAnchor: Offset(box.map.ax, box.map.ay),
       newAnchor: anchor,
       position: Offset(box.map.px, box.map.py),
       scaleXPercent: box.map.sx * 100,
       scaleYPercent: box.map.sy * 100,
       rotationDegrees: box.rotationDegrees,
-    );
+    ),
+    z: null,
+  );
+}
+
+/// Whether a pan-behind on [box] would write over keys or an expression: on
+/// the anchor, on Position, or on Position z where it moves too. Asks the
+/// engine, so it is for a press and never for a build.
+bool panBehindHitsKeys(LayerBox box) {
+  try {
+    final tf = box.layer.getTransform();
+    bool keyed(BridgeScalar s) => s is! BridgeScalar_Static;
+    return keyed(tf.anchorX) ||
+        keyed(tf.anchorY) ||
+        keyed(tf.positionX) ||
+        keyed(tf.positionY) ||
+        (box.map.tilted && keyed(tf.positionZ));
+  } catch (_) {
+    // The layer has gone, so there is nothing to pan behind.
+    return true;
+  }
+}
+
+/// The one op a pan-behind writes: the anchor and Position, with Position z
+/// on a 3D layer that is turned in depth.
+void setPannedBehind(LayerBox box, Offset anchor) {
+  final (:position, :z) = panBehindFor(box, anchor);
+  box.layer.setTransforms(
+    props: [
+      BridgeTransformProp.anchorX,
+      BridgeTransformProp.anchorY,
+      BridgeTransformProp.positionX,
+      BridgeTransformProp.positionY,
+      if (z != null) BridgeTransformProp.positionZ,
+    ],
+    values: [
+      BridgeScalar.static_(anchor.dx),
+      BridgeScalar.static_(anchor.dy),
+      BridgeScalar.static_(position.dx),
+      BridgeScalar.static_(position.dy),
+      if (z != null) BridgeScalar.static_(z),
+    ],
+  );
+}
+
+/// [tf] with the pan-behind to [anchor] in it, for a preview.
+BridgeTransform transformPannedBehind(
+    LayerBox box, BridgeTransform tf, Offset anchor) {
+  final (:position, :z) = panBehindFor(box, anchor);
+  return transformWith(
+    tf,
+    anchorX: anchor.dx,
+    anchorY: anchor.dy,
+    positionX: position.dx,
+    positionY: position.dy,
+    positionZ: z,
+  );
+}
 
 /// The Anchor point tool over the picture.
 class ViewerAnchorLayer extends StatefulWidget {
@@ -242,6 +311,7 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
       return;
     }
     widget.uiState.setSelection([hit.layer]);
+    if (_refusedFor(hit)) return;
     _place(hit, at);
   }
 
@@ -249,26 +319,21 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
   /// the picture does not move. One op, so one undo step.
   void _place(LayerBox box, Offset at) {
     final anchor = _wantedAnchor(box, at);
-    final position = panBehindFor(box, anchor);
     try {
-      box.layer.setTransforms(
-        props: const [
-          BridgeTransformProp.anchorX,
-          BridgeTransformProp.anchorY,
-          BridgeTransformProp.positionX,
-          BridgeTransformProp.positionY,
-        ],
-        values: [
-          BridgeScalar.static_(anchor.dx),
-          BridgeScalar.static_(anchor.dy),
-          BridgeScalar.static_(position.dx),
-          BridgeScalar.static_(position.dy),
-        ],
-      );
+      setPannedBehind(box, anchor);
       widget.onChanged();
     } catch (_) {
       // The layer went away between the press and the release.
     }
+  }
+
+  /// Whether [box]'s pivot must stay where it is because moving it would
+  /// write over keys, said in a notice when it must.
+  bool _refusedFor(LayerBox box) {
+    if (!panBehindHitsKeys(box)) return false;
+    Provider.of<LumitState>(context, listen: false)
+        .postNotice(l10n.anchorKeyedRefused);
+    return true;
   }
 
   void _onPanStart(DragStartDetails details) {
@@ -280,6 +345,7 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
         !widget.uiState.selectedLayerIds.contains(target.id)) {
       widget.uiState.setSelection([target.layer]);
     }
+    if (target != null && _refusedFor(target)) return;
     setState(() {
       _acting = target;
       _pointer = details.localPosition;
@@ -307,20 +373,14 @@ class _ViewerAnchorLayerState extends State<ViewerAnchorLayer> {
     final at = _pointer;
     if (box == null || at == null) return;
     final anchor = _wantedAnchor(box, at);
-    final position = panBehindFor(box, anchor);
     _throttle.request(() {
       try {
         widget.comp.renderFrameWithTransformPreview(
           frame: BigInt.from(widget.uiState.playheadFrame.value),
           scale: widget.uiState.viewerScale,
           layer: box.layer,
-          transform: transformWith(
-            box.layer.getTransform(),
-            anchorX: anchor.dx,
-            anchorY: anchor.dy,
-            positionX: position.dx,
-            positionY: position.dy,
-          ),
+          transform:
+              transformPannedBehind(box, box.layer.getTransform(), anchor),
         );
       } catch (_) {
         // A preview is a courtesy; the commit still lands.

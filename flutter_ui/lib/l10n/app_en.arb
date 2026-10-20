@@ -6729,6 +6729,10 @@
   "@newLayer": {
     "description": "Button that opens the list of layer kinds."
   },
+  "anchorKeyedRefused": "Can't move the anchor while Position or Anchor point is keyed",
+  "@anchorKeyedRefused": {
+    "description": "Notice when the anchor is dragged on a layer whose Position or Anchor point has keyframes or an expression, which moving it would overwrite."
+  },
   "noCameraToMove": "No camera to move — add a camera layer first",
   "@noCameraToMove": {
     "description": "Notice when a camera tool is used in a composition with no camera."
