@@ -6539,18 +6539,53 @@ impl LayerReference {
     /// finite number.
     #[frb(sync)]
     pub fn stretch(&self, speed_percent: f64) -> Result<(), BridgeError> {
+        if !speed_percent.is_finite() || speed_percent <= 0.0 {
+            return Err(BridgeError::InvalidTime);
+        }
+        // The factor the layer's *length* is multiplied by, which is the
+        // reciprocal of the speed: at half speed it takes twice as long.
+        let k = Rational::from_f64_on_grid(100.0 / speed_percent, Rational::FLICK_DEN)
+            .map_err(|_| BridgeError::InvalidTime)?;
+        self.stretch_by(k, Rational::ZERO)
+    }
+
+    /// [`Self::stretch`] to the given ends, the way dragging either end of the
+    /// bar with Shift held does. Moving the in point slides the whole layer so
+    /// its out point holds. The factor is worked out exactly, so the ends land
+    /// on the frames they were dropped on rather than a flick short of them.
+    #[frb(sync)]
+    pub fn stretch_to(
+        &self,
+        in_point: BridgeRational,
+        out_point: BridgeRational,
+    ) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        let bad = |_| BridgeError::InvalidTime;
+        let from = comp_time(in_point)?;
+        let shift = from.checked_sub(layer.in_point.0).map_err(bad)?;
+        let k = comp_time(out_point)?
+            .checked_sub(from)
+            .and_then(|want| {
+                layer
+                    .out_point
+                    .0
+                    .checked_sub(layer.in_point.0)
+                    .and_then(|span| want.checked_div(span))
+            })
+            .map_err(bad)?;
+        if k <= Rational::ZERO {
+            return Err(BridgeError::InvalidTime);
+        }
+        self.stretch_by(k, shift)
+    }
+
+    /// Stretch by `k` about the in point, then slide the layer `shift` along.
+    fn stretch_by(&self, k: Rational, shift: Rational) -> Result<(), BridgeError> {
         let layer = self.item()?;
         if matches!(layer.kind, lumit_core::model::LayerKind::Sequence { .. }) {
             return Err(BridgeError::NotRetimeable);
         }
-        if !speed_percent.is_finite() || speed_percent <= 0.0 {
-            return Err(BridgeError::InvalidTime);
-        }
         let bad = |_| BridgeError::InvalidTime;
-        // The factor the layer's *length* is multiplied by, which is the
-        // reciprocal of the speed: at half speed it takes twice as long.
-        let k =
-            Rational::from_f64_on_grid(100.0 / speed_percent, Rational::FLICK_DEN).map_err(bad)?;
         let in_local = layer
             .in_point
             .0
@@ -6566,7 +6601,9 @@ impl LayerReference {
             .and_then(|span| span.checked_mul(k))
             .and_then(|span| in_local.checked_add(span))
             .map_err(bad)?;
-        let out_point = CompTime(layer.start_offset.0.checked_add(stretched).map_err(bad)?);
+        let slid = |t: Rational| t.checked_add(shift).map(CompTime).map_err(bad);
+        let start_offset = slid(layer.start_offset.0)?;
+        let out_point = CompTime(start_offset.0.checked_add(stretched).map_err(bad)?);
 
         let map = self.retime_or_identity(&layer, in_local, out_local);
         let Animation::Keyframed(keys) = &map.animation else {
@@ -6614,9 +6651,9 @@ impl LayerReference {
                 lumit_core::Op::SetLayerSpan {
                     comp: self.comp_id,
                     layer: self.layer_id,
-                    in_point: layer.in_point,
+                    in_point: slid(layer.in_point.0)?,
                     out_point,
-                    start_offset: layer.start_offset,
+                    start_offset,
                 },
                 lumit_core::Op::SetRetimeProperty {
                     comp: self.comp_id,
