@@ -1845,6 +1845,36 @@ void main() {
       await drag(const Offset(150, 0));
       after = camera.getTransform();
       expect(still(after.positionZ), greaterThan(still(beforeDolly.positionZ)));
+
+      // A keyed camera moves too: the orbit keys what is keyed at the
+      // playhead, leaves a still row still, and is one undo step.
+      BridgeKeyframe key(int frame, double value) => BridgeKeyframe(
+            time: p.comp.timeOfFrame(frame: frame),
+            value: value,
+            interpIn: const BridgeSideInterp.linear(),
+            interpOut: const BridgeSideInterp.linear(),
+          );
+      final placed = camera.getTransform();
+      final x = still(placed.positionX);
+      camera.setTransform(
+        prop: BridgeTransformProp.positionX,
+        value: BridgeScalar.keyframed([key(0, x), key(30, x + 200)]),
+      );
+      p.uiState.model.refresh();
+      p.uiState.playheadFrame.value = 10;
+      p.uiState.tools.select(ToolMode.cameraOrbit);
+      await tester.pump();
+      await drag(const Offset(120, 0));
+      List<BridgeKeyframe> keysOfX() =>
+          (camera.getTransform().positionX as BridgeScalar_Keyframed).field0;
+      expect(keysOfX(), hasLength(3), reason: 'a key landed at the playhead');
+      expect(camera.getTransform().rotationY, isA<BridgeScalar_Static>());
+      expect(still(camera.getTransform().rotationY),
+          isNot(closeTo(still(placed.rotationY), 1e-9)));
+      p.state.project!.undo();
+      expect(keysOfX(), hasLength(2), reason: 'the drag was one undo step');
+      expect(still(camera.getTransform().rotationY),
+          closeTo(still(placed.rotationY), 1e-9));
     });
 
     testWidgets('relinking the missing footage clears the badge',

@@ -6737,6 +6737,10 @@
   "@noCameraToMove": {
     "description": "Notice when a camera tool is used in a composition with no camera."
   },
+  "cameraExpressionRefused": "Can't move a camera driven by an expression",
+  "@cameraExpressionRefused": {
+    "description": "Notice when a camera tool is dragged in the Viewer and the active camera's Position, Rotation or Point of interest is set by an expression, which the drag would overwrite."
+  },
   "noCommandsMatch": "No commands match",
   "@noCommandsMatch": {
     "description": "Shown in the command palette when the search finds nothing."
