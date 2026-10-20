@@ -922,6 +922,26 @@ Vec3 turnOfBox(LayerBox box) => (
       box.rotationDegrees,
     );
 
+/// Those of [ids] with an ancestor also among them. They follow that
+/// ancestor, so moving or turning them as well would do it twice.
+Set<UuidValue> ridingAlong(Set<UuidValue> ids, List<BridgeLayerEntry> layers) {
+  final parentOf = {
+    for (final entry in layers) entry.layer.internallayerId: entry.info.parent
+  };
+  bool rides(UuidValue id) {
+    final seen = {id};
+    for (var up = parentOf[id]; up != null && seen.add(up); up = parentOf[up]) {
+      if (ids.contains(up)) return true;
+    }
+    return false;
+  }
+
+  return {
+    for (final id in ids)
+      if (rides(id)) id
+  };
+}
+
 /// The box the 3D handles sit on among [boxes]: the layer picked first, as
 /// [LumitUiState.selectedLayer] has it, while that one is seen in depth,
 /// otherwise the first that is.
@@ -1107,6 +1127,15 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// Where the 3D drag last put its values, kept while the pointer is
   /// somewhere the axis cannot reach, such as past its vanishing point.
   Vec3? _last3d;
+
+  /// The other selected layers a 3D drag moves with it, as they stood when
+  /// it began, and whether the one with the handles rides along on one of
+  /// them rather than being written itself.
+  List<LayerBox> _carried = const [];
+  bool _handlesRide = false;
+
+  /// The layers a body drag leaves to a parent that is moving too.
+  Set<UuidValue> _riders = const {};
 
   /// The 3D handle under the pointer, which set and which part.
   (BridgeTransformProp, GizmoPick)? _hot3d;
@@ -1432,6 +1461,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     if (_drag == _GizmoDrag.move &&
         box.map.projected &&
         box.draggable &&
+        !_riders.contains(box.id) &&
         widget.uiState.selectedLayerIds.contains(box.id)) {
       final (x, y, z) = _movedPosition(box);
       return box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(x, y), z: z);
@@ -1866,6 +1896,19 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           _set = set;
           _part = part;
           _last3d = set.at;
+          // The rest of the selection moves with it, as a body drag does.
+          final carried = [
+            for (final box in selected)
+              if (box.id != set.box.id && box.transform != null) box
+          ];
+          final riders = ridingAlong(
+              {set.box.id, for (final box in carried) box.id},
+              widget.uiState.model.heldLayers);
+          _carried = [
+            for (final box in carried)
+              if (!riders.contains(box.id)) box
+          ];
+          _handlesRide = riders.contains(set.box.id);
           _drag = _GizmoDrag.axis3d;
           _hot3d = null;
           _hover = null;
@@ -1938,6 +1981,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     setState(() {
       _drag = _GizmoDrag.move;
       _onScreen = HardwareKeyboard.instance.isAltPressed;
+      _riders = ridingAlong(widget.uiState.selectedLayerIds,
+          widget.uiState.model.heldLayers);
       _hover = null;
     });
   }
@@ -2009,6 +2054,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       _set = null;
       _part = null;
       _last3d = null;
+      _carried = const [];
+      _handlesRide = false;
+      _riders = const {};
       _onScreen = false;
     });
   }
@@ -2075,7 +2123,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     if (_delta == Offset.zero) return;
     final moves = <(LayerBox, double, double, double?)>[];
     for (final box in _selected) {
-      if (!box.draggable) continue;
+      if (!box.draggable || _riders.contains(box.id)) continue;
       final (x, y, z) = _movedPosition(box);
       moves.add((box, x, y, z));
     }
@@ -2121,11 +2169,44 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return _last3d = (at.$1 + d.$1, at.$2 + d.$2, at.$3 + d.$3);
   }
 
-  /// The layer the 3D drag moves and where to.
+  /// Every layer the 3D drag moves and where to: the one with the handles,
+  /// then the rest of the selection by the same move in the comp, each in
+  /// its own parent's space. A 2D layer takes the move across the picture.
   List<(LayerBox, List<BridgeTransformProp>, Vec3, Vec3)> _moves3d() {
     final set = _set, to = _moved3d();
     if (set == null || to == null) return const [];
-    return [(set.box, set.props, set.at, to)];
+    final d = (to.$1 - set.at.$1, to.$2 - set.at.$2, to.$3 - set.at.$3);
+    final inComp = parentToComp(set.box.map, d);
+    const position = [
+      BridgeTransformProp.positionX,
+      BridgeTransformProp.positionY,
+      BridgeTransformProp.positionZ,
+    ];
+    return [
+      if (!_handlesRide) (set.box, set.props, set.at, to),
+      for (final box in _carried)
+        if (_carriedTo(box, inComp) case (final from, final to))
+          (box, position, from, to),
+    ];
+  }
+
+  (Vec3, Vec3)? _carriedTo(LayerBox box, Vec3 inComp) {
+    final m = box.map;
+    final tf = box.transform;
+    if (tf == null ||
+        [tf.positionX, tf.positionY, if (m.projected) tf.positionZ]
+            .any((s) => s is BridgeScalar_Expression)) {
+      return null;
+    }
+    if (!m.projected) {
+      if (!box.draggable) return null;
+      final step = m.positionStep(Offset(inComp.$1, inComp.$2));
+      return ((m.px, m.py, 0), (m.px + step.dx, m.py + step.dy, 0));
+    }
+    final d = compToParent(m, inComp);
+    if (d == null) return null;
+    final from = (m.px, m.py, m.depth!.z);
+    return (from, (from.$1 + d.$1, from.$2 + d.$2, from.$3 + d.$3));
   }
 
   /// [tf] with a 3D drag's three values in it.
