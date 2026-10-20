@@ -100,6 +100,15 @@ abstract final class LumitIcons {
   /// Two rails running away to a vanishing point and an arrow up them: the camera moving into the scene, not the picture scaling. Deliberately not a cone with an arrow beside it, which is a loudspeaker.
   static const String cameraDolly =
       '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13.5L6.5 3M14 13.5L9.5 3" opacity=".55"/><path d="M8 12.5V6M6.2 7.8 8 6l1.8 1.8"/></svg>';
+  /// The three axes turned the layer's way, two of them with heads. World axes is the same three standing upright.
+  static const String localAxes =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10.5l6.8-3.2M6 10.5L2.8 3.7M6 10.5l-1.5 4"/><path d="M10.5 6.9 12.8 7.3 11.7 9.3M2.4 6 2.8 3.7 4.8 4.8"/></svg>';
+  /// The three axes standing upright over the ground line, the comp's own way round.
+  static const String worldAxes =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 13.5h13" opacity=".55"/><path d="M5 11h8.5M5 11V2.5M5 11l-2.5 2.5"/><path d="M11.6 9.7 13.5 11l-1.9 1.3M3.7 4.4 5 2.5l1.3 1.9"/></svg>';
+  /// Right and up inside the frame of the screen.
+  static const String viewAxes =
+      '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="2.5" width="11" height="11" rx="1" opacity=".55"/><path d="M8 8h4.5M8 8V3.5"/><path d="M10.6 6.7 12.5 8l-1.9 1.3M6.7 5.4 8 3.5l1.3 1.9"/></svg>';
 
   // --- Layer switches ---
   static const String visible =
@@ -465,6 +474,9 @@ abstract final class LumitIcons {
     'Camera orbit': cameraOrbit,
     'Camera pan': cameraPan,
     'Camera dolly': cameraDolly,
+    'Local axes': localAxes,
+    'World axes': worldAxes,
+    'View axes': viewAxes,
     'Visible': visible,
     'Hidden': hidden,
     'Audio': audio,

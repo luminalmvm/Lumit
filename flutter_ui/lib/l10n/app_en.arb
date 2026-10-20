@@ -8694,6 +8694,18 @@
   "@tipSnapOn": {
     "description": "Tooltip on the magnet: dragged keyframes land on whole frames. One or two words."
   },
+  "tipLocalAxes": "Local axes",
+  "@tipLocalAxes": {
+    "description": "Tooltip on a tool option for the Selection and Rotation tools: a 3D layer's move arrows and rotation rings follow the layer's own axes. After Effects calls this Local Axis Mode."
+  },
+  "tipWorldAxes": "World axes",
+  "@tipWorldAxes": {
+    "description": "Tooltip on a tool option for the Selection and Rotation tools: a 3D layer's move arrows and rotation rings follow the composition's axes. After Effects calls this World Axis Mode."
+  },
+  "tipViewAxes": "View axes",
+  "@tipViewAxes": {
+    "description": "Tooltip on a tool option for the Selection and Rotation tools: a 3D layer's move arrows and rotation rings follow the screen. After Effects calls this View Axis Mode."
+  },
   "tipSpeedGraph": "Speed graph",
   "@tipSpeedGraph": {
     "description": "Tooltip: show how fast the value changes. One or two words."

@@ -36,7 +36,8 @@
 // under its own name.
 
 import 'package:flutter/widgets.dart';
-import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeBrushShape;
+import 'package:lumit_flutter/src/rust/api/layer.dart'
+    show BridgeBrushShape, BridgeLayerKind;
 import 'package:provider/provider.dart';
 
 import '../icons/icons.dart';
@@ -158,9 +159,11 @@ class LumitToolBarFrb extends StatelessWidget {
         border: pills ? null : Border(bottom: BorderSide(color: t.hairline)),
       ),
       child: ListenableBuilder(
-        listenable: ui.tools,
+        // The model too: the axes only show once the comp has something
+        // in depth.
+        listenable: Listenable.merge([ui.tools, ui.model]),
         builder: (context, _) {
-          final options = _toolOptions(t, ui.tools, height: _lanternPill);
+          final options = _toolOptions(t, ui, height: _lanternPill);
           // The tool pill keeps the magnet at its end; the flat strip keeps
           // the magnet after the options, where it has always stood.
           final tools = Row(
@@ -239,9 +242,9 @@ class LumitTopLineToolsFrb extends StatelessWidget {
     final ui = context.watch<LumitUiState>();
     final pills = t.tokens.roomed;
     return ListenableBuilder(
-      listenable: ui.tools,
+      listenable: Listenable.merge([ui.tools, ui.model]),
       builder: (context, _) {
-        final options = _toolOptions(t, ui.tools, height: _workspacePill);
+        final options = _toolOptions(t, ui, height: _workspacePill);
         // The workspaces take their own width at the right end, where
         // docs/07 §1.4 puts them, and the options take what is left. The
         // strip only scrolls once the half is too narrow for it, not by a
@@ -289,9 +292,13 @@ Widget _gap(bool pills) =>
 /// beside the tools, and the strip is empty for the tools that draw nothing.
 /// Lantern shows no pill then either: one that only said "no options" was a
 /// thing to read with nothing in it.
-Widget? _toolOptions(LumitTheme t, ToolsState tools,
-    {required double height}) {
-  final shows = toolOptionsFor(tools.tool);
+Widget? _toolOptions(LumitTheme t, LumitUiState ui, {required double height}) {
+  final tools = ui.tools;
+  final shows = toolOptionsFor(tools.tool,
+      inDepth: ui.model.heldLayers.any((entry) =>
+          entry.info.switches.threeD ||
+          entry.info.kind == BridgeLayerKind.light ||
+          entry.info.kind == BridgeLayerKind.camera));
   if (shows == ToolOptions.none) return null;
   // The row is centred on the pill's height, as the workspace strip's are
   // on theirs; a bare child takes the top of the box it is given. The width
@@ -477,15 +484,21 @@ enum ToolOptions {
   /// says "this is the subject" over the pixels it covers, and how wide it
   /// covers is the whole of what there is to set.
   roto,
+
+  /// Which way a 3D layer's arrows and rings point: Local, World or View,
+  /// while the comp has a 3D layer, a light or a camera.
+  axes,
 }
 
 /// The options [tool] shows on the toolbar.
-ToolOptions toolOptionsFor(ToolMode tool) => switch (tool.group) {
+ToolOptions toolOptionsFor(ToolMode tool, {bool inDepth = false}) =>
+    switch (tool.group) {
       ToolGroup.type => ToolOptions.type,
       ToolGroup.paint => ToolOptions.paint,
       ToolGroup.shape || ToolGroup.pen => ToolOptions.shape,
       ToolGroup.puppet => ToolOptions.puppet,
       ToolGroup.roto => ToolOptions.roto,
+      ToolGroup.select || ToolGroup.rotate when inDepth => ToolOptions.axes,
       _ => ToolOptions.none,
     };
 
@@ -499,6 +512,31 @@ class _ToolOptions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
+    if (shows == ToolOptions.axes) {
+      return Row(
+        children: [
+          for (final (axes, icon, tip) in [
+            (GizmoAxes.local, LumitIcon.localAxes, l10n.tipLocalAxes),
+            (GizmoAxes.world, LumitIcon.worldAxes, l10n.tipWorldAxes),
+            (GizmoAxes.view, LumitIcon.viewAxes, l10n.tipViewAxes),
+          ])
+            LumitTooltip(
+              message: tip,
+              // Lit as the magnet is, the one in use at full strength.
+              child: HouseButton(
+                key: ValueKey<String>('tool-axes-${axes.name}'),
+                small: true,
+                frameless: tools.axes != axes,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                onPressed: () => tools.axes = axes,
+                child: lumitIcon(icon,
+                    size: iconSize,
+                    color: tools.axes == axes ? t.textPrimary : t.textMuted),
+              ),
+            ),
+        ],
+      );
+    }
     // The scribble's width, on its own, for the mesh's reason: a roto stroke
     // lays no colour down either.
     if (shows == ToolOptions.roto) {
