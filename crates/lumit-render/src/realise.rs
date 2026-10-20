@@ -2025,7 +2025,7 @@ impl Realiser<'_> {
                     tex_h,
                     format,
                     colour_space,
-                } if straight_to_composite(l)
+                } if straight_to_composite(l, camera)
                     && matches!(format, lumit_media::PixelFormat::Srgb8)
                     && self.input_transform(colour_space).is_none() =>
                 {
@@ -2232,12 +2232,22 @@ impl Realiser<'_> {
             // active camera's focus plane is blurred by its circle of
             // confusion before it is placed. None unless the camera carries
             // one, so a comp without it renders byte-for-byte as before.
-            if let Some(radius_px) = dof_radius(camera, l, self.render_scale) {
+            let texels = source_w as f32 / l.natural_size.0.max(1e-6);
+            if let Some(radius_px) = dof_radius(camera, l, texels) {
+                // Room round the layer for its outline to blur into, or a
+                // solid would come out as sharp as it went in. Never past the
+                // widest picture the card takes, and even, so it stays centred.
+                let room = |n: u32| {
+                    let most = crate::plan::MAX_TEXTURE_SIDE.saturating_sub(n);
+                    n + ((radius_px.ceil() as u32 * 2).min(most) & !1)
+                };
+                let (w, h) = (room(tex.width()), room(tex.height()));
+                tex = lumit_gpu::fx::fit_centred(&self.ctx, tex, w, h);
                 tex = self.fx.blur(
                     &self.ctx,
                     &tex,
-                    tex.width(),
-                    tex.height(),
+                    w,
+                    h,
                     None,
                     &lumit_gpu::fx::BlurOp {
                         radius_px,
@@ -2578,12 +2588,12 @@ fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
 /// a plane leaning through the focus plane blurs evenly rather than across
 /// itself. The circle of confusion is a diameter on screen in comp pixels;
 /// halved for the radius, scaled back to the layer's texels by its
-/// projection (`d / zoom`) and its own scale, and by the render scale the
-/// texture was made at.
-fn dof_radius(
+/// projection (`d / zoom`) and its own scale, and by how many texels its
+/// picture has to a pixel of the layer.
+pub(crate) fn dof_radius(
     camera: Option<lumit_core::model::CameraPose>,
     l: &crate::draw::CompLayerDraw,
-    render_scale: f32,
+    texels_per_px: f32,
 ) -> Option<f32> {
     let cam = camera?;
     let dof = cam.dof?;
@@ -2619,7 +2629,7 @@ fn dof_radius(
     if scale <= 1e-6 || cam.zoom <= 0.0 {
         return None;
     }
-    let radius = coc / 2.0 * d / cam.zoom / scale * f64::from(render_scale);
+    let radius = coc / 2.0 * d / cam.zoom / scale * f64::from(texels_per_px);
     (radius >= 0.5).then_some(radius as f32)
 }
 
@@ -2677,11 +2687,14 @@ fn cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
 /// eight-bit sRGB texture reads as the same linear values the linearise pass
 /// would have written into a working-format copy of it. Everything else that
 /// touches a layer's picture wants the working format: an effect stack, the
-/// lighting pass, and the motion-blur average, whose fp32 accumulation is what
-/// keeps a still layer bit-exact (docs/06 §4). One of those and the layer
-/// linearises as it always did.
-fn straight_to_composite(l: &CompLayerDraw) -> bool {
-    l.fx.is_empty() && l.lights.is_empty() && l.mb.is_empty()
+/// lighting pass, the camera's depth of field, and the motion-blur average,
+/// whose fp32 accumulation is what keeps a still layer bit-exact (docs/06 §4).
+/// One of those and the layer linearises as it always did.
+fn straight_to_composite(l: &CompLayerDraw, camera: Option<lumit_core::model::CameraPose>) -> bool {
+    l.fx.is_empty()
+        && l.lights.is_empty()
+        && l.mb.is_empty()
+        && !(l.three_d && camera.is_some_and(|c| c.dof.is_some()))
 }
 
 /// Whether a region of interest can be applied to this draw list, or

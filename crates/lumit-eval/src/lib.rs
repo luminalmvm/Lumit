@@ -63,7 +63,9 @@ pub mod schedule;
 ///   own time.
 /// * 11: Depth of field pro blurs up to the frame's edge, where it left a strip
 ///   of the edge pixel.
-pub const ALGO_VERSION: u32 = 11;
+/// * 17: a 3D layer's outline blurs under the camera's depth of field, and a
+///   plain solid under one is blurred at its own size.
+pub const ALGO_VERSION: u32 = 17;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4524,12 +4526,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 11, which renamed every frame.
+        // Pinned under ALGO_VERSION 17, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                166_356_893_935_221_389_190_851_733_106_718_405_377,
-                233_041_167_907_227_752_146_596_676_542_925_387_127
+                109_588_339_425_146_761_875_782_770_488_626_120_550,
+                222_431_429_589_919_992_755_804_217_156_224_230_894
             )
         );
 
