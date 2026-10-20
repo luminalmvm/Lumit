@@ -29,6 +29,26 @@ A 3D layer's box, handles, mask outlines and motion path are drawn in perspectiv
 the active camera or the chosen view. A click picks the nearest 3D layer under the pointer.
 A light shows as a small diamond at its position.
 
+## 3D handles
+
+A selected 3D layer, light or camera has three arrows at its anchor: x red, y green, z blue.
+
+- **Drag an arrow** to move along that axis only.
+- **Drag a square** between two arrows to move in that plane.
+- **Drag the ring** at the centre, or **Alt-drag** the layer, to move it across the view at
+  its depth.
+- **Shift** keeps an arrow or square drag to steps of 10.
+- With the **Rotation** tool, **drag a ring** to turn about that axis, or drag off the rings
+  to turn freely. `Shift` turns in 45° steps.
+
+**Local axes**, **World axes** and **View axes** in the tool options point the handles along
+the layer, the composition or the screen. In Local axes each ring turns one of X, Y and Z
+Rotation. With several layers selected the handles sit on the one picked first and move or
+turn them all, a 2D layer by the Z ring alone. A layer whose parent is selected too moves
+only with its parent. A two-node camera also has handles at its point of interest.
+
+A drag, a nudge or a move of the anchor on a 3D layer keys a keyed value at the playhead.
+
 ## Distance
 
 **Pixels per metre** in the camera's settings is how many composition pixels make a metre.
