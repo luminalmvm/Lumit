@@ -212,6 +212,59 @@ pub(crate) fn pix_fmt_flag(format: i32, flag: u32) -> bool {
     }
 }
 
+/// Point swscale at the YUV matrix a file states. Left alone it uses BT.601
+/// whatever the file says, and HD video is BT.709. A file that states none is
+/// read as players read it: BT.709 from 720 lines up, BT.601 below. Only the
+/// matrix changes; the ranges swscale worked out stay as they were.
+pub(crate) fn use_yuv_matrix(
+    sws: &mut rsmpeg::swscale::SwsContext,
+    colorspace: ffi::AVColorSpace,
+    height: i32,
+    yuv_is_source: bool,
+) {
+    // The enum is an `i32` where C enums are signed and a `u32` where they are
+    // not, so the cast is needed on some targets and flagged on the rest.
+    #[allow(clippy::unnecessary_cast)]
+    let cs = match colorspace {
+        ffi::AVCOL_SPC_UNSPECIFIED if height >= 720 => ffi::SWS_CS_ITU709 as i32,
+        ffi::AVCOL_SPC_UNSPECIFIED => ffi::SWS_CS_ITU601 as i32,
+        stated => stated as i32,
+    };
+    // SAFETY: `as_mut_ptr` is the context this wrapper owns, already
+    // initialised, with no scale running. The get call fills the six locals
+    // from it; the coefficient table is a static libswscale owns, and the set
+    // call copies what it is handed.
+    #[allow(unsafe_code)]
+    unsafe {
+        let c = sws.as_mut_ptr();
+        let (mut inv, mut table) = (std::ptr::null_mut(), std::ptr::null_mut());
+        let (mut src_range, mut dst_range) = (0, 0);
+        let (mut brightness, mut contrast, mut saturation) = (0, 0, 0);
+        if ffi::sws_getColorspaceDetails(
+            c,
+            &mut inv,
+            &mut src_range,
+            &mut table,
+            &mut dst_range,
+            &mut brightness,
+            &mut contrast,
+            &mut saturation,
+        ) < 0
+        {
+            return;
+        }
+        let coefficients = ffi::sws_getCoefficients(cs);
+        let (inv, table) = if yuv_is_source {
+            (coefficients, table.cast_const())
+        } else {
+            (inv.cast_const(), coefficients)
+        };
+        ffi::sws_setColorspaceDetails(
+            c, inv, src_range, table, dst_range, brightness, contrast, saturation,
+        );
+    }
+}
+
 fn codec_name(id: ffi::AVCodecID) -> String {
     rsmpeg::avcodec::AVCodec::find_decoder(id)
         .map(|c| c.name().to_string_lossy().into_owned())

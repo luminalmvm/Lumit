@@ -78,12 +78,17 @@ limit*, *Needs alpha*, *Audio off*, *No picture*, *No sound* or *No metadata*.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | **H.264 (.mp4)** | Yes | Yes | No | 8 bit | Yes | Stated in the file | Yes |
 | **HEVC (.mp4)** | Yes | Yes | No | 8 bit | Yes | Stated in the file | Yes |
+| **ProRes 422 Proxy, LT, 422, HQ (.mov)** | Yes | Yes | No | 8 or 16 bit | No | Stated in the file | Yes |
+| **ProRes 4444, 4444 XQ (.mov)** | Yes | Yes | Yes | 8 or 16 bit | No | Stated in the file | Yes |
 | **PNG sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **TIFF sequence** | Yes | No | Yes | 8 or 16 bit | No | None stated | No |
 | **M4A (AAC)** | No | Yes | — | 16 bit | Yes | — | Yes |
 | **WAV** | No | Yes | — | 16 or 24 bit | No | — | Yes |
 
 HEVC is tagged `hvc1`, so Apple's players open it.
+
+ProRes files are ten-bit. At **16 bit** they are filled from the sixteen-bit picture.
+Their sound is uncompressed PCM, at 16 or 24 bit.
 
 An image sequence writes one numbered file per frame beside the name you chose. A sequence
 has no container to carry metadata, so that section is disabled.
@@ -142,7 +147,7 @@ window says which frame it is on and about how long is left, and has a Cancel. W
 export is done, click the file's path on the strip to open its folder.
 
 :::note[Not built yet]
-ProRes and DNxHR intermediate codecs, and an export priority control. The **Managed by**
+DNxHR, and an export priority control. The **Managed by**
 row reads back the configuration the project names and cannot be set from here.
 :::
 

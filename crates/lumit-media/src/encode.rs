@@ -2,8 +2,9 @@
 //!
 //! In plain terms: the compositor hands over finished RGBA frames (and the
 //! mixer hands over finished stereo samples); this module compresses them
-//! into an .mp4. The video encoder is picked from a ladder — NVENC (NVIDIA),
-//! then AMF (AMD), then Quick Sync (Intel), then software x264/x265 — and
+//! into an .mp4 (a .mov for ProRes). The video encoder is picked from a
+//! ladder — NVENC (NVIDIA), then AMF (AMD), then Quick Sync (Intel), then
+//! software x264/x265 — and
 //! each rung is *proven* with a short test encode before it is trusted,
 //! because hardware encoders can exist in the FFmpeg build yet fail at
 //! runtime (wrong vendor's GPU, driver sessions exhausted). Whatever rung
@@ -25,6 +26,17 @@ use std::path::Path;
 pub enum VideoCodec {
     H264,
     Hevc,
+    /// The ProRes family, in a `.mov`, every frame a keyframe. The four 422
+    /// kinds are ten-bit 4:2:2 at rising data rates; 422 HQ is the usual
+    /// master to hand an editor.
+    ProRes422Proxy,
+    ProRes422Lt,
+    ProRes422,
+    ProRes422Hq,
+    /// Ten-bit 4:4:4 with an alpha channel.
+    ProRes4444,
+    /// 4444 at a higher data rate.
+    ProRes4444Xq,
 }
 
 impl VideoCodec {
@@ -33,6 +45,44 @@ impl VideoCodec {
         match self {
             VideoCodec::H264 => "H.264",
             VideoCodec::Hevc => "HEVC",
+            VideoCodec::ProRes422Proxy => "ProRes 422 Proxy",
+            VideoCodec::ProRes422Lt => "ProRes 422 LT",
+            VideoCodec::ProRes422 => "ProRes 422",
+            VideoCodec::ProRes422Hq => "ProRes 422 HQ",
+            VideoCodec::ProRes4444 => "ProRes 4444",
+            VideoCodec::ProRes4444Xq => "ProRes 4444 XQ",
+        }
+    }
+
+    /// `prores_ks`'s own number for the profile, None for the other codecs.
+    fn prores_profile(self) -> Option<i64> {
+        match self {
+            VideoCodec::H264 | VideoCodec::Hevc => None,
+            VideoCodec::ProRes422Proxy => Some(0),
+            VideoCodec::ProRes422Lt => Some(1),
+            VideoCodec::ProRes422 => Some(2),
+            VideoCodec::ProRes422Hq => Some(3),
+            VideoCodec::ProRes4444 => Some(4),
+            VideoCodec::ProRes4444Xq => Some(5),
+        }
+    }
+
+    pub fn is_prores(self) -> bool {
+        self.prores_profile().is_some()
+    }
+
+    /// The 4444 kinds, which carry alpha.
+    pub fn has_alpha(self) -> bool {
+        matches!(self, VideoCodec::ProRes4444 | VideoCodec::ProRes4444Xq)
+    }
+
+    /// The container's extension. ProRes lives in a `.mov`; the mp4 muxer
+    /// refuses it.
+    pub fn extension(self) -> &'static str {
+        if self.is_prores() {
+            "mov"
+        } else {
+            "mp4"
         }
     }
 }
@@ -136,6 +186,21 @@ fn set_colour_tags(ctx: &mut AVCodecContext, tags: ColourTags) {
     }
 }
 
+/// The same statement on one frame. ProRes writes each frame's header from the
+/// frame, not the context, and leaves it unknown otherwise.
+fn stamp_colour(frame: &mut AVFrame, tags: ColourTags) {
+    let (pri, trc, spc) = tags.av();
+    // SAFETY: the frame is ours alone and these are plain enum fields.
+    #[allow(unsafe_code)]
+    unsafe {
+        let raw = frame.as_mut_ptr();
+        (*raw).color_primaries = pri;
+        (*raw).color_trc = trc;
+        (*raw).colorspace = spc;
+        (*raw).color_range = ffi::AVCOL_RANGE_MPEG;
+    }
+}
+
 /// Everything the video stream needs to open.
 #[derive(Debug, Clone)]
 pub struct VideoSettings {
@@ -150,10 +215,13 @@ pub struct VideoSettings {
     pub max_rate: Option<i64>,
     /// What the container states this stream's colour to be.
     pub colour: ColourTags,
+    /// How wide each channel of the frames [`Encoder::write_rgba`] is handed:
+    /// eight bits, or sixteen (little-endian) to fill a ten-bit ProRes.
+    pub depth: BitDepth,
 }
 
 /// How many bits each colour channel carries in the written file
-/// (docs/06-RENDER-PIPELINE.md §7.4). Only the still formats can carry more
+/// (docs/06-RENDER-PIPELINE.md §7.4). Only the still formats and ProRes take more
 /// than eight today — see the capability table in `lumit_render::export`.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, Hash,
@@ -340,10 +408,11 @@ impl Metadata {
 /// The encoder ladder for a codec, best first (docs/impl/media-io.md §7):
 /// NVIDIA NVENC → AMD AMF → Intel Quick Sync → software. Pure data so the
 /// priority is unit-tested, not folklore.
-pub fn encoder_candidates(codec: VideoCodec) -> [&'static str; 4] {
+pub fn encoder_candidates(codec: VideoCodec) -> &'static [&'static str] {
     match codec {
-        VideoCodec::H264 => ["h264_nvenc", "h264_amf", "h264_qsv", "libx264"],
-        VideoCodec::Hevc => ["hevc_nvenc", "hevc_amf", "hevc_qsv", "libx265"],
+        VideoCodec::H264 => &["h264_nvenc", "h264_amf", "h264_qsv", "libx264"],
+        VideoCodec::Hevc => &["hevc_nvenc", "hevc_amf", "hevc_qsv", "libx265"],
+        _ => &["prores_ks"],
     }
 }
 
@@ -358,12 +427,14 @@ pub fn pick_first_working<'a>(
 }
 
 /// The pixel format each encoder is fed. Quick Sync encoders take NV12 only;
-/// everything else on the ladder accepts planar 4:2:0.
-pub fn pix_fmt_for(encoder: &str) -> i32 {
-    if encoder.ends_with("_qsv") {
-        ffi::AV_PIX_FMT_NV12
-    } else {
-        ffi::AV_PIX_FMT_YUV420P
+/// everything else on the H.264 and HEVC ladders accepts planar 4:2:0. ProRes
+/// is ten-bit: 4:4:4 with alpha for the 4444 kinds, 4:2:2 for the rest.
+pub fn pix_fmt_for(codec: VideoCodec, encoder: &str) -> i32 {
+    match codec {
+        c if c.has_alpha() => ffi::AV_PIX_FMT_YUVA444P10LE,
+        c if c.is_prores() => ffi::AV_PIX_FMT_YUV422P10LE,
+        _ if encoder.ends_with("_qsv") => ffi::AV_PIX_FMT_NV12,
+        _ => ffi::AV_PIX_FMT_YUV420P,
     }
 }
 
@@ -375,6 +446,7 @@ pub fn encoder_label(encoder: &str) -> &'static str {
         "h264_qsv" | "hevc_qsv" => "Intel Quick Sync",
         "libx264" => "software x264",
         "libx265" => "software x265",
+        "prores_ks" => "software ProRes",
         _ => "software",
     }
 }
@@ -671,9 +743,13 @@ struct VideoTrack {
     encoder: &'static str,
     sws: SwsContext,
     encode_pix_fmt: i32,
+    /// What `write_rgba` is handed: eight-bit RGBA or sixteen-bit.
+    src_pix_fmt: i32,
+    src_bytes_per_px: usize,
     width: i32,
     height: i32,
     next_pts: i64,
+    colour: ColourTags,
 }
 
 pub struct Encoder {
@@ -796,7 +872,8 @@ impl Encoder {
         self.video.is_some()
     }
 
-    /// Encode one tightly-packed RGBA frame (sRGB-encoded display output).
+    /// Encode one tightly-packed RGBA frame (sRGB-encoded display output), at
+    /// the depth the settings named.
     pub fn write_rgba(&mut self, rgba: &[u8]) -> Result<(), MediaError> {
         let Self { output, video, .. } = self;
         let Some(track) = video.as_mut() else {
@@ -804,7 +881,7 @@ impl Encoder {
                 "this export was opened without a video stream".into(),
             ));
         };
-        let expect = rgba_frame_len(track.width, track.height)?;
+        let expect = frame_len(track.width, track.height, track.src_bytes_per_px)?;
         if rgba.len() != expect {
             return Err(MediaError::Ffmpeg(format!(
                 "frame size {} != expected {expect}",
@@ -815,10 +892,17 @@ impl Encoder {
         let mut src = AVFrame::new();
         src.set_width(track.width);
         src.set_height(track.height);
-        src.set_format(ffi::AV_PIX_FMT_RGBA);
+        src.set_format(track.src_pix_fmt);
         src.alloc_buffer()
             .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
-        copy_rgba_into(&mut src, rgba, track.width, track.height)?;
+        copy_pixels_into(
+            &mut src,
+            rgba,
+            track.width,
+            track.height,
+            track.src_bytes_per_px,
+            false,
+        )?;
 
         let mut dst = AVFrame::new();
         dst.set_width(track.width);
@@ -836,6 +920,7 @@ impl Encoder {
         }
         dst.set_pts(track.next_pts);
         track.next_pts += 1;
+        stamp_colour(&mut dst, track.colour);
 
         track.ctx.send_frame(Some(&dst))?;
         drain_packets(&mut track.ctx, output, 0, false)
@@ -919,7 +1004,7 @@ fn open_video(
     // The ladder: prove each rung with a test encode, then open the real
     // context; a rung that proves but won't re-open also falls through.
     let mut opened: Option<AVCodecContext> = None;
-    let picked = pick_first_working(&encoder_candidates(video.codec), |name| {
+    let picked = pick_first_working(encoder_candidates(video.codec), |name| {
         match test_encode(name, video).and_then(|()| build_video_ctx(name, video, global_header)) {
             Ok(ctx) => {
                 opened = Some(ctx);
@@ -971,24 +1056,38 @@ fn open_video(
         .map_err(|_| MediaError::Ffmpeg("frame width overflows".into()))?;
     let height = i32::try_from(video.height)
         .map_err(|_| MediaError::Ffmpeg("frame height overflows".into()))?;
-    let encode_pix_fmt = pix_fmt_for(encoder);
-    let sws = sliced_scaler(width, height, encode_pix_fmt)?;
+    let encode_pix_fmt = pix_fmt_for(video.codec, encoder);
+    let (src_pix_fmt, src_bytes_per_px) = match video.depth {
+        BitDepth::Eight => (ffi::AV_PIX_FMT_RGBA, 4),
+        BitDepth::Sixteen => (ffi::AV_PIX_FMT_RGBA64LE, 8),
+        BitDepth::Half | BitDepth::Float => {
+            return Err(MediaError::Ffmpeg(
+                "video is written from eight or sixteen bits, not floats".into(),
+            ))
+        }
+    };
+    let mut sws = sliced_scaler(width, height, src_pix_fmt, encode_pix_fmt)?;
+    crate::probe::use_yuv_matrix(&mut sws, video.colour.av().2, height, false);
 
     Ok(VideoTrack {
         ctx,
         encoder,
         sws,
         encode_pix_fmt,
+        src_pix_fmt,
+        src_bytes_per_px,
         width,
         height,
         next_pts: 0,
+        colour: video.colour,
     })
 }
 
-/// The RGBA to encoder format scaler, run in slices across the machine's
-/// cores. On one core it took longer at 4K than the encoder did. Each slice
-/// works its rows out of the whole picture, so the bytes are the same.
-fn sliced_scaler(width: i32, height: i32, to: i32) -> Result<SwsContext, MediaError> {
+/// The RGBA (eight- or sixteen-bit) to encoder format scaler, run in slices
+/// across the machine's cores. On one core it took longer at 4K than the
+/// encoder did. Each slice works its rows out of the whole picture, so the
+/// bytes are the same.
+fn sliced_scaler(width: i32, height: i32, from: i32, to: i32) -> Result<SwsContext, MediaError> {
     let failed = || MediaError::Ffmpeg("swscale for encode".into());
     // SAFETY: the context is owned by the wrapper as soon as it exists, so it
     // is freed on every path. Its public fields are written before
@@ -1001,7 +1100,7 @@ fn sliced_scaler(width: i32, height: i32, to: i32) -> Result<SwsContext, MediaEr
         let c = sws.as_mut_ptr();
         (*c).src_w = width;
         (*c).src_h = height;
-        (*c).src_format = ffi::AV_PIX_FMT_RGBA;
+        (*c).src_format = from;
         (*c).dst_w = width;
         (*c).dst_h = height;
         (*c).dst_format = to;
@@ -1078,7 +1177,7 @@ fn build_video_ctx(
         num: v.fps_num,
         den: v.fps_den,
     });
-    ctx.set_pix_fmt(pix_fmt_for(name));
+    ctx.set_pix_fmt(pix_fmt_for(v.codec, name));
     ctx.set_gop_size(30);
     if let Some(rate) = v.bit_rate {
         ctx.set_bit_rate(rate);
@@ -1096,6 +1195,18 @@ fn build_video_ctx(
     let profile = (v.codec == VideoCodec::H264).then_some(ffi::AV_PROFILE_H264_HIGH as i32);
     set_rate_and_profile(&mut ctx, profile, v.max_rate);
     set_colour_tags(&mut ctx, v.colour);
+    if let Some(p) = v.codec.prores_profile() {
+        // SAFETY: the context is ours and not yet open, `priv_data` is the
+        // prores_ks options block `AVCodecContext::new` allocated, and the
+        // name is a NUL-terminated literal. Both are plain option writes.
+        #[allow(unsafe_code)]
+        unsafe {
+            let raw = ctx.as_mut_ptr();
+            ffi::av_opt_set_int((*raw).priv_data, c"profile".as_ptr(), p, 0);
+            // libavcodec runs one thread unless told; ProRes splits well.
+            (*raw).thread_count = 0;
+        }
+    }
     ctx.open(None)?;
     Ok(ctx)
 }
@@ -1107,7 +1218,7 @@ fn build_video_ctx(
 /// rung, please", never a failed export.
 fn test_encode(name: &str, v: &VideoSettings) -> Result<(), MediaError> {
     let mut ctx = build_video_ctx(name, v, false)?;
-    let mut frame = blank_frame(pix_fmt_for(name), v.width, v.height)?;
+    let mut frame = blank_frame(pix_fmt_for(v.codec, name), v.width, v.height)?;
     for n in 0..16 {
         frame.set_pts(n);
         ctx.send_frame(Some(&frame))?;
@@ -1368,6 +1479,22 @@ fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFrame, MediaEr
         .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
     let rows = usize::try_from(h).unwrap_or(0);
     let chroma_rows = rows.div_ceil(2);
+    // The ten-bit ProRes layouts: every plane is full height, and zero is a
+    // valid sample, which is all a test encode needs.
+    if matches!(
+        pix_fmt,
+        ffi::AV_PIX_FMT_YUV422P10LE | ffi::AV_PIX_FMT_YUVA444P10LE
+    ) {
+        let planes = if pix_fmt == ffi::AV_PIX_FMT_YUVA444P10LE {
+            4
+        } else {
+            3
+        };
+        for p in 0..planes {
+            fill_plane(frame.data[p], frame.linesize[p], rows, 0)?;
+        }
+        return Ok(frame);
+    }
     // Y = 16, chroma = 128 is video-range black for both layouts we feed.
     fill_plane(frame.data[0], frame.linesize[0], rows, 16)?;
     match pix_fmt {
@@ -1383,7 +1510,7 @@ fn blank_frame(pix_fmt: i32, width: u32, height: u32) -> Result<AVFrame, MediaEr
 }
 
 /// Fill one frame plane with a byte value — a raw-pointer touch, kept small
-/// and auditable like `copy_rgba_into`.
+/// and auditable like `copy_pixels_into`.
 fn fill_plane(ptr: *mut u8, linesize: i32, rows: usize, value: u8) -> Result<(), MediaError> {
     if ptr.is_null() {
         return Err(MediaError::Ffmpeg("encode frame has no data plane".into()));
@@ -1474,16 +1601,10 @@ fn f32_to_i16(s: f32) -> i16 {
     (s.clamp(-1.0, 1.0) * 32767.0).round() as i16
 }
 
-/// Exact byte length of one packed RGBA frame, checked against overflow so a
-/// nonsensical width/height (bad caller input, not file input, but the rule
-/// is the same: no panics — docs/14-ENGINEERING-RULES.md §4) errors instead
-/// of overflowing `i32` arithmetic.
-fn rgba_frame_len(width: i32, height: i32) -> Result<usize, MediaError> {
-    frame_len(width, height, 4)
-}
-
-/// Exact byte length of one packed frame at `bytes_per_px`, with the same
-/// overflow discipline [`rgba_frame_len`] has always had.
+/// Exact byte length of one packed frame at `bytes_per_px`, checked against
+/// overflow so a nonsensical width/height (bad caller input, not file input,
+/// but the rule is the same: no panics — docs/14-ENGINEERING-RULES.md §4)
+/// errors instead of overflowing `i32` arithmetic.
 fn frame_len(width: i32, height: i32, bytes_per_px: usize) -> Result<usize, MediaError> {
     let bytes = i32::try_from(bytes_per_px)
         .map_err(|_| MediaError::Ffmpeg("frame dimensions overflow".into()))?;
@@ -1494,19 +1615,6 @@ fn frame_len(width: i32, height: i32, bytes_per_px: usize) -> Result<usize, Medi
         .ok_or_else(|| MediaError::Ffmpeg("frame dimensions overflow".into()))
 }
 
-/// Copy tight RGBA rows into the (possibly padded) AVFrame planes — the one
-/// raw-pointer touch of the video path, kept small and auditable.
-fn copy_rgba_into(
-    frame: &mut AVFrame,
-    rgba: &[u8],
-    width: i32,
-    height: i32,
-) -> Result<(), MediaError> {
-    copy_pixels_into(frame, rgba, width, height, 4, false)
-}
-
-/// As [`copy_rgba_into`], for any packed pixel size, optionally swapping each
-/// `u16` sample's two bytes on the way (the big-endian still formats).
 /// Scatter interleaved scene-linear float RGBA into a planar `gbrapf32le`
 /// frame — the one shape OpenEXR's encoder takes.
 ///
@@ -1562,6 +1670,10 @@ fn copy_planar_f32_into(
     Ok(())
 }
 
+/// Copy tight packed rows into the (possibly padded) AVFrame planes, any pixel
+/// size, optionally swapping each `u16` sample's two bytes on the way (the
+/// big-endian still formats). The one raw-pointer touch of the frame paths,
+/// kept small and auditable.
 fn copy_pixels_into(
     frame: &mut AVFrame,
     rgba: &[u8],
@@ -1623,6 +1735,7 @@ mod tests {
             bit_rate: None,
             max_rate: None,
             colour: ColourTags::Srgb,
+            depth: BitDepth::Eight,
         }
     }
 
@@ -1633,10 +1746,10 @@ mod tests {
         let candidates = encoder_candidates(VideoCodec::H264);
         // Simulate a machine where NVENC and AMF exist but cannot open
         // (wrong GPU vendor) and QSV is absent: software must win.
-        let picked = pick_first_working(&candidates, |name| name == "libx264");
+        let picked = pick_first_working(candidates, |name| name == "libx264");
         assert_eq!(picked, Some("libx264"));
         // Simulate a working NVIDIA machine: the first rung wins.
-        let picked = pick_first_working(&candidates, |name| {
+        let picked = pick_first_working(candidates, |name| {
             name.ends_with("_nvenc") || name.starts_with("libx")
         });
         assert_eq!(picked, Some("h264_nvenc"));
@@ -1716,6 +1829,99 @@ mod tests {
         let input = crate::probe::open_input(&(&path).into()).unwrap();
         let tag = input.streams()[0].codecpar().codec_tag;
         assert_eq!(&tag.to_le_bytes(), b"hvc1");
+    }
+
+    /// A file tagged BT.709 holds BT.709 YUV, and reads back as the colour
+    /// that went in. Writing BT.601 under a 709 tag turned red orange in every
+    /// other player while Lumit, reading 601 too, saw nothing wrong.
+    #[test]
+    fn video_is_written_and_read_in_the_matrix_it_states() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("matrix.mp4");
+        let (w, h) = (1280u32, 720u32);
+        let mut enc = Encoder::open(
+            &path,
+            Some(&video_settings(VideoCodec::H264, w, h)),
+            None,
+            &Metadata::new(),
+        )
+        .unwrap();
+        let rgba = [200u8, 60, 40, 255].repeat((w * h) as usize);
+        for _ in 0..4 {
+            enc.write_rgba(&rgba).unwrap();
+        }
+        enc.finish().unwrap();
+
+        let index = crate::index::build_frame_index(&path).unwrap();
+        let mut dec = crate::decode::VideoDecoder::open(&path, index).unwrap();
+        let mid = (h / 2 * w + w / 2) as usize;
+        // The luma tap reads full range: BT.709 luma of (200, 60, 40) is 88,
+        // BT.601's is 100.
+        let y = dec.frame_luma(0).unwrap().luma[mid] * 255.0;
+        assert!((y - 88.0).abs() < 2.0, "stored luma {y}");
+        let px = &dec.frame_rgba(0, None).unwrap().rgba[mid * 4..mid * 4 + 3];
+        for (got, want) in px.iter().zip([200u8, 60, 40]) {
+            assert!(got.abs_diff(want) <= 3, "read back {px:?}");
+        }
+    }
+
+    /// Every ProRes kind opens, writes a .mov with PCM sound, and comes back
+    /// tagged as the profile it claims. The tag is what an editor reads to
+    /// know which ProRes it has, and whether it holds alpha.
+    #[test]
+    fn prores_round_trips_through_our_own_probe() {
+        let dir = tempfile::tempdir().unwrap();
+        for (codec, tag) in [
+            (VideoCodec::ProRes422Proxy, b"apco"),
+            (VideoCodec::ProRes422Lt, b"apcs"),
+            (VideoCodec::ProRes422, b"apcn"),
+            (VideoCodec::ProRes422Hq, b"apch"),
+            (VideoCodec::ProRes4444, b"ap4h"),
+            (VideoCodec::ProRes4444Xq, b"ap4x"),
+        ] {
+            let path = dir.path().join(format!("{}.mov", codec.label()));
+            let mut enc = Encoder::open(
+                &path,
+                Some(&video_settings(codec, 320, 240)),
+                Some(&AudioSettings {
+                    rate: 48_000,
+                    bit_rate: 0,
+                    codec: AudioCodec::PcmS24,
+                    channels: 2,
+                }),
+                &Metadata::new(),
+            )
+            .unwrap();
+            let rgba = vec![90u8; 320 * 240 * 4];
+            for _ in 0..30 {
+                enc.write_rgba(&rgba).unwrap();
+                enc.write_audio(&[0.0; 1600 * 2]).unwrap();
+            }
+            enc.finish().unwrap();
+            let probe = crate::probe::probe(&path).unwrap();
+            let video = probe.video.unwrap();
+            assert_eq!(video.codec, "prores");
+            assert_eq!((video.width, video.height), (320, 240));
+            let input = crate::probe::open_input(&(&path).into()).unwrap();
+            let stream_tag = input.streams()[0].codecpar().codec_tag;
+            assert_eq!(&stream_tag.to_le_bytes(), tag);
+        }
+
+        // Sixteen-bit frames go in little-endian: mid grey stays mid grey.
+        let path = dir.path().join("deep.mov");
+        let mut v = video_settings(VideoCodec::ProRes422Hq, 320, 240);
+        v.depth = BitDepth::Sixteen;
+        let mut enc = Encoder::open(&path, Some(&v), None, &Metadata::new()).unwrap();
+        let grey = [0x6000u16, 0x6000, 0x6000, 0xffff]
+            .map(u16::to_le_bytes)
+            .concat()
+            .repeat(320 * 240);
+        enc.write_rgba(&grey).unwrap();
+        enc.finish().unwrap();
+        let index = crate::index::build_frame_index(&path).unwrap();
+        let mut dec = crate::decode::VideoDecoder::open(&path, index).unwrap();
+        let red = dec.frame_rgba(0, None).unwrap().rgba[0];
+        assert!(red.abs_diff(0x60) <= 2, "read back {red}");
     }
 
     /// Every sample rate, sample width and channel layout the export dialog
@@ -1968,11 +2174,11 @@ mod tests {
     /// wrong, too-small size (release builds) for large-but-plausible
     /// dimensions. It must report a typed error instead.
     #[test]
-    fn rgba_frame_len_errors_instead_of_overflowing() {
+    fn frame_len_errors_instead_of_overflowing() {
         // 50,000 x 50,000 x 4 overflows i32::MAX (2,147,483,647).
-        assert!(rgba_frame_len(50_000, 50_000).is_err());
-        assert_eq!(rgba_frame_len(2, 2).unwrap(), 16);
-        assert_eq!(rgba_frame_len(320, 240).unwrap(), 320 * 240 * 4);
+        assert!(frame_len(50_000, 50_000, 4).is_err());
+        assert_eq!(frame_len(2, 2, 4).unwrap(), 16);
+        assert_eq!(frame_len(320, 240, 4).unwrap(), 320 * 240 * 4);
     }
 
     /// Metadata really lands in the container: written on the way out, read

@@ -1375,6 +1375,7 @@ mod tests {
             bit_rate: None,
             max_rate: None,
             colour: ColourTags::default(),
+            depth: lumit_media::encode::BitDepth::Eight,
         };
         let mut encoder = Encoder::open(&clip, Some(&settings), None, &Metadata::new()).unwrap();
         for n in 0..12u8 {
@@ -1517,6 +1518,7 @@ mod tests {
             bit_rate: None,
             max_rate: None,
             colour: ColourTags::default(),
+            depth: lumit_media::encode::BitDepth::Eight,
         };
         let mut encoder = Encoder::open(&clip, Some(&settings), None, &Metadata::new()).unwrap();
         for n in 0..12u8 {
