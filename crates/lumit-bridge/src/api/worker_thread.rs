@@ -4573,6 +4573,13 @@ fn viewed_through(
 /// Let go of everything held for a closed view.
 #[frb(ignore)]
 fn close_view(state: &mut WorkerState, view: u32) {
+    if state
+        .last_shown
+        .as_ref()
+        .is_some_and(|shown| shown.0 == view)
+    {
+        state.last_shown = None;
+    }
     state.looks.remove(&view);
     state.camera_views.remove(&view);
     state.names.forget_view(view);
@@ -4736,14 +4743,9 @@ fn render_item(
     };
     state.set_view_id(req.view);
     look_at(state, req.view);
+    // Not `last_shown`: the fill, the cache bar and the drags follow the
+    // active composition view, and this item's scratch comp is none of those.
     let comp = req.of.comp_id();
-    state.last_shown = Some((
-        req.view,
-        CompositionReference::new(req.project.id, comp),
-        req.frame,
-        req.scale,
-    ));
-    state.fill_exhausted = false;
     watched(state, stream, req.frame, |state, stream| {
         publish_frame(
             state,
