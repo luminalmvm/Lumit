@@ -1877,6 +1877,131 @@ void main() {
           closeTo(still(placed.rotationY), 1e-9));
     });
 
+    /// The Viewer's own parent walk, which boxes follow during a drag, puts a
+    /// child where the engine does: under a 2D null, a camera on a doubled
+    /// null, a two-node camera and an aimed light. A point light on each is
+    /// the probe, its engine mark against the walk through the same view.
+    testWidgets('the Viewer places children of every kind of parent as the engine does',
+        (tester) async {
+      final p = withLayer();
+      final comp = p.comp;
+      void set(LayerReference l, Map<BridgeTransformProp, double> values) =>
+          l.setTransforms(
+              props: values.keys.toList(),
+              values: [for (final v in values.values) BridgeScalar.static_(v)]);
+
+      final flat = comp.addNullLayer();
+      set(flat, {
+        BridgeTransformProp.positionX: 300,
+        BridgeTransformProp.positionZ: -50,
+        BridgeTransformProp.rotationX: 60,
+        BridgeTransformProp.rotation: 10,
+      });
+      final big = comp.addNullLayer();
+      big.setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      set(big, {
+        BridgeTransformProp.positionX: 900,
+        BridgeTransformProp.scaleX: 200,
+        BridgeTransformProp.scaleY: 200,
+        BridgeTransformProp.rotationY: 20,
+      });
+      final onBig = comp.addCameraLayer();
+      onBig.setParent(parent: big.internallayerId, frame: 0);
+      set(onBig, {
+        BridgeTransformProp.positionX: 40,
+        BridgeTransformProp.positionY: -30,
+        BridgeTransformProp.positionZ: -500,
+        BridgeTransformProp.rotationY: 15,
+      });
+      final aimed = comp.addCameraLayer();
+      final camera = aimed.getCameraSettings()!;
+      aimed.setCameraSettings(
+          settings: BridgeCameraSettings(
+              twoNode: true,
+              depthOfField: false,
+              lockToZoom: camera.lockToZoom,
+              filmSizeMm: camera.filmSizeMm,
+              pxPerMetre: camera.pxPerMetre));
+      set(aimed, {
+        BridgeTransformProp.positionZ: -600,
+        BridgeTransformProp.rotation: 20,
+        BridgeTransformProp.poiX: 400,
+        BridgeTransformProp.poiY: 300,
+        BridgeTransformProp.poiZ: 200,
+      });
+      final beam = comp.addLightLayer(kind: 1);
+      beam.setLightSettings(
+          settings: const BridgeLightSettings(
+              kind: BridgeLightKind.spot,
+              falloff: BridgeLightFalloff.none,
+              twoNode: true));
+      set(beam, {
+        BridgeTransformProp.positionZ: -300,
+        BridgeTransformProp.rotation: -15,
+        BridgeTransformProp.poiX: 700,
+        BridgeTransformProp.poiY: 100,
+        BridgeTransformProp.poiZ: 500,
+      });
+      final probes = [
+        for (final parent in [flat, onBig, aimed, beam])
+          () {
+            final probe = comp.addLightLayer(kind: 0);
+            probe.setParent(parent: parent.internallayerId, frame: 0);
+            set(probe, {
+              BridgeTransformProp.positionX: 30,
+              BridgeTransformProp.positionY: -20,
+              BridgeTransformProp.positionZ: 40,
+            });
+            return probe;
+          }()
+      ];
+
+      const view = BridgeCameraPose(
+          zoom: 2000,
+          x: 900,
+          y: 300,
+          z: -2500,
+          rotationX: -10,
+          rotationY: 25,
+          rotationZ: 0);
+      final rows = comp.viewProjection(frame: BigInt.zero, view: view);
+      final marks = comp.wireframes(
+          frame: BigInt.zero,
+          view: view,
+          ground: false,
+          only: [for (final probe in probes) probe.internallayerId],
+          mediaSizes: const []);
+      final layers = comp.getModel().layers;
+      final byId = {for (final e in layers) e.layer.internallayerId: e};
+      for (final probe in probes) {
+        final entry = byId[probe.internallayerId]!;
+        final parent = parentMatrix(
+          entry,
+          byId,
+          (e) => e.info.transform,
+          (s, _, __) => (s as BridgeScalar_Static).field0,
+          cameraPose: (c) => c.layer.cameraOwnPoseAt(frame: BigInt.zero),
+        )!;
+        final m = parent.storage;
+        final w = [
+          for (var r = 0; r < 3; r++)
+            m[r] * 30 + m[4 + r] * -20 + m[8 + r] * 40 + m[12 + r]
+        ];
+        double row(int r) =>
+            rows[r * 4] * w[0] +
+            rows[r * 4 + 1] * w[1] +
+            rows[r * 4 + 2] * w[2] +
+            rows[r * 4 + 3];
+        final mark = marks.lights
+            .firstWhere((l) => l.layer == probe.internallayerId)
+            .at;
+        expect(row(0) / row(2), closeTo(mark.x, 0.05),
+            reason: 'x under ${entry.info.parent}');
+        expect(row(1) / row(2), closeTo(mark.y, 0.05),
+            reason: 'y under ${entry.info.parent}');
+      }
+    });
+
     testWidgets('relinking the missing footage clears the badge',
         (tester) async {
       final p = withLayer();

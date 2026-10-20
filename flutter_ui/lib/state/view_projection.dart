@@ -77,4 +77,28 @@ class CameraPoses {
     _byLayer[id] = (key, pose);
     return pose;
   }
+
+  final Map<Object, (Object, BridgeCameraPose?)> _ownByLayer = {};
+
+  /// The camera's own placement inside its parents, aim and solve included:
+  /// what a layer parented to it is placed by. Held as [of] is.
+  BridgeCameraPose? ownOf(
+    LayerReference layer, {
+    required Object id,
+    required int frame,
+    required BigInt? revision,
+    required int generation,
+  }) {
+    final key = (frame, revision, generation);
+    final held = _ownByLayer[id];
+    if (held != null && held.$1 == key) return held.$2;
+    BridgeCameraPose? pose;
+    try {
+      pose = layer.cameraOwnPoseAt(frame: BigInt.from(frame));
+    } catch (_) {
+      // A camera that has gone. Asked again once the document moves.
+    }
+    _ownByLayer[id] = (key, pose);
+    return pose;
+  }
 }

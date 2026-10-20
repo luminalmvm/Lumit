@@ -2831,6 +2831,13 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceCameraOwnAim(
           that: this, frame: frame, aim: aim);
 
+  /// This camera's own placement at `frame`, inside its parents: its eye, and
+  /// its turn with a two-node camera's aim and a solve link in it. What a
+  /// layer parented to it is placed by. `None` on any other kind.
+  BridgeCameraPose? cameraOwnPoseAt({required BigInt frame}) =>
+      BridgeLib.instance.api
+          .crateApiLayerLayerReferenceCameraOwnPoseAt(that: this, frame: frame);
+
   /// Stop the shape animating, keeping the shape it shows at `time`.
   ///
   /// The stopwatch turning off, and it matches what the stopwatch does

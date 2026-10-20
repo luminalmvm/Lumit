@@ -698,6 +698,26 @@ impl LayerReference {
         })
     }
 
+    /// This camera's own placement at `frame`, inside its parents: its eye, and
+    /// its turn with a two-node camera's aim and a solve link in it. What a
+    /// layer parented to it is placed by. `None` on any other kind.
+    #[frb(sync)]
+    pub fn camera_own_pose_at(
+        &self,
+        frame: u64,
+    ) -> Result<Option<crate::api::layer::BridgeCameraPose>, BridgeError> {
+        self.with_camera_at(frame, |doc, comp, layer, t| {
+            let own = lumit_core::track::own_camera_pose_of(
+                doc,
+                comp,
+                layer,
+                t,
+                &lumit_render::track::Store,
+            )?;
+            Some(crate::api::layer::BridgeCameraPose::of(own.pose))
+        })
+    }
+
     /// The camera's own values that put it at `aim` in the comp at `frame`:
     /// the eye, the rotation rows and the point of interest carried back into
     /// its parent's space. What a camera drag writes, so a parented camera
