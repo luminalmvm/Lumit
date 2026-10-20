@@ -185,6 +185,7 @@ class ViewerLayerMap {
     double anchorX,
     double anchorY, {
     required Offset position,
+    double? z,
   }) =>
       ViewerLayerMap(
         px: position.dx,
@@ -198,7 +199,7 @@ class ViewerLayerMap {
         origin: origin,
         viewScale: viewScale,
         parent: parent,
-        depth: depth,
+        depth: z == null ? depth : depth?.at(z),
       );
 
   /// Whether this layer is seen through a camera rather than flat.
@@ -212,25 +213,9 @@ class ViewerLayerMap {
   /// the layer's own placement, which has no z of its own because the layer
   /// is flat.
   late final List<double> _plane = () {
-    final d = depth!;
-    final rx = d.rotationX * math.pi / 180;
-    final ry = d.rotationY * math.pi / 180;
-    final (sinX, cosX) = (math.sin(rx), math.cos(rx));
-    final (sinY, cosY) = (math.sin(ry), math.cos(ry));
-    // Where a layer point lands in its parent's space: the compositor's
-    // T · Ry · Rx · Rz · S · T(-anchor), worked through by hand.
-    (double, double, double) place(double x, double y) {
-      final dx = (x - ax) * sx;
-      final dy = (y - ay) * sy;
-      final zx = dx * cos - dy * sin;
-      final zy = dx * sin + dy * cos;
-      final (yy, yz) = (zy * cosX, zy * sinX);
-      return (px + zx * cosY + yz * sinY, py + yy, d.z - zx * sinY + yz * cosY);
-    }
-
-    final o = place(0, 0);
-    final ex = place(1, 0);
-    final ey = place(0, 1);
+    final o = inParent(0, 0);
+    final ex = inParent(1, 0);
+    final ey = inParent(0, 1);
     final r = _parentRows;
     return [
       for (var row = 0; row < 3; row++) ...[
@@ -242,6 +227,34 @@ class ViewerLayerMap {
   }();
 
   late final List<double>? _planeInverse = _invert3(_plane);
+
+  late final (double, double, double, double) _turns = () {
+    final rx = (depth?.rotationX ?? 0) * math.pi / 180;
+    final ry = (depth?.rotationY ?? 0) * math.pi / 180;
+    return (math.sin(rx), math.cos(rx), math.sin(ry), math.cos(ry));
+  }();
+
+  /// Whether the layer is turned out of its parent's flat by its X or Y
+  /// rotation, so a point moved on it moves in depth too.
+  bool get tilted =>
+      projected && (_turns.$1.abs() > 1e-9 || _turns.$3.abs() > 1e-9);
+
+  /// Where the layer point ([x], [y]) is in its parent's space, depth and
+  /// all: the compositor's T · Ry · Rx · Rz · S · T(-anchor), worked through
+  /// by hand. A 2D layer's is at depth 0.
+  (double, double, double) inParent(double x, double y) {
+    final (sinX, cosX, sinY, cosY) = _turns;
+    final dx = (x - ax) * sx;
+    final dy = (y - ay) * sy;
+    final zx = dx * cos - dy * sin;
+    final zy = dx * sin + dy * cos;
+    final (yy, yz) = (zy * cosX, zy * sinX);
+    return (
+      px + zx * cosY + yz * sinY,
+      py + yy,
+      (depth?.z ?? 0) - zx * sinY + yz * cosY,
+    );
+  }
 
   /// Comp pixels, still to be divided by [w], to screen.
   Offset _shown(double x, double y, double w) {
@@ -421,6 +434,15 @@ class ViewerDepth {
     required this.rotationY,
     this.parent,
   });
+
+  /// The same layer at Position z [z].
+  ViewerDepth at(double z) => ViewerDepth(
+        view: view,
+        z: z,
+        rotationX: rotationX,
+        rotationY: rotationY,
+        parent: parent,
+      );
 
   /// The view's rows times the parent chain.
   List<double> parentRows() {
