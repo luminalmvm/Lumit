@@ -168,6 +168,10 @@ class ViewerSurface {
   /// from the comp's.
   PreviewResolution resolution;
 
+  /// Frame every layer the first time the view is drawn, which is how a new
+  /// 3D viewport opens. Not written down.
+  bool frameOnOpen = false;
+
   /// A 3D viewport's picture: the size it fills round the comp's middle,
   /// comp pixels, which its panel measures, and the share of its tier it is
   /// drawn at so a wide pane costs at most twice the comp's pixels.

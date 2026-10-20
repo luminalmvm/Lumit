@@ -1204,6 +1204,9 @@ class LumitUiState extends ChangeNotifier {
     // and that asks for the picture itself.
     final viewport = views.isViewport(view);
     if (viewport && !view.cameraViews.containsKey(view.compId)) {
+      // Framed the first time it shows a comp it has no view of yet.
+      view.frameOnOpen = !view.cameraPoses
+          .containsKey('${view.compId}/${ViewerView.free.name}');
       setViewerView(ViewerView.free, viewId: view.engineId);
       return;
     }
@@ -1385,7 +1388,7 @@ class LumitUiState extends ChangeNotifier {
 
   /// Window ▸ 3D viewport, and the 3D view menu's own row: a Viewer panel
   /// beside the one being worked in, whose view looks at the same comp
-  /// through a free camera of its own.
+  /// through a free camera of its own and frames every layer as it opens.
   void addViewportPanel() {
     final made = addPane(split, Panel.viewer, beside: currentViewerPane);
     views.viewportPanes.add(made);
@@ -1393,6 +1396,7 @@ class LumitUiState extends ChangeNotifier {
     workspace.touch();
     saveLayout();
     final view = views.forPane(made).first;
+    view.frameOnOpen = true;
     frontView(view.id);
     setViewerView(ViewerView.free, viewId: view.engineId);
     requestFrame();
@@ -3994,6 +3998,12 @@ class LumitUiState extends ChangeNotifier {
   /// until it ends.
   bool cameraDragging = false;
 
+  /// Whether a 3D viewport is flying, which keeps the keys from everything
+  /// else until it lands, and whether the right button is down in one, which
+  /// keeps the fly keys for it.
+  bool cameraFlying = false;
+  bool flyKeysArmed = false;
+
   /// The 3D views view [viewId] can be switched to: a 3D viewport's free
   /// view only in a viewport.
   List<ViewerView> viewsOffered(int viewId) => [
@@ -4025,6 +4035,14 @@ class LumitUiState extends ChangeNotifier {
 
   final Map<int, ((int, int), double)> _canvasDue = {};
 
+  /// A 3D viewport's view ended a drag or a flight: the Viewer's own menu
+  /// under the button that did it stays shut. Cleared by the next press.
+  bool viewerNavigated = false;
+
+  /// How fast a 3D viewport flies, as a share of its scene's own pace, set
+  /// with the wheel mid-flight and kept for the session.
+  double flySpeed = 1;
+
   /// The view Scopes and Levels read: the active one, or with a 3D viewport
   /// in front, a view of the same comp beside it, as a viewport's picture has
   /// the ground drawn in.
@@ -4049,6 +4067,16 @@ class LumitUiState extends ChangeNotifier {
   bool isViewport(int viewId) {
     final view = _surfaceOf(viewId);
     return view != null && views.isViewport(view);
+  }
+
+  /// Put view [viewId], a 3D viewport, on its free view at [pose]: where plain
+  /// navigation takes it from the comp's camera or a fixed view.
+  void dropToFreeView(int viewId, BridgeCameraPose pose) {
+    final view = _surfaceOf(viewId);
+    if (view == null || compFor(view) == null) return;
+    setViewerView(ViewerView.free, viewId: viewId);
+    setViewerViewPose(pose, viewId: viewId);
+    rememberSession();
   }
 
   /// Switch the active view to its 3D view shortcut [slot]. False with no

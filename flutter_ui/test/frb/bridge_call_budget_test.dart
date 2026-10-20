@@ -33,6 +33,7 @@ import 'package:lumit_flutter/src/rust/api/project_item.dart';
 import 'package:lumit_flutter/src/rust/api/state.dart';
 import 'package:lumit_flutter/state/animated_mask_paths.dart';
 import 'package:lumit_flutter/state/comp_time.dart';
+import 'package:lumit_flutter/state/dock.dart' show Panel;
 import 'package:lumit_flutter/state/dropper.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
@@ -1566,6 +1567,74 @@ void main() {
           reason: 'hovering re-found the camera:\n${counter.ranking()}',
         );
       }
+    });
+
+    /// **A 3D viewport moves with the mouse and no tool, and costs what a
+    /// view's own camera drag costs.** Hovering it asks nothing, and a right
+    /// button orbit asks for the new view and its outlines, not the world.
+    testWidgets('a 3D viewport asks nothing on hover and little to orbit',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      comp
+          .addSolidLayer()
+          .setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      comp.addCameraLayer();
+      p.uiState.views.viewportPanes.add((panel: Panel.viewer, instance: 0));
+      p.uiState.setSelectedComp(comp);
+      p.uiState.model.refresh();
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+      expect(p.uiState.viewOf(p.uiState.activeViewId), ViewerView.free);
+
+      final centre = tester.getCenter(find.byType(ViewerPanelFrb));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: centre);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(centre + const Offset(1, 1));
+      await tester.pump(const Duration(milliseconds: 16));
+      counter
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await mouse.moveTo(centre + Offset(i * 3.0, i * 2.0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      counter.counting = false;
+      // ignore: avoid_print
+      print('VIEWPORT HOVER COST ${counter.total} calls\n${counter.ranking()}');
+      expect(counter.total, 0,
+          reason: 'hovering a viewport asked the engine:\n${counter.ranking()}');
+
+      final right = await tester.createGesture(
+          kind: PointerDeviceKind.mouse, buttons: kSecondaryMouseButton);
+      await mouse.removePointer();
+      await right.addPointer(location: centre);
+      await right.down(centre);
+      await tester.pump(const Duration(milliseconds: 16));
+      counter
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await right.moveBy(const Offset(4, 1));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await right.up();
+      await tester.pump(const Duration(milliseconds: 16));
+      counter.counting = false;
+      await right.removePointer();
+      await mouse.addPointer(location: centre);
+      // ignore: avoid_print
+      print('VIEWPORT ORBIT COST ${counter.total} calls\n${counter.ranking()}');
+      // About 75 for twenty moves when this was written.
+      expect(counter.total, lessThanOrEqualTo(90),
+          reason: 'an orbit asked too much:\n${counter.ranking()}');
     });
 
     /// **Nor must fronting a composition, while nobody is looking through

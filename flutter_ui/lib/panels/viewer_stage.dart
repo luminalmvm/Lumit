@@ -980,6 +980,7 @@ class ViewerStage extends StatelessWidget {
             // active camera.
             ViewerCameraLayer(
               active: uiState.tools.tool.group == ToolGroup.camera,
+              viewport: uiState.isViewport(viewId),
               tool: uiState.tools.tool,
               comp: comp,
               viewId: viewId,

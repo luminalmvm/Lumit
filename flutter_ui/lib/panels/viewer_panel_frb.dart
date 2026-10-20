@@ -770,10 +770,12 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
             );
 
         return Listener(
-          // The middle button pans, like in other software.
+          // The middle button pans, like in other software, except in a 3D
+          // viewport, where it moves the view.
           onPointerMove: (event) {
             if (event.buttons == kMiddleMouseButton &&
-                ui.dropper.value == null) {
+                ui.dropper.value == null &&
+                !viewport) {
               _panBy(event.delta);
             }
           },

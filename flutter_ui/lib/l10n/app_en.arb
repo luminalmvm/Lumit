@@ -5916,6 +5916,10 @@
   "@keyLookAtAllLayers": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keyFrameAllLayersInA3dViewport": "Frame all layers in a 3D viewport",
+  "@keyFrameAllLayersInA3dViewport": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyOpenA3dViewport": "Open a 3D viewport",
   "@keyOpenA3dViewport": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
@@ -7167,6 +7171,15 @@
   "panel3dViewport": "3D viewport",
   "@panel3dViewport": {
     "description": "The name at the top of a 3D viewport: a Viewer panel looking through a camera of its own, moved with the mouse."
+  },
+  "viewportFlySpeed": "Speed ×{speed}",
+  "@viewportFlySpeed": {
+    "description": "Beside the pointer for a moment while the wheel changes how fast a 3D viewport flies. {speed} is how many times its usual pace, such as 1.56.",
+    "placeholders": {
+      "speed": {
+        "type": "String"
+      }
+    }
   },
   "sourceTitle": "Source",
   "@sourceTitle": {

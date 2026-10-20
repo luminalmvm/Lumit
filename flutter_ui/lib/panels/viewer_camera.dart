@@ -37,6 +37,10 @@
 // one carries it into the last custom view and turns that, as After Effects
 // does.
 //
+// In a 3D viewport the same drags need no tool: the right button orbits
+// round what is under the pointer, the middle one tracks and the wheel
+// dollies. Holding the right button and pressing W, A, S, D, Q or E flies.
+//
 // The maths below is pure and in composition pixels; the widget under it only
 // turns drags into these calls and commits transform properties.
 
@@ -44,6 +48,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/l10n/strings.dart';
@@ -55,6 +60,8 @@ import 'package:lumit_flutter/src/rust/api/system.dart';
 import 'package:lumit_flutter/state/preview_throttle.dart';
 import 'package:lumit_flutter/state/tools.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
+import 'package:lumit_flutter/state/viewer_views.dart' show ViewerSurface;
+import 'package:lumit_flutter/widgets/controls.dart' show ThemeScope;
 import 'package:lumit_flutter/widgets/drag_escape.dart';
 
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
@@ -468,6 +475,17 @@ CameraPose? frameFlat(CameraPose pose, List<(double, double, double)> points,
   );
 }
 
+/// [pose] turned about its own eye by a drag of [dx], [dy] pixels: the
+/// fly mode's look. Up looks up, and it never tips over the top.
+CameraPose lookCamera(CameraPose pose, double dx, double dy) {
+  final (pitch, yaw, roll) = pose.rotation;
+  return pose.copyWith(rotation: (
+    (pitch - dy * orbitDegreesPerPixel).clamp(-89.9, 89.9),
+    yaw + dx * orbitDegreesPerPixel,
+    roll,
+  ));
+}
+
 /// A camera layer at the top of the active view's comp, placed where that
 /// custom view looks from, as one undo step. False in any other view.
 bool cameraFromView(LumitState app, LumitUiState ui) {
@@ -529,6 +547,20 @@ ToolMode cameraMoveForButtons(int buttons) {
   if (buttons & kSecondaryMouseButton != 0) return ToolMode.cameraDolly;
   return ToolMode.cameraOrbit;
 }
+
+/// What W, A, S, D, Q and E move a flight by: across, up and forward, by
+/// where the keys sit rather than what they print.
+final Map<PhysicalKeyboardKey, (double, double, double)> _flyMoves = {
+  PhysicalKeyboardKey.keyW: (0, 0, 1),
+  PhysicalKeyboardKey.keyS: (0, 0, -1),
+  PhysicalKeyboardKey.keyD: (1, 0, 0),
+  PhysicalKeyboardKey.keyA: (-1, 0, 0),
+  PhysicalKeyboardKey.keyE: (0, 1, 0),
+  PhysicalKeyboardKey.keyQ: (0, -1, 0),
+};
+
+/// Whether [key] is one a flight moves by.
+bool isFlyKey(PhysicalKeyboardKey key) => _flyMoves.containsKey(key);
 
 /// A view's pose as the tools work in it: one-node, and never aimed.
 CameraPose poseOfView(BridgeCameraPose view) => CameraPose(
@@ -602,8 +634,12 @@ bool writeCameraPose(
 
 /// The camera tools over the picture.
 class ViewerCameraLayer extends StatefulWidget {
-  /// Whether a camera tool is armed. Inert otherwise.
+  /// Whether a camera tool is armed. Otherwise only a 3D viewport's own
+  /// buttons move the camera.
   final bool active;
+
+  /// Whether the view is a 3D viewport, moved without a tool.
+  final bool viewport;
 
   final ToolMode tool;
   final CompositionReference comp;
@@ -633,6 +669,7 @@ class ViewerCameraLayer extends StatefulWidget {
   const ViewerCameraLayer({
     super.key,
     required this.active,
+    this.viewport = false,
     required this.tool,
     required this.comp,
     required this.viewId,
@@ -651,18 +688,21 @@ class ViewerCameraLayer extends StatefulWidget {
   State<ViewerCameraLayer> createState() => _ViewerCameraLayerState();
 }
 
-class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
+class _ViewerCameraLayerState extends State<ViewerCameraLayer>
+    with SingleTickerProviderStateMixin {
   Offset? _pointer;
 
   @override
   void initState() {
     super.initState();
     widget.uiState.viewerCameraRequest.addListener(_onCommand);
+    _frameOnOpen();
   }
 
   @override
   void didUpdateWidget(ViewerCameraLayer old) {
     super.didUpdateWidget(old);
+    _frameOnOpen();
     if (old.uiState == widget.uiState) return;
     old.uiState.viewerCameraRequest.removeListener(_onCommand);
     widget.uiState.viewerCameraRequest.addListener(_onCommand);
@@ -678,9 +718,44 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     _throttle.cancel();
     _escape.dispose();
     _closeUndoStep();
+    _landFlight();
+    _flyClock.dispose();
+    _speedFade?.cancel();
     if (_start != null) widget.uiState.cameraDragging = false;
     super.dispose();
   }
+
+  /// A new 3D viewport frames every layer the first time it is drawn, once
+  /// the frame it is drawn in has laid out.
+  void _frameOnOpen() {
+    if (!widget.viewport || !(_surface?.frameOnOpen ?? false)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final view in widget.uiState.views.views) {
+        if (view.engineId != widget.viewId || !view.frameOnOpen) continue;
+        if (widget.uiState.viewPoseOf(widget.viewId) == null) return;
+        view.frameOnOpen = false;
+        _look(ViewerCameraCommand.lookAtAll, quiet: true);
+      }
+    });
+  }
+
+  /// Whether the drag in hand was begun without a camera tool, by a
+  /// viewport's own buttons. It turns round what is under the pointer.
+  bool _navigating = false;
+
+  /// The buttons the last press held, which say what a navigation is.
+  int _buttons = 0;
+  Offset _pressAt = Offset.zero;
+
+  /// While the right button is down in a viewport: the fly keys held, where
+  /// the flight has got to, how fast it goes, and the clock that moves it.
+  bool _flyArmed = false;
+  final Set<PhysicalKeyboardKey> _flyKeys = {};
+  CameraPose? _flyPose;
+  double _flySpeed = 0;
+  late final Ticker _flyClock = createTicker(_flyStep);
+  Duration _flyLast = Duration.zero;
 
   /// What is being moved and the pose it had when the drag began - the whole
   /// gesture is relative to that, so a drag never compounds its own rounding.
@@ -960,7 +1035,37 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.active) return const SizedBox.shrink();
+    final speed = _speedShown;
+    final t = ThemeScope.of(context).theme;
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: widget.active
+                ? _tools()
+                : widget.viewport
+                    ? _navigation()
+                    : const SizedBox.shrink(),
+          ),
+          // How fast a flight goes, for a moment after the wheel sets it.
+          if (speed != null)
+            Positioned(
+              left: speed.$2.dx + 16,
+              top: speed.$2.dy + 16,
+              child: IgnorePointer(
+                child: Text(
+                  l10n.viewportFlySpeed(speed.$1.toStringAsFixed(2)),
+                  style: t.caption.copyWith(color: widget.mark),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// The camera tools' own layer, while one is in hand.
+  Widget _tools() {
     final unified = widget.tool == ToolMode.cameraUnified;
     final stack = Stack(
       children: [
@@ -984,56 +1089,347 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
         ),
       ],
     );
-    return Positioned.fill(
-      // The hardware crosshair leads; the badge beside it, drawn by
-      // the app, only says which camera move.
-      child: DrawnPointerRegion(
-        cursor: SystemMouseCursors.precise,
-        onPointer: (at) => setState(() => _pointer = at),
-        // The unified tool reads raw pointers, because a pan recogniser is
-        // told nothing about which button is down and the button is the whole
-        // of what picks the move. The stage's own pan is switched off while a
-        // camera tool is armed, so nothing underneath takes the drag instead.
-        child: Listener(
-          onPointerSignal: _wheel,
-          // A trackpad's two-finger push dollies as the wheel does.
-          onPointerPanZoomUpdate: (e) =>
-              _dollyBy(e.localPosition, -e.panDelta.dy),
-          child: unified
-              ? Listener(
-                  behavior: HitTestBehavior.opaque,
-                  onPointerDown: (e) {
-                    _move = cameraMoveForButtons(e.buttons);
-                    _begin(e.localPosition);
-                  },
-                  onPointerMove: (e) => _drag(e.localPosition, e.delta),
-                  onPointerUp: (_) => _end(),
-                  onPointerCancel: (_) => _end(),
-                  child: stack,
-                )
-              : GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapUp: (_) {
-                    if (_target == null) _sayNoCamera();
-                  },
-                  onPanStart: (d) => _begin(d.localPosition),
-                  onPanUpdate: (d) => _drag(d.localPosition, d.delta),
-                  onPanEnd: (_) => _end(),
-                  onPanCancel: _end,
-                  child: stack,
-                ),
-        ),
+    // The hardware crosshair leads; the badge beside it, drawn by the app,
+    // only says which camera move.
+    return DrawnPointerRegion(
+      cursor: SystemMouseCursors.precise,
+      onPointer: (at) => setState(() => _pointer = at),
+      // The unified tool reads raw pointers, because a pan recogniser is
+      // told nothing about which button is down and the button is the whole
+      // of what picks the move. The stage's own pan is switched off while a
+      // camera tool is armed, so nothing underneath takes the drag instead.
+      child: Listener(
+        onPointerSignal: _wheel,
+        // A trackpad's two-finger push dollies as the wheel does.
+        onPointerPanZoomUpdate: (e) =>
+            _dollyBy(e.localPosition, -e.panDelta.dy),
+        child: unified
+            ? Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (e) {
+                  _move = cameraMoveForButtons(e.buttons);
+                  _begin(e.localPosition);
+                },
+                onPointerMove: (e) => _drag(e.localPosition, e.delta),
+                onPointerUp: (_) => _end(),
+                onPointerCancel: (_) => _end(),
+                child: stack,
+              )
+            : GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (_) {
+                  if (_target == null) _sayNoCamera();
+                },
+                onPanStart: (d) => _begin(d.localPosition),
+                onPanUpdate: (d) => _drag(d.localPosition, d.delta),
+                onPanEnd: (_) => _end(),
+                onPanCancel: _end,
+                child: stack,
+              ),
       ),
     );
   }
 
+  /// A viewport's navigation with no camera tool in hand: a layer that
+  /// watches the pointer go by to the layers below, taking only the buttons
+  /// a viewport moves with.
+  Widget _navigation() => Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _press,
+        onPointerUp: (_) => _release(),
+        onPointerCancel: (_) => _release(),
+        onPointerSignal: _wheel,
+        onPointerPanZoomStart: _padStart,
+        onPointerPanZoomUpdate: _padUpdate,
+        onPointerPanZoomEnd: (_) => _padEnd(),
+        child: RawGestureDetector(
+          behavior: HitTestBehavior.translucent,
+          gestures: {
+            PanGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<PanGestureRecognizer>(
+              () =>
+                  PanGestureRecognizer(allowedButtonsFilter: _navigatesWith),
+              (r) => r
+                ..dragStartBehavior = DragStartBehavior.down
+                ..onStart = ((d) => _navigate(d.localPosition))
+                ..onUpdate = ((d) => _drag(d.localPosition, d.delta))
+                ..onEnd = ((_) => _release())
+                ..onCancel = _release,
+            ),
+          },
+          child: _start == null || _flyPose != null
+              ? const SizedBox.expand()
+              : CustomPaint(
+                  size: Size.infinite,
+                  painter: _CameraGizmoPainter(
+                    pivot: _pivotMark(),
+                    orbiting: _activeMove == ToolMode.cameraOrbit,
+                    mark: widget.mark,
+                    outline: widget.outline,
+                    accent: widget.accent,
+                  ),
+                ),
+        ),
+      );
+
+  /// This view's own record, for what a viewport keeps of it.
+  ViewerSurface? get _surface {
+    for (final view in widget.uiState.views.views) {
+      if (view.engineId == widget.viewId) return view;
+    }
+    return null;
+  }
+
+  /// Which presses move the camera with no tool: the right and middle
+  /// buttons.
+  bool _navigatesWith(int buttons) =>
+      buttons == kSecondaryMouseButton || buttons == kMiddleMouseButton;
+
+  /// A press, before anything has moved: its buttons, and in a viewport the
+  /// fly keys made ready while the right button is down.
+  void _press(PointerDownEvent event) {
+    _buttons = event.buttons;
+    _pressAt = event.localPosition;
+    widget.uiState.viewerNavigated = false;
+    if (event.buttons == kSecondaryMouseButton && !_flyArmed) {
+      _flyArmed = true;
+      widget.uiState.flyKeysArmed = true;
+      HardwareKeyboard.instance.addHandler(_flyKey);
+      _watchFocus();
+    }
+  }
+
+  /// Leaving the window with the right button down or mid-flight, Alt+Tab
+  /// and the like, lets go and lands, so the keys are never kept from the
+  /// rest of the app when the button comes up somewhere else.
+  void _watchFocus() {
+    _lifecycle ??= AppLifecycleListener(onStateChange: (state) {
+      if (state == AppLifecycleState.resumed) return;
+      if (_start != null) {
+        _end();
+      } else {
+        _landFlight();
+      }
+      _release();
+    });
+  }
+
+  /// A navigation drag has begun at [at]: the right button orbits, or
+  /// tracks with Shift for a mouse with no middle button, and the middle
+  /// button tracks.
+  void _navigate(Offset at) {
+    if (_start != null) return;
+    final right = _buttons & kSecondaryMouseButton != 0;
+    _move = right && !HardwareKeyboard.instance.isShiftPressed
+        ? ToolMode.cameraOrbit
+        : ToolMode.cameraPan;
+    _navigating = true;
+    _toFree();
+    _begin(at);
+  }
+
+  /// Plain navigation in a viewport moves its own free view and never a
+  /// camera layer or a fixed view: it drops to the free view from where the
+  /// view is now, as Blender does.
+  void _toFree() {
+    final ui = widget.uiState;
+    final look = ui.viewOf(widget.viewId);
+    if (!widget.viewport || look == ViewerView.free) return;
+    final pose = _target?.pose;
+    if (pose == null) return;
+    ui.dropToFreeView(
+      widget.viewId,
+      viewOfPose(CameraPose(
+          position: pose.position, rotation: pose.rotation, zoom: pose.zoom)),
+    );
+  }
+
+  /// The button has come up, or the drag was taken away.
+  void _release() {
+    if (_flyArmed) {
+      _flyArmed = false;
+      widget.uiState.flyKeysArmed = false;
+      HardwareKeyboard.instance.removeHandler(_flyKey);
+    }
+    if (_navigating && _start != null) _end();
+    _navigating = false;
+    if (_flyPose == null) {
+      _lifecycle?.dispose();
+      _lifecycle = null;
+    }
+  }
+
+  /// W, A, S, D, Q and E while the right button is down in a viewport: the
+  /// first one takes off, and each is held to keep moving.
+  bool _flyKey(KeyEvent event) {
+    final key = event.physicalKey;
+    if (!_flyMoves.containsKey(key)) return false;
+    if (event is KeyUpEvent) {
+      _flyKeys.remove(key);
+    } else {
+      if (_flyPose == null) _takeOff();
+      _flyKeys.add(key);
+    }
+    return true;
+  }
+
+  /// Start flying from where the view is, with whatever the drag had done
+  /// so far kept. Mouse movement looks about
+  /// from here on.
+  void _takeOff() {
+    final ui = widget.uiState;
+    if (_start == null) {
+      _move = ToolMode.cameraOrbit;
+      _navigating = true;
+      _toFree();
+      _begin(_pressAt);
+      if (_start == null) return;
+    } else {
+      _throttle.cancel();
+      _write(preview: false);
+    }
+    final pose = _target?.pose;
+    if (pose == null) return;
+    // Across the whole scene in about two seconds, never slower than half
+    // the comp's width a second.
+    final points = _cornersOf(widget.boxes(), pose);
+    var reach = widget.compSize.width;
+    if (points.isNotEmpty) {
+      double span(double Function((double, double, double)) of) =>
+          points.map(of).reduce(math.max) - points.map(of).reduce(math.min);
+      final (x, y, z) =
+          (span((p) => p.$1), span((p) => p.$2), span((p) => p.$3));
+      reach = math.max(reach, math.sqrt(x * x + y * y + z * z));
+    }
+    _flySpeed = reach / 2;
+    _flyPose = pose;
+    _flyLast = Duration.zero;
+    ui.cameraFlying = true;
+    _watchFocus();
+    _flyClock.start();
+    setState(() {});
+  }
+
+  AppLifecycleListener? _lifecycle;
+
+  /// One tick of a flight: along the view for W and S, across it for A and
+  /// D, and straight up or down the world for E and Q. Shift goes four times
+  /// as fast, and the wheel sets the pace.
+  void _flyStep(Duration elapsed) {
+    final pose = _flyPose;
+    final dt = ((elapsed - _flyLast).inMicroseconds / 1e6).clamp(0.0, 0.1);
+    _flyLast = elapsed;
+    if (pose == null || _flyKeys.isEmpty || dt == 0) return;
+    var (x, y, z) = (0.0, 0.0, 0.0);
+    for (final key in _flyKeys) {
+      final m = _flyMoves[key]!;
+      (x, y, z) = (x + m.$1, y + m.$2, z + m.$3);
+    }
+    final k = _flySpeed *
+        widget.uiState.flySpeed *
+        dt *
+        (HardwareKeyboard.instance.isShiftPressed ? 4 : 1);
+    final a = pose.axes;
+    final e = pose.position;
+    // Up the world is up the screen, which is -y.
+    _flyPose = pose.copyWith(position: (
+      e.$1 + (a.right.$1 * x + a.forward.$1 * z) * k,
+      e.$2 + (a.right.$2 * x + a.forward.$2 * z - y) * k,
+      e.$3 + (a.right.$3 * x + a.forward.$3 * z) * k,
+    ));
+    _write(preview: true);
+  }
+
+  /// The flight is over, and the keys go back to everything else.
+  void _landFlight() {
+    if (_flyArmed) {
+      _flyArmed = false;
+      widget.uiState.flyKeysArmed = false;
+      HardwareKeyboard.instance.removeHandler(_flyKey);
+    }
+    _lifecycle?.dispose();
+    _lifecycle = null;
+    _flyClock.stop();
+    _flyKeys.clear();
+    _flyPose = null;
+    widget.uiState.cameraFlying = false;
+  }
+
+  /// The pace a flight was last given and where the pointer was, shown for a
+  /// moment after the wheel sets it.
+  (double, Offset)? _speedShown;
+  Timer? _speedFade;
+
+  /// The wheel mid-flight: each notch a quarter faster or slower.
+  void _setFlySpeed(double dy, Offset at) {
+    if (dy == 0) return;
+    final ui = widget.uiState;
+    ui.flySpeed =
+        (ui.flySpeed * math.pow(1.25, dy < 0 ? 1 : -1)).clamp(0.05, 20.0);
+    _speedFade?.cancel();
+    _speedFade = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _speedShown = null);
+    });
+    setState(() => _speedShown = (ui.flySpeed, at));
+  }
+
+  /// A trackpad in a viewport: two fingers orbit, or track with Shift, and a
+  /// pinch dollies toward the pointer. Each push moves on from where the
+  /// last one left the view.
+  CameraPose? _padPose;
+  (double, double, double)? _padPivot;
+  double _padScale = 1;
+
+  void _padStart(PointerPanZoomStartEvent event) {
+    if (_start != null) return;
+    _toFree();
+    final target = _target;
+    if (target == null || target.layer != null) return;
+    _padPose = target.pose;
+    _padPivot = _navPivot(event.localPosition, target.pose);
+    _aimAt(event.localPosition, target.pose);
+    _padScale = 1;
+  }
+
+  void _padUpdate(PointerPanZoomUpdateEvent event) {
+    var pose = _padPose;
+    if (pose == null) return;
+    final d = event.panDelta;
+    pose = HardwareKeyboard.instance.isShiftPressed
+        ? trackCamera(pose, d.dx, d.dy, scale: _scale, depth: _trackDepth)
+        : orbitCamera(pose, d.dx, d.dy, around: _padPivot);
+    if (event.scale > 0 && (event.scale - _padScale).abs() > 1e-4) {
+      pose = _dollied(pose, math.log(event.scale / _padScale) / dollyFraction);
+      _padScale = event.scale;
+    }
+    final next = pose;
+    _padPose = next;
+    _throttle.request(() => widget.uiState
+        .setViewerViewPose(viewOfPose(next), viewId: widget.viewId));
+  }
+
+  void _padEnd() {
+    final pose = _padPose;
+    _padPose = null;
+    if (pose == null) return;
+    _throttle.cancel();
+    widget.uiState.setViewerViewPose(viewOfPose(pose), viewId: widget.viewId);
+    widget.uiState.rememberSession();
+  }
+
   /// The wheel dollies while a camera tool is in hand, and the Viewer's own
   /// wheel zoom stands aside for it. With nothing to move it is left to the
-  /// zoom.
+  /// zoom. With no tool, it dollies in a viewport. Mid-flight it sets how
+  /// fast the flight goes.
   void _wheel(PointerSignalEvent event) {
-    if (event is! PointerScrollEvent || _start != null || _target == null) {
+    if (event is! PointerScrollEvent) return;
+    if (_flyPose != null) {
+      GestureBinding.instance.pointerSignalResolver.register(event,
+          (_) => _setFlySpeed(event.scrollDelta.dy, event.localPosition));
       return;
     }
+    if (_start != null || _target == null) return;
+    if (!widget.active && !widget.viewport) return;
     final dy = event.scrollDelta.dy.clamp(-wheelNotchPixels, wheelNotchPixels);
     GestureBinding.instance.pointerSignalResolver.register(
         event, (_) => _dollyBy(event.localPosition, -dy * wheelDollyPixels));
@@ -1042,8 +1438,10 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// One step of the wheel or the trackpad: [travel] pixels of dolly toward
   /// what is under [at], away from you going in, as in After Effects.
   void _dollyBy(Offset at, double travel) {
+    if (_start != null || travel == 0) return;
+    if (!widget.active) _toFree();
     final target = _target;
-    if (_start != null || target == null || travel == 0) return;
+    if (target == null) return;
     _aimAt(at, target.pose);
     final pose = _dollied(target.pose, travel);
     final layer = target.layer;
@@ -1063,9 +1461,11 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   void _begin(Offset at) {
     final target = _target;
     if (target == null) {
-      _sayNoCamera();
+      if (!_navigating) _sayNoCamera();
       return;
     }
+    // A press that moved the view is not also the picture's menu.
+    if (_navigating) widget.uiState.viewerNavigated = true;
     // The pointer is pinned where it was pressed for as long as the drag lasts.
     // Moving a camera is a gesture with no *place* — nothing on the picture is
     // being aimed at — so a pointer that wanders out of the Viewer, and finally
@@ -1176,27 +1576,40 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   void _drag(Offset at, Offset delta) {
     if (_start == null || !_escape.running) return;
     final anchor = _anchor;
+    var moved = delta;
     if (_locked && anchor != null) {
       // Measured from where the pointer is *held*, not from the last event:
       // putting the pointer back is itself a movement, and the delta the
       // framework reports for that one exactly undoes the real one. Against the
       // anchor, the put-back event reads as no movement at all, which is the
       // truth of it.
-      final moved = at - anchor;
+      moved = at - anchor;
       if (moved == Offset.zero) return;
-      setState(() => _delta += moved);
       restoreFrozenCursor();
-    } else {
-      setState(() => _delta += delta);
     }
+    // In flight the mouse looks about from where the eye is.
+    final flying = _flyPose;
+    setState(() {
+      if (flying != null) {
+        _flyPose = lookCamera(flying, moved.dx, moved.dy);
+      } else {
+        _delta += moved;
+      }
+    });
     _write(preview: true);
   }
 
   void _end() {
     final commit = _escape.end();
-    if (commit && _start != null && _delta != Offset.zero) {
+    if (commit &&
+        _start != null &&
+        (_delta != Offset.zero || _flyPose != null)) {
+      _throttle.cancel();
       _write(preview: false);
+      // A viewport keeps where it was left with the session.
+      if (_actingView && widget.viewport) widget.uiState.rememberSession();
     }
+    _landFlight();
     _closeUndoStep();
     widget.uiState.cameraDragging = false;
     if (_locked) thawCursor();
@@ -1217,6 +1630,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// rest of the drag moves nothing.
   void _abandon() {
     _throttle.cancel();
+    _landFlight();
     if (_actingView) {
       _revertView?.call();
       return;
@@ -1233,9 +1647,11 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   }
 
   /// Which move the drag is: the armed tool's, or the button's under the
-  /// unified tool.
+  /// unified tool and with no tool at all.
   ToolMode get _activeMove =>
-      widget.tool == ToolMode.cameraUnified ? _move : widget.tool;
+      widget.active && widget.tool != ToolMode.cameraUnified
+          ? widget.tool
+          : _move;
 
   /// Screen pixels per comp pixel.
   double get _scale => widget.compSize.width == 0
@@ -1265,6 +1681,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// in the comp, or null for the camera's own pivot, which is also where a
   /// choice that finds nothing falls back to.
   (double, double, double)? _pivotFor(Offset? at, CameraPose pose) {
+    if (_navigating) return _navPivot(at, pose);
     final choice = widget.uiState.tools.cameraPivot;
     if (choice == CameraPivot.pointOfInterest) return null;
     if (choice == CameraPivot.cursor) {
@@ -1276,6 +1693,17 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
         ? _middleOf(boxes.where((b) => selected.contains(b.id)), pose)
         : null;
     return picked ?? _middleOf(boxes, pose);
+  }
+
+  /// What a navigation turns round: what is under [at], else the middle of
+  /// the selection, else the middle of the scene.
+  (double, double, double)? _navPivot(Offset? at, CameraPose pose) {
+    final hit = at == null ? null : _hitAt(at, pose)?.point;
+    if (hit != null) return hit;
+    final boxes = widget.boxes();
+    final selected = widget.uiState.selectedLayerIds;
+    return _middleOf(boxes.where((b) => selected.contains(b.id)), pose) ??
+        _middleOf(boxes, pose);
   }
 
   /// The middle of the box round every 3D layer in [boxes], in the comp, or
@@ -1330,28 +1758,50 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     final request = widget.uiState.viewerCameraRequest.value;
     if (request == null || !mounted || _start != null) return;
     if (widget.uiState.views.active?.engineId != widget.viewId) return;
+    _look(request.$2);
+  }
+
+  /// Look at the layers, or reset the view. [quiet] says nothing when there
+  /// is nothing to look at, which is how a new viewport opens.
+  void _look(ViewerCameraCommand command, {bool quiet = false}) {
     final target = _target;
     if (target == null) {
-      _sayNoCamera();
+      if (!quiet) _sayNoCamera();
       return;
     }
     final layer = target.layer;
     final CameraPose? to;
-    switch (request.$2) {
+    switch (command) {
       case ViewerCameraCommand.lookAtSelected ||
             ViewerCameraCommand.lookAtAll:
         final selected = widget.uiState.selectedLayerIds;
         final boxes = widget.boxes().where((b) =>
-            request.$2 == ViewerCameraCommand.lookAtAll ||
+            command == ViewerCameraCommand.lookAtAll ||
             selected.contains(b.id));
         final points = _cornersOf(boxes, target.pose);
+        // A view, not a camera, takes in the cameras as well when it frames
+        // everything: a game's camera and its markers are the scene.
+        if (layer == null && command == ViewerCameraCommand.lookAtAll) {
+          for (final e in widget.uiState.model.heldLayers) {
+            if (e.info.kind != BridgeLayerKind.camera) continue;
+            try {
+              final eye = e.layer
+                  .cameraAimAt(
+                      frame: BigInt.from(widget.uiState.playheadFrame.value))
+                  ?.pose;
+              if (eye != null) points.add((eye.x, eye.y, eye.z));
+            } catch (_) {
+              // The layer went away between the model and the read.
+            }
+          }
+        }
         // A fixed view magnifies to fit, so it stays flat.
         to = _fixedView
             ? frameFlat(target.pose, points, widget.compSize,
                 _framedDepth(target.pose))
             : framePoints(target.pose, points, widget.compSize);
         if (to == null) {
-          widget.state.postNotice(l10n.noLayersToLookAt);
+          if (!quiet) widget.state.postNotice(l10n.noLayersToLookAt);
           return;
         }
       case ViewerCameraCommand.reset:
@@ -1374,7 +1824,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     }
     final tf = _held?.transform;
     if (tf == null) return;
-    final reset = request.$2 == ViewerCameraCommand.reset;
+    final reset = command == ViewerCameraCommand.reset;
     _writeCamera(layer, tf, to, {
       BridgeTransformProp.positionX,
       BridgeTransformProp.positionY,
@@ -1441,6 +1891,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   CameraPose? _moved() {
     final start = _start;
     if (start == null) return null;
+    final flying = _flyPose;
+    if (flying != null) return flying;
     final shift = HardwareKeyboard.instance.isShiftPressed;
     return switch (_activeMove) {
       ToolMode.cameraOrbit => orbitCamera(start, _delta.dx, _delta.dy,
