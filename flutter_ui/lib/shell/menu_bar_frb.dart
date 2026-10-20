@@ -1607,6 +1607,49 @@ List<MenuSection> lumitMenus(
               checked: () => ui.tools.snapToGrid,
             ),
             MenuEntry.divider(),
+            // The 3D view of the view in front, After Effects' rows: a view
+            // on one of the F10 to F12 shortcuts shows its key.
+            MenuEntry.submenu(l10n.menuSwitch3dView, [
+              for (final look in ViewerView.values)
+                MenuEntry.option(
+                  look.title,
+                  () {
+                    final view = ui.views.active;
+                    if (view != null) {
+                      ui.setViewerView(look, viewId: view.engineId);
+                    }
+                  },
+                  action: switch ([
+                    for (var slot = 0; slot < 3; slot++) ui.viewSlotOf(slot)
+                  ].indexOf(look)) {
+                    -1 => null,
+                    final slot => 'viewer.3d.slot.${slot + 1}',
+                  },
+                  checked: () =>
+                      ui.views.active != null &&
+                      ui.viewOf(ui.views.active!.engineId) == look,
+                ),
+            ]),
+            MenuEntry.submenu(
+                l10n.menuAssignViewShortcut(ui.views.active == null
+                    ? ViewerView.activeCamera.title
+                    : ui.viewOf(ui.views.active!.engineId).title),
+                [
+                  for (var slot = 0; slot < 3; slot++)
+                    MenuEntry(
+                      l10n.menuViewShortcutSlot(
+                          '${slot + 1}', ui.viewSlotOf(slot).title),
+                      comp == null ? null : () => ui.assignViewSlot(slot),
+                      action: 'viewer.3d.assign.${slot + 1}',
+                    ),
+                ]),
+            MenuEntry(l10n.menuSwitchToLast3dView,
+                comp == null ? null : ui.switchToLastView,
+                action: 'viewer.3d.last'),
+            MenuEntry(l10n.menuBackToActiveCamera,
+                comp == null ? null : ui.backToActiveCamera,
+                action: 'viewer.3d.camera'),
+            MenuEntry.divider(),
             // Several views in one Viewer panel (docs/07 §2, and After Effects'
             // own view-layout menu). Option rows: picking one runs it and leaves
             // the menu open, so two layouts can be compared without reopening it.

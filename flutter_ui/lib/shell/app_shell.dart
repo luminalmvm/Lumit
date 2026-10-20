@@ -44,6 +44,7 @@ import 'package:lumit_flutter/src/rust/api/composition.dart'
 import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeLayerSwitch;
 import 'package:lumit_flutter/src/rust/api/state.dart' show OpenProgress;
 import 'package:lumit_flutter/state/dock.dart';
+import 'package:lumit_flutter/state/keymap.dart' show chordText;
 import 'package:lumit_flutter/state/settings.dart' show ToolBarPosition;
 import 'package:lumit_flutter/src/rust/api/keymap.dart';
 import 'package:lumit_flutter/state/viewer_view.dart';
@@ -256,6 +257,9 @@ class _LumitAppViewState extends State<LumitAppView> {
   /// Lets go of this view's Escape claim (the maximised pane).
   VoidCallback? _escapeRelease;
 
+  /// And of its claim on the lowest rung, the Viewer's last 3D view.
+  VoidCallback? _viewEscapeRelease;
+
   @override
   void initState() {
     super.initState();
@@ -274,6 +278,23 @@ class _LumitAppViewState extends State<LumitAppView> {
       if (ui.maximisedPane.value == null) return false;
       ui.maximisedPane.value = null;
       return true;
+    });
+    // Escape switches the Viewer back to its last 3D view, After Effects'
+    // key, on the lowest rung: a menu, a drag or a selection takes it first,
+    // and a field being typed in keeps it.
+    _viewEscapeRelease = EscapeLadder.register(EscapeRung.view, () {
+      final ui = context.read<LumitUiState>();
+      final focused = FocusManager.instance.primaryFocus?.context;
+      if (ui.activePanel != Panel.viewer ||
+          lumitModalOpen ||
+          ui.keymap.rawChordFor('viewer.3d.last') != 'Escape' ||
+          (focused != null &&
+              (focused.widget is EditableText ||
+                  focused.findAncestorWidgetOfExactType<EditableText>() !=
+                      null))) {
+        return false;
+      }
+      return ui.switchToLastView();
     });
     // The pointer is tracked the same way — globally, not through the widget
     // tree. The Ctrl+Space console opens its ring at the mouse, and a
@@ -385,6 +406,7 @@ class _LumitAppViewState extends State<LumitAppView> {
     HardwareKeyboard.instance.removeHandler(_handleKey);
     GestureBinding.instance.pointerRouter.removeGlobalRoute(_trackPointer);
     _escapeRelease?.call();
+    _viewEscapeRelease?.call();
     _clipboardWatch?.dispose();
     super.dispose();
   }
@@ -821,6 +843,20 @@ class _LumitAppViewState extends State<LumitAppView> {
         handled = ui.toggleCompare();
       case 'viewer.preview.always':
         ui.toggleAlwaysPreview();
+      // The 3D view shortcuts, After Effects' F10 to F12, and Shift to set
+      // one to the view in front.
+      case 'viewer.3d.slot.1' || 'viewer.3d.slot.2' || 'viewer.3d.slot.3':
+        handled = ui.recallViewSlot(int.parse(action[action.length - 1]) - 1);
+      case 'viewer.3d.assign.1' ||
+            'viewer.3d.assign.2' ||
+            'viewer.3d.assign.3':
+        handled = ui.assignViewSlot(int.parse(action[action.length - 1]) - 1);
+      // Plain Escape is the ladder's lowest rung (initState), so it only
+      // acts once nothing else wanted the press. Any other chord acts here.
+      case 'viewer.3d.last':
+        handled = chordText(event) != 'Escape' && ui.switchToLastView();
+      case 'viewer.3d.camera':
+        handled = ui.backToActiveCamera();
       // The panel under the pointer fills the window and comes back
       // (docs/07 §1.1's backtick). The keymap has always carried this; this is
       // where it finally does something.

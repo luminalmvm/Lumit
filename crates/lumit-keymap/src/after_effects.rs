@@ -360,6 +360,30 @@ const COMMANDS: &[(&str, &str, KeyContext, &str)] = &[
     ("CDirTabPanel", "NewViewer", Viewer, "viewer.new"),
     (
         "CSwitchboard",
+        "SwitchTo3DViewA",
+        Global,
+        "viewer.3d.slot.1",
+    ),
+    (
+        "CSwitchboard",
+        "SwitchTo3DViewB",
+        Global,
+        "viewer.3d.slot.2",
+    ),
+    (
+        "CSwitchboard",
+        "SwitchTo3DViewC",
+        Global,
+        "viewer.3d.slot.3",
+    ),
+    (
+        "CSwitchboard",
+        "SwitchToLast3DView",
+        Viewer,
+        "viewer.3d.last",
+    ),
+    (
+        "CSwitchboard",
         "ToggleLayerControls",
         Viewer,
         "viewer.controls.toggle",

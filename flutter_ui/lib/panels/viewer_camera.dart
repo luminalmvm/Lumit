@@ -526,6 +526,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     _throttle.cancel();
     _escape.dispose();
     _closeUndoStep();
+    if (_start != null) widget.uiState.cameraDragging = false;
     super.dispose();
   }
 
@@ -946,6 +947,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
     if (target.layer != null) _openUndoStep();
     _wrote = false;
     _escape.begin(_abandon);
+    widget.uiState.cameraDragging = true;
     setState(() {
       _acting = target.layer;
       _actingView = target.layer == null;
@@ -1056,6 +1058,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       _write(preview: false);
     }
     _closeUndoStep();
+    widget.uiState.cameraDragging = false;
     if (_locked) thawCursor();
     _locked = false;
     _anchor = null;

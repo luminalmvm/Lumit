@@ -25,7 +25,7 @@ import 'package:lumit_flutter/src/rust/api/layer.dart' show BridgeCameraPose;
 import 'package:uuid/uuid.dart';
 
 import 'dock.dart';
-import 'viewer_view.dart' show ViewerChannel, ViewerView;
+import 'viewer_view.dart' show ViewerChannel, ViewerView, defaultViewSlots;
 import 'workspace.dart' show ViewerLook, neutralLook;
 
 /// Which of the three display modes a view is in (docs/07 §2.1).
@@ -149,6 +149,13 @@ class ViewerSurface {
   /// begun in a fixed view goes.
   ViewerView lastCustom = ViewerView.custom1;
 
+  /// The 3D view this view was on before the one it is on now, per comp, for
+  /// Escape's switch to the last 3D view.
+  final Map<String, ViewerView> lastViews = {};
+
+  /// The 3D views F10, F11 and F12 switch this view to.
+  final List<ViewerView> viewSlots = [...defaultViewSlots];
+
   ViewerSurface({
     required this.id,
     required this.engineId,
@@ -188,6 +195,8 @@ class ViewerSurface {
         if (colourView != null) 'colour_view': colourView,
         if (wireframe) 'wireframe': true,
         if (!layerControls) 'layer_controls': false,
+        if (!listEquals(viewSlots, defaultViewSlots))
+          'view_slots': [for (final v in viewSlots) v.name],
       };
 
   /// Read one back. Anything malformed reads as its default rather than
@@ -196,7 +205,8 @@ class ViewerSurface {
     final id = j['id'];
     if (id is! String || id.isEmpty) return null;
     final look = j['look'];
-    return ViewerSurface(
+    final slots = j['view_slots'];
+    final surface = ViewerSurface(
       id: id,
       engineId: engineId,
       mode: ViewMode.values.asNameMap()[j['mode']] ?? ViewMode.composition,
@@ -220,6 +230,13 @@ class ViewerSurface {
       wireframe: j['wireframe'] == true,
       layerControls: j['layer_controls'] != false,
     );
+    if (slots is List && slots.length == defaultViewSlots.length) {
+      final named = ViewerView.values.asNameMap();
+      for (var i = 0; i < slots.length; i++) {
+        surface.viewSlots[i] = named[slots[i]] ?? defaultViewSlots[i];
+      }
+    }
+    return surface;
   }
 
   static double? _finite(Object? raw) =>

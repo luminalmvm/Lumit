@@ -78,6 +78,14 @@ enum ViewerView {
       };
 }
 
+/// The 3D view shortcuts a Viewer view starts with, F10 to F12 in turn, as
+/// After Effects sets them.
+const List<ViewerView> defaultViewSlots = [
+  ViewerView.front,
+  ViewerView.custom1,
+  ViewerView.activeCamera,
+];
+
 /// Which channel a view shows (docs/07 §2.2 item 3): the three colours on
 /// their own, or the alpha as the greyscale matte it is.
 ///

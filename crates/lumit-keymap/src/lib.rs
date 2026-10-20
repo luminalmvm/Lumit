@@ -258,6 +258,14 @@ impl ActionId {
             "viewer.preview.always" => "Always preview this view",
             "viewer.controls.toggle" => "Show or hide the layer controls",
             "viewer.snap.grid.toggle" => "Turn snapping to the grid on or off",
+            "viewer.3d.slot.1" => "Switch to 3D view shortcut 1",
+            "viewer.3d.slot.2" => "Switch to 3D view shortcut 2",
+            "viewer.3d.slot.3" => "Switch to 3D view shortcut 3",
+            "viewer.3d.assign.1" => "Assign the 3D view to shortcut 1",
+            "viewer.3d.assign.2" => "Assign the 3D view to shortcut 2",
+            "viewer.3d.assign.3" => "Assign the 3D view to shortcut 3",
+            "viewer.3d.last" => "Switch to the last 3D view",
+            "viewer.3d.camera" => "Back to the active camera",
             // Panels.
             "panel.toggle.project" => "Show or hide the Project panel",
             "panel.toggle.effects" => "Show or hide Effect controls",
@@ -976,6 +984,14 @@ pub fn default_keymap() -> Keymap {
         // The mask whose row is picked in the Timeline.
         row(Global, "Mod+Shift+F", "mask.feather"),
         row(Global, "Mod+Shift+I", "mask.invert"),
+        // The 3D views on After Effects' own keys, which work from any panel
+        // there too.
+        row(Global, "F10", "viewer.3d.slot.1"),
+        row(Global, "F11", "viewer.3d.slot.2"),
+        row(Global, "F12", "viewer.3d.slot.3"),
+        row(Global, "Shift+F10", "viewer.3d.assign.1"),
+        row(Global, "Shift+F11", "viewer.3d.assign.2"),
+        row(Global, "Shift+F12", "viewer.3d.assign.3"),
         // --- Tools ---
         row(Tools, "V", "tool.select"),
         row(Tools, "H", "tool.hand"),
@@ -1072,6 +1088,9 @@ pub fn default_keymap() -> Keymap {
         row(Viewer, "Mod+Alt+P", "viewer.preview.always"),
         row(Viewer, "Mod+Shift+H", "viewer.controls.toggle"),
         row(Viewer, "Mod+Shift+'", "viewer.snap.grid.toggle"),
+        // Escape goes back to the last 3D view, as in After Effects, and
+        // only when nothing else on screen wanted it.
+        row(Viewer, "Escape", "viewer.3d.last"),
         // --- Panels ---
         row(Panels, "Mod+F6", "panel.focus.next"),
         row(Panels, "Mod+Shift+F6", "panel.focus.prev"),

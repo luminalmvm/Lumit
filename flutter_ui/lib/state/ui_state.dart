@@ -3852,6 +3852,57 @@ class LumitUiState extends ChangeNotifier {
     return view.cameraPoses['${comp.internalid}/${look.name}'];
   }
 
+  /// The 3D view shortcut [slot] of the active view: 0 to 2 for F10 to F12.
+  ViewerView viewSlotOf(int slot) =>
+      views.active?.viewSlots[slot] ?? defaultViewSlots[slot];
+
+  /// Whether a camera tool's drag is running, which holds the 3D view still
+  /// until it ends.
+  bool cameraDragging = false;
+
+  /// Switch the active view to its 3D view shortcut [slot]. False with no
+  /// composition in it.
+  bool recallViewSlot(int slot) {
+    final view = views.active;
+    if (view == null || compFor(view) == null || cameraDragging) return false;
+    setViewerView(view.viewSlots[slot], viewId: view.engineId);
+    return true;
+  }
+
+  /// Make the active view's 3D view its shortcut [slot].
+  bool assignViewSlot(int slot) {
+    final view = views.active;
+    if (view == null || compFor(view) == null) return false;
+    view.viewSlots[slot] = viewOf(view.engineId);
+    rememberSession();
+    notifyListeners();
+    return true;
+  }
+
+  /// Put the active view back on its comp's own camera. False when it is
+  /// there already, so the key is left for anything else that wants it.
+  bool backToActiveCamera() {
+    final view = views.active;
+    if (view == null ||
+        cameraDragging ||
+        viewOf(view.engineId) == ViewerView.activeCamera) {
+      return false;
+    }
+    setViewerView(ViewerView.activeCamera, viewId: view.engineId);
+    return true;
+  }
+
+  /// Switch the active view back to the 3D view it was on before, After
+  /// Effects' Escape, which toggles between the two. False with none.
+  bool switchToLastView() {
+    final view = views.active;
+    final comp = view == null ? null : compFor(view);
+    final last = view?.lastViews[comp?.internalid.toString()];
+    if (view == null || last == null || cameraDragging) return false;
+    setViewerView(last, viewId: view.engineId);
+    return true;
+  }
+
   /// The custom view Viewer view [viewId] last looked through.
   ViewerView lastCustomViewOf(int viewId) =>
       _surfaceOf(viewId)?.lastCustom ?? ViewerView.custom1;
@@ -3862,6 +3913,7 @@ class LumitUiState extends ChangeNotifier {
     final comp = view == null ? null : compFor(view);
     if (view == null || comp == null) return;
     final id = comp.internalid.toString();
+    final was = view.cameraViews[id] ?? ViewerView.activeCamera;
     final fixed = look.fixed;
     if (fixed == null) {
       view.cameraViews.remove(id);
@@ -3886,6 +3938,7 @@ class LumitUiState extends ChangeNotifier {
       view.cameraViews[id] = look;
       if (look.orbits) view.lastCustom = look;
     }
+    if (look != was) view.lastViews[id] = was;
     _cameraMoved(view, comp);
   }
 
