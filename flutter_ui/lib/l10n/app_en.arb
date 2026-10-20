@@ -223,6 +223,15 @@
   "@lightSettings": {
     "description": "Layer menu item, and the title of the window it opens: a light's type and options. The window also opens when a light is made."
   },
+  "lightLayerName": "{kind} light",
+  "@lightLayerName": {
+    "description": "The name a new light starts with in the light settings window, from its type, as in \"Spot light\".",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
   "materialOptions": "Material options",
   "@materialOptions": {
     "description": "Heading beside Transform on a 3D layer, over the rows about how it takes the composition's lights. After Effects' name for the group."

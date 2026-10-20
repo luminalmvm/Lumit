@@ -75,7 +75,6 @@ import 'fx_console_context.dart';
 import 'flowchart_frb.dart';
 import 'fx_console_frb.dart';
 import 'history_dialog_frb.dart';
-import 'layer_settings_frb.dart';
 import 'light_settings_dialog.dart';
 import 'menu_animation_frb.dart';
 import 'menu_layer_frb.dart';
@@ -1293,11 +1292,9 @@ List<MenuSection> lumitMenus(
             ]),
             // What the layer *is*, as opposed to what it is doing: its name, and a
             // Solid's own size and colour (the shared dialogue pattern).
-            MenuEntry(l10n.menuLayerSettings, onLayer((l) async {
-              if (await showLayerSettingsFrb(context: context, layer: l)) {
-                app.notifyDocumentChanged();
-              }
-            }), action: 'layer.settings'),
+            MenuEntry(l10n.menuLayerSettings,
+                onLayer((l) => layerSettingsOf(context, app, ui, l)),
+                action: 'layer.settings'),
             MenuEntry.divider(),
             MenuEntry.submenu(l10n.menuMask, maskRows(context, app, ui)),
             MenuEntry.submenu(

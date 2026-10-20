@@ -21,8 +21,6 @@ import 'package:lumit_flutter/shell/export_queue_frb.dart'
 import 'package:lumit_flutter/shell/fx_console_frb.dart'
     show lastKnownPointerPosition;
 import 'package:lumit_flutter/shell/light_settings_dialog.dart';
-import 'package:lumit_flutter/shell/layer_settings_frb.dart'
-    show showLayerSettingsFrb;
 import 'package:lumit_flutter/shell/menu_animation_frb.dart';
 import 'package:lumit_flutter/shell/menu_bar_frb.dart';
 import 'package:lumit_flutter/shell/menu_layer_frb.dart';
@@ -1202,9 +1200,7 @@ class _LumitAppViewState extends State<LumitAppView> {
         if (layer == null) {
           handled = false;
         } else {
-          showLayerSettingsFrb(context: context, layer: layer).then((changed) {
-            if (changed) state.notifyDocumentChanged();
-          });
+          layerSettingsOf(context, state, ui, layer);
         }
       // Up and down the stack with the selection, and along the Timeline
       // with the layers themselves. Keyboard only, like the frame steps.

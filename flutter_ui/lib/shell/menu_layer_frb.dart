@@ -35,6 +35,7 @@ import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
     show TransformSection, hasThreeDSwitch, transformGroups;
 import 'camera_settings_dialog.dart';
+import 'layer_settings_frb.dart';
 import 'light_settings_dialog.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
 import 'number_dialog_frb.dart';
@@ -498,52 +499,89 @@ MenuEntry threeDRow(LumitState app, LumitUiState ui) {
 /// dialog that asked the engine per rebuild would be the habit the
 /// rebuild-path rule exists to stop.
 MenuEntry cameraSettingsRow(
-    BuildContext context, LumitState app, LumitUiState ui) {
+        BuildContext context, LumitState app, LumitUiState ui) =>
+    MenuEntry(
+      l10n.cameraSettings,
+      _cameraWindow(
+          context,
+          app,
+          ui,
+          selectedEntries(ui)
+              .where((entry) => entry.info.camera != null)
+              .firstOrNull),
+    );
+
+/// Opens [picked]'s camera window, or null where there is none to open.
+VoidCallback? _cameraWindow(BuildContext context, LumitState app,
+    LumitUiState ui, BridgeLayerEntry? picked) {
   final comp = ui.selectedComp;
-  final picked = selectedEntries(ui)
-      .where((entry) => entry.info.camera != null)
-      .firstOrNull;
   final channels = picked?.info.transform.camera;
-  return MenuEntry(
-    l10n.cameraSettings,
-    picked == null || channels == null || comp == null
-        ? null
-        : () async {
-            final applied = await showCameraSettingsFrb(
-              context: context,
-              layer: picked.layer,
-              settings: picked.info.camera!,
-              channels: channels,
-              compWidth: comp.getSettings().width.toDouble(),
-            );
-            if (applied) app.notifyDocumentChanged();
-          },
-  );
+  if (picked == null || channels == null || comp == null) return null;
+  return () async {
+    final applied = await showCameraSettingsFrb(
+      context: context,
+      layer: picked.layer,
+      settings: picked.info.camera!,
+      channels: channels,
+      compWidth: comp.getSettings().width.toDouble(),
+    );
+    if (applied) app.notifyDocumentChanged();
+  };
 }
 
 /// Layer ▸ Light settings: the light's window again, greyed until a light is
 /// picked.
 MenuEntry lightSettingsRow(
-    BuildContext context, LumitState app, LumitUiState ui) {
-  final picked = selectedEntries(ui)
-      .where((entry) => entry.info.light != null)
-      .firstOrNull;
+        BuildContext context, LumitState app, LumitUiState ui) =>
+    MenuEntry(
+      l10n.lightSettings,
+      _lightWindow(
+          context,
+          app,
+          ui,
+          selectedEntries(ui)
+              .where((entry) => entry.info.light != null)
+              .firstOrNull),
+    );
+
+/// Opens [picked]'s light window, or null where there is none to open.
+VoidCallback? _lightWindow(BuildContext context, LumitState app,
+    LumitUiState ui, BridgeLayerEntry? picked) {
+  final comp = ui.selectedComp;
   final channels = picked?.info.transform.light;
-  return MenuEntry(
-    l10n.lightSettings,
-    picked == null || channels == null
-        ? null
-        : () async {
-            final applied = await showLightSettingsFrb(
-              context: context,
-              layer: picked.layer,
-              name: picked.info.name,
-              settings: picked.info.light!,
-              channels: channels,
-            );
-            if (applied) app.notifyDocumentChanged();
-          },
-  );
+  if (picked == null || channels == null || comp == null) return null;
+  return () async {
+    final size = comp.getSettings();
+    final applied = await showLightSettingsFrb(
+      context: context,
+      layer: picked.layer,
+      name: picked.info.name,
+      settings: picked.info.light!,
+      channels: channels,
+      compWidth: size.width.toDouble(),
+      compHeight: size.height.toDouble(),
+    );
+    if (applied) app.notifyDocumentChanged();
+  };
+}
+
+/// Layer ▸ Layer settings: a light's or a camera's own window on those, as
+/// After Effects opens them, and the layer's name and source on the rest.
+Future<void> layerSettingsOf(BuildContext context, LumitState app,
+    LumitUiState ui, LayerReference layer) async {
+  final entry = ui.model.layers
+      .where((e) => e.layer.internallayerId == layer.internallayerId)
+      .firstOrNull;
+  final own = entry?.info.light != null
+      ? _lightWindow(context, app, ui, entry)
+      : _cameraWindow(context, app, ui, entry);
+  if (own != null) {
+    own();
+    return;
+  }
+  if (await showLayerSettingsFrb(context: context, layer: layer)) {
+    app.notifyDocumentChanged();
+  }
 }
 
 /// Layer ▸ Markers: the layer's own cues, which travel with its bar and are

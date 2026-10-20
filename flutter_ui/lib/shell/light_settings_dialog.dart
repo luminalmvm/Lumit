@@ -155,7 +155,7 @@ Future<void> newLightFrb({
     context: context,
     id: 'light-settings',
     builder: (close) =>
-        _LightSettingsBody(values: start, name: '', onDone: close),
+        _LightSettingsBody(values: start, name: null, onDone: close),
   );
   if (picked == null) return;
   final (values, name) = picked;
@@ -181,6 +181,8 @@ Future<bool> showLightSettingsFrb({
   required String name,
   required BridgeLightSettings settings,
   required BridgeLightChannels channels,
+  required double compWidth,
+  required double compHeight,
 }) async {
   final project = Provider.of<LumitState>(context, listen: false).project;
   final picked = await showLumitModal<(_LightValues, String)>(
@@ -199,6 +201,20 @@ Future<bool> showLightSettingsFrb({
       layer.setLightSettings(settings: values.settings);
     }
     final (props, scalars) = values.writes(channels);
+    // A light from an older file has never had a point to aim at, so the
+    // first time it is aimed it looks at the comp's middle, as a new one does.
+    const zero = BridgeScalar.static_(0);
+    if (!settings.twoNode &&
+        values.settings.twoNode &&
+        channels.poiX == zero &&
+        channels.poiY == zero &&
+        channels.poiZ == zero) {
+      props.addAll(const [BridgeTransformProp.poiX, BridgeTransformProp.poiY]);
+      scalars.addAll([
+        BridgeScalar.static_(compWidth / 2),
+        BridgeScalar.static_(compHeight / 2),
+      ]);
+    }
     if (props.isNotEmpty) layer.setTransforms(props: props, values: scalars);
     if (wanted.isNotEmpty && wanted != name) layer.rename(name: wanted);
   });
@@ -207,7 +223,10 @@ Future<bool> showLightSettingsFrb({
 
 class _LightSettingsBody extends StatefulWidget {
   final _LightValues values;
-  final String name;
+
+  /// The light's name, or null for a light still to be made, whose name
+  /// follows its type until it is typed over.
+  final String? name;
   final void Function((_LightValues, String)?) onDone;
 
   const _LightSettingsBody({
@@ -223,7 +242,9 @@ class _LightSettingsBody extends StatefulWidget {
 class _LightSettingsBodyState extends State<_LightSettingsBody> {
   late final _LightValues _v = widget.values.copy();
   late final TextEditingController _name =
-      TextEditingController(text: widget.name);
+      TextEditingController(text: widget.name ?? _kindName);
+
+  String get _kindName => l10n.lightLayerName(lightKindLabel(_s.kind));
 
   @override
   void dispose() {
@@ -354,8 +375,12 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
         value: _s.kind,
         options: BridgeLightKind.values,
         label: lightKindLabel,
-        onChanged: (k) =>
-            setState(() => _v.settings = lightSettingsWith(_s, kind: k)),
+        onChanged: (k) => setState(() {
+          // A new light's name follows its type until it is typed over.
+          final was = _kindName;
+          _v.settings = lightSettingsWith(_s, kind: k);
+          if (widget.name == null && _name.text == was) _name.text = _kindName;
+        }),
         width: cameraWell + 60,
       );
 
@@ -373,13 +398,16 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
   Widget _colourRow(LumitTheme t) {
     final c = _v.colour;
     if (c == null) return _animated(t, 'colour');
+    final exact = PickedColour(c[0], c[1], c[2]);
     return Align(
       alignment: Alignment.centerLeft,
       child: ColourSwatchButton(
         key: const ValueKey('light-colour'),
-        colour: PickedColour(c[0], c[1], c[2]).clipped,
-        // Scene-linear, as the light's row is.
+        colour: exact.clipped,
+        // The exact numbers, scene-linear as the light's row is.
+        initial: exact,
         scale: ColourScale.unit,
+        max: 64,
         onPicked: (p) => setState(() => _v.colour = [p.r, p.g, p.b]),
       ),
     );

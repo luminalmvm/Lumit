@@ -270,19 +270,21 @@ List<TransformGroup> transformGroups({
         ], section: option),
       ],
       if (s.kind == BridgeLightKind.area)
-        TransformGroup(l10n.size, const [
-          TransformAxis(BridgeTransformProp.lightWidth, min: 0, decimals: 0),
-          TransformAxis(BridgeTransformProp.lightHeight, min: 0, decimals: 0),
+        TransformGroup(l10n.size, [
+          TransformAxis(BridgeTransformProp.lightWidth,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0),
+          TransformAxis(BridgeTransformProp.lightHeight,
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0),
         ], section: option),
       if (lightFallsOff(s.kind) && s.falloff != BridgeLightFalloff.none)
-        TransformGroup(l10n.lightRadius, const [
+        TransformGroup(l10n.lightRadius, [
           TransformAxis(BridgeTransformProp.lightRadius,
-              min: 0, decimals: 0, speed: 2),
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
         ], section: option),
       if (lightFallsOff(s.kind) && s.falloff == BridgeLightFalloff.smooth)
-        TransformGroup(l10n.lightFalloffDistance, const [
+        TransformGroup(l10n.lightFalloffDistance, [
           TransformAxis(BridgeTransformProp.falloffDistance,
-              min: 0, decimals: 0, speed: 2),
+              suffix: l10n.unitSymbolPx, min: 0, decimals: 0, speed: 2),
         ], section: option),
     ];
   }
@@ -430,6 +432,15 @@ class TransformRowsFrb extends StatelessWidget {
         light: light)) {
       if (group.section != last) {
         last = group.section;
+        // The Effect controls card names each options group as the
+        // Timeline's headings do.
+        final heading = switch (group.section) {
+          TransformSection.transform => null,
+          TransformSection.camera => l10n.cameraOptions,
+          TransformSection.light => l10n.lightOptions,
+          TransformSection.material => l10n.materialOptions,
+        };
+        if (twoColumn && heading != null) out.add(_OptionsHeading(heading));
         for (final setting in settings) {
           if (setting.section != last) continue;
           out.add(LayerSettingRowFrb(
@@ -464,6 +475,28 @@ class TransformRowsFrb extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: rows(context),
       );
+}
+
+/// The name over a camera's, a light's or a layer's option rows in the Effect
+/// controls card, in the label column.
+class _OptionsHeading extends StatelessWidget {
+  final String label;
+  const _OptionsHeading(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = ThemeScope.of(context).theme;
+    return SizedBox(
+      height: fxRowHeight(t),
+      child: Padding(
+        padding: const EdgeInsets.only(left: fxKeyColumnWidth + 4),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(t.kickerCase(label), style: t.kicker),
+        ),
+      ),
+    );
+  }
 }
 
 /// One transform property group as a row.
@@ -909,23 +942,45 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
       for (final axis in group.axes)
         sampledScalar(read(transform, axis.prop), time)
     ];
-    return ColourSwatchButton(
-      key: ValueKey<String>(
-          '${widget.keyPrefix}-${group.axes.first.prop.name}'),
-      colour: PickedColour(rgb[0], rgb[1], rgb[2]).clipped,
-      // Scene-linear, so the picker counts in 0 to 1 and may go past it.
-      scale: ColourScale.unit,
-      onPicked: (p) {
-        widget.layer.setTransforms(
-          props: [for (final axis in group.axes) axis.prop],
-          values: [
-            for (final (i, v) in [p.r, p.g, p.b].indexed)
-              scalarWithValueAt(read(transform, group.axes[i].prop), v,
-                  widget.comp, frame),
-          ],
-        );
-        widget.onChanged();
-      },
+    List<BridgeScalar> values(PickedColour p) => [
+          for (final (i, v) in [p.r, p.g, p.b].indexed)
+            scalarWithValueAt(
+                read(transform, group.axes[i].prop), v, widget.comp, frame),
+        ];
+    final exact = PickedColour(rgb[0], rgb[1], rgb[2]);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ColourSwatchButton(
+        key: ValueKey<String>(
+            '${widget.keyPrefix}-${group.axes.first.prop.name}'),
+        colour: exact.clipped,
+        // The exact numbers, so an over-white light or an imported value is
+        // not rounded to what a screen shows.
+        initial: exact,
+        scale: ColourScale.unit,
+        max: 64,
+        onPreview: (p) {
+          var staged = transform;
+          for (final (i, v) in values(p).indexed) {
+            staged = writeScalar(staged, group.axes[i].prop, v);
+          }
+          final ui = _ui;
+          _throttle.request(() => widget.comp.renderFrameWithTransformPreview(
+                frame: BigInt.from(ui.playheadFrame.value),
+                scale: ui.viewerScale,
+                layer: widget.layer,
+                transform: staged,
+              ));
+        },
+        onPicked: (p) {
+          _throttle.cancel();
+          widget.layer.setTransforms(
+            props: [for (final axis in group.axes) axis.prop],
+            values: values(p),
+          );
+          widget.onChanged();
+        },
+      ),
     );
   }
 
