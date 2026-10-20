@@ -76,9 +76,17 @@ pub fn base_layer(
     name: String,
     kind: LayerKind,
     out: Rational,
-    transform: TransformGroup,
+    mut transform: TransformGroup,
 ) -> Layer {
     let label = kind.default_label();
+    // Nothing lights a camera, a light or a null, so it keeps the material
+    // a file leaves out.
+    if matches!(
+        kind,
+        LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Null
+    ) {
+        transform.material = Box::new(lumit_core::model::Material::legacy());
+    }
     Layer {
         markers: Vec::new(),
         graph: Default::default(),

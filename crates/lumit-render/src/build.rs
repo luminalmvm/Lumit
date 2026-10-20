@@ -1172,11 +1172,16 @@ pub fn shading_lights(
 }
 
 /// A layer's Material options at comp time `t_comp`, as the fractions the
-/// lighting pass reads. The eye is the realiser's to fill in.
+/// lighting pass reads. The eye is the realiser's to fill in. A 2D layer has
+/// no Material options to set, so it takes the lights as they always were,
+/// with no highlight.
 pub fn shading_material(
     layer: &lumit_core::model::Layer,
     t_comp: f64,
 ) -> lumit_gpu::fx::LightingMaterial {
+    if !layer.switches.three_d {
+        return lumit_gpu::fx::LightingMaterial::default();
+    }
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let m = &layer.transform.material;
     let pct = |p: &lumit_core::anim::Property| (p.value_at(lt) / 100.0).max(0.0) as f32;

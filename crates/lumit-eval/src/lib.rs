@@ -1613,11 +1613,14 @@ fn feed_layer(
     if !layer.switches.accepts_lights && comp.layers.iter().any(|l| l.is_light()) {
         h.update(b"unlit");
     }
-    // The material shades only where there is a light, and is hashed only
-    // once it has moved off what layers had before it existed, so those keys
-    // stay valid.
+    // The material shades only a 3D layer and only where there is a light,
+    // and is hashed only once it has moved off what layers had before it
+    // existed, so those keys stay valid.
     let m = &layer.transform.material;
-    if comp.layers.iter().any(|l| l.is_light()) && **m != lumit_core::model::Material::legacy() {
+    if layer.switches.three_d
+        && comp.layers.iter().any(|l| l.is_light())
+        && **m != lumit_core::model::Material::legacy()
+    {
         h.update(b"material");
         for p in [&m.ambient, &m.diffuse, &m.specular, &m.shininess, &m.metal] {
             feed_f64(h, p.value_at(lt));

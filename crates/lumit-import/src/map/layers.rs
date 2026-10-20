@@ -145,7 +145,12 @@ pub(crate) fn map_layer(
     // pre-transform deviation is visible exactly on a turned or squashed layer,
     // and that is what decides whether the import says so.
     let mut transform = transform(conv, &path, props);
-    transform.material = Box::new(material(conv, &path, props));
+    // Nothing lights a camera, a light or a null, so it keeps the material a
+    // file leaves out.
+    transform.material = Box::new(match kind {
+        LayerKind::Camera { .. } | LayerKind::Light { .. } | LayerKind::Null => Material::legacy(),
+        _ => material(conv, &path, props),
+    });
     // After Effects measures a text layer from its first baseline and Lumit
     // from the corner of the raster the words are drawn into. The anchor and
     // the masks move by the gap, so both stay where After Effects had them.
