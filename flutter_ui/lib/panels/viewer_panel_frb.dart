@@ -752,6 +752,10 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         _band = ui.viewerOverlays.rulers ? viewerRulerBand : 0.0;
         final fitted = _fittedRect(constraints, size);
         _reportScale(ui, fitted, size, _fitScale(constraints, size));
+        // Through the comp's own camera a viewport is the comp's picture.
+        final canvas = viewport && ui.viewPoseOf(widget.view.engineId) != null
+            ? _viewportCanvas(ui, fitted, size, constraints)
+            : null;
 
         // Which layers might be missing their file. Off the held facts, not
         // re-asked here: this used to live in the stage, which rebuilds per
@@ -800,6 +804,7 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
               viewId: widget.view.engineId,
               uiState: ui,
               fitted: fitted,
+              pictureRect: canvas,
               grid: ui.viewerGrid,
               overlays: ui.viewerOverlays,
               pictureKey: _pictureKey,
@@ -929,6 +934,26 @@ class _ViewerPanelFrbState extends State<ViewerViewSurface>
         ],
       ),
     );
+  }
+
+  /// The picture a 3D viewport fills, on screen: round the comp's middle out
+  /// to the farther edge of the pane each way, in whole steps of 16 comp
+  /// pixels and never more than four comps across, so a pane that grows a
+  /// pixel is not a new picture. The engine is told the size it draws, and
+  /// past twice the comp's pixels it draws it with fewer.
+  Rect _viewportCanvas(LumitUiState ui, Rect fitted, BridgeCompSize size,
+      BoxConstraints constraints) {
+    final (w, h) = (size.width.toDouble(), size.height.toDouble());
+    if (w <= 0 || h <= 0 || fitted.width <= 0) return fitted;
+    final s = fitted.width / w;
+    final c = fitted.center;
+    int across(double reach, double own) =>
+        (math.min(math.max(2 * reach / s, own), own * 4) / 16).ceil() * 16;
+    final cw = across(math.max(c.dx, constraints.maxWidth - c.dx), w);
+    final ch = across(math.max(c.dy, constraints.maxHeight - c.dy), h);
+    final share = math.min(1.0, math.sqrt(2 * w * h / (cw * ch)));
+    ui.reportViewportCanvas(widget.view.engineId, (cw, ch), share);
+    return Rect.fromCenter(center: c, width: cw * s, height: ch * s);
   }
 
   /// Where the picture sits in the panel, at the current magnification.

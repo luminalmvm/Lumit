@@ -1210,7 +1210,7 @@ class LumitUiState extends ChangeNotifier {
     final frame = frameFor(view);
     // A viewport draws at its own tier, every other view at the comp's.
     final scale = viewport
-        ? view.resolution.scaleFor(_panelScale)
+        ? view.resolution.scaleFor(_panelScale) * view.canvasShare
         : _compResolution.scaleFor(_panelScale);
     final stamp = '${comp.internalid}/$frame/$scale/${model.heldRevision}/'
         '${view.look.stops}/${view.look.toneMap}/${view.region}/'
@@ -3922,6 +3922,30 @@ class LumitUiState extends ChangeNotifier {
           if (v != ViewerView.free || isViewport(viewId)) v,
       ];
 
+  /// The picture a 3D viewport fills, comp pixels round the comp's middle,
+  /// which its panel measures as it lays out, and the share of its tier it
+  /// is drawn at to stay within twice the comp's pixels. Kept and said to the
+  /// engine after the frame it was measured in, as layout changes nothing.
+  void reportViewportCanvas(int viewId, (int, int) canvas, double share) {
+    final view = _surfaceOf(viewId);
+    if (view == null) return;
+    final due = _canvasDue[viewId];
+    if (due == null && view.canvas == canvas) return;
+    _canvasDue[viewId] = (canvas, share);
+    if (due != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final next = _canvasDue.remove(viewId);
+      final view = _surfaceOf(viewId);
+      if (next == null || view == null || view.canvas == next.$1) return;
+      view.canvas = next.$1;
+      view.canvasShare = next.$2;
+      final comp = compFor(view);
+      if (comp != null) _cameraMoved(view, comp);
+    });
+  }
+
+  final Map<int, ((int, int), double)> _canvasDue = {};
+
   /// Whether Viewer view [viewId] is in a 3D viewport.
   bool isViewport(int viewId) {
     final view = _surfaceOf(viewId);
@@ -4084,7 +4108,8 @@ class LumitUiState extends ChangeNotifier {
 
   /// What each view was last told it looks through, by engine id. A worker is
   /// born knowing no view, which reads here as null.
-  final Map<int, (String, BridgeCameraPose?, int?)?> _pushedCamera = {};
+  final Map<int, (String, BridgeCameraPose?, int?, (int, int))?>
+      _pushedCamera = {};
 
   /// Tell the engine which pose [view] draws [comp] through, when that has
   /// changed. The engine latches it per view, so this is said when the view
@@ -4097,7 +4122,9 @@ class LumitUiState extends ChangeNotifier {
     final ground = viewport && viewerAidsOf(view.engineId).ground
         ? theme.textMuted.toARGB32()
         : null;
-    final target = pose == null && !viewport ? null : (id, pose, ground);
+    final canvas = viewport ? view.canvas : (0, 0);
+    final target =
+        pose == null && !viewport ? null : (id, pose, ground, canvas);
     if (_pushedCamera[view.engineId] == target) return;
     try {
       comp.setCameraView(
@@ -4105,6 +4132,8 @@ class LumitUiState extends ChangeNotifier {
         view: view.engineId,
         draft: viewport,
         ground: ground,
+        canvasWidth: canvas.$1,
+        canvasHeight: canvas.$2,
       );
     } catch (_) {
       // No worker yet, or a comp that has gone.

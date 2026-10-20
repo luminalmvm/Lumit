@@ -7240,10 +7240,18 @@ fn wire__crate__api__composition__composition_reference_set_camera_view_impl(
             let api_view = <u32>::sse_decode(&mut deserializer);
             let api_draft = <bool>::sse_decode(&mut deserializer);
             let api_ground = <Option<u32>>::sse_decode(&mut deserializer);
+            let api_canvas_width = <u32>::sse_decode(&mut deserializer);
+            let api_canvas_height = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok = crate::api::composition::CompositionReference::set_camera_view(
-                    &api_that, api_pose, api_view, api_draft, api_ground,
+                    &api_that,
+                    api_pose,
+                    api_view,
+                    api_draft,
+                    api_ground,
+                    api_canvas_width,
+                    api_canvas_height,
                 )?;
                 Ok(output_ok)
             })())

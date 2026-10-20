@@ -298,13 +298,16 @@ struct ViewerLook {
 }
 
 /// One view's 3D view of a comp as the worker holds it: the pose it is drawn
-/// through, and for a 3D viewport the draft that leaves out motion blur.
+/// through, and for a 3D viewport the draft that leaves out motion blur and
+/// the size of the picture it fills, comp pixels round the comp's middle.
+/// A canvas of `(0, 0)` is the comp's own size.
 #[frb(ignore)]
 #[derive(Clone, Copy, PartialEq)]
 struct ViewLatch {
     comp: Uuid,
     pose: lumit_core::model::CameraPose,
     draft: bool,
+    canvas: (u32, u32),
 }
 
 /// Make the renderer look the way `view` looks, if it does not already.
@@ -1899,9 +1902,11 @@ pub enum WorkerRequest {
         pose: Option<crate::api::layer::BridgeCameraPose>,
         /// Whose view this is.
         view: u32,
-        /// A 3D viewport's: no motion blur, and its ground in this colour.
+        /// A 3D viewport's: no motion blur, its ground in this colour, and
+        /// the picture as wide as its pane.
         draft: bool,
         ground: Option<[f32; 4]>,
+        canvas: (u32, u32),
     },
     SetViewerLook {
         stops: f64,
@@ -4221,11 +4226,13 @@ fn handle_requests(
                     view,
                     draft,
                     ground,
+                    canvas,
                 } => {
                     let latch = pose.map(|p| ViewLatch {
                         comp,
                         pose: p.core(),
                         draft,
+                        canvas,
                     });
                     let ground = ground.and_then(|colour| ground_of(state, comp, colour));
                     set_view(state, view, latch, ground);
@@ -4591,6 +4598,7 @@ fn viewed_through(
         comp: comp_id,
         pose,
         draft,
+        canvas,
     }) = view
     else {
         return document;
@@ -4614,8 +4622,46 @@ fn viewed_through(
     if let Some(c) = doc.comp_mut(comp_id) {
         c.layers.insert(0, layer);
         c.motion_blur.enabled &= !draft;
+        // A 3D viewport fills its pane: a wider picture round the comp's
+        // middle, the 2D layers kept where they sit on the comp. The camera
+        // looks at the picture's middle, so the 3D scene needs no moving.
+        let (cw, ch) = canvas;
+        if cw > 0 && ch > 0 && (cw, ch) != (c.width, c.height) {
+            let dx = (f64::from(cw) - f64::from(c.width)) / 2.0;
+            let dy = (f64::from(ch) - f64::from(c.height)) / 2.0;
+            (c.width, c.height) = (cw, ch);
+            for l in &mut c.layers {
+                let placed_in_3d = l.switches.three_d
+                    || matches!(
+                        l.kind,
+                        lumit_core::model::LayerKind::Camera { .. }
+                            | lumit_core::model::LayerKind::Light { .. }
+                    );
+                if placed_in_3d || l.parent.is_some() {
+                    continue;
+                }
+                shift(&mut l.transform.position_x, dx);
+                shift(&mut l.transform.position_y, dy);
+            }
+        }
     }
     std::sync::Arc::new(doc)
+}
+
+/// Move a property's values by `by`, keys and all. An expression is left as
+/// it is, so in a 3D viewport a 2D layer placed by one sits off by the shift,
+/// and `thisComp.width` and `height` read the wider picture.
+#[frb(ignore)]
+fn shift(property: &mut lumit_core::anim::Property, by: f64) {
+    match &mut property.animation {
+        lumit_core::anim::Animation::Static(v) => *v += by,
+        lumit_core::anim::Animation::Keyframed(keys) => {
+            for key in keys {
+                key.value += by;
+            }
+        }
+        lumit_core::anim::Animation::Expression(_) => {}
+    }
 }
 
 /// A 3D viewport's ground in `colour`, on the floor through the middle of
@@ -6182,6 +6228,7 @@ mod tests {
             comp,
             pose,
             draft: false,
+            canvas: (0, 0),
         };
         let through = super::viewed_through(None, Some(latch), two.clone());
         let layers = &through.comp(comp).expect("comp").layers;
@@ -6239,6 +6286,7 @@ mod tests {
             comp,
             pose: top,
             draft: false,
+            canvas: (0, 0),
         };
         super::set_view(&mut state, 1, Some(latch), None);
 

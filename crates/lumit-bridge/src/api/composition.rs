@@ -2469,8 +2469,10 @@ impl CompositionReference {
     /// view's 3D view changes and that view's next render looks through it.
     /// Export never sees a view.
     ///
-    /// A 3D viewport's view is a `draft`, drawn without motion blur, and draws
-    /// its `ground` into the picture in that colour (`0xAARRGGBB`).
+    /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
+    /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
+    /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
+    /// middle, the shape of its pane. Zero is the comp's own size.
     #[frb(sync)]
     pub fn set_camera_view(
         &self,
@@ -2478,6 +2480,8 @@ impl CompositionReference {
         view: u32,
         draft: bool,
         ground: Option<u32>,
+        canvas_width: u32,
+        canvas_height: u32,
     ) -> Result<(), BridgeError> {
         let channel =
             |argb: u32, shift: u32| lumit_core::pixels::srgb_decode((argb >> shift) as u8);
@@ -2495,6 +2499,7 @@ impl CompositionReference {
             view,
             draft,
             ground,
+            canvas: (canvas_width, canvas_height),
         })
     }
 

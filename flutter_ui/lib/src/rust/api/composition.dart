@@ -2153,16 +2153,26 @@ class CompositionReference {
   /// view's 3D view changes and that view's next render looks through it.
   /// Export never sees a view.
   ///
-  /// A 3D viewport's view is a `draft`, drawn without motion blur, and draws
-  /// its `ground` into the picture in that colour (`0xAARRGGBB`).
+  /// A 3D viewport's view is a `draft`, drawn without motion blur, draws its
+  /// `ground` into the picture in that colour (`0xAARRGGBB`), and fills a
+  /// picture `canvas_width` by `canvas_height` comp pixels round the comp's
+  /// middle, the shape of its pane. Zero is the comp's own size.
   void setCameraView(
           {BridgeCameraPose? pose,
           required int view,
           required bool draft,
-          int? ground}) =>
+          int? ground,
+          required int canvasWidth,
+          required int canvasHeight}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetCameraView(
-              that: this, pose: pose, view: view, draft: draft, ground: ground);
+              that: this,
+              pose: pose,
+              view: view,
+              draft: draft,
+              ground: ground,
+              canvasWidth: canvasWidth,
+              canvasHeight: canvasHeight);
 
   void setGroupLabel({required UuidValue group, required int label}) =>
       BridgeLib.instance.api

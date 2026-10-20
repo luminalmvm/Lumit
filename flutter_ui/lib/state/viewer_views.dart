@@ -168,6 +168,12 @@ class ViewerSurface {
   /// from the comp's.
   PreviewResolution resolution;
 
+  /// A 3D viewport's picture: the size it fills round the comp's middle,
+  /// comp pixels, which its panel measures, and the share of its tier it is
+  /// drawn at so a wide pane costs at most twice the comp's pixels.
+  (int, int) canvas = (0, 0);
+  double canvasShare = 1;
+
   ViewerSurface({
     required this.id,
     required this.engineId,

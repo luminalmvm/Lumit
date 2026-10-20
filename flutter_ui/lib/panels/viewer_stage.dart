@@ -95,6 +95,9 @@ class ViewerStage extends StatelessWidget {
 
   final Rect fitted;
 
+  /// Where the picture is drawn, when it reaches past the comp: a 3D
+  /// viewport's fills its pane. Null is [fitted].
+  final Rect? pictureRect;
   final bool grid;
 
   /// Which of the guides menu's marks are drawn over the picture: the grid, the
@@ -141,6 +144,7 @@ class ViewerStage extends StatelessWidget {
     required this.viewId,
     required this.uiState,
     required this.fitted,
+    this.pictureRect,
     required this.grid,
     required this.overlays,
     required this.pictureKey,
@@ -632,7 +636,7 @@ class ViewerStage extends StatelessWidget {
                     // Thousands of squares that rarely change: kept as one
                     // picture instead of being drawn square by square.
                     isComplex: true,
-                    painter: _CheckerPainter(t, fitted),
+                    painter: _CheckerPainter(t, pictureRect ?? fitted),
                   ),
                 ),
               ),
@@ -640,7 +644,7 @@ class ViewerStage extends StatelessWidget {
             // Everything below in this stack is a sibling of it, so the
             // photograph is the picture and not the marks over it.
             Positioned.fromRect(
-              rect: fitted,
+              rect: pictureRect ?? fitted,
               child: RepaintBoundary(
                 key: pictureKey,
                 child: _Picture(

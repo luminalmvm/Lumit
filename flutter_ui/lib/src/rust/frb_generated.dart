@@ -859,7 +859,9 @@ abstract class BridgeLibApi extends BaseApi {
       BridgeCameraPose? pose,
       required int view,
       required bool draft,
-      int? ground});
+      int? ground,
+      required int canvasWidth,
+      required int canvasHeight});
 
   void crateApiCompositionCompositionReferenceSetGroupLabel(
       {required CompositionReference that,
@@ -8012,7 +8014,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeCameraPose? pose,
       required int view,
       required bool draft,
-      int? ground}) {
+      int? ground,
+      required int canvasWidth,
+      required int canvasHeight}) {
     return handler.executeSync(SyncTask(
       callFfi: () {
         final serializer = SseSerializer(generalizedFrbRustBinding);
@@ -8021,6 +8025,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_u_32(view, serializer);
         sse_encode_bool(draft, serializer);
         sse_encode_opt_box_autoadd_u_32(ground, serializer);
+        sse_encode_u_32(canvasWidth, serializer);
+        sse_encode_u_32(canvasHeight, serializer);
         return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 189)!;
       },
       codec: SseCodec(
@@ -8029,7 +8035,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
             sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerBridgeError,
       ),
       constMeta: kCrateApiCompositionCompositionReferenceSetCameraViewConstMeta,
-      argValues: [that, pose, view, draft, ground],
+      argValues: [that, pose, view, draft, ground, canvasWidth, canvasHeight],
       apiImpl: this,
     ));
   }
@@ -8038,7 +8044,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       get kCrateApiCompositionCompositionReferenceSetCameraViewConstMeta =>
           const TaskConstMeta(
             debugName: "composition_reference_set_camera_view",
-            argNames: ["that", "pose", "view", "draft", "ground"],
+            argNames: [
+              "that",
+              "pose",
+              "view",
+              "draft",
+              "ground",
+              "canvasWidth",
+              "canvasHeight"
+            ],
           );
 
   @override
