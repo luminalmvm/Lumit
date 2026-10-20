@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use lumit_core::anim::{Animation, Keyframe, Property, SideInterp, TangentMode};
 use lumit_core::edits;
-use lumit_core::expression::{Language, Slot, SLOT_KEY};
+use lumit_core::expression::{Language, Slot};
 use lumit_core::markers::{Marker, MarkerEdit, MarkerKind};
 use lumit_core::model::{Composition, Document, Layer, LayerKind, ProjectItem, TransformProp};
 use lumit_core::ops::Op;
@@ -1841,11 +1841,9 @@ fn layer_keys(host: &dyn Host, a: KeysArgs) -> Result<Value, ScriptError> {
         .find(|(name, _)| *name == a.property)
         .map(|(_, channels)| *channels)
         .ok_or_else(|| bad(format!("Lumit has no property called {}.", a.property)))?;
-    let held: Vec<&Property> = channels
-        .iter()
-        .map(|c| layer.prop(*c))
-        .collect::<Option<_>>()
-        .ok_or_else(|| bad(format!("{} is not on this layer.", a.property)))?;
+    if channels.iter().any(|c| layer.prop(*c).is_none()) {
+        return Err(bad(format!("{} is not on this layer.", a.property)));
+    }
     // One number for a one-axis property, a list with one for each axis
     // otherwise, though position can leave Z alone.
     let axes = |values: &Values| -> Result<usize, ScriptError> {
@@ -1873,22 +1871,15 @@ fn layer_keys(host: &dyn Host, a: KeysArgs) -> Result<Value, ScriptError> {
             } else {
                 channels.len()
             };
-            let values: Vec<f64> = held.iter().take(used).map(|p| underneath(p)).collect();
             let mut ops = Vec::new();
-            for (axis, (channel, held)) in channels.iter().zip(&held).take(used).enumerate() {
-                let next = expressed(held, &text, &values, axis);
-                ops.push(Op::SetTransformProperty {
-                    comp: comp.id,
-                    layer: layer.id,
-                    prop: *channel,
-                    animation: next.animation,
-                });
-                ops.push(Op::SetTransformExpressionSlot {
-                    comp: comp.id,
-                    layer: layer.id,
-                    prop: *channel,
-                    slot: next.extra.get(SLOT_KEY).cloned(),
-                });
+            for channel in channels.iter().take(used) {
+                ops.extend(edits::transform_ops(
+                    comp.id,
+                    layer,
+                    *channel,
+                    Animation::Expression(text.clone()),
+                    Some(Language::JavaScript),
+                ));
             }
             let id = layer.id;
             commit(store, ops)?;

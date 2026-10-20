@@ -184,21 +184,24 @@ double sampledScalar(BridgeScalar scalar, BridgeRational time) {
   return values.isEmpty ? 0 : values.first;
 }
 
-/// What an expression on [layer] reads at [time]. An expression can read
-/// anything in the document, so its answers are only held until [revision]
-/// moves.
+/// What an expression on [row] of [layer] reads at [time]. An expression can
+/// read anything in the document, so its answers are only held until
+/// [revision] moves. The halves of a point carry the same text and each
+/// reads its own number, so the row is part of what is held.
 double sampledExpression(BridgeScalar scalar, BridgeRational time,
-    LayerReference layer, BigInt? revision) {
+    LayerReference layer, BigInt? revision,
+    {BridgeExpressionRow? row}) {
   if (_expressionRevision != revision || _expressionSamples.length >= 2048) {
     _expressionSamples.clear();
     _expressionRevision = revision;
   }
-  return _expressionSamples[(scalar, layer.internallayerId, time)] ??=
-      sampleScalarWithContext(scalar: scalar, time: time, layer: layer);
+  return _expressionSamples[(scalar, layer.internallayerId, row, time)] ??=
+      sampleScalarWithContext(
+          scalar: scalar, time: time, layer: layer, row: row);
 }
 
-final Map<(BridgeScalar, Object, BridgeRational), double> _expressionSamples =
-    {};
+final Map<(BridgeScalar, Object, BridgeExpressionRow?, BridgeRational), double>
+    _expressionSamples = {};
 BigInt? _expressionRevision;
 
 /// Note that [scalar] was wanted at [time], starting the set over when the time

@@ -213,7 +213,8 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
           language: _language,
           time: time,
           layer: layer,
-          held: on.scalar);
+          held: on.scalar,
+          row: on.expressionRow);
     }
     final fault = _fault;
     return Padding(
@@ -233,6 +234,7 @@ class _ExpressionsPanelFrbState extends State<ExpressionsPanelFrb> {
                     time: time,
                     layer: layer,
                     held: on.scalar,
+                    row: on.expressionRow,
                   ).toStringAsPrecision(6)}',
                   style: t.mono.copyWith(color: t.textMuted),
                 ),

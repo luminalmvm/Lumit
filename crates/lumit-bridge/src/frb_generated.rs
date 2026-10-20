@@ -9189,6 +9189,8 @@ fn wire__crate__api__effect__expression_fault_impl(
             let api_layer = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
             let api_held =
                 <Option<crate::api::effect::BridgeScalar>>::sse_decode(&mut deserializer);
+            let api_row =
+                <Option<crate::api::effect::BridgeExpressionRow>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Result::<_, ()>::Ok(crate::api::effect::expression_fault(
@@ -9197,6 +9199,7 @@ fn wire__crate__api__effect__expression_fault_impl(
                     api_time,
                     api_layer,
                     api_held,
+                    api_row,
                 ))?;
                 Ok(output_ok)
             })())
@@ -21262,6 +21265,8 @@ fn wire__crate__api__effect__sample_scalar_range_with_context_impl(
             let api_start = <crate::api::effect::BridgeRational>::sse_decode(&mut deserializer);
             let api_end = <crate::api::effect::BridgeRational>::sse_decode(&mut deserializer);
             let api_samples = <i64>::sse_decode(&mut deserializer);
+            let api_row =
+                <Option<crate::api::effect::BridgeExpressionRow>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok =
@@ -21271,6 +21276,7 @@ fn wire__crate__api__effect__sample_scalar_range_with_context_impl(
                         api_start,
                         api_end,
                         api_samples,
+                        api_row,
                     ))?;
                 Ok(output_ok)
             })())
@@ -21303,11 +21309,13 @@ fn wire__crate__api__effect__sample_scalar_with_context_impl(
             let api_layer = <crate::api::layer::LayerReference>::sse_decode(&mut deserializer);
             let api_held =
                 <Option<crate::api::effect::BridgeScalar>>::sse_decode(&mut deserializer);
+            let api_row =
+                <Option<crate::api::effect::BridgeExpressionRow>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok =
                     Result::<_, ()>::Ok(crate::api::effect::sample_scalar_with_context(
-                        api_scalar, api_time, api_layer, api_held,
+                        api_scalar, api_time, api_layer, api_held, api_row,
                     ))?;
                 Ok(output_ok)
             })())
@@ -24337,6 +24345,31 @@ impl SseDecode for crate::api::effect::BridgeExpressionLanguage {
             1 => crate::api::effect::BridgeExpressionLanguage::JavaScript,
             _ => unreachable!("Invalid variant for BridgeExpressionLanguage: {}", inner),
         };
+    }
+}
+
+impl SseDecode for crate::api::effect::BridgeExpressionRow {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 =
+                    <crate::api::layer::BridgeTransformProp>::sse_decode(deserializer);
+                return crate::api::effect::BridgeExpressionRow::Transform(var_field0);
+            }
+            1 => {
+                let mut var_effect = <uuid::Uuid>::sse_decode(deserializer);
+                let mut var_param = <String>::sse_decode(deserializer);
+                return crate::api::effect::BridgeExpressionRow::Effect {
+                    effect: var_effect,
+                    param: var_param,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 
@@ -30790,6 +30823,19 @@ impl SseDecode for Option<crate::api::export::BridgeExportSpec> {
     }
 }
 
+impl SseDecode for Option<crate::api::effect::BridgeExpressionRow> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::effect::BridgeExpressionRow>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::state::BridgeGraphPoint> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -34435,6 +34481,36 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeExpressionLangu
     for crate::api::effect::BridgeExpressionLanguage
 {
     fn into_into_dart(self) -> crate::api::effect::BridgeExpressionLanguage {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::effect::BridgeExpressionRow {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::effect::BridgeExpressionRow::Transform(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::effect::BridgeExpressionRow::Effect { effect, param } => [
+                1.into_dart(),
+                effect.into_into_dart().into_dart(),
+                param.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::effect::BridgeExpressionRow
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::effect::BridgeExpressionRow>
+    for crate::api::effect::BridgeExpressionRow
+{
+    fn into_into_dart(self) -> crate::api::effect::BridgeExpressionRow {
         self
     }
 }
@@ -41598,6 +41674,26 @@ impl SseEncode for crate::api::effect::BridgeExpressionLanguage {
     }
 }
 
+impl SseEncode for crate::api::effect::BridgeExpressionRow {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::effect::BridgeExpressionRow::Transform(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <crate::api::layer::BridgeTransformProp>::sse_encode(field0, serializer);
+            }
+            crate::api::effect::BridgeExpressionRow::Effect { effect, param } => {
+                <i32>::sse_encode(1, serializer);
+                <uuid::Uuid>::sse_encode(effect, serializer);
+                <String>::sse_encode(param, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
 impl SseEncode for crate::api::extensions::BridgeExtension {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -46526,6 +46622,16 @@ impl SseEncode for Option<crate::api::export::BridgeExportSpec> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::export::BridgeExportSpec>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::effect::BridgeExpressionRow> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::effect::BridgeExpressionRow>::sse_encode(value, serializer);
         }
     }
 }

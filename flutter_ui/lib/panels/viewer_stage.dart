@@ -262,12 +262,14 @@ class ViewerStage extends StatelessWidget {
     // The exact comp time, asked for only once a keyed channel needs it: a
     // comp with nothing animated pays for no frame conversion at all.
     late final at = timeOfFrame(comp, uiState.playheadFrame.value);
-    double read(BridgeScalar s, LayerReference layer) => switch (s) {
+    double read(BridgeScalar s, LayerReference layer,
+            BridgeTransformProp prop) =>
+        switch (s) {
           BridgeScalar_Static(:final field0) => field0,
-          // An expression needs the layer it runs on, or the box stays behind
-          // while the picture moves.
-          BridgeScalar_Expression() =>
-            sampledExpression(s, at, layer, revision),
+          // An expression needs the layer and the row it runs on, or the box
+          // stays behind while the picture moves.
+          BridgeScalar_Expression() => sampledExpression(s, at, layer, revision,
+              row: BridgeExpressionRow.transform(prop)),
           _ => sampledScalar(s, at),
         };
 
@@ -306,7 +308,8 @@ class ViewerStage extends StatelessWidget {
       final light = entry.info.kind == BridgeLayerKind.light;
       final map = layerMapOf(entry, byId, transformOf, read,
           origin: fitted.topLeft, viewScale: viewScale, view: rows);
-      final rotation = read(tf.rotation, entry.layer);
+      final rotation =
+          read(tf.rotation, entry.layer, BridgeTransformProp.rotation);
       final live = uiState.liveText.value[entry.layer.internallayerId];
       final id = entry.layer.internallayerId;
       // A keyed shape path is drawn where the picture has it, as a mask is.
@@ -1071,23 +1074,23 @@ ViewerLayerMap layerMapOf(
   BridgeLayerEntry entry,
   Map<UuidValue, BridgeLayerEntry> byId,
   BridgeTransform Function(BridgeLayerEntry) transformOf,
-  double Function(BridgeScalar, LayerReference) read, {
+  double Function(BridgeScalar, LayerReference, BridgeTransformProp) read, {
   required Offset origin,
   required double viewScale,
   required List<double> Function() view,
 }) {
   final tf = transformOf(entry);
-  double at(BridgeScalar s) => read(s, entry.layer);
+  double at(BridgeScalar s, BridgeTransformProp p) => read(s, entry.layer, p);
   final parent = parentMatrix(entry, byId, transformOf, read);
   final m = parent?.storage;
   return ViewerLayerMap.of(
-    positionX: at(tf.positionX),
-    positionY: at(tf.positionY),
-    anchorX: at(tf.anchorX),
-    anchorY: at(tf.anchorY),
-    scaleXPercent: at(tf.scaleX),
-    scaleYPercent: at(tf.scaleY),
-    rotationDegrees: at(tf.rotation),
+    positionX: at(tf.positionX, BridgeTransformProp.positionX),
+    positionY: at(tf.positionY, BridgeTransformProp.positionY),
+    anchorX: at(tf.anchorX, BridgeTransformProp.anchorX),
+    anchorY: at(tf.anchorY, BridgeTransformProp.anchorY),
+    scaleXPercent: at(tf.scaleX, BridgeTransformProp.scaleX),
+    scaleYPercent: at(tf.scaleY, BridgeTransformProp.scaleY),
+    rotationDegrees: at(tf.rotation, BridgeTransformProp.rotation),
     origin: origin,
     viewScale: viewScale,
     parent: m == null
@@ -1097,9 +1100,9 @@ ViewerLayerMap layerMapOf(
         ? ViewerDepth(
             view: view,
             parent: parent,
-            z: at(tf.positionZ),
-            rotationX: at(tf.rotationX),
-            rotationY: at(tf.rotationY),
+            z: at(tf.positionZ, BridgeTransformProp.positionZ),
+            rotationX: at(tf.rotationX, BridgeTransformProp.rotationX),
+            rotationY: at(tf.rotationY, BridgeTransformProp.rotationY),
           )
         : null,
   );
@@ -1114,7 +1117,7 @@ Matrix4? parentMatrix(
   BridgeLayerEntry entry,
   Map<UuidValue, BridgeLayerEntry> byId,
   BridgeTransform Function(BridgeLayerEntry) transformOf,
-  double Function(BridgeScalar, LayerReference) read,
+  double Function(BridgeScalar, LayerReference, BridgeTransformProp) read,
 ) {
   Matrix4? world;
   final seen = {entry.layer.internallayerId};
@@ -1122,20 +1125,25 @@ Matrix4? parentMatrix(
     final up = byId[id];
     if (up == null) break;
     final tf = transformOf(up);
-    double at(BridgeScalar s) => read(s, up.layer);
-    double turn(BridgeScalar s) => at(s) * math.pi / 180;
+    double at(BridgeScalar s, BridgeTransformProp p) => read(s, up.layer, p);
+    double turn(BridgeScalar s, BridgeTransformProp p) =>
+        at(s, p) * math.pi / 180;
     // A 2D parent's hidden z and X/Y rotation count as 0, as the engine
     // places it. Cameras and lights have no 3D switch, so theirs count.
     final flat = !up.info.switches.threeD &&
         up.info.kind != BridgeLayerKind.camera &&
         up.info.kind != BridgeLayerKind.light;
     final own = Matrix4.translationValues(
-        at(tf.positionX), at(tf.positionY), flat ? 0 : at(tf.positionZ))
-      ..rotateY(flat ? 0 : turn(tf.rotationY))
-      ..rotateX(flat ? 0 : turn(tf.rotationX))
-      ..rotateZ(turn(tf.rotation))
-      ..scaleByDouble(at(tf.scaleX) / 100, at(tf.scaleY) / 100, 1, 1)
-      ..translateByDouble(-at(tf.anchorX), -at(tf.anchorY), 0, 1);
+        at(tf.positionX, BridgeTransformProp.positionX),
+        at(tf.positionY, BridgeTransformProp.positionY),
+        flat ? 0 : at(tf.positionZ, BridgeTransformProp.positionZ))
+      ..rotateY(flat ? 0 : turn(tf.rotationY, BridgeTransformProp.rotationY))
+      ..rotateX(flat ? 0 : turn(tf.rotationX, BridgeTransformProp.rotationX))
+      ..rotateZ(turn(tf.rotation, BridgeTransformProp.rotation))
+      ..scaleByDouble(at(tf.scaleX, BridgeTransformProp.scaleX) / 100,
+          at(tf.scaleY, BridgeTransformProp.scaleY) / 100, 1, 1)
+      ..translateByDouble(-at(tf.anchorX, BridgeTransformProp.anchorX),
+          -at(tf.anchorY, BridgeTransformProp.anchorY), 0, 1);
     world = world == null ? own : own.multiplied(world);
     id = up.info.parent;
   }
@@ -1184,10 +1192,11 @@ BridgeLayerEntry? layerAtCompPoint(
   final revision = comp.documentRevision();
   final time = timeOfFrame(comp, frame);
   final seconds = frame / (model.fps > 0 ? model.fps : 60.0);
-  double read(BridgeScalar s, LayerReference layer) => switch (s) {
+  double read(BridgeScalar s, LayerReference layer, BridgeTransformProp prop) =>
+      switch (s) {
         BridgeScalar_Static(:final field0) => field0,
-        BridgeScalar_Expression() =>
-          sampledExpression(s, time, layer, revision),
+        BridgeScalar_Expression() => sampledExpression(s, time, layer, revision,
+            row: BridgeExpressionRow.transform(prop)),
         _ => sampledScalar(s, time),
       };
   const pictureless = {
@@ -1226,7 +1235,8 @@ BridgeLayerEntry? layerAtCompPoint(
           compSize: size, revision: revision, t: seconds),
       draggable: false,
       scalable: false,
-      rotationDegrees: read(info.transform.rotation, entry.layer),
+      rotationDegrees: read(info.transform.rotation, entry.layer,
+          BridgeTransformProp.rotation),
     ));
   }
   return entries[layerAtPoint(boxes, at)?.id];

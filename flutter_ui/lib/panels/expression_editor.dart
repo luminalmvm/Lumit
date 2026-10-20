@@ -49,6 +49,7 @@ Future<void> showExpressionEditor({
   required void Function(BridgeScalar next) onCommit,
   bool fresh = false,
   BridgeScalar? held,
+  BridgeExpressionRow? row,
 }) async {
   final frame =
       Provider.of<LumitUiState>(context, listen: false).playheadFrame.value;
@@ -64,13 +65,18 @@ Future<void> showExpressionEditor({
       value: value,
       fresh: fresh,
       sample: (scalar) => sampleScalarWithContext(
-          scalar: scalar, time: time, layer: layer, held: held ?? value),
+          scalar: scalar,
+          time: time,
+          layer: layer,
+          held: held ?? value,
+          row: row),
       fault: (scalar) => expressionFault(
           expression: scalar.field0,
           language: scalar.field1,
           time: time,
           layer: layer,
-          held: held ?? value),
+          held: held ?? value,
+          row: row),
       onDraft: (next) {
         draft = next;
         onLive?.call(next);
@@ -89,7 +95,11 @@ Future<void> showExpressionEditor({
   if (removed) {
     // The number the expression was showing, so the picture does not move.
     onCommit(BridgeScalar.static_(sampleScalarWithContext(
-        scalar: draft, time: time, layer: layer, held: held ?? value)));
+        scalar: draft,
+        time: time,
+        layer: layer,
+        held: held ?? value,
+        row: row)));
   } else if (draft != value) {
     // A cancelled edit that was previewed has to be written back over it.
     if (!cancelled) {
@@ -318,6 +328,7 @@ class ExpressionLane extends StatelessWidget {
                     value: value,
                     comp: comp,
                     layer: channel.entry.layer,
+                    row: channel.expressionRow,
                     onCommit: (next) {
                       commitChannelEdits({channel: next});
                       onChanged();

@@ -30,7 +30,11 @@ use lumit_core::{
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::api::{layer::LayerReference, state::PROJECTS, BridgeError};
+use crate::api::{
+    layer::{BridgeTransformProp, LayerReference},
+    state::PROJECTS,
+    BridgeError,
+};
 use crate::frb_generated::StreamSink;
 
 /// One built-in effect as the Add-effect menu needs it: the stable `name` to
@@ -837,12 +841,41 @@ fn sample_at(scalar: BridgeScalar, seconds: f64) -> f64 {
     }
 }
 
+/// The row an expression sits on, so a sampler reads it as that row: a
+/// point's halves carry the same text and each takes its own number.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum BridgeExpressionRow {
+    Transform(BridgeTransformProp),
+    /// An effect's parameter by the effect's id and the parameter's.
+    Effect {
+        effect: Uuid,
+        param: String,
+    },
+}
+
+impl BridgeExpressionRow {
+    #[frb(ignore)]
+    fn core(&self) -> lumit_core::expression::Row<'_> {
+        match self {
+            BridgeExpressionRow::Transform(prop) => {
+                lumit_core::expression::Row::Transform(prop.core())
+            }
+            BridgeExpressionRow::Effect { effect, param } => lumit_core::expression::Row::Effect {
+                effect: *effect,
+                param,
+            },
+        }
+    }
+}
+
 #[frb(sync)]
 pub fn sample_scalar_with_context(
     scalar: BridgeScalar,
     time: BridgeRational,
     layer: LayerReference,
     held: Option<BridgeScalar>,
+    row: Option<BridgeExpressionRow>,
 ) -> f64 {
     let seconds = seconds_of(time);
     match scalar {
@@ -874,7 +907,7 @@ pub fn sample_scalar_with_context(
                 current_depth: 0,
                 inputs: None,
             });
-            let slot = own_slot(&context, &expr, held, seconds);
+            let slot = own_slot(&context, &expr, held, seconds, row.as_ref());
             // This runs on the interface's thread, for every row on screen.
             lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
                 lumit_core::expression::evaluate_with(language.read(), &expr, Some(context), slot)
@@ -892,6 +925,7 @@ pub fn expression_fault(
     time: BridgeRational,
     layer: LayerReference,
     held: Option<BridgeScalar>,
+    row: Option<BridgeExpressionRow>,
 ) -> Option<String> {
     let doc = document_for(&layer)?;
     let context = Arc::new(ExpressionContext {
@@ -904,7 +938,7 @@ pub fn expression_fault(
         current_depth: 0,
         inputs: None,
     });
-    let slot = own_slot(&context, &expression, held, seconds_of(time));
+    let slot = own_slot(&context, &expression, held, seconds_of(time), row.as_ref());
     // On the interface's thread, as the sampler above is.
     lumit_core::expression::within_steps(lumit_core::expression::INTERFACE_STEPS, || {
         lumit_core::expression::fault_in(language.read(), &expression, Some(context), slot)
@@ -914,18 +948,27 @@ pub fn expression_fault(
 /// What an expression knows about its property, as a render gives it: `value`
 /// and `wiggle` read this. `held` is the property as it is while new text is
 /// typed for it, and `None` when the text is already the property's own.
+/// `row` is the row asking, when it is known.
 fn own_slot(
     context: &ExpressionContext,
     expression: &str,
     held: Option<BridgeScalar>,
     seconds: f64,
+    row: Option<&BridgeExpressionRow>,
 ) -> lumit_core::expression::Slot {
-    use lumit_core::expression::{slot_on_layer, Slot};
-    match held {
-        None => slot_on_layer(context, expression),
-        Some(BridgeScalar::Expression(text, _)) => slot_on_layer(context, &text),
-        // Not an expression yet, so the number it shows is what one will read.
-        Some(number) => Slot::new(&[sample_at(number, seconds)], 0, 0),
+    use lumit_core::expression::{slot_of_row, slot_on_layer, Slot};
+    // Not an expression yet, so the number it shows is what one will read.
+    let own = match &held {
+        Some(BridgeScalar::Expression(..)) | None => None,
+        Some(number) => Some(sample_at(number.clone(), seconds)),
+    };
+    if let Some(row) = row {
+        return slot_of_row(context, row.core(), own);
+    }
+    match (held, own) {
+        (_, Some(own)) => Slot::new(&[own], 0, 0),
+        (Some(BridgeScalar::Expression(text, _)), None) => slot_on_layer(context, &text),
+        _ => slot_on_layer(context, expression),
     }
 }
 
@@ -951,6 +994,7 @@ pub fn sample_scalar_range_with_context(
     start: BridgeRational,
     end: BridgeRational,
     samples: i64,
+    row: Option<BridgeExpressionRow>,
 ) -> Vec<f64> {
     match scalar {
         BridgeScalar::Expression(expr, language) => {
@@ -974,6 +1018,9 @@ pub fn sample_scalar_range_with_context(
                 current_depth: 0,
                 inputs: None,
             };
+            let slot = row
+                .as_ref()
+                .map(|row| lumit_core::expression::slot_of_row(&context, row.core(), None));
             // The whole curve shares what one frame of a render may spend, so
             // a loop that never ends costs one repaint a fixed amount.
             lumit_core::expression::within_steps(
@@ -986,6 +1033,7 @@ pub fn sample_scalar_range_with_context(
                         start,
                         end,
                         samples,
+                        slot,
                     )
                 },
             )
@@ -3287,6 +3335,7 @@ impl BridgeEffectInstance {
             .iter_mut()
             .find(|p| p.id == id)
             .ok_or(BridgeError::InvalidParam)?;
+        let fresh = !matches!(&param.value, EffectValue::Float(p) if p.extra.contains_key(lumit_core::expression::SLOT_KEY));
 
         value.write_at(&mut param.value, offset, bounds)?;
         // A typed text is held to its cap here, as a number is to its range.
@@ -3294,6 +3343,10 @@ impl BridgeEffectInstance {
             (kind, &mut param.value)
         {
             text.truncate(lumit_core::fx::capped_text(text).len());
+        }
+        // A new expression on half of a point reads the whole point.
+        if fresh {
+            lumit_core::expression::note_effect_point(&mut self.effect, &id);
         }
         // Writing to an offered row is the act that adopts it (§1.5): from
         // here it rides the commit like every row the document holds.

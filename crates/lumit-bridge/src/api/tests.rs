@@ -10022,16 +10022,17 @@ fn an_illustrator_document_imports_as_a_comp_of_its_layers() {
 #[test]
 fn a_transform_expression_keeps_its_language_through_undo() {
     use crate::api::effect::{
-        expression_fault, sample_scalar_with_context, BridgeExpressionLanguage, BridgeRational,
-        BridgeScalar,
+        expression_fault, sample_scalar_with_context, BridgeExpressionLanguage,
+        BridgeExpressionRow, BridgeRational, BridgeScalar,
     };
     use crate::api::layer::BridgeTransformProp;
 
     let (project, layer) = project_with_layer();
     let rotation = BridgeTransformProp::Rotation;
+    let row = || Some(BridgeExpressionRow::Transform(rotation));
     let read = || layer.get_transform().expect("transform").rotation;
     let at = || BridgeRational { num: 0, den: 1 };
-    let shown = || sample_scalar_with_context(read(), at(), layer, None);
+    let shown = || sample_scalar_with_context(read(), at(), layer, None, row());
     layer
         .set_transform(rotation, BridgeScalar::Static(30.0))
         .expect("a number");
@@ -10050,12 +10051,12 @@ fn a_transform_expression_keeps_its_language_through_undo() {
     let js = BridgeExpressionLanguage::JavaScript;
     let draft = "wiggle(0, 0) + 1".to_owned();
     assert_eq!(
-        expression_fault(draft.clone(), js, at(), layer, Some(read())),
+        expression_fault(draft.clone(), js, at(), layer, Some(read()), row()),
         None
     );
     let typing = BridgeScalar::Expression(draft, js);
     assert_eq!(
-        sample_scalar_with_context(typing, at(), layer, Some(read())),
+        sample_scalar_with_context(typing, at(), layer, Some(read()), row()),
         31.0
     );
 

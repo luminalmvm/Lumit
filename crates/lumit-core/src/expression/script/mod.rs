@@ -128,10 +128,14 @@ impl Slot {
         self.value.get(..usize::from(self.len)).unwrap_or_default()
     }
 
-    /// This property's own number out of [`Self::values`].
+    /// This property's own number out of [`Self::values`]. A row shown on its
+    /// own keeps only that number, whichever of the point it is.
     #[must_use]
     pub fn own(&self) -> Option<f64> {
-        self.values().get(usize::from(self.axis)).copied()
+        match self.values() {
+            [one] => Some(*one),
+            many => many.get(usize::from(self.axis)).copied(),
+        }
     }
 
     /// Read a slot back out of a property's `extra`.

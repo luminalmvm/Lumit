@@ -327,16 +327,28 @@ pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
         return Slot::default();
     };
     let tr = &layer.transform;
+    let camera = match &layer.kind {
+        crate::model::LayerKind::Camera { zoom, options, .. } => {
+            let [x, y, z] = &options.point_of_interest;
+            vec![x, y, z, zoom]
+        }
+        _ => Vec::new(),
+    };
     let transform = [
         &tr.anchor_x,
         &tr.anchor_y,
         &tr.position_x,
         &tr.position_y,
+        &tr.position_z,
         &tr.scale_x,
         &tr.scale_y,
         &tr.rotation,
+        &tr.rotation_x,
+        &tr.rotation_y,
         &tr.opacity,
-    ];
+    ]
+    .into_iter()
+    .chain(camera);
     let params = layer.effects.iter().flat_map(|effect| {
         effect.params.iter().flat_map(|param| {
             let parts: Vec<&Property> = match &param.value {
@@ -349,10 +361,158 @@ pub fn slot_on_layer(context: &ExpressionContext, expression: &str) -> Slot {
         })
     });
     transform
-        .into_iter()
         .chain(params)
         .find(|property| carries(property))
         .map_or_else(Slot::default, |property| Slot::read(&property.extra))
+}
+
+/// A row an expression can sit on: a transform property, or an effect
+/// parameter by the effect's id and its own. An effect's point is the pair
+/// of rows its schema names `<stem>_x` and `<stem>_y`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Row<'a> {
+    Transform(crate::model::TransformProp),
+    Effect { effect: Uuid, param: &'a str },
+}
+
+/// The properties of the point `row` is one number of on `layer`, in order,
+/// and which of them it is.
+fn point_of_row<'l>(
+    layer: &'l crate::model::Layer,
+    row: Row<'_>,
+) -> Option<(Vec<&'l crate::anim::Property>, usize)> {
+    use crate::model::EffectValue;
+    match row {
+        Row::Transform(prop) => {
+            let (rows, axis) = layer.point_rows(prop);
+            let props = rows
+                .iter()
+                .map(|r| layer.prop(*r))
+                .collect::<Option<Vec<_>>>()?;
+            Some((props, axis))
+        }
+        Row::Effect { effect, param } => {
+            let inst = layer.effects.iter().find(|e| e.id == effect)?;
+            let float = |id: &str| match inst.params.iter().find(|p| p.id == id)?.value {
+                EffectValue::Float(ref p) => Some(p),
+                _ => None,
+            };
+            let pair = crate::fx::schema(&inst.effect.match_name)
+                .and_then(|schema| schema.pairs().find(|p| p.x == param || p.y == param));
+            if let Some(pair) = pair {
+                if let (Some(x), Some(y)) = (float(pair.x), float(pair.y)) {
+                    return Some((vec![x, y], usize::from(pair.y == param)));
+                }
+            }
+            Some((vec![float(param)?], 0))
+        }
+    }
+}
+
+/// What `value` reads on a property: the number under its expression, or
+/// what it holds at nought.
+#[must_use]
+pub fn underlying_value(property: &crate::anim::Property) -> f64 {
+    match &property.animation {
+        crate::anim::Animation::Expression(_) => Slot::read(&property.extra).own().unwrap_or(0.0),
+        _ => property.value_at(0.0),
+    }
+}
+
+/// Note on `property`, whose expression was only just put on, the point it
+/// is number `axis` of, as an import does. `value` then reads the point, and
+/// a list the expression answers with gives this row its own number. A row
+/// shown on its own passes only its own number, and `value` is that.
+pub fn note_point(property: &mut crate::anim::Property, point: &[f64], axis: usize) {
+    if !matches!(property.animation, crate::anim::Animation::Expression(_))
+        || axis == 0 && point.len() < 2
+    {
+        return;
+    }
+    let kept = Slot::read(&property.extra);
+    Slot::new(point, axis, kept.seed)
+        .in_language(kept.language)
+        .write(&mut property.extra);
+}
+
+/// [`note_point`] for the row `prop` of `layer`, given that row's new state.
+pub fn note_transform_point(
+    layer: &crate::model::Layer,
+    prop: crate::model::TransformProp,
+    next: &mut crate::anim::Property,
+) {
+    let (rows, axis) = layer.point_rows(prop);
+    if layer.separated(prop) {
+        note_point(next, &[underlying_value(next)], axis);
+        return;
+    }
+    let point: Vec<f64> = rows
+        .iter()
+        .map(|r| match r {
+            r if *r == prop => underlying_value(next),
+            r => layer.prop(*r).map_or(0.0, underlying_value),
+        })
+        .collect();
+    note_point(next, &point, axis);
+}
+
+/// [`note_point`] for the parameter `param` of `inst`, when it is half of a
+/// pair and its expression was only just put on.
+pub fn note_effect_point(inst: &mut crate::model::EffectInstance, param: &str) {
+    use crate::model::EffectValue;
+    let Some(pair) = crate::fx::schema(&inst.effect.match_name)
+        .and_then(|schema| schema.pairs().find(|p| p.x == param || p.y == param))
+    else {
+        return;
+    };
+    let held = |id: &str| match inst.params.iter().find(|p| p.id == id).map(|p| &p.value) {
+        Some(EffectValue::Float(p)) => Some(underlying_value(p)),
+        _ => None,
+    };
+    let (Some(x), Some(y)) = (held(pair.x), held(pair.y)) else {
+        return;
+    };
+    let axis = usize::from(pair.y == param);
+    if let Some(EffectValue::Float(p)) = inst
+        .params
+        .iter_mut()
+        .find(|p| p.id == param)
+        .map(|p| &mut p.value)
+    {
+        note_point(p, &[x, y], axis);
+    }
+}
+
+/// What an expression on `row` of the context's layer is told about its
+/// property. `own` is the number the row shows while it is not an expression
+/// yet, and the slot is then the one putting one on would write.
+#[must_use]
+pub fn slot_of_row(context: &ExpressionContext, row: Row<'_>, own: Option<f64>) -> Slot {
+    let layer = context.comp.zip(context.layer).and_then(|(comp, layer)| {
+        let comp = context.document.comp(comp)?;
+        comp.layers.iter().find(|l| l.id == layer)
+    });
+    let Some(layer) = layer else {
+        return Slot::default();
+    };
+    let Some((props, axis)) = point_of_row(layer, row) else {
+        return Slot::default();
+    };
+    let Some(this) = props.get(axis) else {
+        return Slot::default();
+    };
+    if own.is_none() && this.extra.contains_key(SLOT_KEY) {
+        return Slot::read(&this.extra);
+    }
+    let own = own.unwrap_or_else(|| underlying_value(this));
+    if matches!(row, Row::Transform(prop) if layer.separated(prop)) {
+        return Slot::new(&[own], axis, 0);
+    }
+    let mut point: Vec<f64> = props.iter().map(|p| underlying_value(p)).collect();
+    if let Some(at) = point.get_mut(axis) {
+        *at = own;
+    }
+    Slot::new(&point, axis, 0)
 }
 
 /// Whether this text is a Rhai expression Lumit can actually run — it parses,
@@ -487,6 +647,9 @@ pub fn evaluate_text(expression: &str, context: Option<Arc<ExpressionContext>>) 
 /// An expression that does not compile yields **no samples at all**, not a row
 /// of zeroes: the graph has nothing truthful to draw for a line that is still
 /// being typed, and a flat curve at zero would read as a real answer.
+///
+/// `slot` is what the row the curve is drawn for knows about its property
+/// ([`slot_of_row`]), and the one carrying the text is found when it is left out.
 pub fn evaluate_range(
     language: Language,
     expression: &str,
@@ -494,6 +657,7 @@ pub fn evaluate_range(
     start: f64,
     end: f64,
     samples: i64,
+    slot: Option<Slot>,
 ) -> Vec<f64> {
     // A curve is a few hundred samples. More than a screen is wide draws
     // nothing new, and the number comes from outside.
@@ -502,7 +666,9 @@ pub fn evaluate_range(
         if program_for(expression).is_err() {
             return Vec::new();
         }
-        let slot = context.map_or_else(Slot::default, |context| slot_on_layer(context, expression));
+        let slot = slot.unwrap_or_else(|| {
+            context.map_or_else(Slot::default, |context| slot_on_layer(context, expression))
+        });
         let delta = (end - start) / (samples as f64);
         return (0..samples)
             .map(|i| {
@@ -1225,6 +1391,26 @@ mod tests {
             1000.0
         );
         assert_eq!(driven(shaken, Slot::new(&[960.0, 540.0], 1, 5), 2.0), 541.0);
+        // One put on a point's y row in the app reads the whole point, as an
+        // import gives it, so the row neither jumps nor takes the x.
+        let mut layer = driven_layer("Pin", "0");
+        layer.transform.position_x = Property::fixed(960.0);
+        layer.transform.position_y = Property::fixed(540.0);
+        let mut y = layer.transform.position_y.clone();
+        y.set_animation(Animation::Expression("value + [0, 10]".into()));
+        y.set_expression_language(Language::JavaScript);
+        note_transform_point(&layer, crate::model::TransformProp::PositionY, &mut y);
+        assert_eq!(y.value_at_with_context(0.0, on_rig(&rig, 0.0)), 550.0);
+        // A separated y row is a number of its own, as in After Effects, and
+        // still takes its own number of a list.
+        layer.transform.axis_modes.position = crate::model::AxisMode::Separated;
+        for (text, want) in [("value + 10", 550.0), ("[1, 2]", 2.0)] {
+            let mut y = layer.transform.position_y.clone();
+            y.set_animation(Animation::Expression(text.into()));
+            y.set_expression_language(Language::JavaScript);
+            note_transform_point(&layer, crate::model::TransformProp::PositionY, &mut y);
+            assert_eq!(y.value_at_with_context(0.0, on_rig(&rig, 0.0)), want);
+        }
         assert_eq!(
             driven(
                 "value.length > 1 ? value[1] : value",
@@ -1297,12 +1483,20 @@ mod tests {
         let js = Language::JavaScript;
         assert_eq!(evaluate_in(js, "value + 5", Some(on_rig(&rig, 0.0))), 35.0);
         assert_eq!(
-            evaluate_range(js, "value + 5", Some(&*on_rig(&rig, 0.0)), 0.0, 1.0, 3),
+            evaluate_range(
+                js,
+                "value + 5",
+                Some(&*on_rig(&rig, 0.0)),
+                0.0,
+                1.0,
+                3,
+                None
+            ),
             [35.0, 35.0, 35.0]
         );
         // A line still being typed has no curve to draw, in either language.
-        assert!(evaluate_range(js, "value +", None, 0.0, 1.0, 3).is_empty());
-        assert!(evaluate_range(Language::Rhai, "time +", None, 0.0, 1.0, 3).is_empty());
+        assert!(evaluate_range(js, "value +", None, 0.0, 1.0, 3, None).is_empty());
+        assert!(evaluate_range(Language::Rhai, "time +", None, 0.0, 1.0, 3, None).is_empty());
     }
 
     /// **An expression is run by the language it was given, never by a guess.**

@@ -145,6 +145,16 @@ class GraphChannel {
   /// draws for a mask path.
   bool get isMaskPath => maskValue == MaskValue.path;
 
+  /// The row an expression on this channel sits on, so it reads its own
+  /// number of a point. Null for a channel that is neither a transform
+  /// property nor an effect parameter.
+  BridgeExpressionRow? get expressionRow => switch ((prop, effect, param)) {
+        (final prop?, _, _) => BridgeExpressionRow.transform(prop),
+        (null, final effect?, final param?) =>
+          BridgeExpressionRow.effect(effect: effect.id, param: param.id),
+        _ => null,
+      };
+
   const GraphChannel({
     required this.path,
     required this.id,
