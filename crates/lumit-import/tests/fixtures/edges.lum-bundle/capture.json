@@ -178,9 +178,17 @@
             { "match_name": "ADBE Light Options Group", "name": "Light Options", "enabled": true,
               "group": [
                 { "match_name": "ADBE Light Intensity", "name": "Intensity",
-                  "value_type": "float", "value": 50.0 },
+                  "value_type": "float", "value": 50.0,
+                  "keyframes": [
+                    { "t": 0.0, "v": 50.0, "in_interp": "LINEAR", "out_interp": "LINEAR" },
+                    { "t": 2.0, "v": 150.0, "in_interp": "LINEAR", "out_interp": "LINEAR" }
+                  ] },
                 { "match_name": "ADBE Light Color", "name": "Color",
-                  "value_type": "colour", "value": [1.0, 1.0, 1.0] },
+                  "value_type": "colour", "value": [1.0, 1.0, 1.0],
+                  "keyframes": [
+                    { "t": 0.0, "v": [1.0, 1.0, 1.0], "in_interp": "LINEAR", "out_interp": "LINEAR" },
+                    { "t": 2.0, "v": [1.0, 0.5, 0.0], "in_interp": "LINEAR", "out_interp": "LINEAR" }
+                  ] },
                 { "match_name": "ADBE Light Cone Angle", "name": "Cone Angle",
                   "value_type": "float", "value": 90.0 }
               ]

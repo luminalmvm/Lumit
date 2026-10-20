@@ -703,3 +703,29 @@ fn a_motion_tile_is_measured_against_its_own_layer_not_the_composition() {
     // And the untouched Output Height is the layer's own, whole.
     assert_eq!(at("output_height"), 1088.0);
 }
+
+/// **An ambient light arrives as one, its keys with it.**
+///
+/// Light options used to come across as their still value alone, and an
+/// ambient light as a point. Its intensity's keys arrive as Lumit's own
+/// percentages, and its colour's in scene-linear light.
+#[test]
+fn an_ambient_light_keeps_its_kind_and_its_keyframes() {
+    let (doc, report) = mapped("edges.lum-bundle");
+    let LayerKind::Light { light } = &layer(comp(&doc, "Edges"), "Key light").kind else {
+        panic!("a light");
+    };
+    assert_eq!(light.kind, lumit_core::model::LightKind::Ambient);
+    assert_eq!(keys(&light.intensity).len(), 2);
+    assert_eq!(light.intensity.value_at(2.0), 150.0);
+    let green = keys(&light.colour[1]);
+    assert_eq!(green.len(), 2);
+    assert!(
+        (green[1].value - 0.214).abs() < 1e-3,
+        "half grey, made linear"
+    );
+    assert!(!reported(&report, |r| matches!(
+        r,
+        Reason::LightKindApproximated { .. }
+    )));
+}
