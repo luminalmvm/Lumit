@@ -50,6 +50,7 @@ import '../widgets/share_marks.dart';
 import 'timeline_extras_frb.dart' show DoubleTap, showMenuAt;
 import 'timeline_snap.dart' show snapSuspended;
 import 'viewer_anchor.dart';
+import 'viewer_gizmo_3d.dart';
 import 'viewer_layer_map.dart';
 import 'viewer_overlays.dart'
     show ViewerOverlayPainter, viewerOverlayToggles, viewerToggleRow;
@@ -57,6 +58,7 @@ import 'viewer_shapes.dart' show bezierPath, stillHalfFeather;
 import 'viewer_snap.dart' show snapViewerDrag, viewerSnapTargets;
 import 'viewer_tool_cursor.dart' show paintAnchorMark, paintMarquee;
 import 'viewer_type.dart' show viewerTypeEditRequest;
+import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart';
 
 /// How big a scale handle is drawn, and how far from it a press still counts.
@@ -202,6 +204,10 @@ class LayerBox {
   /// Position and picked by that.
   final bool marker;
 
+  /// The transform the box was built from, which a 3D handle drag keys or
+  /// sets, or null where nothing on the box writes it.
+  final BridgeTransform? transform;
+
   const LayerBox({
     required this.layer,
     required this.id,
@@ -216,6 +222,7 @@ class LayerBox {
     this.puppet,
     this.motionPath,
     this.marker = false,
+    this.transform,
   });
 
   /// A point of the layer's **art** on screen.
@@ -246,6 +253,7 @@ class LayerBox {
         puppet: puppet,
         motionPath: motionPath,
         marker: marker,
+        transform: transform,
       );
 
   /// The same box with the layer scaled to [sxPercent] / [syPercent] — the
@@ -881,6 +889,74 @@ double rotationForDrag({
   return (result / 45.0).roundToDouble() * 45.0;
 }
 
+/// One set of 3D handles and the three values its arrows write.
+class Handles3d {
+  final LayerBox box;
+  final Gizmo3d gizmo;
+
+  /// x, y and z of Position.
+  final List<BridgeTransformProp> props;
+
+  const Handles3d(this.box, this.gizmo, this.props);
+
+  /// Where the handles are, as the values the arrows write.
+  Vec3 get at => gizmo.at;
+}
+
+/// The channel [prop] names in [tf], for those a 3D handle writes.
+BridgeScalar? scalarOf(BridgeTransform tf, BridgeTransformProp prop) =>
+    switch (prop) {
+      BridgeTransformProp.positionX => tf.positionX,
+      BridgeTransformProp.positionY => tf.positionY,
+      BridgeTransformProp.positionZ => tf.positionZ,
+      BridgeTransformProp.rotation => tf.rotation,
+      BridgeTransformProp.rotationX => tf.rotationX,
+      BridgeTransformProp.rotationY => tf.rotationY,
+      _ => null,
+    };
+
+/// How [box] is turned, X, Y and Z Rotation in degrees.
+Vec3 turnOfBox(LayerBox box) => (
+      box.map.depth?.rotationX ?? 0,
+      box.map.depth?.rotationY ?? 0,
+      box.rotationDegrees,
+    );
+
+/// The box the 3D handles sit on among [boxes]: the layer picked first, as
+/// [LumitUiState.selectedLayer] has it, while that one is seen in depth,
+/// otherwise the first that is.
+LayerBox? primary3d(List<LayerBox> boxes, UuidValue? first) {
+  final deep = [
+    for (final box in boxes)
+      if (box.map.projected) box
+  ];
+  for (final box in deep) {
+    if (box.id == first) return box;
+  }
+  return deep.firstOrNull;
+}
+
+/// The move handles of a 3D layer or a light, at its anchor. None where the
+/// anchor is behind the eye or Position is an expression's.
+List<Handles3d> handles3dOf(LayerBox box, GizmoAxes mode) {
+  final tf = box.transform;
+  final map = box.map;
+  if (tf == null || !map.projected) return const [];
+  const props = [
+    BridgeTransformProp.positionX,
+    BridgeTransformProp.positionY,
+    BridgeTransformProp.positionZ,
+  ];
+  if (props.any((p) => scalarOf(tf, p) is BridgeScalar_Expression)) {
+    return const [];
+  }
+  final gizmo = Gizmo3d.of(map,
+      at: (map.px, map.py, map.depth!.z),
+      local: localAxes(turnOfBox(box)),
+      mode: mode);
+  return gizmo == null ? const [] : [Handles3d(box, gizmo, props)];
+}
+
 /// What the pointer is doing to the picture right now.
 enum _GizmoDrag {
   none,
@@ -893,6 +969,9 @@ enum _GizmoDrag {
 
   /// A key of a motion path (docs/07 §2.4), dragged on the picture.
   motionKey,
+
+  /// A 3D arrow or square.
+  axis3d,
 }
 
 /// Where the right-click menu's Align puts a layer's box against the
@@ -1020,6 +1099,22 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// Counts a second click in one place, for opening what a layer holds.
   final DoubleTap _taps = DoubleTap();
 
+  /// The 3D handles a drag is on, as they stood when it began, and which of
+  /// them is in hand.
+  Handles3d? _set;
+  GizmoPick? _part;
+
+  /// Where the 3D drag last put its values, kept while the pointer is
+  /// somewhere the axis cannot reach, such as past its vanishing point.
+  Vec3? _last3d;
+
+  /// The 3D handle under the pointer, which set and which part.
+  (BridgeTransformProp, GizmoPick)? _hot3d;
+
+  /// Whether a body drag moves a 3D layer across the screen (Alt) rather
+  /// than across its parent's flat.
+  bool _onScreen = false;
+
   @override
   void initState() {
     super.initState();
@@ -1043,9 +1138,12 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           BridgeTransformProp.positionX
         ],
       _GizmoDrag.points => const <BridgeTransformProp>[],
+      _GizmoDrag.axis3d => [
+          _set?.props.first ?? BridgeTransformProp.positionX,
+        ],
     };
     if (props == null) return const [];
-    final acting = _acting;
+    final acting = _acting ?? _set?.box;
     return [
       for (final box in acting == null ? _selected : [acting])
         if (props.isEmpty)
@@ -1134,7 +1232,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
                   ? nudgeIn3D(box, by)
                   : box.map.positionStep(by))
               case final step?)
-            (box, box.map.px + step.dx, box.map.py + step.dy),
+            (box, box.map.px + step.dx, box.map.py + step.dy, null),
     ];
     if (moves.isEmpty) return false;
     _place(moves);
@@ -1222,6 +1320,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         ? selected.single
         : null;
     final move = _drag == _GizmoDrag.move ? _move : null;
+    final sets =
+        _drag == _GizmoDrag.move ? const <Handles3d>[] : _setsOf(selected);
+    final held = _set;
+    final part = _part;
 
     final painter = CustomPaint(
       key: const ValueKey('viewer-gizmo'),
@@ -1274,6 +1376,18 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         accent: t.animated,
         hairline: t.hairlineStrong,
         surface: t.surface0,
+        handles3d: sets,
+        hot3d: _drag == _GizmoDrag.none ? _hot3d : null,
+        held3d: held != null && part != null ? (held.props.first, part) : null,
+        neutral: t.textPrimary,
+        readout: switch (_drag) {
+          _GizmoDrag.axis3d => _readout3d(),
+          _GizmoDrag.move when _onScreen => _readoutAcross(),
+          _ => const [],
+        },
+        pointer: _pointer,
+        readoutStyle: t.small.copyWith(color: t.textPrimary),
+        plate: t.surface0.withValues(alpha: 0.85),
       ),
     );
 
@@ -1319,8 +1433,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         box.map.projected &&
         box.draggable &&
         widget.uiState.selectedLayerIds.contains(box.id)) {
-      final (x, y) = _movedPosition(box);
-      return box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(x, y));
+      final (x, y, z) = _movedPosition(box);
+      return box.pivotedAt(Offset(box.map.ax, box.map.ay), Offset(x, y), z: z);
     }
     if (_acting?.id == box.id) {
       switch (_drag) {
@@ -1444,6 +1558,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// mark, and highlighting it would read as a second state.
   void _onHover(PointerHoverEvent event) {
     if (_drag != _GizmoDrag.none) return;
+    final hot = _pick3d(event.localPosition);
+    final named = hot == null ? null : (hot.$1.props.first, hot.$2);
+    if (named != _hot3d) setState(() => _hot3d = named);
+    if (named != null) return _setHover(null);
     final hit = layerAtPoint(widget.boxes, event.localPosition);
     final ids = widget.uiState.selectedLayerIds;
     _setHover(hit == null || ids.contains(hit.id) ? null : hit.id);
@@ -1452,6 +1570,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// A click selects what is under it — with Shift, adds to or removes from the
   /// selection; on empty space, selects nothing.
   void _onTapUp(TapUpDetails details) {
+    // A click on a 3D handle is a drag that went nowhere, not a pick.
+    if (_pick3d(details.localPosition) != null) return;
     final shift = HardwareKeyboard.instance.isShiftPressed;
     // A mask point first: it sits on top of the layer it belongs to, and a
     // click on it means the point rather than the layer.
@@ -1629,7 +1749,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// is what is seen. A layer with a keyed position stays where it is, as it
   /// does under a drag.
   void _align(_Align to) {
-    final moves = <(LayerBox, double, double)>[];
+    final moves = <(LayerBox, double, double, double?)>[];
     for (final box in _selected) {
       final rect = box.draggable ? _rectOf([box]) : null;
       if (rect == null) continue;
@@ -1647,14 +1767,16 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           } /
           scale;
       final step = box.map.positionStep(d);
-      moves.add((box, box.map.px + step.dx, box.map.py + step.dy));
+      moves.add((box, box.map.px + step.dx, box.map.py + step.dy, null));
     }
     _place(moves);
   }
 
   /// Write new Positions, in composition pixels: one op a layer for both axes,
   /// and the lot as one undo step. A move, a nudge and an align all land here.
-  void _place(List<(LayerBox, double, double)> moves) {
+  /// A z where one is given goes in the same op, keyed at the playhead where
+  /// Position z is keyed.
+  void _place(List<(LayerBox, double, double, double?)> moves) {
     if (moves.isEmpty) return;
     var landed = false;
     asOneUndoStep(
@@ -1663,18 +1785,28 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           ? Provider.of<LumitState>(context, listen: false).project
           : null,
       () {
-        for (final (box, x, y) in moves) {
+        for (final (box, x, y, z) in moves) {
           // One op for both axes. x and y are separate properties in the
           // model, and writing them separately made one drag cost two undo
           // steps: Ctrl+Z put the layer back half way, along one axis, which
           // reads as the undo being broken rather than as two honest edits.
           try {
             box.layer.setTransforms(
-              props: const [
+              props: [
                 BridgeTransformProp.positionX,
                 BridgeTransformProp.positionY,
+                if (z != null) BridgeTransformProp.positionZ,
               ],
-              values: [BridgeScalar.static_(x), BridgeScalar.static_(y)],
+              values: [
+                BridgeScalar.static_(x),
+                BridgeScalar.static_(y),
+                if (z != null)
+                  scalarWithValueAt(
+                      box.transform?.positionZ ?? BridgeScalar.static_(z),
+                      z,
+                      widget.comp,
+                      widget.uiState.playheadFrame.value),
+              ],
             );
             landed = true;
           } catch (_) {
@@ -1718,6 +1850,25 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           _acting = key.box;
           _motionKey = key.index;
           _drag = _GizmoDrag.motionKey;
+        });
+        return;
+      }
+    }
+
+    // A 3D arrow or square beats the box's own handles, all but the anchor,
+    // which sits in the middle of them and is aimed at more tightly.
+    if (aimedAt == null &&
+        !(selected.length == 1 &&
+            selected.single.scalable &&
+            selected.single.handleHit(at) == GizmoHandle.anchor)) {
+      if (_pick3d(at) case (final set, final part)) {
+        setState(() {
+          _set = set;
+          _part = part;
+          _last3d = set.at;
+          _drag = _GizmoDrag.axis3d;
+          _hot3d = null;
+          _hover = null;
         });
         return;
       }
@@ -1786,6 +1937,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     }
     setState(() {
       _drag = _GizmoDrag.move;
+      _onScreen = HardwareKeyboard.instance.isAltPressed;
       _hover = null;
     });
   }
@@ -1812,6 +1964,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         _previewPoints();
       case _GizmoDrag.motionKey:
         _previewMotionKey();
+      case _GizmoDrag.axis3d:
+        _preview3d();
       case _GizmoDrag.marquee || _GizmoDrag.none:
         break;
     }
@@ -1833,27 +1987,29 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         _commitMotionKey();
       case _GizmoDrag.marquee:
         _commitMarquee();
+      case _GizmoDrag.axis3d:
+        _commit3d();
       case _GizmoDrag.none:
         break;
     }
-    _throttle.cancel();
-    setState(() {
-      _drag = _GizmoDrag.none;
-      _delta = Offset.zero;
-      _acting = null;
-      _handle = null;
-      _motionKey = null;
-    });
+    _onPanCancel();
   }
 
   void _onPanCancel() {
     _throttle.cancel();
+    if (_drag == _GizmoDrag.axis3d) {
+      widget.uiState.liveTransforms.value = const {};
+    }
     setState(() {
       _drag = _GizmoDrag.none;
       _delta = Offset.zero;
       _acting = null;
       _handle = null;
       _motionKey = null;
+      _set = null;
+      _part = null;
+      _last3d = null;
+      _onScreen = false;
     });
   }
 
@@ -1871,8 +2027,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   void _sendMovePreview(LayerBox box) {
-    final (x, y) = _movedPosition(box);
-    _sendPreview(box, (tf) => transformWith(tf, positionX: x, positionY: y));
+    final (x, y, z) = _movedPosition(box);
+    _sendPreview(box,
+        (tf) => transformWith(tf, positionX: x, positionY: y, positionZ: z));
   }
 
   /// Ask for the provisional picture, and never let a refusal end the gesture.
@@ -1900,21 +2057,173 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   /// Where a dragged layer's Position lands: the magnet's travel, not the
   /// pointer's. The preview, the box on screen and the committed op all
   /// come through here, so the picture cannot land anywhere but where the
-  /// wireframe said it would.
-  (double, double) _movedPosition(LayerBox box) {
-    final step = box.map.positionStep(_moveDelta / box.map.viewScale);
-    return (box.map.px + step.dx, box.map.py + step.dy);
+  /// wireframe said it would. With Alt a 3D layer goes across the screen at
+  /// its depth instead, so z moves too.
+  (double, double, double?) _movedPosition(LayerBox box) {
+    final m = box.map;
+    if (_onScreen && m.projected) {
+      final at = (m.px, m.py, m.depth!.z);
+      final d = Gizmo3d.of(m, at: at, local: const [], mode: GizmoAxes.view)
+          ?.onScreen(_origin, _origin + _moveDelta);
+      if (d != null) return (at.$1 + d.$1, at.$2 + d.$2, at.$3 + d.$3);
+    }
+    final step = m.positionStep(_moveDelta / m.viewScale);
+    return (m.px + step.dx, m.py + step.dy, null);
   }
 
   void _commitMove() {
     if (_delta == Offset.zero) return;
-    final moves = <(LayerBox, double, double)>[];
+    final moves = <(LayerBox, double, double, double?)>[];
     for (final box in _selected) {
       if (!box.draggable) continue;
-      final (x, y) = _movedPosition(box);
-      moves.add((box, x, y));
+      final (x, y, z) = _movedPosition(box);
+      moves.add((box, x, y, z));
     }
     _place(moves);
+  }
+
+  // --- 3D arrows and squares ------------------------------------------------
+
+  /// The 3D handles on screen, on the selected 3D layer or light picked
+  /// first, in the axes the toolbar is set to.
+  List<Handles3d> _setsOf(List<LayerBox> selected) {
+    if (!widget.showControls || !_selectionTool) return const [];
+    final primary =
+        primary3d(selected, widget.uiState.selectedLayer.value?.internallayerId);
+    return primary == null
+        ? const []
+        : handles3dOf(primary, widget.uiState.tools.axes);
+  }
+
+  /// The 3D handle under [at], and its set.
+  (Handles3d, GizmoPick)? _pick3d(Offset at) {
+    for (final set in _setsOf(_selected)) {
+      final part = set.gizmo.pick(at, turning: false);
+      if (part != null) return (set, part);
+    }
+    return null;
+  }
+
+  /// Where the 3D drag in hand puts its three values. Shift keeps it to
+  /// whole steps of ten.
+  Vec3? _moved3d() {
+    final set = _set, part = _part;
+    if (set == null || part == null) return null;
+    final step = HardwareKeyboard.instance.isShiftPressed ? 10.0 : null;
+    final d = switch (part.kind) {
+      GizmoKind.arrow =>
+        set.gizmo.along(part.axis, _origin, _pointer, step: step),
+      GizmoKind.screen => set.gizmo.onScreen(_origin, _pointer),
+      _ => set.gizmo.across(part.axis, _origin, _pointer, step: step),
+    };
+    if (d == null) return _last3d;
+    final at = set.at;
+    return _last3d = (at.$1 + d.$1, at.$2 + d.$2, at.$3 + d.$3);
+  }
+
+  /// The layer the 3D drag moves and where to.
+  List<(LayerBox, List<BridgeTransformProp>, Vec3, Vec3)> _moves3d() {
+    final set = _set, to = _moved3d();
+    if (set == null || to == null) return const [];
+    return [(set.box, set.props, set.at, to)];
+  }
+
+  /// [tf] with a 3D drag's three values in it.
+  BridgeTransform _with3d(
+          BridgeTransform tf, List<BridgeTransformProp> props, Vec3 to) =>
+      transformWith(tf, positionX: to.$1, positionY: to.$2, positionZ: to.$3);
+
+  /// The boxes and the picture follow the drag: the boxes are rebuilt from
+  /// the provisional transforms, children included, and one layer moving
+  /// alone is previewed as every other drag previews.
+  void _preview3d() {
+    final moves = _moves3d();
+    final live = {
+      for (final (box, props, _, to) in moves)
+        box.id: _with3d(box.transform!, props, to),
+    };
+    if (live.isEmpty) return;
+    widget.uiState.liveTransforms.value = live;
+    if (moves.length != 1) return;
+    final layer = moves.single.$1.layer;
+    final patched = live.values.single;
+    _throttle.request(() {
+      try {
+        widget.comp.renderFrameWithTransformPreview(
+          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          scale: widget.uiState.viewerScale,
+          layer: layer,
+          transform: patched,
+        );
+      } catch (_) {
+        // A preview is a courtesy; the move still lands.
+      }
+    });
+  }
+
+  /// One op a layer for the values the drag changed, the lot as one undo
+  /// step. A keyed value takes a key at the playhead, a still one stays
+  /// still.
+  void _commit3d() {
+    if (_delta == Offset.zero) return;
+    final moves = _moves3d();
+    final frame = widget.uiState.playheadFrame.value;
+    var landed = false;
+    asOneUndoStep(
+      moves.length > 1
+          ? Provider.of<LumitState>(context, listen: false).project
+          : null,
+      () {
+        for (final (box, props, from, to) in moves) {
+          final was = [from.$1, from.$2, from.$3];
+          final now = [to.$1, to.$2, to.$3];
+          final write = <BridgeTransformProp>[];
+          final values = <BridgeScalar>[];
+          for (var i = 0; i < 3; i++) {
+            final scalar = scalarOf(box.transform!, props[i]);
+            if (scalar == null || (now[i] - was[i]).abs() < 1e-9) continue;
+            write.add(props[i]);
+            values.add(scalarWithValueAt(scalar, now[i], widget.comp, frame));
+          }
+          if (write.isEmpty) continue;
+          try {
+            box.layer.setTransforms(props: write, values: values);
+            landed = true;
+          } catch (_) {
+            // A layer deleted mid-drag. The rest still move.
+          }
+        }
+      },
+    );
+    if (landed) widget.onChanged();
+  }
+
+  /// What the 3D drag has changed so far, for the readout by the pointer.
+  List<String> _readout3d() {
+    final set = _set, to = _last3d;
+    if (set == null || to == null) return const [];
+    return _readout(l10n.transformPosition, set.at, to);
+  }
+
+  /// The same for an Alt drag across the view, on the layer the handles
+  /// would sit on.
+  List<String> _readoutAcross() {
+    final box = primary3d(
+        _selected, widget.uiState.selectedLayer.value?.internallayerId);
+    if (box == null || !box.draggable) return const [];
+    final (x, y, z) = _movedPosition(box);
+    final m = box.map;
+    return _readout(l10n.transformPosition, (m.px, m.py, m.depth!.z),
+        (x, y, z ?? m.depth!.z));
+  }
+
+  List<String> _readout(String what, Vec3 from, Vec3 to) {
+    final d = [to.$1 - from.$1, to.$2 - from.$2, to.$3 - from.$3];
+    return [
+      what,
+      for (var i = 0; i < 3; i++)
+        if (d[i].abs() >= 0.05) '${'xyz'[i]}  ${gizmoAmount(d[i])}',
+    ];
   }
 
   // --- Scale ----------------------------------------------------------------
@@ -2288,9 +2597,12 @@ BridgeTransform transformWith(
   double? scaleX,
   double? scaleY,
   double? rotation,
+  double? rotationX,
+  double? rotationY,
 }) {
   BridgeScalar put(double? value, BridgeScalar keep) =>
       value == null ? keep : BridgeScalar.static_(value);
+  final camera = tf.camera;
   return BridgeTransform(
     anchorX: put(anchorX, tf.anchorX),
     anchorY: put(anchorY, tf.anchorY),
@@ -2300,9 +2612,10 @@ BridgeTransform transformWith(
     scaleX: put(scaleX, tf.scaleX),
     scaleY: put(scaleY, tf.scaleY),
     rotation: put(rotation, tf.rotation),
-    rotationX: tf.rotationX,
-    rotationY: tf.rotationY,
+    rotationX: put(rotationX, tf.rotationX),
+    rotationY: put(rotationY, tf.rotationY),
     opacity: tf.opacity,
+    camera: camera,
   );
 }
 
@@ -2351,6 +2664,19 @@ class _GizmoPainter extends CustomPainter {
   final Color hairline;
   final Color surface;
 
+  /// The 3D handles, the one under the pointer and the one in hand, each
+  /// named by its set's first value, and the centre ring's colour.
+  final List<Handles3d> handles3d;
+  final (BridgeTransformProp, GizmoPick)? hot3d;
+  final (BridgeTransformProp, GizmoPick)? held3d;
+  final Color neutral;
+
+  /// What a 3D drag has changed, drawn by [pointer].
+  final List<String> readout;
+  final Offset pointer;
+  final TextStyle readoutStyle;
+  final Color plate;
+
   const _GizmoPainter({
     required this.selected,
     required this.motionPaths,
@@ -2371,6 +2697,14 @@ class _GizmoPainter extends CustomPainter {
     required this.accent,
     required this.hairline,
     required this.surface,
+    required this.handles3d,
+    required this.hot3d,
+    required this.held3d,
+    required this.neutral,
+    required this.readout,
+    required this.pointer,
+    required this.readoutStyle,
+    required this.plate,
   });
 
   @override
@@ -2459,6 +2793,23 @@ class _GizmoPainter extends CustomPainter {
     for (final box in motionPaths) {
       _motionPath(canvas, box);
     }
+
+    final held = held3d;
+    for (final set in handles3d) {
+      final named = set.props.first;
+      if (held != null && held.$1 != named) continue;
+      paintGizmo3d(
+        canvas,
+        set.gizmo,
+        turning: false,
+        neutral: neutral,
+        outline: surface,
+        hot: hot3d?.$1 == named ? hot3d?.$2 : null,
+        held: held?.$2,
+      );
+    }
+    paintGizmoReadout(canvas, pointer, readout,
+        style: readoutStyle, plate: plate);
 
     final band = marquee;
     if (band != null) paintMarquee(canvas, band, accent);

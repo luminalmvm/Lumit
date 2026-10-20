@@ -1293,6 +1293,75 @@ void main() {
               '${counter.ranking()}');
     });
 
+    /// **A 3D arrow drag asks for no camera and writes once.** The arrows are
+    /// worked out from the rows the boxes already hold, so a drag costs a
+    /// throttled preview and one op on release, however far it goes.
+    testWidgets('a 3D arrow drag writes once and asks for no camera',
+        (tester) async {
+      final p = freshProject();
+      final comp = p.state.project!.newComposition(name: 'Scene');
+      final layer = comp.addSolidLayer()
+        ..setSwitch(switch_: BridgeLayerSwitch.threeD, on_: true);
+      comp.addCameraLayer();
+      p.uiState.setSelectedComp(comp);
+      p.uiState.setSelection([layer]);
+      p.uiState.tools.select(ToolMode.select);
+
+      await tester.pumpWidget(hostPanel(
+        state: p.state,
+        uiState: p.uiState,
+        size: const Size(900, 600),
+        child: const ViewerPanelFrb(),
+      ));
+      await settleFrb(tester, minRounds: 8);
+
+      // Pressed on the X arrow, where the gizmo drew it.
+      final gizmo = find.byKey(const ValueKey('viewer-gizmo'));
+      final painter = tester.widget<CustomPaint>(gizmo).painter as dynamic;
+      final arrows = (painter.handles3d as List).single.gizmo;
+      final box = tester.renderObject<RenderBox>(gizmo);
+      final from = box.localToGlobal(Offset.lerp(
+          arrows.centre as Offset, arrows.tips[0] as Offset, 0.7)!);
+      double x() =>
+          sampledScalar(layer.getTransform().positionX, timeOfFrame(comp, 0));
+      final was = x();
+      final drag =
+          await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+      counter
+        ..reset()
+        ..counting = true;
+      for (var i = 0; i < 20; i++) {
+        await drag.moveBy(const Offset(4, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      counter.counting = false;
+      const rows = 'composition_reference_view_projection';
+      expect(counter.calls[rows] ?? 0, 0,
+          reason: 'the drag asked for the camera:\n${counter.ranking()}');
+      expect(counter.calls['layer_reference_set_transforms'] ?? 0, 0,
+          reason: 'the drag wrote before it was let go');
+      final previews = counter.calls[
+              'composition_reference_render_frame_with_transform_preview'] ??
+          0;
+      expect(previews, inInclusiveRange(1, 20),
+          reason: 'the drag previewed more than once a move:\n'
+              '${counter.ranking()}');
+      // Measured at nothing else: the stage rebuilds per move from what it
+      // holds.
+      expect(counter.total - previews, lessThanOrEqualTo(1),
+          reason: 'the drag re-read the document:\n${counter.ranking()}');
+
+      counter
+        ..reset()
+        ..counting = true;
+      await drag.up();
+      await tester.pump();
+      counter.counting = false;
+      expect(counter.calls['layer_reference_set_transforms'], 1);
+      expect(x(), greaterThan(was + 40),
+          reason: 'the arrow moved the layer along x');
+    });
+
     /// **Nor must a pick drag** (docs/07 §6.1). A window is 129 pixels a side
     /// and the magnifier's 9×9 is cut out of it in Dart, so a sweep across the
     /// picture is meant to cost the engine *nothing at all* until the pointer

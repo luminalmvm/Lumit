@@ -339,6 +339,7 @@ class ViewerStage extends StatelessWidget {
             isStill(tf.rotation),
         rotationDegrees: rotation,
         marker: light,
+        transform: tf,
         // The path a keyed position follows, for the layers whose outline is
         // drawn: asked once per layer per document revision and held. A 3D
         // layer moving only in depth has one too.

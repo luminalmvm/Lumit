@@ -209,6 +209,9 @@ class ViewerLayerMap {
   /// the view's rows times the parent chain.
   late final List<double> _parentRows = depth!.parentRows();
 
+  /// The same rows, for the 3D handles, which work in the parent's space.
+  List<double> get parentRows => _parentRows;
+
   /// The layer's own plane `(x, y, 1)` to `(X, Y, W)`: the rows above times
   /// the layer's own placement, which has no z of its own because the layer
   /// is flat.
