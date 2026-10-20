@@ -39,7 +39,7 @@ use lumit_core::markers::{Marker, MarkerKind};
 use lumit_core::mask::{BezierPath, Mask, MaskMode, PathKeyframe, Vertex};
 use lumit_core::model::{
     BlendMode, Layer, LayerInputSource, LayerKind, LightDef, LightKind, Material, MatteChannel,
-    MatteRef, Switches, TextDocument, TransformGroup,
+    MatteRef, ShadowMode, Switches, TextDocument, TransformGroup,
 };
 use lumit_core::retime::Interpolation;
 use lumit_core::time::{CompTime, Rational};
@@ -553,6 +553,9 @@ fn light(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property])
     let cone_feather = option("ADBE Light Cone Feather 2", 50.0);
     let radius_px = option("ADBE Light Falloff Start", 500.0);
     let falloff_px = option("ADBE Light Falloff Distance", 500.0);
+    let shadow_darkness = option("ADBE Light Shadow Darkness", 100.0);
+    let shadow_diffusion = option("ADBE Light Shadow Diffusion", 0.0);
+    let casts_shadows = still(options, "ADBE Casts Shadows", 0).is_some_and(|v| v != 0.0);
     // AE numbers its menus from one: None, Smooth, Inverse Square Clamped.
     let falloff = match still(options, "ADBE Light Falloff Type", 0) {
         Some(v) if v.round() == 2.0 => LightFalloff::Smooth,
@@ -575,6 +578,9 @@ fn light(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property])
             scalar(conv, path, group, "ADBE Anchor Point", 1, 0.0),
             scalar(conv, path, group, "ADBE Anchor Point", 2, 0.0),
         ],
+        casts_shadows,
+        shadow_darkness,
+        shadow_diffusion,
         ..LightDef::default()
     }
 }
@@ -590,6 +596,19 @@ fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Materia
         specular: read("ADBE Specular Coefficient", 50.0),
         shininess: read("ADBE Shininess Coefficient", 5.0),
         metal: read("ADBE Metal Coefficient", 100.0),
+        light_transmission: read("ADBE Light Transmission", 0.0),
+        casts_shadows: shadow_mode(still(options, "ADBE Casts Shadows", 0), ShadowMode::Off),
+        accepts_shadows: shadow_mode(still(options, "ADBE Accepts Shadows", 0), ShadowMode::On),
+    }
+}
+
+/// AE's Off, On and Only, as it numbers them.
+fn shadow_mode(value: Option<f64>, fallback: ShadowMode) -> ShadowMode {
+    match value.map(|v| v.round() as i64) {
+        Some(0) => ShadowMode::Off,
+        Some(1) => ShadowMode::On,
+        Some(2) => ShadowMode::Only,
+        _ => fallback,
     }
 }
 

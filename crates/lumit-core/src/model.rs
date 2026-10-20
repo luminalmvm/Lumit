@@ -672,6 +672,7 @@ pub struct TransformGroup {
 /// A layer's Material options, After Effects' own: how much of each kind of
 /// light it takes. Percentages, as there.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Material {
     /// How much of the ambient lights it takes.
     pub ambient: Property,
@@ -685,6 +686,22 @@ pub struct Material {
     /// How much the highlight takes the layer's own colour rather than the
     /// light's.
     pub metal: Property,
+    /// The shadow settings, kept and keyframed but not yet drawn: whether it
+    /// casts and takes shadows, and how much light passes through it.
+    pub casts_shadows: ShadowMode,
+    pub accepts_shadows: ShadowMode,
+    pub light_transmission: Property,
+}
+
+/// After Effects' three answers to Casts shadows and Accepts shadows: no,
+/// yes, or only the shadow without the layer itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShadowMode {
+    #[default]
+    Off,
+    On,
+    Only,
 }
 
 impl Material {
@@ -715,6 +732,7 @@ impl Material {
             TransformProp::Specular => &self.specular,
             TransformProp::Shininess => &self.shininess,
             TransformProp::Metal => &self.metal,
+            TransformProp::LightTransmission => &self.light_transmission,
             _ => return None,
         })
     }
@@ -726,6 +744,7 @@ impl Material {
             TransformProp::Specular => &mut self.specular,
             TransformProp::Shininess => &mut self.shininess,
             TransformProp::Metal => &mut self.metal,
+            TransformProp::LightTransmission => &mut self.light_transmission,
             _ => return None,
         })
     }
@@ -740,6 +759,9 @@ impl Default for Material {
             specular: Property::fixed(50.0),
             shininess: Property::fixed(5.0),
             metal: Property::fixed(100.0),
+            casts_shadows: ShadowMode::Off,
+            accepts_shadows: ShadowMode::On,
+            light_transmission: Property::zero(),
         }
     }
 }
@@ -890,12 +912,15 @@ pub enum TransformProp {
     FalloffDistance,
     LightWidth,
     LightHeight,
+    ShadowDarkness,
+    ShadowDiffusion,
     /// A layer's Material options, in [`Material`].
     Ambient,
     Diffuse,
     Specular,
     Shininess,
     Metal,
+    LightTransmission,
 }
 
 impl TransformGroup {
@@ -2242,6 +2267,12 @@ pub struct LightDef {
     pub two_node: bool,
     /// Where an aimed light points, comp pixels.
     pub point_of_interest: [Property; 3],
+    /// After Effects' shadow settings, kept and keyframed but not yet drawn:
+    /// whether it casts them, how dark they are as a percentage, and how soft
+    /// in comp pixels.
+    pub casts_shadows: bool,
+    pub shadow_darkness: Property,
+    pub shadow_diffusion: Property,
 }
 
 /// [`LightDef`] as a file holds it, old keys and new.
@@ -2266,6 +2297,12 @@ struct LightDefFile {
     two_node: bool,
     #[serde(default = "LightDef::zero3")]
     point_of_interest: [Property; 3],
+    #[serde(default)]
+    casts_shadows: bool,
+    #[serde(default = "LightDef::hundred")]
+    shadow_darkness: Property,
+    #[serde(default = "Property::zero")]
+    shadow_diffusion: Property,
     // What a light held before it had rows.
     intensity: Option<Property>,
     half_size: Option<[Property; 2]>,
@@ -2304,6 +2341,9 @@ impl From<LightDefFile> for LightDef {
             falloff_px: f.falloff_px,
             two_node: f.two_node,
             point_of_interest: f.point_of_interest,
+            casts_shadows: f.casts_shadows,
+            shadow_darkness: f.shadow_darkness,
+            shadow_diffusion: f.shadow_diffusion,
         }
     }
 }
@@ -2374,6 +2414,8 @@ impl LightDef {
             TransformProp::PoiX => &self.point_of_interest[0],
             TransformProp::PoiY => &self.point_of_interest[1],
             TransformProp::PoiZ => &self.point_of_interest[2],
+            TransformProp::ShadowDarkness => &self.shadow_darkness,
+            TransformProp::ShadowDiffusion => &self.shadow_diffusion,
             _ => return None,
         })
     }
@@ -2393,6 +2435,8 @@ impl LightDef {
             TransformProp::PoiX => &mut self.point_of_interest[0],
             TransformProp::PoiY => &mut self.point_of_interest[1],
             TransformProp::PoiZ => &mut self.point_of_interest[2],
+            TransformProp::ShadowDarkness => &mut self.shadow_darkness,
+            TransformProp::ShadowDiffusion => &mut self.shadow_diffusion,
             _ => return None,
         })
     }
@@ -2430,6 +2474,9 @@ impl Default for LightDef {
             falloff_px: Property::fixed(500.0),
             two_node: false,
             point_of_interest: Self::zero3(),
+            casts_shadows: false,
+            shadow_darkness: Self::hundred(),
+            shadow_diffusion: Property::zero(),
         }
     }
 }
