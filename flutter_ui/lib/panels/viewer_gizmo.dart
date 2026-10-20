@@ -1000,7 +1000,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   }
 
   /// The boxes whose points may be aimed at: the selected layers, plus the
-  /// layer owning a mask whose Path row is picked. Picking that row is
+  /// layer owning a mask or shape whose Path row is picked. Picking that row is
   /// saying "this is the shape I am editing", so its points become reachable
   /// without having to click the layer first.
   List<LayerBox> get _editablePointBoxes {
@@ -1015,16 +1015,16 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return out;
   }
 
-  /// The mask whose **Path** row is picked, if one is — the shape the
+  /// The mask or shape whose **Path** row is picked, if one is — the shape the
   /// author is editing, so it is the one whose points are offered even when
   /// the layer itself was never clicked.
   (UuidValue, UuidValue)? get _pathBeingEdited {
     for (final path in widget.uiState.selectedProperties.value) {
       final parts = path.split('/');
-      // <layer>/masks/<mask>/path
+      // <layer>/masks/<mask>/path or <layer>/contents/<item>/path
       if (parts.length == 4 &&
-          parts[1] == 'masks' &&
-          parts[3] == MaskValue.path.name) {
+          ((parts[1] == 'masks' && parts[3] == MaskValue.path.name) ||
+              (parts[1] == 'contents' && parts[3] == ShapeValue.path.name))) {
         try {
           return (
             UuidValue.fromString(parts[0]),
