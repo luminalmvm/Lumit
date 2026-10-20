@@ -188,6 +188,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeBezierSide dco_decode_box_autoadd_bridge_bezier_side(dynamic raw);
 
   @protected
+  BridgeCameraAim dco_decode_box_autoadd_bridge_camera_aim(dynamic raw);
+
+  @protected
   BridgeCameraChannels dco_decode_box_autoadd_bridge_camera_channels(
       dynamic raw);
 
@@ -540,6 +543,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCacheStats dco_decode_bridge_cache_stats(dynamic raw);
+
+  @protected
+  BridgeCameraAim dco_decode_bridge_camera_aim(dynamic raw);
 
   @protected
   BridgeCameraChannels dco_decode_bridge_camera_channels(dynamic raw);
@@ -1819,6 +1825,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   BridgeBeatGrid? dco_decode_opt_box_autoadd_bridge_beat_grid(dynamic raw);
 
   @protected
+  BridgeCameraAim? dco_decode_opt_box_autoadd_bridge_camera_aim(dynamic raw);
+
+  @protected
   BridgeCameraChannels? dco_decode_opt_box_autoadd_bridge_camera_channels(
       dynamic raw);
 
@@ -2189,6 +2198,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeBezierSide sse_decode_box_autoadd_bridge_bezier_side(
+      SseDeserializer deserializer);
+
+  @protected
+  BridgeCameraAim sse_decode_box_autoadd_bridge_camera_aim(
       SseDeserializer deserializer);
 
   @protected
@@ -2616,6 +2629,9 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
 
   @protected
   BridgeCacheStats sse_decode_bridge_cache_stats(SseDeserializer deserializer);
+
+  @protected
+  BridgeCameraAim sse_decode_bridge_camera_aim(SseDeserializer deserializer);
 
   @protected
   BridgeCameraChannels sse_decode_bridge_camera_channels(
@@ -4124,6 +4140,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
       SseDeserializer deserializer);
 
   @protected
+  BridgeCameraAim? sse_decode_opt_box_autoadd_bridge_camera_aim(
+      SseDeserializer deserializer);
+
+  @protected
   BridgeCameraChannels? sse_decode_opt_box_autoadd_bridge_camera_channels(
       SseDeserializer deserializer);
 
@@ -4524,6 +4544,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_box_autoadd_bridge_bezier_side(
       BridgeBezierSide self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_bridge_camera_aim(
+      BridgeCameraAim self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_bridge_camera_channels(
@@ -4970,6 +4994,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_bridge_cache_stats(
       BridgeCacheStats self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bridge_camera_aim(
+      BridgeCameraAim self, SseSerializer serializer);
 
   @protected
   void sse_encode_bridge_camera_channels(
@@ -6602,6 +6630,10 @@ abstract class BridgeLibApiImplPlatform extends BaseApiImpl<BridgeLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_bridge_beat_grid(
       BridgeBeatGrid? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_camera_aim(
+      BridgeCameraAim? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_bridge_camera_channels(

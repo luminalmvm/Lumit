@@ -91,7 +91,7 @@ const double wheelNotchPixels = 120;
 /// it faces, how far ahead the plane it renders 1:1 sits, and what it is aimed
 /// at when it is aimed at something.
 ///
-/// [position] is the **eye**, as the document stores it. [rotation] is the
+/// [position] is the **eye** in the comp, parents and all. [rotation] is the
 /// *effective* rotation - a two-node camera's aim is already composed into it  - 
 /// so the axes below are always the ones the picture is drawn with.
 @immutable
@@ -561,21 +561,32 @@ bool writeCameraPose(
   required CompositionReference comp,
   required int frame,
 }) {
-  double valueOf(BridgeTransformProp prop) => switch (prop) {
-        BridgeTransformProp.positionX => pose.position.$1,
-        BridgeTransformProp.positionY => pose.position.$2,
-        BridgeTransformProp.positionZ => pose.position.$3,
-        BridgeTransformProp.rotationX => pose.rotation.$1,
-        BridgeTransformProp.rotationY => pose.rotation.$2,
-        BridgeTransformProp.rotation => pose.rotation.$3,
-        BridgeTransformProp.zoom => pose.zoom,
-        BridgeTransformProp.poiX => pose.pointOfInterest.$1,
-        BridgeTransformProp.poiY => pose.pointOfInterest.$2,
-        BridgeTransformProp.poiZ => pose.pointOfInterest.$3,
-        // Nothing else is a camera's placement, so nothing else is asked.
-        _ => 0,
-      };
   try {
+    // A parented camera's own values are in its parent's space, so the
+    // engine carries the pose back there and that is what is written.
+    final own = layer.cameraOwnAim(
+      frame: BigInt.from(frame),
+      aim: BridgeCameraAim(
+        pose: viewOfPose(pose),
+        poiX: pose.pointOfInterest.$1,
+        poiY: pose.pointOfInterest.$2,
+        poiZ: pose.pointOfInterest.$3,
+      ),
+    );
+    double valueOf(BridgeTransformProp prop) => switch (prop) {
+          BridgeTransformProp.positionX => own.pose.x,
+          BridgeTransformProp.positionY => own.pose.y,
+          BridgeTransformProp.positionZ => own.pose.z,
+          BridgeTransformProp.rotationX => own.pose.rotationX,
+          BridgeTransformProp.rotationY => own.pose.rotationY,
+          BridgeTransformProp.rotation => own.pose.rotationZ,
+          BridgeTransformProp.zoom => pose.zoom,
+          BridgeTransformProp.poiX => own.poiX,
+          BridgeTransformProp.poiY => own.poiY,
+          BridgeTransformProp.poiZ => own.poiZ,
+          // Nothing else is a camera's placement, so nothing else is asked.
+          _ => 0,
+        };
     layer.setTransforms(
       props: props.toList(),
       values: [
@@ -899,36 +910,24 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
         _expression = true;
         return null;
       }
-      final poi = [channels.poiX, channels.poiY, channels.poiZ];
-      var aim = [for (final s in poi) s is BridgeScalar_Static ? s.field0 : 0.0];
-      if (poi.any((s) => s is! BridgeScalar_Static)) {
-        try {
-          aim = sampleScalars(
-              scalars: poi, time: widget.comp.timeOfFrame(frame: frame));
-        } catch (_) {
-          // A comp that has gone.
-        }
-      }
-      // The *effective* pose: a two-node camera's aim and a solve link are
-      // already composed into it, which the rows on their own do not carry.
-      BridgeCameraPose? evaluated;
+      // The *effective* pose in the comp: a two-node camera's aim, a solve
+      // link and the parents are already composed into it, which the rows on
+      // their own do not carry, and the point of interest is in the comp too.
+      BridgeCameraAim? evaluated;
       try {
-        evaluated = entry.layer.cameraPoseAt(frame: BigInt.from(frame));
+        evaluated = entry.layer.cameraAimAt(frame: BigInt.from(frame));
       } catch (_) {
         // The layer went away between the model and the read.
       }
       if (evaluated == null) return null;
+      final pose = evaluated.pose;
       return (
         layer: entry.layer,
         pose: CameraPose(
-          position: (evaluated.x, evaluated.y, evaluated.z),
-          rotation: (
-            evaluated.rotationX,
-            evaluated.rotationY,
-            evaluated.rotationZ
-          ),
-          zoom: evaluated.zoom,
-          pointOfInterest: (aim[0], aim[1], aim[2]),
+          position: (pose.x, pose.y, pose.z),
+          rotation: (pose.rotationX, pose.rotationY, pose.rotationZ),
+          zoom: pose.zoom,
+          pointOfInterest: (evaluated.poiX, evaluated.poiY, evaluated.poiZ),
           twoNode: twoNode,
         ),
         transform: tf,
@@ -1504,9 +1503,12 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       BridgeTransformProp.positionX,
       BridgeTransformProp.positionY,
       BridgeTransformProp.positionZ,
+      // Under a turned parent an orbit changes all three of the camera's own
+      // rows, so Z is written with the other two.
       if (!pose.twoNode && move == ToolMode.cameraOrbit) ...{
         BridgeTransformProp.rotationX,
         BridgeTransformProp.rotationY,
+        BridgeTransformProp.rotation,
       },
       if (poiMoves) ...{
         BridgeTransformProp.poiX,

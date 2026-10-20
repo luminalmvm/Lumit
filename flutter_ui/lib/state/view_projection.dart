@@ -70,7 +70,7 @@ class CameraPoses {
     if (held != null && held.$1 == key) return held.$2;
     BridgeCameraPose? pose;
     try {
-      pose = layer.cameraPoseAt(frame: BigInt.from(frame));
+      pose = layer.cameraAimAt(frame: BigInt.from(frame))?.pose;
     } catch (_) {
       // A camera that has gone. Asked again once the document moves.
     }

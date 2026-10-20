@@ -667,15 +667,91 @@ impl LayerReference {
         })
     }
 
-    /// This camera's evaluated placement at `frame`: the eye, the effective
-    /// rotation with a two-node camera's aim already in it, and the zoom, with
-    /// a solve link followed (docs/impl/camera.md §2). What the camera tools
-    /// start a drag from. `None` on any other kind.
+    /// This camera's evaluated placement in the comp at `frame`: the eye, the
+    /// effective rotation with a two-node camera's aim already in it, and the
+    /// zoom, with a solve link and its parents followed (docs/impl/camera.md
+    /// §2). The point of interest comes out of the parent's space the same way.
+    /// What the camera tools start a drag from. `None` on any other kind.
     #[frb(sync)]
-    pub fn camera_pose_at(
+    pub fn camera_aim_at(
         &self,
         frame: u64,
-    ) -> Result<Option<crate::api::layer::BridgeCameraPose>, BridgeError> {
+    ) -> Result<Option<crate::api::layer::BridgeCameraAim>, BridgeError> {
+        self.with_camera_at(frame, |doc, comp, layer, t| {
+            let pose = lumit_core::track::camera_pose_of(
+                doc,
+                comp,
+                layer,
+                t,
+                &lumit_render::track::Store,
+            )?;
+            let context = lumit_core::model::comp_context(doc, comp, t);
+            let solves =
+                Some(&lumit_render::track::Store as &dyn lumit_core::track::CameraSolveStore);
+            let poi = lumit_core::model::point_of_interest(comp, layer, t, &context, solves)?;
+            Some(crate::api::layer::BridgeCameraAim {
+                pose: crate::api::layer::BridgeCameraPose::of(pose.pose),
+                poi_x: poi.0,
+                poi_y: poi.1,
+                poi_z: poi.2,
+            })
+        })
+    }
+
+    /// The camera's own values that put it at `aim` in the comp at `frame`:
+    /// the eye, the rotation rows and the point of interest carried back into
+    /// its parent's space. What a camera drag writes, so a parented camera
+    /// lands where the drag put it. `aim` comes back as it is with no parent.
+    #[frb(sync)]
+    pub fn camera_own_aim(
+        &self,
+        frame: u64,
+        aim: crate::api::layer::BridgeCameraAim,
+    ) -> Result<crate::api::layer::BridgeCameraAim, BridgeError> {
+        let own = self.with_camera_at(frame, |doc, comp, layer, t| {
+            let context = lumit_core::model::comp_context(doc, comp, t);
+            let solves =
+                Some(&lumit_render::track::Store as &dyn lumit_core::track::CameraSolveStore);
+            let back = lumit_core::model::parent_space(comp, layer, t, &context, solves)?;
+            let back = back.inverse()?;
+            let p = aim.pose;
+            let eye = back.carry(lumit_core::camera::Eye {
+                position: (p.x, p.y, p.z),
+                rotation_deg: (p.rotation_x, p.rotation_y, p.rotation_z),
+                point_of_interest: None,
+            });
+            let poi = back.point((aim.poi_x, aim.poi_y, aim.poi_z));
+            Some(crate::api::layer::BridgeCameraAim {
+                pose: crate::api::layer::BridgeCameraPose {
+                    x: eye.position.0,
+                    y: eye.position.1,
+                    z: eye.position.2,
+                    rotation_x: eye.rotation_deg.0,
+                    rotation_y: eye.rotation_deg.1,
+                    rotation_z: eye.rotation_deg.2,
+                    ..p
+                },
+                poi_x: poi.0,
+                poi_y: poi.1,
+                poi_z: poi.2,
+            })
+        })?;
+        Ok(own.unwrap_or(aim))
+    }
+
+    /// `read` on the document, this layer and comp time `frame`. `None` for a
+    /// frame the comp's rate cannot place.
+    #[frb(ignore)]
+    fn with_camera_at<T>(
+        &self,
+        frame: u64,
+        read: impl FnOnce(
+            &std::sync::Arc<lumit_core::model::Document>,
+            &lumit_core::model::Composition,
+            &lumit_core::model::Layer,
+            f64,
+        ) -> Option<T>,
+    ) -> Result<Option<T>, BridgeError> {
         let doc = {
             let proj = self.project()?;
             let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
@@ -691,14 +767,7 @@ impl LayerReference {
         else {
             return Ok(None);
         };
-        Ok(lumit_core::track::camera_pose_of(
-            &doc,
-            comp,
-            layer,
-            t.0.to_f64(),
-            &lumit_render::track::Store,
-        )
-        .map(|p| crate::api::layer::BridgeCameraPose::of(p.pose)))
+        Ok(read(&doc, comp, layer, t.0.to_f64()))
     }
 }
 
