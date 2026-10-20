@@ -1771,7 +1771,13 @@ impl Compositor {
         // by anything — every reader takes the resolved `target` — so it wants
         // no TEXTURE_BINDING, and `RENDER_ATTACHMENT` alone lets a driver keep
         // it in tiled memory on the hardware that can.
-        let samples = samples.max(1);
+        // A run cut by depth needs a depth texture at the same count.
+        let samples = if cuts.iter().any(|c| matches!(c, Some(Cut::Depth(_)))) {
+            ctx.cut_sample_count(samples)
+        } else {
+            samples
+        }
+        .max(1);
         let msaa = (samples > 1).then(|| {
             self.attachment(
                 ctx,

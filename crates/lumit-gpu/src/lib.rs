@@ -52,6 +52,10 @@ pub struct GpuContext {
     /// which only [`Self::headless`] holds — every other handle in the engine
     /// is a cheap clone of a device and a queue.
     pub sample_flags: wgpu::TextureFormatFeatureFlags,
+    /// The same for the depth that 3D layers too tangled to cut into pieces
+    /// are cut by, which has to take the frame's count (see
+    /// [`Self::cut_sample_count`]).
+    pub depth_sample_flags: wgpu::TextureFormatFeatureFlags,
     /// The frame's open command buffer, while one is being batched.
     ///
     /// A submit is a round trip to the driver. Every pass in this crate used to
@@ -531,6 +535,7 @@ impl GpuContext {
             // are inside this process when they may not be.
             unified_memory: false,
             sample_flags: wgpu::TextureFormatFeatureFlags::empty(),
+            depth_sample_flags: wgpu::TextureFormatFeatureFlags::empty(),
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
             pool: std::cell::RefCell::new(Vec::new()),
@@ -581,6 +586,13 @@ impl GpuContext {
         sample_count_from(self.sample_flags, requested)
     }
 
+    /// The count a frame that cuts 3D layers by depth draws at: `requested`
+    /// when the depth takes it too, or the most both formats give.
+    #[must_use]
+    pub fn cut_sample_count(&self, requested: u32) -> u32 {
+        sample_count_from(self.sample_flags & self.depth_sample_flags, requested)
+    }
+
     /// What this context's passes work in (see [`Self::working`] the field).
     #[must_use]
     pub fn working(&self) -> wgpu::TextureFormat {
@@ -627,6 +639,7 @@ impl GpuContext {
             working: std::cell::Cell::new(self.working.get()),
             unified_memory: self.unified_memory,
             sample_flags: self.sample_flags,
+            depth_sample_flags: self.depth_sample_flags,
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
             pool: std::cell::RefCell::new(Vec::new()),
@@ -1266,6 +1279,12 @@ impl GpuContext {
             adapter.get_texture_format_features(WORKING_FORMAT).flags,
             device.features(),
         );
+        let depth_sample_flags = usable_sample_flags(
+            adapter
+                .get_texture_format_features(wgpu::TextureFormat::Depth32Float)
+                .flags,
+            device.features(),
+        );
         // Publish it for the reporting path (see `ADAPTER_SAMPLE_FLAGS`); the
         // first context to open wins and every later one agrees with it.
         let _ = ADAPTER_SAMPLE_FLAGS.set(sample_flags);
@@ -1296,6 +1315,7 @@ impl GpuContext {
             working: std::cell::Cell::new(WORKING_FORMAT),
             unified_memory,
             sample_flags,
+            depth_sample_flags,
             frame: std::cell::RefCell::new(None),
             frame_depth: std::cell::Cell::new(0),
             pool: std::cell::RefCell::new(Vec::new()),
