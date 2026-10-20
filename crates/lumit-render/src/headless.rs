@@ -6783,6 +6783,73 @@ mod tests {
         );
     }
 
+    /// A 64 px comp seen through the default camera, holding 32 px 3D cards
+    /// at its centre, the first given at the top of the stack. Each card is
+    /// a colour, a z and a turn about y in degrees.
+    fn cards_scene(cards: &[([f32; 4], f64, f64)]) -> (Arc<Document>, Uuid) {
+        const ZOOM: f64 = 128.0;
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "Cards", 64, 64);
+        let mut camera = matrix_layer(
+            "Camera",
+            LayerKind::Camera {
+                zoom: Property::fixed(ZOOM),
+                solve_link: None,
+                correction_base: None,
+                options: Default::default(),
+            },
+            64,
+            64,
+        );
+        camera.transform.position_z = Property::fixed(-ZOOM);
+        let mut layers = vec![camera];
+        for &(colour, z, turn) in cards {
+            let def = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "Card".into(),
+                colour: LinearColour(colour),
+                width: 32,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            let mut card = matrix_layer("Card", LayerKind::Solid { def }, 32, 32);
+            card.switches.three_d = true;
+            card.transform.position_x = Property::fixed(32.0);
+            card.transform.position_y = Property::fixed(32.0);
+            card.transform.position_z = Property::fixed(z);
+            card.transform.rotation_y = Property::fixed(turn);
+            layers.push(card);
+        }
+        doc.comp_mut(comp_id).unwrap().layers = layers;
+        (Arc::new(doc), comp_id)
+    }
+
+    /// **The nearer 3D layer covers the farther one, wherever they sit in the
+    /// stack**, as in After Effects. Red is at the bottom but nearer the
+    /// camera. Drawn in stack order, blue would cover it.
+    #[test]
+    fn a_nearer_3d_layer_lower_in_the_stack_draws_in_front() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (doc, comp_id) = cards_scene(&[
+            ([0.0, 0.0, 1.0, 1.0], 40.0, 0.0),
+            ([1.0, 0.0, 0.0, 1.0], -40.0, 0.0),
+        ]);
+        let (rgba, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
+        let i = ((32 * w + 32) * 4) as usize;
+        assert!(
+            rgba[i] > 200 && rgba[i + 2] < 50,
+            "the centre should be the near red card, got {:?}",
+            &rgba[i..i + 4]
+        );
+    }
+
     /// **A wire reaches the picture.**
     ///
     /// The matrix above proves the two walks agree; this proves there is

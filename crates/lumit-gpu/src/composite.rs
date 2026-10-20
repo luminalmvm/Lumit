@@ -417,6 +417,164 @@ pub fn camera_frame(
     cam_place.inverse()
 }
 
+/// The order a run of adjacent 3D layers draws in, as indices into `worlds`
+/// (each layer's [`CompositeLayer::world`], bottom of the stack first),
+/// farthest first. `view_proj` is the [`camera_matrix`] and `eye` the
+/// camera's position in comp pixels.
+///
+/// After Effects cuts 3D layers where they meet, so what it shows is always
+/// the true order, not a sort by some one point. So of two layers that
+/// overlap on screen, the one wholly behind the other's plane draws first, and
+/// two on one plane keep their stack order. Layers that pass through each
+/// other, or three that overlap in a loop, have no such answer and go by how
+/// far each one's centre is along the view, the stack breaking ties.
+pub fn depth_order(worlds: &[Mat4], view_proj: Mat4, eye: [f32; 3]) -> Vec<usize> {
+    // Closer than this to a plane, in comp pixels, is on it.
+    const ON: f32 = 0.01;
+    let n = worlds.len();
+    let eye = glam::Vec3::from(eye);
+    let corners: Vec<[glam::Vec3; 4]> = worlds
+        .iter()
+        .map(|m| {
+            [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+                .map(|(u, v)| m.transform_point3(glam::vec3(u, v, 0.0)))
+        })
+        .collect();
+    // Clip w is the distance along the view over the zoom.
+    let depth: Vec<f32> = worlds
+        .iter()
+        .map(|m| (view_proj * *m * glam::vec4(0.5, 0.5, 0.0, 1.0)).w)
+        .collect();
+    // Where each lands on screen. A corner behind the eye could reach
+    // anywhere, so that layer overlaps everything.
+    let bounds: Vec<Option<[f32; 4]>> = corners
+        .iter()
+        .map(|c| {
+            c.iter()
+                .try_fold([f32::MAX, f32::MAX, f32::MIN, f32::MIN], |b, p| {
+                    let q = view_proj * p.extend(1.0);
+                    (q.w > 0.0).then(|| {
+                        let (x, y) = (q.x / q.w, q.y / q.w);
+                        [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)]
+                    })
+                })
+        })
+        .collect();
+    let overlap = |a: usize, b: usize| match (bounds[a], bounds[b]) {
+        (Some(p), Some(q)) => p[0] < q[2] && q[0] < p[2] && p[1] < q[3] && q[1] < p[3],
+        _ => true,
+    };
+    let planes: Vec<Option<(glam::Vec3, glam::Vec3)>> = corners
+        .iter()
+        .map(|c| Some(((c[1] - c[0]).cross(c[3] - c[0]).try_normalize()?, c[0])))
+        .collect();
+    // Which side of `b`'s plane `a` lies on: in front (the eye's side),
+    // behind, on it, or across it. A plane seen edge on decides nothing.
+    enum Side {
+        Front,
+        Behind,
+        On,
+        Across,
+    }
+    let side = |a: usize, b: usize| {
+        let Some((normal, origin)) = planes[b] else {
+            return Side::Across;
+        };
+        let toward = normal.dot(eye - origin);
+        if toward.abs() <= ON {
+            return Side::Across;
+        }
+        let (mut front, mut behind) = (false, false);
+        for p in &corners[a] {
+            let d = normal.dot(*p - origin) * toward.signum();
+            front |= d > ON;
+            behind |= d < -ON;
+        }
+        match (front, behind) {
+            (false, false) => Side::On,
+            (true, false) => Side::Front,
+            (false, true) => Side::Behind,
+            (true, true) => Side::Across,
+        }
+    };
+    // Each layer's list of layers that must wait for it, and how many it waits
+    // for itself.
+    let mut then: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut waits = vec![0usize; n];
+    // Past this many the pairs cost more than a frame can spare (a millisecond
+    // at 256), so a run that big goes by its centres alone.
+    const PAIRED: usize = 256;
+    for a in 0..if n > PAIRED { 0 } else { n } {
+        for b in a + 1..n {
+            if !overlap(a, b) {
+                continue;
+            }
+            let a_first = match side(a, b) {
+                Side::On | Side::Behind => Some(true),
+                Side::Front => Some(false),
+                Side::Across => match side(b, a) {
+                    Side::Behind => Some(false),
+                    Side::Front => Some(true),
+                    Side::On | Side::Across => None,
+                },
+            };
+            let (first, second) = match a_first {
+                Some(true) => (a, b),
+                Some(false) => (b, a),
+                None => continue,
+            };
+            then[first].push(second);
+            waits[second] += 1;
+        }
+    }
+    // Farther first, then lower in the stack.
+    struct Far(f32, usize);
+    impl PartialEq for Far {
+        fn eq(&self, other: &Self) -> bool {
+            self.cmp(other).is_eq()
+        }
+    }
+    impl Eq for Far {}
+    impl PartialOrd for Far {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+    impl Ord for Far {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            self.0.total_cmp(&other.0).then(other.1.cmp(&self.1))
+        }
+    }
+    let mut free: std::collections::BinaryHeap<Far> = (0..n)
+        .filter(|&i| waits[i] == 0)
+        .map(|i| Far(depth[i], i))
+        .collect();
+    let mut done = vec![false; n];
+    let mut order = Vec::with_capacity(n);
+    while order.len() < n {
+        // The farthest layer free to go, or when a loop leaves none free, the
+        // farthest of all.
+        let next = match free.pop() {
+            Some(Far(_, i)) => Some(i),
+            None => (0..n)
+                .filter(|&i| !done[i])
+                .max_by_key(|&i| Far(depth[i], i)),
+        };
+        let Some(i) = next else {
+            break;
+        };
+        done[i] = true;
+        order.push(i);
+        for &j in &then[i] {
+            waits[j] = waits[j].saturating_sub(1);
+            if waits[j] == 0 && !done[j] {
+                free.push(Far(depth[j], j));
+            }
+        }
+    }
+    order
+}
+
 /// The geometry pipelines at ONE multisample count.
 ///
 /// A `wgpu` render pipeline carries its sample count, so a pipeline built for

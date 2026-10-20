@@ -2399,6 +2399,20 @@ impl Realiser<'_> {
                 }
             })
             .collect();
+        let eye = camera.map(|pose| {
+            [
+                pose.position.0 as f32,
+                pose.position.1 as f32,
+                pose.position.2 as f32,
+            ]
+        });
+        let mut slots: Vec<Option<lumit_gpu::CompositeLayer>> =
+            comp_layers.into_iter().map(Some).collect();
+        let comp_layers: Vec<lumit_gpu::CompositeLayer> =
+            draw_order(layers, &linear_textures, &grown, cam_mat.zip(eye))
+                .into_iter()
+                .filter_map(|i| slots[i].take())
+                .collect();
         if let (Some(metres_per_w), Some(cam)) = (scene_depth, cam_mat) {
             let depth = self.compositor.composite_depth(
                 &self.ctx,
@@ -2434,25 +2448,7 @@ impl Realiser<'_> {
                     if !l.three_d {
                         continue;
                     }
-                    let (dx, dy) = grow_offset(l.natural_size, *g);
-                    let placed = lumit_gpu::CompositeLayer {
-                        texture,
-                        size: grow_size(l.natural_size, *g),
-                        position: l.position,
-                        anchor: (l.anchor.0 + dx, l.anchor.1 + dy),
-                        scale: l.scale,
-                        rotation_deg: l.rotation_deg,
-                        opacity: l.opacity,
-                        z: l.z,
-                        rotation_x_deg: l.rotation_x_deg,
-                        rotation_y_deg: l.rotation_y_deg,
-                        three_d: true,
-                        matte: None,
-                        blend: l.blend,
-                        layer_mask: None,
-                        pre: l.pre,
-                    };
-                    let m = frame * placed.world();
+                    let m = frame * placed_in_3d(texture, l, *g).world();
                     planes.push(lumit_gpu::fx::ScenePlane {
                         u: m.col(0).truncate().to_array(),
                         v: m.col(1).truncate().to_array(),
@@ -2534,6 +2530,68 @@ impl Realiser<'_> {
         self.ctx.end_frame();
         out
     }
+}
+
+/// A 3D layer's picture where it really sits, motion blur or not: the plane
+/// its rays meet and its place in the depth order.
+fn placed_in_3d<'a>(
+    texture: &'a wgpu::Texture,
+    l: &CompLayerDraw,
+    g: (f32, f32),
+) -> lumit_gpu::CompositeLayer<'a> {
+    let (dx, dy) = grow_offset(l.natural_size, g);
+    lumit_gpu::CompositeLayer {
+        texture,
+        size: grow_size(l.natural_size, g),
+        position: l.position,
+        anchor: (l.anchor.0 + dx, l.anchor.1 + dy),
+        scale: l.scale,
+        rotation_deg: l.rotation_deg,
+        opacity: l.opacity,
+        z: l.z,
+        rotation_x_deg: l.rotation_x_deg,
+        rotation_y_deg: l.rotation_y_deg,
+        three_d: true,
+        matte: None,
+        blend: l.blend,
+        layer_mask: None,
+        pre: l.pre,
+    }
+}
+
+/// The order a segment's layers draw in: each run of adjacent 3D layers
+/// farthest first, as After Effects draws them. A 2D layer ends a run, and so
+/// does an adjustment layer, which already splits the segments. With no camera
+/// 3D layers draw flat, so the stack order stands.
+fn draw_order(
+    layers: &[CompLayerDraw],
+    textures: &[wgpu::Texture],
+    grown: &[(f32, f32)],
+    camera: Option<(lumit_gpu::Mat4, [f32; 3])>,
+) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..layers.len()).collect();
+    let Some((view_proj, eye)) = camera else {
+        return order;
+    };
+    let mut start = 0;
+    while start < layers.len() {
+        let end = (start..layers.len())
+            .find(|&i| !layers[i].three_d)
+            .unwrap_or(layers.len());
+        if end - start > 1 {
+            let worlds: Vec<lumit_gpu::Mat4> = (start..end)
+                .map(|i| placed_in_3d(&textures[i], &layers[i], grown[i]).world())
+                .collect();
+            for (slot, i) in lumit_gpu::depth_order(&worlds, view_proj, eye)
+                .into_iter()
+                .enumerate()
+            {
+                order[start + slot] = start + i;
+            }
+        }
+        start = end + 1;
+    }
+    order
 }
 
 /// The quad a grown picture needs (docs/08 §3.39).
