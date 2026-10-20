@@ -46,6 +46,8 @@ class _LightValues {
   double? falloffDistance;
   double? width;
   double? height;
+  double? shadowDarkness;
+  double? shadowDiffusion;
 
   _LightValues({
     required this.settings,
@@ -57,6 +59,8 @@ class _LightValues {
     required this.falloffDistance,
     required this.width,
     required this.height,
+    required this.shadowDarkness,
+    required this.shadowDiffusion,
   });
 
   _LightValues.of(BridgeLightSettings s, BridgeLightChannels c)
@@ -68,7 +72,9 @@ class _LightValues {
         radius = staticCameraValue(c.radius),
         falloffDistance = staticCameraValue(c.falloffDistance),
         width = staticCameraValue(c.width),
-        height = staticCameraValue(c.height);
+        height = staticCameraValue(c.height),
+        shadowDarkness = staticCameraValue(c.shadowDarkness),
+        shadowDiffusion = staticCameraValue(c.shadowDiffusion);
 
   _LightValues copy() => _LightValues(
         settings: settings,
@@ -80,6 +86,8 @@ class _LightValues {
         falloffDistance: falloffDistance,
         width: width,
         height: height,
+        shadowDarkness: shadowDarkness,
+        shadowDiffusion: shadowDiffusion,
       );
 
   static List<double>? _stillColour(BridgeLightChannels c) {
@@ -116,6 +124,10 @@ class _LightValues {
         was?.falloffDistance);
     put(BridgeTransformProp.lightWidth, width, was?.width);
     put(BridgeTransformProp.lightHeight, height, was?.height);
+    put(BridgeTransformProp.shadowDarkness, shadowDarkness,
+        was?.shadowDarkness);
+    put(BridgeTransformProp.shadowDiffusion, shadowDiffusion,
+        was?.shadowDiffusion);
     return (props, values);
   }
 }
@@ -141,6 +153,7 @@ Future<void> newLightFrb({
           kind: BridgeLightKind.spot,
           falloff: BridgeLightFalloff.none,
           twoNode: true,
+          castsShadows: false,
         ),
         intensity: 100,
         colour: [1, 1, 1],
@@ -150,6 +163,8 @@ Future<void> newLightFrb({
         falloffDistance: 500,
         width: w * 0.2,
         height: h * 0.2,
+        shadowDarkness: 100,
+        shadowDiffusion: 0,
       );
   final picked = await showLumitModal<(_LightValues, String)>(
     context: context,
@@ -342,6 +357,35 @@ class _LightSettingsBodyState extends State<_LightSettingsBody> {
                         _v.settings = lightSettingsWith(_s, twoNode: on)),
                   ),
                 )),
+          // An ambient light comes from nowhere, so it casts nothing.
+          if (kind != BridgeLightKind.ambient) ...[
+            _row(
+                t,
+                l10n.castsShadows,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: HouseCheckbox(
+                    key: const ValueKey('light-shadows'),
+                    value: _s.castsShadows,
+                    onChanged: (on) => setState(() =>
+                        _v.settings = lightSettingsWith(_s, castsShadows: on)),
+                  ),
+                )),
+            if (_s.castsShadows) ...[
+              _row(
+                  t,
+                  l10n.lightShadowDarkness,
+                  _well(t, 'darkness', _v.shadowDarkness,
+                      (v) => _v.shadowDarkness = v,
+                      unit: l10n.unitSymbolPercent, max: 100, speed: 0.5)),
+              _row(
+                  t,
+                  l10n.lightShadowDiffusion,
+                  _well(t, 'diffusion', _v.shadowDiffusion,
+                      (v) => _v.shadowDiffusion = v,
+                      unit: l10n.unitSymbolPx, speed: 0.5)),
+            ],
+          ],
         ]),
         dialogFooter(
           t,

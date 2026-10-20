@@ -966,6 +966,10 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
         500,
       // Seeded from the comp, as a camera's are.
       BridgeTransformProp.lightWidth || BridgeTransformProp.lightHeight => null,
+      BridgeTransformProp.shadowDarkness => 100,
+      BridgeTransformProp.shadowDiffusion ||
+      BridgeTransformProp.lightTransmission =>
+        0,
       // After Effects' Material options defaults.
       BridgeTransformProp.ambient || BridgeTransformProp.metal => 100,
       BridgeTransformProp.diffuse || BridgeTransformProp.specular => 50,
@@ -2022,6 +2026,7 @@ List<LayerFoldRow> layerFoldRows({
     kind: info.kind,
     twoNode: info.camera?.twoNode ?? false,
     light: info.light,
+    material: info.material,
   );
   final soloed = !transformOpen &&
       groups.any((g) => open.contains(transformGroupPath(id, g)));

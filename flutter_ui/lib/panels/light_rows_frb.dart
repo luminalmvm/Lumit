@@ -1,7 +1,7 @@
-// The rows of a layer that are a choice rather than a number: a light's type
-// and falloff, and whether a 3D layer accepts lights. They sit at the head of
-// their section, above the keyframed rows, in both the Timeline's fold-out and
-// the Effect controls card.
+// The rows of a layer that are a choice rather than a number: a light's type,
+// falloff and shadows, and how a 3D layer takes lights and shadows. They sit
+// at the head of their section, above the keyframed rows, in both the
+// Timeline's fold-out and the Effect controls card.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -16,17 +16,24 @@ import 'transform_rows_frb.dart';
 enum LayerSetting {
   lightType,
   lightFalloff,
+  lightCastsShadows,
+  castsShadows,
+  acceptsShadows,
   acceptsLights;
 
   /// The heading the row sits under.
   TransformSection get section => switch (this) {
-        lightType || lightFalloff => TransformSection.light,
-        acceptsLights => TransformSection.material,
+        lightType || lightFalloff || lightCastsShadows =>
+          TransformSection.light,
+        castsShadows || acceptsShadows || acceptsLights =>
+          TransformSection.material,
       };
 
   String get label => switch (this) {
         lightType => l10n.lightType,
         lightFalloff => l10n.lightFalloff,
+        lightCastsShadows || castsShadows => l10n.castsShadows,
+        acceptsShadows => l10n.acceptsShadows,
         acceptsLights => l10n.switchAcceptsLights,
       };
 }
@@ -37,6 +44,13 @@ const BridgeLightSettings plainLight = BridgeLightSettings(
   kind: BridgeLightKind.point,
   falloff: BridgeLightFalloff.none,
   twoNode: false,
+  castsShadows: false,
+);
+
+/// The same for a material, on After Effects' defaults.
+const BridgeMaterialSettings plainMaterial = BridgeMaterialSettings(
+  castsShadows: BridgeShadowMode.off,
+  acceptsShadows: BridgeShadowMode.on_,
 );
 
 /// The choice rows a layer shows, in order.
@@ -52,14 +66,19 @@ List<LayerSetting> layerSettings({
     return [
       if (threeD &&
           kind != BridgeLayerKind.camera &&
-          kind != BridgeLayerKind.nullLayer)
+          kind != BridgeLayerKind.nullLayer) ...[
+        LayerSetting.castsShadows,
+        LayerSetting.acceptsShadows,
         LayerSetting.acceptsLights,
+      ],
     ];
   }
   final s = light ?? plainLight;
   return [
     LayerSetting.lightType,
     if (lightFallsOff(s.kind)) LayerSetting.lightFalloff,
+    // An ambient light comes from nowhere, so it has nowhere to cast from.
+    if (s.kind != BridgeLightKind.ambient) LayerSetting.lightCastsShadows,
   ];
 }
 
@@ -83,6 +102,12 @@ String lightKindLabel(BridgeLightKind kind) => switch (kind) {
       BridgeLightKind.ambient => l10n.lightAmbient,
     };
 
+String shadowModeLabel(BridgeShadowMode mode) => switch (mode) {
+      BridgeShadowMode.off => l10n.off,
+      BridgeShadowMode.on_ => l10n.shadowsOn,
+      BridgeShadowMode.only => l10n.shadowsOnly,
+    };
+
 String lightFalloffLabel(BridgeLightFalloff falloff) => switch (falloff) {
       BridgeLightFalloff.none => l10n.none,
       BridgeLightFalloff.smooth => l10n.lightFalloffSmooth,
@@ -96,11 +121,13 @@ BridgeLightSettings lightSettingsWith(
   BridgeLightKind? kind,
   BridgeLightFalloff? falloff,
   bool? twoNode,
+  bool? castsShadows,
 }) =>
     BridgeLightSettings(
       kind: kind ?? s.kind,
       falloff: falloff ?? s.falloff,
       twoNode: twoNode ?? s.twoNode,
+      castsShadows: castsShadows ?? s.castsShadows,
     );
 
 /// One choice row. Each pick is one op, so one undo step.
@@ -108,6 +135,7 @@ class LayerSettingRowFrb extends StatelessWidget {
   final LayerReference layer;
   final LayerSetting setting;
   final BridgeLightSettings? light;
+  final BridgeMaterialSettings? material;
   final bool acceptsLights;
   final VoidCallback onChanged;
 
@@ -121,6 +149,7 @@ class LayerSettingRowFrb extends StatelessWidget {
     required this.layer,
     required this.setting,
     required this.light,
+    this.material,
     this.acceptsLights = true,
     required this.onChanged,
     this.valueColumn,
@@ -131,6 +160,17 @@ class LayerSettingRowFrb extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = ThemeScope.of(context).theme;
     final s = light ?? plainLight;
+    final m = material ?? plainMaterial;
+    void shadows({BridgeShadowMode? casts, BridgeShadowMode? accepts}) {
+      layer.setMaterialSettings(
+        settings: BridgeMaterialSettings(
+          castsShadows: casts ?? m.castsShadows,
+          acceptsShadows: accepts ?? m.acceptsShadows,
+        ),
+      );
+      onChanged();
+    }
+
     void write(BridgeLightSettings next) {
       layer.setLightSettings(settings: next);
       onChanged();
@@ -153,6 +193,30 @@ class LayerSettingRowFrb extends StatelessWidget {
           options: BridgeLightFalloff.values,
           label: lightFalloffLabel,
           onChanged: (f) => write(lightSettingsWith(s, falloff: f)),
+        ),
+      LayerSetting.lightCastsShadows => Align(
+          alignment: Alignment.centerLeft,
+          child: HouseCheckbox(
+            key: key,
+            value: s.castsShadows,
+            onChanged: (on) => write(lightSettingsWith(s, castsShadows: on)),
+          ),
+        ),
+      LayerSetting.castsShadows => BareDropdown<BridgeShadowMode>(
+          key: key,
+          dense: valueColumn != null,
+          value: m.castsShadows,
+          options: BridgeShadowMode.values,
+          label: shadowModeLabel,
+          onChanged: (v) => shadows(casts: v),
+        ),
+      LayerSetting.acceptsShadows => BareDropdown<BridgeShadowMode>(
+          key: key,
+          dense: valueColumn != null,
+          value: m.acceptsShadows,
+          options: BridgeShadowMode.values,
+          label: shadowModeLabel,
+          onChanged: (v) => shadows(accepts: v),
         ),
       // The same switch as the layer's right-click item, one op a click.
       LayerSetting.acceptsLights => Align(

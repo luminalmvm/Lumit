@@ -708,6 +708,14 @@ pub enum ShadowMode {
     Only,
 }
 
+/// The non-animatable part of a material, what `Op::SetMaterialSettings`
+/// carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaterialSettings {
+    pub casts_shadows: ShadowMode,
+    pub accepts_shadows: ShadowMode,
+}
+
 impl Material {
     /// What layers had before materials: no highlight at all.
     #[must_use]
@@ -739,6 +747,14 @@ impl Material {
             TransformProp::LightTransmission => &self.light_transmission,
             _ => return None,
         })
+    }
+
+    #[must_use]
+    pub fn settings(&self) -> MaterialSettings {
+        MaterialSettings {
+            casts_shadows: self.casts_shadows,
+            accepts_shadows: self.accepts_shadows,
+        }
     }
 
     pub fn get_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
@@ -2489,6 +2505,7 @@ impl LightDef {
             falloff: self.falloff,
             two_node: self.two_node,
             legacy_shape: self.legacy_shape,
+            casts_shadows: self.casts_shadows,
         }
     }
 
@@ -2497,6 +2514,7 @@ impl LightDef {
         self.falloff = s.falloff;
         self.two_node = s.two_node;
         self.legacy_shape = s.legacy_shape;
+        self.casts_shadows = s.casts_shadows;
     }
 }
 
@@ -2534,6 +2552,8 @@ pub struct LightSettings {
     /// old light onto the new curves undoes back off them.
     #[serde(default)]
     pub legacy_shape: bool,
+    #[serde(default)]
+    pub casts_shadows: bool,
 }
 
 /// One Light layer resolved at a comp time — what the renderer hands to the

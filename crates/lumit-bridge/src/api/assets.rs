@@ -643,8 +643,21 @@ impl LayerReference {
         })
     }
 
-    /// Replace a light's kind, falloff and aim as one undo step. Refused on
-    /// any other kind of layer.
+    /// Replace whether a layer casts and accepts shadows, as one undo step.
+    #[frb(sync)]
+    pub fn set_material_settings(
+        &self,
+        settings: crate::api::layer::BridgeMaterialSettings,
+    ) -> Result<(), BridgeError> {
+        self.commit(lumit_core::Op::SetMaterialSettings {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            settings: settings.core(),
+        })
+    }
+
+    /// Replace a light's kind, falloff, aim and shadows as one undo step.
+    /// Refused on any other kind of layer.
     #[frb(sync)]
     pub fn set_light_settings(
         &self,

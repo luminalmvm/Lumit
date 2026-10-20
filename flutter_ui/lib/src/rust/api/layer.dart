@@ -23,9 +23,9 @@ import 'state.dart';
 import 'streams.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// Where a fixed view looks from, for a comp of this size
@@ -870,6 +870,9 @@ class BridgeLayerInfo {
   /// A Light layer's, the same way: which of its rows show.
   final BridgeLightSettings? light;
 
+  /// A 3D layer's shadow settings, `None` where it has no Material options.
+  final BridgeMaterialSettings? material;
+
   const BridgeLayerInfo({
     required this.name,
     required this.kind,
@@ -908,6 +911,7 @@ class BridgeLayerInfo {
     required this.wired,
     this.camera,
     this.light,
+    this.material,
   });
 
   @override
@@ -948,7 +952,8 @@ class BridgeLayerInfo {
       pan.hashCode ^
       wired.hashCode ^
       camera.hashCode ^
-      light.hashCode;
+      light.hashCode ^
+      material.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -991,7 +996,8 @@ class BridgeLayerInfo {
           pan == other.pan &&
           wired == other.wired &&
           camera == other.camera &&
-          light == other.light;
+          light == other.light &&
+          material == other.material;
 }
 
 /// What kind of source a layer has — what the Timeline draws its bar and its
@@ -1189,6 +1195,12 @@ class BridgeLightChannels {
   final BridgeScalar width;
   final BridgeScalar height;
 
+  /// Percent.
+  final BridgeScalar shadowDarkness;
+
+  /// Comp pixels.
+  final BridgeScalar shadowDiffusion;
+
   const BridgeLightChannels({
     required this.poiX,
     required this.poiY,
@@ -1203,6 +1215,8 @@ class BridgeLightChannels {
     required this.falloffDistance,
     required this.width,
     required this.height,
+    required this.shadowDarkness,
+    required this.shadowDiffusion,
   });
 
   @override
@@ -1219,7 +1233,9 @@ class BridgeLightChannels {
       radius.hashCode ^
       falloffDistance.hashCode ^
       width.hashCode ^
-      height.hashCode;
+      height.hashCode ^
+      shadowDarkness.hashCode ^
+      shadowDiffusion.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1238,7 +1254,9 @@ class BridgeLightChannels {
           radius == other.radius &&
           falloffDistance == other.falloffDistance &&
           width == other.width &&
-          height == other.height;
+          height == other.height &&
+          shadowDarkness == other.shadowDarkness &&
+          shadowDiffusion == other.shadowDiffusion;
 }
 
 /// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
@@ -1267,15 +1285,21 @@ class BridgeLightSettings {
 
   /// Aimed at its point of interest.
   final bool twoNode;
+  final bool castsShadows;
 
   const BridgeLightSettings({
     required this.kind,
     required this.falloff,
     required this.twoNode,
+    required this.castsShadows,
   });
 
   @override
-  int get hashCode => kind.hashCode ^ falloff.hashCode ^ twoNode.hashCode;
+  int get hashCode =>
+      kind.hashCode ^
+      falloff.hashCode ^
+      twoNode.hashCode ^
+      castsShadows.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1284,7 +1308,8 @@ class BridgeLightSettings {
           runtimeType == other.runtimeType &&
           kind == other.kind &&
           falloff == other.falloff &&
-          twoNode == other.twoNode;
+          twoNode == other.twoNode &&
+          castsShadows == other.castsShadows;
 }
 
 /// One mask on a layer: a bezier path that gates the layer's alpha before its
@@ -1418,6 +1443,7 @@ class BridgeMaterialChannels {
   final BridgeScalar specular;
   final BridgeScalar shininess;
   final BridgeScalar metal;
+  final BridgeScalar lightTransmission;
 
   const BridgeMaterialChannels({
     required this.ambient,
@@ -1425,6 +1451,7 @@ class BridgeMaterialChannels {
     required this.specular,
     required this.shininess,
     required this.metal,
+    required this.lightTransmission,
   });
 
   @override
@@ -1433,7 +1460,8 @@ class BridgeMaterialChannels {
       diffuse.hashCode ^
       specular.hashCode ^
       shininess.hashCode ^
-      metal.hashCode;
+      metal.hashCode ^
+      lightTransmission.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -1444,7 +1472,31 @@ class BridgeMaterialChannels {
           diffuse == other.diffuse &&
           specular == other.specular &&
           shininess == other.shininess &&
-          metal == other.metal;
+          metal == other.metal &&
+          lightTransmission == other.lightTransmission;
+}
+
+/// Whether a layer casts and accepts shadows, one op
+/// ([`lumit_core::model::MaterialSettings`]).
+class BridgeMaterialSettings {
+  final BridgeShadowMode castsShadows;
+  final BridgeShadowMode acceptsShadows;
+
+  const BridgeMaterialSettings({
+    required this.castsShadows,
+    required this.acceptsShadows,
+  });
+
+  @override
+  int get hashCode => castsShadows.hashCode ^ acceptsShadows.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeMaterialSettings &&
+          runtimeType == other.runtimeType &&
+          castsShadows == other.castsShadows &&
+          acceptsShadows == other.acceptsShadows;
 }
 
 /// A layer used as another layer's matte (docs/03 §5.1).
@@ -1809,6 +1861,14 @@ enum BridgeRevealKind {
 
   /// `UU`: groups holding anything changed from a fresh layer's state.
   modified,
+  ;
+}
+
+/// Casts shadows and Accepts shadows ([`lumit_core::model::ShadowMode`]).
+enum BridgeShadowMode {
+  off,
+  on_,
+  only,
   ;
 }
 
@@ -2524,11 +2584,14 @@ enum BridgeTransformProp {
   falloffDistance,
   lightWidth,
   lightHeight,
+  shadowDarkness,
+  shadowDiffusion,
   ambient,
   diffuse,
   specular,
   shininess,
   metal,
+  lightTransmission,
   ;
 }
 
@@ -4139,8 +4202,8 @@ class LayerReference {
   void setLabel({required int label}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetLabel(that: this, label: label);
 
-  /// Replace a light's kind, falloff and aim as one undo step. Refused on
-  /// any other kind of layer.
+  /// Replace a light's kind, falloff, aim and shadows as one undo step.
+  /// Refused on any other kind of layer.
   void setLightSettings({required BridgeLightSettings settings}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetLightSettings(
           that: this, settings: settings);
@@ -4176,6 +4239,11 @@ class LayerReference {
           {required UuidValue id, required List<BridgeKeyframe> keys}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetMaskPathKeys(
           that: this, id: id, keys: keys);
+
+  /// Replace whether a layer casts and accepts shadows, as one undo step.
+  void setMaterialSettings({required BridgeMaterialSettings settings}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetMaterialSettings(
+          that: this, settings: settings);
 
   /// Point this layer at another as its matte, or clear it with `None`.
   ///
