@@ -234,6 +234,30 @@ const Map<String, ToolGroup> toolActions = {
   'tool.camera': ToolGroup.camera,
 };
 
+/// What a camera orbit swings round, After Effects' choice on the camera
+/// tools' options.
+enum CameraPivot {
+  /// What the camera looks at: its point of interest, or the middle of the
+  /// frame at its zoom.
+  pointOfInterest,
+
+  /// The point on the layer under the pointer when the drag starts.
+  cursor,
+
+  /// The middle of every 3D layer.
+  scene,
+
+  /// The middle of the selected 3D layers.
+  selection;
+
+  String get label => switch (this) {
+        CameraPivot.pointOfInterest => l10n.cameraPivotPointOfInterest,
+        CameraPivot.cursor => l10n.cameraPivotCursor,
+        CameraPivot.scene => l10n.cameraPivotScene,
+        CameraPivot.selection => l10n.cameraPivotSelection,
+      };
+}
+
 /// A colour the toolbar holds, in the document's own scene-linear channels — the
 /// same numbers a fill crosses the bridge as, so nothing is converted twice.
 @immutable
@@ -508,6 +532,16 @@ class ToolsState extends ChangeNotifier {
     final next = value.clamp(0.0, 100.0);
     if (_puppetExpansion == next) return;
     _puppetExpansion = next;
+    notifyListeners();
+  }
+
+  /// What the camera tools orbit round. The pointer by default, as in After
+  /// Effects.
+  CameraPivot _cameraPivot = CameraPivot.cursor;
+  CameraPivot get cameraPivot => _cameraPivot;
+  set cameraPivot(CameraPivot value) {
+    if (_cameraPivot == value) return;
+    _cameraPivot = value;
     notifyListeners();
   }
 

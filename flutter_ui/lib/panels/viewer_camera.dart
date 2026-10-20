@@ -58,6 +58,8 @@ import 'package:lumit_flutter/state/viewer_view.dart';
 
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'transform_rows_frb.dart' show read;
+import 'viewer_gizmo.dart' show LayerBox, layerAtPoint;
+import 'viewer_layer_map.dart' show viewerNear;
 import 'viewer_tool_cursor.dart';
 
 /// How many degrees a pixel of drag turns the camera.
@@ -181,19 +183,37 @@ class CameraPose {
   return dx.abs() >= dy.abs() ? (dx, 0.0) : (0.0, dy);
 }
 
+/// [v] turned [deg] degrees about y, the way the compositor's `Ry` turns it.
+(double, double, double) _aboutY(double deg, (double, double, double) v) {
+  final a = deg * math.pi / 180;
+  final (c, s) = (math.cos(a), math.sin(a));
+  return (c * v.$1 + s * v.$3, v.$2, -s * v.$1 + c * v.$3);
+}
+
+/// [v] turned [deg] degrees about x, the way the compositor's `Rx` turns it.
+(double, double, double) _aboutX(double deg, (double, double, double) v) {
+  final a = deg * math.pi / 180;
+  final (c, s) = (math.cos(a), math.sin(a));
+  return (v.$1, c * v.$2 - s * v.$3, s * v.$2 + c * v.$3);
+}
+
 /// The pose after an **orbit** drag of [dx], [dy] screen pixels.
 ///
 /// Horizontal movement swings the camera around the pivot (yaw); vertical
 /// movement lifts it over the top or drops it underneath (pitch). The pivot
 /// never moves, which is precisely what makes this an orbit rather than a pan.
+/// It is [around] when given, a point anywhere in the comp, and the camera's
+/// own [CameraPose.pivot] otherwise.
 CameraPose orbitCamera(
   CameraPose pose,
   double dx,
   double dy, {
   bool lockAxis = false,
+  (double, double, double)? around,
 }) {
   final (ax, ay) = _onOneAxis(dx, dy, lockAxis);
-  final yaw = pose.rotation.$2 + ax * orbitDegreesPerPixel;
+  final (pitch0, yaw0, roll) = pose.rotation;
+  final yaw = yaw0 + ax * orbitDegreesPerPixel;
   // Dragging **up** lifts the camera over the top, which means tilting it to
   // look *down* — a negative x rotation in the compositor's frame, where +y is
   // down the screen. Getting this the other way round is the classic inverted
@@ -202,30 +222,65 @@ CameraPose orbitCamera(
   // Clamped rather than wrapped: past a quarter turn the camera is looking
   // straight down and the next pixel of drag flips the picture over, which no
   // orbit control anywhere does.
-  final pitch =
-      (pose.rotation.$1 + ay * orbitDegreesPerPixel).clamp(-89.9, 89.9);
-  final turned = (pitch, yaw, pose.rotation.$3);
-  final pivot = pose.pivot;
-  final f = pose.copyWith(rotation: turned).axes.forward;
-  // A two-node camera keeps whatever distance it had to the point it is aimed
-  // at; a one-node one keeps its pivot on the plane it renders 1:1.
-  final reach = pose.twoNode
-      ? math.sqrt([
-          pose.position.$1 - pivot.$1,
-          pose.position.$2 - pivot.$2,
-          pose.position.$3 - pivot.$3,
-        ].fold(0.0, (sum, v) => sum + v * v))
-      : pose.zoom;
+  final pitch = (pitch0 + ay * orbitDegreesPerPixel).clamp(-89.9, 89.9);
+  final pivot = around ?? pose.pivot;
+  // The swing is one turn of the whole scene about the pivot: back off the
+  // old heading, tip by the change in pitch, round to the new heading. It
+  // takes the camera's old axes to its new ones, so whatever it carries keeps
+  // its place in the frame.
+  (double, double, double) swing((double, double, double) p) {
+    final r = _aboutY(
+        yaw,
+        _aboutX(pitch - pitch0,
+            _aboutY(-yaw0, (p.$1 - pivot.$1, p.$2 - pivot.$2, p.$3 - pivot.$3))));
+    return (pivot.$1 + r.$1, pivot.$2 + r.$2, pivot.$3 + r.$3);
+  }
+
   return pose.copyWith(
-    position: (
-      pivot.$1 - f.$1 * reach,
-      pivot.$2 - f.$2 * reach,
-      pivot.$3 - f.$3 * reach,
-    ),
-    // The rows of a two-node camera are left alone: its aim is worked out from
-    // where the eye now is, so turning them as well would double the swing.
-    rotation: pose.twoNode ? pose.rotation : turned,
+    position: swing(pose.position),
+    // A two-node camera's point of interest swings with it, which leaves it
+    // where it is when it is the pivot. Its rows are left alone: its aim is
+    // worked out from the eye and that point, so turning them as well would
+    // double the swing.
+    pointOfInterest:
+        pose.twoNode ? swing(pose.pointOfInterest) : pose.pointOfInterest,
+    rotation: pose.twoNode ? pose.rotation : (pitch, yaw, roll),
   );
+}
+
+/// The comp point at depth [w] under [at], comp pixels of a picture [size]
+/// seen through [pose]. [w] is the depth over the zoom, as the view rows and
+/// the layer maps measure it.
+(double, double, double) pointUnder(
+    CameraPose pose, Offset at, Size size, double w) {
+  final a = pose.axes;
+  final x = (at.dx - size.width / 2) * w;
+  final y = (at.dy - size.height / 2) * w;
+  final z = pose.zoom * w;
+  final e = pose.position;
+  return (
+    e.$1 + a.right.$1 * x + a.up.$1 * y + a.forward.$1 * z,
+    e.$2 + a.right.$2 * x + a.up.$2 * y + a.forward.$2 * z,
+    e.$3 + a.right.$3 * x + a.up.$3 * y + a.forward.$3 * z,
+  );
+}
+
+/// Where the comp point [p] lands in a picture [size] seen through [pose], in
+/// comp pixels, or null when it is behind the eye.
+Offset? pictureOf(CameraPose pose, (double, double, double) p, Size size) {
+  final a = pose.axes;
+  final d = (
+    p.$1 - pose.position.$1,
+    p.$2 - pose.position.$2,
+    p.$3 - pose.position.$3
+  );
+  double dot((double, double, double) u) =>
+      u.$1 * d.$1 + u.$2 * d.$2 + u.$3 * d.$3;
+  final z = dot(a.forward);
+  if (z <= 1e-6) return null;
+  final k = pose.zoom / z;
+  return Offset(
+      size.width / 2 + dot(a.right) * k, size.height / 2 + dot(a.up) * k);
 }
 
 /// The pose after a **track** drag: the eye slides along its own right and up
@@ -337,6 +392,10 @@ class ViewerCameraLayer extends StatefulWidget {
   /// The composition's own size, for the same two.
   final Size compSize;
 
+  /// Every layer's box, asked for when an orbit needs what is under the
+  /// pointer, the scene or the selection.
+  final List<LayerBox> Function() boxes;
+
   final Color mark;
   final Color outline;
   final Color accent;
@@ -353,6 +412,7 @@ class ViewerCameraLayer extends StatefulWidget {
     required this.uiState,
     required this.fitted,
     required this.compSize,
+    required this.boxes,
     required this.mark,
     required this.outline,
     required this.accent,
@@ -397,6 +457,15 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
 
   /// Closes a run of wheel notches into one undo step once the wheel rests.
   Timer? _wheelRest;
+
+  /// What the orbit in hand swings round, in the comp, or null for the
+  /// camera's own pivot.
+  (double, double, double)? _pivot;
+
+  /// The orbit's pivot while no drag runs, held against what moves it so a
+  /// hover walks no boxes.
+  Object? _idleKey;
+  (double, double, double)? _idlePivot;
 
   void _closeUndoStep() {
     if (!_grouped) return;
@@ -570,11 +639,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
         Positioned.fill(
           child: CustomPaint(
             painter: _CameraGizmoPainter(
-              // The pivot is what the camera is looking at, which is by
-              // construction the middle of the frame - a one-node camera's
-              // 1:1 plane and a two-node camera's point of interest both sit
-              // on its forward axis.
-              pivot: _target == null ? null : widget.fitted.center,
+              pivot: _pivotMark(),
               orbiting: widget.tool == ToolMode.cameraOrbit ||
                   (unified && _move == ToolMode.cameraOrbit),
               mark: widget.mark,
@@ -702,6 +767,8 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       _actingView = target.layer == null;
       _start = start;
       _startTransform = _held?.transform;
+      _pivot =
+          _activeMove == ToolMode.cameraOrbit ? _pivotFor(at, start) : null;
       _delta = Offset.zero;
     });
   }
@@ -763,6 +830,7 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
       _actingView = false;
       _start = null;
       _startTransform = null;
+      _pivot = null;
       _delta = Offset.zero;
     });
   }
@@ -772,19 +840,129 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   ToolMode get _activeMove =>
       widget.tool == ToolMode.cameraUnified ? _move : widget.tool;
 
+  /// Screen pixels per comp pixel.
+  double get _scale => widget.compSize.width == 0
+      ? 1.0
+      : widget.fitted.width / widget.compSize.width;
+
+  /// A point on screen as comp pixels of the picture.
+  Offset _toPicture(Offset at) => (at - widget.fitted.topLeft) / _scale;
+
+  /// What an orbit begun at [at] swings round under the tool options' choice,
+  /// in the comp, or null for the camera's own pivot, which is also where a
+  /// choice that finds nothing falls back to.
+  (double, double, double)? _pivotFor(Offset? at, CameraPose pose) {
+    final choice = widget.uiState.tools.cameraPivot;
+    if (choice == CameraPivot.pointOfInterest) return null;
+    if (choice == CameraPivot.cursor && at == null) return null;
+    final boxes = widget.boxes();
+    if (at != null && choice == CameraPivot.cursor) {
+      // The nearest 3D layer under the pointer, where the pointer meets it.
+      // A light is its own point.
+      final hit = layerAtPoint(boxes, at);
+      if (hit == null || !hit.map.projected) return null;
+      final m = hit.map;
+      final on = hit.marker ? m.toScreen(m.ax, m.ay) : at;
+      final w = hit.marker ? m.depthOf(m.ax, m.ay) : m.depthAt(at);
+      if (w == null || w <= viewerNear) return null;
+      return pointUnder(pose, _toPicture(on), widget.compSize, w);
+    }
+    final selected = widget.uiState.selectedLayerIds;
+    final picked = choice == CameraPivot.selection
+        ? _middleOf(boxes.where((b) => selected.contains(b.id)), pose)
+        : null;
+    return picked ?? _middleOf(boxes, pose);
+  }
+
+  /// The middle of the box round every 3D layer in [boxes], in the comp, or
+  /// null with none.
+  (double, double, double)? _middleOf(
+      Iterable<LayerBox> boxes, CameraPose pose) {
+    final lo = [double.infinity, double.infinity, double.infinity];
+    final hi = [-double.infinity, -double.infinity, -double.infinity];
+    void take(LayerBox box, double x, double y) {
+      final w = box.map.depthOf(x, y);
+      if (w.abs() < 1e-9) return;
+      final p = pointUnder(
+          pose, _toPicture(box.map.toScreen(x, y)), widget.compSize, w);
+      final xyz = [p.$1, p.$2, p.$3];
+      for (var i = 0; i < 3; i++) {
+        lo[i] = math.min(lo[i], xyz[i]);
+        hi[i] = math.max(hi[i], xyz[i]);
+      }
+    }
+
+    for (final box in boxes) {
+      if (!box.map.projected) continue;
+      if (box.marker) {
+        take(box, box.map.ax, box.map.ay);
+        continue;
+      }
+      final s = box.bounds;
+      take(box, 0, 0);
+      take(box, s.width, 0);
+      take(box, 0, s.height);
+      take(box, s.width, s.height);
+    }
+    if (lo[0] > hi[0]) return null;
+    return ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
+  }
+
+  /// Where the pivot mark goes on screen, or null for none: the drag's pivot
+  /// while one runs, and otherwise the one an orbit would take now. Under
+  /// Cursor that is not known until the press.
+  Offset? _pivotMark() {
+    final start = _start;
+    final CameraPose pose;
+    final (double, double, double) at;
+    if (start != null) {
+      pose = _moved() ?? start;
+      at = _activeMove == ToolMode.cameraOrbit
+          ? (_pivot ?? start.pivot)
+          : pose.pivot;
+    } else {
+      final target = _target;
+      if (target == null) return null;
+      pose = target.pose;
+      final orbits = widget.tool == ToolMode.cameraOrbit ||
+          widget.tool == ToolMode.cameraUnified;
+      final choice = widget.uiState.tools.cameraPivot;
+      if (orbits && choice == CameraPivot.cursor) return null;
+      at = (orbits ? _idle(pose) : null) ?? pose.pivot;
+    }
+    final p = pictureOf(pose, at, widget.compSize);
+    return p == null ? null : widget.fitted.topLeft + p * _scale;
+  }
+
+  /// The scene's or the selection's middle for the mark, asked again only
+  /// when the document, the frame, the view or the selection has moved.
+  (double, double, double)? _idle(CameraPose pose) {
+    final ui = widget.uiState;
+    final key = (
+      ui.tools.cameraPivot,
+      ui.model.heldRevision,
+      ui.playheadFrame.value,
+      ui.viewPoseOf(widget.viewId),
+      Object.hashAllUnordered(ui.selectedLayerIds),
+      widget.fitted,
+    );
+    if (key != _idleKey) {
+      _idleKey = key;
+      _idlePivot = _pivotFor(null, pose);
+    }
+    return _idlePivot;
+  }
+
   /// The pose the drag so far implies.
   CameraPose? _moved() {
     final start = _start;
     if (start == null) return null;
     final shift = HardwareKeyboard.instance.isShiftPressed;
-    final scale = widget.compSize.width == 0
-        ? 1.0
-        : widget.fitted.width / widget.compSize.width;
     return switch (_activeMove) {
-      ToolMode.cameraOrbit =>
-        orbitCamera(start, _delta.dx, _delta.dy, lockAxis: shift),
-      ToolMode.cameraPan =>
-        trackCamera(start, _delta.dx, _delta.dy, scale: scale, lockAxis: shift),
+      ToolMode.cameraOrbit => orbitCamera(start, _delta.dx, _delta.dy,
+          lockAxis: shift, around: _pivot),
+      ToolMode.cameraPan => trackCamera(start, _delta.dx, _delta.dy,
+          scale: _scale, lockAxis: shift),
       ToolMode.cameraDolly => dollyCamera(start, _delta.dx, _delta.dy),
       _ => start,
     };
@@ -822,9 +1000,12 @@ class _ViewerCameraLayerState extends State<ViewerCameraLayer> {
   /// What [move] changes on the camera. Only what moved is written, so a
   /// keyed camera gains no keys on rows the drag left alone: a
   /// two-node camera's rotation rows stay put, as its aim follows the eye,
-  /// and its point of interest only travels with a track.
+  /// and its point of interest travels with a track or an orbit round
+  /// something else.
   Set<BridgeTransformProp> _movedProps(CameraPose pose, ToolMode move) {
-    final poiMoves = pose.twoNode && move == ToolMode.cameraPan;
+    final poiMoves = pose.twoNode &&
+        (move == ToolMode.cameraPan ||
+            (move == ToolMode.cameraOrbit && _pivot != null));
     return {
       BridgeTransformProp.positionX,
       BridgeTransformProp.positionY,

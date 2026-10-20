@@ -779,6 +779,7 @@ class ViewerStage extends StatelessWidget {
                 compSize.width.toDouble(),
                 compSize.height.toDouble(),
               ),
+              boxes: _boxes,
               mark: t.textPrimary,
               outline: t.surface0,
               accent: t.accent,

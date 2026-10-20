@@ -477,6 +477,9 @@ enum ToolOptions {
   /// says "this is the subject" over the pixels it covers, and how wide it
   /// covers is the whole of what there is to set.
   roto,
+
+  /// The camera tools: what an orbit swings round.
+  camera,
 }
 
 /// The options [tool] shows on the toolbar.
@@ -486,6 +489,7 @@ ToolOptions toolOptionsFor(ToolMode tool) => switch (tool.group) {
       ToolGroup.shape || ToolGroup.pen => ToolOptions.shape,
       ToolGroup.puppet => ToolOptions.puppet,
       ToolGroup.roto => ToolOptions.roto,
+      ToolGroup.camera => ToolOptions.camera,
       _ => ToolOptions.none,
     };
 
@@ -512,6 +516,22 @@ class _ToolOptions extends StatelessWidget {
             max: 2000,
             suffix: ' px',
             onChanged: (v) => tools.rotoSize = v,
+          ),
+        ],
+      );
+    }
+    if (shows == ToolOptions.camera) {
+      return Row(
+        children: [
+          Text(l10n.toolOrbitAround,
+              style: t.small.copyWith(color: t.textSecondary)),
+          const SizedBox(width: 5),
+          BareDropdown<CameraPivot>(
+            key: const ValueKey<String>('tool-camera-pivot'),
+            value: tools.cameraPivot,
+            options: CameraPivot.values,
+            label: (pivot) => pivot.label,
+            onChanged: (v) => tools.cameraPivot = v,
           ),
         ],
       );
