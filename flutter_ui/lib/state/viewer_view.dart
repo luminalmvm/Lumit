@@ -55,9 +55,10 @@ enum ViewerView {
           BridgeCameraView.custom,
       };
 
-  /// Whether the camera tools move this view. Only the custom three: a Front
-  /// view that could be dragged off square would not be a front view.
-  bool get movable =>
+  /// Whether the camera tools can orbit this view. Only the custom three: a
+  /// Front view turned off square would not be a front view. The fixed ones
+  /// still track and dolly.
+  bool get orbits =>
       this == ViewerView.custom1 ||
       this == ViewerView.custom2 ||
       this == ViewerView.custom3;

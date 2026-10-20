@@ -145,6 +145,10 @@ class ViewerSurface {
   final Map<String, ViewerView> cameraViews = {};
   final Map<String, BridgeCameraPose> cameraPoses = {};
 
+  /// The custom view this view last looked through, which is where an orbit
+  /// begun in a fixed view goes.
+  ViewerView lastCustom = ViewerView.custom1;
+
   ViewerSurface({
     required this.id,
     required this.engineId,
