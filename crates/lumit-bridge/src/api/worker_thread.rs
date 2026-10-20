@@ -5058,15 +5058,18 @@ fn trace_scope(
     state: &mut WorkerState,
     stream: &mut WorkerResponseStream,
 ) -> Result<(), BridgeError> {
-    let document = {
+    let (document, revision) = {
         let document = state.project.state()?;
         let document = document.read().map_err(|_| BridgeError::ReadFailed)?;
-        document.store.snapshot()
+        (document.store.snapshot(), document.store.revision())
     };
     // The picture that view shows: through its own 3D view, and the chip.
-    let document = viewed_through(
+    // The kept copy, which playback has usually made already.
+    let document = viewed_kept(
+        &mut state.viewed,
         state.prefix,
         state.camera_views.get(&req.view).copied(),
+        revision,
         document,
     );
 
