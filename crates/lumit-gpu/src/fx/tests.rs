@@ -202,6 +202,35 @@ fn wgsl_matted_blur_matches_the_cpu_oracle_and_varies_in_width() {
         }
     }
 
+    // The camera's depth of field on a layer leaning away from the eye through
+    // the focus plane, so the two passes take different radii.
+    let field = [
+        [1.0f32, 0.0, 0.0, 0.3],
+        [0.0, 0.3, 2.0, 70.0],
+        [-24.0, 10.0, 60.0, 0.0],
+    ];
+    let img: Vec<f32> = (0..w * h)
+        .flat_map(|i| {
+            let v = if (i % w / 3 + i / w / 3) % 2 == 0 {
+                1.5
+            } else {
+                0.1
+            };
+            [v, v * 0.5, 0.2, 1.0]
+        })
+        .collect();
+    let quantised: Vec<f32> = img.iter().map(|v| f16_to_f32(f16_bits(*v))).collect();
+    let tex = upload_linear_f32(&ctx, &img, w, h);
+    // Full size, and shrunk onto a grid 3 px apart as past the reach.
+    for step in [1.0, 3.0] {
+        let mut cpu = quantised.clone();
+        lumit_core::fx::cpu::blur_gaussian_field(&mut cpu, w, h, 7.0, field, step);
+        let out = fx.blur_field(&ctx, &tex, w, h, 7.0, field, step);
+        let gpu = readback_linear_f32(&ctx, &out, w, h).unwrap();
+        let worst = worst_diff(&cpu, &gpu);
+        assert!(worst < 2e-2, "field at step {step}: worst diff {worst}");
+    }
+
     // **The width probe.** One bright pixel on black, blurred at radius 10 under
     // a FLAT matte — once at 1.0, once at 0.25 — and the question is how far the
     // light reaches, not how bright it is at the centre.

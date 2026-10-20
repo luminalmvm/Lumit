@@ -25,8 +25,13 @@ struct Params {
     sigma: f32,         // radius * 0.5, clamped ≥ 1e-3
     edge: u32,          // 0 transparent, 1 repeat, 2 mirror
     mix_amt: f32,       // 0..1, blended against `orig` (1 on the h-pass)
-    matte_on: f32,      // 1 = scale the radius by the matte's luma
+    matte_on: f32,      // 1 = scale the radius by the matte's luma, 2 = by `field`
     _pad0: f32,         // was Invert; applied once at the seam
+    // Camera depth of field, the layer seen from the eye with the view down +z:
+    // [0].xyz and [1].xyz are one texel's step along x and y, [2].xyz is where
+    // texel (0, 0)'s corner is, [0].w is the aperture over twice the focus
+    // distance and [1].w is the focus distance.
+    field: array<vec4<f32>, 3>,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -45,6 +50,21 @@ struct Params {
 fn matte_k(xy: vec2<i32>) -> f32 {
     let m = textureLoad(matte, xy, 0);
     return clamp(m.r * 0.2126 + m.g * 0.7152 + m.b * 0.0722, 0.0, 1.0);
+}
+
+// The camera's blur at this texel along this pass, in texels: half its circle
+// of confusion on screen over how long one texel step along the pass is on
+// screen, so the blur comes out round on screen however the layer is turned.
+// Nothing behind the eye, and never past `radius`.
+fn dof_radius(xy: vec2<i32>) -> f32 {
+    let at = vec2<f32>(xy) + 0.5;
+    let q = p.field[2].xyz + p.field[0].xyz * at.x + p.field[1].xyz * at.y;
+    let step = select(p.field[1].xyz, p.field[0].xyz, p.dir.x > 0.5);
+    let along = length(step.xy * q.z - q.xy * step.z);
+    if (q.z <= 0.0 || along <= 0.0) {
+        return 0.0;
+    }
+    return min(p.field[0].w * abs(q.z - p.field[1].w) * q.z / along, p.radius);
 }
 
 // Resolve a tap index under the edge policy; -1 means transparent (no tap).
@@ -76,7 +96,10 @@ fn blur_pass(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     var rad = p.radius;
     var sig = p.sigma;
-    if (p.matte_on != 0.0) {
+    if (p.matte_on > 1.5) {
+        rad = dof_radius(xy);
+        sig = max(rad * 0.5, 1e-3);
+    } else if (p.matte_on != 0.0) {
         rad = p.radius * matte_k(xy);
         sig = max(rad * 0.5, 1e-3);
     }

@@ -66,7 +66,11 @@ pub mod schedule;
 /// * 12: 3D layers draw farthest first and cut where they pass through each
 ///   other, so a 3D comp with a camera can look different.
 /// * 13: with no camera layer, 3D layers are seen through the default camera.
-pub const ALGO_VERSION: u32 = 13;
+/// * 14: camera depth of field blurs a 3D layer by each pixel's distance, round
+///   on screen, Scene depth lets a higher group of 3D layers cover a lower
+///   one, and an adjustment layer's Depth row pointed at itself reads the 3D
+///   layers below.
+pub const ALGO_VERSION: u32 = 14;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4631,12 +4635,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 13, which renamed every frame.
+        // Pinned under ALGO_VERSION 14, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                311_780_279_161_583_965_545_020_857_864_894_950_438,
-                289_357_039_625_610_062_062_196_736_817_795_363_776
+                339_084_335_608_038_227_168_470_244_507_938_380_466,
+                217_236_650_918_990_969_634_543_205_351_335_580_445
             )
         );
 

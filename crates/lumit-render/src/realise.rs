@@ -2240,25 +2240,20 @@ impl Realiser<'_> {
             // active camera's focus plane is blurred by its circle of
             // confusion before it is placed. None unless the camera carries
             // one, so a comp without it renders byte-for-byte as before.
-            if let Some(radius_px) = dof_radius(camera, l, self.render_scale) {
-                tex = self.fx.blur(
-                    &self.ctx,
-                    &tex,
-                    tex.width(),
-                    tex.height(),
-                    None,
-                    &lumit_gpu::fx::BlurOp {
-                        radius_px,
-                        edge: 1,
-                        mix: 1.0,
-                    },
-                );
-            }
-            self.layer_done(l, started, fx_ms);
-            grown.push((
+            let grow = (
                 tex.width() as f32 / source_w as f32,
                 tex.height() as f32 / source_h as f32,
-            ));
+            );
+            if let Some((reach, field, step)) =
+                dof_blur(camera, l, &tex, grow, (width, height), self.render_scale)
+            {
+                let (w, h) = (tex.width(), tex.height());
+                tex = self
+                    .fx
+                    .blur_field(&self.ctx, &tex, w, h, reach, field, step);
+            }
+            self.layer_done(l, started, fx_ms);
+            grown.push(grow);
             linear_textures.push(tex);
         }
         let cam_mat = camera.map(|pose| crate::export::camera_mat(width, height, pose));
@@ -2638,6 +2633,122 @@ fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
     )
 }
 
+/// How far one pass of the camera's blur reaches at most, in texels. A layer
+/// seen nearly edge on would otherwise reach across all of it.
+const DOF_REACH: f32 = 512.0;
+
+/// Depth of field on a 3D layer (docs/impl/camera.md §5), for
+/// `FxEngine::blur_field`: the layer seen from the eye, and how far a pass may
+/// reach. Each pixel is blurred by its own distance from the focus plane,
+/// round on screen, so a floor going into the distance softens towards its far
+/// end. A parent's scale comes in through the placement.
+///
+/// `None` for a sharp layer: no camera, no depth of field, a 2D layer, one
+/// wholly behind the eye or off the frame, or one blurred under half a pixel.
+fn dof_blur(
+    camera: Option<lumit_core::model::CameraPose>,
+    l: &crate::draw::CompLayerDraw,
+    texture: &wgpu::Texture,
+    grow: (f32, f32),
+    comp: (u32, u32),
+    render_scale: f32,
+) -> Option<(f32, [[f32; 4]; 3], f32)> {
+    let cam = camera?;
+    let dof = cam.dof?;
+    if !l.three_d || dof.focus_distance <= 0.0 {
+        return None;
+    }
+    // Half the circle of confusion on screen is this times zoom times how far
+    // off focus a point is over its distance.
+    let k = (dof.aperture * (dof.blur_level / 100.0).max(0.0) / (2.0 * dof.focus_distance)) as f32;
+    let focus = dof.focus_distance as f32;
+    if k <= 0.0 {
+        return None;
+    }
+    let zoom = (cam.zoom as f32).max(1.0);
+    let (cw, ch) = (comp.0 as f32, comp.1 as f32);
+    let frame = lumit_gpu::camera_frame(
+        cw,
+        ch,
+        zoom,
+        (
+            cam.position.0 as f32,
+            cam.position.1 as f32,
+            cam.position.2 as f32,
+        ),
+        (
+            cam.rotation_deg.0 as f32,
+            cam.rotation_deg.1 as f32,
+            cam.rotation_deg.2 as f32,
+        ),
+    );
+    // In the camera's frame the eye is at the comp centre, zoom back.
+    let from_eye =
+        lumit_gpu::Mat4::from_translation(lumit_gpu::Vec3::new(-cw * 0.5, -ch * 0.5, zoom));
+    let m = from_eye * frame * placed_in_3d(texture, l, grow).world();
+    let corner = m.col(3).truncate();
+    let (across, down) = (m.col(0).truncate(), m.col(1).truncate());
+    let corners = [
+        corner,
+        corner + across,
+        corner + down,
+        corner + across + down,
+    ];
+    if corners.iter().all(|c| c.z <= 0.0) {
+        return None;
+    }
+    if corners.iter().all(|c| c.z > 0.0) {
+        let seen = corners.map(|c| (c.x * zoom / c.z, c.y * zoom / c.z));
+        let off = |f: &dyn Fn((f32, f32)) -> bool| seen.iter().all(|&p| f(p));
+        if off(&|p| p.0 < -cw * 0.5)
+            || off(&|p| p.0 > cw * 0.5)
+            || off(&|p| p.1 < -ch * 0.5)
+            || off(&|p| p.1 > ch * 0.5)
+        {
+            return None;
+        }
+        // The widest blur on screen is at the nearest or farthest corner. A
+        // layer reaching past the eye is left to the shader, as its nearest
+        // part is no corner.
+        let widest = corners
+            .iter()
+            .map(|c| k * zoom * (c.z - focus).abs() / c.z)
+            .fold(0.0, f32::max);
+        if widest * render_scale < 0.5 {
+            return None;
+        }
+    }
+    let (tw, th) = (texture.width() as f32, texture.height() as f32);
+    let (x, y) = (across / tw, down / th);
+    // A layer blurred past the reach all over, far away or shrunk, is blurred
+    // on a grid a few pixels apart instead, where it reaches far enough.
+    let along = |q: lumit_gpu::Vec3, s: lumit_gpu::Vec3| {
+        (s.x * q.z - q.x * s.z).hypot(s.y * q.z - q.y * s.z)
+    };
+    let least = if corners.iter().all(|c| c.z > 0.0) {
+        corners
+            .iter()
+            .flat_map(|&c| [x, y].map(|s| k * (c.z - focus).abs() * c.z / along(c, s).max(1e-9)))
+            .fold(f32::MAX, f32::min)
+    } else {
+        0.0
+    };
+    let step = if least > DOF_REACH {
+        (least / 32.0).min(tw.max(th))
+    } else {
+        1.0
+    };
+    Some((
+        DOF_REACH.min(tw.max(th) / step),
+        [
+            [x.x, x.y, x.z, k],
+            [y.x, y.y, y.z, focus],
+            [corner.x, corner.y, corner.z, 0.0],
+        ],
+        step,
+    ))
+}
+
 /// The lighting pass's parameters for one draw (docs/06), or `None`
 /// when nothing lights it — which is the common case and the reason a comp
 /// without Light layers pays nothing.
@@ -2649,60 +2760,6 @@ fn grow_offset(natural: (f32, f32), grow: (f32, f32)) -> (f32, f32) {
 /// works out the same whether the layer is being rendered at full resolution
 /// or a quarter of it, because the steps are measured against the raster this
 /// pass is actually running on.
-/// The gaussian radius, in the layer's own texels, that depth of field
-/// blurs this draw by (docs/impl/camera.md §5), or `None` for a sharp one:
-/// no camera, no depth of field, a 2D layer, a layer at or behind the eye,
-/// or a radius under half a texel.
-///
-/// The layer's depth is read at its anchor, through its parent placement, so
-/// a plane leaning through the focus plane blurs evenly rather than across
-/// itself. The circle of confusion is a diameter on screen in comp pixels;
-/// halved for the radius, scaled back to the layer's texels by its
-/// projection (`d / zoom`) and its own scale, and by the render scale the
-/// texture was made at.
-fn dof_radius(
-    camera: Option<lumit_core::model::CameraPose>,
-    l: &crate::draw::CompLayerDraw,
-    render_scale: f32,
-) -> Option<f32> {
-    let cam = camera?;
-    let dof = cam.dof?;
-    if !l.three_d {
-        return None;
-    }
-    let p = [
-        f64::from(l.position.0),
-        f64::from(l.position.1),
-        f64::from(l.z),
-    ];
-    // `pre` is column-major (`to_cols_array_2d`): column `c`, row `r`.
-    let world = match l.pre {
-        Some(m) => {
-            let m = m.map(|c| c.map(f64::from));
-            [
-                m[0][0] * p[0] + m[1][0] * p[1] + m[2][0] * p[2] + m[3][0],
-                m[0][1] * p[0] + m[1][1] * p[1] + m[2][1] * p[2] + m[3][1],
-                m[0][2] * p[0] + m[1][2] * p[1] + m[2][2] * p[2] + m[3][2],
-            ]
-        }
-        None => p,
-    };
-    let f = lumit_core::camera::forward(cam.rotation_deg);
-    let d = (world[0] - cam.position.0) * f.0
-        + (world[1] - cam.position.1) * f.1
-        + (world[2] - cam.position.2) * f.2;
-    let coc = lumit_core::camera::coc_px(&dof, cam.zoom, d);
-    if coc <= 0.0 {
-        return None;
-    }
-    let scale = (f64::from(l.scale.0.abs()) + f64::from(l.scale.1.abs())) / 200.0;
-    if scale <= 1e-6 || cam.zoom <= 0.0 {
-        return None;
-    }
-    let radius = coc / 2.0 * d / cam.zoom / scale * f64::from(render_scale);
-    (radius >= 0.5).then_some(radius as f32)
-}
-
 fn lighting_op(
     l: &crate::draw::CompLayerDraw,
     w: u32,
