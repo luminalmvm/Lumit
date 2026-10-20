@@ -646,10 +646,10 @@ pub fn nice(v: f64) -> f64 {
 }
 
 /// Project a comp-space point through a pose the way the compositor does:
-/// `x' = cx + a.x · zoom / (a.z + zoom)` with `a` the point in the camera's
-/// frame, the eye at `a.z = -zoom`. Returns the comp-pixel position and
-/// whether the point is in front of the eye; a point behind it still gets a
-/// number, but not one worth drawing.
+/// `x' = cx + a.x · zoom / a.z` with `a` the point in the camera's frame, the
+/// eye at its origin. Returns the comp-pixel position and whether the point is
+/// in front of the eye; a point behind it still gets a number, but not one
+/// worth drawing.
 #[must_use]
 pub fn project(
     pose: &CameraPose,
@@ -657,13 +657,41 @@ pub fn project(
     height: f64,
     p: (f64, f64, f64),
 ) -> ((f64, f64), bool) {
-    let (x, y, depth) = project_depth(pose, width, height, p);
-    ((x, y), depth + pose.zoom > 1e-6)
+    let (x, y, w) = seen(pose, width, height, p);
+    ((x, y), w * pose.zoom > 1e-6)
 }
 
-/// [`project`] with the depth kept as the third number: how far in front of
-/// the plane the camera sees 1:1 the point is. That is the point's own z when
-/// the camera sits where a fresh one does, and [`unproject`] takes it back.
+/// A comp-space point in the camera's own frame. Rotations invert by
+/// transposing, so this never fails.
+pub(crate) fn eye_frame(pose: &CameraPose) -> Place {
+    let m = rotation(pose.rotation_deg);
+    let back = Place {
+        m: [
+            [m[0][0], m[1][0], m[2][0]],
+            [m[0][1], m[1][1], m[2][1]],
+            [m[0][2], m[1][2], m[2][2]],
+        ],
+        t: (0.0, 0.0, 0.0),
+    };
+    let t = back.vector(pose.position);
+    Place {
+        t: (-t.0, -t.1, -t.2),
+        ..back
+    }
+}
+
+/// The picture position, and how far ahead of the eye over the zoom.
+fn seen(pose: &CameraPose, width: f64, height: f64, p: (f64, f64, f64)) -> (f64, f64, f64) {
+    let a = eye_frame(pose).point(p);
+    let w = a.2 / pose.zoom.max(1e-9);
+    let w = if w.abs() < 1e-9 { 1e-9 } else { w };
+    (width * 0.5 + a.0 / w, height * 0.5 + a.1 / w, w)
+}
+
+/// [`project`] with After Effects' third number from `toComp`:
+/// `zoom · (1 − 1/z)`, with `z` how far ahead of the eye the point is along
+/// the view. Nought one pixel ahead of the eye, nearing the zoom far off.
+/// [`unproject`] takes it back.
 #[must_use]
 pub fn project_depth(
     pose: &CameraPose,
@@ -671,31 +699,12 @@ pub fn project_depth(
     height: f64,
     p: (f64, f64, f64),
 ) -> (f64, f64, f64) {
-    let m = rotation(pose.rotation_deg);
-    let d = (
-        p.0 - pose.position.0,
-        p.1 - pose.position.1,
-        p.2 - pose.position.2,
-    );
-    // Rotation matrices invert by transposing: a = Rᵀ · d.
-    let a = (
-        m[0][0] * d.0 + m[1][0] * d.1 + m[2][0] * d.2,
-        m[0][1] * d.0 + m[1][1] * d.1 + m[2][1] * d.2,
-        m[0][2] * d.0 + m[1][2] * d.1 + m[2][2] * d.2,
-    );
-    // In the compositor's frame the eye is `zoom` behind the 1:1 plane, so a
-    // point `a.z` in front of the eye is at `a.z - zoom` there.
-    let w = a.2 / pose.zoom.max(1e-9);
-    let w = if w.abs() < 1e-9 { 1e-9 } else { w };
-    (
-        width * 0.5 + a.0 / w,
-        height * 0.5 + a.1 / w,
-        a.2 - pose.zoom,
-    )
+    let (x, y, w) = seen(pose, width, height, p);
+    (x, y, pose.zoom - 1.0 / w)
 }
 
 /// The comp-space point that [`project_depth`] puts at picture position
-/// `(x, y)` with that depth.
+/// `(x, y)` with that third number.
 #[must_use]
 pub fn unproject(
     pose: &CameraPose,
@@ -703,8 +712,10 @@ pub fn unproject(
     height: f64,
     p: (f64, f64, f64),
 ) -> (f64, f64, f64) {
-    let ahead = p.2 + pose.zoom;
-    let w = ahead / pose.zoom.max(1e-9);
+    // A third number of the zoom itself is infinitely far off.
+    let k = pose.zoom - p.2;
+    let w = 1.0 / if k.abs() < 1e-9 { 1e-9 } else { k };
+    let ahead = w * pose.zoom.max(1e-9);
     let a = ((p.0 - width * 0.5) * w, (p.1 - height * 0.5) * w, ahead);
     let m = rotation(pose.rotation_deg);
     let at = |r: usize| m[r][0] * a.0 + m[r][1] * a.1 + m[r][2] * a.2;

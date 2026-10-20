@@ -1701,10 +1701,11 @@ mod tests {
         }
 
         // Every way and its way back, at a time given and at the time now.
+        // Not toCompVec through a camera: After Effects' fromCompVec isn't
+        // quite its inverse, and the render tests hold both to its numbers.
         let ways = [
             ("toComp", "fromComp", "to_comp", "from_comp"),
             ("toWorld", "fromWorld", "to_world", "from_world"),
-            ("toCompVec", "fromCompVec", "to_comp_vec", "from_comp_vec"),
             (
                 "toWorldVec",
                 "fromWorldVec",

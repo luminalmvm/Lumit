@@ -6684,24 +6684,14 @@ mod parent_placement_tests {
         let pose = c.camera_pose(0.0).unwrap();
         let cam = crate::export::camera_mat(c.width, c.height, pose);
         let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
-        // The third number is the depth in the camera's own frame.
-        let frame = lumit_gpu::camera_frame(
-            c.width as f32,
-            c.height as f32,
-            pose.zoom as f32,
-            (
-                pose.position.0 as f32,
-                pose.position.1 as f32,
-                pose.position.2 as f32,
-            ),
-            (
-                pose.rotation_deg.0 as f32,
-                pose.rotation_deg.1 as f32,
-                pose.rotation_deg.2 as f32,
-            ),
-        );
-        let depth = (frame * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d()[3][2];
-        let drawn = [a[3][0] / a[3][3], a[3][1] / a[3][3], depth];
+        // After Effects' third number, zoom · (1 − 1/z), from the same divide:
+        // the compositor's w is z over the zoom.
+        let depth = pose.zoom - 1.0 / f64::from(a[3][3]);
+        let drawn = [
+            f64::from(a[3][0] / a[3][3]),
+            f64::from(a[3][1] / a[3][3]),
+            depth,
+        ];
         for (axis, want) in drawn.into_iter().enumerate() {
             let js = run(
                 Language::JavaScript,
@@ -6712,7 +6702,7 @@ mod parent_placement_tests {
                 &format!("layer(\"Marker\").to_comp([0, 0, 0])[{axis}]"),
             );
             for got in [js, rhai] {
-                assert!((got - f64::from(want)).abs() < 1e-2, "{got} is not {want}");
+                assert!((got - want).abs() < 1e-2, "{got} is not {want}");
             }
         }
         // A 2D layer is drawn flat, with no camera.
@@ -6768,6 +6758,152 @@ mod parent_placement_tests {
                 );
             }
         }
+    }
+
+    /// The rig of aecheck's tocomp-check.jsx, and After Effects' own numbers
+    /// for it: toComp's third number, fromComp off it, the Vec forms, a point
+    /// behind the eye, and the facing sign of toCompVec.
+    #[test]
+    #[allow(clippy::panic)]
+    fn to_comp_reads_what_after_effects_reads() {
+        use lumit_core::expression::{evaluate_value_in, ExprValue, Language};
+
+        let mut rig = layer(900.0, 500.0, None);
+        rig.switches.three_d = true;
+        rig.transform.position_z = Property::fixed(300.0);
+        rig.transform.anchor_x = Property::fixed(20.0);
+        rig.transform.rotation = Property::fixed(-12.0);
+        rig.transform.rotation_y = Property::fixed(35.0);
+        rig.transform.scale_x = Property::fixed(150.0);
+        rig.transform.scale_y = Property::fixed(80.0);
+        let mut marker = layer(120.0, -60.0, Some(rig.id));
+        marker.name = "Marker".into();
+        marker.switches.three_d = true;
+        marker.transform.position_z = Property::fixed(-80.0);
+        marker.transform.rotation_x = Property::fixed(20.0);
+        let mut face = layer(960.0, 540.0, None);
+        face.name = "Face".into();
+        face.switches.three_d = true;
+        let mut back = face.clone();
+        back.id = uuid::Uuid::now_v7();
+        back.name = "Back".into();
+        back.transform.rotation_y = Property::fixed(180.0);
+        let mut camera = layer(700.0, 450.0, None);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(1400.0),
+            options: Box::default(),
+            solve_link: None,
+            correction_base: None,
+        };
+        camera.transform.position_z = Property::fixed(-1500.0);
+        camera.transform.rotation_y = Property::fixed(15.0);
+        camera.transform.rotation = Property::fixed(5.0);
+        let mut c = comp(vec![camera, rig, marker, face, back]);
+        (c.width, c.height) = (1920, 1080);
+        let pose = c.camera_pose(0.0).unwrap();
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(c.clone()));
+        let context = Arc::new(ExpressionContext {
+            document: Arc::new(doc),
+            comp: Some(c.id),
+            layer: None,
+            comp_time: 0.0,
+            current_depth: 0,
+            inputs: None,
+        });
+        let run = |language, text: &str| match evaluate_value_in(
+            language,
+            text,
+            Some(context.clone()),
+            &[],
+        ) {
+            Ok(ExprValue::Number(n)) => n,
+            other => panic!("{text}: {other:?}"),
+        };
+
+        // 100 px behind the eye, as the camera sees it.
+        let m = lumit_core::camera::rotation(pose.rotation_deg);
+        let a = (30.0, 20.0, -100.0);
+        let eye = [pose.position.0, pose.position.1, pose.position.2];
+        let at = |r: usize| eye[r] + m[r][0] * a.0 + m[r][1] * a.1 + m[r][2] * a.2;
+        let behind = format!("[{}, {}, {}]", at(0), at(1), at(2));
+        let behind_js = format!("toComp(thisComp.layer('Marker').fromWorld({behind}))");
+        let behind_rhai = format!("to_comp(layer(\"Marker\").from_world({behind}))");
+        for (in_js, in_rhai, want) in [
+            (
+                "toComp([0, 0, 0])",
+                "to_comp([0, 0, 0])",
+                [814.5410, 529.0258, 1399.1609],
+            ),
+            (
+                "toComp([30, -40, 25])",
+                "to_comp([30, -40, 25])",
+                [842.3415, 488.1836, 1399.1593],
+            ),
+            (
+                "fromComp([960, 540, 0])",
+                "from_comp([960, 540, 0])",
+                [473.1247, -304.8729, -1494.0807],
+            ),
+            (
+                "fromComp([960, 540])",
+                "from_comp([960, 540])",
+                [473.1247, -304.8729, -1494.0807],
+            ),
+            (
+                "fromComp([960, 540, -1400])",
+                "from_comp([960, 540, -1400])",
+                [473.2362, -304.9918, -1494.5374],
+            ),
+            (
+                "fromComp([100, 900, 1399])",
+                "from_comp([100, 900, 1399])",
+                [-422.4201, 46.1342, -546.0801],
+            ),
+            (
+                "toCompVec([10, 20, 30])",
+                "to_comp_vec([10, 20, 30])",
+                [20.9047, 7.2530, 46218.5615],
+            ),
+            (
+                "fromCompVec([10, 20, 30])",
+                "from_comp_vec([10, 20, 30])",
+                [-17.5206, 29.4023, 36.8613],
+            ),
+            (
+                "fromCompVec([10, 20])",
+                "from_comp_vec([10, 20])",
+                [-2.4660, 21.3642, 9.7869],
+            ),
+            (
+                behind_js.as_str(),
+                behind_rhai.as_str(),
+                [540.0, 260.0, 1414.0],
+            ),
+        ] {
+            for (axis, want) in want.into_iter().enumerate() {
+                let js = run(
+                    Language::JavaScript,
+                    &format!("thisComp.layer('Marker').{in_js}[{axis}]"),
+                );
+                let rhai = run(
+                    Language::Rhai,
+                    &format!("layer(\"Marker\").{in_rhai}[{axis}]"),
+                );
+                for got in [js, rhai] {
+                    assert!((got - want).abs() < 2e-3, "{in_js}: {got} is not {want}");
+                }
+            }
+        }
+        // The manual's promise: above nought while the front faces the camera.
+        let facing = |name: &str| {
+            run(
+                Language::JavaScript,
+                &format!("thisComp.layer('{name}').toCompVec([0, 0, 1])[2]"),
+            )
+        };
+        assert!(facing("Face") > 0.0);
+        assert!(facing("Back") < 0.0);
     }
 }
 
