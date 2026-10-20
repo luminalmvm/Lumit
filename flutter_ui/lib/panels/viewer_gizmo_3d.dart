@@ -97,11 +97,98 @@ Vec3 eulerYxz(List<double> m) {
   return (deg(rx), deg(math.atan2(m[2], m[8])), deg(math.atan2(m[3], m[4])));
 }
 
+/// After Effects' turn Rx · Ry · Rz, row by row: what Orientation turns by,
+/// outside X, Y and Z Rotation.
+List<double> turnOfAe(Vec3 deg) {
+  double r(double d) => d * math.pi / 180;
+  final (sx, cx) = (math.sin(r(deg.$1)), math.cos(r(deg.$1)));
+  final (sy, cy) = (math.sin(r(deg.$2)), math.cos(r(deg.$2)));
+  final (sz, cz) = (math.sin(r(deg.$3)), math.cos(r(deg.$3)));
+  return [
+    cy * cz, -cy * sz, sy, //
+    cx * sz + sx * sy * cz, cx * cz - sx * sy * sz, -sx * cy,
+    sx * sz - cx * sy * cz, sx * cz + cx * sy * sz, cx * cy,
+  ];
+}
+
+/// The angles in degrees of a turn built as Rx · Ry · Rz, the port of
+/// `lumit_core::camera::euler_xyz`, the one of its two ways of writing it
+/// nearer [near], wound on by whole turns.
+Vec3 eulerXyz(List<double> m, Vec3 near) {
+  double deg(double r) => r * 180 / math.pi;
+  final sinY = m[2].clamp(-1.0, 1.0);
+  final ry = math.asin(sinY);
+  final cosY = math.sqrt(math.max(0, 1 - sinY * sinY));
+  final Vec3 one = cosY < 1e-9
+      ? (deg(math.atan2(m[7], m[4])), deg(ry), 0)
+      : (deg(math.atan2(-m[5], m[8])), deg(ry), deg(math.atan2(-m[1], m[0])));
+  final other = (one.$1 + 180, 180 - one.$2, one.$3 + 180);
+  return _nearer(one, other, near);
+}
+
+/// [one] or [other], each wound on by whole turns towards [near], whichever
+/// is nearer it.
+Vec3 _nearer(Vec3 one, Vec3 other, Vec3 near) {
+  double wind(double a, double n) => a - ((a - n) / 360).round() * 360;
+  Vec3 wound(Vec3 v) =>
+      (wind(v.$1, near.$1), wind(v.$2, near.$2), wind(v.$3, near.$3));
+  double gap(Vec3 v) =>
+      math.pow(v.$1 - near.$1, 2) +
+      math.pow(v.$2 - near.$2, 2) +
+      math.pow(v.$3 - near.$3, 2).toDouble();
+  final (a, b) = (wound(one), wound(other));
+  return gap(b) < gap(a) ? b : a;
+}
+
+/// `a · b`, both row by row.
+List<double> mul3(List<double> a, List<double> b) => [
+      for (var row = 0; row < 3; row++)
+        for (var col = 0; col < 3; col++)
+          a[row * 3] * b[col] +
+              a[row * 3 + 1] * b[3 + col] +
+              a[row * 3 + 2] * b[6 + col],
+    ];
+
+/// A turn undone: its rows and columns swapped.
+List<double> transpose3(List<double> m) =>
+    [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+
+/// [v] turned by [m], row by row.
+Vec3 turned3(List<double> m, Vec3 v) => _apply(m, v);
+
+/// The turn of [radians] about [axis], row by row.
+List<double> turnAbout(Vec3 axis, double radians) {
+  final (x, y, z) = _unit(axis);
+  final s = math.sin(radians), c = math.cos(radians), k = 1 - c;
+  return [
+    c + x * x * k, x * y * k - z * s, x * z * k + y * s, //
+    y * x * k + z * s, c + y * y * k, y * z * k - x * s,
+    z * x * k - y * s, z * y * k + x * s, c + z * z * k,
+  ];
+}
+
+/// The Orientation that turns a layer by [radians] more about [axis] in its
+/// parent's space, leaving X, Y and Z Rotation as they are. [outside] is the
+/// whole turn outside those, the Orientation and an aimed camera's aim, which
+/// stays where it is. Nearest [near], or [orientation] itself.
+Vec3 orientedAbout(List<double> outside, Vec3 orientation, Vec3 axis,
+    double radians, {Vec3? near}) {
+  final aim = mul3(outside, transpose3(turnOfAe(orientation)));
+  final turned = mul3(transpose3(aim), mul3(turnAbout(axis, radians), outside));
+  return eulerXyz(turned, near ?? orientation);
+}
+
 /// The axes X, Y and Z Rotation each turn about, as the compositor applies
 /// them: Y Rotation about the parent's y, X Rotation about x after that,
 /// and Rotation about the layer's own z. A ring drawn round one of these and
 /// a drag on it change that one value and nothing else.
-List<Vec3> rotationAxes(Vec3 deg) {
+List<Vec3> rotationAxes(Vec3 deg, {bool ae = false}) {
+  if (ae) {
+    // After Effects' order: X about the parent's x, Y after it, Z last.
+    final m = turnOfAe((deg.$1, deg.$2, 0));
+    final x = deg.$1 * math.pi / 180;
+    return [(1, 0, 0), (0, math.cos(x), math.sin(x)), (m[2], m[5], m[8])];
+  }
   final y = deg.$2 * math.pi / 180;
   return [
     (math.cos(y), 0, -math.sin(y)),
@@ -110,38 +197,30 @@ List<Vec3> rotationAxes(Vec3 deg) {
   ];
 }
 
+/// X, Y and Z Rotation's turn, row by row, in Lumit's order or, on a layer
+/// brought from After Effects, in its order.
+List<double> rowsTurn(Vec3 deg, {bool ae = false}) =>
+    ae ? turnOfAe(deg) : turnOf(deg);
+
+/// X, Y and Z Rotation turned by [radians] more about [axis] in the parent's
+/// space, [outside] (the Orientation and any aim) staying as it is. Nearest
+/// [near], or [rows] itself.
+Vec3 rowsAbout(List<double> outside, Vec3 rows, Vec3 axis, double radians,
+    {bool ae = false, Vec3? near}) {
+  // The same turn seen inside the outside turn.
+  final inside = turned3(transpose3(outside), axis);
+  if (!ae) return turnedAbout(rows, inside, radians, near: near);
+  return eulerXyz(mul3(turnAbout(inside, radians), turnOfAe(rows)), near ?? rows);
+}
+
 /// [deg] turned by [radians] about [axis] in the parent's space, as X, Y and
 /// Z Rotation again. A turn can be written two ways, and the one nearer
 /// [near] (the drag's last answer), wound on by whole turns, comes back, so
 /// the values never jump part way through a drag.
 Vec3 turnedAbout(Vec3 deg, Vec3 axis, double radians, {Vec3? near}) {
-  final to = near ?? deg;
-  final (x, y, z) = _unit(axis);
-  final s = math.sin(radians), c = math.cos(radians), k = 1 - c;
-  final r = [
-    c + x * x * k, x * y * k - z * s, x * z * k + y * s, //
-    y * x * k + z * s, c + y * y * k, y * z * k - x * s,
-    z * x * k - y * s, z * y * k + x * s, c + z * z * k,
-  ];
-  final m = turnOf(deg);
-  final turned = [
-    for (var row = 0; row < 3; row++)
-      for (var col = 0; col < 3; col++)
-        r[row * 3] * m[col] +
-            r[row * 3 + 1] * m[3 + col] +
-            r[row * 3 + 2] * m[6 + col],
-  ];
-  final one = eulerYxz(turned);
+  final one = eulerYxz(mul3(turnAbout(axis, radians), turnOf(deg)));
   final other = (180 - one.$1, one.$2 + 180, one.$3 + 180);
-  double wind(double a, double near) => a - ((a - near) / 360).round() * 360;
-  Vec3 wound(Vec3 v) =>
-      (wind(v.$1, to.$1), wind(v.$2, to.$2), wind(v.$3, to.$3));
-  double gap(Vec3 v) =>
-      math.pow(v.$1 - to.$1, 2) +
-      math.pow(v.$2 - to.$2, 2) +
-      math.pow(v.$3 - to.$3, 2).toDouble();
-  final (a, b) = (wound(one), wound(other));
-  return gap(b) < gap(a) ? b : a;
+  return _nearer(one, other, near ?? deg);
 }
 
 /// The turn and scale [map]'s parents put on its Position space, row by

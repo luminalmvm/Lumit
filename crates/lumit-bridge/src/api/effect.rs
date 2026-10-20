@@ -807,6 +807,34 @@ pub fn sample_scalars(scalars: Vec<BridgeScalar>, time: BridgeRational) -> Vec<f
         .collect()
 }
 
+/// [`sample_scalars`], and with them Orientations, three scalars each in
+/// `turns`, read as the render reads them: between keys the three turn round
+/// together rather than each on its own. The scalars' values come first, then
+/// three for each Orientation, in order. One crossing for the lot.
+#[frb(sync)]
+pub fn sample_scalars_and_turns(
+    scalars: Vec<BridgeScalar>,
+    turns: Vec<BridgeScalar>,
+    time: BridgeRational,
+) -> Vec<f64> {
+    let seconds = seconds_of(time);
+    let mut out: Vec<f64> = scalars
+        .into_iter()
+        .map(|scalar| sample_at(scalar, seconds))
+        .collect();
+    for turn in turns.chunks_exact(3) {
+        let mut group = lumit_core::model::TransformGroup::default();
+        for (to, from) in group.orientation.iter_mut().zip(turn) {
+            to.animation = from
+                .animation_at(Rational::ZERO)
+                .unwrap_or(Animation::Static(0.0));
+        }
+        let (x, y, z) = group.orientation_at(seconds, &|p| p.value_at(seconds));
+        out.extend([x, y, z]);
+    }
+    out
+}
+
 /// A bridge time in seconds, and zero for the denominator no rational has.
 fn seconds_of(time: BridgeRational) -> f64 {
     if time.den == 0 {

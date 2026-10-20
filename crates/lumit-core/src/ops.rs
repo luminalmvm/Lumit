@@ -548,6 +548,14 @@ pub enum Op {
         pair: TransformPair,
         mode: AxisMode,
     },
+    /// Turn X, Y and Z Rotation in After Effects' order or in Lumit's. Only
+    /// the flag: the rotations rewritten to keep the pose ride along as
+    /// `SetTransformProperty` ops in the same [`Op::Batch`].
+    SetRotationOrder {
+        comp: Uuid,
+        layer: Uuid,
+        after_effects: bool,
+    },
     /// Replace a Camera layer's zoom animation (same coarse-grained shape as
     /// SetTransformProperty, for the same invertibility reason).
     SetCameraZoom {
@@ -926,6 +934,7 @@ impl Op {
             Op::SetTransformProperty { .. } => "Edit transform",
             Op::SetTransformExpressionSlot { .. } => "Edit expression",
             Op::SetTransformAxisMode { .. } => "Set axis mode",
+            Op::SetRotationOrder { .. } => "Set rotation order",
             Op::SetCameraZoom { .. } => "Set camera zoom",
             Op::SetCameraSettings { .. } => "Set camera settings",
             Op::SetLightSettings { .. } => "Set light settings",
@@ -1020,6 +1029,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetTransformProperty { comp, layer, .. }
         | Op::SetTransformExpressionSlot { comp, layer, .. }
         | Op::SetTransformAxisMode { comp, layer, .. }
+        | Op::SetRotationOrder { comp, layer, .. }
         | Op::SetCameraZoom { comp, layer, .. }
         | Op::SetCameraSettings { comp, layer, .. }
         | Op::SetLightSettings { comp, layer, .. }
@@ -1089,6 +1099,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetTransformProperty { comp, .. }
         | Op::SetTransformExpressionSlot { comp, .. }
         | Op::SetTransformAxisMode { comp, .. }
+        | Op::SetRotationOrder { comp, .. }
         | Op::SetCameraZoom { comp, .. }
         | Op::SetCameraSolveLink { comp, .. }
         | Op::SetLayerVolume { comp, .. }
@@ -2088,13 +2099,29 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 .iter_mut()
                 .find(|l| l.id == *layer)
                 .ok_or(OpError::UnknownLayer)?;
-            let slot = l.prop_mut(*prop).ok_or(OpError::PropNotOnLayer)?;
-            let previous = std::mem::replace(&mut slot.animation, animation.clone());
-            Ok(Op::SetTransformProperty {
+            // One Orientation key holds all three angles, whoever writes it.
+            let undo = |prop: TransformProp, animation: Animation| Op::SetTransformProperty {
                 comp: *comp,
                 layer: *layer,
-                prop: *prop,
-                animation: previous,
+                prop,
+                animation,
+            };
+            let mut previous = l.transform.set_orientation_angle(*prop, animation.clone());
+            if previous.is_empty() {
+                let slot = l.prop_mut(*prop).ok_or(OpError::PropNotOnLayer)?;
+                previous.push((
+                    *prop,
+                    std::mem::replace(&mut slot.animation, animation.clone()),
+                ));
+            }
+            Ok(match previous.len() {
+                1 => {
+                    let (prop, animation) = previous.remove(0);
+                    undo(prop, animation)
+                }
+                _ => Op::Batch {
+                    ops: previous.into_iter().map(|(p, a)| undo(p, a)).collect(),
+                },
             })
         }
         Op::SetTransformExpressionSlot {
@@ -2141,6 +2168,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 layer: *layer,
                 pair: *pair,
                 mode: previous,
+            })
+        }
+        Op::SetRotationOrder {
+            comp,
+            layer,
+            after_effects,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.transform.after_effects_order, *after_effects);
+            Ok(Op::SetRotationOrder {
+                comp: *comp,
+                layer: *layer,
+                after_effects: previous,
             })
         }
         Op::SetCameraZoom {

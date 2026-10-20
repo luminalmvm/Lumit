@@ -322,6 +322,10 @@ class KeyframeControlsFrb extends StatelessWidget {
   /// every row.
   final bool fixedColumns;
 
+  /// What the row shows at a time, when that is not each axis read off its own
+  /// curve: an Orientation's angles turn as one. Null for no answer.
+  final List<double>? Function(BridgeRational time)? valuesAt;
+
   const KeyframeControlsFrb({
     super.key,
     required this.scalars,
@@ -330,6 +334,7 @@ class KeyframeControlsFrb extends StatelessWidget {
     required this.onSeek,
     required this.rowKey,
     this.fixedColumns = false,
+    this.valuesAt,
   });
 
   /// The row's first animation, which is what the navigator reads.
@@ -356,7 +361,8 @@ class KeyframeControlsFrb extends StatelessWidget {
   /// one never moves anything.
   List<double> _valuesNow(int frame) {
     final time = timeOfFrame(comp, frame);
-    return [for (final s in scalars) sampledScalar(s, time)];
+    return valuesAt?.call(time) ??
+        [for (final s in scalars) sampledScalar(s, time)];
   }
 
   /// The key sitting exactly on `frame`, if there is one.

@@ -866,11 +866,11 @@
         if (this._keys !== null) return;
         var name = this._name;
         this._keys = [];
-        if (name === 'orientation') {
+        var info = this._layer._info(), held = info.properties[name];
+        if (name === 'orientation' && held === undefined) {
             this._value = [0, 0, 0];
             return;
         }
-        var info = this._layer._info(), held = info.properties[name];
         if (held === undefined) throw new Error(LABELS[name] + ' is not on this layer.');
         if (TURNS.indexOf(name) >= 0 && (info.kind === 'camera' || info.three_d)) {
             loadTurns(this._layer, info, this);
@@ -1214,8 +1214,9 @@
     }
 
     // After Effects turns a 3D layer by Orientation, then X, Y and Z
-    // Rotation, as Rx · Ry · Rz each. Lumit turns it by Ry · Rx · Rz, so the
-    // same turn needs other angles whenever X and Y are both used.
+    // Rotation, as Rx · Ry · Rz each. A layer in Lumit's order turns its
+    // rotations by Ry · Rx · Rz, so the same turn needs other angles whenever
+    // X and Y are both used.
     function lumitAngles(o, a, near) {
         var m = mul(mul(mul(rx(o[0]), ry(o[1])), rz(o[2])), mul(mul(rx(a[0]), ry(a[1])), rz(a[2])));
         // Lumit's own reading of a matrix (lumit_core::camera::euler_yxz),
@@ -1255,15 +1256,18 @@
 
     // A 3D layer's X, Y and Z Rotation as After Effects reads them, which
     // takes all three at once. `caller` is the one being read; the others
-    // are filled too unless already read.
+    // are filled too unless already read. A layer turning in After Effects'
+    // order holds its angles as they are.
     var TURNS = ['rotation_x', 'rotation_y', 'rotation'];
     function loadTurns(layer, info, caller) {
+        var ae = !!info.after_effects_order;
         var channels = TURNS.map(function (n) { return info.properties[n]; });
         var still = channels.map(function (c) { return typeof c === 'number' ? c : 0; });
-        still = aeAngles(still, still);
+        if (!ae) still = aeAngles(still, still);
         var lists = [[], [], []], near = null;
         channelTimes(channels).forEach(function (t) {
-            var turned = aeAngles(channels.map(function (c) { return channelAt(c, t); }), near);
+            var angles = channels.map(function (c) { return channelAt(c, t); });
+            var turned = ae ? angles : aeAngles(angles, near);
             near = turned;
             var hold = channels.every(function (c) { return heldAt(c, t); });
             turned.forEach(function (v, n) {
@@ -1300,26 +1304,35 @@
             p[n]._load();
         });
         var o = p.orientation;
-        if (o._keys.length) unsupported('Keys on Orientation');
-        if (o._exprOn) unsupported('An expression on Orientation');
         var info = layer._info();
         var solid = info.kind === 'camera' || info.three_d;
+        // Orientation is Lumit's own, outside the rotations as in After Effects.
+        if (o._changed) {
+            if (!solid) {
+                if (used(o)) unsupported('Orientation on a 2D layer');
+            } else {
+                writeProp(layer, o);
+            }
+        }
         var trio = [p.rotation_x, p.rotation_y, p.rotation];
-        // An expression is written as it is, so its rotation is not turned.
+        // An expression is written as it is, so its rotation is not turned,
+        // and neither is a layer turning in After Effects' order. With X or Y
+        // unused the two orders are the same turn.
         var expressed = trio.some(function (q) { return q._exprOn; });
-        if (!solid || expressed || (!used(o) && !(used(p.rotation_x) && used(p.rotation_y)))) {
-            if (used(o)) unsupported(solid ? 'Orientation beside an expression on a rotation' : 'Orientation on a 2D layer');
+        if (!solid || expressed || info.after_effects_order || !(used(p.rotation_x) && used(p.rotation_y))) {
             trio.forEach(function (q) {
                 if (q._changed) writeProp(layer, q);
             });
             return;
         }
+        if (!trio.some(function (q) { return q._changed; })) return;
+        var none = [0, 0, 0];
         var times = [];
         trio.forEach(function (q) { q._keys.forEach(function (k) { times.push(k.t); }); });
         times.sort(function (a, b) { return a - b; });
         if (!times.length) {
             var still = trio.map(function (q) { return q._value; });
-            var turned = lumitAngles(o._value, still, still);
+            var turned = lumitAngles(none, still, still);
             trio.forEach(function (q, n) { write(layer, q._name, turned[n]); });
             return;
         }
@@ -1330,7 +1343,7 @@
             if (frame === last) return;
             last = frame;
             var angles = trio.map(function (q) { return valueOf(q, t); });
-            var turned = lumitAngles(o._value, angles, near || angles);
+            var turned = lumitAngles(none, angles, near || angles);
             near = turned;
             // Held only where all three hold.
             var hold = trio.every(function (q) {

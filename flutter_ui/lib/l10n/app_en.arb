@@ -8932,6 +8932,14 @@
   "@tipViewAxes": {
     "description": "Tooltip on a tool option for the Selection and Rotation tools: a 3D layer's move arrows and rotation rings follow the screen. After Effects calls this View Axis Mode."
   },
+  "tipRotateSetsOrientation": "Turn Orientation",
+  "@tipRotateSetsOrientation": {
+    "description": "Tooltip on a Rotation tool option shown while the comp has a 3D layer: the rings and a free turn change the layer's Orientation. After Effects calls this Set: Orientation."
+  },
+  "tipRotateSetsRotation": "Turn Rotation x, y and z",
+  "@tipRotateSetsRotation": {
+    "description": "Tooltip on a Rotation tool option shown while the comp has a 3D layer: the rings and a free turn change the layer's Rotation x, y and z. After Effects calls this Set: Rotation."
+  },
   "tipSpeedGraph": "Speed graph",
   "@tipSpeedGraph": {
     "description": "Tooltip: show how fast the value changes. One or two words."
@@ -9826,6 +9834,10 @@
   "@toolZoom": {
     "description": "The name of a tool, shown in its toolbar tooltip, in the flyout and in the bottom strip."
   },
+  "transformAfterEffectsOrder": "After Effects rotation order",
+  "@transformAfterEffectsOrder": {
+    "description": "Ticked item on the menu opened by right-clicking a 3D layer's, camera's or light's Rotation rows: X, Y and Z Rotation turn in After Effects' order, as an imported layer's do, rather than Lumit's. Changing it keeps the layer where it is."
+  },
   "transformAnchorPoint": "Anchor point",
   "@transformAnchorPoint": {
     "description": "The point a layer rotates and scales about."
@@ -9838,6 +9850,10 @@
   "@transformAnchorPointY": {
     "description": "A Transform row in the Timeline fold-out and the Effect controls card: the up-and-down half of the anchor point, shown once its axes have been separated."
   },
+  "transformAnchorPointZ": "Anchor point z",
+  "@transformAnchorPointZ": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the depth part of a 3D layer's anchor point, shown once its axes have been separated."
+  },
   "transformCombineAxes": "Combine axes",
   "@transformCombineAxes": {
     "description": "Entry in the menu opened by right-clicking a Transform row's name: puts a separated property's axes back on one row."
@@ -9849,6 +9865,10 @@
   "transformOpacity": "Opacity",
   "@transformOpacity": {
     "description": "How solid a layer is."
+  },
+  "transformOrientation": "Orientation",
+  "@transformOrientation": {
+    "description": "A 3D layer's, camera's or light's Transform row, as in After Effects: three angles that turn it as one, outside its Rotation x, y and z, and move between keys by the shortest turn."
   },
   "transformPointOfInterest": "Point of interest",
   "@transformPointOfInterest": {
@@ -9893,6 +9913,10 @@
   "transformScaleY": "Scale y",
   "@transformScaleY": {
     "description": "A Transform row in the Timeline fold-out and the Effect controls card: the height half of the scale, shown once its axes have been separated."
+  },
+  "transformScaleZ": "Scale z",
+  "@transformScaleZ": {
+    "description": "A Transform row in the Timeline fold-out and the Effect controls card: the depth part of a 3D layer's scale, shown once its axes have been separated. It stretches what is parented to the layer along its z, and how far Anchor point z pushes the layer itself."
   },
   "transformSection": "Transform",
   "@transformSection": {
@@ -11632,14 +11656,6 @@
         "type": "String"
       }
     }
-  },
-  "aeOrientationNotCarried": "the layer turns by orientation as well as by rotation — the rotation is what arrives, and the orientation is not carried",
-  "@aeOrientationNotCarried": {
-    "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
-  },
-  "aeRotationOrderConverted": "the rotation was turned into Lumit's axis order, exact on each key and close between them",
-  "@aeRotationOrderConverted": {
-    "description": "Import report row reason, lower case. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
   },
   "aeShadowSwitchKeyed": "the setting is keyframed, and Lumit keeps the first key's",
   "@aeShadowSwitchKeyed": {

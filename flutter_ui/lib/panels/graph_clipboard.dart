@@ -207,18 +207,22 @@ bool copyChannels({
 LumitClipGroup _transformClipGroup(
     GraphChannel lead, List<GraphClipChannel> axes, double fps) {
   final (name, unit) = switch (lead.prop!) {
-    BridgeTransformProp.anchorX || BridgeTransformProp.anchorY => (
-        l10n.transformAnchorPoint,
-        l10n.unitPixels
-      ),
+    BridgeTransformProp.anchorX ||
+    BridgeTransformProp.anchorY ||
+    BridgeTransformProp.anchorZ =>
+      (l10n.transformAnchorPoint, l10n.unitPixels),
     BridgeTransformProp.positionX ||
     BridgeTransformProp.positionY ||
     BridgeTransformProp.positionZ =>
       (l10n.transformPosition, l10n.unitPixels),
-    BridgeTransformProp.scaleX || BridgeTransformProp.scaleY => (
-        l10n.transformScale,
-        l10n.unitPercent
-      ),
+    BridgeTransformProp.scaleX ||
+    BridgeTransformProp.scaleY ||
+    BridgeTransformProp.scaleZ =>
+      (l10n.transformScale, l10n.unitPercent),
+    BridgeTransformProp.orientationX ||
+    BridgeTransformProp.orientationY ||
+    BridgeTransformProp.orientationZ =>
+      (l10n.transformOrientation, l10n.unitDegrees),
     BridgeTransformProp.rotation => (l10n.transformRotation, l10n.unitDegrees),
     BridgeTransformProp.rotationX => (
         l10n.transformRotationX,

@@ -1346,6 +1346,7 @@ fn feed_effect_stack(
                             ] {
                                 feed_f64(h, v);
                             }
+                            feed_depth(h, dtr, slt, &|p| p.value_at(slt));
                             h.update(&[u8::from(src.switches.three_d)]);
                             // Layer-input source mode: None / Masks /
                             // Effects and masks. The discriminant is content
@@ -1577,6 +1578,7 @@ fn feed_layer(
     ] {
         feed_f64(h, v);
     }
+    feed_depth(h, tr, lt, &|p| p.value_at_with_context(lt, context.clone()));
     // The parent chain's inherited placement: a parented layer is drawn inside
     // its ancestors' coordinate space, so every ancestor's evaluated transform
     // is content for THIS layer's pixels.
@@ -1612,7 +1614,14 @@ fn feed_layer(
                 p.rotation_deg.2,
                 p.rotation_deg.0,
                 p.rotation_deg.1,
-            ] {
+            ]
+            .into_iter()
+            .chain(
+                (p.anchor.2 != 0.0 || p.scale.2 != 100.0)
+                    .then_some([p.anchor.2, p.scale.2])
+                    .into_iter()
+                    .flatten(),
+            ) {
                 feed_f64(h, v);
             }
         }
@@ -1685,6 +1694,7 @@ fn feed_layer(
                 ] {
                     feed_f64(h, v);
                 }
+                feed_depth(h, tr, slt, &|p| p.value_at(slt));
             }
         }
     }
@@ -2033,6 +2043,7 @@ fn feed_layer(
                 ] {
                     feed_f64(h, v);
                 }
+                feed_depth(h, mtr, mlt, &|p| p.value_at(mlt));
                 h.update(&[u8::from(src.switches.three_d)]);
                 // Effects-and-masks matte: the matte gates by the
                 // source's *processed* pixels, so the source's own effect stack
@@ -2752,6 +2763,30 @@ fn feed_interp(
             }
         }
     };
+}
+
+/// A layer's Orientation, Anchor Z and Scale Z at layer time `lt`, each read
+/// by `read`, and the order its rotations turn in. Hashed only once one of
+/// them is off its default, so every key from before they existed stays
+/// valid.
+fn feed_depth(
+    h: &mut blake3::Hasher,
+    tr: &lumit_core::model::TransformGroup,
+    lt: f64,
+    read: &dyn Fn(&lumit_core::anim::Property) -> f64,
+) {
+    let (x, y, z) = tr.orientation_at(lt, read);
+    let values = [x, y, z, read(&tr.anchor_z), read(&tr.scale_z)];
+    if values != [0.0, 0.0, 0.0, 0.0, 100.0] || tr.after_effects_order {
+        h.update(if tr.after_effects_order {
+            b"depth-ae/"
+        } else {
+            b"depth/"
+        });
+        for v in values {
+            feed_f64(h, v);
+        }
+    }
 }
 
 fn feed_f64(h: &mut blake3::Hasher, v: f64) {

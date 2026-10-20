@@ -350,10 +350,6 @@
   "@aeNothingToReport": {
     "description": "Import report window — shown in place of the list when the import raised no rows at all."
   },
-  "aeOrientationNotCarried": "该图层同时通过方向和旋转转动 — 导入的是旋转，方向未被带入",
-  "@aeOrientationNotCarried": {
-    "description": "Import report row reason, lower case. After Effects turns a 3D layer by an orientation and by three rotations; Lumit has the rotations only."
-  },
   "aeOutcomeAdjusted": "已调整",
   "@aeOutcomeAdjusted": {
     "description": "Import report window — an outcome grade: mapped, with a difference the row explains."

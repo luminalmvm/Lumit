@@ -283,11 +283,11 @@ Script: `lumit.layer.keys({ ... })`. MCP tool: `layer_keys`.
 | --- | --- | --- | --- |
 | `comp` | string | yes | The comp's id or name |
 | `layer` | string | yes | The layer's id, or its name in the comp |
-| `property` | `"rotation"`, `"rotation_x"`, `"rotation_y"`, `"opacity"`, `"zoom"`, `"focus_distance"`, `"aperture"`, `"anchor"`, `"scale"`, `"position"`, `"point_of_interest"` | yes |  |
-| `value` | number or list of 2 numbers or list of 2 to 3 numbers |  | Z is left as it is when there are two |
+| `property` | `"rotation"`, `"rotation_x"`, `"rotation_y"`, `"opacity"`, `"zoom"`, `"focus_distance"`, `"aperture"`, `"anchor"`, `"scale"`, `"position"`, `"point_of_interest"`, `"orientation"` | yes |  |
+| `value` | number or list of 2 numbers or list of 2 to 3 numbers or list of 3 numbers |  | Z is left as it is when there are two; X, Y and Z, in After Effects' order |
 | `keys` | list |  |  |
 | `keys[].time` | integer or `{num, den}` | yes | A frame on the comp's rate, or exact seconds |
-| `keys[].value` | number or list of 2 numbers or list of 2 to 3 numbers | yes | Z is left as it is when there are two |
+| `keys[].value` | number or list of 2 numbers or list of 2 to 3 numbers or list of 3 numbers | yes | Z is left as it is when there are two; X, Y and Z, in After Effects' order |
 | `keys[].interp` | `"linear"`, `"hold"` |  |  |
 | `keys[].in` | `"linear"`, `"hold"`, `"auto"`, `"clamped"` or `{speed, influence}` or list of `{speed, influence}` |  | Linear, hold, auto or clamped, or an ease, or a list with an ease for each value |
 | `keys[].in.speed` | number |  | Units a second |

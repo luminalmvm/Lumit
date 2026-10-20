@@ -243,10 +243,30 @@ pub mod layers {
         transform_property(&context, this, |tr| &tr.rotation)
     }
 
-    /// always [0, 0, 0]: a layer's whole turn is in its X, Y and Z Rotation
+    /// the layer's Orientation, [x, y, z], as it turns between its keys
     #[rhai_fn(get = "orientation")]
-    pub fn orientation(_this: &mut Layer) -> rhai::Array {
-        super::list_of((0.0, 0.0, 0.0), 3)
+    pub fn orientation(context: NativeCallContext, this: &mut Layer) -> rhai::Array {
+        let o = with_layer(&context, this, |context, layer| {
+            let t = crate::time::layer_time(context.comp_time, layer.start_offset.0);
+            let mut deeper = context.increase_depth();
+            deeper.layer = Some(layer.id);
+            let deeper = Arc::new(deeper);
+            let read = |p: &crate::anim::Property| p.value_at_with_context(t, deeper.clone());
+            layer.transform.orientation_at(t, &read)
+        });
+        super::list_of(o.unwrap_or((-1.0, -1.0, -1.0)), 3)
+    }
+
+    /// z coordinate of the layer's anchor
+    #[rhai_fn(get = "anchor_z")]
+    pub fn anchor_z(context: NativeCallContext, this: &mut Layer) -> f64 {
+        transform_property(&context, this, |tr| &tr.anchor_z)
+    }
+
+    /// z component of the layer's scale
+    #[rhai_fn(get = "scale_z")]
+    pub fn scale_z(context: NativeCallContext, this: &mut Layer) -> f64 {
+        transform_property(&context, this, |tr| &tr.scale_z)
     }
 
     /// a camera's zoom

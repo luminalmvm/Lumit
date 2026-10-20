@@ -314,6 +314,11 @@ pub const COMMANDS: &[Command] = &[
                 r#"["position","point_of_interest"]"#,
                 r#"{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":3,"description":"Z is left as it is when there are two"}"#
             ),
+            ",",
+            keys_form!(
+                r#"["orientation"]"#,
+                r#"{"type":"array","items":{"type":"number"},"minItems":3,"maxItems":3,"description":"X, Y and Z, in After Effects' order"}"#
+            ),
             r#"],"description":"rotation turns about Z"}"#
         ),
     },
@@ -575,6 +580,7 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
         "out": exact(layer.out_point.0),
         "start_offset": exact(layer.start_offset.0),
         "three_d": s.three_d,
+        "after_effects_order": layer.transform.after_effects_order,
         "switches": {
             "visible": s.visible,
             "audible": s.audible,
@@ -1401,6 +1407,14 @@ const PROPERTIES: &[(&str, &[TransformProp])] = &[
     ("rotation", &[TransformProp::Rotation]),
     ("rotation_x", &[TransformProp::RotationX]),
     ("rotation_y", &[TransformProp::RotationY]),
+    (
+        "orientation",
+        &[
+            TransformProp::OrientationX,
+            TransformProp::OrientationY,
+            TransformProp::OrientationZ,
+        ],
+    ),
     ("opacity", &[TransformProp::Opacity]),
     (
         "point_of_interest",

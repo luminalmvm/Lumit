@@ -75,7 +75,7 @@ pub(crate) fn space(
     // 2D parents flat, a camera or light parent aimed and with no anchor or
     // scale, a solved camera on its solve.
     let solves = crate::track::solve_store().map(|store| (doc, store));
-    let mut world = crate::model::placement(layer, read).place();
+    let mut world = crate::model::placement(layer, t, read).place();
     let parents = crate::model::parent_placements(comp, layer, t, read, solves);
     // Nearest parent first, each one wrapping what is inside it.
     for (_, parent) in parents.iter().rev() {

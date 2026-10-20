@@ -7,9 +7,12 @@
 // the whole reason the anchor exists: it is the pin the layer spins on. Holding
 // Shift locks the turn to 45° steps.
 //
-// A 3D layer gets a ring per axis round its anchor, drawn through the camera
-// (viewer_gizmo_3d.dart). A drag on a ring turns about that axis, and a drag
-// off them turns the layer freely, as After Effects does.
+// A 3D layer, a light or a camera gets a ring per axis round its anchor,
+// drawn through the camera (viewer_gizmo_3d.dart). A drag on a ring turns
+// about that axis, and a drag off them turns the layer freely, as After
+// Effects does. The turn goes on the Orientation, as After Effects' Rotation
+// tool does by default, or, set to Rotation, on X, Y and Z Rotation, where a
+// Local ring turns its own one.
 //
 // **Why the pointer is painted rather than picked.** No operating system ships a
 // "rotate" cursor, and Flutter can only ask for cursors the platform has. So the
@@ -35,8 +38,10 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/strings.dart';
+import '../state/comp_time.dart'
+    show sampledOrientation, sampledScalar, timeOfFrame;
 import '../state/preview_throttle.dart';
-import '../state/tools.dart' show GizmoAxes;
+import '../state/tools.dart' show GizmoAxes, RotateSets;
 import '../widgets/controls.dart' show ThemeScope;
 import 'keyframe_controls_frb.dart' show scalarWithValueAt;
 import 'layer_fold_frb.dart' show asOneUndoStep;
@@ -181,14 +186,14 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
 
   /// A turn of a 3D layer: the rings it is measured on as they stood when it
   /// began, the ring in hand (none for a free turn), and each selected 3D
-  /// layer's box and X, Y and Z Rotation then.
+  /// layer's box, X, Y and Z Rotation and Orientation then.
   Gizmo3d? _rings;
   RingTurn? _ring;
-  final Map<UuidValue, (LayerBox, Vec3)> _start3d = {};
+  final Map<UuidValue, (LayerBox, Vec3, Vec3)> _start3d = {};
 
   /// Where the drag last turned each of them, which the next move winds its
   /// values to so they never jump part way through.
-  final Map<UuidValue, Vec3> _last3d = {};
+  final Map<UuidValue, _Turn> _last3d = {};
 
   /// The ring under the pointer, drawn stronger.
   int? _hotRing;
@@ -221,19 +226,37 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
   }
 
   /// The rings round [box]'s anchor, null for a layer that is not turned in
-  /// 3D: a 2D one, a light, or one whose turn an expression drives.
+  /// 3D: a 2D one, or one whose turn an expression drives.
   Gizmo3d? _ringsOf(LayerBox box) {
     final tf = box.transform;
-    if (!box.map.projected || box.marker || tf == null) return null;
-    if ([tf.rotationX, tf.rotationY, tf.rotation]
-        .any((s) => s is BridgeScalar_Expression)) {
+    if (!box.map.projected || tf == null) return null;
+    final depth = tf.depth;
+    if ([
+      tf.rotationX,
+      tf.rotationY,
+      tf.rotation,
+      if (depth != null) ...[
+        depth.orientationX,
+        depth.orientationY,
+        depth.orientationZ
+      ],
+    ].any((s) => s is BridgeScalar_Expression)) {
       return null;
     }
-    final turn = turnOfBox(box);
+    final outside = box.map.depth?.outside;
+    // Turning the Orientation, a Local ring turns about the layer's own axis;
+    // turning the rotations, about the axis that rotation turns about.
+    final rows = widget.uiState.tools.rotateSets == RotateSets.rotation;
     return Gizmo3d.of(box.map,
         at: (box.map.px, box.map.py, box.map.depth!.z),
-        local: localAxes(turn),
-        turns: rotationAxes(turn),
+        local: localAxesOfBox(box),
+        turns: rows
+            ? [
+                for (final a in rotationAxes(turnOfBox(box),
+                    ae: box.map.depth?.aeOrder ?? false))
+                  outside == null ? a : turned3(outside, a)
+              ]
+            : null,
         mode: widget.uiState.tools.axes);
   }
 
@@ -334,7 +357,7 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
             box.transform != null &&
             box.transform!.rotation is! BridgeScalar_Expression;
         if (flat || _ringsOf(box) != null) {
-          _start3d[box.id] ??= (box, turnOfBox(box));
+          _start3d[box.id] ??= (box, turnOfBox(box), _orientationOf(box));
         }
       }
       _start3d.removeWhere((id, _) => riders.contains(id));
@@ -445,12 +468,12 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
 
   // --- In 3D ----------------------------------------------------------------
 
-  /// X, Y and Z Rotation for each selected 3D layer, for the drag as it
-  /// stands. On a ring in Local axes the drag changes that ring's one value;
-  /// in World or View axes, and off the rings, the layer is turned about an
-  /// axis in space and the three values follow. Shift turns in 45° steps,
-  /// and keeps a free turn to the way the pointer has gone furthest.
-  Map<UuidValue, Vec3> _turns3d() {
+  /// X, Y and Z Rotation and Orientation for each selected 3D layer, for the
+  /// drag as it stands. The layer is turned about an axis in space and the
+  /// Orientation, or the rotations, follow; set to Rotation, a Local ring
+  /// changes that ring's one value. Shift turns in 45° steps, and keeps a free
+  /// turn to the way the pointer has gone furthest.
+  Map<UuidValue, _Turn> _turns3d() {
     final from = _from, to = _pointer, rings = _rings;
     if (from == null || to == null || rings == null) return const {};
     final shift = HardwareKeyboard.instance.isShiftPressed;
@@ -458,8 +481,8 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     final swept = ring?.sweptTo(to) ?? 0;
     const step = math.pi / 4;
     final local = widget.uiState.tools.axes == GizmoAxes.local;
-    final out = <UuidValue, Vec3>{};
-    for (final MapEntry(key: id, value: (box, start))
+    final out = <UuidValue, _Turn>{};
+    for (final MapEntry(key: id, value: (box, start, orientation))
         in _start3d.entries) {
       if (!box.map.projected) {
         final by = shift && !local
@@ -469,23 +492,41 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
         if (shift && local && ring?.axis == 2) {
           value = (value / 45).roundToDouble() * 45;
         }
-        out[id] = (start.$1, start.$2, value);
+        out[id] = ((start.$1, start.$2, value), orientation);
         continue;
       }
-      if (ring != null && local) {
+      final rows = widget.uiState.tools.rotateSets == RotateSets.rotation;
+      if (rows && ring != null && local) {
         final was = [start.$1, start.$2, start.$3];
         var value = was[ring.axis] + swept * 180 / math.pi;
         if (shift) value = (value / 45).roundToDouble() * 45;
         was[ring.axis] = value;
-        out[id] = (was[0], was[1], was[2]);
+        out[id] = ((was[0], was[1], was[2]), orientation);
         continue;
       }
-      // Each layer about the same axis in its own parent's space.
+      // Each layer about the same axis in its own parent's space, the turn
+      // going on its Orientation or its rotations, as the tool is set.
       final own = _ringsOf(box) ?? rings;
-      final near = _last3d[id];
+      final outside = box.map.depth?.outside ?? turnOfAe(orientation);
+      final ae = box.map.depth?.aeOrder ?? false;
+      _Turn about(_Turn was, Vec3 axis, double by) {
+        if (rows) {
+          return (
+            rowsAbout(outside, was.$1, axis, by,
+                ae: ae, near: _last3d[id]?.$1),
+            orientation,
+          );
+        }
+        // Each turn changes what is outside the rotations, so a second one is
+        // measured from the first.
+        final turned =
+            orientedAbout(outside, was.$2, axis, by, near: _last3d[id]?.$2);
+        return (was.$1, turned);
+      }
+
       if (ring != null) {
         final by = shift ? (swept / step).roundToDouble() * step : swept;
-        out[id] = turnedAbout(start, own.turns[ring.axis], by, near: near);
+        out[id] = about((start, orientation), own.turns[ring.axis], by);
         continue;
       }
       // Off the rings: across the screen turns about the screen's up, and
@@ -493,9 +534,20 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
       var d = to - from;
       if (shift) d = constrainToAxis(d);
       const perPixel = 0.5 * math.pi / 180;
-      out[id] = turnedAbout(turnedAbout(start, own.viewY, -d.dx * perPixel),
-          own.viewX, d.dy * perPixel,
-          near: near);
+      if (rows) {
+        final across = about((start, orientation), own.viewY, -d.dx * perPixel);
+        out[id] = about(across, own.viewX, d.dy * perPixel);
+        continue;
+      }
+      final across = turnAbout(own.viewY, -d.dx * perPixel);
+      final down = turnAbout(own.viewX, d.dy * perPixel);
+      out[id] = (
+        start,
+        eulerXyz(
+            mul3(transpose3(mul3(outside, transpose3(turnOfAe(orientation)))),
+                mul3(mul3(down, across), outside)),
+            _last3d[id]?.$2 ?? orientation),
+      );
     }
     return out;
   }
@@ -506,11 +558,15 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
     final turned = _turns3d();
     _last3d.addAll(turned);
     final live = <UuidValue, BridgeTransform>{};
-    for (final MapEntry(key: id, value: turn) in turned.entries) {
+    for (final MapEntry(key: id, value: (turn, orientation))
+        in turned.entries) {
       final tf = _start3d[id]?.$1.transform;
       if (tf == null) continue;
       live[id] = transformWith(tf,
-          rotationX: turn.$1, rotationY: turn.$2, rotation: turn.$3);
+          rotationX: turn.$1,
+          rotationY: turn.$2,
+          rotation: turn.$3,
+          orientation: orientation);
     }
     widget.uiState.liveTransforms.value = live;
     if (live.length != 1) return;
@@ -542,8 +598,9 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
           ? Provider.of<LumitState>(context, listen: false).project
           : null,
       () {
-        for (final MapEntry(key: id, value: turn) in turned.entries) {
-          final (box, start) = _start3d[id]!;
+        for (final MapEntry(key: id, value: (turn, orientation))
+            in turned.entries) {
+          final (box, start, was) = _start3d[id]!;
           final tf = box.transform!;
           final props = <BridgeTransformProp>[];
           final values = <BridgeScalar>[];
@@ -551,11 +608,15 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
             (BridgeTransformProp.rotationX, start.$1, turn.$1),
             (BridgeTransformProp.rotationY, start.$2, turn.$2),
             (BridgeTransformProp.rotation, start.$3, turn.$3),
+            (BridgeTransformProp.orientationX, was.$1, orientation.$1),
+            (BridgeTransformProp.orientationY, was.$2, orientation.$2),
+            (BridgeTransformProp.orientationZ, was.$3, orientation.$3),
           ]) {
             if ((now - was).abs() < 1e-6) continue;
+            final scalar = scalarOf(tf, prop);
+            if (scalar == null) continue;
             props.add(prop);
-            values.add(scalarWithValueAt(
-                scalarOf(tf, prop)!, now, widget.comp, frame));
+            values.add(scalarWithValueAt(scalar, now, widget.comp, frame));
           }
           if (props.isEmpty) continue;
           try {
@@ -581,17 +642,45 @@ class _ViewerRotateLayerState extends State<ViewerRotateLayer> {
   /// What the turn has changed on the first layer, for the readout.
   List<String> _readout() {
     if (_start3d.isEmpty) return const [];
-    final MapEntry(key: id, value: (_, start)) = _start3d.entries.first;
-    final turn = _turns3d()[id];
-    if (turn == null) return const [];
-    final d = [turn.$1 - start.$1, turn.$2 - start.$2, turn.$3 - start.$3];
-    return [
-      l10n.transformRotation,
-      for (var i = 0; i < 3; i++)
-        if (d[i].abs() >= 0.05) '${'xyz'[i]}  ${gizmoAmount(d[i], unit: '°')}',
+    final MapEntry(key: id, value: (_, start, was)) = _start3d.entries.first;
+    final now = _turns3d()[id];
+    if (now == null) return const [];
+    final (turn, orientation) = now;
+    List<String> lines(String label, Vec3 from, Vec3 to) {
+      final d = [to.$1 - from.$1, to.$2 - from.$2, to.$3 - from.$3];
+      if (d.every((v) => v.abs() < 0.05)) return const [];
+      return [
+        label,
+        for (var i = 0; i < 3; i++)
+          if (d[i].abs() >= 0.05)
+            '${'xyz'[i]}  ${gizmoAmount(d[i], unit: '°')}',
+      ];
+    }
+
+    final moved = [
+      ...lines(l10n.transformOrientation, was, orientation),
+      ...lines(l10n.transformRotation, start, turn),
     ];
+    return moved.isEmpty ? [l10n.transformRotation] : moved;
+  }
+
+  /// [box]'s Orientation as it stands, nought on a layer with none.
+  Vec3 _orientationOf(LayerBox box) {
+    final d = box.transform?.depth;
+    if (d == null) return (0, 0, 0);
+    final time = timeOfFrame(widget.comp, widget.uiState.playheadFrame.value);
+    double read(BridgeScalar s) => switch (s) {
+          BridgeScalar_Static(:final field0) => field0,
+          _ => sampledScalar(s, time),
+        };
+    return sampledOrientation(
+            d.orientationX, d.orientationY, d.orientationZ, time) ??
+        (read(d.orientationX), read(d.orientationY), read(d.orientationZ));
   }
 }
+
+/// X, Y and Z Rotation, and the Orientation.
+typedef _Turn = (Vec3, Vec3);
 
 /// The curved-arrow pointer, drawn at the pointer's own position.
 ///

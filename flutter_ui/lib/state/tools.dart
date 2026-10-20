@@ -237,6 +237,10 @@ const Map<String, ToolGroup> toolActions = {
 /// The axes a 3D layer's move arrows and rotation rings follow.
 enum GizmoAxes { local, world, view }
 
+/// What the Rotation tool turns on a 3D layer: its Orientation, or its X, Y
+/// and Z Rotation, as After Effects' Rotation tool offers.
+enum RotateSets { orientation, rotation }
+
 /// What a camera orbit swings round, After Effects' choice on the camera
 /// tools' options.
 enum CameraPivot {
@@ -372,6 +376,16 @@ class ToolsState extends ChangeNotifier {
   set axes(GizmoAxes value) {
     if (_axes == value) return;
     _axes = value;
+    notifyListeners();
+  }
+
+  /// What the Rotation tool turns on a 3D layer, Orientation by default as
+  /// in After Effects.
+  RotateSets _rotateSets = RotateSets.orientation;
+  RotateSets get rotateSets => _rotateSets;
+  set rotateSets(RotateSets value) {
+    if (_rotateSets == value) return;
+    _rotateSets = value;
     notifyListeners();
   }
 

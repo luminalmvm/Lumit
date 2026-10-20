@@ -1423,8 +1423,10 @@ void main() {
       await tester.pump();
       counter.counting = false;
       expect(counter.calls['layer_reference_set_transforms'], 1);
+      // The Rotation tool turns the Orientation, as After Effects' does.
       expect(
-          sampledScalar(layer.getTransform().rotation, timeOfFrame(comp, 0)),
+          sampledScalar(layer.getTransform().depth!.orientationZ,
+              timeOfFrame(comp, 0)),
           isNot(0),
           reason: 'the ring turned the layer');
     });

@@ -73,9 +73,9 @@ counted from its in point.
 | | |
 | --- | --- |
 | **Constants** | `time`, `comp_width`, `comp_height`, `comp_fps`, `num_layers`, `num_markers`, `cut_in`, `cut_out` |
-| **Maths** | `sin`, `cos`, `sinh`, `cosh`, `floor`, `ceil`, `round`, `abs`, `clamp`, `noise`, `smoothstep`, `fit`, `fit_clamped`, `fit01` |
+| **Maths** | `sin`, `cos`, `sinh`, `cosh`, `floor`, `ceil`, `round`, `abs`, `clamp`, `noise`, `smoothstep`, `fit`, `fit_clamped`, `fit01`, `look_at(from, to)` |
 | **The composition** | `comp().name`, `comp().active_camera` |
-| **A layer** | `layer()` for this one, `layer("Name")` for another — `.name`, `.time`, `.x`, `.y`, `.rotation`, `.scale_x`, `.scale_y`, `.anchor_x`, `.anchor_y`, `.opacity`, `.z`, `.rotation_x`, `.rotation_y`, `.rotation_z`, `.orientation`, and a camera's `.zoom` and `.point_of_interest` |
+| **A layer** | `layer()` for this one, `layer("Name")` for another — `.name`, `.time`, `.x`, `.y`, `.rotation`, `.scale_x`, `.scale_y`, `.scale_z`, `.anchor_x`, `.anchor_y`, `.anchor_z`, `.opacity`, `.z`, `.rotation_x`, `.rotation_y`, `.rotation_z`, `.orientation`, and a camera's `.zoom` and `.point_of_interest` |
 | **3D** | `.to_comp(p)`, `.from_comp(p)`, `.to_world(p)`, `.from_world(p)`, `.to_comp_vec(v)`, `.from_comp_vec(v)`, `.to_world_vec(v)`, `.from_world_vec(v)`, `.from_comp_to_surface(p)` on a layer, each with an optional time after the point |
 
 A few to start from:
@@ -104,7 +104,7 @@ on arrays adds and scales them as it does in After Effects.
 | **Motion** | `wiggle(freq, amp, octaves, amp_mult, t)`, `valueAtTime(t)`, `posterizeTime(fps)` |
 | **Random** | `seedRandom(seed, timeless)`, `random()`, `gaussRandom()`, `noise()` |
 | **Interpolation** | `linear`, `ease`, `easeIn`, `easeOut`, `clamp` |
-| **Vectors** | `add`, `sub`, `mul`, `div`, `length`, `normalize`, `dot`, `cross` |
+| **Vectors** | `add`, `sub`, `mul`, `div`, `length`, `normalize`, `dot`, `cross`, `lookAt` |
 | **Conversion** | `degreesToRadians`, `radiansToDegrees`, `timeToFrames`, `framesToTime`, `rgbToHsl`, `hslToRgb` |
 | **JavaScript** | `Math`, `parseInt`, `parseFloat`, `isNaN`, and the array and string methods |
 
@@ -133,9 +133,10 @@ thisComp.layer("Marker").toComp([0, 0, 0]) // on Position X and Y, pin a 2D laye
 
 ## 3D
 
-A 3D layer's, a camera's and a light's `position` is three numbers. Its `anchorPoint`
-reads with a z of 0 and its `scale` with a z of 100, as Lumit has no Anchor Z or Scale Z.
-Lumit has no Orientation, so `orientation` is `[0, 0, 0]`.
+A 3D layer's, a camera's and a light's `position`, `anchorPoint`, `scale` and `orientation`
+are three numbers. `orientation` reads the turn between keys as the picture has it.
+`lookAt(from, to)` gives the Orientation that points a layer's z axis from one point at the
+other, with no turn about z.
 
 - **`toComp`** carries a point in the layer's own pixels to the picture. A 3D layer is
   seen through the active camera, and the third number is its depth in front of the

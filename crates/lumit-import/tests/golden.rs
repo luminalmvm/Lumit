@@ -818,8 +818,7 @@ fn the_switches_cross_over_and_the_ones_with_no_counterpart_are_reported() {
 /// map.**
 ///
 /// What does come across: the 3D switch and the layer's Z, the layer's
-/// **Orientation** on the rotation lanes (the rotations here are zero, so the
-/// orientation is exactly what they describe), the camera's Zoom out of its
+/// **Orientation** on its own lanes, the camera's Zoom out of its
 /// options group, and the light's kind, colour, intensity, cone and aim.
 /// The colour converts into scene-linear light; the rest is After Effects'
 /// own numbers.
@@ -839,11 +838,14 @@ fn the_3d_layer_the_camera_and_the_light_come_across_as_far_as_they_map() {
     let card = layer(c, "3d card");
     assert!(card.switches.three_d);
     assert_eq!(card.transform.position_z.value_at(0.0), -150.0);
-    // Orientation [0, 30, 0] onto the rotation lanes, the layer's own
-    // rotations being zero.
-    assert_eq!(card.transform.rotation_x.value_at(0.0), 0.0);
-    assert_eq!(card.transform.rotation_y.value_at(0.0), 30.0);
-    assert_eq!(card.transform.rotation.value_at(0.0), 0.0);
+    // Orientation [0, 30, 0], as it is.
+    let orientation = card
+        .transform
+        .orientation
+        .each_ref()
+        .map(|p| p.value_at(0.0));
+    assert_eq!(orientation, [0.0, 30.0, 0.0]);
+    assert_eq!(card.transform.rotation_y.value_at(0.0), 0.0);
     assert_eq!(
         card.transform.material.casts_shadows,
         lumit_core::model::ShadowMode::On

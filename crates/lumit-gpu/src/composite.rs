@@ -227,12 +227,34 @@ pub fn place_matrix(
     rotation_x_deg: f32,
     rotation_y_deg: f32,
 ) -> [[f32; 4]; 4] {
-    (Mat4::from_translation(glam::vec3(position.0, position.1, z))
-        * Mat4::from_rotation_y(rotation_y_deg.to_radians())
-        * Mat4::from_rotation_x(rotation_x_deg.to_radians())
-        * Mat4::from_rotation_z(rotation_deg.to_radians())
-        * Mat4::from_scale(glam::vec3(scale.0 / 100.0, scale.1 / 100.0, 1.0))
-        * Mat4::from_translation(glam::vec3(-anchor.0, -anchor.1, 0.0)))
+    place_matrix_3d(
+        (position.0, position.1, z),
+        (anchor.0, anchor.1, 0.0),
+        (scale.0, scale.1, 100.0),
+        (rotation_x_deg, rotation_y_deg, rotation_deg),
+    )
+}
+
+/// [`place_matrix`] with Anchor Z and Scale Z, for a parent. A layer's own
+/// picture is flat, so for it Scale Z only scales how far Anchor Z pushes it,
+/// and that push goes in its position. The rotations are x, y and z, any
+/// Orientation already in them.
+pub fn place_matrix_3d(
+    position: (f32, f32, f32),
+    anchor: (f32, f32, f32),
+    scale: (f32, f32, f32),
+    rotation_deg: (f32, f32, f32),
+) -> [[f32; 4]; 4] {
+    (Mat4::from_translation(glam::vec3(position.0, position.1, position.2))
+        * Mat4::from_rotation_y(rotation_deg.1.to_radians())
+        * Mat4::from_rotation_x(rotation_deg.0.to_radians())
+        * Mat4::from_rotation_z(rotation_deg.2.to_radians())
+        * Mat4::from_scale(glam::vec3(
+            scale.0 / 100.0,
+            scale.1 / 100.0,
+            scale.2 / 100.0,
+        ))
+        * Mat4::from_translation(glam::vec3(-anchor.0, -anchor.1, -anchor.2)))
     .to_cols_array_2d()
 }
 

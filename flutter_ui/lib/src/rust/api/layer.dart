@@ -25,7 +25,7 @@ part 'layer.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
 
 /// Where a fixed view looks from, for a comp of this size
@@ -632,6 +632,50 @@ sealed class BridgeClipFadeShape with _$BridgeClipFadeShape {
     required double x2,
     required double y2,
   }) = BridgeClipFadeShape_Custom;
+}
+
+/// After Effects' Orientation, three angles keyed as one turn, and the z of
+/// Anchor and Scale.
+class BridgeDepthChannels {
+  final BridgeScalar orientationX;
+  final BridgeScalar orientationY;
+  final BridgeScalar orientationZ;
+  final BridgeScalar anchorZ;
+  final BridgeScalar scaleZ;
+
+  /// X, Y and Z Rotation turn in After Effects' `Rx · Ry · Rz`, as an
+  /// imported layer's do, rather than Lumit's `Ry · Rx · Rz`.
+  final bool afterEffectsOrder;
+
+  const BridgeDepthChannels({
+    required this.orientationX,
+    required this.orientationY,
+    required this.orientationZ,
+    required this.anchorZ,
+    required this.scaleZ,
+    required this.afterEffectsOrder,
+  });
+
+  @override
+  int get hashCode =>
+      orientationX.hashCode ^
+      orientationY.hashCode ^
+      orientationZ.hashCode ^
+      anchorZ.hashCode ^
+      scaleZ.hashCode ^
+      afterEffectsOrder.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BridgeDepthChannels &&
+          runtimeType == other.runtimeType &&
+          orientationX == other.orientationX &&
+          orientationY == other.orientationY &&
+          orientationZ == other.orientationZ &&
+          anchorZ == other.anchorZ &&
+          scaleZ == other.scaleZ &&
+          afterEffectsOrder == other.afterEffectsOrder;
 }
 
 /// The curve a fade command writes (docs/09 §6) — the Audio panel's
@@ -2490,6 +2534,10 @@ class BridgeTransform {
   /// with no picture to light.
   final BridgeMaterialChannels? material;
 
+  /// Orientation, Anchor Z and Scale Z, on a 3D layer, a camera or a light;
+  /// `None` on a 2D layer, which has none of them.
+  final BridgeDepthChannels? depth;
+
   const BridgeTransform({
     required this.anchorX,
     required this.anchorY,
@@ -2505,6 +2553,7 @@ class BridgeTransform {
     this.camera,
     this.light,
     this.material,
+    this.depth,
   });
 
   @override
@@ -2522,7 +2571,8 @@ class BridgeTransform {
       opacity.hashCode ^
       camera.hashCode ^
       light.hashCode ^
-      material.hashCode;
+      material.hashCode ^
+      depth.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -2542,7 +2592,8 @@ class BridgeTransform {
           opacity == other.opacity &&
           camera == other.camera &&
           light == other.light &&
-          material == other.material;
+          material == other.material &&
+          depth == other.depth;
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2567,6 +2618,11 @@ enum BridgeTransformProp {
   rotationX,
   rotationY,
   opacity,
+  orientationX,
+  orientationY,
+  orientationZ,
+  anchorZ,
+  scaleZ,
   poiX,
   poiY,
   poiZ,
@@ -2887,8 +2943,9 @@ class LayerReference {
 
   /// The camera's own values that put it at `aim` in the comp at `frame`:
   /// the eye, the rotation rows and the point of interest carried back into
-  /// its parent's space. What a camera drag writes, so a parented camera
-  /// lands where the drag put it. `aim` comes back as it is with no parent.
+  /// its parent's space, and the camera's Orientation taken off the rows.
+  /// What a camera drag writes, so a parented camera lands where the drag
+  /// put it. `aim` comes back as it is with no parent and no Orientation.
   BridgeCameraAim cameraOwnAim(
           {required BigInt frame, required BridgeCameraAim aim}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceCameraOwnAim(
@@ -3977,6 +4034,12 @@ class LayerReference {
   /// the flag off, all in one batch, which is one undo step.
   void setAdjustment({required bool on_}) => BridgeLib.instance.api
       .crateApiLayerLayerReferenceSetAdjustment(that: this, on_: on_);
+
+  /// Turn this layer's X, Y and Z Rotation in After Effects' order, or back
+  /// in Lumit's, as one undo step. The rotations are rewritten so the layer
+  /// keeps its pose. Refused while an expression drives one of them.
+  void setAfterEffectsOrder({required bool on_}) => BridgeLib.instance.api
+      .crateApiLayerLayerReferenceSetAfterEffectsOrder(that: this, on_: on_);
 
   /// Choose which audio streams this layer sounds, mixed. One undo step.
   ///

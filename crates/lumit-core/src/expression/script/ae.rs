@@ -57,7 +57,7 @@ const VALUES: [&str; 32] = [
 ];
 
 /// The functions an expression can call with no dot in front.
-const FUNCTIONS: [&str; 53] = [
+const FUNCTIONS: [&str; 54] = [
     "wiggle",
     "seedRandom",
     "random",
@@ -76,6 +76,7 @@ const FUNCTIONS: [&str; 53] = [
     "normalize",
     "dot",
     "cross",
+    "lookAt",
     "degreesToRadians",
     "radiansToDegrees",
     "timeToFrames",
@@ -343,32 +344,29 @@ impl<'a> Ae<'a> {
                     LayerKind::Camera { zoom, options, .. } => Some((zoom, options)),
                     _ => None,
                 };
-                // A 3D layer's points have a z. Lumit has no Anchor Z or Scale
-                // Z yet, so those read as what they would be.
+                // A 3D layer's points have a z.
                 let three_d = found.is_3d();
+                let three = |x, y, z| Parts {
+                    props: [Some(x), Some(y), Some(z), None],
+                    tail: [None; 3],
+                };
                 let parts = match which {
-                    Tr::Position if three_d => Parts {
-                        props: [
-                            Some(&tr.position_x),
-                            Some(&tr.position_y),
-                            Some(&tr.position_z),
-                            None,
-                        ],
-                        tail: [None; 3],
-                    },
+                    Tr::Position if three_d => {
+                        three(&tr.position_x, &tr.position_y, &tr.position_z)
+                    }
                     Tr::Position => Parts::two(&tr.position_x, &tr.position_y),
-                    Tr::Anchor => Parts::two(&tr.anchor_x, &tr.anchor_y).then(three_d, 0.0),
-                    Tr::Scale => Parts::two(&tr.scale_x, &tr.scale_y).then(three_d, 100.0),
+                    Tr::Anchor if three_d => three(&tr.anchor_x, &tr.anchor_y, &tr.anchor_z),
+                    Tr::Anchor => Parts::two(&tr.anchor_x, &tr.anchor_y),
+                    Tr::Scale if three_d => three(&tr.scale_x, &tr.scale_y, &tr.scale_z),
+                    Tr::Scale => Parts::two(&tr.scale_x, &tr.scale_y),
                     Tr::Rotation => Parts::one(&tr.rotation),
                     Tr::RotationX => Parts::one(&tr.rotation_x),
                     Tr::RotationY => Parts::one(&tr.rotation_y),
                     Tr::Opacity => Parts::one(&tr.opacity),
-                    // There is no Orientation: the whole turn is in the three
-                    // rotations, so what it adds is nothing.
-                    Tr::Orientation => Parts {
-                        props: [None; 4],
-                        tail: [Some(0.0); 3],
-                    },
+                    Tr::Orientation => {
+                        let [x, y, z] = &tr.orientation;
+                        three(x, y, z)
+                    }
                     Tr::PointOfInterest => {
                         let [x, y, z] = &camera?.1.point_of_interest;
                         Parts {
@@ -427,6 +425,19 @@ impl<'a> Ae<'a> {
         let Some((comp, layer, parts)) = self.parts(prop) else {
             return fail("a property that is no longer there");
         };
+        // Orientation turns from key to key as one, not number by number.
+        if matches!(
+            prop,
+            PropRef::Transform {
+                which: Tr::Orientation,
+                ..
+            }
+        ) {
+            let local = t - layer.start_offset.0.to_f64();
+            let read = |p: &Property| self.sample(comp, layer, p, t);
+            let (x, y, z) = layer.transform.orientation_at(local, &read);
+            return Ok(vec![x, y, z]);
+        }
         Ok(parts
             .props
             .iter()
@@ -466,7 +477,7 @@ impl<'a> Ae<'a> {
 }
 
 /// Up to four properties (a colour's channels), then numbers that do not
-/// animate: a checkbox or a menu, or the z a 3D layer's anchor has.
+/// animate: a checkbox or a menu.
 struct Parts<'a> {
     props: [Option<&'a Property>; 4],
     tail: [Option<f64>; 3],
@@ -492,14 +503,6 @@ impl<'a> Parts<'a> {
             props: [None; 4],
             tail: [Some(value), None, None],
         }
-    }
-
-    /// The same with `value` on the end, when `more`.
-    fn then(mut self, more: bool, value: f64) -> Self {
-        if more {
-            self.tail[0] = Some(value);
-        }
-        self
     }
 }
 
@@ -1328,6 +1331,15 @@ impl<'a> Interp<'a> {
                     at(&a, 2) * at(&b, 0) - at(&a, 0) * at(&b, 2),
                     at(&a, 0) * at(&b, 1) - at(&a, 1) * at(&b, 0),
                 ])?
+            }
+            "lookAt" => {
+                let (a, b) = (self.vector(&first)?, self.vector(&second)?);
+                let at = |v: &[f64], i: usize| v.get(i).copied().unwrap_or(0.0);
+                let (x, y, z) = crate::camera::look_at_orientation(
+                    (at(&a, 0), at(&a, 1), at(&a, 2)),
+                    (at(&b, 0), at(&b, 1), at(&b, 2)),
+                );
+                self.numbers(&[x, y, z])?
             }
             "degreesToRadians" => Value::Num(to_number(&first).to_radians()),
             "radiansToDegrees" => Value::Num(to_number(&first).to_degrees()),

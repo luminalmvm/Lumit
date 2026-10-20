@@ -652,6 +652,29 @@ pub struct TransformGroup {
     pub rotation_x: Property,
     #[serde(default = "Property::zero")]
     pub rotation_y: Property,
+    /// After Effects' Orientation: three angles in its own `Rx · Ry · Rz`,
+    /// turned outside the X, Y and Z Rotation, and keyed as one turn
+    /// ([`Self::orientation_at`]). Anchor Z and Scale Z beside it. All three
+    /// are left out of the file while nothing uses them, so a layer that
+    /// doesn't writes the bytes it always did.
+    #[serde(default = "zero3", skip_serializing_if = "is_still_zero3")]
+    pub orientation: [Property; 3],
+    #[serde(
+        default = "Property::zero",
+        skip_serializing_if = "crate::paint::is_static_zero"
+    )]
+    pub anchor_z: Property,
+    #[serde(
+        default = "crate::paint::full",
+        skip_serializing_if = "crate::paint::is_static_full"
+    )]
+    pub scale_z: Property,
+    /// X, Y and Z Rotation turn in After Effects' `Rx · Ry · Rz` rather than
+    /// Lumit's `Ry · Rx · Rz`. Set on the 3D layers, cameras and lights an
+    /// After Effects project brings in, so their rotations come across
+    /// exactly, keys and all.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub after_effects_order: bool,
     /// Percent, 0..100.
     pub opacity: Property,
     /// How each two-axis property is shown and edited (docs/03 §6.5).
@@ -859,18 +882,26 @@ pub enum TransformPair {
 }
 
 impl TransformPair {
-    /// The properties this pair covers, in row order. Position's z is one of
-    /// them: a separated Position on a 3D layer is three rows, not two — and on
-    /// a 2D layer the z row is not drawn at all, exactly as it is not today.
+    /// The properties this pair covers, in row order. The z is one of them: a
+    /// separated pair on a 3D layer is three rows, not two, and on a 2D layer
+    /// the z row is not drawn at all.
     pub fn props(self) -> &'static [TransformProp] {
         match self {
-            Self::Anchor => &[TransformProp::AnchorX, TransformProp::AnchorY],
+            Self::Anchor => &[
+                TransformProp::AnchorX,
+                TransformProp::AnchorY,
+                TransformProp::AnchorZ,
+            ],
             Self::Position => &[
                 TransformProp::PositionX,
                 TransformProp::PositionY,
                 TransformProp::PositionZ,
             ],
-            Self::Scale => &[TransformProp::ScaleX, TransformProp::ScaleY],
+            Self::Scale => &[
+                TransformProp::ScaleX,
+                TransformProp::ScaleY,
+                TransformProp::ScaleZ,
+            ],
         }
     }
 }
@@ -888,6 +919,10 @@ impl Default for TransformGroup {
             position_z: Property::fixed(0.0),
             rotation_x: Property::fixed(0.0),
             rotation_y: Property::fixed(0.0),
+            orientation: zero3(),
+            anchor_z: Property::zero(),
+            scale_z: Property::fixed(100.0),
+            after_effects_order: false,
             opacity: Property::fixed(100.0),
             axis_modes: AxisModes::default(),
             material: Box::default(),
@@ -910,6 +945,13 @@ pub enum TransformProp {
     RotationX,
     RotationY,
     Opacity,
+    /// After Effects' Orientation, one turn of three angles, and the z of
+    /// Anchor and Scale.
+    OrientationX,
+    OrientationY,
+    OrientationZ,
+    AnchorZ,
+    ScaleZ,
     /// The seven camera channels (docs/impl/camera.md §1). They live in
     /// [`LayerKind::Camera`] rather than the transform group, and answer
     /// through [`Layer::prop`]; on any other layer they are not there.
@@ -943,7 +985,255 @@ pub enum TransformProp {
     LightTransmission,
 }
 
+fn zero3() -> [Property; 3] {
+    [Property::zero(), Property::zero(), Property::zero()]
+}
+
+fn is_still_zero3(p: &[Property; 3]) -> bool {
+    p.iter().all(crate::paint::is_static_zero)
+}
+
 impl TransformGroup {
+    /// The Orientation at layer time `lt`, each angle read by `read`.
+    ///
+    /// After Effects moves from one Orientation key to the next along the
+    /// shortest turn rather than angle by angle, so between two keys the
+    /// angles are the turn that far round. How far round is the eased progress
+    /// of whichever angle moves most there; the three are keyed together and
+    /// eased alike, so any of them would say the same. An expression, or no
+    /// keys at all, reads each angle as it is.
+    #[must_use]
+    pub fn orientation_at(&self, lt: f64, read: &dyn Fn(&Property) -> f64) -> (f64, f64, f64) {
+        use crate::anim::{evaluate, Animation};
+        let o = &self.orientation;
+        let each = || (read(&o[0]), read(&o[1]), read(&o[2]));
+        let keys = o.each_ref().map(|p| match &p.animation {
+            Animation::Keyframed(keys) if !keys.is_empty() => Some(keys.as_slice()),
+            _ => None,
+        });
+        // The keys either side of `lt`, from all three angles.
+        let (mut before, mut after) = (f64::NEG_INFINITY, f64::INFINITY);
+        for keys in keys.iter().flatten() {
+            let i = keys.partition_point(|k| k.time.to_f64() <= lt);
+            if let Some(k) = i.checked_sub(1).and_then(|i| keys.get(i)) {
+                before = before.max(k.time.to_f64());
+            }
+            if let Some(k) = keys.get(i) {
+                after = after.min(k.time.to_f64());
+            }
+        }
+        if !before.is_finite() || !after.is_finite() {
+            return each();
+        }
+        let ends = |t: f64| {
+            let at = |i: usize| {
+                keys[i]
+                    .and_then(|k| evaluate(k, t))
+                    .unwrap_or_else(|| read(&o[i]))
+            };
+            (at(0), at(1), at(2))
+        };
+        let (a, b) = (ends(before), ends(after));
+        let now = each();
+        let moved = [
+            (b.0 - a.0, now.0 - a.0, keys[0].is_some()),
+            (b.1 - a.1, now.1 - a.1, keys[1].is_some()),
+            (b.2 - a.2, now.2 - a.2, keys[2].is_some()),
+        ];
+        let Some(&(span, gone, _)) = moved
+            .iter()
+            .filter(|(span, _, keyed)| *keyed && span.abs() > 1e-9)
+            .max_by(|x, y| x.0.abs().total_cmp(&y.0.abs()))
+        else {
+            return now;
+        };
+        // On a key, or held at one: the key's own angles, exactly.
+        if gone == 0.0 {
+            return now;
+        }
+        crate::camera::orientation_between(a, b, gone / span)
+    }
+
+    /// Put `animation` on the Orientation angle `prop`, keyed as After Effects
+    /// keys it: one key holds all three angles. Where `animation` has a key
+    /// the other two don't, they get one, holding the turn as it read there
+    /// before, so nothing moves but the angle written. Returns every angle
+    /// that changed with what it held, for undo. An expression on an angle is
+    /// left alone.
+    pub fn set_orientation_angle(
+        &mut self,
+        prop: TransformProp,
+        animation: crate::anim::Animation,
+    ) -> Vec<(TransformProp, crate::anim::Animation)> {
+        use crate::anim::{Animation, Keyframe, SideInterp};
+        const AXES: [TransformProp; 3] = [
+            TransformProp::OrientationX,
+            TransformProp::OrientationY,
+            TransformProp::OrientationZ,
+        ];
+        let Some(i) = AXES.iter().position(|p| *p == prop) else {
+            return Vec::new();
+        };
+        let mut planted = Vec::new();
+        if let Animation::Keyframed(keys) = &animation {
+            for (j, other) in self.orientation.iter().enumerate() {
+                if j == i || matches!(other.animation, Animation::Expression(_)) {
+                    continue;
+                }
+                let held = match &other.animation {
+                    Animation::Keyframed(held) => held.clone(),
+                    _ => Vec::new(),
+                };
+                let mut next = held.clone();
+                for key in keys {
+                    if held.iter().any(|k| k.time == key.time) {
+                        continue;
+                    }
+                    let lt = key.time.to_f64();
+                    let now = self.orientation_at(lt, &|p: &Property| p.value_at(lt));
+                    // The written key's ease, unless it carries a speed, which
+                    // belonged to that one angle.
+                    let side = |side: SideInterp| match side {
+                        SideInterp::Bezier { speed, .. } if speed != 0.0 => SideInterp::Linear,
+                        other => other,
+                    };
+                    next.push(Keyframe {
+                        time: key.time,
+                        value: [now.0, now.1, now.2][j],
+                        interp_in: side(key.interp_in),
+                        interp_out: side(key.interp_out),
+                    });
+                }
+                if next.len() != held.len() {
+                    next.sort_by_key(|k| k.time);
+                    planted.push((j, Animation::Keyframed(next)));
+                }
+            }
+        }
+        let mut previous = Vec::new();
+        for (j, next) in planted {
+            let was = std::mem::replace(&mut self.orientation[j].animation, next);
+            previous.push((AXES[j], was));
+        }
+        let was = std::mem::replace(&mut self.orientation[i].animation, animation);
+        previous.push((prop, was));
+        previous
+    }
+
+    /// X, Y and Z Rotation rewritten for the other rotation order
+    /// (`after_effects` or Lumit's), so the layer keeps its pose: exact on
+    /// still values and on every key, keys going wherever any of the three
+    /// had one. `None` while an expression drives one of them.
+    #[must_use]
+    pub fn rotations_in_order(
+        &self,
+        after_effects: bool,
+    ) -> Option<Vec<(TransformProp, crate::anim::Animation)>> {
+        use crate::anim::{Animation, Keyframe, SideInterp};
+        let rows = [&self.rotation_x, &self.rotation_y, &self.rotation];
+        if rows
+            .iter()
+            .any(|p| matches!(p.animation, Animation::Expression(_)))
+        {
+            return None;
+        }
+        let from = self.after_effects_order;
+        let at = |t: f64| {
+            (
+                rows[0].value_at(t),
+                rows[1].value_at(t),
+                rows[2].value_at(t),
+            )
+        };
+        let keys = rows.map(|p| match &p.animation {
+            Animation::Keyframed(keys) => keys.clone(),
+            _ => Vec::new(),
+        });
+        let mut times: Vec<crate::time::Rational> = keys.iter().flatten().map(|k| k.time).collect();
+        times.sort();
+        times.dedup();
+        let props = [
+            TransformProp::RotationX,
+            TransformProp::RotationY,
+            TransformProp::Rotation,
+        ];
+        if times.is_empty() {
+            let still = at(0.0);
+            let (x, y, z) = crate::camera::reordered(still, from, after_effects, still);
+            return Some(
+                props
+                    .into_iter()
+                    .zip([x, y, z].map(Animation::Static))
+                    .collect(),
+            );
+        }
+        let side = |side: SideInterp| match side {
+            SideInterp::Bezier { speed, .. } if speed != 0.0 => SideInterp::Linear,
+            other => other,
+        };
+        let mut lanes = [Vec::new(), Vec::new(), Vec::new()];
+        let mut near = at(times[0].to_f64());
+        for time in times {
+            let angles = at(time.to_f64());
+            near = crate::camera::reordered(angles, from, after_effects, near);
+            let here = keys.iter().flatten().find(|k| k.time == time);
+            let interp_in = here.map_or(SideInterp::Linear, |k| side(k.interp_in));
+            let interp_out = here.map_or(SideInterp::Linear, |k| side(k.interp_out));
+            for (lane, value) in lanes.iter_mut().zip([near.0, near.1, near.2]) {
+                lane.push(Keyframe {
+                    time,
+                    value,
+                    interp_in,
+                    interp_out,
+                });
+            }
+        }
+        Some(
+            props
+                .into_iter()
+                .zip(lanes.map(Animation::Keyframed))
+                .collect(),
+        )
+    }
+
+    /// The placement these values make at layer time `lt`, each read by
+    /// `read`, with the Orientation turned into the rotations. A `flat` (2D)
+    /// layer counts its hidden z, X and Y Rotation, Orientation, Anchor Z and
+    /// Scale Z as nought, as After Effects does.
+    #[must_use]
+    pub fn placement_at(&self, lt: f64, flat: bool, read: &dyn Fn(&Property) -> f64) -> Placement {
+        let ae_order = self.after_effects_order && !flat;
+        let hidden = |p: &Property, nought: f64| if flat { nought } else { read(p) };
+        let rotation = (
+            hidden(&self.rotation_x, 0.0),
+            hidden(&self.rotation_y, 0.0),
+            read(&self.rotation),
+        );
+        let orientation = if flat {
+            (0.0, 0.0, 0.0)
+        } else {
+            self.orientation_at(lt, read)
+        };
+        Placement {
+            position: (
+                read(&self.position_x),
+                read(&self.position_y),
+                hidden(&self.position_z, 0.0),
+            ),
+            anchor: (
+                read(&self.anchor_x),
+                read(&self.anchor_y),
+                hidden(&self.anchor_z, 0.0),
+            ),
+            scale: (
+                read(&self.scale_x),
+                read(&self.scale_y),
+                hidden(&self.scale_z, 100.0),
+            ),
+            rotation_deg: crate::camera::oriented(orientation, rotation, ae_order),
+        }
+    }
+
     /// The animations a pair's axes need in order to be shown on **one** row
     /// again: every animated axis gains a key wherever any other
     /// animated axis in the pair has one, so a diamond on the recombined row
@@ -1007,6 +1297,11 @@ impl TransformGroup {
             TransformProp::RotationX => &self.rotation_x,
             TransformProp::RotationY => &self.rotation_y,
             TransformProp::Opacity => &self.opacity,
+            TransformProp::OrientationX => &self.orientation[0],
+            TransformProp::OrientationY => &self.orientation[1],
+            TransformProp::OrientationZ => &self.orientation[2],
+            TransformProp::AnchorZ => &self.anchor_z,
+            TransformProp::ScaleZ => &self.scale_z,
             _ => return self.material.get(prop),
         })
     }
@@ -1024,6 +1319,11 @@ impl TransformGroup {
             TransformProp::RotationX => &mut self.rotation_x,
             TransformProp::RotationY => &mut self.rotation_y,
             TransformProp::Opacity => &mut self.opacity,
+            TransformProp::OrientationX => &mut self.orientation[0],
+            TransformProp::OrientationY => &mut self.orientation[1],
+            TransformProp::OrientationZ => &mut self.orientation[2],
+            TransformProp::AnchorZ => &mut self.anchor_z,
+            TransformProp::ScaleZ => &mut self.scale_z,
             _ => return self.material.get_mut(prop),
         })
     }
@@ -1822,18 +2122,27 @@ impl Layer {
     }
 
     /// The rows of the point `prop` is one number of, in order, and which of
-    /// them it is: a position is x and y, and z as well on a 3D layer. A row
-    /// that is a number on its own is a point of one.
+    /// them it is: a position is x and y, and z as well on a 3D layer, and so
+    /// are an anchor and a scale. A row that is a number on its own is a point
+    /// of one.
     #[must_use]
     pub fn point_rows(&self, prop: TransformProp) -> (Vec<TransformProp>, usize) {
         use TransformProp as P;
+        let three_d = self.is_3d();
         let rows = match prop {
+            P::AnchorX | P::AnchorY | P::AnchorZ if three_d => {
+                vec![P::AnchorX, P::AnchorY, P::AnchorZ]
+            }
             P::AnchorX | P::AnchorY => vec![P::AnchorX, P::AnchorY],
-            P::PositionX | P::PositionY | P::PositionZ if self.is_3d() => {
+            P::PositionX | P::PositionY | P::PositionZ if three_d => {
                 vec![P::PositionX, P::PositionY, P::PositionZ]
             }
             P::PositionX | P::PositionY => vec![P::PositionX, P::PositionY],
+            P::ScaleX | P::ScaleY | P::ScaleZ if three_d => vec![P::ScaleX, P::ScaleY, P::ScaleZ],
             P::ScaleX | P::ScaleY => vec![P::ScaleX, P::ScaleY],
+            P::OrientationX | P::OrientationY | P::OrientationZ => {
+                vec![P::OrientationX, P::OrientationY, P::OrientationZ]
+            }
             P::PoiX | P::PoiY | P::PoiZ => vec![P::PoiX, P::PoiY, P::PoiZ],
             other => vec![other],
         };
@@ -1847,9 +2156,9 @@ impl Layer {
     pub fn separated(&self, prop: TransformProp) -> bool {
         use TransformProp as P;
         let pair = match prop {
-            P::AnchorX | P::AnchorY => TransformPair::Anchor,
+            P::AnchorX | P::AnchorY | P::AnchorZ => TransformPair::Anchor,
             P::PositionX | P::PositionY | P::PositionZ => TransformPair::Position,
-            P::ScaleX | P::ScaleY => TransformPair::Scale,
+            P::ScaleX | P::ScaleY | P::ScaleZ => TransformPair::Scale,
             _ => return false,
         };
         self.transform.axis_modes.get(pair) == AxisMode::Separated
@@ -2625,13 +2934,13 @@ pub struct CameraDof {
 /// One Camera layer's placement at comp time `t`, from its own properties,
 /// each read by `read`. `None` when `layer` is not a Camera.
 #[must_use]
-pub fn stored_camera_pose(layer: &Layer, read: &Read<'_>) -> Option<CameraPose> {
+pub fn stored_camera_pose(layer: &Layer, t: f64, read: &Read<'_>) -> Option<CameraPose> {
     let LayerKind::Camera { zoom, options, .. } = &layer.kind else {
         return None;
     };
     let at = |p: &Property| read(layer, p);
     // The eye and the turn, a two-node camera's aim in it, as its children see it.
-    let own = placement(layer, read);
+    let own = placement(layer, t, read);
     Some(CameraPose {
         zoom: at(zoom),
         position: own.position,
@@ -2661,10 +2970,14 @@ pub fn stored_camera_pose_lt(layer: &Layer, lt: f64) -> Option<CameraPose> {
         tr.position_y.value_at(lt),
         tr.position_z.value_at(lt),
     );
-    let stored = (
-        tr.rotation_x.value_at(lt),
-        tr.rotation_y.value_at(lt),
-        tr.rotation.value_at(lt),
+    let stored = crate::camera::oriented(
+        tr.orientation_at(lt, &|p: &Property| p.value_at(lt)),
+        (
+            tr.rotation_x.value_at(lt),
+            tr.rotation_y.value_at(lt),
+            tr.rotation.value_at(lt),
+        ),
+        tr.after_effects_order,
     );
     // A two-node camera aims at its point of interest and the rows add on
     // top (docs/impl/camera.md §2); with nothing to aim at, the rows alone.
@@ -2770,7 +3083,7 @@ impl Composition {
         let camera = self.active_camera(t)?;
         let context = timed_context(self, t);
         let read = context_reader(&context, t);
-        let pose = stored_camera_pose(camera, &read)?;
+        let pose = stored_camera_pose(camera, t, &read)?;
         let space = parent_space(self, camera, t, &read, None);
         Some(space.map_or(pose, |space| space.pose(pose)))
     }
@@ -3414,9 +3727,10 @@ pub fn layer_parent_chain(comp: &Composition, layer: Uuid) -> Vec<Uuid> {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Placement {
     pub position: (f64, f64, f64),
-    pub anchor: (f64, f64),
-    pub scale: (f64, f64),
-    /// Degrees about x, y and z, the compositor's `Ry · Rx · Rz`.
+    pub anchor: (f64, f64, f64),
+    pub scale: (f64, f64, f64),
+    /// Degrees about x, y and z, the compositor's `Ry · Rx · Rz`, with any
+    /// Orientation already turned into them.
     pub rotation_deg: (f64, f64, f64),
 }
 
@@ -3424,6 +3738,29 @@ impl Placement {
     #[must_use]
     pub fn place(&self) -> crate::camera::Place {
         crate::camera::place(self.position, self.anchor, self.scale, self.rotation_deg)
+    }
+
+    /// The position the compositor draws the layer's own flat picture at.
+    /// Anchor Z only pushes the picture along the layer's own z, so it goes
+    /// into the position there, which on the picture's plane is the same
+    /// thing. With no Anchor Z the position comes back exactly as it is.
+    #[must_use]
+    pub fn flat_position(&self) -> (f64, f64, f64) {
+        if self.anchor.2 == 0.0 {
+            return self.position;
+        }
+        let lift = crate::camera::place(
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, self.anchor.2),
+            self.scale,
+            self.rotation_deg,
+        )
+        .t;
+        (
+            self.position.0 + lift.0,
+            self.position.1 + lift.1,
+            self.position.2 + lift.2,
+        )
     }
 }
 
@@ -3473,32 +3810,19 @@ pub fn context_reader(
 /// interest in its anchor), and a two-node camera or light is turned by its
 /// aim, so what is parented to it turns with it.
 #[must_use]
-pub fn placement(layer: &Layer, read: &Read<'_>) -> Placement {
+pub fn placement(layer: &Layer, t: f64, read: &Read<'_>) -> Placement {
     let eye = matches!(
         layer.kind,
         LayerKind::Camera { .. } | LayerKind::Light { .. }
     );
     let flat = !layer.switches.three_d && !eye;
-    let at = |p: &Property| read(layer, p);
-    let hidden = |p: &Property| if flat { 0.0 } else { at(p) };
-    let tr = &layer.transform;
-    let mut out = Placement {
-        position: (
-            at(&tr.position_x),
-            at(&tr.position_y),
-            hidden(&tr.position_z),
-        ),
-        anchor: (at(&tr.anchor_x), at(&tr.anchor_y)),
-        scale: (at(&tr.scale_x), at(&tr.scale_y)),
-        rotation_deg: (
-            hidden(&tr.rotation_x),
-            hidden(&tr.rotation_y),
-            at(&tr.rotation),
-        ),
-    };
+    let lt = crate::time::layer_time(t, layer.start_offset.0);
+    let mut out = layer
+        .transform
+        .placement_at(lt, flat, &|p: &Property| read(layer, p));
     if eye {
-        out.anchor = (0.0, 0.0);
-        out.scale = (100.0, 100.0);
+        out.anchor = (0.0, 0.0, 0.0);
+        out.scale = (100.0, 100.0, 100.0);
     }
     let aim = match &layer.kind {
         LayerKind::Camera { options, .. } if options.two_node => Some(&options.point_of_interest),
@@ -3506,7 +3830,7 @@ pub fn placement(layer: &Layer, read: &Read<'_>) -> Placement {
         _ => None,
     };
     if let Some(poi) = aim {
-        let [x, y, z] = poi.each_ref().map(at);
+        let [x, y, z] = poi.each_ref().map(|p| read(layer, p));
         out.rotation_deg = crate::camera::look_at(out.position, (x, y, z), out.rotation_deg)
             .unwrap_or(out.rotation_deg);
     }
@@ -3573,7 +3897,7 @@ fn parent_placement(
     read: &Read<'_>,
     solves: Solves<'_>,
 ) -> Placement {
-    let mut p = placement(layer, read);
+    let mut p = placement(layer, t, read);
     let solved = matches!(
         layer.kind,
         LayerKind::Camera {
@@ -3617,7 +3941,7 @@ pub fn eye_in_comp(
     read: &Read<'_>,
     solves: Solves<'_>,
 ) -> crate::camera::Eye {
-    let own = placement(layer, read);
+    let own = placement(layer, t, read);
     let eye = crate::camera::Eye {
         position: own.position,
         rotation_deg: own.rotation_deg,

@@ -145,6 +145,10 @@ pub(crate) fn map_layer(
     // pre-transform deviation is visible exactly on a turned or squashed layer,
     // and that is what decides whether the import says so.
     let mut transform = transform(conv, &path, props);
+    // A 3D layer, a camera and a light turn in After Effects' order, so their
+    // rotations come across exactly.
+    transform.after_effects_order = ae.switches.as_ref().and_then(|s| s.three_d) == Some(true)
+        || matches!(kind, LayerKind::Camera { .. } | LayerKind::Light { .. });
     // Nothing lights a camera, a light or a null, so it keeps the material a
     // file leaves out.
     transform.material = Box::new(match kind {
@@ -657,7 +661,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         Some(group) => group.children(),
         None => return TransformGroup::default(),
     };
-    let mut out = TransformGroup {
+    TransformGroup {
         anchor_x: scalar(conv, path, props, "ADBE Anchor Point", 0, 0.0),
         anchor_y: scalar(conv, path, props, "ADBE Anchor Point", 1, 0.0),
         position_x: scalar(conv, path, props, "ADBE Position", 0, 0.0),
@@ -668,6 +672,9 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         rotation: scalar(conv, path, props, "ADBE Rotate Z", 0, 0.0),
         rotation_x: scalar(conv, path, props, "ADBE Rotate X", 0, 0.0),
         rotation_y: scalar(conv, path, props, "ADBE Rotate Y", 0, 0.0),
+        orientation: orientation(conv, path, props),
+        anchor_z: scalar(conv, path, props, "ADBE Anchor Point", 2, 0.0),
+        scale_z: scalar(conv, path, props, "ADBE Scale", 2, 100.0),
         opacity: scalar(conv, path, props, "ADBE Opacity", 0, 100.0),
         // An imported layer lands on the house defaults: AE records its
         // own separated-dimensions and proportional-scale flags, and reading
@@ -675,166 +682,53 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         // faithful either way, because both editors store them per axis.
         axis_modes: lumit_core::model::AxisModes::default(),
         material: Box::default(),
+        after_effects_order: false,
         extra: serde_json::Map::new(),
-    };
-    let orientation = orientation(conv, path, props, &mut out);
-    turn_into_lumits_order(conv, path, orientation, &mut out);
-    out
+    }
 }
 
-/// After Effects gives a 3D layer *two* sets of angles — Orientation and the
-/// X/Y/Z Rotation trio — and composes them. Lumit has the one trio. While the
-/// rotations sit at zero, which is every tracked camera's case, the
-/// orientation takes their place. Otherwise a still orientation comes back to
-/// be folded in, and a moving one is reported and left out.
-fn orientation(
-    conv: &mut Conv<'_>,
-    path: &ItemPath,
-    props: &[Property],
-    out: &mut TransformGroup,
-) -> (f64, f64, f64) {
+/// After Effects' Orientation, angles, keys and all. Its keys ease the turn as
+/// a whole, at a speed in degrees a second along it, so each angle is given
+/// its share of that speed, and the three move round together as they do
+/// there.
+fn orientation(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> [LumProperty; 3] {
+    use lumit_core::anim::{Animation, SideInterp};
+
     let Some(node) = child(props, "ADBE Orientation") else {
-        return (0.0, 0.0, 0.0);
+        return [0.0; 3].map(LumProperty::fixed);
     };
-    let still_turn = node.keyframes.as_ref().is_none_or(Vec::is_empty) && node.expression.is_none();
-    let axis = |n| still(props, "ADBE Orientation", n).unwrap_or(0.0);
-    // A layer that has simply never been turned: read nothing, report nothing.
-    if still_turn && (0..3).all(|n| axis(n) == 0.0) {
-        return (0.0, 0.0, 0.0);
-    }
-    if [&out.rotation_x, &out.rotation_y, &out.rotation]
-        .into_iter()
-        .all(is_still_zero)
-    {
-        out.rotation_x = from_node(conv, path, node, 0, 0.0);
-        out.rotation_y = from_node(conv, path, node, 1, 0.0);
-        out.rotation = from_node(conv, path, node, 2, 0.0);
-        return (0.0, 0.0, 0.0);
-    }
-    if still_turn {
-        return (axis(0), axis(1), axis(2));
-    }
-    conv.report.row(
-        path.property(display_name(node, "ADBE Orientation")),
-        Outcome::Adjusted,
-        Reason::OrientationNotCarried,
-    );
-    (0.0, 0.0, 0.0)
-}
-
-/// After Effects turns by `Rx · Ry · Rz` and Lumit by `Ry · Rx · Rz`, so once
-/// X and Y are both used, or a still orientation sits outside them, the angles
-/// are rewritten in Lumit's order (`lumit_core::camera::from_after_effects`).
-/// Keys go wherever any of the three had one, each axis read off its own curve
-/// there, so every key matches After Effects; between keys it can drift a
-/// little, and the report says so.
-fn turn_into_lumits_order(
-    conv: &mut Conv<'_>,
-    path: &ItemPath,
-    orientation: (f64, f64, f64),
-    out: &mut TransformGroup,
-) {
-    use lumit_core::anim::{Animation, Keyframe, SideInterp};
-
-    let trio = [&out.rotation_x, &out.rotation_y, &out.rotation];
-    let used = |p: &LumProperty| !is_still_zero(p);
-    if orientation == (0.0, 0.0, 0.0) && !(used(trio[0]) && used(trio[1])) {
-        return;
-    }
-    // An expression works out its own angles on every frame.
-    if trio
-        .iter()
-        .any(|p| matches!(p.animation, Animation::Expression(_)))
-    {
-        if orientation != (0.0, 0.0, 0.0) {
-            conv.report.row(
-                path.clone(),
-                Outcome::Adjusted,
-                Reason::OrientationNotCarried,
-            );
-        }
-        return;
-    }
-    let keys_of = |p: &LumProperty| match &p.animation {
-        Animation::Keyframed(keys) => keys.clone(),
-        _ => Vec::new(),
+    let mut out = [0, 1, 2].map(|n| from_node(conv, path, node, n, 0.0));
+    let [Animation::Keyframed(x), Animation::Keyframed(y), Animation::Keyframed(z)] =
+        out.each_mut().map(|p| &mut p.animation)
+    else {
+        return out;
     };
-    let keys = trio.map(keys_of);
-    let at = |t: f64| {
-        (
-            trio[0].value_at(t),
-            trio[1].value_at(t),
-            trio[2].value_at(t),
-        )
-    };
-    let mut times: Vec<Rational> = keys.iter().flatten().map(|k| k.time).collect();
-    times.sort();
-    times.dedup();
-
-    let lanes: [Animation; 3] = if times.is_empty() {
-        let still = at(0.0);
-        let (x, y, z) = lumit_core::camera::from_after_effects(orientation, still, still);
-        [
-            Animation::Static(x),
-            Animation::Static(y),
-            Animation::Static(z),
-        ]
-    } else {
-        conv.report.row(
-            path.clone(),
-            Outcome::Adjusted,
-            Reason::RotationOrderConverted,
-        );
-        // Constant from `time` to the next key: no keys, outside them, or held.
-        let holds = |axis: &[Keyframe], time: Rational| {
-            axis.iter()
-                .rev()
-                .find(|k| k.time <= time)
-                .is_none_or(|k| k.is_hold() || axis.last().is_some_and(|last| last.time <= time))
-        };
-        // A key already here lends its ease, as long as the ease carries no
-        // speed of its own, which belonged to that one axis.
-        let side = |side: SideInterp| match side {
-            SideInterp::Bezier { speed, .. } if speed != 0.0 => SideInterp::Linear,
-            other => other,
-        };
-        let mut lanes = [Vec::new(), Vec::new(), Vec::new()];
-        let mut near = None;
-        for time in times {
-            let angles = at(time.to_f64());
-            let turned =
-                lumit_core::camera::from_after_effects(orientation, angles, near.unwrap_or(angles));
-            near = Some(turned);
-            let here = keys.iter().flatten().find(|k| k.time == time);
-            let interp_in = here.map_or(SideInterp::Linear, |k| side(k.interp_in));
-            let interp_out = if keys.iter().all(|k| holds(k, time)) {
-                SideInterp::Hold
-            } else {
-                match here.map(|k| side(k.interp_out)) {
-                    Some(SideInterp::Hold) | None => SideInterp::Linear,
-                    Some(other) => other,
+    if x.len() != y.len() || x.len() != z.len() {
+        return out;
+    }
+    for i in 1..x.len() {
+        let at = |n: usize| (x[n].value, y[n].value, z[n].value);
+        let (a, b) = (at(i - 1), at(i));
+        let turn = lumit_core::camera::turn_between_deg(a, b);
+        for (lane, moved) in [
+            (&mut *x, b.0 - a.0),
+            (&mut *y, b.1 - a.1),
+            (&mut *z, b.2 - a.2),
+        ] {
+            let share = |side: &mut SideInterp| {
+                if let SideInterp::Bezier { speed, .. } = side {
+                    *speed = if turn > 1e-9 {
+                        *speed * moved / turn
+                    } else {
+                        0.0
+                    };
                 }
             };
-            for (lane, value) in lanes.iter_mut().zip([turned.0, turned.1, turned.2]) {
-                lane.push(Keyframe {
-                    time,
-                    value,
-                    interp_in,
-                    interp_out,
-                });
-            }
+            share(&mut lane[i - 1].interp_out);
+            share(&mut lane[i].interp_in);
         }
-        lanes.map(Animation::Keyframed)
-    };
-    let [x, y, z] = lanes;
-    out.rotation_x.animation = x;
-    out.rotation_y.animation = y;
-    out.rotation.animation = z;
-}
-
-/// A property that holds a flat zero and nothing else.
-fn is_still_zero(property: &LumProperty) -> bool {
-    matches!(property.animation, lumit_core::anim::Animation::Static(v) if v == 0.0)
+    }
+    out
 }
 
 /// The layer's audio level, in decibels, out of `ADBE Audio Group`.

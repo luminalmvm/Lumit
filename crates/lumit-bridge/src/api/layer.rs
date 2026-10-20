@@ -2460,6 +2460,24 @@ pub struct BridgeTransform {
     /// A 3D layer's Material options; `None` on a 2D layer and on the kinds
     /// with no picture to light.
     pub material: Option<BridgeMaterialChannels>,
+    /// Orientation, Anchor Z and Scale Z, on a 3D layer, a camera or a light;
+    /// `None` on a 2D layer, which has none of them.
+    pub depth: Option<BridgeDepthChannels>,
+}
+
+/// After Effects' Orientation, three angles keyed as one turn, and the z of
+/// Anchor and Scale.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeDepthChannels {
+    pub orientation_x: BridgeScalar,
+    pub orientation_y: BridgeScalar,
+    pub orientation_z: BridgeScalar,
+    pub anchor_z: BridgeScalar,
+    pub scale_z: BridgeScalar,
+    /// X, Y and Z Rotation turn in After Effects' `Rx · Ry · Rz`, as an
+    /// imported layer's do, rather than Lumit's `Ry · Rx · Rz`.
+    pub after_effects_order: bool,
 }
 
 /// A layer's Material options, percentages as After Effects shows them.
@@ -2815,6 +2833,11 @@ pub enum BridgeTransformProp {
     RotationX,
     RotationY,
     Opacity,
+    OrientationX,
+    OrientationY,
+    OrientationZ,
+    AnchorZ,
+    ScaleZ,
     PoiX,
     PoiY,
     PoiZ,
@@ -2953,6 +2976,11 @@ impl BridgeTransformProp {
             BridgeTransformProp::RotationX => P::RotationX,
             BridgeTransformProp::RotationY => P::RotationY,
             BridgeTransformProp::Opacity => P::Opacity,
+            BridgeTransformProp::OrientationX => P::OrientationX,
+            BridgeTransformProp::OrientationY => P::OrientationY,
+            BridgeTransformProp::OrientationZ => P::OrientationZ,
+            BridgeTransformProp::AnchorZ => P::AnchorZ,
+            BridgeTransformProp::ScaleZ => P::ScaleZ,
             BridgeTransformProp::PoiX => P::PoiX,
             BridgeTransformProp::PoiY => P::PoiY,
             BridgeTransformProp::PoiZ => P::PoiZ,
@@ -3007,6 +3035,7 @@ impl BridgeTransform {
             camera: None,
             light: None,
             material: None,
+            depth: None,
         }
     }
 
@@ -3044,6 +3073,18 @@ impl BridgeTransform {
                 height: read(&light.size[1]),
                 shadow_darkness: read(&light.shadow_darkness),
                 shadow_diffusion: read(&light.shadow_diffusion),
+            });
+        }
+        if layer.is_3d() {
+            let tr = &layer.transform;
+            let read = |p: &lumit_core::anim::Property| BridgeScalar::read_at(p, offset);
+            out.depth = Some(BridgeDepthChannels {
+                orientation_x: read(&tr.orientation[0]),
+                orientation_y: read(&tr.orientation[1]),
+                orientation_z: read(&tr.orientation[2]),
+                anchor_z: read(&tr.anchor_z),
+                scale_z: read(&tr.scale_z),
+                after_effects_order: tr.after_effects_order,
             });
         }
         if layer.switches.three_d && layer.can_adjust() {
@@ -3151,6 +3192,31 @@ impl BridgeTransform {
         );
         self.opacity
             .put(&mut target.opacity, self.opacity.animation_at(offset)?);
+        if let Some(d) = &self.depth {
+            use lumit_core::model::TransformProp as P;
+            // A keyed Orientation previews with all three angles keyed
+            // together, as it commits.
+            for (prop, from) in [
+                (P::OrientationX, &d.orientation_x),
+                (P::OrientationY, &d.orientation_y),
+                (P::OrientationZ, &d.orientation_z),
+            ] {
+                let animation = from.animation_at(offset)?;
+                if matches!(animation, lumit_core::anim::Animation::Expression(_)) {
+                    if let Some(to) = target.get_mut(prop) {
+                        from.put(to, animation);
+                    }
+                } else if target.get(prop).map(|p| &p.animation) != Some(&animation) {
+                    target.set_orientation_angle(prop, animation);
+                }
+            }
+            for (to, from) in [
+                (&mut target.anchor_z, &d.anchor_z),
+                (&mut target.scale_z, &d.scale_z),
+            ] {
+                from.put(to, from.animation_at(offset)?);
+            }
+        }
         if let Some(m) = &self.material {
             let to = &mut target.material;
             for (to, from) in [
@@ -7218,6 +7284,35 @@ impl LayerReference {
         self.commit(op)
     }
 
+    /// Turn this layer's X, Y and Z Rotation in After Effects' order, or back
+    /// in Lumit's, as one undo step. The rotations are rewritten so the layer
+    /// keeps its pose. Refused while an expression drives one of them.
+    #[frb(sync)]
+    pub fn set_after_effects_order(&self, on: bool) -> Result<(), BridgeError> {
+        let layer = self.item()?;
+        if layer.transform.after_effects_order == on {
+            return Ok(());
+        }
+        let rows = layer
+            .transform
+            .rotations_in_order(on)
+            .ok_or(BridgeError::InvalidLayer)?;
+        let mut ops = vec![lumit_core::Op::SetRotationOrder {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            after_effects: on,
+        }];
+        ops.extend(rows.into_iter().map(|(prop, animation)| {
+            lumit_core::Op::SetTransformProperty {
+                comp: self.comp_id,
+                layer: self.layer_id,
+                prop,
+                animation,
+            }
+        }));
+        self.commit(lumit_core::Op::Batch { ops })
+    }
+
     /// The ops that put `value` on one transform property
     /// ([`lumit_core::edits::transform_ops`]).
     #[frb(ignore)]
@@ -8220,7 +8315,7 @@ impl LayerReference {
         let fresh = crate::edits::centred_transform(0.0, 0.0, comp.width, comp.height);
         let t = &layer.transform;
         let default_t = lumit_core::model::TransformGroup::default();
-        let transform_props: [(&lumit_core::anim::Property, &lumit_core::anim::Property); 11] = [
+        let transform_props: [(&lumit_core::anim::Property, &lumit_core::anim::Property); 16] = [
             (&t.anchor_x, &default_t.anchor_x),
             (&t.anchor_y, &default_t.anchor_y),
             (&t.position_x, &fresh.position_x),
@@ -8232,6 +8327,11 @@ impl LayerReference {
             (&t.rotation_x, &default_t.rotation_x),
             (&t.rotation_y, &default_t.rotation_y),
             (&t.opacity, &default_t.opacity),
+            (&t.orientation[0], &default_t.orientation[0]),
+            (&t.orientation[1], &default_t.orientation[1]),
+            (&t.orientation[2], &default_t.orientation[2]),
+            (&t.anchor_z, &default_t.anchor_z),
+            (&t.scale_z, &default_t.scale_z),
         ];
         let transform = match kind {
             BridgeRevealKind::Animated => transform_props.iter().any(|(p, _)| animated(p)),

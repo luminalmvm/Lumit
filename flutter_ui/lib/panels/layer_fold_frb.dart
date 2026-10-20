@@ -943,12 +943,17 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
       BridgeTransformProp.positionX => w > 0 ? w / 2 : null,
       BridgeTransformProp.positionY => h > 0 ? h / 2 : null,
       BridgeTransformProp.positionZ ||
+      BridgeTransformProp.anchorZ ||
       BridgeTransformProp.rotation ||
       BridgeTransformProp.rotationX ||
-      BridgeTransformProp.rotationY =>
+      BridgeTransformProp.rotationY ||
+      BridgeTransformProp.orientationX ||
+      BridgeTransformProp.orientationY ||
+      BridgeTransformProp.orientationZ =>
         0,
       BridgeTransformProp.scaleX ||
       BridgeTransformProp.scaleY ||
+      BridgeTransformProp.scaleZ ||
       BridgeTransformProp.opacity =>
         100,
       // A full circle of confusion, which is what a fresh camera carries.

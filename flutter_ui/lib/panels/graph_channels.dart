@@ -523,8 +523,9 @@ String graphNumberText(double v) =>
 ///
 /// An effect parameter's unit is its **declaration's**, never its id.
 /// A transform axis has no declaration to ask, so it is read off the property
-/// itself: the two scales and opacity are per cent, the three rotations are
-/// degrees, and everything else is a distance - pixels at composition size.
+/// itself: the scales and opacity are per cent, the rotations and the
+/// Orientation are degrees, and everything else is a distance - pixels at
+/// composition size.
 String? graphChannelUnit(GraphChannel channel) {
   if (channel.param case final param?) return unitRiderText(param.unit);
   if (channel.retime) return l10n.unitSymbolSeconds;
@@ -543,11 +544,15 @@ String? graphChannelUnit(GraphChannel channel) {
     null => null,
     BridgeTransformProp.opacity ||
     BridgeTransformProp.scaleX ||
-    BridgeTransformProp.scaleY =>
+    BridgeTransformProp.scaleY ||
+    BridgeTransformProp.scaleZ =>
       l10n.unitSymbolPercent,
     BridgeTransformProp.rotation ||
     BridgeTransformProp.rotationX ||
-    BridgeTransformProp.rotationY =>
+    BridgeTransformProp.rotationY ||
+    BridgeTransformProp.orientationX ||
+    BridgeTransformProp.orientationY ||
+    BridgeTransformProp.orientationZ =>
       l10n.unitSymbolDegrees,
     _ => l10n.unitSymbolPx,
   };

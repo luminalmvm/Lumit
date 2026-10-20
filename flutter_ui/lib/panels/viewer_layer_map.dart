@@ -238,25 +238,43 @@ class ViewerLayerMap {
   }();
 
   /// Whether the layer is turned out of its parent's flat by its X or Y
-  /// rotation, so a point moved on it moves in depth too.
+  /// rotation or its Orientation, so a point moved on it moves in depth too.
   bool get tilted =>
-      projected && (_turns.$1.abs() > 1e-9 || _turns.$3.abs() > 1e-9);
+      projected &&
+      (_turns.$1.abs() > 1e-9 ||
+          _turns.$3.abs() > 1e-9 ||
+          depth?.outside != null);
 
   /// Where the layer point ([x], [y]) is in its parent's space, depth and
-  /// all: the compositor's T · Ry · Rx · Rz · S · T(-anchor), worked through
-  /// by hand. A 2D layer's is at depth 0.
+  /// all: the compositor's T · O · Ry · Rx · Rz · S · T(-anchor), worked
+  /// through by hand, with O the turn outside the rotations, and Rx · Ry · Rz
+  /// on a layer turning in After Effects' order. A 2D layer's is at depth 0.
   (double, double, double) inParent(double x, double y) {
     final (sinX, cosX, sinY, cosY) = _turns;
     final dx = (x - ax) * sx;
     final dy = (y - ay) * sy;
+    // Anchor Z pushes the flat picture back along its own z.
+    final dz = -(depth?.anchorZ ?? 0) * (depth?.scaleZ ?? 100) / 100;
     final zx = dx * cos - dy * sin;
     final zy = dx * sin + dy * cos;
-    final (yy, yz) = (zy * cosX, zy * sinX);
-    return (
-      px + zx * cosY + yz * sinY,
-      py + yy,
-      (depth?.z ?? 0) - zx * sinY + yz * cosY,
-    );
+    (double, double, double) v;
+    if (depth?.aeOrder ?? false) {
+      // Y first, then X outside it.
+      final (yx, yz) = (zx * cosY + dz * sinY, -zx * sinY + dz * cosY);
+      v = (yx, zy * cosX - yz * sinX, zy * sinX + yz * cosX);
+    } else {
+      final (yy, yz) = (zy * cosX - dz * sinX, zy * sinX + dz * cosX);
+      v = (zx * cosY + yz * sinY, yy, -zx * sinY + yz * cosY);
+    }
+    final o = depth?.outside;
+    if (o != null) {
+      v = (
+        o[0] * v.$1 + o[1] * v.$2 + o[2] * v.$3,
+        o[3] * v.$1 + o[4] * v.$2 + o[5] * v.$3,
+        o[6] * v.$1 + o[7] * v.$2 + o[8] * v.$3,
+      );
+    }
+    return (px + v.$1, py + v.$2, (depth?.z ?? 0) + v.$3);
   }
 
   /// How far in front of the eye the parent-space point ([x], [y], [z]) is,
@@ -445,12 +463,28 @@ class ViewerDepth {
   final double rotationX;
   final double rotationY;
 
+  /// The turn outside the rotations, row by row: the Orientation, and an
+  /// aimed camera's aim. Null for none.
+  final List<double>? outside;
+
+  /// Anchor Z, and Scale Z as a percentage.
+  final double anchorZ;
+  final double scaleZ;
+
+  /// The rotations turn in After Effects' `Rx · Ry · Rz`, as an imported
+  /// layer's do, rather than Lumit's `Ry · Rx · Rz`.
+  final bool aeOrder;
+
   const ViewerDepth({
     required this.view,
     required this.z,
     required this.rotationX,
     required this.rotationY,
     this.parent,
+    this.outside,
+    this.anchorZ = 0,
+    this.scaleZ = 100,
+    this.aeOrder = false,
   });
 
   /// The same layer at Position z [z].
@@ -460,6 +494,10 @@ class ViewerDepth {
         rotationX: rotationX,
         rotationY: rotationY,
         parent: parent,
+        outside: outside,
+        anchorZ: anchorZ,
+        scaleZ: scaleZ,
+        aeOrder: aeOrder,
       );
 
   /// The view's rows times the parent chain.
