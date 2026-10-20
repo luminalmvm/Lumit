@@ -1800,4 +1800,138 @@ mod tests {
         assert_eq!(ch.parent, Some(p.id));
         assert!(matches!(ch.kind, LayerKind::Precomp { comp } if comp == elsewhere));
     }
+
+    /// A span of layers on the comp's clock, for the precompose tests.
+    fn spanned(name: &str, from: i64, to: i64) -> Layer {
+        let mut l = named(name);
+        l.in_point = CompTime(rat(from, 1));
+        l.out_point = CompTime(rat(to, 1));
+        l
+    }
+
+    fn no_length(_: &Layer) -> Option<lumit_core::time::Duration> {
+        None
+    }
+
+    #[test]
+    fn precompose_packs_the_layers_trims_to_their_span_and_keeps_a_parent() {
+        let mut doc = Document::new();
+        let c = add_comp(&mut doc, CompSettings::default());
+        let a = spanned("a", 2, 6);
+        let mut b = spanned("b", 3, 8);
+        let rig = named("rig");
+        b.parent = Some(rig.id);
+        doc.comp_mut(c).unwrap().layers = vec![a.clone(), b.clone(), rig.clone()];
+
+        let (ops, id) = precompose_ops(
+            &doc,
+            comp(&doc, c),
+            Precompose {
+                layers: &[b.id, a.id],
+                name: String::new(),
+                leave_attributes: false,
+                adjust_duration: true,
+                group: None,
+                source_length: &no_length,
+            },
+        )
+        .unwrap();
+        run(&mut doc, &ops);
+
+        // The Precomp layer takes the top layer's place and spans the pair.
+        let outer = comp(&doc, c);
+        assert_eq!(outer.layers.len(), 2);
+        let pre = &outer.layers[0];
+        assert_eq!(pre.id, id);
+        assert_eq!((pre.in_point.0, pre.out_point.0), (rat(2, 1), rat(8, 1)));
+        assert_eq!(pre.start_offset.0, rat(2, 1));
+        let LayerKind::Precomp { comp: inner } = pre.kind else {
+            panic!("a Precomp layer");
+        };
+
+        // Inside, time starts at the first in point, and the parent that
+        // stayed outside is kept by a hidden copy.
+        let inner = comp(&doc, inner);
+        assert_eq!(inner.name, "Pre-comp 1");
+        assert_eq!(inner.duration.0, rat(6, 1));
+        let inside_a = inner.layers.iter().find(|l| l.name == "a").unwrap();
+        let inside_b = inner.layers.iter().find(|l| l.name == "b").unwrap();
+        assert_eq!(
+            (inside_a.in_point.0, inside_a.out_point.0),
+            (rat(0, 1), rat(4, 1))
+        );
+        assert_eq!(
+            (inside_b.in_point.0, inside_b.out_point.0),
+            (rat(1, 1), rat(6, 1))
+        );
+        let copy = inside_b.parent.unwrap();
+        assert_ne!(copy, rig.id);
+        assert!(inner.layers.iter().any(|l| l.id == copy && l.name == "rig"));
+    }
+
+    #[test]
+    fn precompose_leaving_attributes_keeps_them_on_the_precomp_layer() {
+        let mut doc = Document::new();
+        let c = add_comp(&mut doc, CompSettings::default());
+        let mut a = spanned("a", 0, 4);
+        a.transform.rotation = Property::fixed(30.0);
+        let b = spanned("b", 0, 4);
+        doc.comp_mut(c).unwrap().layers = vec![a.clone(), b.clone()];
+
+        // Leaving attributes behind means one layer, so a pair is refused, and
+        // so is a layer the comp does not have.
+        let asked = |layers: &[Uuid], leave: bool| {
+            precompose_ops(
+                &doc,
+                comp(&doc, c),
+                Precompose {
+                    layers,
+                    name: "Packed".into(),
+                    leave_attributes: leave,
+                    adjust_duration: false,
+                    group: None,
+                    source_length: &no_length,
+                },
+            )
+            .map(|(ops, id)| (ops.len(), id))
+        };
+        assert!(matches!(
+            asked(&[a.id, b.id], true),
+            Err(lumit_core::OpError::UnknownLayer)
+        ));
+        assert!(matches!(
+            asked(&[Uuid::now_v7()], false),
+            Err(lumit_core::OpError::UnknownLayer)
+        ));
+
+        let (ops, id) = precompose_ops(
+            &doc,
+            comp(&doc, c),
+            Precompose {
+                layers: &[a.id],
+                name: "Packed".into(),
+                leave_attributes: true,
+                adjust_duration: false,
+                group: None,
+                source_length: &no_length,
+            },
+        )
+        .unwrap();
+        run(&mut doc, &ops);
+
+        // The Precomp layer stands where the layer stood, under its id and
+        // with its turn, and the layer inside is back to its source.
+        assert_eq!(id, a.id);
+        let pre = comp(&doc, c).layers.iter().find(|l| l.id == id).unwrap();
+        assert_eq!(value(&pre.transform.rotation), 30.0);
+        let LayerKind::Precomp { comp: inner } = pre.kind else {
+            panic!("a Precomp layer");
+        };
+        let inner = comp(&doc, inner);
+        assert_eq!(inner.name, "Packed");
+        assert_eq!(inner.duration, comp(&doc, c).duration);
+        assert_eq!(inner.layers.len(), 1);
+        assert_ne!(inner.layers[0].id, a.id);
+        assert_eq!(value(&inner.layers[0].transform.rotation), 0.0);
+    }
 }
