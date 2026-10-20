@@ -1902,6 +1902,8 @@ pub struct BridgeLayerInfo {
     /// A Camera layer's non-animatable settings, `None` on every other kind.
     /// What decides whether the fold-out shows a Point of interest row.
     pub camera: Option<BridgeCameraSettings>,
+    /// A Light layer's, the same way: which of its rows show.
+    pub light: Option<BridgeLightSettings>,
 }
 
 /// One marker on a layer's bar: the marker itself plus where it lands at the
@@ -2294,6 +2296,12 @@ pub(crate) fn read_layer_info(
             }
             _ => None,
         },
+        light: match &layer.kind {
+            lumit_core::model::LayerKind::Light { light } => {
+                Some(BridgeLightSettings::of(light.settings()))
+            }
+            _ => None,
+        },
     }
 }
 
@@ -2443,6 +2451,102 @@ pub struct BridgeTransform {
     /// other kind. Beside the eleven rather than among them, so a layer that is
     /// not a camera carries nothing for them.
     pub camera: Option<BridgeCameraChannels>,
+    /// A Light layer's own channels, the same way.
+    pub light: Option<BridgeLightChannels>,
+}
+
+/// The animatable channels a Light layer has beyond its transform. Intensity
+/// and feather are percentages, the cone its full angle in degrees, the rest
+/// comp pixels; the colour is scene-linear.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeLightChannels {
+    pub poi_x: BridgeScalar,
+    pub poi_y: BridgeScalar,
+    pub poi_z: BridgeScalar,
+    pub intensity: BridgeScalar,
+    pub colour_r: BridgeScalar,
+    pub colour_g: BridgeScalar,
+    pub colour_b: BridgeScalar,
+    pub cone_angle: BridgeScalar,
+    pub cone_feather: BridgeScalar,
+    pub radius: BridgeScalar,
+    pub falloff_distance: BridgeScalar,
+    pub width: BridgeScalar,
+    pub height: BridgeScalar,
+}
+
+/// What kind of light a Light layer is ([`lumit_core::model::LightKind`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeLightKind {
+    Point,
+    Spot,
+    Area,
+    Parallel,
+    Ambient,
+}
+
+/// How a light weakens with distance ([`lumit_core::model::LightFalloff`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgeLightFalloff {
+    None,
+    Smooth,
+    InverseSquareClamped,
+}
+
+/// The non-animatable part of a light, what the settings dialog and the
+/// choice rows edit as one op ([`lumit_core::model::LightSettings`]).
+#[frb(non_opaque)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BridgeLightSettings {
+    pub kind: BridgeLightKind,
+    pub falloff: BridgeLightFalloff,
+    /// Aimed at its point of interest.
+    pub two_node: bool,
+}
+
+impl BridgeLightSettings {
+    #[frb(ignore)]
+    pub(crate) fn of(s: lumit_core::model::LightSettings) -> Self {
+        use lumit_core::model::{LightFalloff as F, LightKind as K};
+        Self {
+            kind: match s.kind {
+                K::Point => BridgeLightKind::Point,
+                K::Spot => BridgeLightKind::Spot,
+                K::Area => BridgeLightKind::Area,
+                K::Parallel => BridgeLightKind::Parallel,
+                K::Ambient => BridgeLightKind::Ambient,
+            },
+            falloff: match s.falloff {
+                F::None => BridgeLightFalloff::None,
+                F::Smooth => BridgeLightFalloff::Smooth,
+                F::InverseSquareClamped => BridgeLightFalloff::InverseSquareClamped,
+            },
+            two_node: s.two_node,
+        }
+    }
+
+    #[frb(ignore)]
+    pub(crate) fn core(self) -> lumit_core::model::LightSettings {
+        use lumit_core::model::{LightFalloff as F, LightKind as K};
+        lumit_core::model::LightSettings {
+            kind: match self.kind {
+                BridgeLightKind::Point => K::Point,
+                BridgeLightKind::Spot => K::Spot,
+                BridgeLightKind::Area => K::Area,
+                BridgeLightKind::Parallel => K::Parallel,
+                BridgeLightKind::Ambient => K::Ambient,
+            },
+            falloff: match self.falloff {
+                BridgeLightFalloff::None => F::None,
+                BridgeLightFalloff::Smooth => F::Smooth,
+                BridgeLightFalloff::InverseSquareClamped => F::InverseSquareClamped,
+            },
+            two_node: self.two_node,
+        }
+    }
 }
 
 /// The seven animatable channels a Camera layer has beyond its transform.
@@ -2631,6 +2735,16 @@ pub enum BridgeTransformProp {
     FocusDistance,
     Aperture,
     BlurLevel,
+    LightIntensity,
+    LightColourR,
+    LightColourG,
+    LightColourB,
+    ConeAngle,
+    ConeFeather,
+    LightRadius,
+    FalloffDistance,
+    LightWidth,
+    LightHeight,
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2751,6 +2865,16 @@ impl BridgeTransformProp {
             BridgeTransformProp::FocusDistance => P::FocusDistance,
             BridgeTransformProp::Aperture => P::Aperture,
             BridgeTransformProp::BlurLevel => P::BlurLevel,
+            BridgeTransformProp::LightIntensity => P::LightIntensity,
+            BridgeTransformProp::LightColourR => P::LightColourR,
+            BridgeTransformProp::LightColourG => P::LightColourG,
+            BridgeTransformProp::LightColourB => P::LightColourB,
+            BridgeTransformProp::ConeAngle => P::ConeAngle,
+            BridgeTransformProp::ConeFeather => P::ConeFeather,
+            BridgeTransformProp::LightRadius => P::LightRadius,
+            BridgeTransformProp::FalloffDistance => P::FalloffDistance,
+            BridgeTransformProp::LightWidth => P::LightWidth,
+            BridgeTransformProp::LightHeight => P::LightHeight,
         }
     }
 }
@@ -2778,6 +2902,7 @@ impl BridgeTransform {
             rotation_y: BridgeScalar::read_at(&group.rotation_y, offset),
             opacity: BridgeScalar::read_at(&group.opacity, offset),
             camera: None,
+            light: None,
         }
     }
 
@@ -2795,6 +2920,24 @@ impl BridgeTransform {
                 focus_distance: BridgeScalar::read_at(&options.focus_distance, offset),
                 aperture: BridgeScalar::read_at(&options.aperture, offset),
                 blur_level: BridgeScalar::read_at(&options.blur_level, offset),
+            });
+        }
+        if let lumit_core::model::LayerKind::Light { light } = &layer.kind {
+            let read = |p: &lumit_core::anim::Property| BridgeScalar::read_at(p, offset);
+            out.light = Some(BridgeLightChannels {
+                poi_x: read(&light.point_of_interest[0]),
+                poi_y: read(&light.point_of_interest[1]),
+                poi_z: read(&light.point_of_interest[2]),
+                intensity: read(&light.intensity),
+                colour_r: read(&light.colour[0]),
+                colour_g: read(&light.colour[1]),
+                colour_b: read(&light.colour[2]),
+                cone_angle: read(&light.cone_angle),
+                cone_feather: read(&light.cone_feather),
+                radius: read(&light.radius_px),
+                falloff_distance: read(&light.falloff_px),
+                width: read(&light.size[0]),
+                height: read(&light.size[1]),
             });
         }
         out
@@ -2820,6 +2963,30 @@ impl BridgeTransform {
             options.focus_distance.animation = c.focus_distance.animation_at(offset)?;
             options.aperture.animation = c.aperture.animation_at(offset)?;
             options.blur_level.animation = c.blur_level.animation_at(offset)?;
+        }
+        if let (Some(c), lumit_core::model::LayerKind::Light { light }) =
+            (&self.light, &mut layer.kind)
+        {
+            let [poi_x, poi_y, poi_z] = &mut light.point_of_interest;
+            let [r, g, b] = &mut light.colour;
+            let [width, height] = &mut light.size;
+            for (to, from) in [
+                (poi_x, &c.poi_x),
+                (poi_y, &c.poi_y),
+                (poi_z, &c.poi_z),
+                (&mut light.intensity, &c.intensity),
+                (r, &c.colour_r),
+                (g, &c.colour_g),
+                (b, &c.colour_b),
+                (&mut light.cone_angle, &c.cone_angle),
+                (&mut light.cone_feather, &c.cone_feather),
+                (&mut light.radius_px, &c.radius),
+                (&mut light.falloff_px, &c.falloff_distance),
+                (width, &c.width),
+                (height, &c.height),
+            ] {
+                to.animation = from.animation_at(offset)?;
+            }
         }
         Ok(())
     }

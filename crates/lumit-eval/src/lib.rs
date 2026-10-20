@@ -405,7 +405,10 @@ fn feed_comp(
                 lumit_core::model::LightKind::Point => 0u8,
                 lumit_core::model::LightKind::Spot => 1,
                 lumit_core::model::LightKind::Area => 2,
+                lumit_core::model::LightKind::Parallel => 3,
+                lumit_core::model::LightKind::Ambient => 4,
             }]);
+            h.update(&[l.falloff as u8]);
             for v in [
                 l.position.0,
                 l.position.1,
@@ -417,6 +420,8 @@ fn feed_comp(
                 l.rotation_x_deg,
                 l.rotation_y_deg,
                 l.falloff_px,
+                l.cone_feather,
+                l.radius_px,
             ] {
                 feed_f64(h, v);
             }

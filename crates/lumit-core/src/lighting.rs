@@ -49,18 +49,37 @@ pub struct ShadingLight {
     pub corners: [[f32; 3]; 4],
     /// Scene-linear RGB, intensity already folded in.
     pub colour: [f32; 3],
-    /// Comp pixels at which the light has fallen to nothing; 0 means it never
-    /// does. The rectangle integral already dims with distance on its own —
-    /// this is the artistic dial on top, and the only distance term a point
-    /// light has at all.
+    pub kind: ShadingKind,
+    /// How the light weakens with distance from its centre. The rectangle
+    /// integral already dims with distance on its own; this is the artistic
+    /// dial on top, and the only distance term a point light has at all.
+    pub falloff: crate::model::LightFalloff,
+    /// Comp pixels of full strength before any falloff starts.
+    pub radius_px: f32,
+    /// How far past the radius a smooth falloff takes to reach nothing.
     pub falloff_px: f32,
-    /// True for an area light: use the rectangle integral. False: cosine law.
-    pub is_area: bool,
     /// Cosine of a spot's half-angle. Anything below -1 means "not a spot",
     /// which is how a point light says it shines everywhere.
     pub cone_cos: f32,
-    /// Unit vector a spot is aimed along.
+    /// Cosine of the angle inside which the cone is at full strength: the
+    /// feather runs between this and `cone_cos`.
+    pub cone_inner: f32,
+    /// Unit vector a spot is aimed along, and the way a parallel light's rays
+    /// run.
     pub axis: [f32; 3],
+}
+
+/// Which law shades a [`ShadingLight`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShadingKind {
+    /// A point or a spot: the cosine law from its centre.
+    Point,
+    /// A rectangle: the form factor integral.
+    Area,
+    /// Rays all running along the axis, with no distance to fall off over.
+    Parallel,
+    /// Light from everywhere: adds its colour whatever way a surface faces.
+    Ambient,
 }
 
 impl ShadingLight {
@@ -190,50 +209,71 @@ pub fn rect_form_factor(p: [f32; 3], n: [f32; 3], corners: &[[f32; 3]; 4]) -> f3
 }
 
 /// How much of `light` reaches a point `p` on a surface facing `n`, in 0..1.
+/// An ambient light has no direction to arrive from, so it is not counted
+/// here; [`shade`] adds it whole.
 #[must_use]
 pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
     let centre = light.centre();
-    let to_light = sub(centre, p);
+    let to_light = match light.kind {
+        ShadingKind::Ambient => return 0.0,
+        // Every ray runs the same way, so the light arrives from straight
+        // back up the axis wherever the point is.
+        ShadingKind::Parallel => [-light.axis[0], -light.axis[1], -light.axis[2]],
+        _ => sub(centre, p),
+    };
 
-    // Distance falloff. Squared so it eases out rather than ending on a crease.
-    let reach = if light.falloff_px > 0.0 {
-        let t = (1.0 - length(to_light) / light.falloff_px).clamp(0.0, 1.0);
-        t * t
-    } else {
+    let reach = if light.kind == ShadingKind::Parallel {
         1.0
+    } else {
+        reach(length(to_light), light)
     };
     if reach <= 0.0 {
         return 0.0;
     }
 
-    // A spot's cone, softened over the outer tenth so the edge is not a
-    // stencil. `cone_cos < -1` is the "not a spot" sentinel.
-    let cone = if light.cone_cos < -1.0 {
+    // A spot's cone, softened over its feather so the edge is not a stencil.
+    // `cone_cos < -1` is the "not a spot" sentinel.
+    let cone = if light.cone_cos < -1.0 || light.kind == ShadingKind::Parallel {
         1.0
     } else {
         let Some(dir) = normalise(sub(p, centre)) else {
             return 0.0;
         };
-        let inner = light.cone_cos + (1.0 - light.cone_cos) * 0.1;
-        smoothstep(light.cone_cos, inner, dot(dir, light.axis))
+        smoothstep(light.cone_cos, light.cone_inner, dot(dir, light.axis))
     };
     if cone <= 0.0 {
         return 0.0;
     }
 
-    let e = if light.is_area {
+    let e = if light.kind == ShadingKind::Area {
         rect_form_factor(p, n, &light.corners)
     } else {
         // The cosine law: a point light's brightness is how squarely the
-        // surface faces it, and nothing else. Distance is the falloff dial
-        // above — an inverse square measured in pixels is a number with no
-        // meaning, and a compositor would only have to fight it.
+        // surface faces it, and nothing else. Distance is the falloff above.
         match normalise(to_light) {
             Some(dir) => dot(n, dir).max(0.0),
             None => 0.0,
         }
     };
     e * reach * cone
+}
+
+/// How much of a light is left at `d` comp pixels from it, After Effects'
+/// way: full strength out to the radius, then the chosen falloff. Smooth
+/// squares its ramp so it eases out rather than ending on a crease.
+fn reach(d: f32, light: &ShadingLight) -> f32 {
+    use crate::model::LightFalloff;
+    let r = light.radius_px;
+    match light.falloff {
+        LightFalloff::None => 1.0,
+        _ if d <= r => 1.0,
+        LightFalloff::Smooth if light.falloff_px <= 0.0 => 0.0,
+        LightFalloff::Smooth => {
+            let t = (1.0 - (d - r) / light.falloff_px).clamp(0.0, 1.0);
+            t * t
+        }
+        LightFalloff::InverseSquareClamped => (r / d) * (r / d),
+    }
 }
 
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
@@ -272,7 +312,11 @@ pub fn shade(rgba: &mut [f32], w: u32, h: u32, s: &ShadingSurface, lights: &[Sha
             ];
             let mut gain = [1.0f32; 3];
             for l in lights.iter().take(MAX_LIT_LIGHTS) {
-                let e = irradiance(p, s.normal, l);
+                let e = if l.kind == ShadingKind::Ambient {
+                    1.0
+                } else {
+                    irradiance(p, s.normal, l)
+                };
                 for (g, c) in gain.iter_mut().zip(l.colour) {
                     *g += e * c;
                 }
@@ -353,9 +397,12 @@ mod tests {
                 [-50.0, 50.0, -100.0],
             ],
             colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Area,
+            falloff: crate::model::LightFalloff::None,
+            radius_px: 0.0,
             falloff_px: 0.0,
-            is_area: true,
             cone_cos: -2.0,
+            cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
         };
         let mut lit = base.clone();
@@ -379,9 +426,12 @@ mod tests {
         let at = |x: f32, y: f32, z: f32| ShadingLight {
             corners: [[x, y, z]; 4],
             colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Point,
+            falloff: crate::model::LightFalloff::None,
+            radius_px: 0.0,
             falloff_px: 0.0,
-            is_area: false,
             cone_cos: -2.0,
+            cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
         };
         let overhead = irradiance([0.0, 0.0, 0.0], n, &at(0.0, 0.0, -100.0));
@@ -404,9 +454,93 @@ mod tests {
         // well outside it.
         let mut spot = at(0.0, 0.0, -100.0);
         spot.cone_cos = 20f32.to_radians().cos();
+        spot.cone_inner = spot.cone_cos + (1.0 - spot.cone_cos) * 0.1;
         let under = irradiance([0.0, 0.0, 0.0], n, &spot);
         let aside = irradiance([500.0, 0.0, 0.0], n, &spot);
         assert!(under > 0.0, "under the spot is lit, got {under}");
         assert_eq!(aside, 0.0, "outside the cone is dark, got {aside}");
+    }
+
+    /// The terms the light rows brought, each against the plain light it
+    /// refines: the feather, the two falloffs with their radius, the parallel
+    /// light and the ambient one.
+    #[test]
+    fn feather_falloff_parallel_and_ambient_shade_as_after_effects_does() {
+        use crate::model::LightFalloff;
+        let n = [0.0, 0.0, -1.0];
+        let plain = ShadingLight {
+            corners: [[0.0, 0.0, -100.0]; 4],
+            colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Point,
+            falloff: LightFalloff::None,
+            radius_px: 0.0,
+            falloff_px: 0.0,
+            cone_cos: -2.0,
+            cone_inner: -2.0,
+            axis: [0.0, 0.0, 1.0],
+        };
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
+
+        // A 30 degree spot seen 25 degrees off its axis: no feather is full
+        // strength there, all feather has started to fade.
+        let cos30 = 30f32.to_radians().cos();
+        let off_axis = [100.0 * 25f32.to_radians().tan(), 0.0, 0.0];
+        let hard = ShadingLight {
+            cone_cos: cos30,
+            cone_inner: cos30,
+            ..plain
+        };
+        let soft = ShadingLight {
+            cone_inner: 1.0,
+            ..hard
+        };
+        let (h, s) = (
+            irradiance(off_axis, n, &hard),
+            irradiance(off_axis, n, &soft),
+        );
+        assert!(s > 0.0 && s < h * 0.5, "the feather fades: {s} vs {h}");
+
+        // 100 pixels away: inside a 150 radius is full strength, a smooth
+        // falloff halfway out squares to a quarter, and so does the inverse
+        // square from a radius of 50.
+        let below = [0.0, 0.0, 0.0];
+        let smooth = |radius_px, falloff_px| ShadingLight {
+            falloff: LightFalloff::Smooth,
+            radius_px,
+            falloff_px,
+            ..plain
+        };
+        assert!(close(irradiance(below, n, &smooth(150.0, 50.0)), 1.0));
+        assert!(close(irradiance(below, n, &smooth(50.0, 100.0)), 0.25));
+        let inverse = ShadingLight {
+            falloff: LightFalloff::InverseSquareClamped,
+            radius_px: 50.0,
+            ..plain
+        };
+        assert!(close(irradiance(below, n, &inverse), 0.25));
+
+        // A parallel light shining straight in lights every point fully,
+        // however far from its layer.
+        let sun = ShadingLight {
+            kind: ShadingKind::Parallel,
+            ..plain
+        };
+        assert!(close(irradiance([5000.0, -3000.0, 0.0], n, &sun), 1.0));
+
+        // An ambient light lifts a surface facing anywhere by its colour.
+        let ambient = ShadingLight {
+            kind: ShadingKind::Ambient,
+            colour: [0.5, 0.25, 0.0],
+            ..plain
+        };
+        let surface = ShadingSurface {
+            origin: [0.0, 0.0, 0.0],
+            du: [1.0, 0.0, 0.0],
+            dv: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+        };
+        let mut px = vec![0.4, 0.4, 0.4, 1.0];
+        shade(&mut px, 1, 1, &surface, &[ambient]);
+        assert!(close(px[0], 0.6) && close(px[1], 0.5) && close(px[2], 0.4));
     }
 }

@@ -643,6 +643,20 @@ impl LayerReference {
         })
     }
 
+    /// Replace a light's kind, falloff and aim as one undo step. Refused on
+    /// any other kind of layer.
+    #[frb(sync)]
+    pub fn set_light_settings(
+        &self,
+        settings: crate::api::layer::BridgeLightSettings,
+    ) -> Result<(), BridgeError> {
+        self.commit(lumit_core::Op::SetLightSettings {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            settings: settings.core(),
+        })
+    }
+
     /// This camera's evaluated placement at `frame`: the eye, the effective
     /// rotation with a two-node camera's aim already in it, and the zoom, with
     /// a solve link followed (docs/impl/camera.md §2). What the camera tools

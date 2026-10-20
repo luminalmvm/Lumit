@@ -35,11 +35,13 @@ import '../state/comp_time.dart';
 import '../state/preview_throttle.dart';
 import '../state/timeline_columns.dart';
 import '../widgets/angle_dial.dart';
+import '../widgets/colour_picker.dart';
 import '../widgets/controls.dart';
 import 'graph_editor_frb.dart';
 import 'fx_key_strip.dart';
 import 'fx_section.dart';
 import 'keyframe_controls_frb.dart';
+import 'light_rows_frb.dart';
 import 'timeline_extras_frb.dart' show showMenuAt;
 
 /// How wide one value cell is. Fixed rather than flexible so the columns line
@@ -55,6 +57,10 @@ class TransformAxis {
   final double max;
   final int decimals;
   final double speed;
+
+  /// A rotation counts whole turns beside its degrees; an angle that is not
+  /// a turn, a cone's, does not.
+  final bool turns;
   const TransformAxis(
     this.prop, {
     this.suffix,
@@ -62,8 +68,14 @@ class TransformAxis {
     this.max = 100000,
     this.decimals = 1,
     this.speed = 1,
+    this.turns = true,
   });
 }
+
+/// Which heading a transform row sits under in the fold-out: the Transform
+/// group itself, or one of the option groups a camera or a light has inside
+/// it.
+enum TransformSection { transform, camera, light }
 
 /// One row: its label, the axes it edits, and — on the three properties that
 /// have more than one axis — which pair it belongs to and how that pair is
@@ -80,17 +92,22 @@ class TransformGroup {
   /// it; [BridgeAxisMode.linked] means the row draws one box for two axes.
   final BridgeAxisMode mode;
 
-  /// One of a camera's lens numbers rather than its placement
-  /// (docs/impl/camera.md §1), so the fold-out can put the Camera options
-  /// heading in front of them.
-  final bool cameraOption;
+  /// The heading the row sits under: a camera's lens numbers and a light's
+  /// own are options rather than placement (docs/impl/camera.md §1), so the
+  /// fold-out puts their own heading in front of them.
+  final TransformSection section;
+
+  /// Three axes that are one colour, drawn as a swatch rather than as three
+  /// numbers.
+  final bool colour;
 
   const TransformGroup(
     this.label,
     this.axes, {
     this.pair,
     this.mode = BridgeAxisMode.combined,
-    this.cameraOption = false,
+    this.section = TransformSection.transform,
+    this.colour = false,
   });
 
   /// A linked row draws one box and carries the other axis with it.
@@ -133,12 +150,14 @@ bool hasVisibilitySwitch(BridgeLayerKind kind, {required bool hasPicture}) =>
 /// whatever the 3D switch says, because being three-dimensional is what they
 /// are (docs/impl/camera.md §1). A camera adds its point of interest when it
 /// is two-node, and the four lens numbers the fold-out heads with Camera
-/// options.
+/// options. A light adds its point of interest when it is aimed, and the
+/// numbers its kind has under Light options.
 List<TransformGroup> transformGroups({
   required bool threeD,
   required BridgeAxisModes modes,
   BridgeLayerKind kind = BridgeLayerKind.footage,
   bool twoNode = false,
+  BridgeLightSettings? light,
 }) {
   List<TransformGroup> pairRows(
     BridgeTransformPair pair,
@@ -201,21 +220,72 @@ List<TransformGroup> transformGroups({
       TransformGroup(l10n.sourceZoom, const [
         TransformAxis(BridgeTransformProp.zoom,
             min: 1, decimals: 0, speed: 4),
-      ], cameraOption: true),
+      ], section: TransformSection.camera),
       TransformGroup(l10n.cameraFocusDistance, const [
         TransformAxis(BridgeTransformProp.focusDistance,
             min: 1, decimals: 0, speed: 4),
-      ], cameraOption: true),
+      ], section: TransformSection.camera),
       TransformGroup(l10n.cameraAperture, const [
         TransformAxis(BridgeTransformProp.aperture, min: 0),
-      ], cameraOption: true),
+      ], section: TransformSection.camera),
       TransformGroup(l10n.cameraBlurLevel, const [
         TransformAxis(BridgeTransformProp.blurLevel,
             suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
-      ], cameraOption: true),
+      ], section: TransformSection.camera),
     ];
   }
-  if (kind == BridgeLayerKind.light) return placement();
+  if (kind == BridgeLayerKind.light) {
+    final s = light ?? plainLight;
+    const option = TransformSection.light;
+    return [
+      // The point it is aimed at, while it is aimed and has a way to face.
+      if (s.twoNode && lightAims(s.kind))
+        TransformGroup(l10n.transformPointOfInterest, const [
+          TransformAxis(BridgeTransformProp.poiX),
+          TransformAxis(BridgeTransformProp.poiY),
+          TransformAxis(BridgeTransformProp.poiZ),
+        ]),
+      ...placement(),
+      TransformGroup(l10n.lightIntensity, const [
+        TransformAxis(BridgeTransformProp.lightIntensity,
+            suffix: '%', min: 0, decimals: 0, speed: 0.5),
+      ], section: option),
+      TransformGroup(
+          l10n.lightColour,
+          const [
+            TransformAxis(BridgeTransformProp.lightColourR, min: 0),
+            TransformAxis(BridgeTransformProp.lightColourG, min: 0),
+            TransformAxis(BridgeTransformProp.lightColourB, min: 0),
+          ],
+          section: option,
+          colour: true),
+      if (s.kind == BridgeLightKind.spot) ...[
+        TransformGroup(l10n.lightConeAngle, const [
+          TransformAxis(BridgeTransformProp.coneAngle,
+              suffix: '°', min: 0, max: 180, speed: 0.5, turns: false),
+        ], section: option),
+        TransformGroup(l10n.lightConeFeather, const [
+          TransformAxis(BridgeTransformProp.coneFeather,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: option),
+      ],
+      if (s.kind == BridgeLightKind.area)
+        TransformGroup(l10n.size, const [
+          TransformAxis(BridgeTransformProp.lightWidth, min: 0, decimals: 0),
+          TransformAxis(BridgeTransformProp.lightHeight, min: 0, decimals: 0),
+        ], section: option),
+      if (lightFallsOff(s.kind) && s.falloff != BridgeLightFalloff.none)
+        TransformGroup(l10n.lightRadius, const [
+          TransformAxis(BridgeTransformProp.lightRadius,
+              min: 0, decimals: 0, speed: 2),
+        ], section: option),
+      if (lightFallsOff(s.kind) && s.falloff == BridgeLightFalloff.smooth)
+        TransformGroup(l10n.lightFalloffDistance, const [
+          TransformAxis(BridgeTransformProp.falloffDistance,
+              min: 0, decimals: 0, speed: 2),
+        ], section: option),
+    ];
+  }
 
   return [
     ...pairRows(
@@ -283,9 +353,10 @@ class TransformRowsFrb extends StatelessWidget {
   final bool threeD;
 
   /// What the layer is, and - on a camera - how it aims: the two other things
-  /// that decide which rows there are.
+  /// that decide which rows there are. A light's settings decide its own.
   final BridgeLayerKind kind;
   final bool twoNode;
+  final BridgeLightSettings? light;
 
   /// How each pair is shown — which decides how many rows there are.
   final BridgeAxisModes axisModes;
@@ -315,6 +386,7 @@ class TransformRowsFrb extends StatelessWidget {
     required this.threeD,
     this.kind = BridgeLayerKind.footage,
     this.twoNode = false,
+    this.light,
     required this.axisModes,
     required this.playheadFrame,
     required this.onSeek,
@@ -326,24 +398,47 @@ class TransformRowsFrb extends StatelessWidget {
   });
 
   /// One widget per transform row — for a caller that has to put each row in its
-  /// own chrome (the Effect controls panel's hairline-separated rows).
-  List<Widget> rows(BuildContext context) => [
-        for (final group in transformGroups(
-            threeD: threeD, modes: axisModes, kind: kind, twoNode: twoNode))
-          TransformRowFrb(
-            comp: comp,
+  /// own chrome (the Effect controls panel's hairline-separated rows). A
+  /// section's choice rows come first in it, as they do in the fold-out.
+  List<Widget> rows(BuildContext context) {
+    final settings = layerSettings(kind: kind, light: light);
+    final out = <Widget>[];
+    TransformSection? last;
+    for (final group in transformGroups(
+        threeD: threeD,
+        modes: axisModes,
+        kind: kind,
+        twoNode: twoNode,
+        light: light)) {
+      if (group.section != last) {
+        last = group.section;
+        for (final setting in settings) {
+          if (setting.section != last) continue;
+          out.add(LayerSettingRowFrb(
             layer: layer,
-            transform: transform,
-            group: group,
-            playheadFrame: playheadFrame,
-            onSeek: onSeek,
+            setting: setting,
+            light: light,
             onChanged: onChanged,
             keyPrefix: keyPrefix,
-            rowHeight: rowHeight,
-            rowPadding: rowPadding,
-            twoColumn: twoColumn,
-          ),
-      ];
+          ));
+        }
+      }
+      out.add(TransformRowFrb(
+        comp: comp,
+        layer: layer,
+        transform: transform,
+        group: group,
+        playheadFrame: playheadFrame,
+        onSeek: onSeek,
+        onChanged: onChanged,
+        keyPrefix: keyPrefix,
+        rowHeight: rowHeight,
+        rowPadding: rowPadding,
+        twoColumn: twoColumn,
+      ));
+    }
+    return out;
+  }
 
   @override
   Widget build(BuildContext context) => Column(
@@ -512,7 +607,9 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     // A linked row draws one box for two axes: the second follows the
     // first through [_ratio], so a box for it would be a box that can only ever
     // be told what it already knows. The stopwatch above still covers both.
-    final cells = group.isLinked ? group.axes.sublist(0, 1) : group.axes;
+    final cells = group.isLinked || group.colour
+        ? group.axes.sublist(0, 1)
+        : group.axes;
     // One stopwatch, every axis in the row — and one undo step, because
     // `setTransforms` commits them as a batch.
     final keyframes = KeyframeControlsFrb(
@@ -670,6 +767,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
 
   Widget _cell(BridgeTransform transform, TransformAxis axis, int frame,
       {bool fixed = true, required TransformGroup group}) {
+    if (group.colour) return _swatch(transform, group, frame);
     final scalar = read(transform, axis.prop);
     // The axis this box drags along with it, or null when it drags alone.
     final partner = group.isLinked ? group.axes[1].prop : null;
@@ -710,7 +808,7 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
     // and 390° are the same picture but not the same animation, and a single
     // box cannot say which of the two a key holds. The value written is still
     // the one angle — see `TurnsAndDegreesField`.
-    final isRotation = axis.suffix == '°';
+    final isRotation = axis.suffix == '°' && axis.turns;
 
     if (scalar is! BridgeScalar_Keyframed) {
       final static_ = (scalar as BridgeScalar_Static).field0;
@@ -780,6 +878,35 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
         onLive: (v) => _liveKeyed(axis.prop, scalar, v, frame, partner),
         onStart: () => _keyOnDragStart(axis.prop, scalar, sampled, frame),
       ),
+    );
+  }
+
+  /// A colour row's one cell: a swatch showing the colour under the playhead,
+  /// which writes all three channels as one step, into the keys at the
+  /// playhead when they are animated.
+  Widget _swatch(BridgeTransform transform, TransformGroup group, int frame) {
+    final time = timeOfFrame(widget.comp, frame);
+    final rgb = [
+      for (final axis in group.axes)
+        sampledScalar(read(transform, axis.prop), time)
+    ];
+    return ColourSwatchButton(
+      key: ValueKey<String>(
+          '${widget.keyPrefix}-${group.axes.first.prop.name}'),
+      colour: PickedColour(rgb[0], rgb[1], rgb[2]).clipped,
+      // Scene-linear, so the picker counts in 0 to 1 and may go past it.
+      scale: ColourScale.unit,
+      onPicked: (p) {
+        widget.layer.setTransforms(
+          props: [for (final axis in group.axes) axis.prop],
+          values: [
+            for (final (i, v) in [p.r, p.g, p.b].indexed)
+              scalarWithValueAt(read(transform, group.axes[i].prop), v,
+                  widget.comp, frame),
+          ],
+        );
+        widget.onChanged();
+      },
     );
   }
 
@@ -989,9 +1116,10 @@ class _TransformRowFrbState extends State<TransformRowFrb> {
   }
 }
 
-/// What a camera channel reads on a transform that carries none - every layer
-/// but a camera. A still zero rather than a throw: the rows are built from the
-/// kind, so nothing asks unless there is something to answer with.
+/// What a camera or light channel reads on a transform that carries none -
+/// every layer but a camera or a light. A still zero rather than a throw: the
+/// rows are built from the kind, so nothing asks unless there is something to
+/// answer with.
 const BridgeScalar _noChannel = BridgeScalar.static_(0);
 
 /// One property out of a transform.
@@ -1008,14 +1136,28 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
       BridgeTransformProp.rotationX => tf.rotationX,
       BridgeTransformProp.rotationY => tf.rotationY,
       BridgeTransformProp.opacity => tf.opacity,
-      BridgeTransformProp.poiX => tf.camera?.poiX ?? _noChannel,
-      BridgeTransformProp.poiY => tf.camera?.poiY ?? _noChannel,
-      BridgeTransformProp.poiZ => tf.camera?.poiZ ?? _noChannel,
+      BridgeTransformProp.poiX =>
+        tf.camera?.poiX ?? tf.light?.poiX ?? _noChannel,
+      BridgeTransformProp.poiY =>
+        tf.camera?.poiY ?? tf.light?.poiY ?? _noChannel,
+      BridgeTransformProp.poiZ =>
+        tf.camera?.poiZ ?? tf.light?.poiZ ?? _noChannel,
       BridgeTransformProp.zoom => tf.camera?.zoom ?? _noChannel,
       BridgeTransformProp.focusDistance =>
         tf.camera?.focusDistance ?? _noChannel,
       BridgeTransformProp.aperture => tf.camera?.aperture ?? _noChannel,
       BridgeTransformProp.blurLevel => tf.camera?.blurLevel ?? _noChannel,
+      BridgeTransformProp.lightIntensity => tf.light?.intensity ?? _noChannel,
+      BridgeTransformProp.lightColourR => tf.light?.colourR ?? _noChannel,
+      BridgeTransformProp.lightColourG => tf.light?.colourG ?? _noChannel,
+      BridgeTransformProp.lightColourB => tf.light?.colourB ?? _noChannel,
+      BridgeTransformProp.coneAngle => tf.light?.coneAngle ?? _noChannel,
+      BridgeTransformProp.coneFeather => tf.light?.coneFeather ?? _noChannel,
+      BridgeTransformProp.lightRadius => tf.light?.radius ?? _noChannel,
+      BridgeTransformProp.falloffDistance =>
+        tf.light?.falloffDistance ?? _noChannel,
+      BridgeTransformProp.lightWidth => tf.light?.width ?? _noChannel,
+      BridgeTransformProp.lightHeight => tf.light?.height ?? _noChannel,
     };
 
 /// A copy of `tf` with one property replaced — what the preview renders.
@@ -1034,6 +1176,7 @@ BridgeTransform writeScalar(
       p == prop ? replacement : current;
 
   final camera = tf.camera;
+  final light = tf.light;
   return BridgeTransform(
     anchorX: pick(BridgeTransformProp.anchorX, tf.anchorX),
     anchorY: pick(BridgeTransformProp.anchorY, tf.anchorY),
@@ -1059,6 +1202,25 @@ BridgeTransform writeScalar(
                 pick(BridgeTransformProp.focusDistance, camera.focusDistance),
             aperture: pick(BridgeTransformProp.aperture, camera.aperture),
             blurLevel: pick(BridgeTransformProp.blurLevel, camera.blurLevel),
+          ),
+    light: light == null
+        ? null
+        : BridgeLightChannels(
+            poiX: pick(BridgeTransformProp.poiX, light.poiX),
+            poiY: pick(BridgeTransformProp.poiY, light.poiY),
+            poiZ: pick(BridgeTransformProp.poiZ, light.poiZ),
+            intensity: pick(BridgeTransformProp.lightIntensity, light.intensity),
+            colourR: pick(BridgeTransformProp.lightColourR, light.colourR),
+            colourG: pick(BridgeTransformProp.lightColourG, light.colourG),
+            colourB: pick(BridgeTransformProp.lightColourB, light.colourB),
+            coneAngle: pick(BridgeTransformProp.coneAngle, light.coneAngle),
+            coneFeather:
+                pick(BridgeTransformProp.coneFeather, light.coneFeather),
+            radius: pick(BridgeTransformProp.lightRadius, light.radius),
+            falloffDistance:
+                pick(BridgeTransformProp.falloffDistance, light.falloffDistance),
+            width: pick(BridgeTransformProp.lightWidth, light.width),
+            height: pick(BridgeTransformProp.lightHeight, light.height),
           ),
   );
 }

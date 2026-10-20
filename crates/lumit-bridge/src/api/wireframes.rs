@@ -635,12 +635,12 @@ impl CompositionReference {
                     }
                     let mut segs = Vec::new();
                     let kind = match light.kind {
-                        L::Point => BridgeWireLightKind::Point,
+                        L::Point | L::Parallel | L::Ambient => BridgeWireLightKind::Point,
                         L::Spot => {
                             // The rings sit a fifth of the comp's width along
                             // the light's own z, which it shines down.
                             let reach = w * 0.2;
-                            let half = light.cone_deg.value_at(lt).clamp(0.0, 85.0);
+                            let half = (light.cone_angle.value_at(lt) * 0.5).clamp(0.0, 85.0);
                             // Where the feather starts: the fixed tenth of the
                             // cone's cosine the lighting kernel softens over.
                             let c = half.to_radians().cos();
@@ -663,8 +663,8 @@ impl CompositionReference {
                         }
                         L::Area => {
                             let (hw, hh) = (
-                                light.half_size[0].value_at(lt).max(0.0),
-                                light.half_size[1].value_at(lt).max(0.0),
+                                (light.size[0].value_at(lt) * 0.5).max(0.0),
+                                (light.size[1].value_at(lt) * 0.5).max(0.0),
                             );
                             ring(
                                 &[

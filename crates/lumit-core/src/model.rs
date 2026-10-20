@@ -793,24 +793,18 @@ pub enum TransformProp {
     FocusDistance,
     Aperture,
     BlurLevel,
-}
-
-impl TransformProp {
-    /// Whether this channel is one of the camera's own rather than the
-    /// transform group's.
-    #[must_use]
-    pub fn is_camera_channel(self) -> bool {
-        matches!(
-            self,
-            Self::PoiX
-                | Self::PoiY
-                | Self::PoiZ
-                | Self::Zoom
-                | Self::FocusDistance
-                | Self::Aperture
-                | Self::BlurLevel
-        )
-    }
+    /// A Light layer's own channels, in [`LightDef`]. A light's point of
+    /// interest is the three `Poi` channels above.
+    LightIntensity,
+    LightColourR,
+    LightColourG,
+    LightColourB,
+    ConeAngle,
+    ConeFeather,
+    LightRadius,
+    FalloffDistance,
+    LightWidth,
+    LightHeight,
 }
 
 impl TransformGroup {
@@ -1726,15 +1720,17 @@ impl Layer {
 
     /// One animatable channel by name: the eleven transform channels from the
     /// transform group, the seven camera channels from a Camera's own kind,
-    /// and `None` for a camera channel on any other layer
-    /// (docs/impl/camera.md §1).
+    /// a light's from a Light's, and `None` for a channel the layer does not
+    /// have (docs/impl/camera.md §1).
     #[must_use]
     pub fn prop(&self, prop: TransformProp) -> Option<&Property> {
-        if !prop.is_camera_channel() {
-            return self.transform.get(prop);
+        if let Some(p) = self.transform.get(prop) {
+            return Some(p);
         }
-        let LayerKind::Camera { zoom, options, .. } = &self.kind else {
-            return None;
+        let (zoom, options) = match &self.kind {
+            LayerKind::Camera { zoom, options, .. } => (zoom, options),
+            LayerKind::Light { light } => return light.channel(prop),
+            _ => return None,
         };
         Some(match prop {
             TransformProp::PoiX => &options.point_of_interest[0],
@@ -1749,11 +1745,13 @@ impl Layer {
     }
 
     pub fn prop_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
-        if !prop.is_camera_channel() {
+        if self.transform.get(prop).is_some() {
             return self.transform.get_mut(prop);
         }
-        let LayerKind::Camera { zoom, options, .. } = &mut self.kind else {
-            return None;
+        let (zoom, options) = match &mut self.kind {
+            LayerKind::Camera { zoom, options, .. } => (zoom, options),
+            LayerKind::Light { light } => return light.channel_mut(prop),
+            _ => return None,
         };
         Some(match prop {
             TransformProp::PoiX => &mut options.point_of_interest[0],
@@ -2092,65 +2090,264 @@ pub enum LightKind {
     /// kind a compositor actually reaches for, and the reason [`LightDef`]
     /// carries a width and a height at all.
     Area,
+    /// Light from so far away that every ray runs the same way, like the sun.
+    /// It shines along the layer's own forward axis.
+    Parallel,
+    /// Light from everywhere at once: no place and no direction.
+    Ambient,
+}
+
+/// How a light weakens with distance, After Effects' three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LightFalloff {
+    /// The same strength at any distance.
+    #[default]
+    None,
+    /// Full strength out to the radius, then eases away to nothing over the
+    /// falloff distance.
+    Smooth,
+    /// Full strength out to the radius, then the inverse square of the
+    /// distance beyond it.
+    InverseSquareClamped,
 }
 
 /// A Light layer's own properties. The placement is NOT here — it is
 /// the layer's ordinary transform, so a light animates and parents exactly as
 /// every other layer does.
+///
+/// Read through [`LightDefFile`], because lights saved before they had rows
+/// held a gain, a half-size and a half-angle where these hold a percentage, a
+/// full size and a full angle.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(from = "LightDefFile")]
 pub struct LightDef {
-    #[serde(default)]
     pub kind: LightKind,
     /// Scene-linear RGB. Animatable per channel, like every colour in the
     /// model.
-    #[serde(default = "LightDef::white")]
     pub colour: [Property; 3],
-    /// Master gain on the light's contribution.
-    #[serde(default = "LightDef::one")]
+    /// Percent; 100 is the light at its own colour.
+    #[serde(rename = "intensity_pct")]
     pub intensity: Property,
-    /// The emitting rectangle's half-width and half-height in comp pixels —
-    /// meaningful for [`LightKind::Area`], ignored by the other two. Half
-    /// rather than full, so it matches the Lens flare's Source size dials
-    /// and a light can be measured from its centre outward.
-    #[serde(default = "LightDef::zero_pair")]
-    pub half_size: [Property; 2],
-    /// The spot cone's half-angle in degrees; ignored unless the kind is
-    /// [`LightKind::Spot`].
-    #[serde(default = "LightDef::default_cone")]
-    pub cone_deg: Property,
-    /// How far the light reaches before it has fallen to nothing, in comp
-    /// pixels. Zero means no falloff at all — the light does not weaken with
-    /// distance, which is what a compositor usually wants from a flare source.
-    #[serde(default = "Property::zero")]
+    /// The emitting rectangle's width and height in comp pixels — meaningful
+    /// for [`LightKind::Area`] and ignored by the others.
+    pub size: [Property; 2],
+    /// The spot cone's full angle in degrees, as After Effects shows it;
+    /// ignored unless the kind is [`LightKind::Spot`].
+    pub cone_angle: Property,
+    /// Percent of the cone, from its edge inwards, that fades rather than
+    /// cuts off.
+    pub cone_feather: Property,
+    pub falloff: LightFalloff,
+    /// Comp pixels the light keeps its full strength out to, when it falls
+    /// off at all.
+    pub radius_px: Property,
+    /// How far past the radius a smooth falloff takes to reach nothing, in
+    /// comp pixels.
     pub falloff_px: Property,
+    /// Aimed at `point_of_interest` rather than by its own rotation, the way
+    /// a two-node camera is. The rotation rows still add on top.
+    pub two_node: bool,
+    /// Where an aimed light points, comp pixels.
+    pub point_of_interest: [Property; 3],
+}
+
+/// [`LightDef`] as a file holds it, old keys and new.
+#[derive(serde::Deserialize)]
+struct LightDefFile {
+    #[serde(default)]
+    kind: LightKind,
+    #[serde(default = "LightDef::white")]
+    colour: [Property; 3],
+    intensity_pct: Option<Property>,
+    size: Option<[Property; 2]>,
+    cone_angle: Option<Property>,
+    /// A tenth was the fixed edge every spot had before the row.
+    #[serde(default = "LightDef::ten")]
+    cone_feather: Property,
+    falloff: Option<LightFalloff>,
+    #[serde(default = "Property::zero")]
+    radius_px: Property,
+    #[serde(default = "Property::zero")]
+    falloff_px: Property,
+    #[serde(default)]
+    two_node: bool,
+    #[serde(default = "LightDef::zero3")]
+    point_of_interest: [Property; 3],
+    // What a light held before it had rows.
+    intensity: Option<Property>,
+    half_size: Option<[Property; 2]>,
+    cone_deg: Option<Property>,
+}
+
+impl From<LightDefFile> for LightDef {
+    fn from(f: LightDefFile) -> Self {
+        let falloff = f.falloff.unwrap_or_else(|| {
+            // A distance used to mean a smooth fade with no radius, and none
+            // meant no falloff at all.
+            if f.falloff_px.is_animated() || f.falloff_px.value_at(0.0) > 0.0 {
+                LightFalloff::Smooth
+            } else {
+                LightFalloff::None
+            }
+        });
+        Self {
+            kind: f.kind,
+            colour: f.colour,
+            intensity: f
+                .intensity_pct
+                .or_else(|| f.intensity.map(|p| scaled(p, 100.0)))
+                .unwrap_or_else(LightDef::hundred),
+            size: f
+                .size
+                .or_else(|| f.half_size.map(|h| h.map(|p| scaled(p, 2.0))))
+                .unwrap_or_else(LightDef::zero_pair),
+            cone_angle: f
+                .cone_angle
+                .or_else(|| f.cone_deg.map(|p| scaled(p, 2.0)))
+                .unwrap_or_else(LightDef::ninety),
+            cone_feather: f.cone_feather,
+            falloff,
+            radius_px: f.radius_px,
+            falloff_px: f.falloff_px,
+            two_node: f.two_node,
+            point_of_interest: f.point_of_interest,
+        }
+    }
+}
+
+/// Every value of `p` times `by`, keys and their speeds with them.
+fn scaled(mut p: Property, by: f64) -> Property {
+    use crate::anim::{Animation, SideInterp};
+    let side = |s: SideInterp| match s {
+        SideInterp::Bezier { speed, influence } => SideInterp::Bezier {
+            speed: speed * by,
+            influence,
+        },
+        other => other,
+    };
+    match &mut p.animation {
+        Animation::Static(v) => *v *= by,
+        Animation::Keyframed(keys) => {
+            for k in keys {
+                k.value *= by;
+                k.interp_in = side(k.interp_in);
+                k.interp_out = side(k.interp_out);
+            }
+        }
+        Animation::Expression(_) => {}
+    }
+    p
 }
 
 impl LightDef {
-    fn one() -> Property {
-        Property::fixed(1.0)
-    }
     fn white() -> [Property; 3] {
-        [Self::one(), Self::one(), Self::one()]
+        [
+            Property::fixed(1.0),
+            Property::fixed(1.0),
+            Property::fixed(1.0),
+        ]
     }
     fn zero_pair() -> [Property; 2] {
         [Property::zero(), Property::zero()]
     }
-    fn default_cone() -> Property {
-        Property::fixed(45.0)
+    fn zero3() -> [Property; 3] {
+        [Property::zero(), Property::zero(), Property::zero()]
+    }
+    fn ten() -> Property {
+        Property::fixed(10.0)
+    }
+    fn ninety() -> Property {
+        Property::fixed(90.0)
+    }
+    fn hundred() -> Property {
+        Property::fixed(100.0)
+    }
+
+    /// The light's own channel that `prop` names, or `None` for one it does
+    /// not have.
+    #[must_use]
+    pub fn channel(&self, prop: TransformProp) -> Option<&Property> {
+        Some(match prop {
+            TransformProp::LightIntensity => &self.intensity,
+            TransformProp::LightColourR => &self.colour[0],
+            TransformProp::LightColourG => &self.colour[1],
+            TransformProp::LightColourB => &self.colour[2],
+            TransformProp::ConeAngle => &self.cone_angle,
+            TransformProp::ConeFeather => &self.cone_feather,
+            TransformProp::LightRadius => &self.radius_px,
+            TransformProp::FalloffDistance => &self.falloff_px,
+            TransformProp::LightWidth => &self.size[0],
+            TransformProp::LightHeight => &self.size[1],
+            TransformProp::PoiX => &self.point_of_interest[0],
+            TransformProp::PoiY => &self.point_of_interest[1],
+            TransformProp::PoiZ => &self.point_of_interest[2],
+            _ => return None,
+        })
+    }
+
+    pub fn channel_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
+        Some(match prop {
+            TransformProp::LightIntensity => &mut self.intensity,
+            TransformProp::LightColourR => &mut self.colour[0],
+            TransformProp::LightColourG => &mut self.colour[1],
+            TransformProp::LightColourB => &mut self.colour[2],
+            TransformProp::ConeAngle => &mut self.cone_angle,
+            TransformProp::ConeFeather => &mut self.cone_feather,
+            TransformProp::LightRadius => &mut self.radius_px,
+            TransformProp::FalloffDistance => &mut self.falloff_px,
+            TransformProp::LightWidth => &mut self.size[0],
+            TransformProp::LightHeight => &mut self.size[1],
+            TransformProp::PoiX => &mut self.point_of_interest[0],
+            TransformProp::PoiY => &mut self.point_of_interest[1],
+            TransformProp::PoiZ => &mut self.point_of_interest[2],
+            _ => return None,
+        })
+    }
+
+    /// The part the settings dialog edits as one op.
+    #[must_use]
+    pub fn settings(&self) -> LightSettings {
+        LightSettings {
+            kind: self.kind,
+            falloff: self.falloff,
+            two_node: self.two_node,
+        }
+    }
+
+    pub fn set_settings(&mut self, s: LightSettings) {
+        self.kind = s.kind;
+        self.falloff = s.falloff;
+        self.two_node = s.two_node;
     }
 }
 
+/// A fresh light, on After Effects' defaults. Not aimed, since a point of
+/// interest needs a composition to sit in: whoever places one sets both.
 impl Default for LightDef {
     fn default() -> Self {
         Self {
             kind: LightKind::default(),
             colour: Self::white(),
-            intensity: Self::one(),
-            half_size: Self::zero_pair(),
-            cone_deg: Self::default_cone(),
-            falloff_px: Property::zero(),
+            intensity: Self::hundred(),
+            size: Self::zero_pair(),
+            cone_angle: Self::ninety(),
+            cone_feather: Property::fixed(50.0),
+            falloff: LightFalloff::None,
+            radius_px: Property::fixed(500.0),
+            falloff_px: Property::fixed(500.0),
+            two_node: false,
+            point_of_interest: Self::zero3(),
         }
     }
+}
+
+/// The non-animatable part of a light, what `Op::SetLightSettings` carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LightSettings {
+    pub kind: LightKind,
+    pub falloff: LightFalloff,
+    pub two_node: bool,
 }
 
 /// One Light layer resolved at a comp time — what the renderer hands to the
@@ -2166,9 +2363,13 @@ pub struct ResolvedLight {
     /// Half-width and half-height in comp pixels; zero for a point.
     pub half_size: (f64, f64),
     /// The spot cone's half-angle in degrees, and the layer's own rotation
-    /// about z, which is what aims it.
+    /// about z. An aimed light's aim is already in the three rotations.
     pub cone_deg: f64,
     pub rotation_deg: f64,
+    /// Percent of the cone that fades.
+    pub cone_feather: f64,
+    pub falloff: LightFalloff,
+    pub radius_px: f64,
     pub falloff_px: f64,
     /// Depth in comp pixels, and the two out-of-plane rotations. The
     /// Lens flare ignores these — it works in the projected picture, where a
@@ -2366,30 +2567,55 @@ impl Composition {
                 }
                 let lt = crate::time::layer_time(t, l.start_offset.0);
                 let tr = &l.transform;
-                let gain = light.intensity.value_at(lt).max(0.0) as f32;
+                let gain = (light.intensity.value_at(lt) / 100.0).max(0.0) as f32;
+                let position = (
+                    tr.position_x.value_at(lt),
+                    tr.position_y.value_at(lt),
+                    tr.position_z.value_at(lt),
+                );
+                let stored = (
+                    tr.rotation_x.value_at(lt),
+                    tr.rotation_y.value_at(lt),
+                    tr.rotation.value_at(lt),
+                );
+                // An aimed light faces its point of interest and the rows add
+                // on top, exactly as a two-node camera does.
+                let (rx, ry, rz) = if light.two_node {
+                    let poi = (
+                        light.point_of_interest[0].value_at(lt),
+                        light.point_of_interest[1].value_at(lt),
+                        light.point_of_interest[2].value_at(lt),
+                    );
+                    crate::camera::look_at(position, poi, stored).unwrap_or(stored)
+                } else {
+                    stored
+                };
                 Some(ResolvedLight {
                     kind: light.kind,
-                    position: (tr.position_x.value_at(lt), tr.position_y.value_at(lt)),
+                    position: (position.0, position.1),
                     colour: [
                         (light.colour[0].value_at(lt) as f32).max(0.0) * gain,
                         (light.colour[1].value_at(lt) as f32).max(0.0) * gain,
                         (light.colour[2].value_at(lt) as f32).max(0.0) * gain,
                     ],
-                    // Only an area light has extent; the other two are points,
+                    // Only an area light has extent; the others are points,
                     // whatever the stored numbers happen to say.
                     half_size: match light.kind {
                         LightKind::Area => (
-                            light.half_size[0].value_at(lt).max(0.0),
-                            light.half_size[1].value_at(lt).max(0.0),
+                            (light.size[0].value_at(lt) / 2.0).max(0.0),
+                            (light.size[1].value_at(lt) / 2.0).max(0.0),
                         ),
                         _ => (0.0, 0.0),
                     },
-                    cone_deg: light.cone_deg.value_at(lt).clamp(0.0, 180.0),
-                    rotation_deg: tr.rotation.value_at(lt),
+                    cone_deg: (light.cone_angle.value_at(lt) / 2.0).clamp(0.0, 180.0),
+                    rotation_deg: rz,
+                    cone_feather: light.cone_feather.value_at(lt).clamp(0.0, 100.0),
+                    falloff: light.falloff,
+                    radius_px: light.radius_px.value_at(lt).max(0.0),
                     falloff_px: light.falloff_px.value_at(lt).max(0.0),
-                    z: tr.position_z.value_at(lt),
-                    rotation_x_deg: tr.rotation_x.value_at(lt),
-                    rotation_y_deg: tr.rotation_y.value_at(lt),
+                    z: position.2,
+                    rotation_x_deg: rx,
+                    rotation_y_deg: ry,
                 })
             })
             .collect()
@@ -4039,6 +4265,36 @@ mod tests {
 
     fn secs(s: i64) -> CompTime {
         CompTime(Rational::new(s, 1).unwrap())
+    }
+
+    /// A light saved before it had rows held a gain, a half-size, a
+    /// half-angle and a bare falloff distance. It must open as the same light:
+    /// a percentage, a full size, a full angle, a smooth falloff with no
+    /// radius, and the tenth of a feather every spot had.
+    #[test]
+    fn a_light_saved_before_its_rows_opens_as_the_same_light() {
+        let p = |v: f64| serde_json::to_value(Property::fixed(v)).unwrap();
+        let old = serde_json::json!({
+            "kind": "spot",
+            "intensity": p(0.75),
+            "half_size": [p(40.0), p(20.0)],
+            "cone_deg": p(30.0),
+            "falloff_px": p(300.0),
+        });
+        let light: LightDef = serde_json::from_value(old).unwrap();
+        assert_eq!(light.intensity.value_at(0.0), 75.0);
+        assert_eq!(light.size[0].value_at(0.0), 80.0);
+        assert_eq!(light.size[1].value_at(0.0), 40.0);
+        assert_eq!(light.cone_angle.value_at(0.0), 60.0);
+        assert_eq!(light.cone_feather.value_at(0.0), 10.0);
+        assert_eq!(light.falloff, LightFalloff::Smooth);
+        assert_eq!(light.radius_px.value_at(0.0), 0.0);
+        assert!(!light.two_node, "an old spot aims by its rotation");
+
+        // And what it is saved as now reads back unchanged.
+        let again: LightDef =
+            serde_json::from_value(serde_json::to_value(&light).unwrap()).unwrap();
+        assert_eq!(again, light);
     }
 
     /// **What "has been retimed" means**. Switching Retime on installs

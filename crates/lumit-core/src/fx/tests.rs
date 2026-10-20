@@ -5044,7 +5044,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             kind: LayerKind::Light {
                 light: Box::new(LightDef {
                     kind,
-                    half_size: [Property::fixed(half), Property::fixed(half * 0.5)],
+                    size: [Property::fixed(half * 2.0), Property::fixed(half)],
                     ..LightDef::default()
                 }),
             },
@@ -5992,7 +5992,7 @@ fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
             kind: LayerKind::Light {
                 light: Box::new(LightDef {
                     kind: LightKind::Area,
-                    half_size: [Property::fixed(80.0), Property::fixed(40.0)],
+                    size: [Property::fixed(160.0), Property::fixed(80.0)],
                     ..LightDef::default()
                 }),
             },

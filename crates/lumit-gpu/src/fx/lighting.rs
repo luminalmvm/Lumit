@@ -16,16 +16,30 @@ pub const MAX_LIT_LIGHTS: usize = 8;
 
 /// One light, flattened for the kernel: the four comp-pixel corners of its
 /// emitting rectangle (all four equal for a point or a spot), its colour and
-/// falloff, its spot axis, and whether it is an area light.
+/// falloff, its spot axis and cone, and which law shades it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LightingLight {
     pub corners: [[f32; 3]; 4],
     pub colour: [f32; 3],
+    pub kind: LightingKind,
+    /// 0 none, 1 smooth, 2 inverse square clamped.
+    pub falloff: u32,
+    pub radius_px: f32,
     pub falloff_px: f32,
-    pub is_area: bool,
     /// Cosine of a spot's half-angle; below -1 means "not a spot".
     pub cone_cos: f32,
+    /// Cosine of the angle the feather starts at.
+    pub cone_inner: f32,
     pub axis: [f32; 3],
+}
+
+/// The oracle's `ShadingKind`, restated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LightingKind {
+    Point,
+    Area,
+    Parallel,
+    Ambient,
 }
 
 /// One layer's plane in comp pixels, plus the lights that reach it. An empty
@@ -50,7 +64,8 @@ struct GpuLight {
     colour: [f32; 4],
     /// xyz = spot axis, w = cos(half-angle).
     axis: [f32; 4],
-    /// x = area flag; the rest keeps the struct 16-byte aligned.
+    /// x = kind (0 point, 1 area, 2 parallel, 3 ambient), y = falloff,
+    /// z = radius px, w = cos of the feather's inner angle.
     flags: [f32; 4],
 }
 
@@ -93,7 +108,12 @@ impl FxEngine {
                 c3: v4(l.corners[3], 0.0),
                 colour: v4(l.colour, l.falloff_px),
                 axis: v4(l.axis, l.cone_cos),
-                flags: [f32::from(u8::from(l.is_area)), 0.0, 0.0, 0.0],
+                flags: [
+                    f32::from(l.kind as u8),
+                    l.falloff as f32,
+                    l.radius_px,
+                    l.cone_inner,
+                ],
             };
         }
         self.dispatch(

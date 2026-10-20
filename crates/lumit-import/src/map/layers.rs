@@ -517,9 +517,8 @@ pub(crate) fn shift(property: &mut LumProperty, by: f64) {
     *property = super::fx_colour::map_values(moved, |v| v + by).0;
 }
 
-/// A Light layer's own properties. AE's intensity is a percentage where 100 is
-/// unity, and its cone angle is the *full* angle where Lumit's is the half —
-/// the two conversions this function makes.
+/// A Light layer's own properties. AE's intensity and cone angle are Lumit's,
+/// a percentage and the full angle.
 fn light(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property]) -> LightDef {
     let kind = match ae.light_type.as_deref() {
         Some("SPOT") => LightKind::Spot,
@@ -542,15 +541,16 @@ fn light(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property])
         let raw = still(props, "ADBE Light Color", axis).unwrap_or(1.0);
         LumProperty::fixed(f64::from(srgb_to_linear(raw)))
     };
-    let intensity = still(props, "ADBE Light Intensity", 0).unwrap_or(100.0) / 100.0;
-    let cone = still(props, "ADBE Light Cone Angle", 0).unwrap_or(90.0) / 2.0;
+    let intensity = still(props, "ADBE Light Intensity", 0).unwrap_or(100.0);
+    let cone = still(props, "ADBE Light Cone Angle", 0).unwrap_or(90.0);
     LightDef {
         kind,
         colour: [colour_axis(0), colour_axis(1), colour_axis(2)],
         intensity: LumProperty::fixed(intensity),
-        half_size: [LumProperty::zero(), LumProperty::zero()],
-        cone_deg: LumProperty::fixed(cone),
-        falloff_px: LumProperty::zero(),
+        cone_angle: LumProperty::fixed(cone),
+        // The edge spots had before AE's feather was read.
+        cone_feather: LumProperty::fixed(10.0),
+        ..LightDef::default()
     }
 }
 

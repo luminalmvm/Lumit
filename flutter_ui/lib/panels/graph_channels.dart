@@ -295,6 +295,7 @@ List<GraphChannel> graphChannels({
         modes: entry.info.axisModes,
         kind: entry.info.kind,
         twoNode: entry.info.camera?.twoNode ?? false,
+        light: entry.info.light,
       )) {
         if (group.axes.first.prop.name != lead) continue;
         // A linked pair is one curve, as it is one box on the row. The lead

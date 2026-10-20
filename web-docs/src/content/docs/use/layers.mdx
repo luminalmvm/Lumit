@@ -164,17 +164,29 @@ The export dialogue can be told to write guide layers anyway.
 ## Light layers
 
 **Layer ▸ New** offers three: a **Point light**, a bare bulb with no extent; a **Spot
-light**, a cone aimed by the layer's own rotation; and an **Area light**, a rectangle
-which starts at a tenth of the composition.
+light**, a cone; and an **Area light**, a rectangle which starts at a fifth of the
+composition. A new light stands in front of the composition, aimed at its centre.
 
 A light is placed by its ordinary transform, so it animates and parents like anything
 else. Which layers it shades is per layer: **Accepts lights**, on the layer's right-click
 menu in the Timeline, on by default.
 
-:::note[Partly built]
-A light's own properties — its colour, intensity, cone angle, size and falloff — have no rows
-yet. What you can set is where the light is and which kind it is when you make it.
-:::
+**Light options**, inside the light's Transform group, holds its own rows:
+
+- **Light type**: **Point**, **Spot**, **Area**, **Parallel** (every ray runs the same way,
+  along the light's aim) or **Ambient** (light from everywhere, with no place or direction).
+- **Intensity**: how bright the light is, as a percentage.
+- **Colour**: the colour of the light.
+- **Cone angle** and **Cone feather**, on a spot: the cone's full angle, and how much of its
+  edge fades.
+- **Size**, on an area light: its width and height.
+- **Falloff**: **None**, **Smooth** or **Inverse square clamped**. **Radius** is how far the
+  light keeps its full strength, and **Falloff distance** how far past it a smooth falloff
+  takes to fade out.
+
+Every row but the type and the falloff can be keyframed. A spot, parallel or area light
+aimed at its **Point of interest** shows that row under Transform; its rotation rows turn it
+from there.
 
 ## Parenting
 

@@ -22,7 +22,9 @@ struct Light {
     colour: vec4<f32>,
     // xyz = spot axis, w = cos(half-angle) or < -1 for "not a spot".
     axis: vec4<f32>,
-    // x = 1 for an area light, 0 for a point or spot.
+    // x = kind (0 point or spot, 1 area, 2 parallel, 3 ambient),
+    // y = falloff (0 none, 1 smooth, 2 inverse square clamped),
+    // z = radius px, w = cos of the feather's inner angle.
     flags: vec4<f32>,
 };
 
@@ -115,36 +117,56 @@ fn soft_step(edge0: f32, edge1: f32, x: f32) -> f32 {
     return t * t * (3.0 - 2.0 * t);
 }
 
-fn irradiance(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
-    let centre = light_centre(l);
-    let to_light = centre - pos;
-
-    let falloff_px = l.colour.w;
-    var reach: f32 = 1.0;
-    if (falloff_px > 0.0) {
-        let t = clamp(1.0 - length(to_light) / falloff_px, 0.0, 1.0);
-        reach = t * t;
+// Full strength out to the radius, then the chosen falloff.
+fn reach(d: f32, l: Light) -> f32 {
+    let mode = u32(l.flags.y + 0.5);
+    let r = l.flags.z;
+    if (mode == 0u || d <= r) {
+        return 1.0;
     }
-    if (reach <= 0.0) {
+    if (mode == 1u) {
+        let falloff_px = l.colour.w;
+        if (falloff_px <= 0.0) {
+            return 0.0;
+        }
+        let t = clamp(1.0 - (d - r) / falloff_px, 0.0, 1.0);
+        return t * t;
+    }
+    return (r / d) * (r / d);
+}
+
+fn irradiance(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
+    let kind = u32(l.flags.x + 0.5);
+    if (kind == 3u) {
+        return 0.0;
+    }
+    let centre = light_centre(l);
+    var to_light = centre - pos;
+    var r: f32 = 1.0;
+    if (kind == 2u) {
+        to_light = -l.axis.xyz;
+    } else {
+        r = reach(length(to_light), l);
+    }
+    if (r <= 0.0) {
         return 0.0;
     }
 
     let cone_cos = l.axis.w;
     var cone: f32 = 1.0;
-    if (cone_cos >= -1.0) {
+    if (cone_cos >= -1.0 && kind != 2u) {
         let dir = normalise(pos - centre);
         if (all(dir == vec3<f32>(0.0))) {
             return 0.0;
         }
-        let inner = cone_cos + (1.0 - cone_cos) * 0.1;
-        cone = soft_step(cone_cos, inner, dot(dir, l.axis.xyz));
+        cone = soft_step(cone_cos, l.flags.w, dot(dir, l.axis.xyz));
     }
     if (cone <= 0.0) {
         return 0.0;
     }
 
     var e: f32;
-    if (l.flags.x > 0.5) {
+    if (kind == 1u) {
         e = rect_form_factor(pos, n, l);
     } else {
         let dir = normalise(to_light);
@@ -154,7 +176,7 @@ fn irradiance(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
             e = max(dot(n, dir), 0.0);
         }
     }
-    return e * reach * cone;
+    return e * r * cone;
 }
 
 @compute @workgroup_size(8, 8)
@@ -178,7 +200,11 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
             break;
         }
         let l = p.lights[i];
-        gain = gain + irradiance(pos, p.normal.xyz, l) * l.colour.rgb;
+        var e: f32 = 1.0;
+        if (u32(l.flags.x + 0.5) != 3u) {
+            e = irradiance(pos, p.normal.xyz, l);
+        }
+        gain = gain + e * l.colour.rgb;
     }
     textureStore(dst, xy, vec4<f32>(o.rgb * gain, o.a));
 }

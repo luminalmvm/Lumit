@@ -1142,17 +1142,29 @@ pub fn shading_lights(
             );
             let (hw, hh) = (l.half_size.0 as f32, l.half_size.1 as f32);
             let at = |x: f32, y: f32| place_point(&place, x, y, 0.0);
+            // A spot is aimed along its own local +z, away from the camera;
+            // anything below -1 tells the kernel "not a spot".
+            let cone_cos = match l.kind {
+                LightKind::Spot => (l.cone_deg as f32).to_radians().cos(),
+                _ => -2.0,
+            };
+            use lumit_gpu::fx::LightingKind as K;
             lumit_gpu::fx::LightingLight {
                 corners: [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)],
                 colour: l.colour,
-                falloff_px: l.falloff_px as f32,
-                is_area: l.kind == LightKind::Area && hw > 0.0 && hh > 0.0,
-                // A spot is aimed along its own local +z, away from the
-                // camera; anything below -1 tells the kernel "not a spot".
-                cone_cos: match l.kind {
-                    LightKind::Spot => (l.cone_deg as f32).to_radians().cos(),
-                    _ => -2.0,
+                kind: match l.kind {
+                    LightKind::Area if hw > 0.0 && hh > 0.0 => K::Area,
+                    LightKind::Parallel => K::Parallel,
+                    LightKind::Ambient => K::Ambient,
+                    _ => K::Point,
                 },
+                falloff: l.falloff as u32,
+                radius_px: l.radius_px as f32,
+                falloff_px: l.falloff_px as f32,
+                cone_cos,
+                // The feather is a share of the cone measured in its cosine,
+                // which at a tenth is the edge spots had before it was a row.
+                cone_inner: cone_cos + (1.0 - cone_cos) * (l.cone_feather / 100.0) as f32,
                 axis: unit(place_dir(&place, 0.0, 0.0, 1.0)),
             }
         })
@@ -6497,7 +6509,7 @@ mod render_below_at_tests {
         light.kind = LayerKind::Light {
             light: Box::new(LightDef {
                 kind: LightKind::Area,
-                half_size: [Property::fixed(120.0), Property::fixed(80.0)],
+                size: [Property::fixed(240.0), Property::fixed(160.0)],
                 ..LightDef::default()
             }),
         };
@@ -6616,7 +6628,7 @@ mod render_below_at_tests {
         spot.kind = LayerKind::Light {
             light: Box::new(LightDef {
                 kind: LightKind::Spot,
-                cone_deg: Property::fixed(20.0),
+                cone_angle: Property::fixed(40.0),
                 ..LightDef::default()
             }),
         };

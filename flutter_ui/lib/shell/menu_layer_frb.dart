@@ -33,7 +33,7 @@ import '../panels/graph_maths.dart' show evaluateKeys;
 import '../panels/layer_fold_frb.dart';
 import '../panels/timeline_mask_rows_frb.dart' show maskModeLabel, maskWith;
 import '../panels/transform_rows_frb.dart'
-    show hasThreeDSwitch, transformGroups;
+    show TransformSection, hasThreeDSwitch, transformGroups;
 import 'camera_settings_dialog.dart';
 import 'menu_bar_frb.dart' show MenuEntry;
 import 'number_dialog_frb.dart';
@@ -341,11 +341,11 @@ List<MenuEntry> transformRows(LumitState app, LumitUiState ui) {
             kind: entry.info.kind,
             twoNode: true,
           ))
-            // The camera options are left alone: a lens is seeded from the
-            // composition it was made in, so there is no still number here
-            // that means "untouched" - and a zoom of nought is a camera that
-            // sees nothing.
-            if (!group.cameraOption)
+            // The camera and light options are left alone: a lens is seeded
+            // from the composition it was made in, so there is no still
+            // number here that means "untouched" - and a zoom of nought is a
+            // camera that sees nothing.
+            if (group.section == TransformSection.transform)
               for (final axis in group.axes) axis.prop,
         ];
         entry.layer.setTransforms(

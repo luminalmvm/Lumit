@@ -48,7 +48,7 @@ void main() {
     test('the four camera options, and only those, are flagged as such', () {
       final options = [
         for (final group in rowsFor(BridgeLayerKind.camera))
-          if (group.cameraOption)
+          if (group.section == TransformSection.camera)
             for (final axis in group.axes) axis.prop,
       ];
       expect(options, [
@@ -73,16 +73,47 @@ void main() {
     });
   });
 
-  group('A light shows the same placement and nothing else', () {
-    test('its place and its three turns', () {
+  group('A light shows the same placement and the options its kind has', () {
+    const placement = {
+      BridgeTransformProp.positionX,
+      BridgeTransformProp.positionY,
+      BridgeTransformProp.positionZ,
+      BridgeTransformProp.rotationX,
+      BridgeTransformProp.rotationY,
+      BridgeTransformProp.rotation,
+    };
+    test('a point light: its place, its three turns, its strength and colour',
+        () {
       expect(propsOf(rowsFor(BridgeLayerKind.light)), {
-        BridgeTransformProp.positionX,
-        BridgeTransformProp.positionY,
-        BridgeTransformProp.positionZ,
-        BridgeTransformProp.rotationX,
-        BridgeTransformProp.rotationY,
-        BridgeTransformProp.rotation,
+        ...placement,
+        BridgeTransformProp.lightIntensity,
+        BridgeTransformProp.lightColourR,
+        BridgeTransformProp.lightColourG,
+        BridgeTransformProp.lightColourB,
       });
+    });
+
+    test('an aimed spot with a smooth falloff adds its aim, cone and reach', () {
+      final props = propsOf(transformGroups(
+        threeD: false,
+        modes: modes,
+        kind: BridgeLayerKind.light,
+        light: const BridgeLightSettings(
+          kind: BridgeLightKind.spot,
+          falloff: BridgeLightFalloff.smooth,
+          twoNode: true,
+        ),
+      ));
+      expect(
+          props,
+          containsAll([
+            BridgeTransformProp.poiX,
+            BridgeTransformProp.coneAngle,
+            BridgeTransformProp.coneFeather,
+            BridgeTransformProp.lightRadius,
+            BridgeTransformProp.falloffDistance,
+          ]));
+      expect(props, isNot(contains(BridgeTransformProp.lightWidth)));
     });
   });
 
@@ -162,13 +193,13 @@ void main() {
       expect(
           [
             for (final row in rows.whereType<FoldTransformRow>())
-              if (row.group.cameraOption) row.group.label,
+              if (row.group.section == TransformSection.camera) row.group.label,
           ],
           ['Zoom', 'Focus distance', 'Aperture', 'Blur level']);
       expect(
           rows
               .whereType<FoldTransformRow>()
-              .where((r) => r.group.cameraOption)
+              .where((r) => r.group.section == TransformSection.camera)
               .every((r) => r.depth == 3),
           isTrue,
           reason: 'they sit under the heading, not beside it');

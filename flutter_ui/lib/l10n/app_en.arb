@@ -155,6 +155,70 @@
   "@cameraTwoNode": {
     "description": "Camera type: a camera that aims at its point of interest."
   },
+  "lightOptions": "Light options",
+  "@lightOptions": {
+    "description": "Heading in a light's Transform group, over the rows about the light itself rather than about where it stands."
+  },
+  "lightType": "Light type",
+  "@lightType": {
+    "description": "Row and settings field: which kind of light a Light layer is."
+  },
+  "lightPoint": "Point",
+  "@lightPoint": {
+    "description": "Light type: light from one point, shining every way."
+  },
+  "lightSpot": "Spot",
+  "@lightSpot": {
+    "description": "Light type: a cone of light."
+  },
+  "lightArea": "Area",
+  "@lightArea": {
+    "description": "Light type: light from a rectangle of a set size, like a softbox."
+  },
+  "lightParallel": "Parallel",
+  "@lightParallel": {
+    "description": "Light type: light from very far away, every ray running the same way, like the sun."
+  },
+  "lightAmbient": "Ambient",
+  "@lightAmbient": {
+    "description": "Light type: light from everywhere at once, with no place or direction."
+  },
+  "lightIntensity": "Intensity",
+  "@lightIntensity": {
+    "description": "Light row: how bright the light is, as a percentage."
+  },
+  "lightColour": "Colour",
+  "@lightColour": {
+    "description": "Light row: the colour of the light."
+  },
+  "lightConeAngle": "Cone angle",
+  "@lightConeAngle": {
+    "description": "Spot light row: the full angle of the cone of light, in degrees."
+  },
+  "lightConeFeather": "Cone feather",
+  "@lightConeFeather": {
+    "description": "Spot light row: how much of the cone's edge fades rather than cuts off, as a percentage."
+  },
+  "lightFalloff": "Falloff",
+  "@lightFalloff": {
+    "description": "Light row and settings field: how the light weakens with distance."
+  },
+  "lightFalloffSmooth": "Smooth",
+  "@lightFalloffSmooth": {
+    "description": "Light falloff: full strength out to the radius, then fading smoothly to nothing over the falloff distance."
+  },
+  "lightFalloffInverseSquare": "Inverse square clamped",
+  "@lightFalloffInverseSquare": {
+    "description": "Light falloff: full strength out to the radius, then weakening with the square of the distance, as real light does. After Effects' name for it."
+  },
+  "lightRadius": "Radius",
+  "@lightRadius": {
+    "description": "Light row: how far the light keeps its full strength before it starts to fall off, in pixels."
+  },
+  "lightFalloffDistance": "Falloff distance",
+  "@lightFalloffDistance": {
+    "description": "Light row: how far past the radius a smooth falloff takes to fade to nothing, in pixels."
+  },
   "cameraType": "Type",
   "@cameraType": {
     "description": "Camera settings row: whether the camera is one-node or two-node."
@@ -14798,6 +14862,10 @@
   "histSetCameraSettings": "Set camera settings",
   "@histSetCameraSettings": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetLightSettings": "Set light settings",
+  "@histSetLightSettings": {
+    "description": "Undo history entry: a light's type, falloff or aim was changed."
   },
   "histSetCameraZoom": "Set camera zoom",
   "@histSetCameraZoom": {

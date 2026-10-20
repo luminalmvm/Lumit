@@ -1547,6 +1547,7 @@ Map<String, String> get _built => {
       "Set axis mode": l10n.histSetAxisMode,
       "Set camera zoom": l10n.histSetCameraZoom,
       "Set camera settings": l10n.histSetCameraSettings,
+      "Set light settings": l10n.histSetLightSettings,
       "Link camera to solve": l10n.histLinkCameraToSolve,
       "Edit volume": l10n.histEditVolume,
       "Edit Retime": l10n.histEditRetime,

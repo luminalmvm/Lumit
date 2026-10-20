@@ -27,6 +27,7 @@ import 'timeline_extras_frb.dart';
 import 'effect_param_row_frb.dart';
 import 'keyframe_controls_frb.dart';
 import 'layer_fold_frb.dart';
+import 'light_rows_frb.dart';
 import 'spectral_lane_frb.dart';
 import 'package:lumit_flutter/src/rust/api/retime.dart';
 import 'flow_rows_frb.dart';
@@ -519,6 +520,14 @@ class FoldRow extends StatelessWidget {
           valueColumn: valueColumn,
           onLabelTap: () => onSelectProperty(path),
           graphColours: graphColours[path],
+        ),
+      FoldSettingRow(:final setting, :final info) => LayerSettingRowFrb(
+          layer: layer,
+          setting: setting,
+          light: info.light,
+          valueColumn: valueColumn,
+          keyPrefix: 'tl-tf',
+          onChanged: onChanged,
         ),
       FoldEffectParamRow() => _TimelineParamRow(
           comp: comp,

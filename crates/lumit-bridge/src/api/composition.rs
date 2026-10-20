@@ -1371,13 +1371,15 @@ impl CompositionReference {
         )
     }
 
-    /// Add a Light layer at the comp centre.
+    /// Add a Light layer.
     ///
-    /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
-    /// because that is the shape every other frb choice takes. An **area**
-    /// light starts at a tenth of the comp's width and height, which is a
-    /// softbox rather than a pinprick: a light with no size would draw exactly
-    /// as a point one and leave nothing to discover.
+    /// `kind` is 0 point, 1 spot, 2 area, 3 parallel, 4 ambient — an integer
+    /// rather than the enum because that is the shape every other frb choice
+    /// takes. As in After Effects, the light stands in front of the comp, up
+    /// and to one side, aimed at its centre: one at the centre in the comp's
+    /// own plane would only graze the layers it is meant to light. Every kind is given
+    /// an area light's size, a fifth of the comp: a light with no size would
+    /// draw exactly as a point one if it is made an area light later.
     #[frb(sync)]
     pub fn add_light_layer(
         &self,
@@ -1391,29 +1393,37 @@ impl CompositionReference {
         let kind = match kind {
             1 => LightKind::Spot,
             2 => LightKind::Area,
+            3 => LightKind::Parallel,
+            4 => LightKind::Ambient,
             _ => LightKind::Point,
         };
-        let half = |v: u32| Property::fixed(f64::from(v) * 0.1);
+        let (w, h) = (f64::from(comp.width), f64::from(comp.height));
         let light = Box::new(LightDef {
             kind,
-            half_size: match kind {
-                LightKind::Area => [half(comp.width), half(comp.height)],
-                _ => [Property::zero(), Property::zero()],
-            },
+            size: [Property::fixed(w * 0.2), Property::fixed(h * 0.2)],
+            two_node: true,
+            point_of_interest: [
+                Property::fixed(w * 0.5),
+                Property::fixed(h * 0.5),
+                Property::zero(),
+            ],
             ..LightDef::default()
         });
         let name = match kind {
             LightKind::Point => "Point light",
             LightKind::Spot => "Spot light",
             LightKind::Area => "Area light",
+            LightKind::Parallel => "Parallel light",
+            LightKind::Ambient => "Ambient light",
         };
         let layer = crate::edits::base_layer(
             name.into(),
             lumit_core::model::LayerKind::Light { light },
             comp.duration.0,
             TransformGroup {
-                position_x: Property::fixed(f64::from(comp.width) * 0.5),
-                position_y: Property::fixed(f64::from(comp.height) * 0.5),
+                position_x: Property::fixed(w * 0.4),
+                position_y: Property::fixed(h * 0.35),
+                position_z: Property::fixed(-w * 0.35),
                 ..TransformGroup::default()
             },
         );

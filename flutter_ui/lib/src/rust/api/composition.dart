@@ -632,13 +632,15 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceAddGroupEffect(
               that: this, group: group, name: name);
 
-  /// Add a Light layer at the comp centre.
+  /// Add a Light layer.
   ///
-  /// `kind` is 0 point, 1 spot, 2 area — an integer rather than the enum
-  /// because that is the shape every other frb choice takes. An **area**
-  /// light starts at a tenth of the comp's width and height, which is a
-  /// softbox rather than a pinprick: a light with no size would draw exactly
-  /// as a point one and leave nothing to discover.
+  /// `kind` is 0 point, 1 spot, 2 area, 3 parallel, 4 ambient — an integer
+  /// rather than the enum because that is the shape every other frb choice
+  /// takes. As in After Effects, the light stands in front of the comp, up
+  /// and to one side, aimed at its centre: one at the centre in the comp's
+  /// own plane would only graze the layers it is meant to light. Every kind is given
+  /// an area light's size, a fifth of the comp: a light with no size would
+  /// draw exactly as a point one if it is made an area light later.
   LayerReference addLightLayer({required int kind, int? row}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceAddLightLayer(

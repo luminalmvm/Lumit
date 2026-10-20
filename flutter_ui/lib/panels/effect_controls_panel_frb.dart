@@ -1215,6 +1215,7 @@ class _EffectControlsPanelFrbState extends State<EffectControlsPanelFrb> {
                             info.kind == BridgeLayerKind.camera,
                         kind: info.kind,
                         twoNode: info.camera?.twoNode ?? false,
+                        light: info.light,
                         corrected: info.trackCorrected,
                         playheadFrame: playhead,
                         onSeek: (frame) => ui.playheadFrame.value = frame,
@@ -3182,6 +3183,7 @@ class _TransformSection extends StatelessWidget {
   /// held, which is what the badge says.
   final BridgeLayerKind kind;
   final bool twoNode;
+  final BridgeLightSettings? light;
 
   bool get isCamera => kind == BridgeLayerKind.camera;
 
@@ -3203,6 +3205,7 @@ class _TransformSection extends StatelessWidget {
     required this.axisModes,
     required this.kind,
     required this.twoNode,
+    required this.light,
     required this.corrected,
     required this.playheadFrame,
     required this.onSeek,
@@ -3223,6 +3226,7 @@ class _TransformSection extends StatelessWidget {
       threeD: threeD,
       kind: kind,
       twoNode: twoNode,
+      light: light,
       axisModes: axisModes,
       playheadFrame: playheadFrame,
       onSeek: onSeek,
