@@ -286,8 +286,9 @@ pub fn parent_world_placement(
 ) -> Option<[[f32; 4]; 4]> {
     let mut world: Option<[[f32; 4]; 4]> = None;
     // Outermost first, so concat_place(outer, inner) = outer × inner.
-    let solves = Some(&crate::track::Store as &dyn lumit_core::track::CameraSolveStore);
-    for (_, p) in lumit_core::model::parent_placements(comp, layer, t_comp, &context, solves) {
+    let read = lumit_core::model::context_reader(&context, t_comp);
+    let solves = crate::track::solves_for(&context.document);
+    for (_, p) in lumit_core::model::parent_placements(comp, layer, t_comp, &read, solves) {
         let p = place_of(&p);
         world = Some(match world {
             Some(w) => lumit_gpu::concat_place(w, p),
@@ -318,7 +319,10 @@ fn own_placement(
     t_comp: f64,
     context: &Arc<ExpressionContext>,
 ) -> [[f32; 4]; 4] {
-    place_of(&lumit_core::model::placement(layer, t_comp, context))
+    place_of(&lumit_core::model::placement(
+        layer,
+        &lumit_core::model::context_reader(context, t_comp),
+    ))
 }
 
 fn place_of(p: &lumit_core::model::Placement) -> [[f32; 4]; 4] {
@@ -480,20 +484,21 @@ fn reparented_eye(
     lumit_core::anim::Animation,
 )> {
     use lumit_core::anim::{Animation, Keyframe, SideInterp};
-    use lumit_core::camera::{Eye, Space};
+    use lumit_core::camera::{place, Eye};
     use lumit_core::model::{parent_space, LayerKind, TransformProp as P};
 
-    let identity = Space::of_layer((0.0, 0.0, 0.0), (0.0, 0.0), (100.0, 100.0), (0.0, 0.0, 0.0));
-    let solves = Some(&crate::track::Store as &dyn lumit_core::track::CameraSolveStore);
-    let was = parent_space(comp, layer, t_comp, context, solves).unwrap_or(identity);
+    let identity = place((0.0, 0.0, 0.0), (0.0, 0.0), (100.0, 100.0), (0.0, 0.0, 0.0));
+    let read = lumit_core::model::context_reader(context, t_comp);
+    let solves = crate::track::solves_for(&context.document);
+    let was = parent_space(comp, layer, t_comp, &read, solves).unwrap_or(identity);
     let now = match new_parent.and_then(|id| comp.layers.iter().find(|l| l.id == id)) {
-        Some(parent) => lumit_core::model::layer_space(comp, parent, t_comp, context, solves),
+        Some(parent) => lumit_core::model::layer_space(comp, parent, t_comp, &read, solves),
         None => identity,
     };
     if was == now {
         return Vec::new();
     }
-    let Some(carry) = now.inverse().map(|back| back.compose(&was)) else {
+    let Some(carry) = now.invert().map(|back| was.within(&back)) else {
         return Vec::new();
     };
     let two_node = match &layer.kind {
@@ -587,7 +592,7 @@ fn reparented_eye(
             )
             .collect();
         let eases = eases?;
-        let row = carry.linear[i - first];
+        let row = carry.m[i - first];
         Some(SideInterp::Bezier {
             speed: row[0] * eases[0].0 + row[1] * eases[1].0 + row[2] * eases[2].0,
             influence: eases[i - first].1,
@@ -1269,7 +1274,7 @@ pub fn shading_lights(
         return Vec::new();
     }
     let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
-    let mut lights = comp.lights_at(t_comp, context);
+    let mut lights = comp.lights_at(t_comp, &lumit_core::model::context_reader(context, t_comp));
     if lights.is_empty() {
         return Vec::new();
     }
@@ -1827,7 +1832,9 @@ fn comp_walk(
                     // A light falls differently on every pixel, so lit on the
                     // tile its pool would come out as a smear of sixty-four
                     // pixels stretched over the whole solid.
-                    && !(layer.switches.accepts_lights && !comp.lights_at(t_comp, &context).is_empty());
+                    && !(layer.switches.accepts_lights && !comp
+                        .lights_at(t_comp, &lumit_core::model::context_reader(&context, t_comp))
+                        .is_empty());
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
                     Arc::new(px_tile(&px, tw, th)),
@@ -6414,7 +6421,9 @@ mod parent_placement_tests {
                         own(TransformProp::PoiZ),
                     );
                     // A one-node camera's point of interest is inert.
-                    let poi = match parent_space(c, l, 0.0, &ctx(), None) {
+                    let context = ctx();
+                    let read = lumit_core::model::context_reader(&context, 0.0);
+                    let poi = match parent_space(c, l, 0.0, &read, None) {
                         _ if !two_node => (0.0, 0.0, 0.0),
                         Some(s) => s.point(poi),
                         None => poi,

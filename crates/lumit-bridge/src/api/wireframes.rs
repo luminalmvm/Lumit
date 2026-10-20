@@ -581,11 +581,9 @@ impl CompositionReference {
                         .two_node
                         .then(|| {
                             let context = lumit_core::model::comp_context(&doc, comp, t);
-                            let solves = Some(
-                                &lumit_render::track::Store
-                                    as &dyn lumit_core::track::CameraSolveStore,
-                            );
-                            lumit_core::model::point_of_interest(comp, layer, t, &context, solves)
+                            let read = lumit_core::model::context_reader(&context, t);
+                            let solves = lumit_render::track::solves_for(&doc);
+                            lumit_core::model::point_of_interest(comp, layer, t, &read, solves)
                         })
                         .flatten();
                     reach_to.extend(poi);
@@ -645,23 +643,22 @@ impl CompositionReference {
                     // faces its point of interest, its rows on top, all of it
                     // read in its parent's space.
                     let context = lumit_core::model::comp_context(&doc, comp, t);
-                    let placed = lumit_core::model::placement(layer, t, &context);
+                    let read = lumit_core::model::context_reader(&context, t);
+                    let placed = lumit_core::model::placement(layer, &read);
                     let mut eye = lumit_core::camera::Eye {
                         position: placed.position,
                         rotation_deg: placed.rotation_deg,
                         point_of_interest: None,
                     };
                     if let Some(space) =
-                        lumit_core::model::parent_space(comp, layer, t, &context, None)
+                        lumit_core::model::parent_space(comp, layer, t, &read, None)
                     {
                         eye = space.carry(eye);
                     }
                     let own = eye.position;
                     let poi = light
                         .two_node
-                        .then(|| {
-                            lumit_core::model::point_of_interest(comp, layer, t, &context, None)
-                        })
+                        .then(|| lumit_core::model::point_of_interest(comp, layer, t, &read, None))
                         .flatten();
                     let (rx, ry, rz) = eye.rotation_deg;
                     let m = lumit_render::place_matrix(

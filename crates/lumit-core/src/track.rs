@@ -166,6 +166,11 @@ pub fn use_solve_store(store: &'static (dyn CameraSolveStore + Sync)) {
     let _ = SOLVES.set(store);
 }
 
+/// The renderer's solves, once it has handed them over.
+pub(crate) fn solve_store() -> Option<&'static dyn CameraSolveStore> {
+    SOLVES.get().map(|store| *store as &dyn CameraSolveStore)
+}
+
 /// Nothing solved yet: a link with nothing to follow reads the stored pose.
 struct Unsolved;
 
@@ -185,10 +190,7 @@ impl CameraSolveStore for Unsolved {
 pub fn active_camera_pose(doc: &Arc<Document>, comp: &Composition, t: f64) -> Option<CameraPose> {
     // The renderer hands its store over the first time it reads a solve, so
     // until then nothing has been solved.
-    let store: &dyn CameraSolveStore = match SOLVES.get() {
-        Some(store) => *store,
-        None => &Unsolved,
-    };
+    let store = solve_store().unwrap_or(&Unsolved);
     camera_pose_at(doc, comp, t, store).map(|linked| linked.pose)
 }
 
@@ -204,7 +206,8 @@ pub fn camera_pose_of(
 ) -> Option<LinkedPose> {
     let mut linked = own_camera_pose_of(doc, comp, layer, t, store)?;
     let context = crate::model::comp_context(doc, comp, t);
-    if let Some(space) = crate::model::parent_space(comp, layer, t, &context, Some(store)) {
+    let read = crate::model::context_reader(&context, t);
+    if let Some(space) = crate::model::parent_space(comp, layer, t, &read, Some((doc, store))) {
         linked.pose = space.pose(linked.pose);
     }
     Some(linked)
@@ -220,7 +223,8 @@ pub fn own_camera_pose_of(
     t: f64,
     store: &dyn CameraSolveStore,
 ) -> Option<LinkedPose> {
-    let stored = stored_camera_pose(layer, t, &crate::model::comp_context(doc, comp, t))?;
+    let context = crate::model::comp_context(doc, comp, t);
+    let stored = stored_camera_pose(layer, &crate::model::context_reader(&context, t))?;
     let LayerKind::Camera {
         solve_link,
         correction_base,

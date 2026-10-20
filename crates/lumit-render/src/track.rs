@@ -1071,8 +1071,15 @@ pub fn point_centroid(media: Uuid, tracks: &[u32]) -> Option<[f64; 3]> {
     (n > 0).then(|| sum.map(|s| s / f64::from(n)))
 }
 
+/// The renderer's solves with `doc`, for the parent walk: a solved camera among
+/// a layer's parents is placed by its solve.
+#[must_use]
+pub fn solves_for(doc: &Arc<Document>) -> lumit_core::model::Solves<'_> {
+    Some((doc, &Store))
+}
+
 /// The **active** camera's placement at comp time `t`, with its solve link
-/// followed. The reading the render path takes, replacing
+/// and its parents followed. The reading the render path takes, replacing
 /// [`lumit_core::model::Composition::camera_pose`], which answers only what the
 /// document holds. With no camera layer it is the default camera After
 /// Effects draws 3D layers through.

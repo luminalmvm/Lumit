@@ -155,15 +155,6 @@ pub fn eye_behind(pivot: (f64, f64, f64), deg: (f64, f64, f64), distance: f64) -
     )
 }
 
-/// Where a layer's own space sits in the comp: a turn and stretch, then a
-/// shift. A camera or a light under a parent is read in the space the parent
-/// chain makes, exactly as any other layer is.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Space {
-    pub linear: Mat3,
-    pub origin: (f64, f64, f64),
-}
-
 /// A camera's or a light's own values: the eye, the rotation rows and, on a
 /// two-node camera, the point of interest. All of them are read in the parent's
 /// space, the point of interest too, as After Effects reads them.
@@ -174,76 +165,16 @@ pub struct Eye {
     pub point_of_interest: Option<(f64, f64, f64)>,
 }
 
-impl Space {
-    /// One layer's placement, the compositor's
-    /// `T(position) · Ry · Rx · Rz · S(scale / 100) · T(-anchor)`.
-    #[must_use]
-    pub fn of_layer(
-        position: (f64, f64, f64),
-        anchor: (f64, f64),
-        scale: (f64, f64),
-        rotation_deg: (f64, f64, f64),
-    ) -> Self {
-        let r = rotation(rotation_deg);
-        let s = [scale.0 / 100.0, scale.1 / 100.0, 1.0];
-        let linear = r.map(|row| [row[0] * s[0], row[1] * s[1], row[2] * s[2]]);
-        let a = apply(&linear, (anchor.0, anchor.1, 0.0));
-        Self {
-            linear,
-            origin: (position.0 - a.0, position.1 - a.1, position.2 - a.2),
-        }
-    }
-
-    /// `inner` placed inside this space.
-    #[must_use]
-    pub fn compose(&self, inner: &Space) -> Space {
-        Space {
-            linear: mul(&self.linear, &inner.linear),
-            origin: self.point(inner.origin),
-        }
-    }
-
-    #[must_use]
-    pub fn point(&self, p: (f64, f64, f64)) -> (f64, f64, f64) {
-        let v = apply(&self.linear, p);
-        (
-            v.0 + self.origin.0,
-            v.1 + self.origin.1,
-            v.2 + self.origin.2,
-        )
-    }
-
-    /// The space that undoes this one. `None` under a parent scaled to nought.
-    #[must_use]
-    pub fn inverse(&self) -> Option<Space> {
-        let m = &self.linear;
-        let cof = |r0: usize, r1: usize, c0: usize, c1: usize| {
-            m[r0][c0] * m[r1][c1] - m[r0][c1] * m[r1][c0]
-        };
-        let det = m[0][0] * cof(1, 2, 1, 2) - m[0][1] * cof(1, 2, 0, 2) + m[0][2] * cof(1, 2, 0, 1);
-        if det.abs() < 1e-12 || !det.is_finite() {
-            return None;
-        }
-        let linear = [
-            [cof(1, 2, 1, 2), -cof(0, 2, 1, 2), cof(0, 1, 1, 2)],
-            [-cof(1, 2, 0, 2), cof(0, 2, 0, 2), -cof(0, 1, 0, 2)],
-            [cof(1, 2, 0, 1), -cof(0, 2, 0, 1), cof(0, 1, 0, 1)],
-        ]
-        .map(|row| row.map(|v| v / det));
-        let o = apply(&linear, self.origin);
-        Some(Space {
-            linear,
-            origin: (-o.0, -o.1, -o.2),
-        })
-    }
-
+/// How a camera or a light is read in a parent's space, which has no turn
+/// of its own to give it when the parent is stretched.
+impl Place {
     /// A turn made in this space, as the comp sees it. A camera has no scale,
     /// so a stretched space is squared up, forward first: the camera still
     /// looks exactly where the stretched space says, and only its up is
     /// nudged square to that.
     #[must_use]
     pub fn turn(&self, deg: (f64, f64, f64)) -> (f64, f64, f64) {
-        let m = mul(&self.linear, &rotation(deg));
+        let m = mul(&self.m, &rotation(deg));
         let unit = |v: (f64, f64, f64)| {
             let len = (v.0 * v.0 + v.1 * v.1 + v.2 * v.2).sqrt();
             (len > 1e-12).then(|| (v.0 / len, v.1 / len, v.2 / len))
@@ -307,14 +238,6 @@ impl Space {
             ..pose
         }
     }
-}
-
-fn apply(m: &Mat3, p: (f64, f64, f64)) -> (f64, f64, f64) {
-    (
-        m[0][0] * p.0 + m[0][1] * p.1 + m[0][2] * p.2,
-        m[1][0] * p.0 + m[1][1] * p.1 + m[1][2] * p.2,
-        m[2][0] * p.0 + m[2][1] * p.1 + m[2][2] * p.2,
-    )
 }
 
 /// The After Effects focal lengths the settings dialog offers, millimetres.

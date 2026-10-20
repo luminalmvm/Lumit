@@ -686,9 +686,9 @@ impl LayerReference {
                 &lumit_render::track::Store,
             )?;
             let context = lumit_core::model::comp_context(doc, comp, t);
-            let solves =
-                Some(&lumit_render::track::Store as &dyn lumit_core::track::CameraSolveStore);
-            let poi = lumit_core::model::point_of_interest(comp, layer, t, &context, solves)?;
+            let read = lumit_core::model::context_reader(&context, t);
+            let solves = lumit_render::track::solves_for(doc);
+            let poi = lumit_core::model::point_of_interest(comp, layer, t, &read, solves)?;
             Some(crate::api::layer::BridgeCameraAim {
                 pose: crate::api::layer::BridgeCameraPose::of(pose.pose),
                 poi_x: poi.0,
@@ -710,10 +710,10 @@ impl LayerReference {
     ) -> Result<crate::api::layer::BridgeCameraAim, BridgeError> {
         let own = self.with_camera_at(frame, |doc, comp, layer, t| {
             let context = lumit_core::model::comp_context(doc, comp, t);
-            let solves =
-                Some(&lumit_render::track::Store as &dyn lumit_core::track::CameraSolveStore);
-            let back = lumit_core::model::parent_space(comp, layer, t, &context, solves)?;
-            let back = back.inverse()?;
+            let read = lumit_core::model::context_reader(&context, t);
+            let solves = lumit_render::track::solves_for(doc);
+            let back = lumit_core::model::parent_space(comp, layer, t, &read, solves)?;
+            let back = back.invert()?;
             let p = aim.pose;
             let eye = back.carry(lumit_core::camera::Eye {
                 position: (p.x, p.y, p.z),

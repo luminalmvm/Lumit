@@ -405,7 +405,8 @@ fn feed_comp(
     // only when the comp actually has one, so every key made before lighting
     // existed stays valid. A Light layer draws no pixels of its own, so
     // nothing else in this walk would notice it moving.
-    let lights = comp.lights_at(t, &lumit_core::model::comp_context(doc, comp, t));
+    let context = lumit_core::model::comp_context(doc, comp, t);
+    let lights = comp.lights_at(t, &lumit_core::model::context_reader(&context, t));
     if !lights.is_empty() {
         h.update(b"lights/");
         if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
@@ -1586,8 +1587,9 @@ fn feed_layer(
     if layer.parent.is_some() {
         h.update(b"parents/");
         let context = lumit_core::model::comp_context(doc, comp, t);
-        let solves = stamper.solves();
-        for (_, p) in lumit_core::model::parent_placements(comp, layer, t, &context, solves) {
+        let read = lumit_core::model::context_reader(&context, t);
+        let solves = stamper.solves().map(|store| (doc, store));
+        for (_, p) in lumit_core::model::parent_placements(comp, layer, t, &read, solves) {
             for v in [
                 p.position.0,
                 p.position.1,
