@@ -6327,6 +6327,12 @@ mod tests {
             &mut stream,
         )
         .expect("the Top frame");
+        // A build with no zero-copy transport drops that frame rather than
+        // making it, so make it here. Where it was made, this just finds it.
+        let shown = super::viewed_through(None, state.camera_view(), document.clone());
+        let bgra = super::zero_copy_wants_bgra();
+        super::prepare_frame(&mut state, &shown, comp, 0, quality, bgra, true)
+            .expect("the Top frame, held");
         crate::framecache::bar::want(comp, 4, 1000);
         super::publish_cache_bar(&mut state, &mut stream);
         let strip = crate::framecache::bar::read(comp, 4, 1000);
