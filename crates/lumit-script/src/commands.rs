@@ -580,6 +580,7 @@ fn layer_json(comp: &Composition, layer: &Layer) -> Value {
         "out": exact(layer.out_point.0),
         "start_offset": exact(layer.start_offset.0),
         "three_d": s.three_d,
+        "after_effects_order": layer.transform.after_effects_order,
         "switches": {
             "visible": s.visible,
             "audible": s.audible,
