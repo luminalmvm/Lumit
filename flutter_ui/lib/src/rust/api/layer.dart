@@ -727,6 +727,9 @@ class BridgeLayerInfo {
   /// which is exactly what decides whether the fold-out shows a Retime row.
   final BridgeScalar? retime;
 
+  /// Sound played faster or slower changes pitch with the speed.
+  final bool pitchFollowsSpeed;
+
   /// The layer's masks, bottom of the stack first. Carried in the
   /// read model for the same reason the effects are: the Timeline's
   /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -851,6 +854,7 @@ class BridgeLayerInfo {
     required this.label,
     this.matte,
     this.retime,
+    required this.pitchFollowsSpeed,
     required this.masks,
     required this.paint,
     this.puppet,
@@ -891,6 +895,7 @@ class BridgeLayerInfo {
       label.hashCode ^
       matte.hashCode ^
       retime.hashCode ^
+      pitchFollowsSpeed.hashCode ^
       masks.hashCode ^
       paint.hashCode ^
       puppet.hashCode ^
@@ -933,6 +938,7 @@ class BridgeLayerInfo {
           label == other.label &&
           matte == other.matte &&
           retime == other.retime &&
+          pitchFollowsSpeed == other.pitchFollowsSpeed &&
           masks == other.masks &&
           paint == other.paint &&
           puppet == other.puppet &&
@@ -3936,6 +3942,12 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetParent(
           that: this, parent: parent, frame: frame);
 
+  /// Whether this layer's sound changes pitch when it plays faster or
+  /// slower. Off keeps the pitch where it was.
+  void setPitchFollowsSpeed({required bool follows}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetPitchFollowsSpeed(
+          that: this, follows: follows);
+
   /// Give this layer a puppet, replace the one it has, or take it away.
   ///
   /// The whole block, because that is the op the engine has and it is exactly
@@ -4207,6 +4219,16 @@ class LayerReference {
   void stretch({required double speedPercent}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceStretch(
           that: this, speedPercent: speedPercent);
+
+  /// Stretch one clip so its edges land on `start_frame` and `end_frame`: it
+  /// plays the same stretch of source at whatever speed that takes, the way
+  /// dragging a clip's edge with Shift held does.
+  void stretchClip(
+          {required UuidValue clip,
+          required PlatformInt64 startFrame,
+          required PlatformInt64 endFrame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceStretchClip(
+          that: this, clip: clip, startFrame: startFrame, endFrame: endFrame);
 
   /// [`Self::stretch`] to the given ends, the way dragging either end of the
   /// bar with Shift held does. Moving the in point slides the whole layer so

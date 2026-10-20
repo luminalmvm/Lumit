@@ -3129,6 +3129,7 @@ fn master_carrier(nested: &Composition, offset_s: f64) -> Option<crate::export::
         offset_s,
         fade: None,
         chain: None,
+        retime: None,
     })
 }
 
@@ -3295,21 +3296,20 @@ impl AudioJobsBuilder {
         if !named && (!layer.switches.audible || (any_solo && !layer.switches.solo)) {
             return;
         }
-        // **A retimed layer is silent** (docs/04 §11.5, docs/09 §7),
-        // footage and Precomp alike: a map that stretches, freezes or runs
-        // a picture backwards has no honest reading for sound, and the
-        // rule is the one a Sequence clip's own map already follows. The
-        // row keeps its mute switch, since `kind_has_audio` is blind to
-        // this and a switch that vanished could never be pressed back.
-        if layer.retime.is_some() {
-            return;
-        }
         let in_s = (layer.in_point.0.to_f64() + base_s).max(window.0);
         let out_s = (layer.out_point.0.to_f64() + base_s).min(window.1);
         if out_s <= in_s {
             return;
         }
         let offset_s = layer.start_offset.0.to_f64() + base_s;
+        // A retimed layer's sound follows its map: a footage layer's file is
+        // read through it, and a Precomp's whole mix is.
+        let retime = layer.retime.as_ref().map(|map| crate::export::Retimed {
+            map: map.clone(),
+            origin_s: offset_s,
+            held: None,
+            pitch_follows_speed: layer.pitch_follows_speed,
+        });
         let strip = strip.unwrap_or(layer.id);
         match &layer.kind {
             LayerKind::Footage { item, .. } => {
@@ -3335,6 +3335,7 @@ impl AudioJobsBuilder {
                     driven: driven_volume_of(doc, comp, layer, offset_s, base_s),
                     chain: audio_chain_of(doc, comp, layer, offset_s, base_s),
                     clip_chain: None,
+                    retime: retime.map(Arc::new),
                 });
             }
             LayerKind::Precomp { comp: nested_id } => {
@@ -3343,6 +3344,25 @@ impl AudioJobsBuilder {
                 }
                 let Some(nested) = doc.comp(*nested_id) else {
                     return;
+                };
+                // Retimed, the comp is heard over the stretch of its own time
+                // the map reaches, and the sum read through the map.
+                let retime = retime.map(|retime| {
+                    Arc::new(crate::export::BusRetime {
+                        retime,
+                        zero_s: offset_s,
+                        span: (in_s, out_s),
+                    })
+                });
+                let reach = match &retime {
+                    Some(bus) => {
+                        let Some((lo, hi)) = crate::export::retimed_reach(&bus.retime, bus.span)
+                        else {
+                            return;
+                        };
+                        (offset_s + lo, offset_s + hi)
+                    }
+                    None => (in_s, out_s),
                 };
                 let mut inner = carriers.to_vec();
                 inner.push(crate::export::Carrier {
@@ -3354,6 +3374,7 @@ impl AudioJobsBuilder {
                     // arrives through this carrier and the rack hears the sum,
                     // ahead of the Volume and Pan beside it here.
                     chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
+                    retime,
                 });
                 inner.extend(master_carrier(nested, offset_s));
                 visited.push(*nested_id);
@@ -3361,7 +3382,7 @@ impl AudioJobsBuilder {
                     doc,
                     nested,
                     offset_s,
-                    (in_s, out_s),
+                    reach,
                     &inner,
                     Some(strip),
                     visited,
@@ -3400,8 +3421,8 @@ impl AudioJobsBuilder {
     /// the row's Volume, Pan and rack ride on the sum, and the clip's ramps
     /// and level ride beside them, worked out as any clip's are.
     ///
-    /// One exclusion, docs/09's: a **retimed** clip is silent (§7: retime
-    /// mutes audio in v1, and a clip's map is as much a retime as a layer's).
+    /// A **retimed** clip is heard through its map, a comp clip's whole mix
+    /// included.
     #[allow(clippy::too_many_arguments)]
     fn sequence_jobs(
         &mut self,
@@ -3455,9 +3476,17 @@ impl AudioJobsBuilder {
 
         for (at, &i) in order.iter().enumerate() {
             let clip = &clips[i];
-            if clip.retime.is_some() {
-                continue; // docs/09 §7: a retimed clip is silent in v1
-            }
+            // A retimed clip's sound follows its map, held inside its trim:
+            // a footage clip's file is read through it, and a comp clip's mix.
+            let retime = clip.retime.as_ref().map(|map| {
+                let (a, b) = (clip.source_in.to_f64(), clip.source_out.to_f64());
+                crate::export::Retimed {
+                    map: map.clone(),
+                    origin_s: offset_s + clip.place_start.to_f64(),
+                    held: Some((a.min(b), a.max(b))),
+                    pitch_follows_speed: layer.pitch_follows_speed,
+                }
+            });
             // The file a footage clip sounds from. A clip whose source is a
             // composition has none, and its comp is walked further down.
             let file = match clip.source {
@@ -3571,6 +3600,29 @@ impl AudioJobsBuilder {
                 else {
                     continue;
                 };
+                // The comp's own time 0 sits where the clip's source time 0
+                // does: the clip's start, less how far it is trimmed in.
+                let nested_s = start_s - clip.source_in.to_f64();
+                // Retimed, the comp is heard over the stretch of its own time
+                // the map reaches, and the sum read through the map.
+                let retime = retime.map(|retime| {
+                    Arc::new(crate::export::BusRetime {
+                        retime,
+                        zero_s: nested_s,
+                        span: (clip_in, clip_out),
+                    })
+                });
+                let reach = match &retime {
+                    Some(bus) => {
+                        let Some((lo, hi)) = crate::export::retimed_reach(&bus.retime, bus.span)
+                        else {
+                            continue;
+                        };
+                        (nested_s + lo, nested_s + hi)
+                    }
+                    None => (clip_in, clip_out),
+                };
+                let rack = clip_chain_of(doc, comp, layer, clip, start_s, base_s);
                 let mut inner = carriers.to_vec();
                 inner.push(crate::export::Carrier {
                     volume: layer.volume_db.clone(),
@@ -3580,29 +3632,30 @@ impl AudioJobsBuilder {
                     // The row's rack as a bus over the comp's sum, as a
                     // Precomp layer's is.
                     chain: bus_chain_of(doc, comp, layer, offset_s, base_s),
+                    // The retime is the clip's, so it goes on the innermost
+                    // carrier and is heard ahead of both racks.
+                    retime: if rack.is_none() { retime.clone() } else { None },
                 });
                 // The clip's own rack is a bus inside the row's, so it
                 // hears the comp first, as a footage clip's rack hears its
                 // file ahead of the row's.
-                if let Some(rack) = clip_chain_of(doc, comp, layer, clip, start_s, base_s) {
+                if let Some(rack) = rack {
                     inner.push(crate::export::Carrier {
                         volume: lumit_core::anim::Property::zero(),
                         pan: lumit_core::anim::Property::zero(),
                         offset_s: start_s,
                         fade: None,
                         chain: Some(rack),
+                        retime,
                     });
                 }
-                // The comp's own time 0 sits where the clip's source time 0
-                // does: the clip's start, less how far it is trimmed in.
-                let nested_s = start_s - clip.source_in.to_f64();
                 inner.extend(master_carrier(nested, nested_s));
                 visited.push(nested_id);
                 self.walk(
                     doc,
                     nested,
                     nested_s,
-                    (clip_in, clip_out),
+                    reach,
                     &inner,
                     Some(strip),
                     visited,
@@ -3636,6 +3689,7 @@ impl AudioJobsBuilder {
                 // tail does not cross a join.
                 chain: chain.clone(),
                 clip_chain: clip_chain_of(doc, comp, layer, clip, start_s, base_s),
+                retime: retime.map(Arc::new),
             });
         }
     }
@@ -4324,6 +4378,7 @@ mod tests {
             audio_only: false,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -4411,6 +4466,7 @@ mod tests {
             audio_only: false,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -4497,6 +4553,7 @@ mod tests {
             let comp_id = Uuid::now_v7();
             let layer = lumit_core::model::Layer {
                 adjustment: false,
+                pitch_follows_speed: false,
                 graph: Default::default(),
                 markers: Vec::new(),
                 id: Uuid::now_v7(),
@@ -5340,18 +5397,17 @@ mod tests {
             assert!((a * a + b * b - 1.0).abs() < 1e-5, "t={t}: not equal power");
         }
 
-        // docs/09 §7: a retimed clip is silent, like a retimed layer.
+        // A retimed clip is heard through its map, held inside its trim.
         if let Some(ProjectItem::Composition(c)) = doc.item_mut(comp) {
             if let LayerKind::Sequence { clips } = &mut c.layers[0].kind {
                 clips[0].retime = Some(lumit_core::anim::Property::fixed(0.0));
             }
         }
         let c = doc.comp(comp).expect("comp").clone();
-        assert_eq!(
-            builder.audio_jobs(&Arc::new(doc.clone()), &c).len(),
-            2,
-            "the retimed clip drops out of the mix"
-        );
+        let jobs = builder.audio_jobs(&Arc::new(doc.clone()), &c);
+        assert_eq!(jobs.len(), 3, "the retimed clip stays in the mix");
+        let retimed = jobs[0].retime.as_ref().expect("it plays through its map");
+        assert_eq!(retimed.held, Some((0.0, 1.0)), "inside its trim");
     }
 
     /// **A clip whose source is a composition is heard.** The comp's own mix
@@ -6233,6 +6289,7 @@ mod tests {
             audio_only: false,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

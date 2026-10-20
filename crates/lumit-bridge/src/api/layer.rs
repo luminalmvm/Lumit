@@ -1830,6 +1830,8 @@ pub struct BridgeLayerInfo {
     /// The Retime property, or None when the layer is not retimed —
     /// which is exactly what decides whether the fold-out shows a Retime row.
     pub retime: Option<BridgeScalar>,
+    /// Sound played faster or slower changes pitch with the speed.
+    pub pitch_follows_speed: bool,
     /// The layer's masks, bottom of the stack first. Carried in the
     /// read model for the same reason the effects are: the Timeline's
     /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -2170,6 +2172,7 @@ pub(crate) fn read_layer_info(
             .retime
             .as_ref()
             .map(|r| BridgeScalar::read_at(r, layer.start_offset.0)),
+        pitch_follows_speed: layer.pitch_follows_speed,
         masks: layer
             .masks
             .iter()
@@ -4615,6 +4618,38 @@ impl LayerReference {
         self.commit_clips(clips)
     }
 
+    /// Stretch one clip so its edges land on `start_frame` and `end_frame`: it
+    /// plays the same stretch of source at whatever speed that takes, the way
+    /// dragging a clip's edge with Shift held does.
+    #[frb(sync)]
+    pub fn stretch_clip(
+        &self,
+        clip: Uuid,
+        start_frame: i64,
+        end_frame: i64,
+    ) -> Result<(), BridgeError> {
+        let (mut clips, index) = self.clips_and_index(clip)?;
+        let comp = self.composition()?;
+        let layer = self.item()?;
+        let start = self.layer_time_of_frame(&comp, &layer, start_frame)?;
+        let end = self.layer_time_of_frame(&comp, &layer, end_frame)?;
+        clips[index] = clips[index]
+            .stretched(start, end)
+            .ok_or(BridgeError::InvalidTime)?;
+        self.commit_clips(clips)
+    }
+
+    /// Whether this layer's sound changes pitch when it plays faster or
+    /// slower. Off keeps the pitch where it was.
+    #[frb(sync)]
+    pub fn set_pitch_follows_speed(&self, follows: bool) -> Result<(), BridgeError> {
+        self.commit(lumit_core::Op::SetLayerPitchFollowsSpeed {
+            comp: self.comp_id,
+            layer: self.layer_id,
+            follows,
+        })
+    }
+
     /// This layer's clips and the index of `clip` among them.
     #[frb(ignore)]
     fn clips_and_index(
@@ -6609,42 +6644,8 @@ impl LayerReference {
         let Animation::Keyframed(keys) = &map.animation else {
             return Err(BridgeError::NotRetimed);
         };
-        let kf = k.to_f64();
-        // A stored side speed is value-units per **second** of local time, so
-        // stretching the times divides it. Influence is a fraction of the span
-        // and so survives untouched.
-        let slower = |side: lumit_core::anim::SideInterp| match side {
-            lumit_core::anim::SideInterp::Bezier { speed, influence } => {
-                lumit_core::anim::SideInterp::Bezier {
-                    speed: speed / kf,
-                    influence,
-                }
-            }
-            lumit_core::anim::SideInterp::Auto {
-                clamped,
-                speed,
-                influence,
-            } => lumit_core::anim::SideInterp::Auto {
-                clamped,
-                speed: speed / kf,
-                influence,
-            },
-            other => other,
-        };
-        let mut scaled = Vec::with_capacity(keys.len());
-        for key in keys {
-            scaled.push(Keyframe {
-                time: key
-                    .time
-                    .checked_sub(in_local)
-                    .and_then(|d| d.checked_mul(k))
-                    .and_then(|d| in_local.checked_add(d))
-                    .map_err(bad)?,
-                value: key.value,
-                interp_in: slower(key.interp_in),
-                interp_out: slower(key.interp_out),
-            });
-        }
+        let scaled =
+            lumit_core::retime::stretch_keys(keys, in_local, k).ok_or(BridgeError::InvalidTime)?;
 
         self.commit(lumit_core::Op::Batch {
             ops: vec![

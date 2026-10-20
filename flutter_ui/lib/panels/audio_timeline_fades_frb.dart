@@ -248,6 +248,7 @@ class _AudioFadeLayerState extends State<AudioFadeLayer> {
         shift: shift,
         sub: 0,
         at: held.at,
+        stretch: false,
       ));
       return;
     }

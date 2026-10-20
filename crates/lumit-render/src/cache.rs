@@ -473,6 +473,7 @@ mod tests {
                 audio_only: false,
                 audio_streams: Default::default(),
                 adjustment: false,
+                pitch_follows_speed: false,
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,

@@ -1128,6 +1128,7 @@ pub fn read_layer(id: Uuid, item: &ProjectItem, comp: &Composition) -> Option<La
         audio_only: false,
         audio_streams: Default::default(),
         adjustment: false,
+        pitch_follows_speed: false,
         retime: None,
         interpolation: crate::retime::Interpolation::default(),
         parked_flow: None,

@@ -316,6 +316,13 @@ pub enum Op {
         layer: Uuid,
         adjustment: bool,
     },
+    /// Whether a layer's sound changes pitch with its speed
+    /// ([`crate::model::Layer::pitch_follows_speed`]).
+    SetLayerPitchFollowsSpeed {
+        comp: Uuid,
+        layer: Uuid,
+        follows: bool,
+    },
     /// Mute or unmute a layer's audio (the audible switch).
     SetLayerAudible {
         comp: Uuid,
@@ -876,6 +883,7 @@ impl Op {
             Op::SetSequenceClips { .. } => "Edit clips",
             Op::SetLayerKind { .. } => "Change layer kind",
             Op::SetLayerAdjustment { .. } => "Adjustment switch",
+            Op::SetLayerPitchFollowsSpeed { .. } => "Keep pitch",
             Op::SetLayerAudible { .. } => "Audible switch",
             Op::SetLayerVisible { .. } => "Visible switch",
             Op::SetLayerSolo { .. } => "Solo switch",
@@ -983,6 +991,7 @@ fn lock_guards(op: &Op) -> Option<(Uuid, Uuid)> {
         | Op::SetSequenceClips { comp, layer, .. }
         | Op::SetLayerKind { comp, layer, .. }
         | Op::SetLayerAdjustment { comp, layer, .. }
+        | Op::SetLayerPitchFollowsSpeed { comp, layer, .. }
         | Op::SetLayerAudible { comp, layer, .. }
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }
@@ -1047,6 +1056,7 @@ fn comp_guards(op: &Op) -> Option<Uuid> {
         | Op::SetSequenceClips { comp, .. }
         | Op::SetLayerKind { comp, .. }
         | Op::SetLayerAdjustment { comp, .. }
+        | Op::SetLayerPitchFollowsSpeed { comp, .. }
         | Op::SetLayerAudible { comp, .. }
         | Op::SetLayerVisible { comp, .. }
         | Op::SetLayerSolo { comp, .. }
@@ -1594,6 +1604,24 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 adjustment: previous,
+            })
+        }
+        Op::SetLayerPitchFollowsSpeed {
+            comp,
+            layer,
+            follows,
+        } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let l = c
+                .layers
+                .iter_mut()
+                .find(|l| l.id == *layer)
+                .ok_or(OpError::UnknownLayer)?;
+            let previous = std::mem::replace(&mut l.pitch_follows_speed, *follows);
+            Ok(Op::SetLayerPitchFollowsSpeed {
+                comp: *comp,
+                layer: *layer,
+                follows: previous,
             })
         }
         Op::SetLayerThreeD {
