@@ -53,6 +53,27 @@ The camera tools move the active camera, or the view the Viewer is looking throu
   An orbit in one of them carries it into the last custom view.
 - A camera placed by an expression does not move.
 
+## 3D views
+
+**View ▸ Switch 3D view** picks what the Viewer looks through. Each view keeps its own.
+
+| Command | Keys | What it does |
+| --- | --- | --- |
+| 3D view shortcuts | `F10`, `F11`, `F12` | Switch to Front, Custom view 1 and Active camera, until reassigned. |
+| **Assign shortcut to** | `Shift+F10`, `Shift+F11`, `Shift+F12` | Put the current 3D view on that key. |
+| **Switch to last 3D view** | `Esc` | Go back to the view before, and again to return. Taken only when nothing else on screen uses `Esc`. |
+| **Back to active camera** | | Look through the composition's camera again. |
+| **Look at selected layers** | `Ctrl+Alt+Shift+\`, or `F` with a camera tool | Move the view, or the active camera, so the selected 3D layers fill the picture. Locked layers count, hidden ones do not. |
+| **Look at all layers** | `Ctrl+Shift+\`, or `Ctrl+Shift+F` with a camera tool | The same for every 3D layer. |
+| **Reset 3D view** | | Put a view back where it starts, or the active camera where a new camera stands. |
+| **Create camera from 3D view** | | Add a camera where a custom view looks from. |
+
+`Ctrl` is `Cmd` on macOS, where `F10` to `F12` need `Fn` and `F11` shows the desktop unless
+that is turned off.
+
+A camera moved by these takes a key at the playhead where it is keyed, Reset included, as one
+undo step.
+
 ## 3D handles
 
 A selected 3D layer, light or camera has three arrows at its anchor: x red, y green, z blue.
