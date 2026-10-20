@@ -67,6 +67,48 @@ pub struct BridgeMediaSize {
 }
 
 impl CompositionReference {
+    /// How the picture sees the comp's 3D space at `frame`: twelve numbers,
+    /// three rows of four, taking a comp-space `(x, y, z, 1)` to `(X, Y, W)`,
+    /// with the comp pixel at `(X / W, Y / W)` and `W` above 0 in front of the
+    /// eye. Through `view` when one is given, otherwise through the comp's
+    /// active camera as the render poses it, aim and solve link included.
+    /// With no camera at all a 3D layer is drawn flat, and so are the rows.
+    /// Asked once per frame, view or document change and held.
+    #[frb(sync)]
+    pub fn view_projection(
+        &self,
+        frame: u64,
+        view: Option<BridgeCameraPose>,
+    ) -> Result<Vec<f64>, BridgeError> {
+        let doc = {
+            let proj = self.project()?;
+            let proj = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+            proj.store.snapshot()
+        };
+        let comp = doc.comp(self.id).ok_or(BridgeError::InvalidComp)?;
+        let t = comp
+            .frame_rate
+            .time_of_frame(i64::try_from(frame).unwrap_or(i64::MAX))
+            .map_err(|_| BridgeError::InvalidComp)?
+            .0
+            .to_f64();
+        let pose = match view {
+            Some(view) => Some(view.core()),
+            None => lumit_render::track::camera_pose(&doc, comp, t),
+        };
+        let rows = match pose {
+            Some(pose) => {
+                lumit_core::camera::projection(&pose, f64::from(comp.width), f64::from(comp.height))
+            }
+            None => [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        };
+        Ok(rows.concat())
+    }
+
     /// The wireframes at `frame`, projected through `view`. Asked once per
     /// frame change or view change, never per rebuild.
     #[frb(sync)]
