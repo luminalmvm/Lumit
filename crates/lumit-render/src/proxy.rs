@@ -157,6 +157,7 @@ pub fn transcode(
         bit_rate: None,
         max_rate: None,
         colour: ColourTags::default(),
+        depth: lumit_media::encode::BitDepth::Eight,
     };
     let mut encoder =
         Encoder::open(dest, Some(&settings), None, &Metadata::new()).map_err(|e| e.to_string())?;
@@ -211,6 +212,7 @@ mod tests {
             bit_rate: None,
             max_rate: None,
             colour: ColourTags::default(),
+            depth: lumit_media::encode::BitDepth::Eight,
         };
         let mut enc = Encoder::open(&source, Some(&settings), None, &Metadata::new()).unwrap();
         for n in 0..12u8 {
@@ -299,6 +301,7 @@ mod tests {
             bit_rate: None,
             max_rate: None,
             colour: ColourTags::default(),
+            depth: lumit_media::encode::BitDepth::Eight,
         };
         let mut enc = Encoder::open(&source, Some(&settings), None, &Metadata::new()).unwrap();
         for _ in 0..12 {

@@ -539,6 +539,13 @@ fn deinterleave_to_yuv420p(src: &AVFrame) -> Result<AVFrame, MediaError> {
     out.alloc_buffer()
         .map_err(|e| MediaError::Ffmpeg(e.to_string()))?;
     sws.scale_frame(src, 0, src.height, &mut out)?;
+    // Keep what the file says about its colour, which the RGBA tap reads.
+    // SAFETY: both frames are valid and ours; this copies plain fields and
+    // side data, never the planes.
+    #[allow(unsafe_code)]
+    unsafe {
+        ffi::av_frame_copy_props(out.as_mut_ptr(), src.as_ptr());
+    }
     Ok(out)
 }
 
@@ -888,6 +895,7 @@ fn convert_sized(frame: &AVFrame, dst_w: i32, dst_h: i32) -> Result<DecodedFrame
         None,
     )
     .ok_or_else(|| MediaError::Ffmpeg("swscale context creation failed".into()))?;
+    crate::probe::use_yuv_matrix(&mut sws, frame.colorspace, src_h, true);
 
     let mut out = AVFrame::new();
     out.set_width(dst_w);

@@ -176,6 +176,7 @@ pub fn transcode(
         bit_rate: Some(rate),
         max_rate: Some(rate.saturating_mul(2)),
         colour: ColourTags::default(),
+        depth: lumit_media::encode::BitDepth::Eight,
     };
     // The sound whole, because whoever reads this file has no other.
     let sound = match &probe.audio {
@@ -344,6 +345,7 @@ mod tests {
             bit_rate: None,
             max_rate: None,
             colour: ColourTags::default(),
+            depth: lumit_media::encode::BitDepth::Eight,
         };
         let mut enc = Encoder::open(&source, Some(&settings), None, &Metadata::new()).unwrap();
         for n in 0..40u8 {
