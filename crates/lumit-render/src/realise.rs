@@ -2011,17 +2011,14 @@ impl Realiser<'_> {
         // does — and multiplying a placement by 1.0 moves nothing, so the
         // composite below is byte for byte what it was.
         let mut grown: Vec<(f32, f32)> = Vec::with_capacity(layers.len());
-        // Where a highlight is seen from: the camera, or with none the eye
-        // After Effects' default camera has, centred and a 50 mm lens away.
-        let eye = match camera {
-            Some(c) => [c.position.0, c.position.1, c.position.2],
-            None => [
-                f64::from(width) / 2.0,
-                f64::from(height) / 2.0,
-                -lumit_core::camera::default_zoom(f64::from(width)),
-            ],
-        }
-        .map(|v| v as f32);
+        // Where a highlight is seen from: the camera the frame is drawn
+        // through, which is the default one when the comp has no camera.
+        let eye = camera
+            .unwrap_or_else(|| {
+                lumit_core::camera::default_pose(f64::from(width), f64::from(height))
+            })
+            .position;
+        let eye = [eye.0, eye.1, eye.2].map(|v| v as f32);
         for l in layers {
             // One row's own cost: its source uploaded and linearised (or its
             // Precomp realised entire) and then its effect stack. The composite

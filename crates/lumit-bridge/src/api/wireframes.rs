@@ -56,7 +56,9 @@ pub enum BridgeWireLightKind {
 
 /// A light: where it is, for its mark, and its lines. A spot has its cone
 /// (the edge and where the feather starts, as two rings) and the line it
-/// shines along; an area light has its rectangle.
+/// shines along, out to its point of interest when it has one; a parallel
+/// light has the line its rays run along, and an area light its rectangle.
+/// An ambient light has no place, so none is drawn.
 #[frb(non_opaque)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct BridgeWireLight {
@@ -574,6 +576,14 @@ impl CompositionReference {
                     let cam = cam.pose;
                     let eye = cam.position;
                     reach_to.push(eye);
+                    let poi = options.two_node.then(|| {
+                        (
+                            options.point_of_interest[0].value_at(lt),
+                            options.point_of_interest[1].value_at(lt),
+                            options.point_of_interest[2].value_at(lt),
+                        )
+                    });
+                    reach_to.extend(poi);
                     if !wanted(layer.id) {
                         continue;
                     }
@@ -614,12 +624,7 @@ impl CompositionReference {
                     ring(&front, &mut segs);
                     ring(&back, &mut segs);
                     segs.extend(front.iter().zip(&back).map(|(a, b)| (*a, *b)));
-                    if options.two_node {
-                        let poi = (
-                            options.point_of_interest[0].value_at(lt),
-                            options.point_of_interest[1].value_at(lt),
-                            options.point_of_interest[2].value_at(lt),
-                        );
+                    if let Some(poi) = poi {
                         segs.push((eye, poi));
                     }
                     drops.push(eye);
@@ -627,24 +632,80 @@ impl CompositionReference {
                 }
                 K::Light { light } => {
                     use lumit_core::model::LightKind as L;
-                    let m = place((0.0, 0.0), (100.0, 100.0));
+                    // Light from everywhere has no place to mark.
+                    if light.kind == L::Ambient {
+                        continue;
+                    }
+                    // Placed as the lighting pass places it: an aimed light
+                    // faces its point of interest, its rows on top.
+                    let own = (
+                        tr.position_x.value_at(lt),
+                        tr.position_y.value_at(lt),
+                        tr.position_z.value_at(lt),
+                    );
+                    let stored = (
+                        tr.rotation_x.value_at(lt),
+                        tr.rotation_y.value_at(lt),
+                        tr.rotation.value_at(lt),
+                    );
+                    let poi = light.two_node.then(|| {
+                        (
+                            light.point_of_interest[0].value_at(lt),
+                            light.point_of_interest[1].value_at(lt),
+                            light.point_of_interest[2].value_at(lt),
+                        )
+                    });
+                    let (rx, ry, rz) = poi
+                        .and_then(|poi| lumit_core::camera::look_at(own, poi, stored))
+                        .unwrap_or(stored);
+                    let m = {
+                        let aimed = lumit_render::place_matrix(
+                            (own.0 as f32, own.1 as f32),
+                            (0.0, 0.0),
+                            (100.0, 100.0),
+                            rz as f32,
+                            own.2 as f32,
+                            rx as f32,
+                            ry as f32,
+                        )
+                        .map(|c| c.map(f64::from));
+                        match &parent {
+                            Some(p) => compose(p, &aimed),
+                            None => aimed,
+                        }
+                    };
                     let at = apply(&m, (0.0, 0.0, 0.0));
                     reach_to.push(at);
+                    reach_to.extend(poi);
                     if !wanted(layer.id) {
                         continue;
                     }
+                    // How far the cone or the rays are drawn along the light's
+                    // own z: to the point of interest, or a fifth of the comp.
+                    let reach = poi
+                        .map(|poi| dot(sub(poi, own), sub(poi, own)).sqrt())
+                        .filter(|d| *d > 1.0)
+                        .unwrap_or(w * 0.2);
                     let mut segs = Vec::new();
                     let kind = match light.kind {
-                        L::Point | L::Parallel | L::Ambient => BridgeWireLightKind::Point,
+                        L::Point | L::Ambient => BridgeWireLightKind::Point,
+                        L::Parallel => {
+                            // Every ray runs the same way, so one line shows it.
+                            segs.push((at, apply(&m, (0.0, 0.0, reach))));
+                            BridgeWireLightKind::Point
+                        }
                         L::Spot => {
-                            // The rings sit a fifth of the comp's width along
-                            // the light's own z, which it shines down.
-                            let reach = w * 0.2;
                             let half = (light.cone_angle.value_at(lt) * 0.5).clamp(0.0, 85.0);
-                            // Where the feather starts: the fixed tenth of the
-                            // cone's cosine the lighting kernel softens over.
-                            let c = half.to_radians().cos();
-                            let inner = (c + (1.0 - c) * 0.1).clamp(-1.0, 1.0).acos();
+                            // Where the feather starts, as the lighting pass
+                            // has it: a share of the cone's angle, or of its
+                            // cosine for a light from before the row.
+                            let feather = light.cone_feather.value_at(lt).clamp(0.0, 100.0) / 100.0;
+                            let inner = if light.legacy_shape {
+                                let c = half.to_radians().cos();
+                                (c + (1.0 - c) * feather).clamp(-1.0, 1.0).acos()
+                            } else {
+                                (half * (1.0 - feather)).to_radians()
+                            };
                             let circle = |angle: f64| -> Vec<P3> {
                                 let r = reach * angle.tan();
                                 (0..48)

@@ -91,7 +91,9 @@ class BridgeWireLayer {
 
 /// A light: where it is, for its mark, and its lines. A spot has its cone
 /// (the edge and where the feather starts, as two rings) and the line it
-/// shines along; an area light has its rectangle.
+/// shines along, out to its point of interest when it has one; a parallel
+/// light has the line its rays run along, and an area light its rectangle.
+/// An ambient light has no place, so none is drawn.
 class BridgeWireLight {
   final UuidValue layer;
   final BridgeWireLightKind kind;
