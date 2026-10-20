@@ -70,7 +70,8 @@ pub mod schedule;
 ///   on screen, Scene depth lets a higher group of 3D layers cover a lower
 ///   one, and an adjustment layer's Depth row pointed at itself reads the 3D
 ///   layers below.
-pub const ALGO_VERSION: u32 = 14;
+/// * 15: shadows are drawn, where a light and a layer cast them.
+pub const ALGO_VERSION: u32 = 15;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -446,6 +447,11 @@ fn feed_comp(
             }
             for c in l.colour {
                 feed_f64(h, f64::from(c));
+            }
+            if l.shadow_darkness > 0.0 {
+                h.update(b"shadows/");
+                feed_f64(h, f64::from(l.shadow_darkness));
+                feed_f64(h, f64::from(l.shadow_diffusion));
             }
         }
     }
@@ -1629,9 +1635,17 @@ fn feed_layer(
         && **m != lumit_core::model::Material::legacy()
     {
         h.update(b"material");
-        for p in [&m.ambient, &m.diffuse, &m.specular, &m.shininess, &m.metal] {
+        for p in [
+            &m.ambient,
+            &m.diffuse,
+            &m.specular,
+            &m.shininess,
+            &m.metal,
+            &m.light_transmission,
+        ] {
             feed_f64(h, p.value_at(lt));
         }
+        h.update(&[m.casts_shadows as u8, m.accepts_shadows as u8]);
     }
     // Collapse changes how a Precomp composites (docs/06 §1.4), so it is
     // content. Hashed only when set, so every pre-collapse key stays valid.
@@ -4635,12 +4649,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 14, which renamed every frame.
+        // Pinned under ALGO_VERSION 15, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                339_084_335_608_038_227_168_470_244_507_938_380_466,
-                217_236_650_918_990_969_634_543_205_351_335_580_445
+                115_094_099_329_550_942_698_573_664_903_240_632_315,
+                134_226_275_403_338_071_672_715_221_392_344_839_471
             )
         );
 

@@ -70,6 +70,11 @@ pub struct ShadingLight {
     /// Unit vector a spot is aimed along, and the way a parallel light's rays
     /// run.
     pub axis: [f32; 3],
+    /// How much of its light the shadows it casts take away, 0..1. Nought
+    /// casts none.
+    pub shadow_darkness: f32,
+    /// How soft those shadows are: the comp pixels their edges spread over.
+    pub shadow_diffusion: f32,
 }
 
 /// Which law shades a [`ShadingLight`].
@@ -135,6 +140,11 @@ pub struct ShadingMaterial {
     /// Linearize working space does. The lights' colours are then display
     /// encoded too, which is the caller's to do.
     pub encoded: bool,
+    /// Whether shadows fall on it, and Only to show nothing but them.
+    pub accepts_shadows: crate::model::ShadowMode,
+    /// Accepts lights off: the lights leave it as it is, but their shadows
+    /// still darken it, as in After Effects.
+    pub unlit: bool,
 }
 
 impl ShadingMaterial {
@@ -149,6 +159,8 @@ impl ShadingMaterial {
         metal: 1.0,
         eye: [0.0, 0.0, 0.0],
         encoded: false,
+        accepts_shadows: crate::model::ShadowMode::Off,
+        unlit: false,
     };
 
     /// After Effects' Specular shininess, a percentage, as the exponent: one
@@ -401,6 +413,274 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
+/// How many layers cast shadows in one frame. Beyond this the rest cast
+/// none: a budget, as the lights' is.
+pub const MAX_SHADOW_CASTERS: usize = 16;
+
+/// Rays closer to the surface than this many comp pixels meet nothing, so a
+/// card lying on a floor does not shade the floor it sits in.
+const SHADOW_GAP: f32 = 0.5;
+
+/// Once this little of a light is left, the casters further on change nothing.
+const SHADOW_OPAQUE: f32 = 1e-3;
+
+/// A layer that casts shadows, as the lights see it: its plane in comp
+/// pixels, how much light passes through it, and its picture shrunk into a
+/// square with each smaller level averaged from the one before.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShadowCaster {
+    /// Where the picture's top-left corner sits.
+    pub origin: [f32; 3],
+    /// Its full width and height as edges in comp space.
+    pub u: [f32; 3],
+    pub v: [f32; 3],
+    /// After Effects' Light transmission, 0..1: how much of the light passing
+    /// through takes the layer's colour rather than stopping.
+    pub transmission: f32,
+    /// Where the picture sits in its square, as shares of the side: the
+    /// corner, then the width and height. See [`caster_box`].
+    pub place: [f32; 4],
+    /// Premultiplied RGBA, the first `size` texels square, each next half.
+    pub levels: Vec<Vec<f32>>,
+    pub size: u32,
+}
+
+/// How many levels a caster square of `size` has: down to a single texel.
+#[must_use]
+pub fn caster_levels(size: u32) -> u32 {
+    size.max(1).ilog2() + 1
+}
+
+/// Where a caster's picture sits in its square of `size`, in texels: the
+/// corner, then the width and height. The longer side fills three quarters,
+/// less where `spread`, the widest soft edge any light gives it in comp
+/// pixels, needs a wider empty margin to spread into. The shorter side keeps
+/// the plane's shape, so a texel is square in comp pixels.
+#[must_use]
+pub fn caster_box(size: u32, u_len: f32, v_len: f32, spread: f32) -> [u32; 4] {
+    let long = u_len.max(v_len).max(1e-6);
+    let share = (1.0 / (1.0 + 2.5 * spread.max(0.0) / long)).min(0.75);
+    let fill = size as f32 * share;
+    let w = ((fill * u_len / long).round() as u32).clamp(1, size);
+    let h = ((fill * v_len / long).round() as u32).clamp(1, size);
+    [(size - w) / 2, (size - h) / 2, w, h]
+}
+
+/// A caster's picture shrunk into `place` in its square, as the GPU stores
+/// it: eight bits a channel, `opacity` already applied, the colour display
+/// encoded where the comp lights an encoded picture, and the smaller levels.
+#[must_use]
+pub fn caster_square(
+    rgba: &[f32],
+    w: u32,
+    h: u32,
+    opacity: f32,
+    size: u32,
+    place: [u32; 4],
+    encoded: bool,
+) -> Vec<Vec<f32>> {
+    let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() / 255.0;
+    let [x0, y0, cw, ch] = place;
+    let texel = |x: i64, y: i64| -> [f32; 4] {
+        let x = x.clamp(0, i64::from(w) - 1) as usize;
+        let y = y.clamp(0, i64::from(h) - 1) as usize;
+        let i = (y * w as usize + x) * 4;
+        rgba.get(i..i + 4)
+            .map_or([0.0; 4], |p| [p[0], p[1], p[2], p[3]])
+    };
+    let mut first = vec![0.0f32; (size * size * 4) as usize];
+    if w > 0 && h > 0 {
+        for y in y0..(y0 + ch).min(size) {
+            for x in x0..(x0 + cw).min(size) {
+                let u = (x - x0) as f32 + 0.5;
+                let v = (y - y0) as f32 + 0.5;
+                let mut s = bilinear(&texel, u / cw as f32 * w as f32, v / ch as f32 * h as f32);
+                for c in &mut s {
+                    *c *= opacity;
+                }
+                if encoded && s[3] > 0.0 {
+                    for k in 0..3 {
+                        s[k] = encode(s[k] / s[3]) * s[3];
+                    }
+                }
+                let i = ((y * size + x) * 4) as usize;
+                for k in 0..4 {
+                    first[i + k] = q(s[k]);
+                }
+            }
+        }
+    }
+    let mut levels = vec![first];
+    let mut n = size;
+    for _ in 1..caster_levels(size) {
+        let half = (n / 2).max(1);
+        let Some(prev) = levels.last() else { break };
+        let mut next = vec![0.0f32; (half * half * 4) as usize];
+        for y in 0..half {
+            for x in 0..half {
+                for k in 0..4 {
+                    let at = |dx: u32, dy: u32| {
+                        prev.get((((y * 2 + dy) * n + x * 2 + dx) * 4) as usize + k)
+                            .copied()
+                            .unwrap_or(0.0)
+                    };
+                    next[((y * half + x) * 4) as usize + k] =
+                        q((at(0, 0) + at(1, 0) + at(0, 1) + at(1, 1)) * 0.25);
+                }
+            }
+        }
+        levels.push(next);
+        n = half;
+    }
+    levels
+}
+
+/// Bilinear between texel centres at `(x, y)` in texels, the edges held.
+fn bilinear(texel: &impl Fn(i64, i64) -> [f32; 4], x: f32, y: f32) -> [f32; 4] {
+    let (x, y) = (x - 0.5, y - 0.5);
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let (x0, y0) = (x0 as i64, y0 as i64);
+    let (a, b, c, d) = (
+        texel(x0, y0),
+        texel(x0 + 1, y0),
+        texel(x0, y0 + 1),
+        texel(x0 + 1, y0 + 1),
+    );
+    let mut out = [0.0; 4];
+    for k in 0..4 {
+        let top = a[k] + (b[k] - a[k]) * fx;
+        let bottom = c[k] + (d[k] - c[k]) * fx;
+        out[k] = top + (bottom - top) * fy;
+    }
+    out
+}
+
+impl ShadowCaster {
+    /// The square at `uv` (0..1 across it) and level `lod`, blending the two
+    /// levels either side and holding the edges, as a GPU's trilinear
+    /// sampler does. The edges are the empty margin, so off the square is
+    /// nothing.
+    fn sample(&self, uv: [f32; 2], lod: f32) -> [f32; 4] {
+        let last = self.levels.len().saturating_sub(1);
+        let lod = lod.clamp(0.0, last as f32);
+        let k0 = lod.floor() as usize;
+        let k1 = (k0 + 1).min(last);
+        let at = |k: usize| {
+            let n = (self.size >> k).max(1);
+            let level = self.levels.get(k);
+            let texel = |x: i64, y: i64| -> [f32; 4] {
+                let x = x.clamp(0, i64::from(n) - 1) as usize;
+                let y = y.clamp(0, i64::from(n) - 1) as usize;
+                let i = (y * n as usize + x) * 4;
+                level
+                    .and_then(|l| l.get(i..i + 4))
+                    .map_or([0.0; 4], |p| [p[0], p[1], p[2], p[3]])
+            };
+            bilinear(&texel, uv[0] * n as f32, uv[1] * n as f32)
+        };
+        let (a, b) = (at(k0), at(k1));
+        let f = lod - k0 as f32;
+        [0, 1, 2, 3].map(|k| a[k] + (b[k] - a[k]) * f)
+    }
+}
+
+/// How much of `light` gets past the casters to `p`, per channel, before the
+/// shadow's darkness. `own` is the layer being shaded, which never shades
+/// itself.
+fn transmitted(
+    p: [f32; 3],
+    light: &ShadingLight,
+    casters: &[ShadowCaster],
+    own: Option<usize>,
+) -> [f32; 3] {
+    let mut through = [1.0f32; 3];
+    // Towards the light: as far as its centre, or for a parallel light back
+    // up its rays with no end.
+    let (dir, bounded) = match light.kind {
+        ShadingKind::Ambient => return through,
+        ShadingKind::Parallel => ([-light.axis[0], -light.axis[1], -light.axis[2]], false),
+        _ => (sub(light.centre(), p), true),
+    };
+    let reach = length(dir);
+    if reach < 1e-6 {
+        return through;
+    }
+    for (i, c) in casters.iter().enumerate().take(MAX_SHADOW_CASTERS) {
+        if own == Some(i) {
+            continue;
+        }
+        let n = cross(c.u, c.v);
+        let den = dot(dir, n);
+        if den.abs() < 1e-12 {
+            continue;
+        }
+        let t = dot(sub(c.origin, p), n) / den;
+        if t * reach <= SHADOW_GAP || (bounded && t >= 1.0) {
+            continue;
+        }
+        let rel = sub(
+            [p[0] + dir[0] * t, p[1] + dir[1] * t, p[2] + dir[2] * t],
+            c.origin,
+        );
+        let (cu, cv) = (cross(c.v, n), cross(n, c.u));
+        let (du, dv) = (dot(c.u, cu), dot(c.v, cv));
+        if du.abs() < 1e-12 || dv.abs() < 1e-12 {
+            continue;
+        }
+        let uv = [dot(rel, cu) / du, dot(rel, cv) / dv];
+        let at = [
+            c.place[0] + uv[0] * c.place[2],
+            c.place[1] + uv[1] * c.place[3],
+        ];
+        // The diffusion is how far the shadow's edge spreads where it lands,
+        // and on the caster it is less by how much nearer the light it is.
+        let spread = if bounded {
+            light.shadow_diffusion * (1.0 - t)
+        } else {
+            light.shadow_diffusion
+        };
+        // A texel is square in comp pixels, so one count serves both ways.
+        let size = c.size as f32;
+        let texels = spread * c.place[2] * size / length(c.u).max(1e-6);
+        let reach = texels / size;
+        if at.iter().any(|x| *x < -reach || *x > 1.0 + reach) {
+            continue;
+        }
+        let s = if texels < 0.5 {
+            c.sample(at, 0.0)
+        } else {
+            // Four taps a radius apart, each from the level that averages a
+            // radius' worth, so the edge is soft without being blocky. Never
+            // further apart than a texel of that level, or each would be a
+            // copy of the shadow of its own.
+            let lod = texels.log2();
+            let last = c.levels.len().saturating_sub(1) as f32;
+            let off = texels.min(lod.min(last).exp2()) * 0.5 / size;
+            let mut sum = [0.0f32; 4];
+            for (ox, oy) in [(-off, -off), (off, -off), (-off, off), (off, off)] {
+                let tap = c.sample([at[0] + ox, at[1] + oy], lod);
+                for k in 0..4 {
+                    sum[k] += tap[k] * 0.25;
+                }
+            }
+            sum
+        };
+        for k in 0..3 {
+            through[k] *= (1.0 - s[3] + c.transmission * s[k]).clamp(0.0, 1.0);
+        }
+        if through.iter().all(|t| *t < SHADOW_OPAQUE) {
+            break;
+        }
+    }
+    through
+}
+
+/// Rec. 709 luminance, for how much of a pixel's light a shadow took.
+fn luma(c: [f32; 3]) -> f32 {
+    0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+
 /// The reference implementation of the lighting pass (docs/06): shade one
 /// layer's premultiplied linear RGBA in place. The WGSL twin mirrors this
 /// op-for-op, and the GPU test compares them (docs/08 §1.6's rule, applied to
@@ -420,9 +700,29 @@ pub fn shade(
     m: &ShadingMaterial,
     lights: &[ShadingLight],
 ) {
+    shade_with_shadows(rgba, w, h, s, m, lights, &[], None);
+}
+
+/// [`shade`] with the frame's shadow casters, `own` being this layer's place
+/// among them if it casts too. A light that casts shadows is dimmed by what
+/// stands between it and each pixel, and a layer that shows only shadows
+/// comes out black where light was taken and clear everywhere else.
+#[allow(clippy::too_many_arguments)]
+pub fn shade_with_shadows(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &ShadingSurface,
+    m: &ShadingMaterial,
+    lights: &[ShadingLight],
+    casters: &[ShadowCaster],
+    own: Option<usize>,
+) {
+    use crate::model::ShadowMode;
     if lights.is_empty() {
         return;
     }
+    let takes = m.accepts_shadows != ShadowMode::Off && !casters.is_empty();
     for y in 0..h {
         for x in 0..w {
             let Some(px) = rgba
@@ -438,29 +738,78 @@ pub fn shade(
                 s.origin[1] + s.du[1] * fx + s.dv[1] * fy,
                 s.origin[2] + s.du[2] * fx + s.dv[2] * fy,
             ];
+            let a = px[3];
+            if m.unlit {
+                // Unlit, so only the shadows touch it: each light that falls
+                // here dims it by what its casters stopped.
+                let mut dim = [1.0f32; 3];
+                for l in lights.iter().take(MAX_LIT_LIGHTS) {
+                    if !takes || l.shadow_darkness <= 0.0 || irradiance(p, s.normal, l) <= 0.0 {
+                        continue;
+                    }
+                    let t = transmitted(p, l, casters, own);
+                    for (d, t) in dim.iter_mut().zip(t) {
+                        *d *= 1.0 - l.shadow_darkness * (1.0 - t);
+                    }
+                }
+                if m.accepts_shadows == ShadowMode::Only {
+                    let taken = (1.0 - luma(dim)).clamp(0.0, 1.0);
+                    px.copy_from_slice(&[0.0, 0.0, 0.0, a * taken]);
+                } else if m.encoded && a > 0.0 {
+                    for (ch, d) in px[..3].iter_mut().zip(dim) {
+                        *ch = decode(encode(*ch / a) * d) * a;
+                    }
+                } else if !m.encoded {
+                    for (ch, d) in px[..3].iter_mut().zip(dim) {
+                        *ch *= d;
+                    }
+                }
+                continue;
+            }
             let mut gain = [m.base; 3];
+            let mut unshadowed = [m.base; 3];
             let mut shine = [0.0f32; 3];
             let diffuse = m.diffuse;
             for l in lights.iter().take(MAX_LIT_LIGHTS) {
                 let colour = l.colour;
                 if l.kind == ShadingKind::Ambient {
-                    for (g, c) in gain.iter_mut().zip(colour) {
+                    for ((g, u), c) in gain.iter_mut().zip(&mut unshadowed).zip(colour) {
                         *g += m.ambient * c;
+                        *u += m.ambient * c;
                     }
                     continue;
                 }
-                let e = diffuse * irradiance(p, s.normal, l);
-                for (g, c) in gain.iter_mut().zip(colour) {
-                    *g += e * c;
+                let lit = irradiance(p, s.normal, l);
+                let e = diffuse * lit;
+                // What the shadow leaves of this light: all of it, less the
+                // darkness's share of what the casters stopped.
+                let left = if takes && l.shadow_darkness > 0.0 && lit > 0.0 {
+                    transmitted(p, l, casters, own).map(|t| 1.0 - l.shadow_darkness * (1.0 - t))
+                } else {
+                    [1.0; 3]
+                };
+                for (((g, u), c), k) in gain.iter_mut().zip(&mut unshadowed).zip(colour).zip(left) {
+                    *g += e * c * k;
+                    *u += e * c;
                 }
                 if m.specular > 0.0 {
                     let k = m.specular * highlight(p, s.normal, l, m.eye, m.exponent);
-                    for (sh, c) in shine.iter_mut().zip(colour) {
-                        *sh += k * c;
+                    for ((sh, c), f) in shine.iter_mut().zip(colour).zip(left) {
+                        *sh += k * c * f;
                     }
                 }
             }
-            let a = px[3];
+            if m.accepts_shadows == ShadowMode::Only {
+                // Black, as opaque as the share of light the shadows took.
+                let lit = luma(unshadowed);
+                let taken = if lit > 1e-6 {
+                    (1.0 - luma(gain) / lit).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                px.copy_from_slice(&[0.0, 0.0, 0.0, a * taken]);
+                continue;
+            }
             if m.encoded && a <= 0.0 {
                 continue;
             }
@@ -557,6 +906,8 @@ mod tests {
             cone_cos: -2.0,
             cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 0.0,
+            shadow_diffusion: 0.0,
         };
         let mut lit = base.clone();
         shade(&mut lit, 4, 4, &surface, &ShadingMaterial::PLAIN, &[light]);
@@ -587,6 +938,8 @@ mod tests {
             cone_cos: -2.0,
             cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 0.0,
+            shadow_diffusion: 0.0,
         };
         let overhead = irradiance([0.0, 0.0, 0.0], n, &at(0.0, 0.0, -100.0));
         let oblique = irradiance([0.0, 0.0, 0.0], n, &at(100.0, 0.0, -100.0));
@@ -633,6 +986,8 @@ mod tests {
             cone_cos: -2.0,
             cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 0.0,
+            shadow_diffusion: 0.0,
         };
         let close = |a: f32, b: f32| (a - b).abs() < 1e-4;
 
@@ -735,6 +1090,8 @@ mod tests {
             cone_cos: -2.0,
             cone_inner: -2.0,
             axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 0.0,
+            shadow_diffusion: 0.0,
         };
         let eye = [0.0, 0.0, -1000.0];
         let under = highlight([0.0, 0.0, 0.0], n, &light, eye, 6.0);
@@ -821,5 +1178,102 @@ mod tests {
         );
         assert!(plastic[0] > 0.0 && plastic[3] == 1.0, "{plastic:?}");
         assert!(shaded(shiny, grey)[0] > half[0], "the highlight adds");
+    }
+
+    /// A card halfway between a light and a floor shades the floor under it
+    /// and nowhere else, by its darkness. A red card letting light through
+    /// tints it red, the card never shades itself, a floor showing only
+    /// shadows is black under the card and clear beside it, and an unlit one
+    /// is only darkened.
+    #[test]
+    fn a_card_casts_its_shadow_on_the_floor_beneath_it() {
+        use crate::model::{LightFalloff, ShadowMode};
+        let light = ShadingLight {
+            corners: [[0.0, 0.0, -200.0]; 4],
+            colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Point,
+            falloff: LightFalloff::None,
+            radius_px: 0.0,
+            falloff_px: 0.0,
+            legacy: false,
+            cone_cos: -2.0,
+            cone_inner: -2.0,
+            axis: [0.0, 0.0, 1.0],
+            shadow_darkness: 1.0,
+            shadow_diffusion: 0.0,
+        };
+        let place = caster_box(64, 40.0, 40.0, 0.0);
+        let card = |rgb: [f32; 3], transmission: f32| ShadowCaster {
+            origin: [-20.0, -20.0, -100.0],
+            u: [40.0, 0.0, 0.0],
+            v: [0.0, 40.0, 0.0],
+            transmission,
+            place: place.map(|t| t as f32 / 64.0),
+            levels: caster_square(
+                &[rgb[0], rgb[1], rgb[2], 1.0].repeat(16),
+                4,
+                4,
+                1.0,
+                64,
+                place,
+                false,
+            ),
+            size: 64,
+        };
+        let white = card([1.0, 1.0, 1.0], 0.0);
+        // Two floor texels: one under the card, one well to the side.
+        let floor = ShadingSurface {
+            origin: [-50.0, -0.5, 0.0],
+            du: [100.0, 0.0, 0.0],
+            dv: [0.0, 1.0, 0.0],
+            normal: [0.0, 0.0, -1.0],
+        };
+        let m = ShadingMaterial {
+            base: 0.0,
+            accepts_shadows: ShadowMode::On,
+            ..ShadingMaterial::PLAIN
+        };
+        let lit = |m: &ShadingMaterial, l: &ShadingLight, c: &[ShadowCaster], own| {
+            let mut px = [0.5, 0.5, 0.5, 1.0].repeat(2);
+            shade_with_shadows(&mut px, 2, 1, &floor, m, &[*l], c, own);
+            px
+        };
+        let close = |a: f32, b: f32| (a - b).abs() < 1e-3;
+        let px = lit(&m, &light, std::slice::from_ref(&white), None);
+        assert!(close(px[0], 0.0), "under the card is dark: {px:?}");
+        assert!(px[4] > 0.4, "beside it is lit: {px:?}");
+
+        let half = ShadingLight {
+            shadow_darkness: 0.5,
+            ..light
+        };
+        let px = lit(&m, &half, std::slice::from_ref(&white), None);
+        assert!(close(px[0], 0.25), "half as dark: {px:?}");
+
+        let red = card([1.0, 0.0, 0.0], 1.0);
+        let px = lit(&m, &light, &[red], None);
+        assert!(
+            close(px[0], 0.5) && close(px[1], 0.0),
+            "red gets through: {px:?}"
+        );
+
+        let px = lit(&m, &light, std::slice::from_ref(&white), Some(0));
+        assert!(close(px[0], 0.5), "its own card is not in its way: {px:?}");
+
+        let only = ShadingMaterial {
+            accepts_shadows: ShadowMode::Only,
+            ..m
+        };
+        let px = lit(&only, &light, std::slice::from_ref(&white), None);
+        assert_eq!(&px[..3], &[0.0; 3]);
+        assert!(close(px[3], 1.0) && px[7] < 1e-3, "only the shadow: {px:?}");
+
+        // Accepts lights off: left as it is, but still in the shadow.
+        let unlit = ShadingMaterial { unlit: true, ..m };
+        let px = lit(&unlit, &light, &[white], None);
+        assert!(
+            close(px[0], 0.0) && px[4] == 0.5,
+            "shadowed, not lit: {px:?}"
+        );
     }
 }
