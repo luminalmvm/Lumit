@@ -256,6 +256,17 @@ class ViewerLayerMap {
     );
   }
 
+  /// How far in front of the eye the parent-space point ([x], [y], [z]) is,
+  /// as [depthOf] measures it. [z] is the layer's own Position z unless
+  /// given.
+  double parentDepthOf(double x, double y, [double? z]) => projected
+      ? _dot(_parentRows, 2, x, y, z ?? depth!.z, 1)
+      : 1;
+
+  /// Whether the parent-space point ([x], [y], [z]) is in front of the eye.
+  bool parentInFront(double x, double y, [double? z]) =>
+      parentDepthOf(x, y, z) > viewerNear;
+
   /// Comp pixels, still to be divided by [w], to screen.
   Offset _shown(double x, double y, double w) {
     final safe = w.abs() < 1e-9 ? 1e-9 : w;
@@ -272,7 +283,7 @@ class ViewerLayerMap {
   }
 
   /// Whether the layer point ([x], [y]) is in front of the eye.
-  bool inFront(double x, double y) => depthOf(x, y) > 1e-6;
+  bool inFront(double x, double y) => depthOf(x, y) > viewerNear;
 
   /// How far away the layer is under the screen point [pos], as the depth
   /// over the camera's zoom, or null where the layer there is behind the eye
@@ -409,6 +420,10 @@ class ViewerLayerMap {
     return (newSx * 100.0, newSy * 100.0);
   }
 }
+
+/// How near the eye a point may be and still be drawn, as the depth over the
+/// camera's zoom: a hair in front of it. Anything nearer is cut off.
+const double viewerNear = 1e-3;
 
 /// How the picture sees one 3D layer: the view it is looked at through, its
 /// parents in full, and the parts of its own transform a flat map has no room
