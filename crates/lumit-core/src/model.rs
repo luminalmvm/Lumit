@@ -495,6 +495,10 @@ pub struct Composition {
     /// layer's Volume does.
     #[serde(default)]
     pub master_volume_db: f64,
+    /// How the comp's lights fall on its layers. Lumit's own adds the light to
+    /// the picture; After Effects' lights a layer from black.
+    #[serde(default, skip_serializing_if = "CompLighting::is_default")]
+    pub lighting: CompLighting,
     /// **The mix mark** (docs/impl/audio-timeline.md §2): set by the first
     /// edit made in the Audio timeline, and never by looking at the comp.
     ///
@@ -2214,6 +2218,31 @@ pub enum LightKind {
     Ambient,
 }
 
+/// How a composition's lights fall on its layers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompLighting {
+    /// The light adds to the picture, so a layer no light reaches is left as
+    /// it is.
+    #[default]
+    Adds,
+    /// As After Effects does it: a lit layer starts from black, the ambient
+    /// lights are its base, and a 2D layer is not lit at all. `linear` is a
+    /// project with Linearize working space on; without it After Effects
+    /// lights the display-encoded picture, and so does this.
+    AfterEffects {
+        #[serde(default)]
+        linear: bool,
+    },
+}
+
+impl CompLighting {
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    fn is_default(&self) -> bool {
+        *self == Self::Adds
+    }
+}
+
 /// How a light weakens with distance, After Effects' three.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -2518,6 +2547,10 @@ pub struct ResolvedLight {
     pub position: (f64, f64),
     /// Scene-linear RGB, already multiplied by intensity.
     pub colour: [f32; 3],
+    /// The colour and the intensity apart, for a picture lit in display
+    /// encoding, where only the colour is encoded.
+    pub tint: [f32; 3],
+    pub gain: f32,
     /// Half-width and half-height in comp pixels; zero for a point.
     pub half_size: (f64, f64),
     /// The spot cone's half-angle in degrees, and the layer's own rotation
@@ -2728,6 +2761,10 @@ impl Composition {
                 let tr = &l.transform;
                 // Negative, as in After Effects, takes light away.
                 let gain = (light.intensity.value_at(lt) / 100.0) as f32;
+                let tint = light
+                    .colour
+                    .each_ref()
+                    .map(|c| (c.value_at(lt) as f32).max(0.0));
                 let position = (
                     tr.position_x.value_at(lt),
                     tr.position_y.value_at(lt),
@@ -2753,11 +2790,9 @@ impl Composition {
                 Some(ResolvedLight {
                     kind: light.kind,
                     position: (position.0, position.1),
-                    colour: [
-                        (light.colour[0].value_at(lt) as f32).max(0.0) * gain,
-                        (light.colour[1].value_at(lt) as f32).max(0.0) * gain,
-                        (light.colour[2].value_at(lt) as f32).max(0.0) * gain,
-                    ],
+                    colour: tint.map(|c| c * gain),
+                    tint,
+                    gain,
                     // Only an area light has extent; the others are points,
                     // whatever the stored numbers happen to say.
                     half_size: match light.kind {
@@ -4835,6 +4870,7 @@ mod tests {
         let mut comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -5155,6 +5191,7 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

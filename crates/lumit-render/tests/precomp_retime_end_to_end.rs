@@ -84,6 +84,7 @@ fn comp_of(name: &str, layers: Vec<Layer>, duration_s: i64) -> Composition {
     Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,

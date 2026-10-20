@@ -41,6 +41,9 @@ struct Params {
     material: vec4<f32>,
     // xyz = the eye, w = metal.
     eye: vec4<f32>,
+    // x = what the light starts from: 1 where it adds, 0 from black.
+    // y = 1 to light the display-encoded picture.
+    base: vec4<f32>,
     lights: array<Light, 8>,
 };
 
@@ -110,6 +113,19 @@ fn rect_form_factor(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
 
 fn light_centre(l: Light) -> vec3<f32> {
     return (l.c0.xyz + l.c1.xyz + l.c2.xyz + l.c3.xyz) * 0.25;
+}
+
+// The sRGB curve, carried through nought, as lumit_core::lighting::encode.
+fn encode(x: vec3<f32>) -> vec3<f32> {
+    let v = abs(x);
+    let e = select(1.055 * pow(v, vec3<f32>(1.0 / 2.4)) - 0.055, v * 12.92, v <= vec3<f32>(0.0031308));
+    return sign(x) * e;
+}
+
+fn decode(x: vec3<f32>) -> vec3<f32> {
+    let v = abs(x);
+    let d = select(pow((v + 0.055) / 1.055, vec3<f32>(2.4)), v / 12.92, v <= vec3<f32>(0.04045));
+    return sign(x) * d;
 }
 
 // Matches lumit_core::lighting::smoothstep, including its degenerate branch —
@@ -232,26 +248,39 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let f = vec2<f32>(f32(xy.x) + 0.5, f32(xy.y) + 0.5);
     let pos = p.origin.xyz + p.du.xyz * f.x + p.dv.xyz * f.y;
-    var gain = vec3<f32>(1.0);
+    let encoded = p.base.y > 0.5;
+    var gain = vec3<f32>(p.base.x);
     var shine = vec3<f32>(0.0);
-    let diffuse = 2.0 * p.material.y;
+    let diffuse = p.material.y;
     for (var i: u32 = 0u; i < MAX_LIT_LIGHTS; i = i + 1u) {
         if (i >= live) {
             break;
         }
         let l = p.lights[i];
+        let colour = l.colour.rgb;
         if (u32(l.flags.x + 0.5) == 3u) {
-            gain = gain + p.material.x * l.colour.rgb;
+            gain = gain + p.material.x * colour;
             continue;
         }
         let e = diffuse * irradiance(pos, p.normal.xyz, l);
-        gain = gain + e * l.colour.rgb;
+        gain = gain + e * colour;
         if (p.material.z > 0.0) {
-            shine = shine + p.material.z * highlight(pos, p.normal.xyz, l) * l.colour.rgb;
+            shine = shine + p.material.z * highlight(pos, p.normal.xyz, l) * colour;
         }
     }
     let metal = p.eye.w;
     let lit = max(shine, vec3<f32>(0.0));
     let g = max(gain + metal * lit, vec3<f32>(0.0));
+    if (encoded) {
+        if (o.a <= 0.0) {
+            textureStore(dst, xy, o);
+            return;
+        }
+        // Out of premultiplied linear and into what After Effects would have
+        // lit, and back.
+        let v = encode(o.rgb / o.a) * g + (1.0 - metal) * lit;
+        textureStore(dst, xy, vec4<f32>(decode(v) * o.a, o.a));
+        return;
+    }
     textureStore(dst, xy, vec4<f32>(o.rgb * g + (1.0 - metal) * lit * o.a, o.a));
 }

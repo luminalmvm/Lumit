@@ -481,6 +481,29 @@ impl CompositionReference {
         })
     }
 
+    /// Whether the comp's lights fall as After Effects' do, lighting a layer
+    /// from black, rather than adding to the picture.
+    #[frb(sync)]
+    pub fn lighting_like_after_effects(&self) -> Result<bool, BridgeError> {
+        Ok(self.composition()?.lighting != lumit_core::model::CompLighting::Adds)
+    }
+
+    /// Switch it, as one undo step.
+    #[frb(sync)]
+    pub fn set_lighting_like_after_effects(&self, on: bool) -> Result<(), BridgeError> {
+        use lumit_core::model::CompLighting;
+        self.commit(lumit_core::Op::SetCompLighting {
+            comp: self.id,
+            // Ticked by hand it lights the display-encoded picture, as a new
+            // After Effects project does.
+            lighting: if on {
+                CompLighting::AfterEffects { linear: false }
+            } else {
+                CompLighting::Adds
+            },
+        })
+    }
+
     /// How many frames the comp is long at its own rate — the Timeline's axis,
     /// and one past the last frame the transport can reach.
     ///
@@ -886,6 +909,7 @@ impl CompositionReference {
                 Composition {
                     graph: None,
                     master_volume_db: 0.0,
+                    lighting: Default::default(),
                     sound_mix: false,
                     groups: Vec::new(),
                     beat_grid: None,

@@ -572,6 +572,11 @@ pub enum Op {
         layer: Uuid,
         settings: crate::model::LightSettings,
     },
+    /// Switch how a composition's lights fall on its layers.
+    SetCompLighting {
+        comp: Uuid,
+        lighting: crate::model::CompLighting,
+    },
     /// Point a Camera layer's **solve link** at a tracked layer, or clear it
     /// with `None` (docs/03 §5.6).
     ///
@@ -940,6 +945,7 @@ impl Op {
             Op::SetFootageColourSpace { .. } => "Set footage colour space",
             Op::SetFootageInterpretation { .. } => "Interpret footage",
             Op::SetCompSettings { .. } => "Composition settings",
+            Op::SetCompLighting { .. } => "Set lighting",
             Op::SetSolidDef { .. } => "Edit solid",
             Op::TrimCompToWorkArea { .. } => "Trim comp to work area",
             Op::CropCompToRegion { .. } => "Crop comp to region of interest",
@@ -2192,6 +2198,14 @@ pub fn apply(doc: &mut Document, op: &Op) -> Result<Op, OpError> {
                 comp: *comp,
                 layer: *layer,
                 settings: previous,
+            })
+        }
+        Op::SetCompLighting { comp, lighting } => {
+            let c = doc.comp_mut(*comp).ok_or(OpError::UnknownComp)?;
+            let previous = std::mem::replace(&mut c.lighting, *lighting);
+            Ok(Op::SetCompLighting {
+                comp: *comp,
+                lighting: previous,
             })
         }
         Op::SetCameraSolveLink {

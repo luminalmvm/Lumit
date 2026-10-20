@@ -12626,6 +12626,18 @@
   "@compShutterAngle": {
     "description": "New composition / Composition settings dialog: row label: how much of a frame the shutter is open for, in degrees."
   },
+  "compGroupLights": "Lights",
+  "@compGroupLights": {
+    "description": "Section of the Composition settings window about how the composition's lights fall on its layers."
+  },
+  "compLightsLikeAfterEffects": "Like After Effects",
+  "@compLightsLikeAfterEffects": {
+    "description": "Composition settings checkbox: light layers from black, with ambient lights as their base, as After Effects does, rather than adding light to the picture. On for compositions imported from After Effects."
+  },
+  "histSetLighting": "Set lighting",
+  "@histSetLighting": {
+    "description": "Undo history entry: a composition's lighting was switched between Lumit's and After Effects' way."
+  },
   "compSamples": "Samples",
   "@compSamples": {
     "description": "New composition / Composition settings dialog: label beside the shutter angle: how many sub-frame samples a blurred layer is drawn at."

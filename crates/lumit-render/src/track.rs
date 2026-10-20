@@ -2828,6 +2828,7 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3464,6 +3465,7 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -3747,6 +3749,7 @@ mod tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -4023,6 +4026,7 @@ mod tests {
         doc.items.push(ProjectItem::Composition(Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

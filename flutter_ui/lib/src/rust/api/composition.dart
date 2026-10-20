@@ -1555,6 +1555,13 @@ class CompositionReference {
           .crateApiCompositionCompositionReferenceInsertGraphGroup(
               that: this, text: text, x: x, y: y);
 
+  /// Whether the comp's lights fall as After Effects' do, lighting a layer
+  /// from black, rather than adding to the picture.
+  bool lightingLikeAfterEffects() => BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceLightingLikeAfterEffects(
+        that: this,
+      );
+
   /// This comp's **master fader**, in dB (docs/09 §3.1). 0 is unity;
   /// −100 and below is exact silence, the same −∞ knee a layer's Volume has.
   double masterVolumeDb() => BridgeLib.instance.api
@@ -2177,6 +2184,12 @@ class CompositionReference {
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetGroupSwitch(
               that: this, group: group, switch_: switch_, on_: on_);
+
+  /// Switch it, as one undo step.
+  void setLightingLikeAfterEffects({required bool on_}) =>
+      BridgeLib.instance.api
+          .crateApiCompositionCompositionReferenceSetLightingLikeAfterEffects(
+              that: this, on_: on_);
 
   /// Replace the whole marker list — one op, trivially invertible, which is
   /// also how beat detection commits a regenerated set.

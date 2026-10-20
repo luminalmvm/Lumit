@@ -400,6 +400,10 @@ fn feed_comp(
     let lights = comp.lights_at(t);
     if !lights.is_empty() {
         h.update(b"lights/");
+        if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
+            h.update(b"after-effects/");
+            h.update(&[u8::from(linear)]);
+        }
         for l in &lights {
             h.update(&[match l.kind {
                 lumit_core::model::LightKind::Point => 0u8,
@@ -422,6 +426,7 @@ fn feed_comp(
                 l.falloff_px,
                 l.cone_feather,
                 l.radius_px,
+                f64::from(l.gain),
             ] {
                 feed_f64(h, v);
             }
@@ -2869,6 +2874,7 @@ mod tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

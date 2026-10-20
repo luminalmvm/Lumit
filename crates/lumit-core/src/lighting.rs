@@ -117,7 +117,13 @@ pub struct ShadingSurface {
 /// is seen from.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShadingMaterial {
+    /// What a pixel's light starts from: 1 where light adds to the picture,
+    /// 0 where it lights the layer from black, as in After Effects.
+    pub base: f32,
     pub ambient: f32,
+    /// What the light reaching a pixel is multiplied by. Twice the Diffuse
+    /// option where light adds, so its default half lights a layer as these
+    /// lights always have.
     pub diffuse: f32,
     pub specular: f32,
     /// The highlight's Blinn-Phong exponent.
@@ -125,18 +131,24 @@ pub struct ShadingMaterial {
     pub metal: f32,
     /// The eye, comp pixels.
     pub eye: [f32; 3],
+    /// Light the display-encoded picture, as an After Effects project without
+    /// Linearize working space does. The lights' colours are then display
+    /// encoded too, which is the caller's to do.
+    pub encoded: bool,
 }
 
 impl ShadingMaterial {
     /// What every layer had before materials: the lights as they were, and no
     /// highlight.
     pub const PLAIN: Self = Self {
+        base: 1.0,
         ambient: 1.0,
-        diffuse: 0.5,
+        diffuse: 1.0,
         specular: 0.0,
         exponent: 1.0,
         metal: 1.0,
         eye: [0.0, 0.0, 0.0],
+        encoded: false,
     };
 
     /// After Effects' Specular shininess, a percentage, as the exponent: one
@@ -359,6 +371,28 @@ fn reach(d: f32, light: &ShadingLight) -> f32 {
     }
 }
 
+/// The sRGB curve, carried through nought so a negative light stays negative.
+#[must_use]
+pub fn encode(x: f32) -> f32 {
+    let v = x.abs();
+    let e = if v <= 0.003_130_8 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    };
+    e.copysign(x)
+}
+
+fn decode(x: f32) -> f32 {
+    let v = x.abs();
+    let d = if v <= 0.040_45 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    };
+    d.copysign(x)
+}
+
 fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
     if edge1 <= edge0 {
         return f32::from(x >= edge1);
@@ -404,33 +438,43 @@ pub fn shade(
                 s.origin[1] + s.du[1] * fx + s.dv[1] * fy,
                 s.origin[2] + s.du[2] * fx + s.dv[2] * fy,
             ];
-            let mut gain = [1.0f32; 3];
+            let mut gain = [m.base; 3];
             let mut shine = [0.0f32; 3];
-            // Diffuse at a half lights a layer as these lights always have.
-            let diffuse = 2.0 * m.diffuse;
+            let diffuse = m.diffuse;
             for l in lights.iter().take(MAX_LIT_LIGHTS) {
+                let colour = l.colour;
                 if l.kind == ShadingKind::Ambient {
-                    for (g, c) in gain.iter_mut().zip(l.colour) {
+                    for (g, c) in gain.iter_mut().zip(colour) {
                         *g += m.ambient * c;
                     }
                     continue;
                 }
                 let e = diffuse * irradiance(p, s.normal, l);
-                for (g, c) in gain.iter_mut().zip(l.colour) {
+                for (g, c) in gain.iter_mut().zip(colour) {
                     *g += e * c;
                 }
                 if m.specular > 0.0 {
                     let k = m.specular * highlight(p, s.normal, l, m.eye, m.exponent);
-                    for (sh, c) in shine.iter_mut().zip(l.colour) {
+                    for (sh, c) in shine.iter_mut().zip(colour) {
                         *sh += k * c;
                     }
                 }
             }
             let a = px[3];
+            if m.encoded && a <= 0.0 {
+                continue;
+            }
             for ((ch, g), sh) in px[..3].iter_mut().zip(gain).zip(shine) {
                 // A negative light can take a pixel to black but no further.
                 let sh = sh.max(0.0);
-                *ch = *ch * (g + m.metal * sh).max(0.0) + (1.0 - m.metal) * sh * a;
+                if m.encoded {
+                    // Out of premultiplied linear and into what After Effects
+                    // would have lit, and back.
+                    let v = encode(*ch / a) * (g + m.metal * sh).max(0.0) + (1.0 - m.metal) * sh;
+                    *ch = decode(v) * a;
+                } else {
+                    *ch = *ch * (g + m.metal * sh).max(0.0) + (1.0 - m.metal) * sh * a;
+                }
             }
         }
     }
@@ -717,7 +761,7 @@ mod tests {
         };
         let full = shaded(
             ShadingMaterial {
-                diffuse: 1.0,
+                diffuse: 2.0,
                 ..plain
             },
             grey,
@@ -734,6 +778,30 @@ mod tests {
             ) == grey,
             "no diffuse takes no light"
         );
+        // After Effects' way lights the layer from black: a light straight
+        // on at a Diffuse of a half gives half the picture.
+        let ae = shaded(
+            ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                ..plain
+            },
+            grey,
+        );
+        assert!((ae[0] - 0.125).abs() < 1e-4, "{ae:?}");
+        // And without Linearize working space it lights what the screen
+        // shows: half the encoded grey, decoded again.
+        let shown = shaded(
+            ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                encoded: true,
+                ..plain
+            },
+            grey,
+        );
+        let want = decode(encode(0.25) * 0.5);
+        assert!((shown[0] - want).abs() < 1e-4, "{shown:?} vs {want}");
 
         // A black pixel has no colour of its own for a metal highlight to
         // take, so only the light's own highlight shows on it.

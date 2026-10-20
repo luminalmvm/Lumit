@@ -723,6 +723,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::RemoveLayer { comp, .. }
         | Op::ReorderLayer { comp, .. }
         | Op::SetCompMotionBlur { comp, .. }
+        | Op::SetCompLighting { comp, .. }
         | Op::SetCompBackground { comp, .. }
         | Op::SetMasterVolume { comp, .. }
         // The layer Timeline's Sound mix row stands or falls on the mark, so

@@ -894,6 +894,7 @@ fn close(
     let inner = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: scope.groups,
         beat_grid: None,

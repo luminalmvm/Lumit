@@ -173,6 +173,13 @@ A light is placed by its ordinary transform, so it animates and parents like any
 else. Which layers it shades is per layer: **Accepts lights**, on by default, in a 3D
 layer's **Material options** and on the layer's right-click menu in the Timeline.
 
+A light adds to the picture, so a layer no light reaches is left as it is. **Like After
+Effects**, under **Lights** in Composition settings, lights a layer from black instead,
+with the ambient lights as its base, and leaves 2D layers unlit. It lights the picture as
+the screen shows it, as After Effects does without **Linearize working space**. A
+composition imported from After Effects has it on, in linear light if the project was
+linearised.
+
 **Light options**, inside the light's Transform group, holds its own rows:
 
 - **Light type**: **Point**, **Spot**, **Area**, **Parallel** (every ray runs the same way,

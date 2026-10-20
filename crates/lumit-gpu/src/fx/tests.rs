@@ -6109,9 +6109,12 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
             ],
         ),
         ("plastic", vec![spot, parallel]),
+        ("after effects", vec![spot, ambient]),
+        ("after effects encoded", vec![spot, ambient]),
     ] {
-        // The last two are seen through a shiny material, a metal one and
-        // then a plastic one; the rest through the plain one.
+        // Two are seen through a shiny material, a metal one and then a
+        // plastic one, and one lit from black as After Effects does; the rest
+        // through the plain one.
         let eye = [16.0, 12.0, -200.0];
         let plain = ShadingMaterial {
             eye,
@@ -6130,6 +6133,22 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
                 ambient: 0.5,
                 ..plain
             },
+            "after effects" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 6.0,
+                ..plain
+            },
+            "after effects encoded" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 6.0,
+                metal: 0.5,
+                encoded: true,
+                ..plain
+            },
             _ => plain,
         };
         let mut cpu = img.clone();
@@ -6141,12 +6160,14 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
             dv: surface.dv,
             normal: surface.normal,
             material: crate::fx::LightingMaterial {
+                base: m.base,
                 ambient: m.ambient,
                 diffuse: m.diffuse,
                 specular: m.specular,
                 exponent: m.exponent,
                 metal: m.metal,
                 eye: m.eye,
+                encoded: m.encoded,
             },
             lights: lights
                 .iter()

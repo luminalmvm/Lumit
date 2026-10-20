@@ -45,6 +45,7 @@ import 'package:lumit_flutter/src/rust/api/project.dart';
 
 import '../icons/icons.dart';
 import '../l10n/strings.dart';
+import '../panels/layer_fold_frb.dart' show asOneUndoStep;
 import '../state/timecode.dart';
 import '../theme/theme.dart';
 import '../widgets/colour_picker.dart';
@@ -136,6 +137,8 @@ Future<bool> showCompSettingsFrb({
   required BuildContext context,
   required CompositionReference comp,
 }) async {
+  final project = Provider.of<LumitState>(context, listen: false).project;
+  final was = comp.lightingLikeAfterEffects();
   final applied = await showLumitModal<bool>(
     context: context,
     id: 'comp-settings',
@@ -143,7 +146,8 @@ Future<bool> showCompSettingsFrb({
       title: l10n.compositionSettings,
       confirm: l10n.save,
       initial: comp.getSettings(),
-      onConfirm: (settings) {
+      lightsLikeAfterEffects: was,
+      onConfirm: (settings, likeAfterEffects) {
         // **The playhead keeps its moment, not its number.** A frame count
         // means nothing without the rate it was counted at, so the time under
         // the playhead is read *before* the rate is written and the nearest
@@ -156,11 +160,17 @@ Future<bool> showCompSettingsFrb({
         // playhead, and changing a background comp's rate must not move it.
         final ui = Provider.of<LumitUiState>(context, listen: false);
         final mine = ui.selectedComp?.internalid == comp.internalid;
-        final was =
+        final at =
             mine ? comp.timeOfFrame(frame: ui.playheadFrame.value) : null;
-        comp.setSettings(settings: settings);
-        if (was != null) {
-          ui.playheadFrame.value = comp.nearestFrameAtTime(time: was);
+        // The button is one undo step however much it changed.
+        asOneUndoStep(project, () {
+          if (likeAfterEffects != was) {
+            comp.setLightingLikeAfterEffects(on_: likeAfterEffects ?? false);
+          }
+          comp.setSettings(settings: settings);
+        });
+        if (at != null) {
+          ui.playheadFrame.value = comp.nearestFrameAtTime(time: at);
         }
         close(true);
       },
@@ -243,15 +253,24 @@ Future<CompositionReference?> showNewCompositionFrb({
         shutterAngle: initial.shutterAngle,
         motionBlurSamples: initial.motionBlurSamples,
       ),
-      onConfirm: (settings) {
-        final comp = nodeGraph
-            ? project.newNodeGraph(name: settings.name, settings: settings)
-            : project.newComposition(name: settings.name, settings: settings);
-        // A node graph has no layers, so nothing is dropped on this door.
-        for (final item in footage) {
-          comp.addFootageLayer(
-              footage: item, asSequence: asSequence, arrival: arrival);
-        }
+      // A node graph has no layers to light.
+      lightsLikeAfterEffects: nodeGraph ? null : false,
+      onConfirm: (settings, likeAfterEffects) {
+        late CompositionReference comp;
+        asOneUndoStep(project, () {
+          comp = nodeGraph
+              ? project.newNodeGraph(name: settings.name, settings: settings)
+              : project.newComposition(
+                  name: settings.name, settings: settings);
+          if (likeAfterEffects ?? false) {
+            comp.setLightingLikeAfterEffects(on_: true);
+          }
+          // A node graph has no layers, so nothing is dropped on this door.
+          for (final item in footage) {
+            comp.addFootageLayer(
+                footage: item, asSequence: asSequence, arrival: arrival);
+          }
+        });
         close(comp);
       },
       onCancel: () => close(null),
@@ -268,8 +287,14 @@ class _CompSettingsBody extends StatefulWidget {
   final String title;
   final String confirm;
   final BridgeCompSettings initial;
-  final void Function(BridgeCompSettings) onConfirm;
+  /// The settings, and whether the comp lights its layers as After Effects
+  /// does (null where the row is hidden).
+  final void Function(BridgeCompSettings, bool?) onConfirm;
   final VoidCallback onCancel;
+
+  /// Whether the comp lights its layers as After Effects does. Null hides the
+  /// row, for a node graph, which has no layers to light.
+  final bool? lightsLikeAfterEffects;
 
   const _CompSettingsBody({
     required this.title,
@@ -277,6 +302,7 @@ class _CompSettingsBody extends StatefulWidget {
     required this.initial,
     required this.onConfirm,
     required this.onCancel,
+    this.lightsLikeAfterEffects,
   });
 
   @override
@@ -292,6 +318,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
   late List<double> _background;
   late double _shutterAngle;
   late int _samples;
+  late bool? _likeAfterEffects = widget.lightsLikeAfterEffects;
 
   /// Keep the shape when one side is edited. On by default, because resizing a
   /// comp to a shape it was never meant to be is nearly always a slip.
@@ -371,7 +398,7 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
       background: F32Array4(Float32List.fromList(_background)),
       shutterAngle: _shutterAngle,
       motionBlurSamples: _samples,
-    ));
+    ), _likeAfterEffects);
   }
 
   /// Editing one side of the size, carrying the other with it when locked.
@@ -437,6 +464,20 @@ class _CompSettingsBodyState extends State<_CompSettingsBody> {
         _section(t, l10n.compGroupMotionBlur, [
           _row(t, l10n.compShutterAngle, _shutterRow(t)),
         ]),
+        if (_likeAfterEffects case final on?)
+          _section(t, l10n.compGroupLights, [
+            _row(
+                t,
+                l10n.compLightsLikeAfterEffects,
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: HouseCheckbox(
+                    key: const ValueKey('comp-lights-ae'),
+                    value: on,
+                    onChanged: (v) => setState(() => _likeAfterEffects = v),
+                  ),
+                )),
+          ]),
         dialogFooter(
           t,
           keyPrefix: 'comp',

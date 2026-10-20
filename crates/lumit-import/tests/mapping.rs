@@ -716,6 +716,11 @@ fn an_ambient_light_keeps_its_kind_and_its_keyframes() {
         panic!("a light");
     };
     assert_eq!(light.kind, lumit_core::model::LightKind::Ambient);
+    assert_eq!(
+        comp(&doc, "Edges").lighting,
+        lumit_core::model::CompLighting::AfterEffects { linear: false },
+        "lit as After Effects lights it"
+    );
     assert_eq!(keys(&light.intensity).len(), 2);
     assert_eq!(light.intensity.value_at(2.0), 150.0);
     let green = keys(&light.colour[1]);

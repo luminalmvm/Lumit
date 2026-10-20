@@ -1092,14 +1092,17 @@ pub fn shading_lights(
 ) -> Vec<lumit_gpu::fx::LightingLight> {
     use lumit_core::model::{LayerKind, LightKind};
 
+    // After Effects never lights a 2D layer.
     if !layer.switches.accepts_lights
         || matches!(
             layer.kind,
             LayerKind::Light { .. } | LayerKind::Camera { .. }
         )
+        || (comp.lighting != lumit_core::model::CompLighting::Adds && !layer.switches.three_d)
     {
         return Vec::new();
     }
+    let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
     let mut lights = comp.lights_at(t_comp);
     if lights.is_empty() {
         return Vec::new();
@@ -1151,7 +1154,13 @@ pub fn shading_lights(
             use lumit_gpu::fx::LightingKind as K;
             lumit_gpu::fx::LightingLight {
                 corners: [at(-hw, -hh), at(hw, -hh), at(hw, hh), at(-hw, hh)],
-                colour: l.colour,
+                // A picture lit in display encoding takes the light's colour
+                // encoded too, and its intensity as it is, as After Effects does.
+                colour: if encoded {
+                    l.tint.map(|c| lumit_core::lighting::encode(c) * l.gain)
+                } else {
+                    l.colour
+                },
                 kind: match l.kind {
                     LightKind::Area if hw > 0.0 && hh > 0.0 => K::Area,
                     LightKind::Parallel => K::Parallel,
@@ -1179,11 +1188,12 @@ pub fn shading_lights(
         .collect()
 }
 
-/// A layer's Material options at comp time `t_comp`, as the fractions the
-/// lighting pass reads. The eye is the realiser's to fill in. A 2D layer has
-/// no Material options to set, so it takes the lights as they always were,
-/// with no highlight.
+/// A layer's Material options at comp time `t_comp`, as what the lighting
+/// pass reads. The eye is the realiser's to fill in. A 2D layer has no
+/// Material options to set, so it takes the lights as they always were, with
+/// no highlight.
 pub fn shading_material(
+    comp: &lumit_core::model::Composition,
     layer: &lumit_core::model::Layer,
     t_comp: f64,
 ) -> lumit_gpu::fx::LightingMaterial {
@@ -1193,13 +1203,19 @@ pub fn shading_material(
     let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
     let m = &layer.transform.material;
     let pct = |p: &lumit_core::anim::Property| (p.value_at(lt) / 100.0).max(0.0) as f32;
+    // Where light adds to the picture, Diffuse at a half is the light as it
+    // always was; After Effects lights from black at the Diffuse given.
+    let adds = comp.lighting == lumit_core::model::CompLighting::Adds;
+    let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
     lumit_gpu::fx::LightingMaterial {
+        base: if adds { 1.0 } else { 0.0 },
         ambient: pct(&m.ambient),
-        diffuse: pct(&m.diffuse),
+        diffuse: if adds { 2.0 } else { 1.0 } * pct(&m.diffuse),
         specular: pct(&m.specular),
         exponent: lumit_core::lighting::ShadingMaterial::exponent_for(m.shininess.value_at(lt)),
         metal: pct(&m.metal).min(1.0),
         eye: [0.0; 3],
+        encoded,
     }
 }
 
@@ -4208,7 +4224,7 @@ fn comp_walk(
             mb: motion_blur_samples(comp, layer, t_comp, context.clone()),
             // The comp's lights, if this layer takes them (docs/06).
             lights: shading_lights(comp, layer, t_comp),
-            material: shading_material(layer, t_comp),
+            material: shading_material(comp, layer, t_comp),
             // Ordinary layers never carry a temporal re-render — that is an
             // adjustment-only capability in v1 (docs/08 §3.25, §3.26).
             temporal_below: None,
@@ -6077,6 +6093,7 @@ mod parent_placement_tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -6465,6 +6482,7 @@ mod render_below_at_tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -6555,6 +6573,7 @@ mod render_below_at_tests {
         let comp_with = |layers: Vec<Layer>| Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -6691,6 +6710,7 @@ mod render_below_at_tests {
             let comp = Composition {
                 graph: None,
                 master_volume_db: 0.0,
+                lighting: Default::default(),
                 sound_mix: false,
                 groups: Vec::new(),
                 beat_grid: None,
@@ -6771,6 +6791,7 @@ mod render_below_at_tests {
         let comp = Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -6922,6 +6943,7 @@ mod render_below_at_tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,
@@ -7071,6 +7093,7 @@ mod render_below_at_tests {
         Composition {
             graph: None,
             master_volume_db: 0.0,
+            lighting: Default::default(),
             sound_mix: false,
             groups: Vec::new(),
             beat_grid: None,

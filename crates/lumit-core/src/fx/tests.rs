@@ -2795,6 +2795,7 @@ fn marker_rig(
     let comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -5018,6 +5019,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
@@ -5967,6 +5969,7 @@ fn lit_document(n: usize) -> (crate::model::Document, Uuid) {
     let mut comp = Composition {
         graph: None,
         master_volume_db: 0.0,
+        lighting: Default::default(),
         sound_mix: false,
         groups: Vec::new(),
         beat_grid: None,
