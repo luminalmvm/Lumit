@@ -105,12 +105,11 @@ pub struct WorkerState {
     /// a parameter. Set by the render request that carries it — the chip
     /// toggling is a render — and cleared by the first request that does not.
     prefix: Option<crate::api::state::BridgePrefixPoint>,
-    /// Each Viewer view's 3D view (docs/impl/camera.md §6): a camera placement
-    /// that stands in for the named comp's active camera while set. Held here
-    /// for the reason the prefix is: it says what the Viewer is looking
-    /// through, and every render, playback and drag preview looks through the
-    /// same. Keyed by view like [`Self::looks`], so a two-up can show the
-    /// active camera beside Top.
+    /// Each Viewer view's 3D view: a camera placement that stands in for the
+    /// named comp's active camera while set. Held here for the reason the
+    /// prefix is: it says what the Viewer is looking through, and every render,
+    /// playback and drag preview looks through the same. Keyed by view like
+    /// [`Self::looks`], so a two-up can show the active camera beside Top.
     camera_views: std::collections::HashMap<u32, (Uuid, lumit_core::model::CameraPose)>,
     /// The disk tier (docs/06 §5.4) and its IO thread. Owned here because this
     /// is the thread that has both halves of every hand-off: the renderer whose
@@ -1869,13 +1868,12 @@ pub enum WorkerRequest {
     /// an export builds its own renderer, which nobody sends this to. One
     /// message rather than one per control, so the renderer can never hold
     /// half a look.
-    /// A Viewer view's 3D view of `comp` (docs/impl/camera.md §6), or `None`
-    /// for the active camera. Latched per view like the look, see
-    /// [`viewed_through`].
+    /// A Viewer view's 3D view of `comp`, or `None` for the active camera.
+    /// Latched per view like the look, see [`viewed_through`].
     SetCameraView {
         comp: Uuid,
         pose: Option<crate::api::layer::BridgeCameraPose>,
-        /// Whose view this is (docs/impl/multi-viewer.md §2.3).
+        /// Whose view this is.
         view: u32,
     },
     SetViewerLook {

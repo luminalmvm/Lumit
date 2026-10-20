@@ -2139,10 +2139,10 @@ class CompositionReference {
           that: this, grid: grid);
 
   /// Look at this comp in Viewer view `view` through `pose` rather than its
-  /// active camera (docs/impl/camera.md §6), or through the active camera
-  /// again with `None`. Panel state, kept per view like the look, so the
-  /// frontend sends it whenever a view's 3D view changes and that view's
-  /// next render looks through it. Export never sees a view.
+  /// active camera, or through the active camera again with `None`. Panel
+  /// state, kept per view like the look, so the frontend sends it whenever a
+  /// view's 3D view changes and that view's next render looks through it.
+  /// Export never sees a view.
   void setCameraView({BridgeCameraPose? pose, required int view}) =>
       BridgeLib.instance.api
           .crateApiCompositionCompositionReferenceSetCameraView(

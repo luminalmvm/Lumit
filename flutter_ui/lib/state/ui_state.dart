@@ -3812,8 +3812,8 @@ class LumitUiState extends ChangeNotifier {
     return view.cameraPoses['$comp/${looking.name}'];
   }
 
-  /// How Viewer view [viewId] is looking at its comp (docs/impl/camera.md
-  /// §6). Each view keeps its own, per comp, beside its own look.
+  /// How Viewer view [viewId] is looking at its comp. Each view keeps its
+  /// own, per comp, beside its own look.
   ViewerView viewOf(int viewId) {
     final view = _surfaceOf(viewId);
     if (view == null) return ViewerView.activeCamera;
@@ -3830,14 +3830,9 @@ class LumitUiState extends ChangeNotifier {
     return _poseIn(view, compFor(view)?.internalid.toString());
   }
 
-  /// The active view's, for whatever follows the active view.
-  ViewerView get viewerView => viewOf(activeViewId);
-  BridgeCameraPose? get viewerViewPose => viewPoseOf(activeViewId);
-
-  /// Look at view [viewId]'s comp through [look], and render it again. The
-  /// active view when no view is named.
-  void setViewerView(ViewerView look, {int? viewId}) {
-    final view = _surfaceOf(viewId ?? activeViewId);
+  /// Look at view [viewId]'s comp through [look], and render it again.
+  void setViewerView(ViewerView look, {required int viewId}) {
+    final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
     if (view == null || comp == null) return;
     final id = comp.internalid.toString();
@@ -3870,8 +3865,8 @@ class LumitUiState extends ChangeNotifier {
   /// Keep what a camera drag did to view [viewId]'s custom view, and show
   /// it. A fixed view has nothing to keep, so it is left as the engine built
   /// it.
-  void setViewerViewPose(BridgeCameraPose pose, {int? viewId}) {
-    final view = _surfaceOf(viewId ?? activeViewId);
+  void setViewerViewPose(BridgeCameraPose pose, {required int viewId}) {
+    final view = _surfaceOf(viewId);
     final comp = view == null ? null : compFor(view);
     if (view == null || comp == null) return;
     final id = comp.internalid.toString();
