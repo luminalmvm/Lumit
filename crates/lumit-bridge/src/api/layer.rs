@@ -2453,6 +2453,20 @@ pub struct BridgeTransform {
     pub camera: Option<BridgeCameraChannels>,
     /// A Light layer's own channels, the same way.
     pub light: Option<BridgeLightChannels>,
+    /// A 3D layer's Material options; `None` on a 2D layer and on the kinds
+    /// with no picture to light.
+    pub material: Option<BridgeMaterialChannels>,
+}
+
+/// A layer's Material options, percentages as After Effects shows them.
+#[frb(non_opaque)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct BridgeMaterialChannels {
+    pub ambient: BridgeScalar,
+    pub diffuse: BridgeScalar,
+    pub specular: BridgeScalar,
+    pub shininess: BridgeScalar,
+    pub metal: BridgeScalar,
 }
 
 /// The animatable channels a Light layer has beyond its transform. Intensity
@@ -2745,6 +2759,11 @@ pub enum BridgeTransformProp {
     FalloffDistance,
     LightWidth,
     LightHeight,
+    Ambient,
+    Diffuse,
+    Specular,
+    Shininess,
+    Metal,
 }
 
 /// Which two-axis transform property an axis-mode edit names
@@ -2875,6 +2894,11 @@ impl BridgeTransformProp {
             BridgeTransformProp::FalloffDistance => P::FalloffDistance,
             BridgeTransformProp::LightWidth => P::LightWidth,
             BridgeTransformProp::LightHeight => P::LightHeight,
+            BridgeTransformProp::Ambient => P::Ambient,
+            BridgeTransformProp::Diffuse => P::Diffuse,
+            BridgeTransformProp::Specular => P::Specular,
+            BridgeTransformProp::Shininess => P::Shininess,
+            BridgeTransformProp::Metal => P::Metal,
         }
     }
 }
@@ -2903,6 +2927,7 @@ impl BridgeTransform {
             opacity: BridgeScalar::read_at(&group.opacity, offset),
             camera: None,
             light: None,
+            material: None,
         }
     }
 
@@ -2938,6 +2963,17 @@ impl BridgeTransform {
                 falloff_distance: read(&light.falloff_px),
                 width: read(&light.size[0]),
                 height: read(&light.size[1]),
+            });
+        }
+        if layer.switches.three_d && layer.can_adjust() {
+            let m = &layer.transform.material;
+            let read = |p: &lumit_core::anim::Property| BridgeScalar::read_at(p, offset);
+            out.material = Some(BridgeMaterialChannels {
+                ambient: read(&m.ambient),
+                diffuse: read(&m.diffuse),
+                specular: read(&m.specular),
+                shininess: read(&m.shininess),
+                metal: read(&m.metal),
             });
         }
         out
@@ -3031,6 +3067,18 @@ impl BridgeTransform {
         );
         self.opacity
             .put(&mut target.opacity, self.opacity.animation_at(offset)?);
+        if let Some(m) = &self.material {
+            let to = &mut target.material;
+            for (to, from) in [
+                (&mut to.ambient, &m.ambient),
+                (&mut to.diffuse, &m.diffuse),
+                (&mut to.specular, &m.specular),
+                (&mut to.shininess, &m.shininess),
+                (&mut to.metal, &m.metal),
+            ] {
+                to.animation = from.animation_at(offset)?;
+            }
+        }
         Ok(())
     }
 }

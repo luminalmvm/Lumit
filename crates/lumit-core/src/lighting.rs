@@ -110,6 +110,40 @@ pub struct ShadingSurface {
     pub normal: [f32; 3],
 }
 
+/// How a layer takes light, its Material options as fractions, and where it
+/// is seen from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShadingMaterial {
+    pub ambient: f32,
+    pub diffuse: f32,
+    pub specular: f32,
+    /// The highlight's Blinn-Phong exponent.
+    pub exponent: f32,
+    pub metal: f32,
+    /// The eye, comp pixels.
+    pub eye: [f32; 3],
+}
+
+impl ShadingMaterial {
+    /// What every layer had before materials: the lights as they were, and no
+    /// highlight.
+    pub const PLAIN: Self = Self {
+        ambient: 1.0,
+        diffuse: 0.5,
+        specular: 0.0,
+        exponent: 1.0,
+        metal: 1.0,
+        eye: [0.0, 0.0, 0.0],
+    };
+
+    /// After Effects' Specular shininess, a percentage, as the exponent: one
+    /// more than it, so nought is the broadest highlight there is.
+    #[must_use]
+    pub fn exponent_for(shininess_pct: f64) -> f32 {
+        (1.0 + shininess_pct.max(0.0)) as f32
+    }
+}
+
 const INV_TWO_PI: f32 = 0.159_154_94;
 
 fn dot(a: [f32; 3], b: [f32; 3]) -> f32 {
@@ -208,14 +242,13 @@ pub fn rect_form_factor(p: [f32; 3], n: [f32; 3], corners: &[[f32; 3]; 4]) -> f3
     (sum * INV_TWO_PI).abs().min(1.0)
 }
 
-/// How much of `light` reaches a point `p` on a surface facing `n`, in 0..1.
-/// An ambient light has no direction to arrive from, so it is not counted
-/// here; [`shade`] adds it whole.
-#[must_use]
-pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
+/// Which way `light` arrives at `p` from, and how much of it is left there
+/// after its falloff and its cone, as the two factors. `None` where none of it
+/// arrives, and for an ambient light, which comes from nowhere.
+fn arrival(p: [f32; 3], light: &ShadingLight) -> Option<([f32; 3], f32, f32)> {
     let centre = light.centre();
     let to_light = match light.kind {
-        ShadingKind::Ambient => return 0.0,
+        ShadingKind::Ambient => return None,
         // Every ray runs the same way, so the light arrives from straight
         // back up the axis wherever the point is.
         ShadingKind::Parallel => [-light.axis[0], -light.axis[1], -light.axis[2]],
@@ -228,7 +261,7 @@ pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
         reach(length(to_light), light)
     };
     if reach <= 0.0 {
-        return 0.0;
+        return None;
     }
 
     // A spot's cone, softened over its feather so the edge is not a stencil.
@@ -236,15 +269,26 @@ pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
     let cone = if light.cone_cos < -1.0 || light.kind == ShadingKind::Parallel {
         1.0
     } else {
-        let Some(dir) = normalise(sub(p, centre)) else {
-            return 0.0;
-        };
-        smoothstep(light.cone_cos, light.cone_inner, dot(dir, light.axis))
+        smoothstep(
+            light.cone_cos,
+            light.cone_inner,
+            dot(normalise(sub(p, centre))?, light.axis),
+        )
     };
     if cone <= 0.0 {
-        return 0.0;
+        return None;
     }
+    Some((to_light, reach, cone))
+}
 
+/// How much of `light` reaches a point `p` on a surface facing `n`, in 0..1.
+/// An ambient light has no direction to arrive from, so it is not counted
+/// here; [`shade`] adds it whole.
+#[must_use]
+pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
+    let Some((to_light, reach, cone)) = arrival(p, light) else {
+        return 0.0;
+    };
     let e = if light.kind == ShadingKind::Area {
         rect_form_factor(p, n, &light.corners)
     } else {
@@ -256,6 +300,33 @@ pub fn irradiance(p: [f32; 3], n: [f32; 3], light: &ShadingLight) -> f32 {
         }
     };
     e * reach * cone
+}
+
+/// The highlight `light` puts on `p` for an eye at `eye`, in 0..1: Blinn-Phong,
+/// the way After Effects' Classic 3D draws it, with `exponent` for how tight
+/// it is. An area light is taken from its centre. Nothing where the light or
+/// the eye is behind the surface.
+#[must_use]
+pub fn highlight(
+    p: [f32; 3],
+    n: [f32; 3],
+    light: &ShadingLight,
+    eye: [f32; 3],
+    exponent: f32,
+) -> f32 {
+    let Some((to_light, reach, cone)) = arrival(p, light) else {
+        return 0.0;
+    };
+    let (Some(l), Some(v)) = (normalise(to_light), normalise(sub(eye, p))) else {
+        return 0.0;
+    };
+    if dot(n, l) <= 0.0 || dot(n, v) <= 0.0 {
+        return 0.0;
+    }
+    let Some(half) = normalise([l[0] + v[0], l[1] + v[1], l[2] + v[2]]) else {
+        return 0.0;
+    };
+    dot(n, half).max(0.0).powf(exponent) * reach * cone
 }
 
 /// How much of a light is left at `d` comp pixels from it, After Effects'
@@ -291,7 +362,18 @@ fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 ///
 /// An empty `lights` returns without touching a byte — the no-op that keeps a
 /// comp without lights rendering exactly as it always did.
-pub fn shade(rgba: &mut [f32], w: u32, h: u32, s: &ShadingSurface, lights: &[ShadingLight]) {
+///
+/// The highlight is added on top of the light: a metal one tints by the
+/// picture's own colour, the rest of it by the light's alone, held to the
+/// pixel's coverage so it stays premultiplied.
+pub fn shade(
+    rgba: &mut [f32],
+    w: u32,
+    h: u32,
+    s: &ShadingSurface,
+    m: &ShadingMaterial,
+    lights: &[ShadingLight],
+) {
     if lights.is_empty() {
         return;
     }
@@ -311,18 +393,30 @@ pub fn shade(rgba: &mut [f32], w: u32, h: u32, s: &ShadingSurface, lights: &[Sha
                 s.origin[2] + s.du[2] * fx + s.dv[2] * fy,
             ];
             let mut gain = [1.0f32; 3];
+            let mut shine = [0.0f32; 3];
+            // Diffuse at a half lights a layer as these lights always have.
+            let diffuse = 2.0 * m.diffuse;
             for l in lights.iter().take(MAX_LIT_LIGHTS) {
-                let e = if l.kind == ShadingKind::Ambient {
-                    1.0
-                } else {
-                    irradiance(p, s.normal, l)
-                };
+                if l.kind == ShadingKind::Ambient {
+                    for (g, c) in gain.iter_mut().zip(l.colour) {
+                        *g += m.ambient * c;
+                    }
+                    continue;
+                }
+                let e = diffuse * irradiance(p, s.normal, l);
                 for (g, c) in gain.iter_mut().zip(l.colour) {
                     *g += e * c;
                 }
+                if m.specular > 0.0 {
+                    let k = m.specular * highlight(p, s.normal, l, m.eye, m.exponent);
+                    for (sh, c) in shine.iter_mut().zip(l.colour) {
+                        *sh += k * c;
+                    }
+                }
             }
-            for (ch, g) in px[..3].iter_mut().zip(gain) {
-                *ch *= g;
+            let a = px[3];
+            for ((ch, g), sh) in px[..3].iter_mut().zip(gain).zip(shine) {
+                *ch = *ch * (g + m.metal * sh) + (1.0 - m.metal) * sh * a;
             }
         }
     }
@@ -386,7 +480,7 @@ mod tests {
         };
 
         let mut untouched = base.clone();
-        shade(&mut untouched, 4, 4, &surface, &[]);
+        shade(&mut untouched, 4, 4, &surface, &ShadingMaterial::PLAIN, &[]);
         assert_eq!(untouched, base, "no lights is a bit-exact no-op");
 
         let light = ShadingLight {
@@ -406,7 +500,7 @@ mod tests {
             axis: [0.0, 0.0, 1.0],
         };
         let mut lit = base.clone();
-        shade(&mut lit, 4, 4, &surface, &[light]);
+        shade(&mut lit, 4, 4, &surface, &ShadingMaterial::PLAIN, &[light]);
         for (i, (a, b)) in base.iter().zip(&lit).enumerate() {
             if i % 4 == 3 {
                 assert_eq!(a, b, "alpha is untouched at {i}");
@@ -540,7 +634,89 @@ mod tests {
             normal: [0.0, 0.0, 1.0],
         };
         let mut px = vec![0.4, 0.4, 0.4, 1.0];
-        shade(&mut px, 1, 1, &surface, &[ambient]);
+        shade(&mut px, 1, 1, &surface, &ShadingMaterial::PLAIN, &[ambient]);
         assert!(close(px[0], 0.6) && close(px[1], 0.5) && close(px[2], 0.4));
+    }
+
+    /// The Material options: Diffuse scales the light, with a half the light
+    /// as it always was, and Specular adds a highlight under a light and an eye
+    /// straight overhead that fades away from them, tinted by the picture when
+    /// metal and by the light when not.
+    #[test]
+    fn diffuse_scales_the_light_and_specular_adds_a_highlight() {
+        use crate::model::LightFalloff;
+        let n = [0.0, 0.0, -1.0];
+        let light = ShadingLight {
+            corners: [[0.0, 0.0, -100.0]; 4],
+            colour: [1.0, 1.0, 1.0],
+            kind: ShadingKind::Point,
+            falloff: LightFalloff::None,
+            radius_px: 0.0,
+            falloff_px: 0.0,
+            cone_cos: -2.0,
+            cone_inner: -2.0,
+            axis: [0.0, 0.0, 1.0],
+        };
+        let eye = [0.0, 0.0, -1000.0];
+        let under = highlight([0.0, 0.0, 0.0], n, &light, eye, 6.0);
+        let aside = highlight([150.0, 0.0, 0.0], n, &light, eye, 6.0);
+        assert!((under - 1.0).abs() < 1e-4, "dead on is full, got {under}");
+        assert!(aside > 0.0 && aside < under * 0.5, "it fades: {aside}");
+        assert!(highlight([150.0, 0.0, 0.0], n, &light, eye, 60.0) < aside);
+
+        let surface = ShadingSurface {
+            origin: [0.0, 0.0, 0.0],
+            du: [1.0, 0.0, 0.0],
+            dv: [0.0, 1.0, 0.0],
+            normal: n,
+        };
+        let shaded = |m: ShadingMaterial, px: [f32; 4]| {
+            let mut px = px.to_vec();
+            shade(&mut px, 1, 1, &surface, &m, &[light]);
+            px
+        };
+        let grey = [0.25, 0.25, 0.25, 1.0];
+        let plain = ShadingMaterial {
+            eye,
+            ..ShadingMaterial::PLAIN
+        };
+        let full = shaded(
+            ShadingMaterial {
+                diffuse: 1.0,
+                ..plain
+            },
+            grey,
+        );
+        let half = shaded(plain, grey);
+        assert!(full[0] > half[0], "more diffuse, more light");
+        assert!(
+            shaded(
+                ShadingMaterial {
+                    diffuse: 0.0,
+                    ..plain
+                },
+                grey
+            ) == grey,
+            "no diffuse takes no light"
+        );
+
+        // A black pixel has no colour of its own for a metal highlight to
+        // take, so only the light's own highlight shows on it.
+        let black = [0.0, 0.0, 0.0, 1.0];
+        let shiny = ShadingMaterial {
+            specular: 0.5,
+            exponent: 6.0,
+            ..plain
+        };
+        assert_eq!(shaded(shiny, black)[0], 0.0);
+        let plastic = shaded(
+            ShadingMaterial {
+                metal: 0.0,
+                ..shiny
+            },
+            black,
+        );
+        assert!(plastic[0] > 0.0 && plastic[3] == 1.0, "{plastic:?}");
+        assert!(shaded(shiny, grey)[0] > half[0], "the highlight adds");
     }
 }

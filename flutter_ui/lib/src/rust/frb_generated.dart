@@ -21220,6 +21220,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeMaterialChannels dco_decode_box_autoadd_bridge_material_channels(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_bridge_material_channels(raw);
+  }
+
+  @protected
   BridgeMatte dco_decode_box_autoadd_bridge_matte(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_bridge_matte(raw);
@@ -23822,6 +23829,21 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeMaterialChannels dco_decode_bridge_material_channels(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return BridgeMaterialChannels(
+      ambient: dco_decode_bridge_scalar(arr[0]),
+      diffuse: dco_decode_bridge_scalar(arr[1]),
+      specular: dco_decode_bridge_scalar(arr[2]),
+      shininess: dco_decode_bridge_scalar(arr[3]),
+      metal: dco_decode_bridge_scalar(arr[4]),
+    );
+  }
+
+  @protected
   BridgeMatte dco_decode_bridge_matte(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -25793,8 +25815,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   BridgeTransform dco_decode_bridge_transform(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return BridgeTransform(
       anchorX: dco_decode_bridge_scalar(arr[0]),
       anchorY: dco_decode_bridge_scalar(arr[1]),
@@ -25809,6 +25831,7 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       opacity: dco_decode_bridge_scalar(arr[10]),
       camera: dco_decode_opt_box_autoadd_bridge_camera_channels(arr[11]),
       light: dco_decode_opt_box_autoadd_bridge_light_channels(arr[12]),
+      material: dco_decode_opt_box_autoadd_bridge_material_channels(arr[13]),
     );
   }
 
@@ -27116,6 +27139,15 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeMaterialChannels? dco_decode_opt_box_autoadd_bridge_material_channels(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_bridge_material_channels(raw);
+  }
+
+  @protected
   BridgeMatte? dco_decode_opt_box_autoadd_bridge_matte(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_bridge_matte(raw);
@@ -27982,6 +28014,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bridge_match_frame(deserializer));
+  }
+
+  @protected
+  BridgeMaterialChannels sse_decode_box_autoadd_bridge_material_channels(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bridge_material_channels(deserializer));
   }
 
   @protected
@@ -30777,6 +30816,23 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeMaterialChannels sse_decode_bridge_material_channels(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ambient = sse_decode_bridge_scalar(deserializer);
+    var var_diffuse = sse_decode_bridge_scalar(deserializer);
+    var var_specular = sse_decode_bridge_scalar(deserializer);
+    var var_shininess = sse_decode_bridge_scalar(deserializer);
+    var var_metal = sse_decode_bridge_scalar(deserializer);
+    return BridgeMaterialChannels(
+        ambient: var_ambient,
+        diffuse: var_diffuse,
+        specular: var_specular,
+        shininess: var_shininess,
+        metal: var_metal);
+  }
+
+  @protected
   BridgeMatte sse_decode_bridge_matte(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_layer = sse_decode_Uuid(deserializer);
@@ -32899,6 +32955,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_decode_opt_box_autoadd_bridge_camera_channels(deserializer);
     var var_light =
         sse_decode_opt_box_autoadd_bridge_light_channels(deserializer);
+    var var_material =
+        sse_decode_opt_box_autoadd_bridge_material_channels(deserializer);
     return BridgeTransform(
         anchorX: var_anchorX,
         anchorY: var_anchorY,
@@ -32912,7 +32970,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         rotationY: var_rotationY,
         opacity: var_opacity,
         camera: var_camera,
-        light: var_light);
+        light: var_light,
+        material: var_material);
   }
 
   @protected
@@ -35026,6 +35085,18 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  BridgeMaterialChannels? sse_decode_opt_box_autoadd_bridge_material_channels(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_bridge_material_channels(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   BridgeMatte? sse_decode_opt_box_autoadd_bridge_matte(
       SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -36154,6 +36225,13 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
       BridgeMatchFrame self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bridge_match_frame(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_bridge_material_channels(
+      BridgeMaterialChannels self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_material_channels(self, serializer);
   }
 
   @protected
@@ -38335,6 +38413,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
   }
 
   @protected
+  void sse_encode_bridge_material_channels(
+      BridgeMaterialChannels self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bridge_scalar(self.ambient, serializer);
+    sse_encode_bridge_scalar(self.diffuse, serializer);
+    sse_encode_bridge_scalar(self.specular, serializer);
+    sse_encode_bridge_scalar(self.shininess, serializer);
+    sse_encode_bridge_scalar(self.metal, serializer);
+  }
+
+  @protected
   void sse_encode_bridge_matte(BridgeMatte self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_Uuid(self.layer, serializer);
@@ -39964,6 +40053,8 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bridge_scalar(self.opacity, serializer);
     sse_encode_opt_box_autoadd_bridge_camera_channels(self.camera, serializer);
     sse_encode_opt_box_autoadd_bridge_light_channels(self.light, serializer);
+    sse_encode_opt_box_autoadd_bridge_material_channels(
+        self.material, serializer);
   }
 
   @protected
@@ -41686,6 +41777,17 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_bridge_match_frame(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_bridge_material_channels(
+      BridgeMaterialChannels? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_bridge_material_channels(self, serializer);
     }
   }
 

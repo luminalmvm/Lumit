@@ -25969,6 +25969,24 @@ impl SseDecode for crate::api::cut::BridgeMatchFrame {
     }
 }
 
+impl SseDecode for crate::api::layer::BridgeMaterialChannels {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_ambient = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_diffuse = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_specular = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_shininess = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        let mut var_metal = <crate::api::effect::BridgeScalar>::sse_decode(deserializer);
+        return crate::api::layer::BridgeMaterialChannels {
+            ambient: var_ambient,
+            diffuse: var_diffuse,
+            specular: var_specular,
+            shininess: var_shininess,
+            metal: var_metal,
+        };
+    }
+}
+
 impl SseDecode for crate::api::layer::BridgeMatte {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -28668,6 +28686,8 @@ impl SseDecode for crate::api::layer::BridgeTransform {
             <Option<crate::api::layer::BridgeCameraChannels>>::sse_decode(deserializer);
         let mut var_light =
             <Option<crate::api::layer::BridgeLightChannels>>::sse_decode(deserializer);
+        let mut var_material =
+            <Option<crate::api::layer::BridgeMaterialChannels>>::sse_decode(deserializer);
         return crate::api::layer::BridgeTransform {
             anchor_x: var_anchorX,
             anchor_y: var_anchorY,
@@ -28682,6 +28702,7 @@ impl SseDecode for crate::api::layer::BridgeTransform {
             opacity: var_opacity,
             camera: var_camera,
             light: var_light,
+            material: var_material,
         };
     }
 }
@@ -28732,6 +28753,11 @@ impl SseDecode for crate::api::layer::BridgeTransformProp {
             25 => crate::api::layer::BridgeTransformProp::FalloffDistance,
             26 => crate::api::layer::BridgeTransformProp::LightWidth,
             27 => crate::api::layer::BridgeTransformProp::LightHeight,
+            28 => crate::api::layer::BridgeTransformProp::Ambient,
+            29 => crate::api::layer::BridgeTransformProp::Diffuse,
+            30 => crate::api::layer::BridgeTransformProp::Specular,
+            31 => crate::api::layer::BridgeTransformProp::Shininess,
+            32 => crate::api::layer::BridgeTransformProp::Metal,
             _ => unreachable!("Invalid variant for BridgeTransformProp: {}", inner),
         };
     }
@@ -31049,6 +31075,19 @@ impl SseDecode for Option<crate::api::cut::BridgeMatchFrame> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::api::cut::BridgeMatchFrame>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::layer::BridgeMaterialChannels> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::layer::BridgeMaterialChannels>::sse_decode(
                 deserializer,
             ));
         } else {
@@ -36672,6 +36711,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::cut::BridgeMatchFrame>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeMaterialChannels {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.ambient.into_into_dart().into_dart(),
+            self.diffuse.into_into_dart().into_dart(),
+            self.specular.into_into_dart().into_dart(),
+            self.shininess.into_into_dart().into_dart(),
+            self.metal.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::layer::BridgeMaterialChannels
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::layer::BridgeMaterialChannels>
+    for crate::api::layer::BridgeMaterialChannels
+{
+    fn into_into_dart(self) -> crate::api::layer::BridgeMaterialChannels {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeMatte {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -40003,6 +40066,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeTransform {
             self.opacity.into_into_dart().into_dart(),
             self.camera.into_into_dart().into_dart(),
             self.light.into_into_dart().into_dart(),
+            self.material.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -40072,6 +40136,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::layer::BridgeTransformProp {
             Self::FalloffDistance => 25.into_dart(),
             Self::LightWidth => 26.into_dart(),
             Self::LightHeight => 27.into_dart(),
+            Self::Ambient => 28.into_dart(),
+            Self::Diffuse => 29.into_dart(),
+            Self::Specular => 30.into_dart(),
+            Self::Shininess => 31.into_dart(),
+            Self::Metal => 32.into_dart(),
             _ => unreachable!(),
         }
     }
@@ -43168,6 +43237,17 @@ impl SseEncode for crate::api::cut::BridgeMatchFrame {
     }
 }
 
+impl SseEncode for crate::api::layer::BridgeMaterialChannels {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::effect::BridgeScalar>::sse_encode(self.ambient, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.diffuse, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.specular, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.shininess, serializer);
+        <crate::api::effect::BridgeScalar>::sse_encode(self.metal, serializer);
+    }
+}
+
 impl SseEncode for crate::api::layer::BridgeMatte {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -45203,6 +45283,7 @@ impl SseEncode for crate::api::layer::BridgeTransform {
         <crate::api::effect::BridgeScalar>::sse_encode(self.opacity, serializer);
         <Option<crate::api::layer::BridgeCameraChannels>>::sse_encode(self.camera, serializer);
         <Option<crate::api::layer::BridgeLightChannels>>::sse_encode(self.light, serializer);
+        <Option<crate::api::layer::BridgeMaterialChannels>>::sse_encode(self.material, serializer);
     }
 }
 
@@ -45256,6 +45337,11 @@ impl SseEncode for crate::api::layer::BridgeTransformProp {
                 crate::api::layer::BridgeTransformProp::FalloffDistance => 25,
                 crate::api::layer::BridgeTransformProp::LightWidth => 26,
                 crate::api::layer::BridgeTransformProp::LightHeight => 27,
+                crate::api::layer::BridgeTransformProp::Ambient => 28,
+                crate::api::layer::BridgeTransformProp::Diffuse => 29,
+                crate::api::layer::BridgeTransformProp::Specular => 30,
+                crate::api::layer::BridgeTransformProp::Shininess => 31,
+                crate::api::layer::BridgeTransformProp::Metal => 32,
                 _ => {
                     unimplemented!("");
                 }
@@ -47083,6 +47169,16 @@ impl SseEncode for Option<crate::api::cut::BridgeMatchFrame> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::cut::BridgeMatchFrame>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::layer::BridgeMaterialChannels> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::layer::BridgeMaterialChannels>::sse_encode(value, serializer);
         }
     }
 }

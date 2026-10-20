@@ -50,7 +50,34 @@ pub struct LightingOp {
     pub du: [f32; 3],
     pub dv: [f32; 3],
     pub normal: [f32; 3],
+    pub material: LightingMaterial,
     pub lights: Vec<LightingLight>,
+}
+
+/// The layer's Material options as fractions, and the eye: the oracle's
+/// `ShadingMaterial`, restated. The default is the oracle's `PLAIN`, the
+/// lights as they were before materials.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LightingMaterial {
+    pub ambient: f32,
+    pub diffuse: f32,
+    pub specular: f32,
+    pub exponent: f32,
+    pub metal: f32,
+    pub eye: [f32; 3],
+}
+
+impl Default for LightingMaterial {
+    fn default() -> Self {
+        Self {
+            ambient: 1.0,
+            diffuse: 0.5,
+            specular: 0.0,
+            exponent: 1.0,
+            metal: 1.0,
+            eye: [0.0; 3],
+        }
+    }
 }
 
 #[repr(C)]
@@ -77,6 +104,10 @@ struct LightingParams {
     dv: [f32; 4],
     /// xyz = plane normal, w = live light count.
     normal: [f32; 4],
+    /// x = ambient, y = diffuse, z = specular, w = highlight exponent.
+    material: [f32; 4],
+    /// xyz = the eye, w = metal.
+    eye: [f32; 4],
     lights: [GpuLight; MAX_LIT_LIGHTS],
 }
 
@@ -129,6 +160,13 @@ impl FxEngine {
                 du: v4(op.du, 0.0),
                 dv: v4(op.dv, 0.0),
                 normal: v4(op.normal, live as f32),
+                material: [
+                    op.material.ambient,
+                    op.material.diffuse,
+                    op.material.specular,
+                    op.material.exponent,
+                ],
+                eye: v4(op.material.eye, op.material.metal),
                 lights,
             }),
         );

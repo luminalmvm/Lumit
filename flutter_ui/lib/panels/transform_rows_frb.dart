@@ -73,9 +73,9 @@ class TransformAxis {
 }
 
 /// Which heading a transform row sits under in the fold-out: the Transform
-/// group itself, or one of the option groups a camera or a light has inside
-/// it.
-enum TransformSection { transform, camera, light }
+/// group itself, one of the option groups a camera or a light has inside it,
+/// or a 3D layer's Material options beside it.
+enum TransformSection { transform, camera, light, material }
 
 /// One row: its label, the axes it edits, and — on the three properties that
 /// have more than one axis — which pair it belongs to and how that pair is
@@ -335,6 +335,20 @@ List<TransformGroup> transformGroups({
       TransformAxis(BridgeTransformProp.opacity,
           suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
     ]),
+    // How a 3D layer takes the comp's lights, as After Effects has it. A null
+    // has no picture to light.
+    if (threeD && kind != BridgeLayerKind.nullLayer)
+      for (final (label, prop) in [
+        (l10n.materialAmbient, BridgeTransformProp.ambient),
+        (l10n.materialDiffuse, BridgeTransformProp.diffuse),
+        (l10n.materialSpecular, BridgeTransformProp.specular),
+        (l10n.materialShininess, BridgeTransformProp.shininess),
+        (l10n.materialMetal, BridgeTransformProp.metal),
+      ])
+        TransformGroup(label, [
+          TransformAxis(prop,
+              suffix: '%', min: 0, max: 100, decimals: 0, speed: 0.5),
+        ], section: TransformSection.material),
   ];
 }
 
@@ -357,6 +371,9 @@ class TransformRowsFrb extends StatelessWidget {
   final BridgeLayerKind kind;
   final bool twoNode;
   final BridgeLightSettings? light;
+
+  /// The layer's Accepts lights switch, for the Material options' own row.
+  final bool acceptsLights;
 
   /// How each pair is shown — which decides how many rows there are.
   final BridgeAxisModes axisModes;
@@ -387,6 +404,7 @@ class TransformRowsFrb extends StatelessWidget {
     this.kind = BridgeLayerKind.footage,
     this.twoNode = false,
     this.light,
+    this.acceptsLights = true,
     required this.axisModes,
     required this.playheadFrame,
     required this.onSeek,
@@ -401,7 +419,7 @@ class TransformRowsFrb extends StatelessWidget {
   /// own chrome (the Effect controls panel's hairline-separated rows). A
   /// section's choice rows come first in it, as they do in the fold-out.
   List<Widget> rows(BuildContext context) {
-    final settings = layerSettings(kind: kind, light: light);
+    final settings = layerSettings(kind: kind, light: light, threeD: threeD);
     final out = <Widget>[];
     TransformSection? last;
     for (final group in transformGroups(
@@ -418,6 +436,7 @@ class TransformRowsFrb extends StatelessWidget {
             layer: layer,
             setting: setting,
             light: light,
+            acceptsLights: acceptsLights,
             onChanged: onChanged,
             keyPrefix: keyPrefix,
           ));
@@ -1158,6 +1177,11 @@ BridgeScalar read(BridgeTransform tf, BridgeTransformProp prop) =>
         tf.light?.falloffDistance ?? _noChannel,
       BridgeTransformProp.lightWidth => tf.light?.width ?? _noChannel,
       BridgeTransformProp.lightHeight => tf.light?.height ?? _noChannel,
+      BridgeTransformProp.ambient => tf.material?.ambient ?? _noChannel,
+      BridgeTransformProp.diffuse => tf.material?.diffuse ?? _noChannel,
+      BridgeTransformProp.specular => tf.material?.specular ?? _noChannel,
+      BridgeTransformProp.shininess => tf.material?.shininess ?? _noChannel,
+      BridgeTransformProp.metal => tf.material?.metal ?? _noChannel,
     };
 
 /// A copy of `tf` with one property replaced — what the preview renders.
@@ -1177,6 +1201,7 @@ BridgeTransform writeScalar(
 
   final camera = tf.camera;
   final light = tf.light;
+  final material = tf.material;
   return BridgeTransform(
     anchorX: pick(BridgeTransformProp.anchorX, tf.anchorX),
     anchorY: pick(BridgeTransformProp.anchorY, tf.anchorY),
@@ -1221,6 +1246,15 @@ BridgeTransform writeScalar(
                 pick(BridgeTransformProp.falloffDistance, light.falloffDistance),
             width: pick(BridgeTransformProp.lightWidth, light.width),
             height: pick(BridgeTransformProp.lightHeight, light.height),
+          ),
+    material: material == null
+        ? null
+        : BridgeMaterialChannels(
+            ambient: pick(BridgeTransformProp.ambient, material.ambient),
+            diffuse: pick(BridgeTransformProp.diffuse, material.diffuse),
+            specular: pick(BridgeTransformProp.specular, material.specular),
+            shininess: pick(BridgeTransformProp.shininess, material.shininess),
+            metal: pick(BridgeTransformProp.metal, material.metal),
           ),
   );
 }

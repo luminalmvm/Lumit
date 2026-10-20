@@ -36,6 +36,10 @@ struct Params {
     dv: vec4<f32>,
     // xyz = the plane's unit normal, w = how many of `lights` are live.
     normal: vec4<f32>,
+    // x = ambient, y = diffuse, z = specular, w = highlight exponent.
+    material: vec4<f32>,
+    // xyz = the eye, w = metal.
+    eye: vec4<f32>,
     lights: array<Light, 8>,
 };
 
@@ -135,18 +139,20 @@ fn reach(d: f32, l: Light) -> f32 {
     return (r / d) * (r / d);
 }
 
-fn irradiance(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
+// How much of the light is left at `pos` after its falloff and its cone, or
+// zero where none arrives; `to_light` is set to the way it arrives from.
+fn arrival(pos: vec3<f32>, l: Light, to_light: ptr<function, vec3<f32>>) -> f32 {
     let kind = u32(l.flags.x + 0.5);
     if (kind == 3u) {
         return 0.0;
     }
     let centre = light_centre(l);
-    var to_light = centre - pos;
+    *to_light = centre - pos;
     var r: f32 = 1.0;
     if (kind == 2u) {
-        to_light = -l.axis.xyz;
+        *to_light = -l.axis.xyz;
     } else {
-        r = reach(length(to_light), l);
+        r = reach(length(*to_light), l);
     }
     if (r <= 0.0) {
         return 0.0;
@@ -164,9 +170,17 @@ fn irradiance(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
     if (cone <= 0.0) {
         return 0.0;
     }
+    return r * cone;
+}
 
+fn irradiance(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
+    var to_light = vec3<f32>(0.0);
+    let strength = arrival(pos, l, &to_light);
+    if (strength <= 0.0) {
+        return 0.0;
+    }
     var e: f32;
-    if (kind == 1u) {
+    if (u32(l.flags.x + 0.5) == 1u) {
         e = rect_form_factor(pos, n, l);
     } else {
         let dir = normalise(to_light);
@@ -176,7 +190,29 @@ fn irradiance(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
             e = max(dot(n, dir), 0.0);
         }
     }
-    return e * r * cone;
+    return e * strength;
+}
+
+// Blinn-Phong, as lumit_core::lighting::highlight.
+fn highlight(pos: vec3<f32>, n: vec3<f32>, l: Light) -> f32 {
+    var to_light = vec3<f32>(0.0);
+    let strength = arrival(pos, l, &to_light);
+    if (strength <= 0.0) {
+        return 0.0;
+    }
+    let ld = normalise(to_light);
+    let v = normalise(p.eye.xyz - pos);
+    if (all(ld == vec3<f32>(0.0)) || all(v == vec3<f32>(0.0))) {
+        return 0.0;
+    }
+    if (dot(n, ld) <= 0.0 || dot(n, v) <= 0.0) {
+        return 0.0;
+    }
+    let h = normalise(ld + v);
+    if (all(h == vec3<f32>(0.0))) {
+        return 0.0;
+    }
+    return pow(max(dot(n, h), 0.0), p.material.w) * strength;
 }
 
 @compute @workgroup_size(8, 8)
@@ -195,16 +231,23 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
     let f = vec2<f32>(f32(xy.x) + 0.5, f32(xy.y) + 0.5);
     let pos = p.origin.xyz + p.du.xyz * f.x + p.dv.xyz * f.y;
     var gain = vec3<f32>(1.0);
+    var shine = vec3<f32>(0.0);
+    let diffuse = 2.0 * p.material.y;
     for (var i: u32 = 0u; i < MAX_LIT_LIGHTS; i = i + 1u) {
         if (i >= live) {
             break;
         }
         let l = p.lights[i];
-        var e: f32 = 1.0;
-        if (u32(l.flags.x + 0.5) != 3u) {
-            e = irradiance(pos, p.normal.xyz, l);
+        if (u32(l.flags.x + 0.5) == 3u) {
+            gain = gain + p.material.x * l.colour.rgb;
+            continue;
         }
+        let e = diffuse * irradiance(pos, p.normal.xyz, l);
         gain = gain + e * l.colour.rgb;
+        if (p.material.z > 0.0) {
+            shine = shine + p.material.z * highlight(pos, p.normal.xyz, l) * l.colour.rgb;
+        }
     }
-    textureStore(dst, xy, vec4<f32>(o.rgb * gain, o.a));
+    let metal = p.eye.w;
+    textureStore(dst, xy, vec4<f32>(o.rgb * (gain + metal * shine) + (1.0 - metal) * shine * o.a, o.a));
 }

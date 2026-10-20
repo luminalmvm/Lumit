@@ -656,8 +656,92 @@ pub struct TransformGroup {
     /// has never been separated writes nothing.
     #[serde(default, skip_serializing_if = "AxisModes::is_default")]
     pub axis_modes: AxisModes,
+    /// How the layer takes the comp's lights. Kept beside the transform
+    /// because it is animated the same way and read in the same places; a
+    /// file from before it existed reads as the lights it had then, and a
+    /// layer that still matches is written without it.
+    #[serde(
+        default = "Material::legacy_boxed",
+        skip_serializing_if = "Material::is_legacy"
+    )]
+    pub material: Box<Material>,
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+/// A layer's Material options, After Effects' own: how much of each kind of
+/// light it takes. Percentages, as there.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Material {
+    /// How much of the ambient lights it takes.
+    pub ambient: Property,
+    /// How much of the other lights it takes. 50 lights a layer as Lumit's
+    /// lights always have.
+    pub diffuse: Property,
+    /// How bright the highlight a light makes on it is.
+    pub specular: Property,
+    /// How small and hard that highlight is.
+    pub shininess: Property,
+    /// How much the highlight takes the layer's own colour rather than the
+    /// light's.
+    pub metal: Property,
+}
+
+impl Material {
+    /// What layers had before materials: no highlight at all.
+    #[must_use]
+    pub fn legacy() -> Self {
+        Self {
+            specular: Property::zero(),
+            ..Self::default()
+        }
+    }
+
+    fn legacy_boxed() -> Box<Self> {
+        Box::new(Self::legacy())
+    }
+
+    // serde hands the field over as it is stored, box and all.
+    #[allow(clippy::borrowed_box)]
+    fn is_legacy(m: &Box<Self>) -> bool {
+        **m == Self::legacy()
+    }
+
+    #[must_use]
+    pub fn get(&self, prop: TransformProp) -> Option<&Property> {
+        Some(match prop {
+            TransformProp::Ambient => &self.ambient,
+            TransformProp::Diffuse => &self.diffuse,
+            TransformProp::Specular => &self.specular,
+            TransformProp::Shininess => &self.shininess,
+            TransformProp::Metal => &self.metal,
+            _ => return None,
+        })
+    }
+
+    pub fn get_mut(&mut self, prop: TransformProp) -> Option<&mut Property> {
+        Some(match prop {
+            TransformProp::Ambient => &mut self.ambient,
+            TransformProp::Diffuse => &mut self.diffuse,
+            TransformProp::Specular => &mut self.specular,
+            TransformProp::Shininess => &mut self.shininess,
+            TransformProp::Metal => &mut self.metal,
+            _ => return None,
+        })
+    }
+}
+
+/// A new layer's material, on After Effects' defaults.
+impl Default for Material {
+    fn default() -> Self {
+        Self {
+            ambient: Property::fixed(100.0),
+            diffuse: Property::fixed(50.0),
+            specular: Property::fixed(50.0),
+            shininess: Property::fixed(5.0),
+            metal: Property::fixed(100.0),
+        }
+    }
 }
 
 /// How one two-axis transform property is shown and edited.
@@ -764,6 +848,7 @@ impl Default for TransformGroup {
             rotation_y: Property::fixed(0.0),
             opacity: Property::fixed(100.0),
             axis_modes: AxisModes::default(),
+            material: Box::default(),
             extra: serde_json::Map::new(),
         }
     }
@@ -805,6 +890,12 @@ pub enum TransformProp {
     FalloffDistance,
     LightWidth,
     LightHeight,
+    /// A layer's Material options, in [`Material`].
+    Ambient,
+    Diffuse,
+    Specular,
+    Shininess,
+    Metal,
 }
 
 impl TransformGroup {
@@ -854,8 +945,9 @@ impl TransformGroup {
         out
     }
 
-    /// The group's own channel, or `None` for a camera channel, which is not
-    /// here: [`Layer::prop`] answers both.
+    /// The group's own channel, its material's included, or `None` for a
+    /// camera or light channel, which is not here: [`Layer::prop`] answers
+    /// all of them.
     #[must_use]
     pub fn get(&self, prop: TransformProp) -> Option<&Property> {
         Some(match prop {
@@ -870,7 +962,7 @@ impl TransformGroup {
             TransformProp::RotationX => &self.rotation_x,
             TransformProp::RotationY => &self.rotation_y,
             TransformProp::Opacity => &self.opacity,
-            _ => return None,
+            _ => return self.material.get(prop),
         })
     }
 
@@ -887,7 +979,7 @@ impl TransformGroup {
             TransformProp::RotationX => &mut self.rotation_x,
             TransformProp::RotationY => &mut self.rotation_y,
             TransformProp::Opacity => &mut self.opacity,
-            _ => return None,
+            _ => return self.material.get_mut(prop),
         })
     }
 }

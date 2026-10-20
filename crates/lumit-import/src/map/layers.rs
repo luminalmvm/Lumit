@@ -578,6 +578,7 @@ fn transform(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Transf
         // them is a follow-up — the axes' values and keyframes are already
         // faithful either way, because both editors store them per axis.
         axis_modes: lumit_core::model::AxisModes::default(),
+        material: Box::default(),
         extra: serde_json::Map::new(),
     };
     let orientation = orientation(conv, path, props, &mut out);

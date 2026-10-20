@@ -223,6 +223,30 @@
   "@lightSettings": {
     "description": "Layer menu item, and the title of the window it opens: a light's type and options. The window also opens when a light is made."
   },
+  "materialOptions": "Material options",
+  "@materialOptions": {
+    "description": "Heading beside Transform on a 3D layer, over the rows about how it takes the composition's lights. After Effects' name for the group."
+  },
+  "materialAmbient": "Ambient",
+  "@materialAmbient": {
+    "description": "Material options row: how much of the ambient lights the layer takes, as a percentage."
+  },
+  "materialDiffuse": "Diffuse",
+  "@materialDiffuse": {
+    "description": "Material options row: how much of the other lights the layer takes, as a percentage."
+  },
+  "materialSpecular": "Specular intensity",
+  "@materialSpecular": {
+    "description": "Material options row: how bright the highlight a light makes on the layer is, as a percentage."
+  },
+  "materialShininess": "Specular shininess",
+  "@materialShininess": {
+    "description": "Material options row: how small and hard the highlight is, as a percentage."
+  },
+  "materialMetal": "Metal",
+  "@materialMetal": {
+    "description": "Material options row: how much the highlight takes the layer's own colour rather than the light's, as a percentage."
+  },
   "cameraType": "Type",
   "@cameraType": {
     "description": "Camera settings row: whether the camera is one-node or two-node."

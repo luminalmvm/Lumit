@@ -5991,7 +5991,7 @@ fn wgsl_lens_flare_matte_mode_matches_the_cpu_reference() {
 /// bit of a transcendental — an absolute epsilon, as the blur oracle uses.
 #[test]
 fn wgsl_lighting_matches_the_cpu_oracle() {
-    use lumit_core::lighting::{ShadingKind, ShadingLight, ShadingSurface};
+    use lumit_core::lighting::{ShadingKind, ShadingLight, ShadingMaterial, ShadingSurface};
     use lumit_core::model::LightFalloff;
 
     let Some(ctx) = crate::test_support::lease() else {
@@ -6095,15 +6095,47 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         ("inverse square", vec![inverse]),
         ("parallel", vec![parallel]),
         ("ambient", vec![ambient]),
+        ("specular", vec![softbox, bulb]),
+        ("plastic", vec![spot, parallel]),
     ] {
+        // The last two are seen through a shiny material, a metal one and
+        // then a plastic one; the rest through the plain one.
+        let eye = [16.0, 12.0, -200.0];
+        let plain = ShadingMaterial {
+            eye,
+            ..ShadingMaterial::PLAIN
+        };
+        let m = match name {
+            "specular" => ShadingMaterial {
+                specular: 0.5,
+                exponent: 6.0,
+                ..plain
+            },
+            "plastic" => ShadingMaterial {
+                specular: 0.8,
+                exponent: 20.0,
+                metal: 0.0,
+                ambient: 0.5,
+                ..plain
+            },
+            _ => plain,
+        };
         let mut cpu = img.clone();
-        lumit_core::lighting::shade(&mut cpu, w, h, &surface, &lights);
+        lumit_core::lighting::shade(&mut cpu, w, h, &surface, &m, &lights);
 
         let op = crate::fx::LightingOp {
             origin: surface.origin,
             du: surface.du,
             dv: surface.dv,
             normal: surface.normal,
+            material: crate::fx::LightingMaterial {
+                ambient: m.ambient,
+                diffuse: m.diffuse,
+                specular: m.specular,
+                exponent: m.exponent,
+                metal: m.metal,
+                eye: m.eye,
+            },
             lights: lights
                 .iter()
                 .map(|l| crate::fx::LightingLight {

@@ -1171,6 +1171,25 @@ pub fn shading_lights(
         .collect()
 }
 
+/// A layer's Material options at comp time `t_comp`, as the fractions the
+/// lighting pass reads. The eye is the realiser's to fill in.
+pub fn shading_material(
+    layer: &lumit_core::model::Layer,
+    t_comp: f64,
+) -> lumit_gpu::fx::LightingMaterial {
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let m = &layer.transform.material;
+    let pct = |p: &lumit_core::anim::Property| (p.value_at(lt) / 100.0).max(0.0) as f32;
+    lumit_gpu::fx::LightingMaterial {
+        ambient: pct(&m.ambient),
+        diffuse: pct(&m.diffuse),
+        specular: pct(&m.specular),
+        exponent: lumit_core::lighting::ShadingMaterial::exponent_for(m.shininess.value_at(lt)),
+        metal: pct(&m.metal).min(1.0),
+        eye: [0.0; 3],
+    }
+}
+
 /// A point through a column-major placement matrix, done by hand so the render
 /// crate does not take a maths dependency for nine multiplies. Placements are
 /// affine — the camera's perspective is applied later — so there is no w to
@@ -3134,6 +3153,7 @@ fn comp_walk(
                 // The members were each already lit; shading the slab would
                 // light them twice.
                 lights: Vec::new(),
+                material: Default::default(),
                 temporal_below: None,
                 accumulation_below: None,
                 flow_below: Vec::new(),
@@ -3930,6 +3950,7 @@ fn comp_walk(
                     // the composite of everything below, whose layers were
                     // each already lit. Shading it would light them twice.
                     lights: Vec::new(),
+                    material: Default::default(),
                     temporal_below,
                     accumulation_below,
                     // The composite this layer's temporal effects read as
@@ -4174,6 +4195,7 @@ fn comp_walk(
             mb: motion_blur_samples(comp, layer, t_comp, context.clone()),
             // The comp's lights, if this layer takes them (docs/06).
             lights: shading_lights(comp, layer, t_comp),
+            material: shading_material(layer, t_comp),
             // Ordinary layers never carry a temporal re-render — that is an
             // adjustment-only capability in v1 (docs/08 §3.25, §3.26).
             temporal_below: None,
@@ -4429,6 +4451,7 @@ fn graph_comp_draw(
         fx_input_key: None,
         mb: Vec::new(),
         lights: Vec::new(),
+        material: Default::default(),
         temporal_below: None,
         accumulation_below: None,
         flow_below: Vec::new(),
@@ -5317,6 +5340,7 @@ fn read_draw(
         fx_input_key: None,
         mb: Vec::new(),
         lights: Vec::new(),
+        material: Default::default(),
         temporal_below: None,
         accumulation_below: None,
         flow_below: Vec::new(),

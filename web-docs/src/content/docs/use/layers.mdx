@@ -170,8 +170,8 @@ the window again for the selected light. A keyframed option reads **animated** t
 left alone.
 
 A light is placed by its ordinary transform, so it animates and parents like anything
-else. Which layers it shades is per layer: **Accepts lights**, on the layer's right-click
-menu in the Timeline, on by default.
+else. Which layers it shades is per layer: **Accepts lights**, on by default, in a 3D
+layer's **Material options** and on the layer's right-click menu in the Timeline.
 
 **Light options**, inside the light's Transform group, holds its own rows:
 
@@ -189,6 +189,19 @@ menu in the Timeline, on by default.
 Every row but the type and the falloff can be keyframed. **Point of interest**, in Light
 settings, aims a spot, parallel or area light at a point rather than by its rotation; the
 point's row then shows under Transform, and the rotation rows turn the light from there.
+
+**Material options**, beside Transform on a 3D layer, sets how it takes the lights:
+
+- **Accepts lights**: whether the lights shade it.
+- **Ambient**: how much of the ambient lights it takes.
+- **Diffuse**: how much of the other lights it takes. At 50% a layer is lit as it was before
+  materials existed.
+- **Specular intensity**: how bright the highlight a light makes on it is.
+- **Specular shininess**: how small and hard that highlight is.
+- **Metal**: how much the highlight takes the layer's own colour rather than the light's.
+
+A layer in a project saved before materials existed has no highlight until its **Specular
+intensity** is raised.
 
 ## Parenting
 

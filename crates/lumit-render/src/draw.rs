@@ -690,6 +690,9 @@ pub struct CompLayerDraw {
     /// lighting pass never runs, which is how a comp without lights renders
     /// byte-for-byte as it did before lighting existed.
     pub lights: Vec<lumit_gpu::fx::LightingLight>,
+    /// How this layer takes those lights, its Material options. The realiser
+    /// puts the eye in.
+    pub material: lumit_gpu::fx::LightingMaterial,
     /// The below-stack re-rendered at a held time for a temporal adjustment
     /// (Posterize Time, docs/08 §3.25). Some only on an adjustment
     /// [`DrawSource::Adjust`] draw whose stack holds a Posterize Time effect

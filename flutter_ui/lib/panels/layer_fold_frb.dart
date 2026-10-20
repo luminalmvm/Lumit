@@ -966,6 +966,10 @@ double? _transformDefault(BridgeTransformProp prop, double w, double h) =>
         500,
       // Seeded from the comp, as a camera's are.
       BridgeTransformProp.lightWidth || BridgeTransformProp.lightHeight => null,
+      // After Effects' Material options defaults.
+      BridgeTransformProp.ambient || BridgeTransformProp.metal => 100,
+      BridgeTransformProp.diffuse || BridgeTransformProp.specular => 50,
+      BridgeTransformProp.shininess => 5,
       // The rest of a camera's channels are seeded from the comp and from
       // each other (docs/impl/camera.md §1), so there is no number here that
       // means "untouched". Exempt, exactly as the Anchor is.
@@ -1806,6 +1810,10 @@ String cameraOptionsPath(String layerId) =>
 String lightOptionsPath(String layerId) =>
     '${transformPath(layerId)}/light-options';
 
+/// The path of a 3D layer's Material options, a heading of its own beside
+/// Transform as in After Effects.
+String materialPath(String layerId) => '$layerId/material';
+
 /// The path of one Transform row — Position, Scale, Rotation and the rest.
 ///
 /// Named after the group's first axis rather than its label, because the label
@@ -2068,7 +2076,8 @@ List<LayerFoldRow> layerFoldRows({
   // the placement rows (docs/impl/camera.md §1). The numbers under it are
   // about the lens or the light rather than about where the layer stands. A
   // light's choice rows head its list.
-  final settings = layerSettings(kind: info.kind, light: info.light);
+  final settings = layerSettings(
+      kind: info.kind, light: info.light, threeD: info.switches.threeD);
   for (final (section, path, label) in [
     (TransformSection.camera, cameraOptionsPath(id), l10n.cameraOptions),
     (TransformSection.light, lightOptionsPath(id), l10n.lightOptions),
@@ -2094,6 +2103,33 @@ List<LayerFoldRow> layerFoldRows({
     for (final group in options) {
       if (optionsOpen || open.contains(transformGroupPath(id, group))) {
         rows.add(FoldTransformRow(group, info.transform, depth: 3));
+      }
+    }
+  }
+
+  // Material options, beside Transform rather than inside it.
+  final material = [
+    for (final g in groups)
+      if (g.section == TransformSection.material) g
+  ];
+  if (material.isNotEmpty && !soloed) {
+    final materialOpen = open.contains(materialPath(id));
+    rows.add(FoldGroupRow(
+      path: materialPath(id),
+      label: l10n.materialOptions,
+      open: materialOpen,
+      depth: 1,
+    ));
+    if (materialOpen) {
+      for (final setting in settings) {
+        if (setting.section == TransformSection.material) {
+          rows.add(FoldSettingRow(setting, info, depth: 2));
+        }
+      }
+    }
+    for (final group in material) {
+      if (materialOpen || open.contains(transformGroupPath(id, group))) {
+        rows.add(FoldTransformRow(group, info.transform, depth: 2));
       }
     }
   }

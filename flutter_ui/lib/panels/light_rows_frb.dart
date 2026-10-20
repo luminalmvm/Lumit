@@ -1,6 +1,7 @@
 // The rows of a layer that are a choice rather than a number: a light's type
-// and falloff. They sit at the head of their section, above the keyframed
-// rows, in both the Timeline's fold-out and the Effect controls card.
+// and falloff, and whether a 3D layer accepts lights. They sit at the head of
+// their section, above the keyframed rows, in both the Timeline's fold-out and
+// the Effect controls card.
 
 import 'package:flutter/widgets.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
@@ -14,14 +15,19 @@ import 'transform_rows_frb.dart';
 /// One choice row.
 enum LayerSetting {
   lightType,
-  lightFalloff;
+  lightFalloff,
+  acceptsLights;
 
   /// The heading the row sits under.
-  TransformSection get section => TransformSection.light;
+  TransformSection get section => switch (this) {
+        lightType || lightFalloff => TransformSection.light,
+        acceptsLights => TransformSection.material,
+      };
 
   String get label => switch (this) {
         lightType => l10n.lightType,
         lightFalloff => l10n.lightFalloff,
+        acceptsLights => l10n.switchAcceptsLights,
       };
 }
 
@@ -40,8 +46,16 @@ const BridgeLightSettings plainLight = BridgeLightSettings(
 List<LayerSetting> layerSettings({
   required BridgeLayerKind kind,
   BridgeLightSettings? light,
+  bool threeD = false,
 }) {
-  if (kind != BridgeLayerKind.light) return const [];
+  if (kind != BridgeLayerKind.light) {
+    return [
+      if (threeD &&
+          kind != BridgeLayerKind.camera &&
+          kind != BridgeLayerKind.nullLayer)
+        LayerSetting.acceptsLights,
+    ];
+  }
   final s = light ?? plainLight;
   return [
     LayerSetting.lightType,
@@ -94,6 +108,7 @@ class LayerSettingRowFrb extends StatelessWidget {
   final LayerReference layer;
   final LayerSetting setting;
   final BridgeLightSettings? light;
+  final bool acceptsLights;
   final VoidCallback onChanged;
 
   /// The Timeline's value column, or null in the Effect controls panel, which
@@ -106,6 +121,7 @@ class LayerSettingRowFrb extends StatelessWidget {
     required this.layer,
     required this.setting,
     required this.light,
+    this.acceptsLights = true,
     required this.onChanged,
     this.valueColumn,
     this.keyPrefix = 'tf',
@@ -137,6 +153,19 @@ class LayerSettingRowFrb extends StatelessWidget {
           options: BridgeLightFalloff.values,
           label: lightFalloffLabel,
           onChanged: (f) => write(lightSettingsWith(s, falloff: f)),
+        ),
+      // The same switch as the layer's right-click item, one op a click.
+      LayerSetting.acceptsLights => Align(
+          alignment: Alignment.centerLeft,
+          child: HouseCheckbox(
+            key: key,
+            value: acceptsLights,
+            onChanged: (on) {
+              layer.setSwitch(
+                  switch_: BridgeLayerSwitch.acceptsLights, on_: on);
+              onChanged();
+            },
+          ),
         ),
     };
     final name = Text(t.propertyCase(setting.label),

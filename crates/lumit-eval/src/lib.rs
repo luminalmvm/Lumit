@@ -1613,6 +1613,16 @@ fn feed_layer(
     if !layer.switches.accepts_lights && comp.layers.iter().any(|l| l.is_light()) {
         h.update(b"unlit");
     }
+    // The material shades only where there is a light, and is hashed only
+    // once it has moved off what layers had before it existed, so those keys
+    // stay valid.
+    let m = &layer.transform.material;
+    if comp.layers.iter().any(|l| l.is_light()) && **m != lumit_core::model::Material::legacy() {
+        h.update(b"material");
+        for p in [&m.ambient, &m.diffuse, &m.specular, &m.shininess, &m.metal] {
+            feed_f64(h, p.value_at(lt));
+        }
+    }
     // Collapse changes how a Precomp composites (docs/06 §1.4), so it is
     // content. Hashed only when set, so every pre-collapse key stays valid.
     if layer.switches.collapse && matches!(layer.kind, LayerKind::Precomp { .. }) {
