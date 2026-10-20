@@ -2687,8 +2687,11 @@ impl Realiser<'_> {
         // After its effects and before it is placed. `l.lights` is empty
         // unless the comp holds lights and this layer accepts them, and empty
         // means the pass never runs. An unlit layer only takes shadows, so
-        // with no casters there is nothing to do.
-        let unshaded = l.material.unlit && casters.is_none();
+        // with no casters there is nothing to do, unless it shows only them
+        // and so has to be cleared.
+        let unshaded = l.material.unlit
+            && casters.is_none()
+            && l.material.accepts_shadows != lumit_gpu::fx::LightingShadows::Only;
         if let Some(mut op) = lighting_op(l, tex.width(), tex.height(), eye).filter(|_| !unshaded) {
             op.own_caster = own;
             tex = self
@@ -3252,7 +3255,7 @@ struct RunPlan {
     own: Vec<Option<usize>>,
     /// Whether the comp lights the display-encoded picture.
     encoded: bool,
-    /// The widest soft edge any light here gives, comp pixels.
+    /// The widest soft edge any light here gives a caster, comp pixels.
     spread: f32,
 }
 
@@ -3266,7 +3269,9 @@ fn run_plan(
     grown: &[(f32, f32)],
     eye: [f32; 3],
 ) -> Option<RunPlan> {
-    use lumit_gpu::fx::{CasterPlane, LightingShadows, MAX_SHADOW_CASTERS};
+    use lumit_gpu::fx::{
+        CasterPlane, LightingShadows, DIFFUSION_SPREAD, MAX_SHADOW_CASTERS, MAX_STRETCH,
+    };
     let centre =
         |c: &[[f32; 3]; 4]| [0, 1, 2].map(|k| (c[0][k] + c[1][k] + c[2][k] + c[3][k]) * 0.25);
     let receivers: Vec<(usize, &CompLayerDraw, [[f32; 3]; 4])> = layers
@@ -3339,7 +3344,7 @@ fn run_plan(
         encoded: receivers.iter().any(|(_, l, _)| l.material.encoded),
         spread: lights
             .filter(|g| g.shadow_darkness > 0.0)
-            .map(|g| g.shadow_diffusion)
+            .map(|g| g.shadow_diffusion * DIFFUSION_SPREAD * MAX_STRETCH)
             .fold(0.0, f32::max),
     })
 }

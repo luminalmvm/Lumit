@@ -4394,7 +4394,18 @@ fn comp_walk(
             three_d: layer.switches.three_d,
             ends_run: false,
             matte,
-            blend: blend_of(layer.blend),
+            // A layer showing only its shadows multiplies them into what is
+            // under it, so a coloured one tints it and never brightens it.
+            blend: match layer.blend {
+                lumit_core::model::BlendMode::Normal
+                    if layer.switches.three_d
+                        && layer.transform.material.accepts_shadows
+                            == lumit_core::model::ShadowMode::Only =>
+                {
+                    lumit_gpu::Blend::Multiply
+                }
+                b => blend_of(b),
+            },
             mask_cov: match &layer.kind {
                 // A comp has no pixels for a mask to be cut into, a
                 // composition clip's as much as a Precomp layer's.
@@ -7382,8 +7393,10 @@ mod render_below_at_tests {
     }
 
     /// A card between a light and a floor shades the floor, Only keeps the
-    /// shadow without the card, and a floor that takes no shadows comes out
-    /// exactly as if nothing cast one.
+    /// shadow without the card, a floor that takes no shadows comes out
+    /// exactly as if nothing cast one, and one taking only shadows shows
+    /// the grey plate behind it, darkened red where the light comes through
+    /// a red card.
     #[test]
     fn a_card_casts_its_shadow_and_only_hides_the_card() {
         use lumit_core::model::{LightDef, LightKind, Material, ProjectItem, ShadowMode, SolidDef};
@@ -7412,19 +7425,22 @@ mod render_below_at_tests {
         };
         let (w, h) = (320u32, 180u32);
         let mut doc = Document::new();
-        let mut solid = |size: (u32, u32)| {
+        let mut solid = |size: (u32, u32), rgb: [f32; 3]| {
             let def = Uuid::now_v7();
             doc.items.push(ProjectItem::Solid(SolidDef {
                 id: def,
                 name: "grey".into(),
-                colour: LinearColour([0.5, 0.5, 0.5, 1.0]),
+                colour: LinearColour([rgb[0], rgb[1], rgb[2], 1.0]),
                 width: size.0,
                 height: size.1,
                 extra: serde_json::Map::new(),
             }));
             def
         };
-        let (floor_def, card_def) = (solid((w, h)), solid((80, 60)));
+        let (floor_def, card_def) = (
+            solid((w, h), [0.5, 0.5, 0.5]),
+            solid((80, 60), [0.9, 0.1, 0.05]),
+        );
         let doc = std::sync::Arc::new(doc);
         let mut light = text_layer(40.0);
         light.kind = LayerKind::Light {
@@ -7436,7 +7452,7 @@ mod render_below_at_tests {
         };
         light.transform.position_y = Property::fixed(90.0);
         light.transform.position_z = Property::fixed(-200.0);
-        let card_layer = |def: Uuid, size: (u32, u32), z: f64, casts, accepts| {
+        let card_layer = |def: Uuid, size: (u32, u32), z: f64, casts, accepts, through| {
             let mut l = text_layer(f64::from(w) / 2.0);
             l.kind = LayerKind::Solid { def };
             l.switches.three_d = true;
@@ -7447,11 +7463,12 @@ mod render_below_at_tests {
             l.transform.material = Box::new(Material {
                 casts_shadows: casts,
                 accepts_shadows: accepts,
+                light_transmission: Property::fixed(through),
                 ..Material::default()
             });
             l
         };
-        let render = |casts: ShadowMode, floor_takes: ShadowMode| {
+        let render = |casts: ShadowMode, floor_takes: ShadowMode, through: f64| {
             let comp = Composition {
                 graph: None,
                 master_volume_db: 0.0,
@@ -7465,12 +7482,12 @@ mod render_below_at_tests {
                 height: h,
                 frame_rate: FrameRate::new(30, 1).unwrap(),
                 duration: Duration(Rational::new(10, 1).unwrap()),
-                background: LinearColour([0.0, 0.0, 0.0, 1.0]),
+                background: LinearColour([0.2, 0.2, 0.2, 1.0]),
                 work_area: None,
                 layers: vec![
                     light.clone(),
-                    card_layer(card_def, (80, 60), -80.0, casts, ShadowMode::On),
-                    card_layer(floor_def, (w, h), 0.0, ShadowMode::Off, floor_takes),
+                    card_layer(card_def, (80, 60), -80.0, casts, ShadowMode::On, through),
+                    card_layer(floor_def, (w, h), 0.0, ShadowMode::Off, floor_takes, 0.0),
                 ],
                 markers: Vec::new(),
                 motion_blur: Default::default(),
@@ -7479,7 +7496,7 @@ mod render_below_at_tests {
             let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
             let mut visited = vec![comp.id];
             let draws = build_comp_draws(&doc, &comp, 0.0, &pixels, &mut visited);
-            let tex = realiser.realise(None, w, h, [0.0, 0.0, 0.0, 1.0], &draws);
+            let tex = realiser.realise(None, w, h, [0.2, 0.2, 0.2, 1.0], &draws);
             engine
                 .readback8(
                     &ctx,
@@ -7488,9 +7505,9 @@ mod render_below_at_tests {
                 .unwrap()
         };
 
-        let none = render(ShadowMode::Off, ShadowMode::On);
-        let cast = render(ShadowMode::On, ShadowMode::On);
-        let only = render(ShadowMode::Only, ShadowMode::On);
+        let none = render(ShadowMode::Off, ShadowMode::On, 0.0);
+        let cast = render(ShadowMode::On, ShadowMode::On, 0.0);
+        let only = render(ShadowMode::Only, ShadowMode::On, 0.0);
         assert_ne!(none, cast, "the card's shadow falls on the floor");
         assert!(
             cast.iter().zip(&none).all(|(a, b)| a <= b),
@@ -7499,13 +7516,30 @@ mod render_below_at_tests {
         assert_ne!(only, cast, "Only hides the card");
         assert_eq!(
             cast,
-            render(ShadowMode::On, ShadowMode::On),
+            render(ShadowMode::On, ShadowMode::On, 0.0),
             "deterministic"
         );
         assert_eq!(
             none,
-            render(ShadowMode::On, ShadowMode::Off),
+            render(ShadowMode::On, ShadowMode::Off, 0.0),
             "a floor that takes no shadows is lit as if none were cast"
+        );
+        let tinted = render(ShadowMode::On, ShadowMode::Only, 100.0);
+        let at = |x: u32, y: u32| {
+            let i = ((y * w + x) * 4) as usize;
+            tinted[i..i + 4].to_vec()
+        };
+        // The grey plate behind the floor shows through it, and the red
+        // shadow only darkens it.
+        let plate = at(10, 170);
+        assert!(
+            plate[0] == plate[1] && plate[1] == plate[2] && plate[0] > 100,
+            "{plate:?}"
+        );
+        let red = at(260, 90);
+        assert!(
+            red[0] <= plate[0] && red[0] > red[1] + 60 && red[1] < 40 && red[2] < 40,
+            "red where the light comes through the card: {red:?} over {plate:?}"
         );
     }
 
