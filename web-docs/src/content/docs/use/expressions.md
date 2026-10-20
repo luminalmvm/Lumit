@@ -74,8 +74,9 @@ counted from its in point.
 | --- | --- |
 | **Constants** | `time`, `comp_width`, `comp_height`, `comp_fps`, `num_layers`, `num_markers`, `cut_in`, `cut_out` |
 | **Maths** | `sin`, `cos`, `sinh`, `cosh`, `floor`, `ceil`, `round`, `abs`, `clamp`, `noise`, `smoothstep`, `fit`, `fit_clamped`, `fit01` |
-| **The composition** | `comp().name` |
-| **A layer** | `layer()` for this one, `layer("Name")` for another — `.name`, `.time`, `.x`, `.y`, `.rotation`, `.scale_x`, `.scale_y`, `.anchor_x`, `.anchor_y`, `.opacity` |
+| **The composition** | `comp().name`, `comp().active_camera` |
+| **A layer** | `layer()` for this one, `layer("Name")` for another — `.name`, `.time`, `.x`, `.y`, `.rotation`, `.scale_x`, `.scale_y`, `.anchor_x`, `.anchor_y`, `.opacity`, `.z`, `.rotation_x`, `.rotation_y`, `.rotation_z`, `.orientation`, and a camera's `.zoom` and `.point_of_interest` |
+| **3D** | `.to_comp(p)`, `.from_comp(p)`, `.to_world(p)`, `.from_world(p)`, `.to_comp_vec(v)`, `.from_comp_vec(v)`, `.to_world_vec(v)`, `.from_world_vec(v)`, `.from_comp_to_surface(p)` on a layer, each with an optional time after the point |
 
 A few to start from:
 
@@ -83,6 +84,8 @@ A few to start from:
 time * 90                          // a turn of ninety degrees a second
 layer("Sun").x + 20                // twenty pixels behind another layer
 noise(time * 2) * 50               // a smooth wander, the same on every run
+layer("Marker").to_comp([0, 0, 0])[0]   // on Position X, where a 3D null is on the picture
+layer("Marker").to_comp([0, 0, 0])[1]   // and on Position Y
 fit(layer().time, 0, 2, 0, 100)    // nought to a hundred over two seconds
 ```
 
@@ -94,8 +97,9 @@ on arrays adds and scales them as it does in After Effects.
 | | |
 | --- | --- |
 | **Values** | `time`, `value`, `index`, `inPoint`, `outPoint`, `startTime`, `width`, `height`, `name`, `hasParent`, `parent`, `numKeys` |
-| **The composition** | `thisComp`, `comp("Name")` — `.width`, `.height`, `.duration`, `.frameDuration`, `.name`, `.numLayers`, `.layer("Name")`, `.layer(1)` |
-| **A layer** | `thisLayer`, or one from `thisComp.layer(…)` — `.name`, `.index`, `.inPoint`, `.outPoint`, `.startTime`, `.hasParent`, `.parent`, `.transform`, `.position`, `.anchorPoint`, `.scale`, `.rotation`, `.opacity`, `.effect("Name")`, `.sourceRectAtTime(t)` |
+| **The composition** | `thisComp`, `comp("Name")` — `.width`, `.height`, `.duration`, `.frameDuration`, `.name`, `.numLayers`, `.layer("Name")`, `.layer(1)`, `.activeCamera` |
+| **A layer** | `thisLayer`, or one from `thisComp.layer(…)` — `.name`, `.index`, `.inPoint`, `.outPoint`, `.startTime`, `.hasParent`, `.parent`, `.transform`, `.position`, `.anchorPoint`, `.scale`, `.rotation`, `.xRotation`, `.yRotation`, `.zRotation`, `.orientation`, `.opacity`, `.effect("Name")`, `.sourceRectAtTime(t)`, and a camera's `.pointOfInterest` and `.zoom` |
+| **3D** | `toComp(p, t)`, `fromComp(p, t)`, `toWorld(p, t)`, `fromWorld(p, t)`, `toCompVec(v, t)`, `fromCompVec(v, t)`, `toWorldVec(v, t)`, `fromWorldVec(v, t)`, `fromCompToSurface(p, t)` on a layer |
 | **An effect's row** | `effect("Name")("Row")` — `.value`, `.valueAtTime(t)`, `.numKeys`, `.key(n)`, `.nearestKey(t)`, `.velocity`, `.speed`, `.wiggle(…)`, `.loopIn(…)`, `.loopOut(…)` |
 | **Motion** | `wiggle(freq, amp, octaves, amp_mult, t)`, `valueAtTime(t)`, `posterizeTime(fps)` |
 | **Random** | `seedRandom(seed, timeless)`, `random()`, `gaussRandom()`, `noise()` |
@@ -111,9 +115,14 @@ An effect is found by the name on its header, and a row by its label.
 wiggle(3, 20)                              // wander twenty either side, three times a second
 value + [effect("Shake")("Amount"), 0]     // push a position sideways by a slider
 seedRandom(index, true); random(0, 360)    // one fixed angle for each layer
+thisComp.layer("Marker").toComp([0, 0, 0]) // on Position X and Y, pin a 2D layer to a 3D null
 ```
 
-- **`value`** is the number the property held when the expression was put on it.
+- **`value`** is the number the property held when the expression was put on it. On half
+  of a combined point, a transform's or an effect's, it is the whole point. On a separated
+  row it is that row's number. A list the expression answers with gives each half its own
+  number. One saved by an older Lumit reads one number, and a list gives every half its
+  first.
 - **A property holds keyframes or an expression, not both.** `loopOut()` repeats another
   row's keyframes, as in `effect("Shake")("Amount").loopOut()`, and returns `value` on the
   property it is written on.
@@ -122,9 +131,26 @@ seedRandom(index, true); random(0, 360)    // one fixed angle for each layer
 - **`sourceRectAtTime`** measures as [Measure](/effects/drivers/measure/) does, in the
   layer's own pixels.
 
+## 3D
+
+A 3D layer's, a camera's and a light's `position` is three numbers. Its `anchorPoint`
+reads with a z of 0 and its `scale` with a z of 100, as Lumit has no Anchor Z or Scale Z.
+Lumit has no Orientation, so `orientation` is `[0, 0, 0]`.
+
+- **`toComp`** carries a point in the layer's own pixels to the picture. A 3D layer is
+  seen through the active camera, and the third number is its depth in front of the
+  plane the camera sees at full size. A 2D layer gives as many numbers as it was given,
+  and ignores the camera.
+- **`fromComp`** goes back. A point with no third number is taken at that plane.
+- **`fromCompToSurface`** gives the point on the layer's own plane that the picture shows
+  there.
+- **`toWorld`** and **`fromWorld`** carry a point to and from the composition's 3D space,
+  parents and all, with no camera.
+- **The `Vec` forms** carry a direction rather than a point.
+
 :::note[Not yet built]
-`toComp`, `fromComp`, `toWorld`, `smooth`, markers, text properties,
-`footage`, `new`, classes and regular expressions.
+`lookAt`, `smooth`, markers, text properties, `footage`, `new`, classes and regular
+expressions.
 :::
 
 ## Save expressions to use again
