@@ -2771,9 +2771,9 @@ impl Composition {
     /// stack uses everywhere else. A light switched off is not a light, exactly
     /// as a layer switched off is not on the picture.
     ///
-    /// `read` reads their properties and their parents'. A light parented to
-    /// a solved camera follows the camera's own values, not the solve.
-    pub fn lights_at(&self, t: f64, read: &Read<'_>) -> Vec<ResolvedLight> {
+    /// `read` reads their properties and their parents', and with `solves` a
+    /// light on a solved camera follows the solve.
+    pub fn lights_at(&self, t: f64, read: &Read<'_>, solves: Solves<'_>) -> Vec<ResolvedLight> {
         self.layers
             .iter()
             .filter_map(|l| {
@@ -2798,7 +2798,7 @@ impl Composition {
                     rotation_deg: own.rotation_deg,
                     point_of_interest: None,
                 };
-                if let Some(space) = parent_space(self, l, t, read, None) {
+                if let Some(space) = parent_space(self, l, t, read, solves) {
                     eye = space.carry(eye);
                 }
                 Some(ResolvedLight {

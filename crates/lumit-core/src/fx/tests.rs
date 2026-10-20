@@ -5096,7 +5096,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
             )
         }
     };
-    let lights = comp.lights_at(1.0, &read(1.0));
+    let lights = comp.lights_at(1.0, &read(1.0), None);
     assert_eq!(lights.len(), 2, "a light switched off is not a light");
 
     // Top of the stack first — the order the effects that read lights take
@@ -5117,7 +5117,7 @@ fn lens_flare_light_layers_resolve_with_their_extent() {
     );
 
     // Outside every span there are no lights at all.
-    assert!(comp.lights_at(99.0, &read(99.0)).is_empty());
+    assert!(comp.lights_at(99.0, &read(99.0), None).is_empty());
 
     // A default light is white at full intensity — a fresh one should light
     // something rather than land as a black source nobody can see.

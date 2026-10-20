@@ -1274,7 +1274,8 @@ pub fn shading_lights(
         return Vec::new();
     }
     let encoded = comp.lighting == lumit_core::model::CompLighting::AfterEffects { linear: false };
-    let mut lights = comp.lights_at(t_comp, &lumit_core::model::context_reader(context, t_comp));
+    let read = lumit_core::model::context_reader(context, t_comp);
+    let mut lights = comp.lights_at(t_comp, &read, crate::track::solves_for(&context.document));
     if lights.is_empty() {
         return Vec::new();
     }
@@ -1833,7 +1834,11 @@ fn comp_walk(
                     // tile its pool would come out as a smear of sixty-four
                     // pixels stretched over the whole solid.
                     && !(layer.switches.accepts_lights && !comp
-                        .lights_at(t_comp, &lumit_core::model::context_reader(&context, t_comp))
+                        .lights_at(
+                            t_comp,
+                            &lumit_core::model::context_reader(&context, t_comp),
+                            None,
+                        )
                         .is_empty());
                 let (tw, th) = if plain { (8, 8) } else { (sd.width, sd.height) };
                 (
@@ -6550,7 +6555,45 @@ mod parent_placement_tests {
         camera.transform.rotation_x = Property::fixed(-10.0);
         camera.transform.rotation_y = Property::fixed(15.0);
         camera.transform.rotation = Property::fixed(5.0);
-        let mut c = comp(vec![camera, flat, card.clone(), rig, marker.clone()]);
+        // Below the active camera, a two-node one with a layer on it, and a
+        // null moved by an expression on time with a layer on that.
+        let mut aimer = layer(300.0, 200.0, None);
+        aimer.kind = LayerKind::Camera {
+            zoom: Property::fixed(900.0),
+            options: Box::new(CameraOptions {
+                two_node: true,
+                ..CameraOptions::fresh(900.0, (800.0, 600.0, 400.0))
+            }),
+            solve_link: None,
+            correction_base: None,
+        };
+        aimer.transform.position_z = Property::fixed(-700.0);
+        aimer.transform.rotation = Property::fixed(20.0);
+        let mut hud = layer(50.0, -40.0, Some(aimer.id));
+        hud.name = "Hud".into();
+        hud.switches.three_d = true;
+        hud.transform.position_z = Property::fixed(600.0);
+        let mut drift = layer(0.0, 300.0, None);
+        drift.switches.three_d = true;
+        drift.transform.position_x = Property {
+            animation: lumit_core::anim::Animation::Expression("100.0 + time * 40.0".into()),
+            ..Property::fixed(0.0)
+        };
+        drift.transform.rotation_y = Property::fixed(25.0);
+        let mut rider = layer(60.0, 10.0, Some(drift.id));
+        rider.name = "Rider".into();
+        rider.switches.three_d = true;
+        let mut c = comp(vec![
+            camera,
+            flat,
+            card.clone(),
+            rig,
+            marker.clone(),
+            aimer,
+            hud,
+            drift,
+            rider,
+        ]);
         (c.width, c.height) = (1920, 1080);
         let mut doc = Document::new();
         doc.items.push(ProjectItem::Composition(c.clone()));
@@ -6634,6 +6677,31 @@ mod parent_placement_tests {
                 ),
             );
             assert!((back - want).abs() < 1e-6, "{back} is not {want}");
+        }
+
+        // A layer on a two-node camera turns with the camera's aim, and one
+        // on a null moved by `time` follows it at that time.
+        let later = Arc::new(ExpressionContext {
+            comp_time: 0.5,
+            ..(*context).clone()
+        });
+        for (name, t, at) in [("Hud", 0.0, &context), ("Rider", 0.5, &later)] {
+            let l = c.layers.iter().find(|l| l.name == name).unwrap();
+            let world = world_placement(&c, l, t, at.clone());
+            let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
+            for axis in 0..2 {
+                let want = a[3][axis] / a[3][3];
+                let text = format!("thisComp.layer('{name}').toComp([0, 0, 0])[{axis}]");
+                let got =
+                    match evaluate_value_in(Language::JavaScript, &text, Some(at.clone()), &[]) {
+                        Ok(ExprValue::Number(n)) => n,
+                        other => panic!("{text}: {other:?}"),
+                    };
+                assert!(
+                    (got - f64::from(want)).abs() < 1e-2,
+                    "{name}: {got} is not {want}"
+                );
+            }
         }
     }
 }

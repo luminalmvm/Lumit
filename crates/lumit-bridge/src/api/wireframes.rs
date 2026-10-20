@@ -650,15 +650,27 @@ impl CompositionReference {
                         rotation_deg: placed.rotation_deg,
                         point_of_interest: None,
                     };
-                    if let Some(space) =
-                        lumit_core::model::parent_space(comp, layer, t, &read, None)
-                    {
+                    if let Some(space) = lumit_core::model::parent_space(
+                        comp,
+                        layer,
+                        t,
+                        &read,
+                        lumit_render::track::solves_for(&doc),
+                    ) {
                         eye = space.carry(eye);
                     }
                     let own = eye.position;
                     let poi = light
                         .two_node
-                        .then(|| lumit_core::model::point_of_interest(comp, layer, t, &read, None))
+                        .then(|| {
+                            lumit_core::model::point_of_interest(
+                                comp,
+                                layer,
+                                t,
+                                &read,
+                                lumit_render::track::solves_for(&doc),
+                            )
+                        })
                         .flatten();
                     let (rx, ry, rz) = eye.rotation_deg;
                     let m = lumit_render::place_matrix(

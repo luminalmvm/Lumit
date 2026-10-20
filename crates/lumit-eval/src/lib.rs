@@ -406,7 +406,8 @@ fn feed_comp(
     // existed stays valid. A Light layer draws no pixels of its own, so
     // nothing else in this walk would notice it moving.
     let context = lumit_core::model::comp_context(doc, comp, t);
-    let lights = comp.lights_at(t, &lumit_core::model::context_reader(&context, t));
+    let read = lumit_core::model::context_reader(&context, t);
+    let lights = comp.lights_at(t, &read, stamper.solves().map(|store| (doc, store)));
     if !lights.is_empty() {
         h.update(b"lights/");
         if let lumit_core::model::CompLighting::AfterEffects { linear } = comp.lighting {
