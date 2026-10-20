@@ -146,8 +146,9 @@ void main() {
       // reported rather than dropped. One moved from adjusted to skipped,
       // since a text layer whose words can't be read is now said to be that.
       // Two fewer adjusted since the fixture's two Gaussian blurs carry their
-      // Repeat Edge Pixels.
-      expect(find.text(l10n.aeSummary(63, 52, 0, 1)), findsOneWidget,
+      // Repeat Edge Pixels. One fewer since shadows are drawn, so the card
+      // that casts them is no longer reported.
+      expect(find.text(l10n.aeSummary(63, 51, 0, 1)), findsOneWidget,
           reason: 'what the direct parse recovers, end to end');
 
       await tester.tap(find.text(l10n.close));
