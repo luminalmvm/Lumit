@@ -4067,7 +4067,7 @@ fn a_camera_carries_its_own_channels_and_a_solid_does_not() {
 /// corners and its eye lands on the middle.
 #[test]
 fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
-    use crate::api::layer::{camera_view_pose, BridgeCameraView};
+    use crate::api::layer::{camera_view_pose, BridgeCameraView, BridgeTransformProp};
 
     let (project, layer) = project_with_layer();
     let comp = CompositionReference::new(project.id, layer.comp_id());
@@ -4100,6 +4100,97 @@ fn the_front_view_wireframes_put_a_fresh_cameras_frustum_on_the_comp_corners() {
     // The far end, a line to each corner and the body's twelve edges: a
     // one-node camera has no line to a point of interest.
     assert_eq!(cam.lines.len(), 20 * 4);
+
+    // A spot on a turned null: its mark and the line it shines along sit
+    // where the lighting pass lights from, the null's turn and all.
+    let null = comp.add_null_layer(None).expect("a null");
+    null.set_switch(crate::api::layer::BridgeLayerSwitch::ThreeD, true)
+        .expect("3D");
+    null.set_transforms(
+        vec![
+            BridgeTransformProp::PositionX,
+            BridgeTransformProp::PositionY,
+            BridgeTransformProp::RotationY,
+            BridgeTransformProp::Rotation,
+        ],
+        [700.0, 400.0, 40.0, 30.0]
+            .map(BridgeScalar::Static)
+            .to_vec(),
+    )
+    .expect("the null turns");
+    let spot = comp.add_light_layer(1, None).expect("a spot");
+    spot.set_parent(Some(null.layer_id), 0).expect("parented");
+    spot.set_transforms(
+        vec![
+            BridgeTransformProp::PositionX,
+            BridgeTransformProp::PositionY,
+            BridgeTransformProp::PositionZ,
+        ],
+        [150.0, -80.0, -200.0].map(BridgeScalar::Static).to_vec(),
+    )
+    .expect("the spot moves");
+    let doc = comp.document().expect("doc");
+    let c = doc.comp(comp.id).expect("comp");
+    let context = lumit_core::model::comp_context(&doc, c, 0.0);
+    let read = lumit_core::model::context_reader(&context, 0.0);
+    let lit = c.lights_at(0.0, &read, None);
+    let lit = match lit.as_slice() {
+        [only] => only,
+        other => panic!("one light, not {}", other.len()),
+    };
+    let place = lumit_render::place_matrix(
+        (lit.position.0 as f32, lit.position.1 as f32),
+        (0.0, 0.0),
+        (100.0, 100.0),
+        lit.rotation_deg as f32,
+        lit.z as f32,
+        lit.rotation_x_deg as f32,
+        lit.rotation_y_deg as f32,
+    );
+    let wires = comp
+        .wireframes(0, Some(view), false, None, Vec::new())
+        .expect("wireframes");
+    let mark = wires
+        .lights
+        .iter()
+        .find(|l| l.layer == spot.layer_id)
+        .expect("the spot is drawn");
+    let rows = lumit_core::camera::projection(&view.core(), 1920.0, 1080.0);
+    let seen = |p: [f32; 4]| {
+        let p = p.map(f64::from);
+        let w = rows[2].iter().zip(p).map(|(r, v)| r * v).sum::<f64>();
+        let at = |r: usize| rows[r].iter().zip(p).map(|(r, v)| r * v).sum::<f64>() / w;
+        (at(0), at(1))
+    };
+    let column = |c: usize, along: f32| {
+        let m = place[3];
+        [0, 1, 2]
+            .map(|r| m[r] + place[c][r] * along)
+            .into_iter()
+            .chain([1.0])
+            .collect::<Vec<_>>()
+    };
+    let at = seen(column(2, 0.0).try_into().expect("four"));
+    close(mark.at.x, at.0);
+    close(mark.at.y, at.1);
+    // The cone's last line runs from the light down the z the lighting pass
+    // aims it along, out to its point of interest.
+    let end = &mark.lines[mark.lines.len() - 4..];
+    let layer = c
+        .layers
+        .iter()
+        .find(|l| l.id == spot.layer_id)
+        .expect("spot");
+    let poi = lumit_core::model::point_of_interest(c, layer, 0.0, &read, None).expect("aimed");
+    let reach = ((poi.0 - lit.position.0).powi(2)
+        + (poi.1 - lit.position.1).powi(2)
+        + (poi.2 - lit.z).powi(2))
+    .sqrt() as f32;
+    let tip = seen(column(2, reach).try_into().expect("four"));
+    close(end[0], at.0);
+    close(end[1], at.1);
+    close(end[2], tip.0);
+    close(end[3], tip.1);
 }
 
 /// Editing a solid changes the **asset**, so every layer drawing it changes at
