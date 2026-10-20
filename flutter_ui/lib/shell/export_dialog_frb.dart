@@ -133,6 +133,18 @@ const String exportDestinationAsk = 'ask';
 const String exportDestinationProject = 'project';
 const String exportDestinationFolder = 'folder';
 
+/// The folder the export defaults write to, or empty when they ask each time
+/// or the project has never been saved.
+String exportDefaultFolder(BridgeExportDefaults defaults,
+    {String? projectPath}) {
+  final cut = projectPath?.lastIndexOf(RegExp(r'[/\\]')) ?? -1;
+  return switch (defaults.destination) {
+    exportDestinationFolder => defaults.folder,
+    exportDestinationProject when cut > 0 => projectPath!.substring(0, cut),
+    _ => '',
+  };
+}
+
 /// Where the export defaults put a file of [codec] made with [preset] from a
 /// composition called [compName], or null when they ask each time.
 ///
@@ -145,12 +157,7 @@ String? exportDefaultPath(BridgeExportDefaults defaults,
     required String compName,
     required String codec,
     String? projectPath}) {
-  final cut = projectPath?.lastIndexOf(RegExp(r'[/\\]')) ?? -1;
-  final folder = switch (defaults.destination) {
-    exportDestinationFolder => defaults.folder,
-    exportDestinationProject when cut > 0 => projectPath!.substring(0, cut),
-    _ => '',
-  };
+  final folder = exportDefaultFolder(defaults, projectPath: projectPath);
   if (folder.isEmpty) return null;
   final name = exportPreset(
     preset: preset,
@@ -316,6 +323,7 @@ Future<void> showExportDialogFrb({
   required CompositionReference comp,
   Future<String?> Function()? picker,
   List<double>? region,
+  int? queued,
 }) {
   // The Viewer's region of interest, read here rather than inside the dialog:
   // the modal is an overlay, and what is above it in the tree is not what is
@@ -346,6 +354,7 @@ Future<void> showExportDialogFrb({
       colour: colour,
       picker: picker,
       region: roi,
+      queued: queued,
       onClose: () => close(null),
     ),
   );
@@ -363,6 +372,10 @@ class _ExportDialog extends StatefulWidget {
   final BridgeColourSummary colour;
   final Future<String?> Function()? picker;
   final List<double>? region;
+
+  /// The queue item being changed, when the dialogue was opened from its row
+  /// in the queue. It opens on that item's settings and saves back to it.
+  final int? queued;
   final VoidCallback onClose;
 
   const _ExportDialog({
@@ -371,6 +384,7 @@ class _ExportDialog extends StatefulWidget {
     required this.colour,
     required this.picker,
     required this.region,
+    this.queued,
     required this.onClose,
   });
 
@@ -622,7 +636,51 @@ class _ExportDialogState extends State<_ExportDialog> {
     if (_lacking.isNotEmpty && _lacking.every((l) => l.holders.isNotEmpty)) {
       _footage = _footageFrames;
     }
+    final queued = widget.queued;
+    final spec = queued == null ? null : exportQueueSpec(id: queued);
+    final path =
+        exportQueueList().where((item) => item.id == queued).firstOrNull?.path;
+    if (spec != null && path != null) _reopen(spec, path);
   }
+
+  /// Open on a queued item's settings. Its footage was settled when it was
+  /// queued, so that group goes.
+  void _reopen(BridgeExportSpec spec, String path) {
+    _lacking = const [];
+    _takeSpec(spec);
+    _edit(() {
+      _ownRate = spec.fps > 0 && (spec.fps - _compFps).abs() > 0.0005;
+      _fps = spec.fps > 0 ? spec.fps : _compFps;
+      _resize = spec.width > 0 && spec.height > 0;
+      final (start, end) = (spec.rangeStartFrame, spec.rangeEndFrame);
+      if (start < 0 || end <= start) {
+        _span = _hasWorkArea ? _Span.workArea : _Span.wholeComp;
+      } else if (_hasWorkArea && start == _workStart && end == _workEnd) {
+        _span = _Span.workArea;
+      } else if (start == 0 && end == _compFrames) {
+        _span = _Span.wholeComp;
+      } else {
+        _span = _Span.custom;
+        _rangeStart = start;
+        _rangeEnd = end;
+      }
+      _useRegion = spec.useRegionOfInterest;
+      for (final field in spec.metadata) {
+        var target = _metadata.where((m) => m.key == field.key).firstOrNull;
+        if (target == null) {
+          target = _MetaField.own(field.key);
+          _metadata.add(target);
+        }
+        target.value.text = field.value;
+      }
+      _openFolder = spec.openFolder;
+      _makeANoise = spec.makeANoise;
+      _path = _picked = _queuedPath = path;
+    });
+  }
+
+  /// Where the queued item wrote when the dialogue opened on it.
+  String? _queuedPath;
 
   @override
   void dispose() {
@@ -858,22 +916,34 @@ class _ExportDialogState extends State<_ExportDialog> {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(l10n.openAddons),
               ),
-            HouseButton(
-              key: const ValueKey('export-add-to-queue'),
-              onPressed: _canQueue ? () => _queue(start: false) : null,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(l10n.exportAddToQueue),
-            ),
-            HouseButton(
-              key: const ValueKey('export-start'),
-              // The window's default action: Enter exports unless a field is
-              // being typed in.
-              primary: true,
-              autofocus: true,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              onPressed: _canQueue ? () => _queue(start: true) : null,
-              child: Text(l10n.exportAction),
-            ),
+            // Opened from the queue, the one thing to do is keep the changes.
+            if (widget.queued != null)
+              HouseButton(
+                key: const ValueKey('export-save-queued'),
+                primary: true,
+                autofocus: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                onPressed: _canQueue ? _saveQueued : null,
+                child: Text(l10n.save),
+              )
+            else ...[
+              HouseButton(
+                key: const ValueKey('export-add-to-queue'),
+                onPressed: _canQueue ? () => _queue(start: false) : null,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(l10n.exportAddToQueue),
+              ),
+              HouseButton(
+                key: const ValueKey('export-start'),
+                // The window's default action: Enter exports unless a field is
+                // being typed in.
+                primary: true,
+                autofocus: true,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                onPressed: _canQueue ? () => _queue(start: true) : null,
+                child: Text(l10n.exportAction),
+              ),
+            ],
           ],
         ),
       ],
@@ -2419,8 +2489,13 @@ class _ExportDialogState extends State<_ExportDialog> {
       _edit(() => _preset = name);
       return;
     }
+    _takeSpec(stored);
+  }
+
+  /// Fill every field a preset carries from [stored], its name included.
+  void _takeSpec(BridgeExportSpec stored) {
     _edit(() {
-      _preset = name;
+      _preset = stored.preset;
       _format = _formats.firstWhere(
         (f) => f.key == stored.codec,
         orElse: () => _formats.first,
@@ -2648,6 +2723,37 @@ class _ExportDialogState extends State<_ExportDialog> {
     // deactivates this element, and looking the Overlay up off a deactivated
     // context is the error that filled the screen after an export.
     showExportQueueFrb(context: context);
+    widget.onClose();
+  }
+
+  /// Give the queued item these settings. A file it would newly write over is
+  /// asked about first, as when it was queued.
+  Future<void> _saveQueued() async {
+    var path = _path;
+    final id = widget.queued;
+    if (path == null || id == null) return;
+    if (path != _queuedPath &&
+        (path != _picked || _images) &&
+        exportPathTaken(path: path, codec: _format.key)) {
+      final keep = await askLumitChoice<bool>(
+        context: context,
+        title: l10n.exportOverwriteTitle,
+        question: l10n.exportOverwriteQuestion(_leaf(path)),
+        answers: [
+          (l10n.exportOverwrite, false),
+          (l10n.exportKeepBoth, true),
+        ],
+      );
+      if (keep == null || !mounted) return;
+      if (keep) path = exportFreePath(path: path, codec: _format.key);
+    }
+    try {
+      exportQueueUpdate(id: id, spec: _spec, path: path);
+    } catch (_) {
+      // It started, or went, while the dialogue was open.
+      setState(() => _refused = l10n.exportQueueNotWaiting);
+      return;
+    }
     widget.onClose();
   }
 
