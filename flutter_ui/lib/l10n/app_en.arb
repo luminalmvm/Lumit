@@ -11641,9 +11641,9 @@
   "@aeRotationOrderConverted": {
     "description": "Import report row reason, lower case. After Effects and Lumit apply a 3D layer's X, Y and Z rotations in a different order, so animated angles were recalculated: they match at each keyframe and may differ slightly in between."
   },
-  "aeCastsShadowsNotCarried": "the layer casts shadows, and Lumit's lights cast none, so it imported without them",
-  "@aeCastsShadowsNotCarried": {
-    "description": "Import report row reason, lower case. After Effects lets a 3D layer cast shadows from a light; Lumit's lights cast none."
+  "aeShadowSwitchKeyed": "the setting is keyframed, and Lumit keeps the first key's",
+  "@aeShadowSwitchKeyed": {
+    "description": "Import report row reason, lower case. Casts Shadows or Accepts Shadows was keyframed in After Effects, and Lumit keeps one setting for the whole layer: the first keyframe's."
   },
   "aeSpatialTangentsFlattened": "the motion path's spatial tangents are not carried — each axis animates on its own",
   "@aeSpatialTangentsFlattened": {

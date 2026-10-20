@@ -1676,8 +1676,8 @@ String? importReason(String key, Map<String, String> args) {
       return l10n.aeOrientationNotCarried;
     case 'rotation_order_converted':
       return l10n.aeRotationOrderConverted;
-    case 'casts_shadows_not_carried':
-      return l10n.aeCastsShadowsNotCarried;
+    case 'shadow_switch_keyed':
+      return l10n.aeShadowSwitchKeyed;
 
     // Properties and keyframes.
     case 'spatial_tangents_flattened':

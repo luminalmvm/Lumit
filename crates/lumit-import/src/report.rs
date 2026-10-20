@@ -201,9 +201,9 @@ pub enum Reason {
     /// A 3D layer's keyed X/Y/Z Rotation rewritten in Lumit's axis order. It
     /// matches After Effects on every key and can drift a little between them.
     RotationOrderConverted,
-    /// A 3D layer with Material Options' Casts Shadows on. Lumit's lights cast
-    /// no shadows, so the layer imports without them.
-    CastsShadowsNotCarried,
+    /// Casts Shadows or Accepts Shadows keyframed. Lumit keeps one setting,
+    /// the first key's.
+    ShadowSwitchKeyed,
 
     // --- properties and keyframes ---
     /// The property is spatial in AE (a motion path with tangents); Lumit
@@ -449,10 +449,9 @@ impl std::fmt::Display for Reason {
                 "the rotation was turned into Lumit's axis order, exact on each key and close \
                  between them"
             ),
-            Self::CastsShadowsNotCarried => write!(
+            Self::ShadowSwitchKeyed => write!(
                 f,
-                "the layer casts shadows, and Lumit's lights cast none, so it imported without \
-                 them"
+                "the setting is keyframed, and Lumit keeps the first key's"
             ),
             Self::SpatialTangentsFlattened => write!(
                 f,

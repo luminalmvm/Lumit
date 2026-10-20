@@ -170,7 +170,6 @@ pub(crate) fn map_layer(
         }
         text_origins.insert(id, (x, y));
     }
-    casts_shadows(conv, &path, ae, props);
     let styles = super::styles::styles(conv, &path, props, &transform);
     // After Effects' own label when the file has one (its None stays none),
     // else the colour Lumit gives a new layer of this kind.
@@ -560,7 +559,8 @@ fn light(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property])
     let falloff_px = option("ADBE Light Falloff Distance", 500.0);
     let shadow_darkness = option("ADBE Light Shadow Darkness", 100.0);
     let shadow_diffusion = option("ADBE Light Shadow Diffusion", 0.0);
-    let casts_shadows = still(options, "ADBE Casts Shadows", 0).is_some_and(|v| v != 0.0);
+    let casts_shadows = shadow_switch(conv, path, options, "ADBE Casts Shadows", "Casts Shadows")
+        .is_some_and(|v| v != 0.0);
     // AE numbers its menus from one: None, Smooth, Inverse Square Clamped.
     let falloff = match still(options, "ADBE Light Falloff Type", 0) {
         Some(v) if v.round() == 2.0 => LightFalloff::Smooth,
@@ -602,9 +602,42 @@ fn material(conv: &mut Conv<'_>, path: &ItemPath, props: &[Property]) -> Materia
         shininess: read("ADBE Shininess Coefficient", 5.0),
         metal: read("ADBE Metal Coefficient", 100.0),
         light_transmission: read("ADBE Light Transmission", 0.0),
-        casts_shadows: shadow_mode(still(options, "ADBE Casts Shadows", 0), ShadowMode::Off),
-        accepts_shadows: shadow_mode(still(options, "ADBE Accepts Shadows", 0), ShadowMode::On),
+        casts_shadows: shadow_mode(
+            shadow_switch(conv, path, options, "ADBE Casts Shadows", "Casts Shadows"),
+            ShadowMode::Off,
+        ),
+        accepts_shadows: shadow_mode(
+            shadow_switch(
+                conv,
+                path,
+                options,
+                "ADBE Accepts Shadows",
+                "Accepts Shadows",
+            ),
+            ShadowMode::On,
+        ),
     }
+}
+
+/// A shadow switch's setting. Lumit keeps one, so a keyframed switch keeps
+/// its first key's and says so.
+fn shadow_switch(
+    conv: &mut Conv<'_>,
+    path: &ItemPath,
+    options: &[Property],
+    name: &str,
+    shown: &str,
+) -> Option<f64> {
+    if let Some(node) =
+        child(options, name).filter(|node| node.keyframes.as_ref().is_some_and(|k| !k.is_empty()))
+    {
+        conv.report.row(
+            path.property(display_name(node, shown)),
+            Outcome::Adjusted,
+            Reason::ShadowSwitchKeyed,
+        );
+    }
+    still(options, name, 0)
 }
 
 /// AE's Off, On and Only, as it numbers them.
@@ -797,24 +830,6 @@ fn turn_into_lumits_order(
     out.rotation_x.animation = x;
     out.rotation_y.animation = y;
     out.rotation.animation = z;
-}
-
-/// Lumit's lights cast no shadows, so a 3D layer set to cast them says so.
-fn casts_shadows(conv: &mut Conv<'_>, path: &ItemPath, ae: &AeLayer, props: &[Property]) {
-    let options = group(props, "ADBE Material Options Group");
-    let Some(node) = child(options, "ADBE Casts Shadows") else {
-        return;
-    };
-    let three_d = ae.switches.as_ref().and_then(|s| s.three_d) == Some(true);
-    let on = still(options, "ADBE Casts Shadows", 0).is_some_and(|v| v != 0.0)
-        || node.keyframes.as_ref().is_some_and(|k| !k.is_empty());
-    if three_d && on {
-        conv.report.row(
-            path.property(display_name(node, "Casts Shadows")),
-            Outcome::Adjusted,
-            Reason::CastsShadowsNotCarried,
-        );
-    }
 }
 
 /// A property that holds a flat zero and nothing else.
