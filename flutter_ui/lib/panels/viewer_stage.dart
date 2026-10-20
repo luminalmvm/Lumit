@@ -711,7 +711,7 @@ class ViewerStage extends StatelessWidget {
                           target: _roto(),
                           // A node graph has no layers: the brush is the box
                           // picked on its canvas.
-                          graph: uiState.model.isNodeGraph ? comp : null,
+                          graph: uiState.model.heldIsNodeGraph ? comp : null,
                           graphBox: uiState.compGraphNode.value?.id,
                           origin: fitted.topLeft,
                           compSize: Size(compSize.width.toDouble(),
