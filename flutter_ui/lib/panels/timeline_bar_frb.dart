@@ -398,6 +398,10 @@ class _BarState extends State<Bar> {
   double _deltaPx = 0;
   BarGrab? _grab;
 
+  /// An end was taken with Shift held: the drag changes the layer's speed
+  /// rather than its trim, so it is not held to its source.
+  bool _stretch = false;
+
   /// `Escape` while the button is down puts the bar back and writes nothing
   /// (P3, §4.1). The gesture stages in Dart and commits one `set_span` on
   /// release, so abandoning it is simply not making that call.
@@ -456,6 +460,7 @@ class _BarState extends State<Bar> {
       _delta = 0;
       _deltaPx = 0;
       _grab = null;
+      _stretch = false;
       _moving = null;
       _movingIds = null;
       _caught = null;
@@ -561,7 +566,8 @@ class _BarState extends State<Bar> {
     // Where the untrimmed source would reach: drawn behind the bar, so
     // what shows past each end is exactly the material trimmed away. Only when
     // there is something to show — a bar filling its source draws no ghost.
-    final ghost = (minIn != null && maxOut != null) &&
+    final ghost = !_stretch &&
+            (minIn != null && maxOut != null) &&
             (drawIn > minIn || drawOut < maxOut)
         ? (widget.axis.xOf(minIn), widget.axis.xOf(maxOut))
         : null;
@@ -805,6 +811,9 @@ class _BarState extends State<Bar> {
                             _delta = 0;
                             _deltaPx = 0;
                             _grab = barGrabAt(_downDx, width);
+                            _stretch = _grab != BarGrab.move &&
+                                HardwareKeyboard.instance.isShiftPressed &&
+                                info.kind != BridgeLayerKind.sequence;
                             // A move that starts on a selected bar carries the
                             // whole unlocked selection; a real plural
                             // only, and only while this bar is still in it — a
@@ -850,7 +859,7 @@ class _BarState extends State<Bar> {
                               delta: _snappedDelta(inFrame, outFrame),
                               inFrame: inFrame,
                               outFrame: outFrame,
-                              bounds: widget.bounds,
+                              bounds: _stretch ? BarBounds.free : widget.bounds,
                             );
                             // The selection's wall: the earliest bar
                             // in the set meeting comp zero stops all of them,
@@ -1191,9 +1200,11 @@ class _BarState extends State<Bar> {
   void _publishPreview() {
     final grab = _grab;
     if (grab == null) return;
-    widget.dragPreview.value = barDragPreview(
-        widget.entry.layer.internallayerId.toString(), grab, _delta,
-        moving: _movingIds);
+    final id = widget.entry.layer.internallayerId.toString();
+    // A stretch from the in end slides the layer, so its keys travel too.
+    widget.dragPreview.value = _stretch && grab == BarGrab.trimIn
+        ? BarDragPreview(id, {id}, _delta, 0, _delta)
+        : barDragPreview(id, grab, _delta, moving: _movingIds);
   }
 
   /// One write for the whole gesture, so a move that shifted the in point
@@ -1217,10 +1228,12 @@ class _BarState extends State<Bar> {
             delta: _delta,
             inFrame: inFrame,
             outFrame: outFrame,
-            bounds: widget.bounds,
+            bounds: _stretch ? BarBounds.free : widget.bounds,
           );
     if (moving != null) delta = max(delta, -moving.minIn);
+    final stretch = _stretch;
     setState(() {
+      _stretch = false;
       _delta = 0;
       _deltaPx = 0;
       _grab = null;
@@ -1250,6 +1263,20 @@ class _BarState extends State<Bar> {
       }
     }
     if (delta == 0 && ticks == 0) return;
+
+    if (stretch) {
+      final grabbedIn = grab == BarGrab.trimIn;
+      try {
+        widget.entry.layer.stretchTo(
+          inPoint: widget.comp.timeOfFrame(
+              frame: grabbedIn ? inFrame + delta : inFrame),
+          outPoint: widget.comp.timeOfFrame(
+              frame: grabbedIn ? outFrame : outFrame + delta),
+        );
+      } catch (_) {}
+      widget.onChanged();
+      return;
+    }
 
     if (grab == BarGrab.move && (moving != null || ticks != 0)) {
       widget.comp.slideLayers(
