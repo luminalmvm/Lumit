@@ -2399,6 +2399,19 @@ impl Realiser<'_> {
                 }
             })
             .collect();
+        let eye = camera.map(|pose| {
+            [
+                pose.position.0 as f32,
+                pose.position.1 as f32,
+                pose.position.2 as f32,
+            ]
+        });
+        let (order, cuts): (Vec<usize>, Vec<Option<lumit_gpu::Cut>>) =
+            draw_order(layers, &linear_textures, &grown, cam_mat.zip(eye))
+                .into_iter()
+                .unzip();
+        let comp_layers: Vec<lumit_gpu::CompositeLayer> =
+            order.iter().map(|&i| comp_layers[i].clone()).collect();
         if let (Some(metres_per_w), Some(cam)) = (scene_depth, cam_mat) {
             let depth = self.compositor.composite_depth(
                 &self.ctx,
@@ -2434,25 +2447,7 @@ impl Realiser<'_> {
                     if !l.three_d {
                         continue;
                     }
-                    let (dx, dy) = grow_offset(l.natural_size, *g);
-                    let placed = lumit_gpu::CompositeLayer {
-                        texture,
-                        size: grow_size(l.natural_size, *g),
-                        position: l.position,
-                        anchor: (l.anchor.0 + dx, l.anchor.1 + dy),
-                        scale: l.scale,
-                        rotation_deg: l.rotation_deg,
-                        opacity: l.opacity,
-                        z: l.z,
-                        rotation_x_deg: l.rotation_x_deg,
-                        rotation_y_deg: l.rotation_y_deg,
-                        three_d: true,
-                        matte: None,
-                        blend: l.blend,
-                        layer_mask: None,
-                        pre: l.pre,
-                    };
-                    let m = frame * placed.world();
+                    let m = frame * placed_in_3d(texture, l, *g).world();
                     planes.push(lumit_gpu::fx::ScenePlane {
                         u: m.col(0).truncate().to_array(),
                         v: m.col(1).truncate().to_array(),
@@ -2488,7 +2483,7 @@ impl Realiser<'_> {
             }
             return depth;
         }
-        self.compositor.composite_seeded(
+        self.compositor.composite_cut(
             &self.ctx,
             width,
             height,
@@ -2499,6 +2494,7 @@ impl Realiser<'_> {
             self.render_scale,
             self.samples,
             region,
+            &cuts,
         )
     }
 
@@ -2534,6 +2530,75 @@ impl Realiser<'_> {
         self.ctx.end_frame();
         out
     }
+}
+
+/// A 3D layer's picture where it really sits, motion blur or not: the plane
+/// its rays meet and its place in the depth order.
+fn placed_in_3d<'a>(
+    texture: &'a wgpu::Texture,
+    l: &CompLayerDraw,
+    g: (f32, f32),
+) -> lumit_gpu::CompositeLayer<'a> {
+    let (dx, dy) = grow_offset(l.natural_size, g);
+    lumit_gpu::CompositeLayer {
+        texture,
+        size: grow_size(l.natural_size, g),
+        position: l.position,
+        anchor: (l.anchor.0 + dx, l.anchor.1 + dy),
+        scale: l.scale,
+        rotation_deg: l.rotation_deg,
+        opacity: l.opacity,
+        z: l.z,
+        rotation_x_deg: l.rotation_x_deg,
+        rotation_y_deg: l.rotation_y_deg,
+        three_d: true,
+        matte: None,
+        blend: l.blend,
+        layer_mask: None,
+        pre: l.pre,
+    }
+}
+
+/// The order a segment's layers draw in: each run of adjacent 3D layers
+/// farthest first, as After Effects draws them, with how each draw is cut
+/// where layers pass through each other (a layer cut into pieces draws once
+/// per piece). A 2D layer ends a run, even one drawn on a collapsed 3D
+/// precomp's plane, and so does an adjustment layer, which already splits
+/// the segments. With no camera 3D layers draw flat, so the
+/// stack order stands.
+fn draw_order(
+    layers: &[CompLayerDraw],
+    textures: &[wgpu::Texture],
+    grown: &[(f32, f32)],
+    camera: Option<(lumit_gpu::Mat4, [f32; 3])>,
+) -> Vec<(usize, Option<lumit_gpu::Cut>)> {
+    let Some((view_proj, eye)) = camera else {
+        return (0..layers.len()).map(|i| (i, None)).collect();
+    };
+    let mut order = Vec::with_capacity(layers.len());
+    let mut start = 0;
+    while start < layers.len() {
+        let end = (start..layers.len())
+            .find(|&i| !layers[i].three_d || layers[i].ends_run)
+            .unwrap_or(layers.len());
+        let worlds: Vec<lumit_gpu::Mat4> = (start..end)
+            .map(|i| placed_in_3d(&textures[i], &layers[i], grown[i]).world())
+            .collect();
+        // A motion-blurred layer draws as a flat smear, which can't be cut
+        // itself, so whatever it crosses is cut along its plane instead.
+        let flat: Vec<bool> = (start..end).map(|i| !layers[i].mb.is_empty()).collect();
+        order.extend(
+            lumit_gpu::depth_order(&worlds, &flat, view_proj, eye)
+                .into_iter()
+                .map(|(i, cut)| (start + i, cut)),
+        );
+        // The 2D layer that ended the run keeps its place.
+        if end < layers.len() {
+            order.push((end, None));
+        }
+        start = end + 1;
+    }
+    order
 }
 
 /// The quad a grown picture needs (docs/08 §3.39).
@@ -2777,6 +2842,7 @@ mod tests {
             rotation_x_deg: 0.0,
             rotation_y_deg: 0.0,
             three_d: false,
+            ends_run: false,
             matte: None,
             blend: lumit_gpu::Blend::Normal,
             mask_cov: None,

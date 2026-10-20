@@ -18,6 +18,11 @@ struct LayerUniform {
     //    14 pin light · 15 hard mix · 16 difference · 17 exclusion · 18 divide ·
     //    19 hue · 20 saturation · 21 colour · 22 luminosity
     target_size: vec4<f32>,
+    // x: the clip z a layer cut by depth draws at, y: how many corners of
+    // `piece` a piece of a layer draws, 0 for every other draw
+    cut: vec4<f32>,
+    // A piece's corners in the layer's own 0..1 space, two to a row.
+    piece: array<vec4<f32>, 5>,
 };
 
 @group(0) @binding(0) var src: texture_2d<f32>;
@@ -33,7 +38,9 @@ struct LayerUniform {
 @group(0) @binding(5) var layer_mask: texture_2d<f32>;
 
 struct VsOut {
-    @builtin(position) pos: vec4<f32>,
+    // Invariant so a cut layer's depth comes out the same in every draw of it,
+    // which is what lets the front draw find itself by an equal test.
+    @builtin(position) @invariant pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
     // Clip w, which through the camera is the distance along its forward
     // axis over its zoom (Scene depth).
@@ -47,9 +54,23 @@ fn vs_layer(@builtin(vertex_index) i: u32) -> VsOut {
         vec2<f32>(0.0, 0.0), vec2<f32>(1.0, 0.0), vec2<f32>(0.0, 1.0),
         vec2<f32>(1.0, 0.0), vec2<f32>(1.0, 1.0), vec2<f32>(0.0, 1.0),
     );
-    let c = corners[i];
+    var c = corners[i];
+    // A piece of a layer draws as a fan of triangles from its first corner.
+    let count = u32(layer.cut.y);
+    if (count >= 3u) {
+        let k = i % 3u;
+        let at = select(i / 3u + k, 0u, k == 0u);
+        let pair = layer.piece[at / 2u];
+        c = select(pair.xy, pair.zw, at % 2u == 1u);
+    }
     var out: VsOut;
     out.pos = layer.matrix * vec4<f32>(c, 0.0, 1.0);
+    // A constant clip z puts depth at cut.x / w: nearer is larger, and a
+    // plane's depth is straight across the screen, so where two planes meet
+    // is where their depths do.
+    if (layer.cut.x > 0.0) {
+        out.pos.z = layer.cut.x;
+    }
     out.uv = c;
     out.w = out.pos.w;
     return out;
@@ -248,6 +269,20 @@ fn fs_layer_snapshot(in: VsOut) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_layer(in: VsOut) -> @location(0) vec4<f32> {
+    return layer_colour(in);
+}
+
+// A cut layer's own depth, laid down wherever any of it shows, so the nearest
+// layer at each pixel is known before any colour is drawn.
+@fragment
+fn fs_layer_cut(in: VsOut) -> @location(0) vec4<f32> {
+    if (layer_colour(in).a <= 0.0) {
+        discard;
+    }
+    return vec4<f32>(0.0);
+}
+
+fn layer_colour(in: VsOut) -> vec4<f32> {
     let texel = textureSample(src, samp, in.uv);
     // Straight-alpha source → premultiplied output, opacity folded in.
     var a = texel.a * layer.params.x * textureSample(layer_mask, samp, in.uv).a;

@@ -515,6 +515,10 @@ pub struct CompLayerDraw {
     pub rotation_x_deg: f32,
     pub rotation_y_deg: f32,
     pub three_d: bool,
+    /// A 2D layer of a collapsed 3D precomp: drawn through the camera on the
+    /// precomp's plane, but like any 2D layer it ends a run of 3D layers, as
+    /// in After Effects.
+    pub ends_run: bool,
     pub matte: Option<MatteDraw>,
     pub blend: lumit_gpu::Blend,
     /// Layer-space mask coverage (white RGBA, alpha = coverage) for

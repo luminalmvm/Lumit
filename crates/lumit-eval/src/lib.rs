@@ -63,7 +63,9 @@ pub mod schedule;
 ///   own time.
 /// * 11: Depth of field pro blurs up to the frame's edge, where it left a strip
 ///   of the edge pixel.
-pub const ALGO_VERSION: u32 = 11;
+/// * 12: 3D layers draw farthest first and cut where they pass through each
+///   other, so a 3D comp with a camera can look different.
+pub const ALGO_VERSION: u32 = 12;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -4544,12 +4546,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 11, which renamed every frame.
+        // Pinned under ALGO_VERSION 12, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                166_356_893_935_221_389_190_851_733_106_718_405_377,
-                233_041_167_907_227_752_146_596_676_542_925_387_127
+                61_653_449_784_439_162_505_009_470_931_868_136_354,
+                291_320_008_273_123_335_629_101_331_896_518_863_007
             )
         );
 

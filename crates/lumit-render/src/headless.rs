@@ -6783,6 +6783,184 @@ mod tests {
         );
     }
 
+    /// A 64 px comp seen through the default camera, holding 32 px 3D cards
+    /// at its centre, the first given at the top of the stack, all at
+    /// `opacity`. Each card is a colour, a z, a turn about y in degrees, and
+    /// whether it is only the card's right half, turning about its left edge.
+    fn cards_scene(cards: &[([f32; 4], f64, f64, bool)], opacity: f64) -> (Arc<Document>, Uuid) {
+        const ZOOM: f64 = 128.0;
+        let mut doc = Document::new();
+        let comp_id = push_comp(&mut doc, "Cards", 64, 64);
+        let mut camera = matrix_layer(
+            "Camera",
+            LayerKind::Camera {
+                zoom: Property::fixed(ZOOM),
+                solve_link: None,
+                correction_base: None,
+                options: Default::default(),
+            },
+            64,
+            64,
+        );
+        camera.transform.position_z = Property::fixed(-ZOOM);
+        let mut layers = vec![camera];
+        for &(colour, z, turn, half) in cards {
+            let def = Uuid::now_v7();
+            let width = if half { 16 } else { 32 };
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "Card".into(),
+                colour: LinearColour(colour),
+                width,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            let mut card = matrix_layer("Card", LayerKind::Solid { def }, width, 32);
+            card.switches.three_d = true;
+            if half {
+                card.transform.anchor_x = Property::fixed(0.0);
+            }
+            card.transform.opacity = Property::fixed(opacity);
+            card.transform.position_x = Property::fixed(32.0);
+            card.transform.position_y = Property::fixed(32.0);
+            card.transform.position_z = Property::fixed(z);
+            card.transform.rotation_y = Property::fixed(turn);
+            layers.push(card);
+        }
+        doc.comp_mut(comp_id).unwrap().layers = layers;
+        (Arc::new(doc), comp_id)
+    }
+
+    /// **A 2D layer inside a collapsed 3D precomp is seen by the camera**, on
+    /// the precomp's plane, and like any 2D layer it keeps its stack order, as
+    /// in After Effects. Pushed back to twice the camera's distance, the red
+    /// 32 px solid shows at 16 px, where drawn flat it filled 32. It stays over
+    /// the blue 3D card below it inside, though the card is nearer.
+    #[test]
+    fn a_2d_layer_in_a_collapsed_3d_precomp_is_seen_by_the_camera() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (base, _) = cards_scene(&[], 100.0);
+        let mut doc = (*base).clone();
+        let comp_id = doc
+            .items
+            .iter()
+            .find_map(|i| match i {
+                ProjectItem::Composition(c) => Some(c.id),
+                _ => None,
+            })
+            .unwrap();
+        let mut solid = |colour: [f32; 4]| {
+            let def = Uuid::now_v7();
+            doc.items.push(ProjectItem::Solid(SolidDef {
+                id: def,
+                name: "Solid".into(),
+                colour: LinearColour(colour),
+                width: 32,
+                height: 32,
+                extra: serde_json::Map::new(),
+            }));
+            matrix_layer("Solid", LayerKind::Solid { def }, 32, 32)
+        };
+        let flat = solid([1.0, 0.0, 0.0, 1.0]);
+        let mut card = solid([0.0, 0.0, 1.0, 1.0]);
+        card.switches.three_d = true;
+        card.transform.position_z = Property::fixed(-64.0);
+        let inner = push_comp(&mut doc, "Inner", 32, 32);
+        doc.comp_mut(inner).unwrap().layers = vec![flat, card];
+        let mut nested = matrix_layer("Nested", LayerKind::Precomp { comp: inner }, 32, 32);
+        nested.switches.three_d = true;
+        nested.switches.collapse = true;
+        nested.transform.position_x = Property::fixed(32.0);
+        nested.transform.position_y = Property::fixed(32.0);
+        nested.transform.position_z = Property::fixed(128.0);
+        doc.comp_mut(comp_id).unwrap().layers.push(nested);
+        let (rgba, w, _) = r
+            .render_rgba(&Arc::new(doc), comp_id, 0, 1.0)
+            .expect("a frame");
+        let at = |x: u32| &rgba[((32 * w + x) * 4) as usize..][..3];
+        assert!(
+            at(32)[0] > 200 && at(41)[2] > 200 && at(44)[2] < 50,
+            "the red solid should show 16 px wide over the blue card, got {:?} {:?} {:?}",
+            at(32),
+            at(41),
+            at(44)
+        );
+    }
+
+    /// **The nearer 3D layer covers the farther one, wherever they sit in the
+    /// stack**, as in After Effects. Red is at the bottom but nearer the
+    /// camera. Drawn in stack order, blue would cover it.
+    #[test]
+    fn a_nearer_3d_layer_lower_in_the_stack_draws_in_front() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let (doc, comp_id) = cards_scene(
+            &[
+                ([0.0, 0.0, 1.0, 1.0], 40.0, 0.0, false),
+                ([1.0, 0.0, 0.0, 1.0], -40.0, 0.0, false),
+            ],
+            100.0,
+        );
+        let (rgba, w, _) = r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame");
+        let i = ((32 * w + 32) * 4) as usize;
+        assert!(
+            rgba[i] > 200 && rgba[i + 2] < 50,
+            "the centre should be the near red card, got {:?}",
+            &rgba[i..i + 4]
+        );
+    }
+
+    /// **3D layers that pass through each other cut where they meet**, as in
+    /// After Effects, and come out right at any opacity. Three see-through
+    /// cards crossing on one axis, which no order of the three can draw, must
+    /// match the same star built from six half cards that only touch.
+    #[test]
+    fn crossing_3d_layers_cut_through_each_other() {
+        let mut r = match HeadlessRenderer::shared() {
+            Ok(r) => r,
+            Err(_) => {
+                lumit_gpu::no_adapter();
+                return;
+            }
+        };
+        let colours = [
+            [0.0, 0.0, 1.0, 1.0],
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0, 1.0],
+        ];
+        let turn = |k: usize| -40.0 + 40.0 * (k % 3) as f64;
+        let whole: Vec<_> = (0..3).map(|k| (colours[k], 0.0, turn(k), false)).collect();
+        let halves: Vec<_> = (0..6)
+            .map(|k| (colours[k % 3], 0.0, turn(k) + 180.0 * (k / 3) as f64, true))
+            .collect();
+        let mut frame = |cards: &[([f32; 4], f64, f64, bool)]| {
+            let (doc, comp_id) = cards_scene(cards, 60.0);
+            r.render_rgba(&doc, comp_id, 0, 1.0).expect("a frame").0
+        };
+        let (star, truth) = (frame(&whole), frame(&halves));
+        let worst = star
+            .iter()
+            .zip(&truth)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            worst <= 2,
+            "the cut star is {worst} levels off the one made of halves"
+        );
+    }
+
     /// **A wire reaches the picture.**
     ///
     /// The matrix above proves the two walks agree; this proves there is
