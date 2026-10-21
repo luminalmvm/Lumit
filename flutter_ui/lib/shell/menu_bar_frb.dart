@@ -2155,6 +2155,12 @@ bool cutSelectionFrb(LumitState app, LumitUiState ui) {
   // A panel holding a finer selection takes the whole of Cut, so its copy is
   // not followed by the layer under it going too.
   if (ui.cutClaim?.call() ?? false) return true;
+  // Keyframes, boxes and the like: the panel that took the copy removes the
+  // same things with its own Delete, and the layer under them stays.
+  if (ui.copyClaim?.call() ?? false) {
+    ui.deleteClaim?.call();
+    return true;
+  }
   final effects = ui.selectedEffects.value;
   final effectsLayer = ui.selectedEffectsLayer;
   final layer = ui.selectedLayer.value;
