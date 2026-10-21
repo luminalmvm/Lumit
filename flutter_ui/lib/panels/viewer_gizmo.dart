@@ -1533,6 +1533,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   HandleLink _link = HandleLink.broken;
   bool _pullingOut = false;
 
+  /// The claim this layer displaced to take Delete for path points.
+  bool Function()? _priorDeleteClaim;
+
   final PreviewThrottle _throttle = PreviewThrottle();
 
   /// Counts a second click in one place, for opening what a layer holds.
@@ -1567,6 +1570,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void initState() {
     super.initState();
     HardwareKeyboard.instance.addHandler(_onKey);
+    // Chained, as the panels chain theirs: Delete with path points selected
+    // is about the points, and anything else goes on down the chain.
+    _priorDeleteClaim = widget.uiState.deleteClaim;
+    widget.uiState.deleteClaim = _deleteClaim;
   }
 
   /// The rows a drag on the picture writes, for the others in a shared
@@ -1623,6 +1630,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   void dispose() {
     sayInHand(this, const []);
     HardwareKeyboard.instance.removeHandler(_onKey);
+    if (widget.uiState.deleteClaim == _deleteClaim) {
+      widget.uiState.deleteClaim = _priorDeleteClaim;
+    }
     _throttle.cancel();
     super.dispose();
   }
@@ -3159,6 +3169,70 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           _pullingOut ? Offset.zero : handleOf(vertices[h.index], h.side);
       return verticesWithHandle(vertices, h.index, h.side, from + d, link);
     };
+  }
+
+  /// Delete with path points selected, in the Viewer: the points go, and a
+  /// path left with too few to be a path goes with them, as in After Effects.
+  bool _deleteClaim() {
+    final ui = widget.uiState;
+    if (!mounted ||
+        _points.isEmpty ||
+        ui.activePanel != Panel.viewer ||
+        !_activeView) {
+      return _priorDeleteClaim?.call() ?? false;
+    }
+    final at = widget.comp.timeOfFrame(frame: ui.playheadFrame.value);
+    var landed = false;
+    List<BridgeVertex> kept(
+            List<BridgeVertex> vertices, String Function(int) keyOf) =>
+        [
+          for (var i = 0; i < vertices.length; i++)
+            if (!_points.contains(keyOf(i))) vertices[i],
+        ];
+    for (final box in _editablePointBoxes) {
+      for (final mask in box.masks) {
+        final left =
+            kept(mask.vertices, (i) => maskPointKey(box.id, mask.id, i));
+        if (left.length == mask.vertices.length) continue;
+        try {
+          if (left.length < (mask.closed ? 3 : 2)) {
+            box.layer.deleteMask(id: mask.id);
+          } else {
+            box.layer.setMask(
+                mask: maskEdited(box, mask, (_, __, ___) => left)!, at: at);
+          }
+          landed = true;
+        } catch (_) {
+          // The mask went away; the rest still go.
+        }
+      }
+      var touched = false;
+      final contents = <BridgeShapeItem>[];
+      for (final item in box.shapeContents) {
+        final left =
+            kept(item.vertices, (i) => shapePointKey(box.id, item.id, i));
+        if (left.length == item.vertices.length) {
+          contents.add(item);
+          continue;
+        }
+        touched = true;
+        if (left.length >= (item.closed ? 3 : 2)) {
+          contents.add(shapeItemWith(item, vertices: left));
+        }
+      }
+      if (touched) {
+        try {
+          box.layer.setShapeContents(contents: contents, at: at);
+          landed = true;
+        } catch (_) {
+          // The layer went away.
+        }
+      }
+    }
+    setState(_points.clear);
+    if (!landed) return _priorDeleteClaim?.call() ?? false;
+    widget.onChanged();
+    return true;
   }
 
   /// A click with Add, Delete or Convert vertex. True when it changed a path.
