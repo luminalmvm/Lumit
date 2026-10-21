@@ -461,9 +461,15 @@ typedef PathPoint = ({
 ///
 /// Masks and shape items hold the same path type, so this is one walk over two
 /// lists rather than two kinds of point.
-List<PathPoint> pathPointsOf(LayerBox box) {
+///
+/// With [only], the layer and path whose Path row is picked, that layer offers
+/// that path's points alone, so a layer of many paths shows just the one being
+/// edited.
+List<PathPoint> pathPointsOf(LayerBox box, {(UuidValue, UuidValue)? only}) {
   final out = <PathPoint>[];
+  bool shown(UuidValue path) => showsPath(box, path, only);
   for (final mask in box.masks) {
+    if (!shown(mask.id)) continue;
     for (var i = 0; i < mask.vertices.length; i++) {
       final v = mask.vertices[i];
       // Behind the eye a point is not drawn, so it can't be aimed at.
@@ -478,6 +484,7 @@ List<PathPoint> pathPointsOf(LayerBox box) {
     }
   }
   for (final item in box.shapeContents) {
+    if (!shown(item.id)) continue;
     for (var i = 0; i < item.vertices.length; i++) {
       final v = item.vertices[i];
       if (!box.map.inFront(v.x - box.artOrigin.dx, v.y - box.artOrigin.dy)) {
@@ -502,11 +509,12 @@ List<PathPoint> pathPointsOf(LayerBox box) {
   List<LayerBox> boxes,
   Offset point, {
   double slop = gizmoAnchorSlop / 2,
+  (UuidValue, UuidValue)? only,
 }) {
   ({LayerBox box, String key, UuidValue pathId, int index, bool shape})? best;
   var bestDistance = slop;
   for (final box in boxes) {
-    for (final p in pathPointsOf(box)) {
+    for (final p in pathPointsOf(box, only: only)) {
       final d = (p.at - point).distance;
       if (d <= bestDistance) {
         bestDistance = d;
@@ -525,11 +533,18 @@ List<PathPoint> pathPointsOf(LayerBox box) {
 
 /// Every editable point of [boxes] inside [rect] — what a marquee catches when
 /// it is sweeping points rather than layers.
-Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect) => {
+Set<String> pathPointsInRect(List<LayerBox> boxes, Rect rect,
+        {(UuidValue, UuidValue)? only}) =>
+    {
       for (final box in boxes)
-        for (final p in pathPointsOf(box))
+        for (final p in pathPointsOf(box, only: only))
           if (rect.contains(p.at)) p.key,
     };
+
+/// Whether [box]'s path [path] is drawn and offered: always, unless [only]
+/// names another path of the same layer.
+bool showsPath(LayerBox box, UuidValue path, (UuidValue, UuidValue)? only) =>
+    only == null || only.$1 != box.id || only.$2 == path;
 
 /// A drag's screen delta in [box]'s own coordinates.
 ///
@@ -1432,6 +1447,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         selectedPoints: _points,
         pointNudge: _drag == _GizmoDrag.points ? _delta : Offset.zero,
         pointFrom: _origin,
+        onlyPath: _pathBeingEdited,
         anchors: widget.showControls && widget.showAnchors
             ? [
                 for (final box in selected)
@@ -1666,7 +1682,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // A mask point first: it sits on top of the layer it belongs to, and a
     // click on it means the point rather than the layer.
     final point = widget.showControls
-        ? pathPointAt(_editablePointBoxes, details.localPosition)
+        ? pathPointAt(_editablePointBoxes, details.localPosition,
+            only: _pathBeingEdited)
         : null;
     if (point != null) {
       setState(() {
@@ -1942,8 +1959,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // point's, so every corner of a drawn square was a scale and never an edit.
     // A press inside a point's own, tighter reach means the point.
     final selected = _selected;
-    final aimedAt =
-        widget.showControls ? pathPointAt(_editablePointBoxes, at) : null;
+    final only = _pathBeingEdited;
+    final aimedAt = widget.showControls
+        ? pathPointAt(_editablePointBoxes, at, only: only)
+        : null;
 
     // A key on a selected layer's motion path: a press within its own tight
     // reach drags that key, whatever layer's body sits under it.
@@ -2731,7 +2750,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // are already selected anyway. With none caught it is the layer sweep it
     // has always been.
     if (widget.showControls) {
-      final caughtPoints = pathPointsInRect(_editablePointBoxes, rect);
+      final caughtPoints =
+          pathPointsInRect(_editablePointBoxes, rect, only: _pathBeingEdited);
       if (caughtPoints.isNotEmpty) {
         setState(() {
           if (!_additive) _points.clear();
@@ -2835,6 +2855,10 @@ class _GizmoPainter extends CustomPainter {
   /// Where the point drag was pressed, which a layer seen through a camera
   /// measures the drag from.
   final Offset pointFrom;
+
+  /// The layer and path whose Path row is picked, which is then the only path
+  /// of its layer drawn.
+  final (UuidValue, UuidValue)? onlyPath;
   final LayerBox? hover;
   final LayerBox? handlesFor;
 
@@ -2877,6 +2901,7 @@ class _GizmoPainter extends CustomPainter {
     required this.selectedPoints,
     required this.pointNudge,
     required this.pointFrom,
+    this.onlyPath,
     required this.hover,
     required this.handlesFor,
     required this.anchors,
@@ -2954,6 +2979,7 @@ class _GizmoPainter extends CustomPainter {
 
     for (final box in maskedBoxes) {
       for (final mask in box.masks) {
+        if (!showsPath(box, mask.id, onlyPath)) continue;
         _pathOutline(
           canvas,
           box,
@@ -2966,6 +2992,7 @@ class _GizmoPainter extends CustomPainter {
       // A shape layer's own art gets the same outline and the same vertices, so
       // drawn art can be seen point by point and corrected rather than redrawn.
       for (final item in box.shapeContents) {
+        if (!showsPath(box, item.id, onlyPath)) continue;
         _pathOutline(
           canvas,
           box,
