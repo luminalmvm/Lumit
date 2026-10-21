@@ -324,6 +324,11 @@ sealed class BridgeOutputRef with _$BridgeOutputRef {
     required UuidValue effect,
     required String port,
   }) = BridgeOutputRef_EffectData;
+
+  /// A stack effect's picture into the Matte of an effect below it.
+  const factory BridgeOutputRef.effectOutput({
+    required UuidValue effect,
+  }) = BridgeOutputRef_EffectOutput;
 }
 
 /// One socket on a box: the id the document writes down, the English word drawn

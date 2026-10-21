@@ -24124,6 +24124,10 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
           effect: dco_decode_Uuid(raw[1]),
           port: dco_decode_String(raw[2]),
         );
+      case 3:
+        return BridgeOutputRef_EffectOutput(
+          effect: dco_decode_Uuid(raw[1]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -30960,6 +30964,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         var var_effect = sse_decode_Uuid(deserializer);
         var var_port = sse_decode_String(deserializer);
         return BridgeOutputRef_EffectData(effect: var_effect, port: var_port);
+      case 3:
+        var var_effect = sse_decode_Uuid(deserializer);
+        return BridgeOutputRef_EffectOutput(effect: var_effect);
       default:
         throw UnimplementedError('');
     }
@@ -38339,6 +38346,9 @@ class BridgeLibApiImpl extends BridgeLibApiImplPlatform
         sse_encode_i_32(2, serializer);
         sse_encode_Uuid(effect, serializer);
         sse_encode_String(port, serializer);
+      case BridgeOutputRef_EffectOutput(effect: final effect):
+        sse_encode_i_32(3, serializer);
+        sse_encode_Uuid(effect, serializer);
     }
   }
 

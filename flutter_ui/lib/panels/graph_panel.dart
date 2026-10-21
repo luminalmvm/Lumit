@@ -273,6 +273,10 @@ const double _autoDriverStepY = 140;
 /// How near a socket the pointer has to be to take hold of it.
 const double _socketGrab = 7;
 
+/// How near a socket a wire in hand has to come to snap to it. Over a box, the
+/// nearest socket on that box that takes the wire is reached from anywhere.
+const double _socketSnap = 24;
+
 /// The pointer travel that turns a press into a drag rather than a click.
 const double graphDragSlop = 3;
 
@@ -411,6 +415,10 @@ Map<String, DrivenParam> drivenParamsIn(BridgeLayerGraph graph) {
         BridgeOutputRef_EffectData(:final effect, :final port) => (
             graphNodeKey(BridgeNodeRef.effect(effect)),
             port
+          ),
+        BridgeOutputRef_EffectOutput(:final effect) => (
+            graphNodeKey(BridgeNodeRef.effect(effect)),
+            'output'
           ),
       };
       final source = byRef[fromKey];
@@ -702,6 +710,33 @@ class GraphLayout {
     return null;
   }
 
+  /// The socket a wire let go of at [at] would join: the nearest one that
+  /// [fits], within [_socketSnap] of the pointer or anywhere on the box under
+  /// it. Null where none would.
+  GraphSocket? snapAt(Offset at, bool Function(GraphSocket) fits) {
+    final over = boxAt(at);
+    GraphSocket? best;
+    var nearest = double.infinity;
+    for (final box in boxes) {
+      for (final (isInput, ports) in [
+        (true, box.inputs),
+        (false, box.outputs)
+      ]) {
+        for (final port in ports) {
+          final centre = box.socket(port.id, isInput);
+          if (centre == null) continue;
+          final d = (centre - at).distance;
+          if (d >= nearest || (d > _socketSnap && box != over)) continue;
+          final socket = GraphSocket(box.key, port, isInput, centre);
+          if (!fits(socket)) continue;
+          best = socket;
+          nearest = d;
+        }
+      }
+    }
+    return best;
+  }
+
   GraphBox? boxAt(Offset at) {
     for (final box in boxes.reversed) {
       if (box.rect.contains(at)) return box;
@@ -822,6 +857,10 @@ bool graphNoStreamPorts(List<BridgePort> inputs, String matchName) {
         graphNodeKey(BridgeNodeRef.effect(effect)),
         port
       ),
+    BridgeOutputRef_EffectOutput(:final effect) => (
+        graphNodeKey(BridgeNodeRef.effect(effect)),
+        'output'
+      ),
   };
   final (toKey, toPort) = switch (e.to) {
     BridgeInputRef_Param(:final node, :final port) => (
@@ -869,7 +908,13 @@ double graphWireDistance(Offset a, Offset b, Offset at,
 class GraphFlight {
   final GraphSocket from;
   Offset to;
+
+  /// The socket the wire would join if let go of now. The loose end is drawn
+  /// on it, so the wire shows where it is going before the drop.
+  GraphSocket? snap;
   GraphFlight(this.from, this.to);
+
+  Offset get end => snap?.at ?? to;
 }
 
 /// The layer canvas's wire in hand, which knows about the image chain besides.
@@ -1551,6 +1596,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       BridgeOutputRef_Driver(:final port) => port,
       BridgeOutputRef_SourceMatte() => 'matte',
       BridgeOutputRef_EffectData(:final port) => port,
+      BridgeOutputRef_EffectOutput() => 'output',
     };
     final i = box.outputs.indexWhere((p) => p.id == portId);
     final at = box.socket(portId, false);
@@ -1584,11 +1630,12 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     if (_driverIdOf(node) case final driver?) {
       return BridgeOutputRef.driver(node: driver, port: port.id);
     }
-    // A **stack effect's** declared data output — the first wire whose source
-    // is the effect list itself. The picture's own `output` port never
-    // reaches here: a chain socket takes no drag at all.
+    // A **stack effect's** declared data output, or its picture, which only
+    // ever goes into the Matte of an effect below it.
     if (_effectIdOf(node) case final effect?) {
-      return BridgeOutputRef.effectData(effect: effect, port: port.id);
+      return port.portType == BridgePortType.image
+          ? BridgeOutputRef.effectOutput(effect: effect)
+          : BridgeOutputRef.effectData(effect: effect, port: port.id);
     }
     return null;
   }
@@ -1606,11 +1653,29 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// port types both sides carry in the read model. A mismatched drop is
   /// declined without a bridge call: the engine's refusal is the backstop, not
   /// the message channel (docs/17, "The layer graph").
+  /// What a wire in hand may snap to: a chain wire only a chain input, which
+  /// is all [_chainDrop] takes, and any other wire what [_accepts] takes.
+  /// A chain wire drawn out of an effect's output may also go into a Matte.
+  bool Function(GraphSocket) _fits(_InFlight flight) => flight.chain == null
+      ? (s) => _accepts(flight.from, s)
+      : (s) =>
+          (s.isInput && _isChainType(s.port.portType)) ||
+          (flight.fromOutput && _accepts(flight.from, s));
+
   bool _accepts(GraphSocket from, GraphSocket to) {
     if (from.isInput == to.isInput) return false;
     final out = from.isInput ? to : from;
     final into = from.isInput ? from : to;
     if (out.node == into.node) return false;
+    // An effect's picture into the Matte of an effect below it.
+    if (out.port.portType == BridgePortType.image &&
+        into.port.portType == BridgePortType.matte) {
+      final order = [for (final n in _graph!.nodes) graphNodeKey(n.node)];
+      final above = order.indexOf(out.node);
+      return _effectIdOf(_refOf(out.node)) != null &&
+          above >= 0 &&
+          above < order.indexOf(into.node);
+    }
     if (_isChainType(out.port.portType) || _isChainType(into.port.portType)) {
       return false;
     }
@@ -1655,7 +1720,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         BridgeOutputRef_Driver(:final node) =>
           graphNodeKey(BridgeNodeRef.driver(node)),
         BridgeOutputRef_SourceMatte() => 'source',
-        BridgeOutputRef_EffectData(:final effect) =>
+        BridgeOutputRef_EffectData(:final effect) ||
+        BridgeOutputRef_EffectOutput(:final effect) =>
           graphNodeKey(BridgeNodeRef.effect(effect)),
       };
 
@@ -2513,7 +2579,10 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   void _move(PointerMoveEvent event, GraphLayout layout) {
     final at = _toCanvas(event.localPosition);
     if (_flight case final flight?) {
-      setState(() => flight.to = at);
+      setState(() {
+        flight.to = at;
+        flight.snap = layout.snapAt(at, _fits(flight));
+      });
       return;
     }
     if (_nodeDrag case final drag?) {
@@ -2555,8 +2624,17 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
 
     if (_flight case final flight?) {
       setState(() => _flight = null);
-      final landed = layout.socketAt(at);
+      final landed = layout.snapAt(at, _fits(flight)) ?? layout.socketAt(at);
       if (flight.chain case final held?) {
+        // Out of an effect's output into a Matte below: a wire, not a move.
+        if (moved &&
+            flight.fromOutput &&
+            landed != null &&
+            landed.port.portType == BridgePortType.matte &&
+            _accepts(flight.from, landed)) {
+          _connect(flight.from, landed);
+          return;
+        }
         // A press that never travelled is no gesture at all here: a stored
         // wire unplugs on a stationary click, but a chain wire's discard
         // costs an effect, and that must never be the price of a slip.
@@ -2976,6 +3054,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                                   onRenameCancelled: () =>
                                       setState(() => _renamingNode = null),
                                   foot: _shaderThumb(box.key),
+                                  snap: _flight?.snap?.node == box.key
+                                      ? _flight!.snap
+                                      : null,
                                 ),
                               ),
                           ],
@@ -3085,6 +3166,9 @@ class GraphNodeCard extends StatelessWidget {
   /// shader's picture of its inner graph. A press on it is its own.
   final Widget? foot;
 
+  /// The socket on this card a wire in hand has snapped to, drawn lit.
+  final GraphSocket? snap;
+
   const GraphNodeCard({
     super.key,
     required this.box,
@@ -3099,6 +3183,7 @@ class GraphNodeCard extends StatelessWidget {
     required this.onRenameCancelled,
     this.paramRow,
     this.foot,
+    this.snap,
   });
 
   GraphCard get _card => box.card;
@@ -3375,29 +3460,32 @@ class GraphNodeCard extends StatelessWidget {
           Positioned(
             left: -graphSocketSize / 2 - 1,
             top: (row.height - graphSocketSize) / 2,
-            child: _socket(t, input),
+            child: _socket(t, input, isInput: true),
           ),
         if (output != null)
           Positioned(
             right: -graphSocketSize / 2 - 1,
             top: (row.height - graphSocketSize) / 2,
-            child: _socket(t, output),
+            child: _socket(t, output, isInput: false),
           ),
       ],
     );
   }
 
-  /// A filled socket is wired, a hollow one is not (15-DESIGN §12A.7).
-  Widget _socket(LumitTheme t, BridgePort port) {
+  /// A filled socket is wired, a hollow one is not (15-DESIGN §12A.7). The
+  /// one a wire in hand has snapped to is filled and ringed.
+  Widget _socket(LumitTheme t, BridgePort port, {required bool isInput}) {
     final colour = portColour(t, port.portType);
+    final lit = snap?.isInput == isInput && snap?.port.id == port.id;
     return Container(
       key: ValueKey<String>('graph-socket-$_key-${port.id}'),
       width: graphSocketSize,
       height: graphSocketSize,
       decoration: BoxDecoration(
-        color: port.wired ? colour : t.surface1,
+        color: port.wired || lit ? colour : t.surface1,
         shape: BoxShape.circle,
-        border: Border.all(color: colour),
+        border: Border.all(
+            color: lit ? t.animated : colour, width: lit ? 2 : 1),
       ),
     );
   }
@@ -3680,7 +3768,7 @@ class _GraphPainter extends CustomPainter {
     if (flight case final f?) {
       // A wire drawn out of an input runs the other way, pointer to socket,
       // so it leaves the input heading left as a stored wire would.
-      final (a, b) = f.from.isInput ? (f.to, f.from.at) : (f.from.at, f.to);
+      final (a, b) = f.from.isInput ? (f.end, f.from.at) : (f.from.at, f.end);
       _wire(canvas, a, b, dragged, dashes: true);
     }
   }

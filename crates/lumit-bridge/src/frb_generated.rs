@@ -26342,6 +26342,10 @@ impl SseDecode for crate::api::graph::BridgeOutputRef {
                     port: var_port,
                 };
             }
+            3 => {
+                let mut var_effect = <uuid::Uuid>::sse_decode(deserializer);
+                return crate::api::graph::BridgeOutputRef::EffectOutput { effect: var_effect };
+            }
             _ => {
                 unimplemented!("");
             }
@@ -36918,6 +36922,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::graph::BridgeOutputRef {
                 port.into_into_dart().into_dart(),
             ]
             .into_dart(),
+            crate::api::graph::BridgeOutputRef::EffectOutput { effect } => {
+                [3.into_dart(), effect.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -43137,6 +43144,10 @@ impl SseEncode for crate::api::graph::BridgeOutputRef {
                 <i32>::sse_encode(2, serializer);
                 <uuid::Uuid>::sse_encode(effect, serializer);
                 <String>::sse_encode(port, serializer);
+            }
+            crate::api::graph::BridgeOutputRef::EffectOutput { effect } => {
+                <i32>::sse_encode(3, serializer);
+                <uuid::Uuid>::sse_encode(effect, serializer);
             }
             _ => {
                 unimplemented!("");

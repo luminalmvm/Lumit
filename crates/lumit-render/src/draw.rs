@@ -224,6 +224,9 @@ pub enum LayerInputDraw {
     /// so a Lens flare added to one finds the lights in the footage beneath
     /// it without being pointed anywhere.
     ThisLayer,
+    /// The picture an effect above this one in the same stack made, wired into
+    /// this one's Matte. `run_ops` keeps it from when that effect ran.
+    EffectOutput(uuid::Uuid),
     /// Another layer, rendered alone at this raster.
     Layer(DofInputDraw),
     /// One op's whole list of layers, for an effect with more than one layer
@@ -376,6 +379,17 @@ pub enum GraphStep {
     Switch {
         inputs: Vec<Option<usize>>,
         index: i64,
+    },
+    /// A Node graph box's picture dissolved back to the one it was handed
+    /// where its Matte is dark, as the Matte row does on a layer. Every other
+    /// box runs as one op, which does this itself.
+    Dissolve {
+        input: Option<usize>,
+        output: Option<usize>,
+        matte: usize,
+        /// The Matte row's Channel pick, where the effect has one.
+        channel: Option<u32>,
+        invert: bool,
     },
 }
 
