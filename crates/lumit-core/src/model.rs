@@ -3499,6 +3499,10 @@ pub struct Layer {
     /// path asks [`Layer::is_adjustment`], which answers for both.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub adjustment: bool,
+    /// Sound played faster or slower changes pitch with the speed, the way
+    /// tape does. Off keeps the pitch where it was. The layer's clips follow it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pitch_follows_speed: bool,
     /// Retime: layer-local time → source time, in seconds. An ordinary
     /// keyframable [`Property`] like any other — the graph editor, the
     /// stopwatch and the lane diamonds treat it exactly as they treat
@@ -5160,6 +5164,7 @@ mod tests {
             audio_only: false,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: Some(map),
             interpolation: Default::default(),
             parked_flow: None,
@@ -5526,6 +5531,7 @@ mod tests {
             audio_only: false,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -5843,6 +5849,7 @@ mod tests {
             audio_only: false,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

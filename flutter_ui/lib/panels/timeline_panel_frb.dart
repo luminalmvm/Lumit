@@ -2224,6 +2224,9 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
     _graphKeySelection.clear();
     _laneKeySelection.clear();
     _highlighted = null;
+    // The Viewer outlines the layer a picked row belongs to, so it has to hear
+    // the rows go too, or a deselected shape keeps its points on screen.
+    _publishPropertySelection();
   }
 
   /// The shell state this panel claimed Delete on, so the claim can be dropped

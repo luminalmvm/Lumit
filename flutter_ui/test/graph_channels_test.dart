@@ -30,6 +30,7 @@ BridgeLayerEntry entry({required BridgeScalar volumeDb}) {
       internallayerId: id,
     ),
     info: BridgeLayerInfo(
+      pitchFollowsSpeed: false,
       collapseForced: false,
       volumeDb: volumeDb,
       pan: const BridgeScalar.static_(0),

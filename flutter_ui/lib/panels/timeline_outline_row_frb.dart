@@ -1294,6 +1294,18 @@ class _OutlineRowState extends State<OutlineRow> {
                 widget.onChanged();
               },
             ),
+          // Whether sound played faster or slower keeps its pitch.
+          if (widget.hasAudio)
+            MenuRow(
+              key: const ValueKey('tl-row-keep-pitch'),
+              onPressed: () => close('keep-pitch'),
+              child: Row(
+                children: [
+                  menuTick(!widget.entry.info.pitchFollowsSpeed),
+                  Expanded(child: Text(l10n.menuKeepPitch)),
+                ],
+              ),
+            ),
           if (several) ...[
             MenuRow(
                 key: const ValueKey('tl-row-split-streams'),
@@ -1504,6 +1516,14 @@ class _OutlineRowState extends State<OutlineRow> {
           if (target.info.switches.locked) continue;
           try {
             target.layer.stretch(speedPercent: percent);
+          } catch (_) {}
+        }
+      case 'keep-pitch':
+        final follows = !widget.entry.info.pitchFollowsSpeed;
+        for (final target in targets) {
+          if (target.info.switches.locked) continue;
+          try {
+            target.layer.setPitchFollowsSpeed(follows: follows);
           } catch (_) {}
         }
       case 'freeze':

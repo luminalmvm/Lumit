@@ -23,7 +23,7 @@ import 'state.dart';
 import 'streams.dart';
 part 'layer.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
+// These functions are ignored because they are not marked as `pub`: `bands_of`, `bridge_clip`, `bridge_kind`, `bridge_switches`, `clamped_property`, `clip_ops`, `clip_source_duration`, `clip_under`, `clips_and_index`, `commit_clips_with_offset`, `commit_clips`, `commit_masks`, `commit_paint`, `commit_puppet`, `commit_shape_items`, `commit`, `comp_time`, `composition`, `core`, `core`, `core`, `core`, `core`, `core`, `core`, `document`, `edit_shape_item`, `empty`, `empty`, `exr_path`, `instance_home`, `is_graph_inputs`, `item`, `layer_time_of_frame`, `leaving`, `map_end_value`, `motion_path_of`, `of`, `of`, `of`, `of`, `of`, `of`, `placed_graph_of`, `placed`, `project`, `rational_of`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_at`, `read_layer_info`, `read_layer`, `read`, `read`, `read`, `reanchored_span`, `reload_extract_channels`, `retime_or_identity`, `seed_extract_channels`, `source_length`, `stretch_by`, `transform_ops`, `trimmed`, `unretime_op`, `with_effects`, `with_instances`, `write_at`, `write_at`, `write_at`, `write_at`, `write_fade`, `write_item_over`, `write_item`, `write_layer`, `write_over`, `write`, `write`, `write`, `write`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `InstanceHome`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `try_from`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `comp_id`, `id`, `new`, `project_id`
@@ -808,6 +808,9 @@ class BridgeLayerInfo {
   /// which is exactly what decides whether the fold-out shows a Retime row.
   final BridgeScalar? retime;
 
+  /// Sound played faster or slower changes pitch with the speed.
+  final bool pitchFollowsSpeed;
+
   /// The layer's masks, bottom of the stack first. Carried in the
   /// read model for the same reason the effects are: the Timeline's
   /// twirl-down draws a row per mask, and asking per row per frame is the
@@ -938,6 +941,7 @@ class BridgeLayerInfo {
     required this.label,
     this.matte,
     this.retime,
+    required this.pitchFollowsSpeed,
     required this.masks,
     required this.paint,
     this.puppet,
@@ -980,6 +984,7 @@ class BridgeLayerInfo {
       label.hashCode ^
       matte.hashCode ^
       retime.hashCode ^
+      pitchFollowsSpeed.hashCode ^
       masks.hashCode ^
       paint.hashCode ^
       puppet.hashCode ^
@@ -1024,6 +1029,7 @@ class BridgeLayerInfo {
           label == other.label &&
           matte == other.matte &&
           retime == other.retime &&
+          pitchFollowsSpeed == other.pitchFollowsSpeed &&
           masks == other.masks &&
           paint == other.paint &&
           puppet == other.puppet &&
@@ -4334,6 +4340,12 @@ class LayerReference {
       BridgeLib.instance.api.crateApiLayerLayerReferenceSetParent(
           that: this, parent: parent, frame: frame);
 
+  /// Whether this layer's sound changes pitch when it plays faster or
+  /// slower. Off keeps the pitch where it was.
+  void setPitchFollowsSpeed({required bool follows}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceSetPitchFollowsSpeed(
+          that: this, follows: follows);
+
   /// Give this layer a puppet, replace the one it has, or take it away.
   ///
   /// The whole block, because that is the op the engine has and it is exactly
@@ -4605,6 +4617,26 @@ class LayerReference {
   void stretch({required double speedPercent}) =>
       BridgeLib.instance.api.crateApiLayerLayerReferenceStretch(
           that: this, speedPercent: speedPercent);
+
+  /// Stretch one clip so its edges land on `start_frame` and `end_frame`: it
+  /// plays the same stretch of source at whatever speed that takes, the way
+  /// dragging a clip's edge with Shift held does.
+  void stretchClip(
+          {required UuidValue clip,
+          required PlatformInt64 startFrame,
+          required PlatformInt64 endFrame}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceStretchClip(
+          that: this, clip: clip, startFrame: startFrame, endFrame: endFrame);
+
+  /// [`Self::stretch`] to the given ends, the way dragging either end of the
+  /// bar with Shift held does. Moving the in point slides the whole layer so
+  /// its out point holds. The factor is worked out exactly, so the ends land
+  /// on the frames they were dropped on rather than a flick short of them.
+  void stretchTo(
+          {required BridgeRational inPoint,
+          required BridgeRational outPoint}) =>
+      BridgeLib.instance.api.crateApiLayerLayerReferenceStretchTo(
+          that: this, inPoint: inPoint, outPoint: outPoint);
 
   /// Key this mask's **shape** at `time`, or take the key already there away —
   /// the ◆ on the mask's Path row.

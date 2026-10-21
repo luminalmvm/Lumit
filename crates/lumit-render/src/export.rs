@@ -120,6 +120,21 @@ pub struct AudioJob {
     /// before [`Self::chain`]: the clip's rack, then the row's, which is the
     /// order the two racks read on screen. `None` for every whole-layer job.
     pub clip_chain: Option<Arc<AudioChain>>,
+    /// The retime the sound plays through, for a layer or clip that isn't at
+    /// its source's own speed. `None` plays the file as it is.
+    pub retime: Option<Arc<Retimed>>,
+}
+
+/// A retime the sound follows: at comp time `t` it plays source second
+/// `map(t - origin_s)`.
+#[derive(Clone, PartialEq)]
+pub struct Retimed {
+    pub map: lumit_core::anim::Property,
+    pub origin_s: f64,
+    /// The source seconds a clip is trimmed to. Silent outside them.
+    pub held: Option<(f64, f64)>,
+    /// Pitch rises and falls with the speed, as on tape. Off keeps it.
+    pub pitch_follows_speed: bool,
 }
 
 /// A wire onto a layer's Volume (the Audio workspace board's *Duck under*):
@@ -563,6 +578,38 @@ pub struct Carrier {
     /// a layer's own rack already reads. `None` on every carrier that is a
     /// gain and nothing more, which is nearly all of them.
     pub chain: Option<std::sync::Arc<AudioChain>>,
+    /// The Precomp layer's or composition clip's retime. Everything arriving
+    /// through this carrier is summed and the sum read through the map, ahead
+    /// of the rack. `None` on a carrier that plays at its own speed.
+    pub retime: Option<std::sync::Arc<BusRetime>>,
+}
+
+/// A retime on a whole comp's sound: what arrives through a [`Carrier`] is
+/// summed, and the sum is read through `retime` over `span`.
+#[derive(Clone, PartialEq)]
+pub struct BusRetime {
+    pub retime: Retimed,
+    /// Where the comp's own time 0 sits on the mixed timeline.
+    pub zero_s: f64,
+    /// The layer's or clip's span on the mixed timeline.
+    pub span: (f64, f64),
+}
+
+/// The source seconds `retimed` reaches over `span` of the mixed timeline,
+/// with a tenth of a second either side. `None` where it reaches nothing.
+#[must_use]
+pub fn retimed_reach(retimed: &Retimed, span: (f64, f64)) -> Option<(f64, f64)> {
+    let steps = ((span.1 - span.0) * 100.0).ceil().max(1.0) as usize;
+    let (lo, hi) = (0..=steps)
+        .map(|i| {
+            let t = span.0 + (span.1 - span.0) * i as f64 / steps as f64;
+            retimed.map.value_at(t - retimed.origin_s)
+        })
+        .filter(|s| s.is_finite())
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), s| {
+            (a.min(s), b.max(s))
+        });
+    (lo <= hi).then_some((lo - 0.1, hi + 0.1))
 }
 
 /// Bake one job's **Volume and Pan** — its own properties times every
@@ -726,14 +773,27 @@ pub fn bus_runs(placed: &[PlacedJob<'_>], rate: u32, offline: bool) -> Vec<MixRu
     runs_at(placed, &all, 0, rate, offline)
 }
 
-/// The first carrier at or past `depth` that holds a rack: where this job's
-/// sound is summed on its way out.
+/// The first carrier at or past `depth` that holds a rack or a retime: where
+/// this job's sound is summed on its way out.
 fn bus_at(job: &AudioJob, depth: usize) -> Option<usize> {
     job.carriers
         .iter()
         .enumerate()
         .skip(depth)
-        .find_map(|(at, c)| c.chain.is_some().then_some(at))
+        .find_map(|(at, c)| bus_mark(c).is_some().then_some(at))
+}
+
+/// What makes a carrier a bus, as one pointer: its rack, or else its retime.
+/// Two carriers with the same mark are the same bus.
+fn bus_mark(c: &Carrier) -> Option<*const ()> {
+    c.chain
+        .as_ref()
+        .map(|chain| std::sync::Arc::as_ptr(chain).cast::<()>())
+        .or_else(|| {
+            c.retime
+                .as_ref()
+                .map(|r| std::sync::Arc::as_ptr(r).cast::<()>())
+        })
 }
 
 /// The runs inside one bus: `which` indexes [`bus_runs`]'s input and `depth`
@@ -749,7 +809,7 @@ fn runs_at(
     // The buses already summed, so the rest of a bus's jobs are passed over
     // rather than summed again. Two Precomp layers at the same depth are two
     // buses, which is why the chain itself is the mark and not the depth.
-    let mut summed: Vec<(usize, *const AudioChain)> = Vec::new();
+    let mut summed: Vec<(usize, *const ())> = Vec::new();
     for &i in which {
         let job = placed[i].job;
         let carriers = &job.carriers[depth.min(job.carriers.len())..];
@@ -771,22 +831,20 @@ fn runs_at(
             });
             continue;
         };
-        let Some(chain) = job.carriers[at].chain.as_ref() else {
+        let carrier = &job.carriers[at];
+        let Some(mark) = bus_mark(carrier) else {
             continue;
         };
-        if summed.contains(&(at, std::sync::Arc::as_ptr(chain))) {
+        if summed.contains(&(at, mark)) {
             continue;
         }
-        summed.push((at, std::sync::Arc::as_ptr(chain)));
+        summed.push((at, mark));
         let group: Vec<usize> = which
             .iter()
             .copied()
             .filter(|&j| {
                 bus_at(placed[j].job, depth) == Some(at)
-                    && placed[j].job.carriers[at]
-                        .chain
-                        .as_ref()
-                        .is_some_and(|c| std::sync::Arc::ptr_eq(c, chain))
+                    && bus_mark(&placed[j].job.carriers[at]) == Some(mark)
             })
             .collect();
         let inner = runs_at(placed, &group, at + 1, rate, offline);
@@ -824,7 +882,31 @@ fn runs_at(
         // No master fader and no ceiling on a bus: the limiter is the master's
         // own last stage and this sum is in the middle of the desk.
         let sum = lumit_audio::mix::sum_stereo(&sources, (last - first) as usize);
-        let (samples, start_frame) = match chain_bake(chain, &sum, first, rate, offline) {
+        // A retimed comp's sum is read through the map first, so the rack
+        // hears it at its new speed, as a footage layer's rack does.
+        let (sum, first) = match &carrier.retime {
+            Some(bus) => {
+                let zero = bus.zero_s * f64::from(rate) - first as f64;
+                let frames = sum.len() / 2;
+                let Some((at, out)) = read_retimed(
+                    &bus.retime,
+                    bus.span,
+                    zero,
+                    rate,
+                    || frames,
+                    |a, n| sum[a * 2..(a + n) * 2].to_vec(),
+                ) else {
+                    continue;
+                };
+                (out, at)
+            }
+            None => (sum, first),
+        };
+        let baked = carrier
+            .chain
+            .as_ref()
+            .and_then(|chain| chain_bake(chain, &sum, first, rate, offline));
+        let (samples, start_frame) = match baked {
             // Placed the rack's latency earlier, exactly as a job's own rack
             // is, so the processed bus lands where the dry sum did.
             Some((wet, latency)) => (wet, first - i64::from(latency)),
@@ -2636,6 +2718,88 @@ fn place(source: &Source, job: &AudioJob, rate: u32, wait: bool) -> Option<(i64,
     lumit_audio::mix::place_on_timeline(job.in_s, job.out_s, job.offset_s, frames, rate)
 }
 
+/// What a job plays before its racks and its Volume: where it starts on the
+/// timeline and the samples. A retimed job is read through its map, the rest
+/// straight from the file.
+fn dry_run(
+    source: &Arc<Source>,
+    job: &AudioJob,
+    rate: u32,
+    exact: bool,
+) -> Option<(i64, Vec<f32>)> {
+    let Some(retimed) = &job.retime else {
+        let (start_frame, src_start, len) = place(source, job, rate, true)?;
+        return Some((start_frame, source.read(src_start, len, exact)));
+    };
+    read_retimed(
+        retimed,
+        (job.in_s, job.out_s),
+        0.0,
+        rate,
+        || source.frames_exactly(),
+        |first, len| source.read(first, len, exact),
+    )
+}
+
+/// Sound read through `retimed` over `span` of the mixed timeline: where it
+/// starts and the samples. Source second `s` is frame `s * rate + zero` of
+/// what `read` reads, and `total` says how many frames that runs to.
+fn read_retimed(
+    retimed: &Retimed,
+    span: (f64, f64),
+    zero: f64,
+    rate: u32,
+    total: impl FnOnce() -> usize,
+    read: impl FnOnce(usize, usize) -> Vec<f32>,
+) -> Option<(i64, Vec<f32>)> {
+    let r = f64::from(rate);
+    let start_frame = (span.0 * r).round() as i64;
+    let frames = usize::try_from((span.1 * r).round() as i64 - start_frame)
+        .ok()
+        .filter(|f| *f > 0)?;
+    // Where each output frame reads the source, one entry every STEP frames.
+    let step = lumit_audio::speed::STEP;
+    let mut table: Vec<f64> = (0..=frames / step + 1)
+        .map(|c| {
+            let t = (start_frame as f64 + (c * step) as f64) / r;
+            let s = retimed.map.value_at(t - retimed.origin_s);
+            match retimed.held {
+                Some((lo, hi)) if s < lo || s > hi => f64::NAN,
+                _ => s * r + zero,
+            }
+        })
+        .collect();
+    let (lo, hi) = table
+        .iter()
+        .filter(|p| p.is_finite())
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| {
+            (a.min(*p), b.max(*p))
+        });
+    // Only the stretch of source the map reaches, with room for the grains.
+    let pad = r / 10.0;
+    let first = (lo - pad).floor().max(0.0);
+    let first = if first.is_finite() { first as usize } else { 0 };
+    let last = if hi.is_finite() {
+        ((hi + pad).ceil().max(0.0) as usize).min(total())
+    } else {
+        0
+    };
+    let src = if last > first {
+        read(first, last - first)
+    } else {
+        Vec::new()
+    };
+    for p in &mut table {
+        *p -= first as f64;
+    }
+    let samples = if retimed.pitch_follows_speed {
+        lumit_audio::speed::tape(&src, &table, frames)
+    } else {
+        lumit_audio::speed::keep_pitch(&src, &table, frames, rate)
+    };
+    Some((start_frame, samples))
+}
+
 /// **The buses of a mix**, each with the index of the job it stands in line
 /// at: every job arriving through a Precomp layer that carries a rack, read,
 /// run through its own racks, summed and run through the layer's
@@ -2654,8 +2818,7 @@ fn buses(sourced: &[(Arc<Source>, &AudioJob)], rate: u32, offline: bool) -> Vec<
         .enumerate()
         .filter(|(_, (_, job))| in_a_bus(job))
         .filter_map(|(index, (source, job))| {
-            let (start_frame, src_start, len) = place(source, job, rate, true)?;
-            let dry = source.read(src_start, len, offline);
+            let (start_frame, dry) = dry_run(source, job, rate, offline)?;
             Some(match job_bake(job, &dry, start_frame, rate, offline) {
                 Some((wet, latency)) => Member {
                     index,
@@ -2724,8 +2887,7 @@ fn mix_sources(
                     );
                 }
             }
-        } else if let Some((start_frame, src_start, len)) = place(source, job, rate, true) {
-            let dry = source.read(src_start, len, true);
+        } else if let Some((start_frame, dry)) = dry_run(source, job, rate, true) {
             // The export runs the chains **offline** (docs/impl/audio-plugins.md
             // §3): no deadline, and the plugin may take its slower path.
             //
@@ -2799,6 +2961,7 @@ struct BakeKey {
     len: usize,
     clip_chain: Option<Arc<AudioChain>>,
     chain: Option<Arc<AudioChain>>,
+    retime: Option<Arc<Retimed>>,
 }
 
 impl RackBakes {
@@ -2890,8 +3053,15 @@ pub fn live_plan(
             }
             continue;
         }
-        let racked = job.chain.is_some() || job.clip_chain.is_some();
-        let Some((start_frame, src_start, len)) = place(source, job, rate, racked) else {
+        // A retimed job is worked out ahead like a racked one, since the
+        // file can't be read straight off at its speed.
+        let racked = job.chain.is_some() || job.clip_chain.is_some() || job.retime.is_some();
+        let placed = if job.retime.is_some() {
+            Some(((job.in_s * f64::from(rate)).round() as i64, 0, 0))
+        } else {
+            place(source, job, rate, racked)
+        };
+        let Some((start_frame, src_start, len)) = placed else {
             continue;
         };
         // The clip's insert chain and then the layer's, ahead of Volume and
@@ -2909,18 +3079,18 @@ pub fn live_plan(
                 len,
                 clip_chain: job.clip_chain.clone(),
                 chain: job.chain.clone(),
+                retime: job.retime.clone(),
             };
             let baked = match bakes.held.iter().position(|(k, _)| *k == key) {
                 Some(at) => bakes.held.swap_remove(at).1,
-                None => {
-                    let dry = source.read(src_start, len, false);
-                    job_bake(job, &dry, start_frame, rate, false).map(|(samples, latency)| {
-                        (
-                            Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
-                            latency,
-                        )
-                    })
-                }
+                None => dry_run(source, job, rate, false).and_then(|(at, dry)| {
+                    let (samples, latency) = job_bake(job, &dry, at, rate, false)
+                        .or_else(|| job.retime.is_some().then_some((dry, 0)))?;
+                    Some((
+                        Source::whole(Arc::new(lumit_media::AudioBuffer { rate, samples })),
+                        latency,
+                    ))
+                }),
             };
             kept.push((key, baked.clone()));
             baked
@@ -3715,6 +3885,7 @@ mod tests {
                 audio_only: false,
                 audio_streams: Default::default(),
                 adjustment: false,
+                pitch_follows_speed: false,
                 retime: None,
                 interpolation: Default::default(),
                 parked_flow: None,
@@ -3860,6 +4031,7 @@ mod tests {
             driven: None,
             chain: None,
             clip_chain: None,
+            retime: None,
         };
         let (g, env) = volume_bake(&job(Property::fixed(-6.0), 0.0), 0, 48_000, 48_000);
         assert!(env.is_none(), "static volume needs no envelope");
@@ -3905,6 +4077,7 @@ mod tests {
             offset_s: 0.0,
             fade: None,
             chain: None,
+            retime: None,
         }];
         let (g, env) = volume_bake(&carried, 0, 48_000, 48_000);
         assert!(env.is_none());
@@ -3920,6 +4093,7 @@ mod tests {
             offset_s: 0.0,
             fade: None,
             chain: None,
+            retime: None,
         }];
         let (_, env) = volume_bake(&fading_carrier, 0, 48_000, 48_000);
         assert!(env.is_some(), "an animated carrier forces the envelope");
@@ -3942,6 +4116,7 @@ mod tests {
             offset_s: 0.0,
             fade: None,
             chain: None,
+            retime: None,
         }];
         let (g, _) = volume_bake(&opposed, 0, 48_000, 48_000);
         assert!(
@@ -4067,6 +4242,7 @@ mod tests {
             driven: None,
             chain: None,
             clip_chain: None,
+            retime: None,
         };
 
         let (gain, envelope) = volume_bake(&job, 0, frames, rate);
@@ -5313,6 +5489,7 @@ mod tests {
             driven: None,
             chain: row,
             clip_chain: clip,
+            retime: None,
         }
     }
 
@@ -5414,6 +5591,7 @@ mod tests {
             offset_s: 0.0,
             fade: None,
             chain: Some(audio_rack("audio_limiter", &[("ceiling", -6.0)])),
+            retime: None,
         };
         let row = Uuid::now_v7();
         let through = |carrier: Carrier| {

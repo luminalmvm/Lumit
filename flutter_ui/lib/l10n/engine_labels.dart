@@ -1531,6 +1531,7 @@ Map<String, String> get _built => {
       "Solo switch": l10n.histSoloSwitch,
       "Motion blur switch": l10n.histMotionBlurSwitch,
       "Accepts lights switch": l10n.histAcceptsLightsSwitch,
+      "Keep pitch": l10n.histKeepPitch,
       "Shy switch": l10n.histShySwitch,
       "Guide switch": l10n.histGuideSwitch,
       "Lock switch": l10n.histLockSwitch,

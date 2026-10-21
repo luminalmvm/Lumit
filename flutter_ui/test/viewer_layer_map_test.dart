@@ -116,6 +116,7 @@ void main() {
         layer: LayerReference(
             internalprojectId: id, internalcompId: id, internallayerId: id),
         info: BridgeLayerInfo(
+          pitchFollowsSpeed: false,
           name: 'Layer',
           kind: BridgeLayerKind.nullLayer,
           switches: BridgeLayerSwitches(

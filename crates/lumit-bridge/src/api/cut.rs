@@ -1426,6 +1426,47 @@ impl<'a> Edit<'a> {
         self.commit()
     }
 
+    fn stretch(
+        mut self,
+        clip: Uuid,
+        start_frame: i64,
+        end_frame: i64,
+        ripple: bool,
+        linked: bool,
+    ) -> Cut {
+        let (r, c) = self.find(clip)?;
+        let was = self.rows[r].clips[c].clone();
+        let by_start = self.time(start_frame)?.checked_sub(was.place_start)?;
+        let by_end = self.time(end_frame)?.checked_sub(was.place_end())?;
+        for id in self.chosen(&[clip], linked)? {
+            let (r, c) = self.find(id)?;
+            let row = &self.rows[r];
+            let old = &row.clips[c];
+            let (start, end) = (
+                old.place_start.checked_add(by_start)?,
+                old.place_end().checked_add(by_end)?,
+            );
+            let next = old.stretched(start, end).ok_or(BridgeCutResult::Limit)?;
+            // A picture row shows one clip at a time, so a stretch is not
+            // pulled over a neighbour unless a ripple moves it out of the way.
+            let picture = !ripple && !row.audio_only;
+            if picture
+                && row.clips.iter().any(|o| {
+                    o.id != id
+                        && covers(o, start, end)
+                        && !covers(o, old.place_start, old.place_end())
+                })
+            {
+                return Err(BridgeCutResult::Overlap.into());
+            }
+            self.rows[r].clips[c] = next;
+        }
+        if ripple {
+            self.ripple(was.place_end(), by_end.checked_sub(by_start)?)?;
+        }
+        self.commit()
+    }
+
     fn roll(mut self, clip: Uuid, end_edge: bool, to_frame: i64, linked: bool) -> Cut {
         let to = self.time(to_frame)?;
         let (r, c) = self.find(clip)?;
@@ -2049,6 +2090,25 @@ impl CompositionReference {
     ) -> Result<BridgeCutResult, BridgeError> {
         cut(self, |edit| {
             edit.trim(clip, start_frame, end_frame, ripple, linked)
+        })
+    }
+
+    /// Stretch a clip so its edges land on `start_frame` and `end_frame`: it
+    /// plays the same stretch of source at whatever speed that takes. With
+    /// `ripple` everything after it follows its change of length, and with
+    /// `linked` the clips linked to it stretch with it. On a picture layer it
+    /// is refused where it would cover a neighbour.
+    #[frb(sync)]
+    pub fn cut_stretch(
+        &self,
+        clip: Uuid,
+        start_frame: i64,
+        end_frame: i64,
+        ripple: bool,
+        linked: bool,
+    ) -> Result<BridgeCutResult, BridgeError> {
+        cut(self, |edit| {
+            edit.stretch(clip, start_frame, end_frame, ripple, linked)
         })
     }
 

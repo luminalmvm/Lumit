@@ -1761,18 +1761,19 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
               layer.slideClip(
                   clip: clip.id, toFrame: to, overlap: true, nudgeTicks: ticks);
             }
-          case BarGrab.trimIn:
-            layer.trimClip(
-              clip: clip.id,
-              startFrame: clip.startFrame + edit.shift,
-              endFrame: clip.endFrame,
-            );
-          case BarGrab.trimOut:
-            layer.trimClip(
-              clip: clip.id,
-              startFrame: clip.startFrame,
-              endFrame: clip.endFrame + edit.shift,
-            );
+          case BarGrab.trimIn || BarGrab.trimOut:
+            final into = edit.grab == BarGrab.trimIn;
+            final start = clip.startFrame + (into ? edit.shift : 0);
+            final end = clip.endFrame + (into ? 0 : edit.shift);
+            // Shift held: the clip plays faster or slower to fill its new
+            // length, rather than showing more or less of its sound.
+            if (edit.stretch) {
+              layer.stretchClip(
+                  clip: clip.id, startFrame: start, endFrame: end);
+            } else {
+              layer.trimClip(
+                  clip: clip.id, startFrame: start, endFrame: end);
+            }
         }
       },
     );
@@ -1984,8 +1985,35 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
   /// What can be done to one clip: its two fades by shape, the split at the
   /// playhead, and the delete.
   Future<void> _clipMenu(
-      AudioTrackRow track, BridgeClip clip, Offset at) async {
+      AudioTrackRow track, BridgeClip? clip, Offset at) async {
     final ui = _ui;
+    // Whether the track's sound keeps its pitch when it plays faster or
+    // slower. The whole layer's, so every clip on it follows.
+    final follows = track.entry.info.pitchFollowsSpeed;
+    Widget keepPitch(VoidCallback close) => MenuRow(
+          key: ValueKey<String>('atl-keep-pitch-${track.id}'),
+          onPressed: () {
+            close();
+            track.entry.layer.setPitchFollowsSpeed(follows: !follows);
+            _afterWrite();
+          },
+          child: Row(
+            children: [
+              menuTick(!follows),
+              Expanded(child: Text(l10n.menuKeepPitch)),
+            ],
+          ),
+        );
+    // An unconverted layer's bar has no clip yet, only the layer's own rows.
+    if (clip == null) {
+      await showMenuAt<void>(
+        context: context,
+        position: at,
+        width: 190,
+        rows: (close) => [keepPitch(() => close(null))],
+      );
+      return;
+    }
     // The audio streams of the clip's file, for the rows that choose among
     // them. The track draws the clip's wave, so its file has been opened.
     BridgeAudioStreams? streams;
@@ -2040,6 +2068,7 @@ class _AudioTimelinePanelFrbState extends State<AudioTimelinePanelFrb>
           },
           child: Text(l10n.clipSplitAtPlayhead),
         ),
+        keepPitch(() => close(null)),
         // A file with several audio streams: which of them this clip plays,
         // a clip to each on a track of its own, and back onto one.
         if (streams != null && streams.streams.length > 1 && comp != null) ...[

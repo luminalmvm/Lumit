@@ -382,6 +382,34 @@ impl Clip {
         }
     }
 
+    /// This clip placed over `start..end` of its row instead, at whatever
+    /// speed that takes: the same stretch of source, with its map scaled to
+    /// the new length. `None` for an empty span or on overflow.
+    pub fn stretched(&self, start: Rational, end: Rational) -> Option<Clip> {
+        let length = end.checked_sub(start).ok()?;
+        if length <= Rational::ZERO || self.place_duration <= Rational::ZERO {
+            return None;
+        }
+        let k = length.checked_div(self.place_duration).ok()?;
+        let map = self.effective_retime();
+        let animation = match &map.animation {
+            Animation::Keyframed(keys) => {
+                Animation::Keyframed(crate::retime::stretch_keys(keys, Rational::ZERO, k)?)
+            }
+            // A held frame holds however long it lasts.
+            held => held.clone(),
+        };
+        Some(Clip {
+            place_start: start,
+            place_duration: length,
+            retime: Some(Property {
+                animation,
+                extra: map.extra,
+            }),
+            ..self.clone()
+        })
+    }
+
     /// The clip's single constant speed (1.0 = source rate), or None when its
     /// map says something one number cannot.
     ///

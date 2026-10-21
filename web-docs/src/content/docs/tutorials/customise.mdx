@@ -1,0 +1,125 @@
+---
+title: Make Lumit yours
+description: Colour schemes, accents, styles, icons, wires and shortcuts, in one tour.
+sidebar:
+  order: 6
+---
+
+import Shot from "../../../components/Shot.astro";
+
+Lumit doesn't have to look the way it shipped. Most of this page lives in
+**Edit ▸ Settings… ▸ Appearance**, and every change lands the moment you make it.
+
+<Shot file="customise-looks.jpg" caption="One project, four looks: Gruvbox dark, Desk, Lantern in Arcane dark, and Catppuccin Latte." eager/>
+
+## Pick a colour scheme
+
+**Colour scheme** has 33 built in, dark ones first and light ones under them. Point at one
+in the list and the whole window tries it on before you pick it.
+
+<Shot file="customise-schemes.png" caption="The colour scheme list. Gruvbox and Catppuccin are both in there."/>
+
+## Change the accent
+
+**Accent** is the colour that marks what's active: the playhead, the Export button, the
+tool in hand. Six swatches sit beside it, and pointing at one previews it.
+
+<Shot file="customise-accents.png" caption="The default spruce, then blue, amber and violet."/>
+
+## Make a theme of your own
+
+**Customise…** opens the theme editor on the theme in use. Every colour in the interface
+has a row, and the app repaints as you change one.
+
+<Shot file="customise-theme-editor.png" caption="The theme editor, one row per colour."/>
+
+**Save** keeps it under **Your themes**. Saving from a built-in scheme asks for a name and
+makes a new theme, and **Save a copy…** writes the edits under a new name. Closing with
+unsaved edits asks whether to keep them.
+
+**Your themes** also duplicates, renames, deletes, exports and imports them. A theme
+travels as a `.lumtheme` file, so one can be passed to a friend.
+
+The Viewer's surround is not in the editor. It stays neutral.
+
+<Shot file="customise-appearance.png" caption="Settings ▸ Appearance: scheme, theme, accent and style at the top."/>
+
+## Choose a style
+
+**Shape** changes how the interface is built, not only its colours.
+
+- **Studio** is the default: panels meeting flush, with hairlines between them.
+- **Desk** is the same flush panels on a tighter grid, with lower-case labels and the
+  toolbar down the left.
+- **Lantern** stands each panel in a room as a card, with a gap and a shadow round it.
+  **Room** sets it to **Day** or **Night**.
+
+<Shot file="customise-desk.jpg" caption="Desk, in Grey room."/>
+
+<Shot file="customise-lantern.jpg" caption="Lantern, in Arcane dark, in the night room."/>
+
+**Label case** overrides how a style cases its labels: **All caps**, **First letter** or
+**Lower case**.
+
+## Move the bars
+
+**Toolbar position** puts the tools along the **Top** or down the **Left**. **Viewer bars**
+arranges the Viewer's controls: **Split, top and bottom**, **One bar, at the top**, **One
+bar, at the bottom**, or **Deck**, which puts everything about playing in a fixed deck
+under the picture. Each can be left to the **Style's choice**.
+
+<Shot file="customise-rail-deck.jpg" caption="Studio with the toolbar on the left and the Viewer's deck under the picture."/>
+
+## Words or icons
+
+**Chrome labels** decides what the bars say. **Icons** is the default. **Words** spells
+every button out, and **Icons everywhere** turns panel titles into icons too.
+
+<Shot file="customise-labels.png" caption="The Timeline's foot bar with Icons, then with Words."/>
+
+**Icon set** draws the icons **Regular**, **Engraved** or **Bold**.
+
+<Shot file="customise-icon-sets.png" caption="The toolbar in Regular, Engraved and Bold."/>
+
+Fancy drawing your own? **Custom icons** shows a folder. Put an SVG in it named after the
+icon it replaces, such as `razor.svg` or `pointer.svg`, and press **Reload icons**. The row
+counts how many it replaced.
+
+## Size and spacing
+
+- **Scale** runs from 75 % to 200 %.
+- **Compact** tightens the row spacing throughout.
+- **Motion** sets how much controls animate: **Full**, **Minimal** or **None**.
+- **Tooltips** turns them on or off.
+
+## Wires
+
+**Wires**, under **Panels**, sets how each wire in a [node graph](/use/nodes/) runs:
+**Curved**, **Angled** or **Hanging**.
+
+<Shot file="customise-wires.png" caption="The same wire, Curved, Angled and Hanging."/>
+
+## Shortcuts
+
+**Settings ▸ Shortcuts** lists every command. Click a shortcut to rebind it; a clash is
+flagged. **Preset** loads a whole keymap: Lumit's own, **After Effects** or **Vegas**, and
+**After Effects shortcuts ▸ Import…** reads your own file from After Effects.
+
+<Shot file="customise-keyboard.png" caption="The keyboard on the Shortcuts page. Filled keys work anywhere, outlined ones in one panel."/>
+
+## Arrange the panels
+
+Drag a panel's tab to move it, and **Window ▸ Workspace ▸ Save as new workspace…** keeps
+the arrangement. See [Workspaces and panels](/use/workspaces/).
+
+## Take it with you
+
+Themes, keymaps and workspaces all export and import. With
+[Lumit Pro](/use/profiles/#sync), a signed-in profile carries all of it to your other
+machines.
+
+## Related
+
+- [Settings](/use/settings/)
+- [Workspaces and panels](/use/workspaces/)
+- [Profiles and accounts](/use/profiles/)

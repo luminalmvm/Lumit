@@ -199,6 +199,7 @@ pub(crate) fn map_layer(
         audio_only: false,
         audio_streams: Default::default(),
         adjustment: false,
+        pitch_follows_speed: false,
         retime,
         interpolation,
         parked_flow: None,

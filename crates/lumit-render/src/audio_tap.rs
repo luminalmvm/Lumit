@@ -238,8 +238,13 @@ impl<'a> DocumentAudio<'a> {
         let jobs: Vec<crate::export::AudioJob> = self
             .jobs()
             .iter()
+            // ponytail: a driver doesn't hear a retimed layer yet. Read it
+            // through its map, as the mix does, if one needs to.
             .filter(|job| {
-                layer.is_none_or(|id| job.layer == id) && clip.is_none_or(|id| job.clip == Some(id))
+                job.retime.is_none()
+                    && job.carriers.iter().all(|c| c.retime.is_none())
+                    && layer.is_none_or(|id| job.layer == id)
+                    && clip.is_none_or(|id| job.clip == Some(id))
             })
             .cloned()
             .collect();
@@ -370,8 +375,13 @@ impl lumit_core::fx::AudioTap for DocumentAudio<'_> {
         let jobs = self.jobs();
         let decoded: Vec<(Arc<lumit_media::AudioBuffer>, &crate::export::AudioJob)> = jobs
             .iter()
+            // ponytail: a driver doesn't hear a retimed layer yet. Read it
+            // through its map, as the mix does, if one needs to.
             .filter(|job| {
-                layer.is_none_or(|id| job.layer == id) && clip.is_none_or(|id| job.clip == Some(id))
+                job.retime.is_none()
+                    && job.carriers.iter().all(|c| c.retime.is_none())
+                    && layer.is_none_or(|id| job.layer == id)
+                    && clip.is_none_or(|id| job.clip == Some(id))
             })
             .filter_map(|job| Some((decoded(&job.sound)?, job)))
             .collect();
@@ -594,6 +604,7 @@ mod tests {
             audio_only: true,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

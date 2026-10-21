@@ -168,6 +168,7 @@ r.addEventListener("input",set);set()})})`,
                         "use/plugins",
                         "use/extensions",
                         "use/lfx-effects",
+                        "use/addons",
                       ],
                     },
                     {

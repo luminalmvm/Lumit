@@ -20,7 +20,7 @@ speed, ramps between speeds, holds a frame or runs backwards.
 | [**Speed envelope**](#speed-on-a-clip) | Under a Sequence layer's clips | Clips |
 | [**Speed…**](#speed-on-a-clip) | A clip's right-click menu | Clips |
 | [**Retime**](#retime-on-a-layer) | **Layer ▸ Enable Retime**, `Ctrl+Alt+T` | Footage and Precomp layers |
-| [**Stretch…**](#stretch) | A layer's right-click menu in the Timeline | Footage and Precomp layers |
+| [**Stretch…**](#stretch) | A layer's right-click menu in the Timeline, or `Shift`+drag either end | Footage and Precomp layers |
 | [**Freeze frame at playhead**](#freeze-a-frame) | A layer's right-click menu in the Timeline | Footage and Precomp layers |
 | [**Interpret footage…**](#interpret-footage) | The Project panel's right-click menu | Footage items |
 | [**Posterize time**](/effects/temporal/posterize-time/) | **Effect ▸ Temporal** | Any layer |
@@ -120,7 +120,9 @@ and the line lights. It appears only for footage faster than the composition.
 ## Stretch
 
 **Stretch…** plays a layer at a new speed and gives it the length that speed implies.
-Right-click the layer's row in the Timeline and choose **Stretch…**.
+Right-click the layer's row in the Timeline and choose **Stretch…**, or hold `Shift` and drag
+either end of the layer's bar. Dragging the start holds the end where it is. In the Audio and
+Cut workspaces, `Shift`+drag on either edge of a clip stretches the clip.
 
 The dialogue takes a **New speed**, from 1% to 10000%, or a **New duration** in frames.
 Editing either moves the other. The layer's in point holds and its end moves.
@@ -189,11 +191,13 @@ layer and clip on Nearest.
 
 ## Sound
 
-A retimed layer is silent, footage and Precomp alike, as soon as Retime is on. So is a
-retimed clip.
+A retimed layer or clip plays its sound at its speed, a Precomp's whole mix included. **Keep
+pitch**, on the right-click menu of a layer or clip with sound, holds the pitch. It is on by
+default. Off, the pitch rises and falls with the speed, as on tape. Every clip on a layer
+follows the layer's setting.
 
-**Detach audio** on the layer's right-click menu, before retiming, moves its sound to an Audio
-layer of its own. **Convert to sequence layer** is refused on a retimed layer.
+**Detach audio** on the layer's right-click menu moves its sound to an Audio layer of its own.
+**Convert to sequence layer** is refused on a retimed layer.
 
 ## Overrun
 
@@ -213,8 +217,8 @@ the matching straight-line Retime, and a negative one runs backwards. Frame Mix 
 **Blend** and Pixel Motion becomes **Flow**.
 
 :::note[Not built yet]
-Stretching a layer or clip by dragging its edge. A Reverse command. Sound that follows a
-retime. The speed envelope in the Cut timeline.
+Stretching a clip by dragging its edge inside a Sequence layer in the Timeline. A Reverse
+command. The speed envelope in the Cut timeline.
 :::
 
 ## Related

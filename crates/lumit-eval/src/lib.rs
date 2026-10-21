@@ -73,7 +73,10 @@ pub mod schedule;
 /// * 15: shadows are drawn, where a light and a layer cast them.
 /// * 16: camera depth of field blurs a 3D layer's outline too, and blurs as
 ///   much as After Effects does.
-pub const ALGO_VERSION: u32 = 16;
+/// * 17: on main, a 3D layer's outline blurs under the camera's depth of
+///   field, and a plain solid under one is blurred at its own size.
+/// * 18: main's 17 meets 12 to 16.
+pub const ALGO_VERSION: u32 = 18;
 
 /// A 128-bit content hash addressing one rendered comp frame (docs/06 §5.2:
 /// collisions are treated as impossible; no structural comparison at lookup).
@@ -2908,6 +2911,7 @@ mod tests {
             audio_only: false,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,
@@ -4686,12 +4690,12 @@ mod tests {
         let clip_a = Clip::new(ClipSource::Footage(a), r(0), r(3), r(0), r(3));
         let clip_b = Clip::new(ClipSource::Footage(b), r(0), r(3), r(2), r(3));
         let cut = row(vec![clip_a.clone(), clip_b.clone()]);
-        // Pinned under ALGO_VERSION 16, which renamed every frame.
+        // Pinned under ALGO_VERSION 18, which renamed every frame.
         assert_eq!(
             (key(&doc, &cut, 1.0).0, key(&doc, &cut, 4.0).0),
             (
-                236_345_018_442_741_691_863_493_237_578_023_808_731,
-                3_417_315_519_665_212_432_167_007_372_236_651_887
+                43_642_340_716_799_632_156_674_495_559_012_742_681,
+                253_619_975_629_639_521_298_965_030_168_473_732_135
             )
         );
 

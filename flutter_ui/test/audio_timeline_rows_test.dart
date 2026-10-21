@@ -48,6 +48,7 @@ void main() {
         internallayerId: id,
       ),
       info: BridgeLayerInfo(
+        pitchFollowsSpeed: false,
         collapseForced: false,
         volumeDb: const BridgeScalar.static_(0),
         pan: const BridgeScalar.static_(0),

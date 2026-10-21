@@ -770,6 +770,8 @@ pub(crate) fn export_cancel() -> String {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct QueueRow {
     pub id: u32,
+    /// The composition it was made from, so its settings can be opened again.
+    pub comp: uuid::Uuid,
     pub comp_name: String,
     pub out_path: String,
     /// The delivery preset's name, empty for a custom export.
@@ -876,6 +878,17 @@ pub(crate) fn queue_remove(id: u32) {
 /// or has already run, in the engine's own words.
 pub(crate) fn queue_move(id: u32, index: usize) -> Result<(), String> {
     driving::queue_move(id, index)
+}
+
+/// The settings one item was queued with, or `None` once it has gone.
+pub(crate) fn queue_spec(id: u32) -> Option<BridgeExportSpec> {
+    driving::queue_spec(id)
+}
+
+/// Give a waiting item new settings and a new file. The snapshot it renders
+/// stays the one taken when it was added. Refuses the same items a move does.
+pub(crate) fn queue_update(id: u32, spec: &BridgeExportSpec, out_path: &str) -> Result<(), String> {
+    driving::queue_update(id, spec, out_path)
 }
 
 /// The first file an export to `path` writes: the file itself, or frame one
@@ -1140,6 +1153,7 @@ mod driving {
             .iter()
             .map(|item| super::QueueRow {
                 id: item.id,
+                comp: item.comp,
                 comp_name: item.comp_name.clone(),
                 out_path: item.out_path.clone(),
                 preset: item.spec.preset.clone(),
@@ -1220,6 +1234,35 @@ mod driving {
         let to = index.min(guard.queue.len() - 1);
         let item = guard.queue.remove(from);
         guard.queue.insert(to, item);
+        Ok(())
+    }
+
+    pub(super) fn queue_spec(id: u32) -> Option<BridgeExportSpec> {
+        let guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+        guard
+            .queue
+            .iter()
+            .find(|item| item.id == id)
+            .map(|item| item.spec.clone())
+    }
+
+    pub(super) fn queue_update(
+        id: u32,
+        spec: &BridgeExportSpec,
+        out_path: &str,
+    ) -> Result<(), String> {
+        if out_path.trim().is_empty() {
+            return Err("export: no output path".to_owned());
+        }
+        let mut guard = slot().lock().unwrap_or_else(|p| p.into_inner());
+        let Some(item) = guard.queue.iter_mut().find(|item| item.id == id) else {
+            return Err(GONE.to_owned());
+        };
+        if let Some(refusal) = move_refusal(&item.state) {
+            return Err(refusal.to_owned());
+        }
+        item.spec = spec.clone();
+        item.out_path = with_format_extension(out_path, &spec.codec);
         Ok(())
     }
 

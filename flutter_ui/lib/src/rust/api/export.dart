@@ -7,6 +7,7 @@ import '../api.dart';
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
+import 'package:uuid/uuid.dart';
 part 'export.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `reply_error`, `reply_ok`
@@ -134,6 +135,21 @@ void exportQueueRemove({required int id}) =>
 /// an id no longer in the list. An `index` past the end lands it last.
 void exportQueueMove({required int id, required int index}) =>
     BridgeLib.instance.api.crateApiExportExportQueueMove(id: id, index: index);
+
+/// The settings one item was queued with, for the export dialogue to open on.
+/// `None` once the item has left the list.
+BridgeExportSpec? exportQueueSpec({required int id}) =>
+    BridgeLib.instance.api.crateApiExportExportQueueSpec(id: id);
+
+/// Give a waiting item new settings and a new file. It still renders the
+/// composition as it was when it was added. The same refusals as a move: an
+/// item that is running, has run, or has gone.
+void exportQueueUpdate(
+        {required int id,
+        required BridgeExportSpec spec,
+        required String path}) =>
+    BridgeLib.instance.api
+        .crateApiExportExportQueueUpdate(id: id, spec: spec, path: path);
 
 /// Whether an export in format `codec` to `path` would write over a file
 /// already there, or over one still waiting in the queue. For an image
@@ -327,6 +343,9 @@ class BridgeExportPresetEntry {
 /// composition afterwards changes nothing about a queued export.
 class BridgeExportQueueItem {
   final int id;
+
+  /// The composition it was made from. It may have been deleted since.
+  final UuidValue comp;
   final String compName;
 
   /// Where it writes. The interface shows the file's own name and keeps the
@@ -347,6 +366,7 @@ class BridgeExportQueueItem {
 
   const BridgeExportQueueItem({
     required this.id,
+    required this.comp,
     required this.compName,
     required this.path,
     required this.preset,
@@ -359,6 +379,7 @@ class BridgeExportQueueItem {
   @override
   int get hashCode =>
       id.hashCode ^
+      comp.hashCode ^
       compName.hashCode ^
       path.hashCode ^
       preset.hashCode ^
@@ -373,6 +394,7 @@ class BridgeExportQueueItem {
       other is BridgeExportQueueItem &&
           runtimeType == other.runtimeType &&
           id == other.id &&
+          comp == other.comp &&
           compName == other.compName &&
           path == other.path &&
           preset == other.preset &&

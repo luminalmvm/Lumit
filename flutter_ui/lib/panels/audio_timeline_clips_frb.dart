@@ -189,12 +189,15 @@ bool audioTrackTakesClips(BridgeLayerInfo info) =>
 /// is what says whether the clip crossed on to another track. [sub] is the
 /// part of a frame a move carries past [shift]: where the pointer is while
 /// sound is free of the frame grid, back on to a frame while it is not.
+/// [stretch] is an end dragged with Shift held, which changes the clip's speed
+/// rather than its trim.
 typedef AudioClipEdit = ({
   BridgeClip? clip,
   BarGrab grab,
   int shift,
   double sub,
   Offset at,
+  bool stretch,
 });
 
 /// A clip drag in flight, as the fade layer stacked over the strip reads it:
@@ -211,6 +214,7 @@ typedef _ClipDrag = ({
   Offset from,
   Offset at,
   bool moved,
+  bool stretch,
 });
 
 /// One track's clips, over the two lane rows the track is tall.
@@ -255,7 +259,9 @@ class AudioClipStrip extends StatefulWidget {
   final double Function(double x) razorFrameAt;
 
   final void Function(BridgeClip clip) onSelect;
-  final void Function(BridgeClip clip, Offset at) onMenu;
+  /// A right click on a clip, or on an unconverted layer's bar with a null
+  /// clip.
+  final void Function(BridgeClip? clip, Offset at) onMenu;
 
   /// A right click that landed on a fade, or inside an overlap: the fade menu
   /// rather than the clip menu, aimed at that end of the clip.
@@ -433,7 +439,10 @@ class _AudioClipStripState extends State<AudioClipStrip> {
   /// marquee behind it sees anything.
   void _down(PointerDownEvent event, BridgeClip? clip, double width) {
     if (event.buttons == kSecondaryMouseButton) {
-      if (clip == null) return;
+      if (clip == null) {
+        widget.onMenu(null, event.position);
+        return;
+      }
       // A right click on a fade, or anywhere in an overlap, is about the fade
       // and not about the clip.
       final side = clipFadeSideAt(_clips, clip,
@@ -451,12 +460,16 @@ class _AudioClipStripState extends State<AudioClipStrip> {
     final hit = clip == null
         ? null
         : audioClipGrabAt(_clips, widget.axis, _localX(event.position));
+    final grab = hit?.grab ?? barGrabAt(event.localPosition.dx, width);
     setState(() => _drag = (
           clip: hit?.clip ?? clip,
-          grab: hit?.grab ?? barGrabAt(event.localPosition.dx, width),
+          grab: grab,
           from: event.position,
           at: event.position,
           moved: false,
+          // Shift on an end changes the clip's speed instead of its trim.
+          stretch: grab != BarGrab.move &&
+              HardwareKeyboard.instance.isShiftPressed,
         ));
     _escape.begin(() {
       setState(() => _drag = null);
@@ -498,6 +511,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
           at: event.position,
           moved:
               held.moved || (event.position - held.from).distance > _clickSlop,
+          stretch: held.stretch,
         ));
     _publish();
   }
@@ -533,6 +547,7 @@ class _AudioClipStripState extends State<AudioClipStrip> {
       shift: shift,
       sub: _subOf(held),
       at: held.at,
+      stretch: held.stretch,
     ));
   }
 

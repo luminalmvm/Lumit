@@ -23,6 +23,11 @@
 // in its own words, and the refusal is nothing to draw because the next poll
 // shows the list unchanged.
 //
+// **Several comps at once.** *Add compositions…* opens on the comp in front,
+// and its + adds any other, each with its own preset, to queue together.
+// A waiting row's settings mark opens the export dialogue on that item, so
+// each one can have its own settings before it runs.
+//
 // **How the drag is drawn follows the Motion setting** (docs/15 §8.1). At Full
 // the row is carried and the rows it passes step aside. At Minimal and None
 // nothing moves: an accent line marks the place the row would take, the same
@@ -32,15 +37,20 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter/widgets.dart';
+import 'package:lumit_flutter/src/rust/api/composition.dart';
 import 'package:lumit_flutter/src/rust/api/export.dart';
 import 'package:lumit_flutter/src/rust/api/shell.dart' show revealInFolder;
+import 'package:provider/provider.dart';
 
 import '../icons/lumit_icon.dart' as glyph;
 import '../icons/lumit_icons.dart';
 import '../l10n/strings.dart';
+import '../main.dart';
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'dialog_frame.dart';
+import 'export_dialog_frb.dart';
+import 'export_pick_frb.dart';
 import 'status_line_frb.dart';
 
 /// The frame: wide enough for a name, a path and a status side by side.
@@ -89,6 +99,11 @@ class _ExportQueueState extends State<_ExportQueue> {
   List<BridgeExportQueueItem> _items = const [];
   Timer? _poll;
 
+  /// The open project's compositions by id, so a waiting row can open its
+  /// settings. An item from a comp since deleted, or from another project,
+  /// finds nothing here and keeps the settings it has.
+  Map<String, CompositionReference> _comps = const {};
+
   /// A drag that is marked rather than carried: the item in hand, where the
   /// pointer went down, and the place it is aimed at. All null between drags,
   /// and never set while rows are carried.
@@ -111,6 +126,14 @@ class _ExportQueueState extends State<_ExportQueue> {
 
   void _refresh() {
     if (!mounted) return;
+    try {
+      _comps = {
+        for (final (comp, _) in context.read<LumitState>().comps())
+          comp.internalid.toString(): comp,
+      };
+    } catch (_) {
+      // No project to ask, as in a widget test.
+    }
     setState(() {
       _items = (widget.list ?? exportQueueList)();
       // A row that started exporting while it was in hand has lost the
@@ -192,6 +215,12 @@ class _ExportQueueState extends State<_ExportQueue> {
           summary: l10n.exportQueueSummary('$waiting', '$done'),
           keyPrefix: 'export-queue',
           actions: [
+            HouseButton(
+              key: const ValueKey('export-queue-add'),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              onPressed: () => showExportPickFrb(context: context),
+              child: Text(l10n.exportQueueAddComps),
+            ),
             HouseButton(
               key: const ValueKey('export-queue-dismiss'),
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -374,6 +403,7 @@ class _ExportQueueState extends State<_ExportQueue> {
             const SizedBox(width: 10),
             Flexible(flex: 2, child: _statusFace(t, item)),
             const SizedBox(width: 8),
+            _settingsMark(t, item),
             LumitTooltip(
               message: item.state is BridgeExportQueueState_Running
                   ? l10n.exportCancel
@@ -410,6 +440,38 @@ class _ExportQueueState extends State<_ExportQueue> {
           ],
         ),
       );
+
+  /// The mark that opens a waiting item's settings in the export dialogue.
+  /// Kept as an empty space on every other row, so the columns stay put.
+  Widget _settingsMark(LumitTheme t, BridgeExportQueueItem item) {
+    final comp = _comps[item.comp.toString()];
+    const size = Size(dialogCloseGlyph + 8, exportQueueRow);
+    if (item.state is! BridgeExportQueueState_Waiting || comp == null) {
+      return SizedBox.fromSize(size: size);
+    }
+    return LumitTooltip(
+      message: l10n.exportQueueSettings,
+      child: HoverMark(
+        builder: (context, lit) => GestureDetector(
+          key: ValueKey<String>('export-queue-settings-${item.id}'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () => showExportDialogFrb(
+              context: context, comp: comp, queued: item.id),
+          child: SizedBox.fromSize(
+            size: size,
+            child: Center(
+              child: glyph.LumitIcon(
+                LumitIcons.settings,
+                size: dialogCloseGlyph,
+                colour: Color.lerp(t.textMuted, t.textPrimary, lit),
+                semanticLabel: l10n.exportQueueSettings,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   /// How one item is getting on. An error is longer than the column, so a
   /// failed item shows all of it on hover.

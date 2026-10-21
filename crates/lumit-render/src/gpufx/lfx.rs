@@ -366,6 +366,7 @@ fn shade(uv: vec2<f32>) -> vec4<f32> {
             audio_only: false,
             audio_streams: Default::default(),
             adjustment: false,
+            pitch_follows_speed: false,
             retime: None,
             interpolation: Default::default(),
             parked_flow: None,

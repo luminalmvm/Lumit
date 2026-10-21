@@ -770,6 +770,7 @@ pub(crate) fn op_scope(op: &lumit_core::Op) -> (Option<Uuid>, Option<Uuid>, bool
         | Op::SetLayerFx { comp, layer, .. }
         | Op::SetLayerThreeD { comp, layer, .. }
         | Op::SetSequenceClips { comp, layer, .. }
+        | Op::SetLayerPitchFollowsSpeed { comp, layer, .. }
         | Op::SetLayerAudible { comp, layer, .. }
         | Op::SetLayerVisible { comp, layer, .. }
         | Op::SetLayerSolo { comp, layer, .. }

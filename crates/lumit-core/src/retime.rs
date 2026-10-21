@@ -525,6 +525,48 @@ pub fn property_speed_at(retime: Option<&crate::anim::Property>, lt: f64) -> f64
     (p.value_at(lt + H) - p.value_at(lt - H)) / (2.0 * H)
 }
 
+/// A map's keys said over a span `k` times as long, scaled about local time
+/// `about`. Every key's time moves and every stored side speed is divided by
+/// `k`, so the curve keeps its shape. Influence is a fraction of the span and
+/// stays as it is. `None` on overflow.
+pub fn stretch_keys(
+    keys: &[crate::anim::Keyframe],
+    about: Rational,
+    k: Rational,
+) -> Option<Vec<crate::anim::Keyframe>> {
+    use crate::anim::SideInterp;
+    let kf = k.to_f64();
+    // A stored side speed is value-units per second of local time.
+    let slower = |side: SideInterp| match side {
+        SideInterp::Bezier { speed, influence } => SideInterp::Bezier {
+            speed: speed / kf,
+            influence,
+        },
+        SideInterp::Auto {
+            clamped,
+            speed,
+            influence,
+        } => SideInterp::Auto {
+            clamped,
+            speed: speed / kf,
+            influence,
+        },
+        other => other,
+    };
+    keys.iter()
+        .map(|key| {
+            Some(crate::anim::Keyframe {
+                time: about
+                    .checked_add(key.time.checked_sub(about).ok()?.checked_mul(k).ok()?)
+                    .ok()?,
+                value: key.value,
+                interp_in: slower(key.interp_in),
+                interp_out: slower(key.interp_out),
+            })
+        })
+        .collect()
+}
+
 /// docs/08 §3.1: Smoothness is 0–100, default 50.
 pub const DEFAULT_SMOOTHNESS: f64 = 50.0;
 
