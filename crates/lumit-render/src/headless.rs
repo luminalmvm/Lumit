@@ -6713,11 +6713,8 @@ mod tests {
     /// **Depth of field reaches the picture** (docs/impl/camera.md §5).
     ///
     /// One comp, one camera focused on its own zoom, and the same nested tile
-    /// shown twice: once on the focus plane and once at twice the distance. The
-    /// blur runs on the layer's own raster with the edge repeated, so the edge
-    /// it can soften has to be *inside* that raster - hence a white square in a
-    /// black tile rather than a bare solid, which is one flat colour edge to
-    /// edge and would come out of any blur exactly as it went in.
+    /// shown twice: once on the focus plane and once at twice the distance.
+    /// Then a bare solid at the far depth, whose only edge is its outline.
     ///
     /// The far tile draws at half size, so a pixel or two of its edge is
     /// intermediate however sharp it is; the gate is the width of the ramp, not
@@ -6810,6 +6807,72 @@ mod tests {
             soft >= 5,
             "the layer at twice the focus distance came out with a {soft}-pixel edge"
         );
+
+        // A bare solid at twice the distance blurs at its outline, straight
+        // in the scene and inside a collapsed precomp. Its left edge is at
+        // x 68 on screen, and the blur's reach there is 4 px.
+        let mut bare_doc = (*doc).clone();
+        let big = Uuid::now_v7();
+        bare_doc.items.push(ProjectItem::Solid(SolidDef {
+            id: big,
+            name: "Square".into(),
+            colour: LinearColour([1.0, 1.0, 1.0, 1.0]),
+            width: 48,
+            height: 48,
+            extra: serde_json::Map::new(),
+        }));
+        let mut bare = matrix_layer("Square", LayerKind::Solid { def: big }, 48, 48);
+        bare.switches.three_d = true;
+        bare.transform.position_x = Property::fixed(96.0);
+        bare.transform.position_y = Property::fixed(f64::from(ch) * 0.5);
+        bare.transform.position_z = Property::fixed(ZOOM);
+        let inner = push_comp(&mut bare_doc, "Inner", cw, ch);
+        bare_doc.comp_mut(inner).unwrap().layers.push(bare.clone());
+        let mut collapsed = matrix_layer("Inner", LayerKind::Precomp { comp: inner }, cw, ch);
+        collapsed.switches.three_d = true;
+        collapsed.switches.collapse = true;
+        let scene = bare_doc.comp_mut(comp_id).unwrap();
+        scene.background = LinearColour([0.0; 4]);
+        scene.layers.truncate(1);
+        let mut nested_doc = bare_doc.clone();
+        bare_doc.comp_mut(comp_id).unwrap().layers.push(bare);
+        nested_doc.comp_mut(comp_id).unwrap().layers.push(collapsed);
+        for (how, d) in [("straight", bare_doc), ("collapsed", nested_doc)] {
+            let (lin, w, _) = r
+                .render_preview_linear(&Arc::new(d), comp_id, 0, Quality::default())
+                .expect("a frame");
+            let alpha = |x: u32| lin[((ch / 2 * w + x) * 4 + 3) as usize];
+            // Where the coverage crosses a half, and how far the ramp spreads.
+            let half = (56..80)
+                .find(|&x| alpha(x + 1) >= 0.5)
+                .map(|x| x as f32 + (0.5 - alpha(x)) / (alpha(x + 1) - alpha(x)).max(1e-6) + 0.5);
+            let rise: Vec<f32> = (56..80)
+                .map(|x| (alpha(x + 1) - alpha(x)).max(0.0))
+                .collect();
+            let total: f32 = rise.iter().sum();
+            let mean = rise
+                .iter()
+                .enumerate()
+                .map(|(x, d)| x as f32 * d)
+                .sum::<f32>()
+                / total;
+            let spread = (rise
+                .iter()
+                .enumerate()
+                .map(|(x, d)| (x as f32 - mean).powi(2) * d)
+                .sum::<f32>()
+                / total)
+                .sqrt();
+            assert!(
+                half.is_some_and(|x| (x - 68.0).abs() <= 1.0),
+                "a bare solid {how} had its edge at {half:?}, not 68"
+            );
+            // A gaussian cut off at its reach, 2 sigma, spreads 0.88 sigma.
+            assert!(
+                (spread / (0.88 * 2.0) - 1.0).abs() < 0.2,
+                "a bare solid {how} blurred {spread} px, not 1.76"
+            );
+        }
 
         // The aperture is content, so it is part of the frame's name.
         let q = Quality::default();

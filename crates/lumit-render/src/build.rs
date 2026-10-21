@@ -1308,6 +1308,9 @@ struct Walk<'a> {
     /// over a Precomp that holds an Echo builds the whole of the inside once
     /// for every frame of both windows, only to throw it away.
     rebuild: bool,
+    /// The camera a collapsed precomp's layers are seen through, the one of
+    /// the comp it was collapsed into. `None` is this comp's own.
+    seen_through: Option<lumit_core::model::CameraPose>,
 }
 
 impl Walk<'static> {
@@ -1316,6 +1319,7 @@ impl Walk<'static> {
         clone: lumit_core::fx::drivers::NO_CLONE,
         values: &[],
         rebuild: false,
+        seen_through: None,
     };
 }
 
@@ -1374,6 +1378,7 @@ pub fn late_clone_pictures(
             clone: spec.clone,
             values: &[],
             rebuild: false,
+            seen_through: None,
         },
         Some(&mut probe),
     );
@@ -1409,10 +1414,15 @@ fn comp_walk(
     // The copy this walk renders its layers as, and what it hands the comps
     // it walks into.
     let clone_number = with.clone;
+    let seen_through = with
+        .seen_through
+        .filter(|_| spliced)
+        .or_else(|| crate::track::camera_pose(doc, comp, t_comp));
     let inner = Walk {
         clone: clone_number,
         values: &[],
         rebuild: with.rebuild,
+        seen_through,
     };
     // A nested frame's name says nothing of which copy it is, so a numbered
     // copy is never named and never served from the nested store.
@@ -2401,6 +2411,7 @@ fn comp_walk(
                             clone: p.clone.unwrap_or(clone_number),
                             values: &[],
                             rebuild: with.rebuild,
+                            seen_through: None,
                         },
                         Some(&mut probe),
                     );
@@ -4078,7 +4089,44 @@ fn comp_walk(
     if let Some((_, group, mark)) = open_unit {
         wrap_unit(&mut draws, mark, group);
     }
+    // A plain solid is a flat 8 x 8 tile stretched to size, with no outline
+    // for the camera's depth of field to blur, so one it blurs is drawn at its
+    // own size. A collapsed precomp's are done here once they are placed.
+    if !spliced {
+        for d in &mut draws {
+            sized_for_depth_of_field(d, seen_through);
+        }
+    }
     draws
+}
+
+/// See the end of [`comp_walk`].
+fn sized_for_depth_of_field(d: &mut CompLayerDraw, camera: Option<lumit_core::model::CameraPose>) {
+    let max = crate::plan::MAX_TEXTURE_SIDE;
+    let (w, h) = (
+        (d.natural_size.0 as u32).min(max),
+        (d.natural_size.1 as u32).min(max),
+    );
+    let DrawSource::Pixels {
+        rgba, tex_w, tex_h, ..
+    } = &d.source
+    else {
+        return;
+    };
+    let flat = rgba.len() == 256 && rgba.chunks(4).all(|p| p == &rgba[..4]);
+    if (*tex_w, *tex_h) != (8, 8) || (w, h) == (8, 8) || !flat {
+        return;
+    }
+    if crate::realise::dof_radius(camera, d, w as f32 / d.natural_size.0).is_none() {
+        return;
+    }
+    let px = [rgba[0], rgba[1], rgba[2], rgba[3]];
+    if let DrawSource::Pixels {
+        rgba, tex_w, tex_h, ..
+    } = &mut d.source
+    {
+        (*rgba, *tex_w, *tex_h) = (Arc::new(px_tile(&px, w, h)), w, h);
+    }
 }
 
 /// The content name of the picture a layer's effect stack runs on
@@ -4988,6 +5036,7 @@ impl GraphLower<'_> {
                             clone: self.clone,
                             values: &[],
                             rebuild: false,
+                            seen_through: None,
                         },
                         None,
                     ),
@@ -5063,6 +5112,7 @@ impl GraphLower<'_> {
                 clone: self.clone,
                 values: &[],
                 rebuild: false,
+                seen_through: None,
             },
             None,
         );
@@ -5346,6 +5396,7 @@ fn below_draws_cloned(
             clone,
             values: &[],
             rebuild: true,
+            seen_through: None,
         },
         None,
     );
