@@ -45,6 +45,7 @@ Anchor x
 Anchor y
 Angle
 Angle control
+Angle offset
 Animate
 Anticlockwise
 Aperture
@@ -225,6 +226,7 @@ Confidence
 Connect points
 Connections
 Constant
+Constant length
 Contrast
 Controls
 Conversion
@@ -410,6 +412,7 @@ Focus point x
 Focus point y
 Focus range
 Follow
+Follow the vectors
 Force on all layers
 Forces
 Forking
@@ -611,7 +614,10 @@ Makeup
 Manual
 Manual light
 Map black to
+Map channels
 Map placement
+Map slope
+Map softness
 Map white to
 Mask
 Mask path
@@ -961,6 +967,7 @@ Slice repeat
 Slide
 Slider
 Slider control
+Slope channel
 Smooth
 Smudges
 Soft colour
@@ -1133,7 +1140,9 @@ Utility
 Value
 Variation
 Vary points
+Vector blur
 Vector scale
+Vectors from
 Vegas
 Venetian blinds
 Vertical

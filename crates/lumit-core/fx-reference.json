@@ -4101,6 +4101,260 @@
       "matte_role": "own"
     },
     {
+      "slug": "vector-blur",
+      "match_name": "vector_blur",
+      "label": "Vector blur",
+      "version": 1,
+      "category": "Blur & sharpen",
+      "category_slug": "blur-sharpen",
+      "params": [
+        {
+          "id": "vectors_from",
+          "label": "Vectors from",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Map slope",
+            "Map channels"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "slope_channel",
+          "label": "Slope channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "horizontal_channel",
+          "label": "Horizontal channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 2,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "vertical_channel",
+          "label": "Vertical channel",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 3,
+          "options": [
+            "Luminance",
+            "Alpha",
+            "Red",
+            "Green",
+            "Blue"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "length",
+          "label": "Length",
+          "kind": "float",
+          "unit": "px",
+          "default": 40.0,
+          "slider_min": 0.0,
+          "slider_max": 500.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "angle_offset",
+          "label": "Angle offset",
+          "kind": "float",
+          "unit": "degrees",
+          "default": 0.0,
+          "slider_min": -180.0,
+          "slider_max": 180.0,
+          "hard_min": -3600.0,
+          "hard_max": 3600.0
+        },
+        {
+          "id": "constant_length",
+          "label": "Constant length",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        },
+        {
+          "id": "follow_vectors",
+          "label": "Follow the vectors",
+          "kind": "bool",
+          "unit": "raw",
+          "default": true
+        },
+        {
+          "id": "direction",
+          "label": "Direction",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Both ways",
+            "Forwards",
+            "Backwards"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "falloff",
+          "label": "Falloff",
+          "kind": "float",
+          "unit": "percent",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "map_softness",
+          "label": "Map softness",
+          "kind": "float",
+          "unit": "px",
+          "default": 0.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0
+        },
+        {
+          "id": "matte_placement",
+          "label": "Map placement",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "As placed in comp",
+            "Stretch to fit",
+            "Centre"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "edge",
+          "label": "Edges",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 1,
+          "options": [
+            "Transparent",
+            "Repeat",
+            "Mirror"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "mix",
+          "label": "Mix",
+          "kind": "float",
+          "unit": "percent",
+          "default": 100.0,
+          "slider_min": 0.0,
+          "slider_max": 100.0,
+          "hard_min": 0.0,
+          "hard_max": 100.0
+        },
+        {
+          "id": "blend",
+          "label": "Blend",
+          "kind": "choice",
+          "unit": "raw",
+          "default": 0,
+          "options": [
+            "Normal",
+            "Darken",
+            "Multiply",
+            "Colour burn",
+            "Linear burn",
+            "Darker colour",
+            "Add",
+            "Lighten",
+            "Screen",
+            "Colour dodge",
+            "Lighter colour",
+            "Overlay",
+            "Soft light",
+            "Hard light",
+            "Linear light",
+            "Vivid light",
+            "Pin light",
+            "Hard mix",
+            "Difference",
+            "Exclusion",
+            "Subtract",
+            "Divide",
+            "Hue",
+            "Saturation",
+            "Colour",
+            "Luminosity"
+          ],
+          "dividers_after": []
+        },
+        {
+          "id": "matte",
+          "label": "Matte",
+          "kind": "layer",
+          "unit": "raw",
+          "self_default": false
+        },
+        {
+          "id": "matte_invert",
+          "label": "Invert",
+          "kind": "bool",
+          "unit": "raw",
+          "default": false
+        }
+      ],
+      "groups": [],
+      "enabled_when": [
+        {
+          "param": "slope_channel",
+          "on": "vectors_from",
+          "cond": "choice_is",
+          "value": 0
+        },
+        {
+          "param": "horizontal_channel",
+          "on": "vectors_from",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "vertical_channel",
+          "on": "vectors_from",
+          "cond": "choice_is",
+          "value": 1
+        },
+        {
+          "param": "matte_placement",
+          "on": "matte",
+          "cond": "layer_set"
+        }
+      ],
+      "matte": {
+        "param": "matte",
+        "meaning": "is the vector map: its slope or its channels say which way each pixel streaks and how far, and with none picked the layer's own picture is used"
+      },
+      "matte_role": "own"
+    },
+    {
       "slug": "transform",
       "match_name": "transform",
       "label": "Transform",

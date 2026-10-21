@@ -6454,6 +6454,8 @@ fn every_parameter_declares_a_unit() {
             ("channel_blur", "green"),
             ("channel_blur", "blue"),
             ("channel_blur", "alpha"),
+            ("vector_blur", "length"),
+            ("vector_blur", "map_softness"),
             ("transform", "anchor_x"),
             ("transform", "anchor_y"),
             ("transform", "position_x"),
@@ -7459,6 +7461,7 @@ fn every_effect_carries_a_matte_row() {
                 | "glow"
                 | "turbulent_displace"
                 | "displacement_map"
+                | "vector_blur"
                 | "directional_blur"
                 | "radial_blur"
                 | "sharpen"
@@ -7574,15 +7577,15 @@ fn every_effect_carries_a_matte_row() {
             s.match_name
         );
         // The Channel choice rides beside the injected pair on every
-        // effect that does not pick its matte's channels itself. The four that
+        // effect that does not pick its matte's channels itself. The five that
         // do — Depth of field (`depth_channel`), Displacement map (its two
-        // channel choices), the Lens flare (source detection) and Scatter,
-        // which reads **alpha and only alpha** — carry none, and the
-        // seam leaves their matte raw. Set matte used to be a fifth, and
-        // carries no Matte row at all now.
+        // channel choices), Vector blur (its three), the Lens flare (source
+        // detection) and Scatter, which reads **alpha and only alpha** — carry
+        // none, and the seam leaves their matte raw. Set matte used to be one
+        // more, and carries no Matte row at all now.
         let owns_channel = matches!(
             s.match_name,
-            "dof" | "displacement_map" | "lens_flare" | "scatter"
+            "dof" | "displacement_map" | "vector_blur" | "lens_flare" | "scatter"
         );
         let channel = s.params.iter().find(|p| p.id == MATTE_CHANNEL_PARAM);
         assert_eq!(

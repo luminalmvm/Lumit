@@ -21083,5 +21083,41 @@
         "type": "String"
       }
     }
+  },
+  "fxVectorBlur": "Vector blur",
+  "@fxVectorBlur": {
+    "description": "Effect controls — the name of an effect that streaks each pixel along directions read from a map layer."
+  },
+  "fxVectorsFrom": "Vectors from",
+  "@fxVectorsFrom": {
+    "description": "Vector blur parameter label in the Effect Controls panel — whether the streak directions come from the slope of one channel of the map or from two channels read as a push."
+  },
+  "fxMapSlope": "Map slope",
+  "@fxMapSlope": {
+    "description": "Vector blur option for Vectors from — streaks follow the contours of one channel of the map, longest where it changes fastest."
+  },
+  "fxMapChannels": "Map channels",
+  "@fxMapChannels": {
+    "description": "Vector blur option for Vectors from — two channels of the map say how far to streak sideways and up and down, mid-grey being still."
+  },
+  "fxSlopeChannel": "Slope channel",
+  "@fxSlopeChannel": {
+    "description": "Vector blur parameter label in the Effect Controls panel — the channel of the map whose contours the streaks follow."
+  },
+  "fxAngleOffset": "Angle offset",
+  "@fxAngleOffset": {
+    "description": "Vector blur parameter label in the Effect Controls panel — turns every streak direction by this angle."
+  },
+  "fxConstantLength": "Constant length",
+  "@fxConstantLength": {
+    "description": "Vector blur parameter label in the Effect Controls panel — a switch that gives every streak the full length, however weak the map is there."
+  },
+  "fxFollowTheVectors": "Follow the vectors",
+  "@fxFollowTheVectors": {
+    "description": "Vector blur parameter label in the Effect Controls panel — a switch that bends each streak along the map as it goes, rather than keeping it straight."
+  },
+  "fxMapSoftness": "Map softness",
+  "@fxMapSoftness": {
+    "description": "Vector blur parameter label in the Effect Controls panel — how much the map is blurred before the streak directions are read from it."
   }
 }

@@ -50,6 +50,56 @@ struct DirBlurParams {
     _pad0: f32,
 }
 
+/// One resolved Vector blur. Mirrors `lumit_core::fx::cpu::VectorBlurParams`,
+/// with the Matte row's Invert beside it.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VectorBlurOp {
+    /// True reads a push from two channels, false the slope of one.
+    pub from_channels: bool,
+    /// `CHANNEL_OPTIONS` indices: the slope's channel, then x's and y's.
+    pub channels: [u32; 3],
+    /// The longest streak, raster pixels.
+    pub length_px: f32,
+    /// The Angle offset's cos and sin (host-computed).
+    pub turn: (f32, f32),
+    pub constant_length: bool,
+    pub follow: bool,
+    /// 0 both ways, 1 forwards, 2 backwards.
+    pub direction: u32,
+    /// 0..1.
+    pub falloff: f32,
+    /// The map's blur radius, raster pixels.
+    pub softness_px: f32,
+    /// 0 = Transparent, 1 = Repeat, 2 = Mirror.
+    pub edge: u32,
+    /// 0..1, blended against the unprocessed input.
+    pub mix: f32,
+    /// Must equal `lumit_core::fx::cpu::vector_blur_taps`.
+    pub taps: i32,
+    /// The Matte's Invert: the map is read the other way round.
+    pub matte_invert: bool,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct VectorBlurParams {
+    turn: [f32; 2],
+    length: f32,
+    falloff: f32,
+    reach: f32,
+    mix_amt: f32,
+    taps: i32,
+    edge: u32,
+    from_channels: u32,
+    chan_s: u32,
+    chan_x: u32,
+    chan_y: u32,
+    constant_length: u32,
+    follow: u32,
+    direction: u32,
+    invert: u32,
+}
+
 /// One resolved radial blur — Blur's Radial mode (docs/08 §3.8, schema
 /// status note). `taps` must equal
 /// `lumit_core::fx::cpu::radial_blur_taps(amount_px)` so the GPU dispatches
@@ -524,6 +574,58 @@ impl FxEngine {
                 mix_amt: op.mix,
                 matte_on: f32::from(matte.is_some()),
                 _pad0: 0.0,
+            }),
+        );
+        out
+    }
+
+    /// Apply one Vector blur to a linear working texture, returning a new
+    /// texture of the same size. With no map the layer's own picture is the
+    /// map, and with Map softness the map is blurred first.
+    pub fn vector_blur(
+        &self,
+        ctx: &GpuContext,
+        src: &wgpu::Texture,
+        w: u32,
+        h: u32,
+        map: Option<&wgpu::Texture>,
+        op: &VectorBlurOp,
+    ) -> wgpu::Texture {
+        let map = map.unwrap_or(src);
+        let soft = (op.softness_px > 0.0).then(|| {
+            let blur = BlurOp {
+                radius_px: op.softness_px,
+                edge: 1,
+                mix: 1.0,
+            };
+            self.blur(ctx, map, w, h, None, &blur)
+        });
+        let out = work_texture(ctx, w, h, "fx-vector-blur-out");
+        self.dispatch_matted(
+            ctx,
+            &self.vector_blur,
+            src,
+            src,
+            Some(soft.as_ref().unwrap_or(map)),
+            &out,
+            w,
+            h,
+            bytemuck::bytes_of(&VectorBlurParams {
+                turn: [op.turn.0, op.turn.1],
+                length: op.length_px,
+                falloff: op.falloff,
+                reach: (op.softness_px * 0.5).max(1.0),
+                mix_amt: op.mix,
+                taps: op.taps,
+                edge: op.edge,
+                from_channels: u32::from(op.from_channels),
+                chan_s: op.channels[0],
+                chan_x: op.channels[1],
+                chan_y: op.channels[2],
+                constant_length: u32::from(op.constant_length),
+                follow: u32::from(op.follow),
+                direction: op.direction,
+                invert: u32::from(op.matte_invert),
             }),
         );
         out

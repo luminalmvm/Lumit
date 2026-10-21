@@ -363,6 +363,7 @@ static GPU_EFFECTS: &[&dyn GpuEffect] = &[
     &Blur,
     &DirectionalBlur,
     &RadialBlur,
+    &VectorBlur,
     &Sharpen,
     &SharpenSimple,
     &SpriteFlare,
@@ -652,6 +653,49 @@ impl GpuEffect for RadialBlur {
                 spin,
                 edge,
                 mix,
+            },
+        )
+    }
+}
+
+struct VectorBlur;
+impl GpuEffect for VectorBlur {
+    fn match_name(&self) -> &'static str {
+        "vector_blur"
+    }
+    /// The matte is the vector map, as Displacement map's is. With none bound
+    /// the op reads the layer's own picture.
+    fn run(
+        &self,
+        fx: &FxEngine,
+        ctx: &GpuContext,
+        tex: &Tex,
+        w: u32,
+        h: u32,
+        p: Params<'_>,
+        aux: AuxSlot<'_>,
+    ) -> Tex {
+        let v = effects::vector_blur::VectorBlur::read(p).packed();
+        fx.vector_blur(
+            ctx,
+            tex,
+            w,
+            h,
+            aux.matte(),
+            &lumit_gpu::fx::VectorBlurOp {
+                from_channels: v.from_channels,
+                channels: v.channels,
+                length_px: v.length,
+                turn: v.turn,
+                constant_length: v.constant_length,
+                follow: v.follow,
+                direction: v.direction,
+                falloff: v.falloff,
+                softness_px: v.softness,
+                edge: v.edge,
+                mix: v.mix,
+                taps: v.taps,
+                matte_invert: p.bool(lumit_core::fx::MATTE_INVERT_ID, false),
             },
         )
     }

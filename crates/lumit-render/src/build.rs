@@ -2685,7 +2685,10 @@ fn comp_walk(
         use lumit_core::fx::MapPlacement;
         // Mid-grey is no push at all, whichever channel steers it, so the
         // frame round a placed map stays still.
-        let ground = if e.effect.match_name == "displacement_map" {
+        let ground = if matches!(
+            e.effect.match_name.as_str(),
+            "displacement_map" | "vector_blur"
+        ) {
             [0.5; 4]
         } else {
             [0.0; 4]

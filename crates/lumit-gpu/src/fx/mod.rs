@@ -69,6 +69,7 @@ pub struct FxEngine {
     custom_shader: custom_shader::CustomShaderPipelines,
     blur: wgpu::ComputePipeline,
     dir_blur: wgpu::ComputePipeline,
+    vector_blur: wgpu::ComputePipeline,
     radial_blur: wgpu::ComputePipeline,
     sharpen_unpremultiply: wgpu::ComputePipeline,
     sharpen_combine: wgpu::ComputePipeline,
