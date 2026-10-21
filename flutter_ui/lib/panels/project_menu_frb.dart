@@ -44,6 +44,24 @@ enum _ProjectMenuAction {
   delete
 }
 
+/// Do [act] to each of [items] as one undo step, passing over any that has
+/// gone, such as a clip deleted with its folder a moment ago.
+void eachInOneUndo(LumitState state, List<ItemReference> items,
+    void Function(ItemReference item) act) {
+  final project = state.project;
+  final group = items.length > 1 && project != null;
+  if (group) project.beginUndoGroup();
+  try {
+    for (final item in items) {
+      try {
+        act(item);
+      } catch (_) {}
+    }
+  } finally {
+    if (group) project.endUndoGroup();
+  }
+}
+
 /// Duplicate every composition in [items] and hand back the copies. The
 /// panel's Duplicate, its `Mod+D` and its paste all come here. Only a comp has
 /// a copy to make, so anything else picked is passed over.
@@ -62,19 +80,8 @@ Future<List<ItemReference>> duplicateProjectItems(
 
 /// Delete [items] as one undo step: the row menu's Delete and the panel's
 /// `Delete` key.
-void deleteProjectItems(LumitState state, List<ItemReference> items) {
-  final project = state.project;
-  final group = items.length > 1 && project != null;
-  if (group) project.beginUndoGroup();
-  for (final item in items) {
-    try {
-      item.delete();
-    } catch (_) {
-      // Already gone - a folder deleted with its parent a moment ago.
-    }
-  }
-  if (group) project.endUndoGroup();
-}
+void deleteProjectItems(LumitState state, List<ItemReference> items) =>
+    eachInOneUndo(state, items, (item) => item.delete());
 
 /// A colour chip with a word for it, or the bare chip where the colour is its
 /// own explanation — which is every chip but the neutral one (A12).
@@ -616,31 +623,24 @@ Future<void> showProjectMenuFrb({
       // proxy to read from; one that has none is passed over rather than
       // switched on to nothing.
       final on = !(proxy?.enabled ?? false);
-      for (final target in acts) {
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) {
         if (target case ItemReference_Footage(:final field0)) {
-          if (field0.getProxy() == null) continue;
-          try {
-            field0.setUseProxy(on_: on);
-          } catch (_) {}
+          if (field0.getProxy() != null) field0.setUseProxy(on_: on);
         }
-      }
+      });
       onLocalEdit();
     case _ProjectMenuAction.clearProxy:
-      for (final target in acts) {
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) {
         if (target case ItemReference_Footage(:final field0)) {
-          if (field0.getProxy() == null) continue;
-          try {
-            field0.clearProxy();
-          } catch (_) {}
+          if (field0.getProxy() != null) field0.clearProxy();
         }
-      }
+      });
       onLocalEdit();
     case _ProjectMenuAction.moveToRoot:
-      for (final target in acts) {
-        try {
-          target.moveToRoot();
-        } catch (_) {}
-      }
+      eachInOneUndo(Provider.of<LumitState>(context, listen: false), acts,
+          (target) => target.moveToRoot());
       onLocalEdit();
     case _ProjectMenuAction.delete:
       // No confirmation: it is one undo step, matching egui.

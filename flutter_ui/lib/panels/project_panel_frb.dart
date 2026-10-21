@@ -68,7 +68,8 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'project_chrome_frb.dart';
 import 'project_columns_frb.dart';
-import 'project_menu_frb.dart' show deleteProjectItems, duplicateProjectItems;
+import 'project_menu_frb.dart'
+    show deleteProjectItems, duplicateProjectItems, eachInOneUndo;
 import 'project_row_frb.dart';
 
 export 'project_chrome_frb.dart';
@@ -1497,12 +1498,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   List<ItemReference> _targets(ItemReference item) =>
       _selectedIds.contains(projectItemId(item)) ? _picked : [item];
 
-  /// Tag every selected item, or untag them with 0 — one call each, so one
-  /// undo step each, which is what the engine's op is.
+  /// Tag every selected item, or untag them with 0, as one undo step.
   void _setLabel(ItemReference item, int label) {
-    for (final target in _targets(item)) {
-      target.setLabel(label: label);
-    }
+    eachInOneUndo(Provider.of<LumitState>(context, listen: false),
+        _targets(item), (target) => target.setLabel(label: label));
     _documentChanged();
   }
 
@@ -1517,20 +1516,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// its own descendant (and anything whose item has since been deleted), and
   /// the rest of the drop still lands.
   void _fileInto(ItemReference folder, List<ItemReference> items) {
-    if (items.isEmpty) return;
-    final id = folder is ItemReference_Folder ? folder.field0.internalid : null;
-    if (id == null) return;
-    final project = Provider.of<LumitState>(context, listen: false).project;
-    final group = items.length > 1 && project != null;
-    if (group) project.beginUndoGroup();
-    for (final item in items) {
-      try {
-        item.moveToFolder(folder: id);
-      } catch (_) {
-        // Refused — a cycle, or an item that is no longer there.
-      }
-    }
-    if (group) project.endUndoGroup();
+    if (folder is! ItemReference_Folder) return;
+    final id = folder.field0.internalid;
+    eachInOneUndo(Provider.of<LumitState>(context, listen: false), items,
+        (item) => item.moveToFolder(folder: id));
     _documentChanged();
   }
 
