@@ -9612,9 +9612,19 @@ fn wgsl_wave_warp_matches_the_cpu_oracle() {
         }
     };
     let mut cases: Vec<(String, WaveWarp)> = Vec::new();
-    for (i, name) in ["sine", "square", "triangle", "sawtooth", "circle"]
-        .into_iter()
-        .enumerate()
+    for (i, name) in [
+        "sine",
+        "square",
+        "triangle",
+        "sawtooth",
+        "circle",
+        "semicircle",
+        "uncircle",
+        "noise",
+        "smooth-noise",
+    ]
+    .into_iter()
+    .enumerate()
     {
         let mut v = base;
         v.wave_type = i as u32;

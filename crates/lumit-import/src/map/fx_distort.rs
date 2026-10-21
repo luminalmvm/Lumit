@@ -388,7 +388,7 @@ fn ripple(fx: &mut Fx<'_, '_>) {
 /// AE `ADBE Wave Warp` → Wave warp (docs/11 §5). Wave Speed becomes Phase
 /// keyframes, for §3.53's reason.
 fn wave_warp(fx: &mut Fx<'_, '_>) {
-    fx.choice(1, "wave_type", &[0, 1, 2, 3, 4, -1, -1, -1, -1], "Sine");
+    fx.choice(1, "wave_type", &[0, 1, 2, 3, 4, 5, 6, 7, 8], "Sine");
     fx.carry(2, "wave_height", Unit::Px);
     fx.carry(3, "wave_width", Unit::Px);
     fx.carry(4, "direction", Unit::Direct);

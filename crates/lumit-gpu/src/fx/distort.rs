@@ -345,7 +345,8 @@ pub struct WaveWarpOp {
     pub inv_width: f32,
     /// Phase ÷ 360, in whole waves.
     pub turns: f32,
-    /// 0 Sine, 1 Square, 2 Triangle, 3 Sawtooth, 4 Circle.
+    /// 0 Sine, 1 Square, 2 Triangle, 3 Sawtooth, 4 Circle, 5 Semicircle,
+    /// 6 Uncircle, 7 Noise, 8 Smooth noise.
     pub shape: u32,
     /// Per edge — left, right, top, bottom — 1 when that edge is pinned.
     pub pin: [f32; 4],

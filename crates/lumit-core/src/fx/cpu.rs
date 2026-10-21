@@ -3248,7 +3248,8 @@ pub struct WaveWarpParams {
     pub inv_width: f32,
     /// Phase ÷ 360, in whole waves.
     pub turns: f32,
-    /// 0 Sine, 1 Square, 2 Triangle, 3 Sawtooth, 4 Circle.
+    /// 0 Sine, 1 Square, 2 Triangle, 3 Sawtooth, 4 Circle, 5 Semicircle,
+    /// 6 Uncircle, 7 Noise, 8 Smooth noise.
     pub shape: u32,
     /// Per edge — left, right, top, bottom — 1 when that edge is pinned.
     pub pin: [f32; 4],
@@ -3258,7 +3259,7 @@ pub struct WaveWarpParams {
     pub mix: f32,
 }
 
-/// The five wave shapes (docs/08 §3.54's table), each running `−1..=1` over one
+/// The nine wave shapes (docs/08 §3.54's table), each running `−1..=1` over one
 /// whole wave. Written as one function so the CPU reference and the WGSL kernel
 /// cannot drift on the awkward ones.
 #[must_use]
@@ -3289,8 +3290,36 @@ pub fn wave_shape(shape: u32, t: f32) -> f32 {
                 -arc
             }
         }
+        5 | 6 => {
+            // One arch a wave, all on one side. Uncircle is it upside down.
+            let u = 2.0 * f - 1.0;
+            let arch = 2.0 * (1.0 - u * u).max(0.0).sqrt() - 1.0;
+            if shape == 5 {
+                arch
+            } else {
+                -arch
+            }
+        }
+        7 | 8 => {
+            // A random height every half wave. Noise joins them with straight
+            // lines, Smooth noise eases between them.
+            let s = 2.0 * t;
+            let k = s.floor();
+            let mut g = s - k;
+            if shape == 8 {
+                g = g * g * (3.0 - 2.0 * g);
+            }
+            let a = wave_knot(k as i32);
+            a + (wave_knot(k as i32 + 1) - a) * g
+        }
         _ => (TAU * t).sin(),
     }
+}
+
+/// One of Wave warp's noise heights, `−1..1`: the top 24 bits of the knot's
+/// hash, which are exact in `f32`.
+fn wave_knot(k: i32) -> f32 {
+    (super::maths::splitmix32(k as u32) >> 8) as f32 / 8_388_608.0 - 1.0
 }
 
 /// Wave warp (docs/08 §3.54): a travelling wave across the frame — the
