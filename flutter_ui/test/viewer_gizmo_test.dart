@@ -344,6 +344,33 @@ void main() {
       expect(b.corners.first, points.first.at,
           reason: 'which is the whole point: the box and the points agree');
     });
+
+    test('a point added to a curved edge leaves the curve where it was', () {
+      const a = BridgeVertex(
+          x: 0, y: 0, tanInX: 0, tanInY: 0, tanOutX: 40, tanOutY: -60);
+      const b = BridgeVertex(
+          x: 100, y: 0, tanInX: 20, tanInY: -80, tanOutX: 0, tanOutY: 0);
+      Offset along(BridgeVertex p, BridgeVertex q, double t) {
+        final u = 1 - t;
+        Offset at(double x, double y) => Offset(x, y);
+        return at(p.x, p.y) * (u * u * u) +
+            at(p.x + p.tanOutX, p.y + p.tanOutY) * (3 * u * u * t) +
+            at(q.x + q.tanInX, q.y + q.tanInY) * (3 * u * t * t) +
+            at(q.x, q.y) * (t * t * t);
+      }
+
+      final split = verticesWithPointAdded(const [a, b], 0, 0.3);
+      expect(split, hasLength(3));
+      for (final t in [0.0, 0.25, 0.5, 0.75, 1.0]) {
+        // The first half of the new path is the old edge up to 0.3, the
+        // second half the rest of it.
+        final before = along(split[0], split[1], t) - along(a, b, 0.3 * t);
+        final after =
+            along(split[1], split[2], t) - along(a, b, 0.3 + 0.7 * t);
+        expect(before.distance, lessThan(1e-9));
+        expect(after.distance, lessThan(1e-9));
+      }
+    });
   });
 
   group('Where the handles sit', () {
