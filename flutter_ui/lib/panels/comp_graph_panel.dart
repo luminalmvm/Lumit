@@ -1794,7 +1794,10 @@ class _CompGraphPanelState extends State<CompGraphPanel>
   void _move(PointerMoveEvent event, GraphLayout layout) {
     final at = _toCanvas(event.localPosition);
     if (_flight case final flight?) {
-      setState(() => flight.to = at);
+      setState(() {
+        flight.to = at;
+        flight.snap = layout.snapAt(at, (s) => _accepts(flight.from, s));
+      });
       return;
     }
     if (_nodeDrag case final drag?) {
@@ -1833,7 +1836,8 @@ class _CompGraphPanelState extends State<CompGraphPanel>
 
     if (_flight case final flight?) {
       setState(() => _flight = null);
-      final landed = layout.socketAt(at);
+      final landed = layout.snapAt(at, (s) => _accepts(flight.from, s)) ??
+          layout.socketAt(at);
       if (flight.detached case final held?) {
         if (moved && landed != null && _accepts(flight.from, landed)) {
           _connect(flight.from, landed, without: held);
@@ -2172,8 +2176,8 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                         flight: _flight == null
                             ? null
                             : _flight!.from.isInput
-                                ? (_flight!.to, _flight!.from.at)
-                                : (_flight!.from.at, _flight!.to),
+                                ? (_flight!.end, _flight!.from.at)
+                                : (_flight!.from.at, _flight!.end),
                         dragged: t.textPrimary,
                         pan: _pan,
                         zoom: _zoom,
@@ -2213,6 +2217,9 @@ class _CompGraphPanelState extends State<CompGraphPanel>
                                     setState(() => _renaming = null),
                                 paramRow: (param) => _paramRow(box.key, param),
                                 foot: _shaderThumb(box.key),
+                                snap: _flight?.snap?.node == box.key
+                                    ? _flight!.snap
+                                    : null,
                               ),
                             ),
                         ],
