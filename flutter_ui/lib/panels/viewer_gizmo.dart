@@ -1106,6 +1106,45 @@ List<BridgeScalar> _featherFollowing(BridgeMask mask, List<BridgeVertex> to) {
   return out;
 }
 
+/// The soft edge's width at [mask]'s point [index], when it is one number
+/// rather than keyed.
+double? stillFeatherAt(BridgeMask mask, int index) {
+  final s = index < mask.vertexFeather.length
+      ? mask.vertexFeather[index]
+      : mask.feather;
+  return s is BridgeScalar_Static ? s.field0 : null;
+}
+
+/// [mask] with point [index]'s soft edge set to [width]. A mask with one width
+/// all the way round gets a width per point first, each the one it had.
+BridgeMask maskWithFeatherAt(BridgeMask mask, int index, double width) {
+  final n = mask.vertices.length;
+  return maskWith(mask, vertexFeather: [
+    for (var i = 0; i < n; i++)
+      if (i == index)
+        BridgeScalar.static_(width)
+      else if (i < mask.vertexFeather.length)
+        mask.vertexFeather[i]
+      else
+        mask.feather,
+  ]);
+}
+
+/// Which way is square to [mask]'s path at point [index], in its layer: the
+/// way a soft edge is measured.
+Offset featherNormalAt(BridgeMask mask, int index) {
+  final v = mask.vertices;
+  final n = v.length;
+  final here = v[index];
+  var run = handleOf(here, HandleSide.leaving) - handleOf(here, HandleSide.arriving);
+  if (run.distance < 1e-9) {
+    final prev = v[(index - 1 + n) % n], next = v[(index + 1) % n];
+    run = Offset(next.x - prev.x, next.y - prev.y);
+  }
+  if (run.distance < 1e-9) return const Offset(0, 1);
+  return Offset(-run.dy, run.dx) / run.distance;
+}
+
 /// [box]'s whole art with every point of it in [points] moved by [d], or null
 /// when none of it is selected.
 ///
@@ -1392,6 +1431,9 @@ enum _GizmoDrag {
 
   /// A handle of a selected path point, or a pair pulled out of a point.
   handle,
+
+  /// A mask point's soft edge, with the Mask feather tool.
+  feather,
   marquee,
 
   /// A key of a motion path (docs/07 §2.4), dragged on the picture.
@@ -1533,6 +1575,9 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   HandleLink _link = HandleLink.broken;
   bool _pullingOut = false;
 
+  /// The mask point whose soft edge the Mask feather tool is dragging.
+  ({LayerBox box, BridgeMask mask, int index})? _featherAt;
+
   /// The claim this layer displaced to take Delete for path points.
   bool Function()? _priorDeleteClaim;
 
@@ -1593,7 +1638,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
           BridgeTransformProp.positionX
         ],
       _GizmoDrag.points ||
-      _GizmoDrag.handle =>
+      _GizmoDrag.handle ||
+      _GizmoDrag.feather =>
         const <BridgeTransformProp>[],
       _GizmoDrag.axis3d => [
           _set?.props.first ?? BridgeTransformProp.positionX,
@@ -1644,7 +1690,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
   bool get _vertexTool =>
       widget.tool == ToolMode.penAddVertex ||
       widget.tool == ToolMode.penDeleteVertex ||
-      widget.tool == ToolMode.penConvertVertex;
+      widget.tool == ToolMode.penConvertVertex ||
+      widget.tool == ToolMode.penMaskFeather;
 
   /// Ctrl+Alt (Cmd+Option on a Mac) with the Selection tool is Convert
   /// vertex for the click, as in After Effects.
@@ -1827,6 +1874,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
         pointNudge: _drag == _GizmoDrag.points ? _delta : Offset.zero,
         pointFrom: _origin,
         pathEdit: _drag == _GizmoDrag.handle ? _handleEdit() : null,
+        maskInHand: _drag == _GizmoDrag.feather ? _featherNow() : null,
         onlyPath: _pathBeingEdited,
         anchors: widget.showControls && widget.showAnchors
             ? [
@@ -2359,6 +2407,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // Convert vertex drags a handle on its own, or pulls a pair out of a
     // point. The other two tools only click, and none of the three moves a
     // layer or sweeps a marquee.
+    if (widget.showControls && widget.tool == ToolMode.penMaskFeather) {
+      _takeFeather(at);
+      return;
+    }
     final converting =
         widget.tool == ToolMode.penConvertVertex || _convertChord;
     if (_vertexTool || (converting && aimedAt != null)) {
@@ -2550,6 +2602,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       case _GizmoDrag.handle:
         final edit = _handleEdit();
         if (edit != null) _previewEdit((_) => edit);
+      case _GizmoDrag.feather:
+        _previewFeather();
       case _GizmoDrag.motionKey:
         _previewMotionKey();
       case _GizmoDrag.axis3d:
@@ -2574,6 +2628,8 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       case _GizmoDrag.handle:
         final edit = _handleEdit();
         if (edit != null && _delta != Offset.zero) _commitEdit((_) => edit);
+      case _GizmoDrag.feather:
+        _commitFeather();
       case _GizmoDrag.motionKey:
         _commitMotionKey();
       case _GizmoDrag.marquee:
@@ -2598,6 +2654,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       _handle = null;
       _handleInHand = null;
       _pullingOut = false;
+      _featherAt = null;
       _motionKey = null;
       _set = null;
       _part = null;
@@ -3243,8 +3300,92 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     return true;
   }
 
+  /// The Mask feather tool's press: a mask point, or either edge of the soft
+  /// band drawn round it, starts a drag that sets that point's width.
+  void _takeFeather(Offset at) {
+    ({LayerBox box, BridgeMask mask, int index})? best;
+    var nearest = gizmoAnchorSlop / 2;
+    for (final box in _editablePointBoxes) {
+      for (final mask in box.masks) {
+        if (!showsPath(box, mask.id, _pathBeingEdited)) continue;
+        for (var i = 0; i < mask.vertices.length; i++) {
+          final width = stillFeatherAt(mask, i);
+          if (width == null) continue;
+          final v = mask.vertices[i];
+          final n = featherNormalAt(mask, i) * (width / 2);
+          for (final p in [Offset(v.x, v.y), Offset(v.x, v.y) + n, Offset(v.x, v.y) - n]) {
+            final d = (box.map.toScreen(p.dx, p.dy) - at).distance;
+            if (d <= nearest) {
+              nearest = d;
+              best = (box: box, mask: mask, index: i);
+            }
+          }
+        }
+      }
+    }
+    if (best == null) return;
+    setState(() {
+      _featherAt = best;
+      _points
+        ..clear()
+        ..add(maskPointKey(best!.box.id, best.mask.id, best.index));
+      _drag = _GizmoDrag.feather;
+    });
+  }
+
+  /// The mask in hand as the feather drag has it: the soft band's edge
+  /// follows the pointer, so the width is twice the pointer's distance from
+  /// the path, measured square to it.
+  BridgeMask? _featherNow() {
+    final f = _featherAt;
+    if (f == null) return null;
+    final v = f.mask.vertices[f.index];
+    final p = f.box.map.layerOf(_pointer);
+    final reach = (p - Offset(v.x, v.y));
+    final n = featherNormalAt(f.mask, f.index);
+    final width = 2 * (reach.dx * n.dx + reach.dy * n.dy).abs();
+    return maskWithFeatherAt(f.mask, f.index, width);
+  }
+
+  void _previewFeather() {
+    final f = _featherAt;
+    final mask = _featherNow();
+    if (f == null || mask == null) return;
+    _throttle.request(() {
+      try {
+        widget.comp.renderFrameWithMaskPreview(
+          frame: BigInt.from(widget.uiState.playheadFrame.value),
+          scale: widget.uiState.viewerScale,
+          layer: f.box.layer,
+          masks: [
+            for (final m in f.box.masks) m.id == mask.id ? mask : m,
+          ],
+        );
+      } catch (_) {
+        // A preview is a courtesy, the release still lands.
+      }
+    });
+  }
+
+  void _commitFeather() {
+    final f = _featherAt;
+    final mask = _featherNow();
+    if (f == null || mask == null || _delta == Offset.zero) return;
+    try {
+      f.box.layer.setMask(
+        mask: mask,
+        at: widget.comp.timeOfFrame(frame: widget.uiState.playheadFrame.value),
+      );
+      widget.onChanged();
+    } catch (_) {
+      // The mask went away mid-drag.
+    }
+  }
+
   /// A click with Add, Delete or Convert vertex. True when it changed a path.
   bool _vertexToolTap(Offset at) {
+    // Mask feather only drags; its click selects, as the Selection tool's does.
+    if (widget.tool == ToolMode.penMaskFeather) return false;
     final boxes = _editablePointBoxes;
     final only = _pathBeingEdited;
     final point = pathPointAt(boxes, at, only: only);
@@ -3465,6 +3606,9 @@ class _GizmoPainter extends CustomPainter {
   /// A handle drag in flight, drawn on the path it is changing.
   final VertexEdit? pathEdit;
 
+  /// A mask whose soft edge is being dragged, drawn as the drag has it.
+  final BridgeMask? maskInHand;
+
   /// The layer and path whose Path row is picked, which is then the only path
   /// of its layer drawn.
   final (UuidValue, UuidValue)? onlyPath;
@@ -3511,6 +3655,7 @@ class _GizmoPainter extends CustomPainter {
     required this.pointNudge,
     required this.pointFrom,
     this.pathEdit,
+    this.maskInHand,
     this.onlyPath,
     required this.hover,
     required this.handlesFor,
@@ -3600,7 +3745,8 @@ class _GizmoPainter extends CustomPainter {
           live(keyOf, mask.vertices, mask.closed),
           mask.closed,
           keyOf,
-          feather: stillHalfFeather(mask),
+          feather: stillHalfFeather(
+              maskInHand?.id == mask.id ? maskInHand! : mask),
         );
       }
       // A shape layer's own art gets the same outline and the same vertices, so

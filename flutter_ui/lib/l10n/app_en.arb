@@ -15355,6 +15355,10 @@
   "@statusHintConvertVertex": {
     "description": "Right-hand end of the status bar while the Convert vertex tool is armed: what a click on a path point, a drag from a point and a drag of a handle do in the Viewer. The parts are separated by a middle dot."
   },
+  "statusHintMaskFeather": "Drag out from a mask point to soften its edge there",
+  "@statusHintMaskFeather": {
+    "description": "Right-hand end of the status bar while the Mask feather tool is armed: what a drag from a point of a mask's path does in the Viewer."
+  },
   "statusHintType": "Shift+Enter starts a new line · Enter or Esc finishes the edit",
   "@statusHintType": {
     "description": "Right-hand end of the status bar while the Type tool is armed: one quiet line saying which keys break a line and end the edit while typing in the Viewer. The parts are separated by a middle dot."
