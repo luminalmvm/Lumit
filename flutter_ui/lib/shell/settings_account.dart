@@ -41,6 +41,7 @@ String profileGroupLabel(ProfileGroup group) => switch (group) {
 /// asks before there is a page to read them off.
 List<String> accountSettingsRows() => [
       l10n.settingsAccountProfiles,
+      l10n.settingsAccountName,
       l10n.settingsAccountPlan,
       l10n.settingsStorage,
       l10n.settingsPhones,
@@ -206,6 +207,21 @@ class AccountSettings extends StatelessWidget {
           ],
         ),
       ),
+      // What other people see on previews. Signing in with Apple, Google or
+      // Discord fills it with the name they hold, often a real one.
+      _row(
+        t,
+        l10n.settingsAccountName,
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(account.name, style: t.small.copyWith(color: t.textSecondary)),
+            const SizedBox(width: 10),
+            _button(t, 'account-rename', l10n.deviceRename,
+                () => unawaited(_rename(context, account.name))),
+          ],
+        ),
+      ),
       _row(
         t,
         l10n.settingsAccountPlan,
@@ -255,6 +271,22 @@ class AccountSettings extends StatelessWidget {
         description: account.pro ? '' : l10n.reviewNeedsPro,
       ),
     ];
+  }
+
+  Future<void> _rename(BuildContext context, String now) async {
+    final name = await askProfileName(context,
+        title: l10n.accountRenameTitle, suggested: now, confirm: l10n.rename);
+    if (name == null || name == now) return;
+    try {
+      await ui.account.rename(name);
+    } on CloudError catch (e) {
+      // An empty name never gets this far, so a bad one is a long one.
+      if (context.mounted) {
+        context.read<LumitState>().postNotice(
+            e.code == 'bad_name' ? l10n.deviceNameLong : cloudErrorText(e),
+            error: true);
+      }
+    }
   }
 
   Future<void> _setReviewMail(BuildContext context, bool on) async {

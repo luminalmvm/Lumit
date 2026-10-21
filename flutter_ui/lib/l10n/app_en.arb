@@ -18625,6 +18625,14 @@
   "@settingsAccountPlan": {
     "description": "Row label on the Account page of Settings: Free, or Lumit Pro."
   },
+  "settingsAccountName": "Name",
+  "@settingsAccountName": {
+    "description": "Row label on the Account page of Settings: the name other people see on previews and replies, which need not be the person's real name."
+  },
+  "accountRenameTitle": "Change your name",
+  "@accountRenameTitle": {
+    "description": "Title of the small window that asks for the name other people see on previews and replies."
+  },
   "settingsAccountDelete": "Delete account…",
   "@settingsAccountDelete": {
     "description": "Button on the Account page of Settings."
