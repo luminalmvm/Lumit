@@ -5623,6 +5623,14 @@
   "@keyDuplicateTheSelectedItem": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
   },
+  "keySelectTheItemAbove": "Select the item above",
+  "@keySelectTheItemAbove": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
+  "keySelectTheItemBelow": "Select the item below",
+  "@keySelectTheItemBelow": {
+    "description": "Settings → Keymap: what a shortcut does, in the table’s left column."
+  },
   "keyRevealAnchorPoint": "Reveal Anchor point",
   "@keyRevealAnchorPoint": {
     "description": "Settings → Keymap: what a shortcut does, in the table’s left column."

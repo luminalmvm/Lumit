@@ -194,6 +194,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// [projectMinWidth] the tree keeps its width and slides instead of shrinking
   /// any further.
   final ScrollController _hScroll = ScrollController();
+  final ScrollController _vScroll = ScrollController();
 
   /// The shell state this panel is listening to, so the listener can be taken
   /// off the same object it was put on.
@@ -383,14 +384,15 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _searchFocus.dispose();
     _rowPicks.dispose();
     _hScroll.dispose();
+    _vScroll.dispose();
     _dropThumbs();
     _dropScrub();
     _stopSound();
     super.dispose();
   }
 
-  /// The Project panel's keyboard commands: rename, duplicate, and the
-  /// three for how the selected footage is interpreted.
+  /// The Project panel's keyboard commands: rename, duplicate, the arrows,
+  /// and the three for how the selected footage is interpreted.
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
     if (lumitModalOpen) return false;
@@ -416,6 +418,10 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         if (_picked.isEmpty) return false;
         _duplicate(_picked);
         return true;
+      case 'item.select.prev':
+        return _step(-1);
+      case 'item.select.next':
+        return _step(1);
     }
     final footage = [
       for (final id in _visibleIds)
@@ -446,6 +452,28 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
         return true;
     }
     return false;
+  }
+
+  /// Move the pick one row up or down the list, and scroll that row into
+  /// view.
+  bool _step(int by) {
+    if (_visibleIds.isEmpty) return false;
+    final at = _visibleIds.indexOf(_anchorId ?? '');
+    final next = at < 0
+        ? (by > 0 ? 0 : _visibleIds.length - 1)
+        : (at + by).clamp(0, _visibleIds.length - 1);
+    _select(_visibleIds[next], SelectMode.replace);
+    if (_vScroll.hasClients) {
+      final top = next * projectRowHeight;
+      final view = _vScroll.position;
+      if (top < view.pixels) {
+        _vScroll.jumpTo(top);
+      } else if (top + projectRowHeight >
+          view.pixels + view.viewportDimension) {
+        _vScroll.jumpTo(top + projectRowHeight - view.viewportDimension);
+      }
+    }
+    return true;
   }
 
   /// The items currently selected, by id, in the order the panel lists them.
@@ -1016,6 +1044,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
                   // the same height, so the list never has to measure one it
                   // has not built.
                   child: ListView.builder(
+                    controller: _vScroll,
                     hitTestBehavior: HitTestBehavior.deferToChild,
                     itemExtent: projectRowHeight,
                     itemCount: rows.length,
@@ -1358,10 +1387,17 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
 
   /// Double-clicking the panel's blank space imports, which is the gesture
   /// every editor has and the one people reach for before finding a menu.
+  /// One click there lets go of the selection.
   Widget _importOnDoubleTap({required Widget child}) => GestureDetector(
         key: const ValueKey('project-empty-area'),
         behavior: HitTestBehavior.opaque,
         onDoubleTap: _import,
+        onTap: () {
+          if (_selectedIds.isEmpty) return;
+          _selectedIds.clear();
+          _publishPicks();
+          _publishSelection();
+        },
         child: child,
       );
 

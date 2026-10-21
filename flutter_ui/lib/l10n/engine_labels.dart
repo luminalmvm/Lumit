@@ -1387,6 +1387,8 @@ Map<String, String> get _built => {
       "Rename the layer": l10n.keyRenameTheLayer,
       "Rename the selected item": l10n.keyRenameTheSelectedItem,
       "Duplicate the selected item": l10n.keyDuplicateTheSelectedItem,
+      "Select the item above": l10n.keySelectTheItemAbove,
+      "Select the item below": l10n.keySelectTheItemBelow,
       "Interpret the selected footage": l10n.keyInterpretTheSelectedFootage,
       "Remember the footage's interpretation":
           l10n.keyRememberTheFootagesInterpretation,
