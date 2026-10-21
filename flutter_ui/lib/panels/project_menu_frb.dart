@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 
 import '../l10n/strings.dart';
 import '../shell/comp_settings_frb.dart';
+import '../shell/dialog_frame.dart' show askLumitChoice;
 import '../shell/interpret_footage_frb.dart';
 import '../shell/status_line_frb.dart';
 import '../state/file_dialogs.dart';
@@ -93,9 +94,30 @@ Future<List<ItemReference>> duplicateProjectItems(
 }
 
 /// Delete [items] as one undo step: the row menu's Delete and the panel's
-/// `Delete` key.
-void deleteProjectItems(LumitState state, List<ItemReference> items) =>
-    eachInOneUndo(state, items, (item) => item.delete());
+/// `Delete` key. A folder takes what is inside it, and when layers show any
+/// of it the question comes first, since those layers go too. Returns
+/// whether anything was deleted.
+Future<bool> deleteProjectItems(
+    BuildContext context, List<ItemReference> items) async {
+  var layers = 0;
+  for (final item in items) {
+    try {
+      layers += item.layersUsing();
+    } catch (_) {}
+  }
+  if (layers > 0) {
+    final go = await askLumitChoice<bool>(
+      context: context,
+      title: l10n.deleteInUseTitle,
+      question: l10n.deleteInUseQuestion(layers),
+      answers: [(l10n.delete, true)],
+    );
+    if (go != true || !context.mounted) return false;
+  }
+  eachInOneUndo(Provider.of<LumitState>(context, listen: false), items,
+      (item) => item.delete());
+  return true;
+}
 
 /// A colour chip with a word for it, or the bare chip where the colour is its
 /// own explanation — which is every chip but the neutral one (A12).
@@ -656,9 +678,7 @@ Future<void> showProjectMenuFrb({
           (target) => target.moveToRoot());
       onLocalEdit();
     case _ProjectMenuAction.delete:
-      // No confirmation: it is one undo step, matching egui.
-      deleteProjectItems(Provider.of<LumitState>(context, listen: false), acts);
-      onLocalEdit();
+      if (await deleteProjectItems(context, acts)) onLocalEdit();
   }
 }
 

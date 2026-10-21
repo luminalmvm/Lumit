@@ -3132,7 +3132,7 @@ fn comp_places(comp: &Composition, id: Uuid) -> bool {
 /// Written as an exhaustive match so a new [`LayerKind`] cannot quietly place
 /// an item the `in use` badge then fails to notice: the compiler asks.
 #[must_use]
-fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
+pub(crate) fn layer_names_item(layer: &Layer, id: Uuid) -> bool {
     match &layer.kind {
         LayerKind::Footage { item } => *item == id,
         LayerKind::Solid { def } => *def == id,

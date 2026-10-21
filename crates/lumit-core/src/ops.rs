@@ -2829,6 +2829,69 @@ pub fn move_to_folder_ops(doc: &Document, item: Uuid, folder: Uuid) -> Option<Ve
     )
 }
 
+/// The ops that delete `item`: a folder takes everything filed inside it, and
+/// every layer showing a deleted item goes too, so no layer is left pointing
+/// at nothing. A Sequence layer only loses the clips that name one, and goes
+/// once it has none left. None when `item` is not in the project.
+#[must_use]
+pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
+    doc.item(item)?;
+    let mut gone = vec![item];
+    let mut next = 0;
+    while next < gone.len() {
+        if let Some(folder) = doc.folder(gone[next]) {
+            for child in &folder.children {
+                if doc.item(*child).is_some() && !gone.contains(child) {
+                    gone.push(*child);
+                }
+            }
+        }
+        next += 1;
+    }
+
+    let mut ops = Vec::new();
+    for comp in doc.items.iter().filter_map(|i| match i {
+        ProjectItem::Composition(c) if !gone.contains(&c.id) => Some(c),
+        _ => None,
+    }) {
+        for layer in &comp.layers {
+            if let crate::model::LayerKind::Sequence { clips } = &layer.kind {
+                let kept: Vec<_> = clips
+                    .iter()
+                    .filter(|c| {
+                        let (crate::sequence::ClipSource::Footage(id)
+                        | crate::sequence::ClipSource::Comp(id)) = &c.source;
+                        !gone.contains(id)
+                    })
+                    .cloned()
+                    .collect();
+                if kept.len() == clips.len() {
+                    continue;
+                }
+                if !kept.is_empty() {
+                    ops.push(Op::SetSequenceClips {
+                        comp: comp.id,
+                        layer: layer.id,
+                        clips: kept,
+                    });
+                    continue;
+                }
+            } else if !gone
+                .iter()
+                .any(|id| crate::model::layer_names_item(layer, *id))
+            {
+                continue;
+            }
+            ops.push(Op::RemoveLayer {
+                comp: comp.id,
+                layer: layer.id,
+            });
+        }
+    }
+    ops.extend(gone.into_iter().map(|id| Op::RemoveItem { id }));
+    Some(ops)
+}
+
 /// Whether `folder` sits anywhere inside `ancestor` — the cycle guard
 /// [`move_to_folder_ops`] refuses on.
 ///

@@ -6300,6 +6300,19 @@
   "@duplicateNestedTitle": {
     "description": "Title of the question asked when a composition being duplicated has other compositions inside it."
   },
+  "deleteInUseTitle": "Delete items in use",
+  "@deleteInUseTitle": {
+    "description": "Title of the question asked before deleting Project panel items that layers still show."
+  },
+  "deleteInUseQuestion": "{count, plural, =1{1 layer uses this and will be deleted with it.} other{{count} layers use this and will be deleted with it.}}",
+  "@deleteInUseQuestion": {
+    "description": "The question asked before deleting Project panel items that layers still show. Those layers are deleted too.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "duplicateNestedQuestion": "The copy can share the compositions inside this one, so an edit shows in both, or get copies of its own.",
   "@duplicateNestedQuestion": {
     "description": "The question asked when duplicating a composition that has other compositions nested in it. Sharing means one nested composition used by both; separate copies means each gets its own."

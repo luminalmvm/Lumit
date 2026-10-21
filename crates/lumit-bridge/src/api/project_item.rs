@@ -103,12 +103,13 @@ impl ItemReference {
         })
     }
 
-    /// Delete the item. One undo step, no confirmation — matching the egui
-    /// project menu, where Delete is undoable and therefore not worth a dialog.
+    /// Delete the item as one undo step. A folder takes everything inside it,
+    /// and the layers showing any of it go too
+    /// ([`lumit_core::ops::delete_item_ops`]).
     #[frb(sync)]
     pub fn delete(&self) -> Result<(), BridgeError> {
-        self.item()?;
-        self.commit(lumit_core::Op::RemoveItem { id: self.item_id() })
+        let ops = self.delete_ops()?;
+        self.commit(lumit_core::Op::Batch { ops })
     }
 
     /// **Duplicate**: a copy of this item under a free name ("Shot copy"),
@@ -170,6 +171,26 @@ impl ItemReference {
             }
             ItemReference::Folder(_) => ItemReference::Folder(FolderReference::new(project, copy)),
         })
+    }
+
+    /// How many layers a delete of this item would take with it, so the panel
+    /// can ask first.
+    #[frb(sync)]
+    pub fn layers_using(&self) -> Result<u32, BridgeError> {
+        let ops = self.delete_ops()?;
+        let layers = ops
+            .iter()
+            .filter(|op| !matches!(op, lumit_core::Op::RemoveItem { .. }))
+            .count();
+        Ok(u32::try_from(layers).unwrap_or(u32::MAX))
+    }
+
+    #[frb(ignore)]
+    fn delete_ops(&self) -> Result<Vec<lumit_core::Op>, BridgeError> {
+        let proj = self.project()?;
+        let p = proj.read().map_err(|_| BridgeError::ReadFailed)?;
+        lumit_core::ops::delete_item_ops(&p.store.snapshot(), self.item_id())
+            .ok_or(BridgeError::InvalidItem)
     }
 
     /// Move the item back to the panel root: remove it from every folder that

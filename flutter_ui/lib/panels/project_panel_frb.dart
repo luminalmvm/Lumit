@@ -273,11 +273,13 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     if (!_keysAreOurs) return _priorDelete?.call() ?? false;
     final picked = _picked;
     if (picked.isEmpty) return false;
-    deleteProjectItems(Provider.of<LumitState>(context, listen: false), picked);
-    _selectedIds.clear();
-    _publishPicks();
-    _publishSelection();
-    _documentChanged();
+    deleteProjectItems(context, picked).then((deleted) {
+      if (!deleted || !mounted) return;
+      _selectedIds.clear();
+      _publishPicks();
+      _publishSelection();
+      _documentChanged();
+    });
     return true;
   }
 
