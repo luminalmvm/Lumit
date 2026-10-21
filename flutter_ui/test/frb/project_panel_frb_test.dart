@@ -434,6 +434,10 @@ void main() {
       expect(find.text('b.mov'), findsNothing);
       expect(rowText('c.mov'), findsOneWidget,
           reason: 'the unpicked row stayed');
+
+      p.state.project!.undo();
+      expect(p.state.project!.getItems(), hasLength(3),
+          reason: 'one undo brings both back');
     });
 
     /// Missing-media rows and the filter. The imported path does not exist, so the

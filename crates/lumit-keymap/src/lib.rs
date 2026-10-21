@@ -160,6 +160,7 @@ impl ActionId {
             "app.settings" => "Open Settings",
             "project.settings" => "Open Project settings",
             "item.rename" => "Rename the selected item",
+            "item.duplicate" => "Duplicate the selected item",
             "footage.interpret" => "Interpret the selected footage",
             "footage.interpretation.remember" => "Remember the footage's interpretation",
             "footage.interpretation.apply" => "Apply the remembered interpretation",
@@ -1037,6 +1038,7 @@ pub fn default_keymap() -> Keymap {
         // the item in the Project panel, the effect in Effect controls — the
         // same key the Timeline has always used for its layers.
         row(Project, "Enter", "item.rename"),
+        row(Project, "Mod+D", "item.duplicate"),
         // After Effects' own three for Interpret Footage.
         row(Project, "Mod+Alt+G", "footage.interpret"),
         row(Project, "Mod+Alt+C", "footage.interpretation.remember"),

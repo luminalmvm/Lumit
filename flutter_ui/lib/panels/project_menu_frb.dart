@@ -44,6 +44,38 @@ enum _ProjectMenuAction {
   delete
 }
 
+/// Duplicate every composition in [items] and hand back the copies. The
+/// panel's Duplicate, its `Mod+D` and its paste all come here. Only a comp has
+/// a copy to make, so anything else picked is passed over.
+Future<List<ItemReference>> duplicateProjectItems(
+    BuildContext context, List<ItemReference> items) async {
+  final copies = <ItemReference>[];
+  for (final item in items) {
+    if (item case ItemReference_Composition(:final field0)) {
+      if (!context.mounted) break;
+      final copy = await duplicateCompositionFrb(context, field0);
+      if (copy != null) copies.add(ItemReference.composition(copy));
+    }
+  }
+  return copies;
+}
+
+/// Delete [items] as one undo step: the row menu's Delete and the panel's
+/// `Delete` key.
+void deleteProjectItems(LumitState state, List<ItemReference> items) {
+  final project = state.project;
+  final group = items.length > 1 && project != null;
+  if (group) project.beginUndoGroup();
+  for (final item in items) {
+    try {
+      item.delete();
+    } catch (_) {
+      // Already gone - a folder deleted with its parent a moment ago.
+    }
+  }
+  if (group) project.endUndoGroup();
+}
+
 /// A colour chip with a word for it, or the bare chip where the colour is its
 /// own explanation — which is every chip but the neutral one (A12).
 Widget _menuChipTip(String? message, Widget chip) =>
@@ -474,10 +506,10 @@ Future<void> showProjectMenuFrb({
         }
       }
     case _ProjectMenuAction.duplicate:
-      if (item case ItemReference_Composition(:final field0)) {
-        if (await duplicateCompositionFrb(context, field0) != null) {
-          onLocalEdit();
-        }
+      final copies = await duplicateProjectItems(context, acts);
+      if (copies.isNotEmpty) {
+        onLocalEdit();
+        ui.projectPickRequest.value = copies.last;
       }
     case _ProjectMenuAction.interpret:
       final picked = [
@@ -612,13 +644,7 @@ Future<void> showProjectMenuFrb({
       onLocalEdit();
     case _ProjectMenuAction.delete:
       // No confirmation: it is one undo step, matching egui.
-      for (final target in acts) {
-        try {
-          target.delete();
-        } catch (_) {
-          // Already gone - a folder deleted with its parent a moment ago.
-        }
-      }
+      deleteProjectItems(Provider.of<LumitState>(context, listen: false), acts);
       onLocalEdit();
   }
 }

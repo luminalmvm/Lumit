@@ -68,6 +68,7 @@ import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import 'project_chrome_frb.dart';
 import 'project_columns_frb.dart';
+import 'project_menu_frb.dart' show deleteProjectItems, duplicateProjectItems;
 import 'project_row_frb.dart';
 
 export 'project_chrome_frb.dart';
@@ -240,28 +241,105 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     // panel is focused rather than deciding what "everything" means itself.
     _boundUi!.selectAllRequest.addListener(_onSelectAllRequested);
     _boundUi!.projectPickRequest.addListener(_onPickRequested);
+    // Delete, Copy, Cut and Paste act on the picked items while this panel is
+    // the focused one, and fall through to whoever claimed them before.
+    _priorDelete = _boundUi!.deleteClaim;
+    _priorCopy = _boundUi!.copyClaim;
+    _priorCut = _boundUi!.cutClaim;
+    _priorPaste = _boundUi!.pasteClaim;
+    _boundUi!
+      ..deleteClaim = _deleteClaim
+      ..copyClaim = _copyClaim
+      ..cutClaim = _cutClaim
+      ..pasteClaim = _pasteClaim;
   }
 
-  /// Select an item something outside the panel has just made, and open the
-  /// folders it is filed in so the row is there to see.
+  bool Function()? _priorDelete, _priorCopy, _priorCut, _priorPaste;
+
+  /// What `Mod+C` took here, for `Mod+V` to duplicate.
+  List<ItemReference> _copied = const [];
+
+  bool get _keysAreOurs => mounted && _boundUi?.activePanel == Panel.project;
+
+  /// The picked items in the order the panel lists them.
+  List<ItemReference> get _picked => [
+        for (final id in _visibleIds)
+          if (_selectedIds.contains(id)) _itemById[id],
+      ].whereType<ItemReference>().toList();
+
+  bool _deleteClaim() {
+    if (!_keysAreOurs) return _priorDelete?.call() ?? false;
+    final picked = _picked;
+    if (picked.isEmpty) return false;
+    deleteProjectItems(Provider.of<LumitState>(context, listen: false), picked);
+    _selectedIds.clear();
+    _publishPicks();
+    _publishSelection();
+    _documentChanged();
+    return true;
+  }
+
+  bool _copyClaim() {
+    if (!_keysAreOurs) {
+      // A copy anywhere else is what the next paste here should not undo.
+      _copied = const [];
+      return _priorCopy?.call() ?? false;
+    }
+    _copied = _picked;
+    return true;
+  }
+
+  /// Taken and dropped: items do not move by cut and paste, and a layer in
+  /// the Timeline must not go because the keys were pressed here.
+  bool _cutClaim() => _keysAreOurs || (_priorCut?.call() ?? false);
+
+  bool _pasteClaim() {
+    if (!_keysAreOurs || _copied.isEmpty) {
+      return _priorPaste?.call() ?? false;
+    }
+    _duplicate(_copied);
+    return true;
+  }
+
+  Future<void> _duplicate(List<ItemReference> items) async {
+    final copies = await duplicateProjectItems(context, items);
+    if (copies.isNotEmpty && mounted) _pick(copies);
+  }
+
   void _onPickRequested() {
     final item = _boundUi?.projectPickRequest.value;
-    if (!mounted || item == null) return;
-    final id = projectItemId(item);
+    if (mounted && item != null) _pick([item]);
+  }
+
+  /// Select items something has just made, and open the folders they are
+  /// filed in so the rows are there to see.
+  void _pick(List<ItemReference> items) {
+    final ids = {for (final item in items) projectItemId(item)};
     bool holds(ItemReference at) {
-      if (projectItemId(at) == id) return true;
+      if (ids.contains(projectItemId(at))) return true;
       if (at is! ItemReference_Folder) return false;
-      final inside = at.field0.getChildren().any(holds);
+      // Every child is asked, so each copy's folder opens.
+      final inside =
+          at.field0.getChildren().fold(false, (hit, c) => holds(c) || hit);
       if (inside) _closedFolders.remove(projectItemId(at));
       return inside;
     }
 
     final project = Provider.of<LumitState>(context, listen: false).project;
-    (project?.getItems() ?? const <ItemReference>[]).any(holds);
-    // The rows have not been drawn with it yet, and the selection is
+    for (final root in project?.getItems() ?? const <ItemReference>[]) {
+      holds(root);
+    }
+    // The rows have not been drawn with them yet, and the selection is
     // published from what the rows hold.
-    _itemById[id] = item;
-    _select(id, SelectMode.replace);
+    for (final item in items) {
+      _itemById[projectItemId(item)] = item;
+    }
+    _selectedIds
+      ..clear()
+      ..addAll(ids);
+    _anchorId = ids.last;
+    _publishPicks();
+    _publishSelection();
     _documentChanged();
   }
 
@@ -293,6 +371,13 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     _boundUi?.panelSearchRequest.removeListener(_onSearchRequested);
     _boundUi?.selectAllRequest.removeListener(_onSelectAllRequested);
     _boundUi?.projectPickRequest.removeListener(_onPickRequested);
+    final ui = _boundUi;
+    if (ui != null) {
+      if (ui.deleteClaim == _deleteClaim) ui.deleteClaim = _priorDelete;
+      if (ui.copyClaim == _copyClaim) ui.copyClaim = _priorCopy;
+      if (ui.cutClaim == _cutClaim) ui.cutClaim = _priorCut;
+      if (ui.pasteClaim == _pasteClaim) ui.pasteClaim = _priorPaste;
+    }
     _changes?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
@@ -304,8 +389,8 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
     super.dispose();
   }
 
-  /// The Project panel's keyboard commands: rename, and the three for how
-  /// the selected footage is interpreted.
+  /// The Project panel's keyboard commands: rename, duplicate, and the
+  /// three for how the selected footage is interpreted.
   bool _onKey(KeyEvent event) {
     if (event is! KeyDownEvent || !mounted) return false;
     if (lumitModalOpen) return false;
@@ -325,6 +410,12 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
       if (_selectedIds.length != 1 || _renamingId != null) return false;
       setState(() => _renamingId = _selectedIds.first);
       return true;
+    }
+    switch (action) {
+      case 'item.duplicate':
+        if (_picked.isEmpty) return false;
+        _duplicate(_picked);
+        return true;
     }
     final footage = [
       for (final id in _visibleIds)
@@ -1368,12 +1459,7 @@ class _ProjectPanelFrbState extends State<ProjectPanelFrb> {
   /// part of it, and that row alone when it is not. The menu is about what is
   /// picked, and a right-click on an unpicked row is about that row.
   List<ItemReference> _targets(ItemReference item) =>
-      _selectedIds.contains(projectItemId(item))
-          ? [
-              for (final id in _visibleIds)
-                if (_selectedIds.contains(id)) _itemById[id],
-            ].whereType<ItemReference>().toList()
-          : [item];
+      _selectedIds.contains(projectItemId(item)) ? _picked : [item];
 
   /// Tag every selected item, or untag them with 0 — one call each, so one
   /// undo step each, which is what the engine's op is.

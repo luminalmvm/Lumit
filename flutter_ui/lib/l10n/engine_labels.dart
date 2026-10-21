@@ -1386,6 +1386,7 @@ Map<String, String> get _built => {
       "Fit the keyframes to the panel": l10n.keyFitTheKeyframesToThePanel,
       "Rename the layer": l10n.keyRenameTheLayer,
       "Rename the selected item": l10n.keyRenameTheSelectedItem,
+      "Duplicate the selected item": l10n.keyDuplicateTheSelectedItem,
       "Interpret the selected footage": l10n.keyInterpretTheSelectedFootage,
       "Remember the footage's interpretation":
           l10n.keyRememberTheFootagesInterpretation,
