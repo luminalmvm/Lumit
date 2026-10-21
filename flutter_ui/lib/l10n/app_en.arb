@@ -6318,11 +6318,11 @@
   },
   "deleteInUseTitle": "Delete items in use",
   "@deleteInUseTitle": {
-    "description": "Title of the question asked before deleting Project panel items that layers still show."
+    "description": "Title of the question asked before deleting Project panel items that compositions still use."
   },
-  "deleteInUseQuestion": "{count, plural, =1{1 layer uses this and will be deleted with it.} other{{count} layers use this and will be deleted with it.}}",
+  "deleteInUseQuestion": "{count, plural, =1{This is used once in your compositions, and that use will be deleted too.} other{This is used {count} times in your compositions, and those uses will be deleted too.}}",
   "@deleteInUseQuestion": {
-    "description": "The question asked before deleting Project panel items that layers still show. Those layers are deleted too.",
+    "description": "The question asked before deleting Project panel items that compositions still use. A use is a layer, an effect or a node graph box, and each is deleted too.",
     "placeholders": {
       "count": {
         "type": "int"

@@ -94,22 +94,22 @@ Future<List<ItemReference>> duplicateProjectItems(
 }
 
 /// Delete [items] as one undo step: the row menu's Delete and the panel's
-/// `Delete` key. A folder takes what is inside it, and when layers show any
-/// of it the question comes first, since those layers go too. Returns
+/// `Delete` key. A folder takes what is inside it, and when compositions use
+/// any of it the question comes first, since those uses go too. Returns
 /// whether anything was deleted.
 Future<bool> deleteProjectItems(
     BuildContext context, List<ItemReference> items) async {
-  var layers = 0;
+  var uses = 0;
   for (final item in items) {
     try {
-      layers += item.layersUsing();
+      uses += item.uses();
     } catch (_) {}
   }
-  if (layers > 0) {
+  if (uses > 0) {
     final go = await askLumitChoice<bool>(
       context: context,
       title: l10n.deleteInUseTitle,
-      question: l10n.deleteInUseQuestion(layers),
+      question: l10n.deleteInUseQuestion(uses),
       answers: [(l10n.delete, true)],
     );
     if (go != true || !context.mounted) return false;

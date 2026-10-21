@@ -104,7 +104,7 @@ impl ItemReference {
     }
 
     /// Delete the item as one undo step. A folder takes everything inside it,
-    /// and the layers showing any of it go too
+    /// and the layers, effects and boxes using any of it go too
     /// ([`lumit_core::ops::delete_item_ops`]).
     #[frb(sync)]
     pub fn delete(&self) -> Result<(), BridgeError> {
@@ -173,16 +173,16 @@ impl ItemReference {
         })
     }
 
-    /// How many layers a delete of this item would take with it, so the panel
-    /// can ask first.
+    /// How many uses in compositions a delete of this item would take with
+    /// it, so the panel can ask first.
     #[frb(sync)]
-    pub fn layers_using(&self) -> Result<u32, BridgeError> {
+    pub fn uses(&self) -> Result<u32, BridgeError> {
         let ops = self.delete_ops()?;
-        let layers = ops
+        let uses = ops
             .iter()
             .filter(|op| !matches!(op, lumit_core::Op::RemoveItem { .. }))
             .count();
-        Ok(u32::try_from(layers).unwrap_or(u32::MAX))
+        Ok(u32::try_from(uses).unwrap_or(u32::MAX))
     }
 
     #[frb(ignore)]

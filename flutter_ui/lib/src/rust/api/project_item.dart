@@ -36,7 +36,7 @@ sealed class ItemReference with _$ItemReference {
   ) = ItemReference_Folder;
 
   /// Delete the item as one undo step. A folder takes everything inside it,
-  /// and the layers showing any of it go too
+  /// and the layers, effects and boxes using any of it go too
   /// ([`lumit_core::ops::delete_item_ops`]).
   void delete() =>
       BridgeLib.instance.api.crateApiProjectItemItemReferenceDelete(
@@ -71,13 +71,6 @@ sealed class ItemReference with _$ItemReference {
   /// chip uses, `0` for untagged. Every item of a project saved
   /// before tags existed answers 0.
   int label() => BridgeLib.instance.api.crateApiProjectItemItemReferenceLabel(
-        that: this,
-      );
-
-  /// How many layers a delete of this item would take with it, so the panel
-  /// can ask first.
-  int layersUsing() =>
-      BridgeLib.instance.api.crateApiProjectItemItemReferenceLayersUsing(
         that: this,
       );
 
@@ -121,4 +114,10 @@ sealed class ItemReference with _$ItemReference {
   /// file.
   void setLabel({required int label}) => BridgeLib.instance.api
       .crateApiProjectItemItemReferenceSetLabel(that: this, label: label);
+
+  /// How many uses in compositions a delete of this item would take with
+  /// it, so the panel can ask first.
+  int uses() => BridgeLib.instance.api.crateApiProjectItemItemReferenceUses(
+        that: this,
+      );
 }

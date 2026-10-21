@@ -159,7 +159,7 @@ fn deleting_a_folder_takes_its_footage_and_layers_and_one_undo_restores_them() {
     };
     comp.add_footage_layer(footage, false, None, None)
         .expect("placed");
-    assert_eq!(folder.layers_using().expect("counted"), 1);
+    assert_eq!(folder.uses().expect("counted"), 1);
 
     folder.delete().expect("deleted");
     assert!(comp.get_layers().expect("layers").is_empty());

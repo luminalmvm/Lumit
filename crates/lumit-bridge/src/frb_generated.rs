@@ -42,7 +42,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 26027063;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 379562660;
 
 // Section: executor
 
@@ -11008,36 +11008,6 @@ fn wire__crate__api__project_item__item_reference_label_impl(
         },
     )
 }
-fn wire__crate__api__project_item__item_reference_layers_using_impl(
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "item_reference_layers_using",
-            port: None,
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_that = <crate::api::project_item::ItemReference>::sse_decode(&mut deserializer);
-            deserializer.end();
-            transform_result_sse::<_, BridgeError>((move || {
-                let output_ok = crate::api::project_item::ItemReference::layers_using(&api_that)?;
-                Ok(output_ok)
-            })())
-        },
-    )
-}
 fn wire__crate__api__project_item__item_reference_move_to_folder_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -11189,6 +11159,36 @@ fn wire__crate__api__project_item__item_reference_set_label_impl(
             transform_result_sse::<_, BridgeError>((move || {
                 let output_ok =
                     crate::api::project_item::ItemReference::set_label(&api_that, api_label)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__project_item__item_reference_uses_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "item_reference_uses",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::api::project_item::ItemReference>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, BridgeError>((move || {
+                let output_ok = crate::api::project_item::ItemReference::uses(&api_that)?;
                 Ok(output_ok)
             })())
         },
@@ -32407,12 +32407,12 @@ fn pde_ffi_dispatcher_sync_impl(
 300 => wire__crate__api__project_item__item_reference_equals_impl(ptr, rust_vec_len, data_len),
 301 => wire__crate__api__project_item__item_reference_is_used_impl(ptr, rust_vec_len, data_len),
 302 => wire__crate__api__project_item__item_reference_label_impl(ptr, rust_vec_len, data_len),
-303 => wire__crate__api__project_item__item_reference_layers_using_impl(ptr, rust_vec_len, data_len),
-304 => wire__crate__api__project_item__item_reference_move_to_folder_impl(ptr, rust_vec_len, data_len),
-305 => wire__crate__api__project_item__item_reference_move_to_root_impl(ptr, rust_vec_len, data_len),
-306 => wire__crate__api__project_item__item_reference_name_impl(ptr, rust_vec_len, data_len),
-307 => wire__crate__api__project_item__item_reference_rename_impl(ptr, rust_vec_len, data_len),
-308 => wire__crate__api__project_item__item_reference_set_label_impl(ptr, rust_vec_len, data_len),
+303 => wire__crate__api__project_item__item_reference_move_to_folder_impl(ptr, rust_vec_len, data_len),
+304 => wire__crate__api__project_item__item_reference_move_to_root_impl(ptr, rust_vec_len, data_len),
+305 => wire__crate__api__project_item__item_reference_name_impl(ptr, rust_vec_len, data_len),
+306 => wire__crate__api__project_item__item_reference_rename_impl(ptr, rust_vec_len, data_len),
+307 => wire__crate__api__project_item__item_reference_set_label_impl(ptr, rust_vec_len, data_len),
+308 => wire__crate__api__project_item__item_reference_uses_impl(ptr, rust_vec_len, data_len),
 310 => wire__crate__api__keymap__keymap_break_handles_impl(ptr, rust_vec_len, data_len),
 311 => wire__crate__api__keymap__keymap_conflicts_impl(ptr, rust_vec_len, data_len),
 313 => wire__crate__api__keymap__keymap_groups_impl(ptr, rust_vec_len, data_len),

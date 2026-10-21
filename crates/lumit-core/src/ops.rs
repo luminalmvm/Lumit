@@ -2830,11 +2830,17 @@ pub fn move_to_folder_ops(doc: &Document, item: Uuid, folder: Uuid) -> Option<Ve
 }
 
 /// The ops that delete `item`: a folder takes everything filed inside it, and
-/// every layer showing a deleted item goes too, so no layer is left pointing
-/// at nothing. A Sequence layer only loses the clips that name one, and goes
-/// once it has none left. None when `item` is not in the project.
+/// whatever uses a deleted item goes too, so nothing is left pointing at
+/// nothing. That is every layer showing one, every Node graph effect applying
+/// one, and every box reading or applying one. A Sequence layer only loses
+/// the clips that name one, and goes once it has none left. None when `item`
+/// is not in the project.
 #[must_use]
 pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
+    use crate::comp_graph::GraphNode;
+    use crate::model::{applies_graph, layer_names_item, EffectInstance, LayerKind};
+    use crate::sequence::ClipSource;
+
     doc.item(item)?;
     let mut gone = vec![item];
     let mut next = 0;
@@ -2848,6 +2854,13 @@ pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
         }
         next += 1;
     }
+    let applies = |e: &EffectInstance| gone.iter().any(|id| applies_graph(e, *id));
+    let kept_effects = |effects: &[EffectInstance]| -> Option<Vec<EffectInstance>> {
+        effects
+            .iter()
+            .any(&applies)
+            .then(|| effects.iter().filter(|e| !applies(e)).cloned().collect())
+    };
 
     let mut ops = Vec::new();
     for comp in doc.items.iter().filter_map(|i| match i {
@@ -2855,37 +2868,75 @@ pub fn delete_item_ops(doc: &Document, item: Uuid) -> Option<Vec<Op>> {
         _ => None,
     }) {
         for layer in &comp.layers {
-            if let crate::model::LayerKind::Sequence { clips } = &layer.kind {
+            let removed = if let LayerKind::Sequence { clips } = &layer.kind {
                 let kept: Vec<_> = clips
                     .iter()
                     .filter(|c| {
-                        let (crate::sequence::ClipSource::Footage(id)
-                        | crate::sequence::ClipSource::Comp(id)) = &c.source;
+                        let (ClipSource::Footage(id) | ClipSource::Comp(id)) = &c.source;
                         !gone.contains(id)
                     })
                     .cloned()
                     .collect();
-                if kept.len() == clips.len() {
-                    continue;
-                }
-                if !kept.is_empty() {
+                if !kept.is_empty() && kept.len() < clips.len() {
                     ops.push(Op::SetSequenceClips {
                         comp: comp.id,
                         layer: layer.id,
-                        clips: kept,
+                        clips: kept.clone(),
                     });
-                    continue;
                 }
-            } else if !gone
-                .iter()
-                .any(|id| crate::model::layer_names_item(layer, *id))
-            {
-                continue;
+                kept.is_empty() && !clips.is_empty()
+            } else {
+                gone.iter().any(|id| layer_names_item(layer, *id))
+            };
+            if removed {
+                ops.push(Op::RemoveLayer {
+                    comp: comp.id,
+                    layer: layer.id,
+                });
+            } else if let Some(effects) = kept_effects(&layer.effects) {
+                ops.push(Op::SetLayerEffects {
+                    comp: comp.id,
+                    layer: layer.id,
+                    effects,
+                });
             }
-            ops.push(Op::RemoveLayer {
-                comp: comp.id,
-                layer: layer.id,
-            });
+        }
+        for group in &comp.groups {
+            if let Some(effects) = kept_effects(&group.effects) {
+                ops.push(Op::SetGroupEffects {
+                    comp: comp.id,
+                    group: group.id,
+                    effects,
+                });
+            }
+        }
+        if let Some(graph) = &comp.graph {
+            let doomed: Vec<Uuid> = graph
+                .nodes
+                .iter()
+                .filter(|n| match n {
+                    GraphNode::Read { item, .. } => gone.contains(item),
+                    GraphNode::Fx(inst) => applies(inst),
+                    _ => false,
+                })
+                .map(GraphNode::id)
+                .collect();
+            if !doomed.is_empty() {
+                let mut graph = graph.clone();
+                graph.nodes.retain(|n| !doomed.contains(&n.id()));
+                graph
+                    .edges
+                    .retain(|e| !doomed.contains(&e.from) && !doomed.contains(&e.to));
+                graph.layout.retain(|(id, _)| !doomed.contains(id));
+                graph.exposed.retain(|id| !doomed.contains(id));
+                for wash in &mut graph.groups {
+                    wash.members.retain(|id| !doomed.contains(id));
+                }
+                ops.push(Op::SetCompGraph {
+                    comp: comp.id,
+                    graph: Box::new(graph),
+                });
+            }
         }
     }
     ops.extend(gone.into_iter().map(|id| Op::RemoveItem { id }));
