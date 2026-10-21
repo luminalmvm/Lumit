@@ -1680,7 +1680,10 @@ class _TimelinePanelFrbState extends State<TimelinePanelFrb>
       final outFrame = frameOfTime(span.outPoint, fpsNum, fpsDen);
       final delta = clampBarDelta(
         grab: grab,
-        delta: frame - (atIn ? inFrame : outFrame),
+        // The out point is the frame after the last one shown, so the end
+        // lands a frame past the playhead and keeps the playhead's frame, as
+        // After Effects does.
+        delta: atIn ? frame - inFrame : frame + 1 - outFrame,
         inFrame: inFrame,
         outFrame: outFrame,
         bounds: _barBounds[entry.layer.internallayerId.toString()] ??
