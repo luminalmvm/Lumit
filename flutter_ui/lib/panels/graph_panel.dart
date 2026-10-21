@@ -3678,7 +3678,10 @@ class _GraphPainter extends CustomPainter {
     }
 
     if (flight case final f?) {
-      _wire(canvas, f.from.at, f.to, dragged, dashes: true);
+      // A wire drawn out of an input runs the other way, pointer to socket,
+      // so it leaves the input heading left as a stored wire would.
+      final (a, b) = f.from.isInput ? (f.to, f.from.at) : (f.from.at, f.to);
+      _wire(canvas, a, b, dragged, dashes: true);
     }
   }
 
