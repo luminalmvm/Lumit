@@ -921,6 +921,7 @@ Seed from
 Segment
 Segment length
 Segments
+Semicircle
 Sensitivity
 Sensor
 Sepia
@@ -962,6 +963,7 @@ Slide
 Slider
 Slider control
 Smooth
+Smooth noise
 Smudges
 Soft colour
 Soft light
@@ -1111,6 +1113,7 @@ Two points
 Two-way strike
 Type
 Ultra
+Uncircle
 Uncoated
 Underwater
 Uniform

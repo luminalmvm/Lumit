@@ -4097,7 +4097,7 @@
   },
   "fxNoise": "Noise",
   "@fxNoise": {
-    "description": "Effect controls — the name of an effect."
+    "description": "Effect controls — the name of an effect., and a Wave type option on Wave warp."
   },
   "fxNoiseType": "Noise type",
   "@fxNoiseType": {
@@ -10415,6 +10415,18 @@
   },
   "fxCircle": "Circle",
   "@fxCircle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSemicircle": "Semicircle",
+  "@fxSemicircle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxUncircle": "Uncircle",
+  "@fxUncircle": {
+    "description": "Effect controls — a Wave type option on Wave warp."
+  },
+  "fxSmoothNoise": "Smooth noise",
+  "@fxSmoothNoise": {
     "description": "Effect controls — a Wave type option on Wave warp."
   },
   "fxColourEdge": "Colour edge",

@@ -19,7 +19,7 @@ struct Params {
     turns: f32,            // Phase / 360, in whole waves
     inv_pin_band: f32,     // 1 / |Wave height|
     mix_amt: f32,          // 0..1, blended against the unprocessed input
-    shape: u32,            // 0 Sine, 1 Square, 2 Triangle, 3 Sawtooth, 4 Circle
+    shape: u32,            // 0 Sine .. 8 Smooth noise, as cpu::wave_shape
     matte_on: f32,         // 1 = the matte scales Wave height
     _pad1: u32,
 };
@@ -44,7 +44,24 @@ fn matte_k(xy: vec2<i32>) -> f32 {
 
 const TAU: f32 = 6.2831855;
 
-// == cpu::wave_shape: the five shapes, each running -1..1 over one whole wave.
+// == lumit_core::fx::splitmix32.
+fn splitmix32(xin: u32) -> u32 {
+    var x = xin;
+    x = x + 0x9e3779b9u;
+    x = x ^ (x >> 16u);
+    x = x * 0x21f0aaadu;
+    x = x ^ (x >> 15u);
+    x = x * 0x735a2d97u;
+    x = x ^ (x >> 15u);
+    return x;
+}
+
+// == cpu::wave_knot.
+fn wave_knot(k: i32) -> f32 {
+    return f32(splitmix32(bitcast<u32>(k)) >> 8u) / 8388608.0 - 1.0;
+}
+
+// == cpu::wave_shape: the nine shapes, each running -1..1 over one whole wave.
 fn wave_shape(shape: u32, t: f32) -> f32 {
     let f = t - floor(t);
     if (shape == 1u) {
@@ -63,6 +80,23 @@ fn wave_shape(shape: u32, t: f32) -> f32 {
         let u = 2.0 * (b - floor(b)) - 1.0;
         let arc = sqrt(max(1.0 - u * u, 0.0));
         return select(-arc, arc, f < 0.5);
+    }
+    if (shape == 5u || shape == 6u) {
+        // One arch a wave, all on one side. Uncircle is it upside down.
+        let u = 2.0 * f - 1.0;
+        let arch = 2.0 * sqrt(max(1.0 - u * u, 0.0)) - 1.0;
+        return select(-arch, arch, shape == 5u);
+    }
+    if (shape == 7u || shape == 8u) {
+        // A random height every half wave, joined straight or eased.
+        let s = 2.0 * t;
+        let k = floor(s);
+        var g = s - k;
+        if (shape == 8u) {
+            g = g * g * (3.0 - 2.0 * g);
+        }
+        let a = wave_knot(i32(k));
+        return a + (wave_knot(i32(k) + 1) - a) * g;
     }
     return sin(TAU * t);
 }
