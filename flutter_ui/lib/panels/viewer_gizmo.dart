@@ -1646,6 +1646,14 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
       widget.tool == ToolMode.penDeleteVertex ||
       widget.tool == ToolMode.penConvertVertex;
 
+  /// Ctrl+Alt (Cmd+Option on a Mac) with the Selection tool is Convert
+  /// vertex for the click, as in After Effects.
+  bool get _convertChord {
+    final keys = HardwareKeyboard.instance;
+    return _selectionTool &&
+        (keys.isControlPressed || keys.isMetaPressed) &&
+        keys.isAltPressed;
+  }
 
   /// Whether this is the view the keys and the double-click belong to. Every
   /// view on screen hears a key, and only one of them may answer it.
@@ -2052,7 +2060,7 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     if (_pick3d(details.localPosition) != null) return;
     final shift = HardwareKeyboard.instance.isShiftPressed;
     if (widget.showControls &&
-        _vertexTool &&
+        (_vertexTool || _convertChord) &&
         _vertexToolTap(details.localPosition)) {
       return;
     }
@@ -2351,10 +2359,10 @@ class _ViewerGizmoLayerState extends State<ViewerGizmoLayer> {
     // Convert vertex drags a handle on its own, or pulls a pair out of a
     // point. The other two tools only click, and none of the three moves a
     // layer or sweeps a marquee.
-    if (_vertexTool) {
-      if (!widget.showControls || widget.tool != ToolMode.penConvertVertex) {
-        return;
-      }
+    final converting =
+        widget.tool == ToolMode.penConvertVertex || _convertChord;
+    if (_vertexTool || (converting && aimedAt != null)) {
+      if (!widget.showControls || !converting) return;
       final handle =
           pathHandleAt(_editablePointBoxes, at, _points, only: only);
       if (handle != null) {
