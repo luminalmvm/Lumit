@@ -46,6 +46,7 @@ import 'package:lumit_flutter/src/rust/api/graph.dart';
 import 'package:lumit_flutter/src/rust/api/layer.dart';
 import 'package:lumit_flutter/src/rust/api/project.dart';
 import 'package:lumit_flutter/src/rust/api/project_item.dart';
+import 'package:lumit_flutter/src/rust/api/track.dart' show fireEffectAction;
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -57,17 +58,28 @@ import '../l10n/strings.dart';
 import '../shell/fx_console_frb.dart';
 import '../state/dock.dart';
 import '../state/drag_payloads.dart';
+import '../state/preview_throttle.dart';
 import '../state/settings.dart' show InterfaceSettings;
+import '../state/timeline_columns.dart' show ValueColumn;
 import '../theme/theme.dart';
 import '../widgets/controls.dart';
 import '../widgets/marquee.dart';
-import 'comp_graph_panel.dart' show CompGraphPanel;
+import 'comp_graph_panel.dart' show CompBoxRows, CompGraphPanel, compBoxRows;
+import 'effect_param_row_frb.dart'
+    show
+        EffectParamRowFrb,
+        EffectStackEditor,
+        cachedListParameters,
+        relistedRows,
+        withChained;
 import 'graph_groups.dart';
 import 'fx_section.dart' show fxEnableMark, fxEnableMarkScale;
 import 'layer_fold_frb.dart' show effectPath;
+import 'lens_window.dart' show pressLensButton;
 import '../state/share.dart';
 import 'placeholder.dart';
-import 'shader_editor.dart' show InstanceHome;
+import 'shader_editor.dart'
+    show InstanceHome, editExpressionOn, pressShaderButton;
 import 'shader_graph.dart' show ShaderGraphPanel, ShaderGraphThumb;
 import 'timeline_extras_frb.dart' show DoubleTap;
 import 'viewer_tool_cursor.dart' show handPanLayer;
@@ -750,12 +762,14 @@ class GraphLayout {
 /// A **driver** draws every socket it has: the box is small, and its ports are
 /// the whole of what it is for. An **effect** draws the picture's own sockets
 /// always, and a parameter socket when a wire is on it or when the box is
-/// twirled open.
+/// twirled open. An open box draws a control on each of its [params] rows, as
+/// a node graph composition's does.
 GraphLayout _layoutOf(
   BridgeLayerGraph graph,
   Map<String, Offset> positions,
   Set<String> exposed,
   String layerName,
+  Map<String, CompBoxRows> params,
 ) {
   final boxes = <GraphBox>[];
   var chain = 0;
@@ -764,9 +778,13 @@ GraphLayout _layoutOf(
     final key = graphNodeKey(node.node);
     final isDriver = node.node is BridgeNodeRef_Driver;
     final derived = _derivedNode(node.node);
-    final placed =
-        positions[key] ?? graphAutoPlace(isDriver ? drivers : chain, lower: isDriver);
+    final placed = positions[key] ??
+        graphAutoPlace(isDriver ? drivers : chain,
+            lower: isDriver, width: graphNodeOpenWidth);
     isDriver ? drivers++ : chain++;
+    final open = exposed.contains(key) || isDriver;
+    final rows =
+        open ? params[key]?.rows ?? const <BridgeParamInfo>[] : const [];
     boxes.add(graphLayoutBox(
       (
         key: key,
@@ -785,9 +803,13 @@ GraphLayout _layoutOf(
         noStream: graphNoStream(node),
       ),
       placed,
-      open: exposed.contains(key) || isDriver,
-      width:
-          node.node is BridgeNodeRef_Out ? graphOutNodeWidth : graphNodeWidth,
+      open: open,
+      params: [for (final p in rows) p.id],
+      width: node.node is BridgeNodeRef_Out
+          ? graphOutNodeWidth
+          : rows.isEmpty
+              ? graphNodeWidth
+              : graphNodeOpenWidth,
       foot: node.matchName == 'custom_shader' ? graphShaderFoot : 0,
     ));
   }
@@ -1009,6 +1031,19 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   /// not in it.
   Map<String, BridgeGraphNode> _byKey = const {};
 
+  /// Each effect and driver box's instance, and the rows it draws when open,
+  /// read beside the graph and never in a build.
+  Map<String, BridgeEffectInstanceInfo> _infos = const {};
+  Map<String, CompBoxRows> _params = const {};
+
+  /// A drag on an effect box's control: staged, previewed, committed on
+  /// release as one op, as the Node panel's is.
+  final EffectStackEditor _stack = EffectStackEditor();
+
+  /// The same for a driver box, whose commit is `setGraph`.
+  ({String key, Map<String, BridgeEffectValue> values})? _driverDrag;
+  final PreviewThrottle _driverPreview = PreviewThrottle();
+
   /// The layer's name, taken at the same moment, so the Source box can be
   /// headed without asking the model during a paint.
   String _layerName = '';
@@ -1175,6 +1210,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _positions,
       graph.wiring.exposed.map(graphNodeKey).toSet(),
       _layerName,
+      _params,
     ).boxes;
   }
 
@@ -1302,6 +1338,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
   @override
   void dispose() {
     _unbind();
+    // A held tick would fire into a panel that is gone.
+    _driverPreview.cancel();
+    _stack.clear();
     _canvasFocus.dispose();
     super.dispose();
   }
@@ -1313,11 +1352,36 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     BridgeLayerGraph? graph;
     var notes = const <BridgeGraphNote>[];
     var name = '';
+    final infos = <String, BridgeEffectInstanceInfo>{};
+    final params = <String, CompBoxRows>{};
     if (layer != null) {
       try {
         graph = layer.getGraph();
         notes = layer.getGraphNotes();
         name = layer.getInfo().name;
+        // The rows an open box draws, by the Effect controls panel's rules.
+        void read(BridgeNodeRef node, BridgeEffectInstance instance) {
+          final key = graphNodeKey(node);
+          final info = instance.getInfo();
+          infos[key] = info;
+          params[key] = compBoxRows(
+            info.name,
+            relistedRows(
+              [...cachedListParameters(info.name), ...info.derivedParams],
+              info.rowOptions,
+            ),
+            {for (final v in info.values) v.id: v.value},
+            info.hiddenRows.toSet(),
+            info.disabledRows,
+          );
+        }
+
+        for (final instance in layer.getEffects()) {
+          read(BridgeNodeRef.effect(instance.id()), instance);
+        }
+        for (final instance in layer.getGraphDrivers()) {
+          read(BridgeNodeRef.driver(instance.id()), instance);
+        }
       } catch (_) {
         // The layer has gone since the selection was made; the placeholder is
         // the honest answer until the selection catches up.
@@ -1327,6 +1391,9 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
     setState(() {
       _layer = layer;
       _graph = graph;
+      _infos = infos;
+      _params = params;
+      _driverDrag = null;
       _notes = graph == null ? const [] : notes;
       _byKey = {
         for (final n in graph?.nodes ?? const <BridgeGraphNode>[])
@@ -1345,6 +1412,189 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
         _publishPick();
       }
     });
+  }
+
+  // --- A box's own controls -----------------------------------------------
+
+  /// One parameter row on an open box: the Node panel's row, committed and
+  /// previewed the way that panel's edit is.
+  Widget _paramRow(String key, String param) {
+    final layer = _layer;
+    final ui = _ui;
+    final comp = ui?.selectedComp;
+    final info = _infos[key];
+    final held = _params[key];
+    final p = held?.rows.where((p) => p.id == param).firstOrNull;
+    if (layer == null ||
+        ui == null ||
+        comp == null ||
+        info == null ||
+        held == null ||
+        p == null) {
+      return const SizedBox.shrink();
+    }
+    final driver = key.startsWith('driver:');
+    final values = {for (final v in info.values) v.id: v.value};
+    final drag = _driverDrag;
+    BridgeEffectValue? valueOf(String id) =>
+        (driver
+            ? (drag?.key == key ? drag!.values[id] : null)
+            : _stack.stagedValue(info.id, id)) ??
+        values[id];
+    Map<String, BridgeEffectValue> chained(
+            String param, BridgeEffectValue value) =>
+        withChained(info, param, value, comp, ui.playheadFrame.value);
+    return EffectParamRowFrb(
+      key: ValueKey<String>('graph-row-$key-$param'),
+      effectId: info.id,
+      param: p,
+      value: valueOf(param),
+      comp: comp,
+      ownerLayerId: layer.internallayerId,
+      ownerLayers: ui.model.layers,
+      playheadFrame: ui.playheadFrame.value,
+      onSeek: (frame) => ui.playheadFrame.value = frame,
+      onWrite: (_, param, value) =>
+          _writeParams(key, info, chained(param, value)),
+      onLive: (_, param, value) =>
+          _liveParams(key, info, chained(param, value)),
+      rowPadding: EdgeInsets.zero,
+      valueColumn: const ValueColumn(graphControlColumn, graphRowInset),
+      siblings: values,
+      // Greyed where another control has taken the row over.
+      enabled: !held.disabled.contains(param),
+      riders: [
+        for (final r in held.riders[param] ?? const <BridgeParamInfo>[])
+          (r, valueOf(r.id)),
+      ],
+      onAction: (effect, param) => _pressParam(info, driver, effect, param),
+    );
+  }
+
+  /// The layer's drivers, freshly read, with [values] written into one of
+  /// them: what a driver box's preview and commit both send.
+  List<BridgeEffectInstance> _driversWith(LayerReference layer, UuidValue node,
+      Map<String, BridgeEffectValue> values) {
+    final drivers = layer.getGraphDrivers();
+    for (final instance in drivers) {
+      if (instance.id() != node) continue;
+      for (final entry in values.entries) {
+        instance.setValue(id: entry.key, value: entry.value);
+      }
+    }
+    return drivers;
+  }
+
+  /// A typed value, or the release of a drag: one op, one undo step.
+  void _writeParams(String key, BridgeEffectInstanceInfo info,
+      Map<String, BridgeEffectValue> values) {
+    final layer = _layer;
+    if (layer == null) return;
+    if (key.startsWith('driver:')) {
+      _driverPreview.cancel();
+      final List<BridgeEffectInstance> drivers;
+      try {
+        drivers = _driversWith(layer, info.id, values);
+      } catch (_) {
+        return;
+      }
+      _commit(_wiringNow(), drivers: drivers);
+      return;
+    }
+    _stack.writeAll(layer, info.id, values);
+    _ui?.model.refresh();
+  }
+
+  /// A drag tick: the row shows it and the Viewer previews it, and nothing is
+  /// committed.
+  void _liveParams(String key, BridgeEffectInstanceInfo info,
+      Map<String, BridgeEffectValue> values) {
+    final ui = _ui;
+    final layer = _layer;
+    final comp = ui?.selectedComp;
+    if (ui == null || layer == null || comp == null) return;
+    if (key.startsWith('driver:')) {
+      setState(() => _driverDrag = (key: key, values: values));
+      _driverPreview.request(() {
+        try {
+          comp.renderFrameWithDriverPreview(
+            frame: BigInt.from(ui.playheadFrame.value),
+            scale: ui.viewerScale,
+            layer: layer,
+            drivers: _driversWith(layer, info.id, values),
+          );
+        } catch (_) {
+          // The graph moved under the drag; the release re-reads.
+        }
+      });
+      return;
+    }
+    setState(() {
+      for (final entry in values.entries) {
+        _stack.live(comp, layer, info.id, entry.key, entry.value,
+            frame: ui.playheadFrame.value, scale: ui.viewerScale);
+      }
+    });
+  }
+
+  /// A press on one of a box's buttons, the same press Effect controls and the
+  /// Node panel make.
+  void _pressParam(BridgeEffectInstanceInfo info, bool driver,
+      UuidValue effect, String param) {
+    final ui = _ui;
+    final layer = _layer;
+    if (ui == null || layer == null) return;
+    final comp = ui.selectedComp;
+    final frame = BigInt.from(ui.playheadFrame.value);
+    final home = driver
+        ? InstanceHome.drivers(layer)
+        : InstanceHome.layer(layer,
+            draw: comp == null
+                ? null
+                : (staged) => comp.renderFrameWithPreview(
+                    frame: frame,
+                    scale: ui.viewerScale,
+                    layer: layer,
+                    effects: staged));
+    void applied() => ui.model.refresh();
+    if (info.name == 'expression' &&
+        editExpressionOn(
+            context: context,
+            home: home,
+            effect: effect,
+            param: param,
+            onApplied: applied)) {
+      return;
+    }
+    if (info.name == 'custom_shader' &&
+        pressShaderButton(
+            context: context,
+            home: home,
+            effect: effect,
+            param: param,
+            onApplied: applied)) {
+      return;
+    }
+    if (pressLensButton(
+        context: context,
+        home: home,
+        effect: effect,
+        param: param,
+        onApplied: applied)) {
+      return;
+    }
+    if (info.name == 'node_graph' && param == 'open') {
+      final project = Provider.of<LumitState>(context, listen: false).project;
+      final inner = graphCompById(project, info.nodeGraphComp);
+      if (inner != null) ui.setSelectedComp(inner);
+      return;
+    }
+    if (driver) return;
+    try {
+      fireEffectAction(layer: layer, effect: effect, param: param, frame: frame);
+    } catch (_) {
+      // Refused; the effect's own status line says why.
+    }
   }
 
   // --- Committing ---------------------------------------------------------
@@ -2813,6 +3063,7 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
       _positions,
       graph.wiring.exposed.map(graphNodeKey).toSet(),
       _layerName,
+      _params,
     );
     _boxRects = {for (final box in layout.boxes) box.key: box.rect};
 
@@ -3054,6 +3305,8 @@ class _GraphPanelFrbState extends State<GraphPanelFrb>
                                   onRenameCancelled: () =>
                                       setState(() => _renamingNode = null),
                                   foot: _shaderThumb(box.key),
+                                  paramRow: (param) =>
+                                      _paramRow(box.key, param),
                                   snap: _flight?.snap?.node == box.key
                                       ? _flight!.snap
                                       : null,
