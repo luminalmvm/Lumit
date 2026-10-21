@@ -139,8 +139,10 @@ impl Space {
         Some(self.world.invert()?.point(p))
     }
 
-    /// On the picture. A 3D layer's third number is its depth in front of the
-    /// plane the camera sees 1:1. A 2D layer's is nought.
+    /// On the picture. A 3D layer's third number is After Effects' own,
+    /// `zoom · (1 − 1/z)` with `z` how far ahead of the eye along the view
+    /// ([`camera::project_depth`]), and plain z with no camera. A 2D layer's
+    /// is nought.
     fn to_comp(&self, p: P3) -> P3 {
         let w = self.world.point(p);
         match &self.camera {
@@ -149,7 +151,8 @@ impl Space {
         }
     }
 
-    /// Back off the picture. A 2D layer ignores the third number, since all
+    /// Back off the picture. A third number of nought, or none, is one pixel
+    /// ahead of the eye, as in After Effects. A 2D layer ignores it, since all
     /// of it is on the comp's plane.
     fn comp_to_layer(&self, p: P3) -> Option<P3> {
         Some(match &self.camera {
@@ -194,11 +197,32 @@ impl Space {
         ))
     }
 
-    fn to_comp_vec(&self, v: P3) -> P3 {
-        sub(self.to_comp(v), self.to_comp((0.0, 0.0, 0.0)))
+    /// Through a camera After Effects carries a direction the way a surface's
+    /// facing is carried, by the inverse transpose of its whole projection,
+    /// so the third number says whether the layer faces the eye. Here `n` is
+    /// the layer in the camera's frame and `b` where its origin sits there.
+    fn to_comp_vec(&self, v: P3) -> Option<P3> {
+        let Some((pose, _, _)) = &self.camera else {
+            return Some(sub(self.to_comp(v), self.to_comp((0.0, 0.0, 0.0))));
+        };
+        let n = self.world.within(&camera::eye_frame(pose));
+        let back = n.invert()?.m;
+        let at = |c: usize| back[0][c] * v.0 + back[1][c] * v.1 + back[2][c] * v.2;
+        let u = (at(0), at(1), at(2));
+        let b = n.t;
+        Some((u.0, u.1, b.0 * u.0 + b.1 * u.1 + b.2 * u.2))
     }
 
+    /// After Effects' way back is the projection's own transpose, which is
+    /// not quite the inverse of [`Self::to_comp_vec`].
     fn comp_vec_to_layer(&self, v: P3) -> Option<P3> {
+        if let Some((pose, width, height)) = &self.camera {
+            let m = self.world.within(&camera::eye_frame(pose)).m;
+            let z = pose.zoom.max(1e-9);
+            let q = (v.0, v.1, v.2 + (v.0 * width + v.1 * height) * 0.5 / z);
+            let at = |c: usize| m[0][c] * q.0 + m[1][c] * q.1 + m[2][c] * q.2;
+            return Some((at(0), at(1), at(2)));
+        }
         let origin = self.to_comp((0.0, 0.0, 0.0));
         let at = (origin.0 + v.0, origin.1 + v.1, origin.2 + v.2);
         Some(sub(self.comp_to_layer(at)?, self.comp_to_layer(origin)?))
@@ -238,7 +262,7 @@ impl Space {
             Way::FromComp => self.comp_to_layer(p)?,
             Way::ToWorld => self.to_world(p),
             Way::FromWorld => self.world_to_layer(p)?,
-            Way::ToCompVec => self.to_comp_vec(p),
+            Way::ToCompVec => self.to_comp_vec(p)?,
             Way::FromCompVec => self.comp_vec_to_layer(p)?,
             Way::ToWorldVec => self.to_world_vec(p),
             Way::FromWorldVec => self.world_vec_to_layer(p)?,

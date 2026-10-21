@@ -136,18 +136,21 @@ thisComp.layer("Marker").toComp([0, 0, 0]) // on Position X and Y, pin a 2D laye
 A 3D layer's, a camera's and a light's `position`, `anchorPoint`, `scale` and `orientation`
 are three numbers. `orientation` reads the turn between keys as the picture has it.
 `lookAt(from, to)` gives the Orientation that points a layer's z axis from one point at the
-other, with no turn about z.
+other, rolled so the layer's x axis stays level.
 
 - **`toComp`** carries a point in the layer's own pixels to the picture. A 3D layer is
-  seen through the active camera, and the third number is its depth in front of the
-  plane the camera sees at full size. A 2D layer gives as many numbers as it was given,
-  and ignores the camera.
-- **`fromComp`** goes back. A point with no third number is taken at that plane.
+  seen through the active camera, and the third number is After Effects' own:
+  zoom × (1 − 1 / depth), with depth the distance ahead of the camera along its view.
+  A 2D layer gives as many numbers as it was given, and ignores the camera.
+- **`fromComp`** goes back. A point with no third number, or a third number of 0, is
+  taken one pixel ahead of the camera.
 - **`fromCompToSurface`** gives the point on the layer's own plane that the picture shows
   there.
 - **`toWorld`** and **`fromWorld`** carry a point to and from the composition's 3D space,
   parents and all, with no camera.
-- **The `Vec` forms** carry a direction rather than a point.
+- **The `Vec` forms** carry a direction rather than a point. Through a camera they follow
+  After Effects: the third number of `toCompVec([0, 0, 1])` is above 0 while the layer's
+  front faces the camera.
 
 :::note[Not yet built]
 `lookAt`, `smooth`, markers, text properties, `footage`, `new`, classes and regular

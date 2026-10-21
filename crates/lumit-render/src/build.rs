@@ -363,7 +363,8 @@ fn drawn(
 ///
 /// A parented layer's values are read inside its parent's space, so the same
 /// numbers under a new parent land somewhere else. This works out the numbers
-/// that land it where it already was: position, scale and the three rotations.
+/// that land it where it already was: position, scale and the rotation, or on
+/// a 3D layer the Orientation, its X, Y and Z Rotation staying as they are.
 /// The anchor point stays, and opacity is not inherited. A property that
 /// already reads right is left out, and so is one driven by an expression.
 ///
@@ -412,24 +413,14 @@ pub fn reparented(
     let placed = lumit_gpu::concat_place(carry, own_placement(layer, t_comp, &context));
     let mut to =
         lumit_gpu::unplace_matrix(placed, (at(&tr.anchor_x) as f32, at(&tr.anchor_y) as f32));
-    // The anchor's own z, and the layer's Orientation, stay where they are,
-    // so the position and the rotations take what they leave.
+    // The anchor's own z stays where it is, so the position takes what it
+    // leaves.
     if layer.switches.three_d {
         let a = [&tr.anchor_x, &tr.anchor_y, &tr.anchor_z].map(|p| at(p) as f32);
         let p = |r: usize| {
             placed[0][r] * a[0] + placed[1][r] * a[1] + placed[2][r] * a[2] + placed[3][r]
         };
         (to.position, to.z) = ((p(0), p(1)), p(2));
-        let orientation = tr.orientation_at(lt, &at);
-        let turn = (
-            f64::from(to.rotation_x_deg),
-            f64::from(to.rotation_y_deg),
-            f64::from(to.rotation_deg),
-        );
-        let rows = (at(&tr.rotation_x), at(&tr.rotation_y), at(&tr.rotation));
-        let (x, y, z) =
-            lumit_core::camera::unoriented(orientation, turn, tr.after_effects_order, rows);
-        (to.rotation_x_deg, to.rotation_y_deg, to.rotation_deg) = (x as f32, y as f32, z as f32);
     }
     // Scale Z stretches what is parented to the layer and how far Anchor Z
     // pushes it, so it is carried as the other two are.
@@ -444,13 +435,38 @@ pub fn reparented(
     };
     // A flip can be written two ways: one axis negative, or the other one
     // negative and half a turn. Keep the way the layer already has it.
-    let (sx, sy, rz) = if f64::from(to.scale.0) * at(&tr.scale_x) < 0.0 {
+    let (sx, sy, mut rz) = if f64::from(to.scale.0) * at(&tr.scale_x) < 0.0 {
         (-to.scale.0, -to.scale.1, to.rotation_deg + 180.0)
     } else {
         (to.scale.0, to.scale.1, to.rotation_deg)
     };
 
+    // A 3D layer keeps its rotations and its Orientation takes the turn, as
+    // After Effects does it, unless an expression drives the Orientation.
+    let reorient = layer.switches.three_d
+        && !tr
+            .orientation
+            .iter()
+            .any(|p| matches!(p.animation, lumit_core::anim::Animation::Expression(_)));
     let mut edits = Vec::new();
+    if layer.switches.three_d {
+        let orientation = tr.orientation_at(lt, &at);
+        let turn = (
+            f64::from(to.rotation_x_deg),
+            f64::from(to.rotation_y_deg),
+            f64::from(rz),
+        );
+        let rows = (at(&tr.rotation_x), at(&tr.rotation_y), at(&tr.rotation));
+        let ae_order = tr.after_effects_order;
+        if reorient {
+            let o = lumit_core::camera::reoriented(turn, rows, ae_order, orientation);
+            edits = orientation_edits(tr, orientation, o);
+        } else {
+            let (x, y, z) = lumit_core::camera::unoriented(orientation, turn, ae_order, rows);
+            (to.rotation_x_deg, to.rotation_y_deg, rz) = (x as f32, y as f32, z as f32);
+        }
+    }
+
     let mut edit = |prop: P, to: f32, turns: bool, gain: Option<f64>| {
         let Some(property) = tr.get(prop) else { return };
         let animation = made_up(property, at(property), f64::from(to), turns, gain);
@@ -461,15 +477,98 @@ pub fn reparented(
     edit(P::PositionY, to.position.1, false, along(1));
     edit(P::ScaleX, sx, false, None);
     edit(P::ScaleY, sy, false, None);
-    edit(P::Rotation, rz, true, Some(1.0));
+    if !reorient {
+        edit(P::Rotation, rz, true, Some(1.0));
+    }
     // A 2D layer's hidden 3D values are kept for when it goes 3D again.
     if layer.switches.three_d {
         edit(P::PositionZ, to.z, false, along(2));
-        edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
-        edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+        if !reorient {
+            edit(P::RotationX, to.rotation_x_deg, true, Some(1.0));
+            edit(P::RotationY, to.rotation_y_deg, true, Some(1.0));
+        }
         edit(P::ScaleZ, sz, false, None);
     }
     edits
+}
+
+/// The edits that take `tr`'s Orientation from `from` to `to` at the moment
+/// of a reparent. A still one is written as it is; a keyed one has every key
+/// turned by the same turn, so its whole move comes along, with all three
+/// angles keyed together as After Effects keys them.
+fn orientation_edits(
+    tr: &lumit_core::model::TransformGroup,
+    from: (f64, f64, f64),
+    to: (f64, f64, f64),
+) -> Vec<(
+    lumit_core::model::TransformProp,
+    lumit_core::anim::Animation,
+)> {
+    use lumit_core::anim::{Animation, Keyframe, SideInterp};
+    use lumit_core::model::TransformProp as P;
+    const AXES: [P; 3] = [P::OrientationX, P::OrientationY, P::OrientationZ];
+
+    // The f64 maths is exact well past a thousandth; past that it is noise.
+    let differs = |a: f64, b: f64| ((a - b) * 1e3).round() != 0.0;
+    if !(differs(from.0, to.0) || differs(from.1, to.1) || differs(from.2, to.2)) {
+        return Vec::new();
+    }
+    let lanes = tr.orientation.each_ref().map(|p| match &p.animation {
+        Animation::Keyframed(keys) => keys.as_slice(),
+        _ => &[],
+    });
+    let mut times: Vec<_> = lanes.iter().copied().flatten().map(|k| k.time).collect();
+    times.sort();
+    times.dedup();
+    if times.is_empty() {
+        let to = [to.0, to.1, to.2];
+        return (0..3)
+            .filter(|&i| differs(tr.orientation[i].value_at(0.0), to[i]))
+            .map(|i| (AXES[i], Animation::Static(to[i])))
+            .collect();
+    }
+    let turned: Vec<_> = times
+        .iter()
+        .map(|time| {
+            let lt = time.to_f64();
+            let o = tr.orientation_at(lt, &|p| p.value_at(lt));
+            let o = lumit_core::camera::orientation_turned(o, from, to);
+            [o.0, o.1, o.2]
+        })
+        .collect();
+    // A key an angle didn't have borrows another's ease, but not its speed,
+    // which belonged to that one angle.
+    let borrowed = |side: SideInterp| match side {
+        SideInterp::Bezier { speed, .. } if speed != 0.0 => SideInterp::Linear,
+        other => other,
+    };
+    (0..3)
+        .map(|i| {
+            let keys = times
+                .iter()
+                .zip(&turned)
+                .map(|(&time, o)| {
+                    let own = lanes[i].iter().find(|k| k.time == time);
+                    let (interp_in, interp_out) = match own {
+                        Some(k) => (k.interp_in, k.interp_out),
+                        None => lanes
+                            .iter()
+                            .find_map(|lane| lane.iter().find(|k| k.time == time))
+                            .map_or((SideInterp::Linear, SideInterp::Linear), |k| {
+                                (borrowed(k.interp_in), borrowed(k.interp_out))
+                            }),
+                    };
+                    Keyframe {
+                        time,
+                        value: o[i],
+                        interp_in,
+                        interp_out,
+                    }
+                })
+                .collect();
+            (AXES[i], Animation::Keyframed(keys))
+        })
+        .collect()
 }
 
 /// The ops that make `parent` the parent of `layer` in `comp` and keep the
@@ -515,7 +614,7 @@ pub fn parent_ops(
 }
 
 /// [`reparented`] for a camera or a light, which has no scale or anchor of its
-/// own: the eye, the rows and an aimed one's point of interest, carried
+/// own: the eye, the Orientation and an aimed one's point of interest, carried
 /// out of the old parent's space and into the new one's.
 ///
 /// As After Effects does it, every key is carried through the same two parents
@@ -560,30 +659,22 @@ fn reparented_eye(
         LayerKind::Light { light } => light.two_node,
         _ => false,
     };
-    let mut props = vec![
-        P::PositionX,
-        P::PositionY,
-        P::PositionZ,
-        P::RotationX,
-        P::RotationY,
-        P::Rotation,
-    ];
+    // The rows stay and the Orientation takes the turn, as on any 3D layer,
+    // unless an expression drives the Orientation.
+    let reorient = !layer
+        .transform
+        .orientation
+        .iter()
+        .any(|p| matches!(p.animation, Animation::Expression(_)));
+    let mut props = vec![P::PositionX, P::PositionY, P::PositionZ];
+    if reorient {
+        props.extend([P::OrientationX, P::OrientationY, P::OrientationZ]);
+    } else {
+        props.extend([P::RotationX, P::RotationY, P::Rotation]);
+    }
     if two_node {
         props.extend([P::PoiX, P::PoiY, P::PoiZ]);
     }
-    let channels: Vec<_> = props
-        .iter()
-        .filter_map(|&p| Some((p, layer.prop(p)?)))
-        .collect();
-    let keys = |property: &lumit_core::anim::Property| match &property.animation {
-        Animation::Keyframed(keys) => keys.clone(),
-        _ => Vec::new(),
-    };
-    let lanes: Vec<Vec<Keyframe>> = channels.iter().map(|(_, p)| keys(p)).collect();
-    let mut times: Vec<_> = lanes.iter().flatten().map(|k| k.time).collect();
-    times.sort();
-    times.dedup();
-
     let ae_order = layer.transform.after_effects_order;
     // Every channel's value at layer time `lt`, carried as one eye.
     let carried = |lt: f64| {
@@ -592,7 +683,6 @@ fn reparented_eye(
                 .prop(prop)
                 .map_or(0.0, |p| p.value_at_with_context(lt, context.clone()))
         };
-        // The Orientation stays as it is, and the rows take the rest.
         let o = layer
             .transform
             .orientation_at(lt, &|p| p.value_at_with_context(lt, context.clone()));
@@ -603,24 +693,76 @@ fn reparented_eye(
             point_of_interest: two_node.then(|| (at(P::PoiX), at(P::PoiY), at(P::PoiZ))),
         });
         let poi = eye.point_of_interest.unwrap_or_default();
-        let (p, r) = (
-            eye.position,
-            lumit_core::camera::unoriented(o, eye.rotation_deg, ae_order, rows),
-        );
+        let (p, r) = if reorient {
+            let o = lumit_core::camera::reoriented(eye.rotation_deg, rows, ae_order, o);
+            (eye.position, o)
+        } else {
+            let rows = lumit_core::camera::unoriented(o, eye.rotation_deg, ae_order, rows);
+            (eye.position, rows)
+        };
         [p.0, p.1, p.2, r.0, r.1, r.2, poi.0, poi.1, poi.2]
     };
     let slot = |prop: P| props.iter().position(|p| *p == prop).unwrap_or(0);
     // The f64 maths is exact well past a thousandth; past that it is noise.
     let differs = |a: f64, b: f64| ((a - b) * 1e3).round() != 0.0;
 
-    let mut edits = Vec::new();
+    let keys = |property: &lumit_core::anim::Property| match &property.animation {
+        Animation::Keyframed(keys) => keys.clone(),
+        _ => Vec::new(),
+    };
+    let times_of = |props: &[P]| {
+        let mut times: Vec<_> = props
+            .iter()
+            .filter_map(|&p| layer.prop(p))
+            .flat_map(keys)
+            .map(|k| k.time)
+            .collect();
+        times.sort();
+        times.dedup();
+        times
+    };
+    // Where the carry turns every key alike, which it does unless an aim or a
+    // stretched parent bends it, the Orientation keeps its own keys and a
+    // still one stays still.
+    let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
+    let read_o = |lt: f64| {
+        layer
+            .transform
+            .orientation_at(lt, &|p| p.value_at_with_context(lt, context.clone()))
+    };
+    let (from, to) = {
+        let v = carried(lt);
+        (read_o(lt), (v[3], v[4], v[5]))
+    };
+    let mut all = props.clone();
+    all.extend([P::RotationX, P::RotationY, P::Rotation]);
+    let alike = reorient
+        && times_of(&all).iter().all(|time| {
+            let (lt, v) = (time.to_f64(), carried(time.to_f64()));
+            let want = lumit_core::camera::orientation_turned(read_o(lt), from, to);
+            lumit_core::camera::turn_between_deg((v[3], v[4], v[5]), want) < 1e-3
+        });
+    let mut edits = if alike {
+        orientation_edits(&layer.transform, from, to)
+    } else {
+        Vec::new()
+    };
+    let channels: Vec<_> = props
+        .iter()
+        .filter(|p| !(alike && matches!(p, P::OrientationX | P::OrientationY | P::OrientationZ)))
+        .filter_map(|&p| Some((p, layer.prop(p)?)))
+        .collect();
+    let lanes: Vec<Vec<Keyframe>> = channels.iter().map(|(_, p)| keys(p)).collect();
+    let mut times: Vec<_> = lanes.iter().flatten().map(|k| k.time).collect();
+    times.sort();
+    times.dedup();
+
     if times.is_empty() {
-        let lt = lumit_core::time::layer_time(t_comp, layer.start_offset.0);
-        let to = carried(lt);
+        let now = carried(lt);
         for (prop, property) in &channels {
             if let Animation::Static(v) = property.animation {
-                if differs(v, to[slot(*prop)]) {
-                    edits.push((*prop, Animation::Static(to[slot(*prop)])));
+                if differs(v, now[slot(*prop)]) {
+                    edits.push((*prop, Animation::Static(now[slot(*prop)])));
                 }
             }
         }
@@ -1634,6 +1776,9 @@ struct Walk<'a> {
     /// over a Precomp that holds an Echo builds the whole of the inside once
     /// for every frame of both windows, only to throw it away.
     rebuild: bool,
+    /// The camera a collapsed precomp's layers are seen through, the one of
+    /// the comp it was collapsed into. `None` is this comp's own.
+    seen_through: Option<lumit_core::model::CameraPose>,
 }
 
 impl Walk<'static> {
@@ -1642,6 +1787,7 @@ impl Walk<'static> {
         clone: lumit_core::fx::drivers::NO_CLONE,
         values: &[],
         rebuild: false,
+        seen_through: None,
     };
 }
 
@@ -1700,6 +1846,7 @@ pub fn late_clone_pictures(
             clone: spec.clone,
             values: &[],
             rebuild: false,
+            seen_through: None,
         },
         Some(&mut probe),
     );
@@ -1735,10 +1882,15 @@ fn comp_walk(
     // The copy this walk renders its layers as, and what it hands the comps
     // it walks into.
     let clone_number = with.clone;
+    let seen_through = with
+        .seen_through
+        .filter(|_| spliced)
+        .unwrap_or_else(|| crate::track::camera_pose(doc, comp, t_comp));
     let inner = Walk {
         clone: clone_number,
         values: &[],
         rebuild: with.rebuild,
+        seen_through: Some(seen_through),
     };
     // A nested frame's name says nothing of which copy it is, so a numbered
     // copy is never named and never served from the nested store.
@@ -2727,6 +2879,7 @@ fn comp_walk(
                             clone: p.clone.unwrap_or(clone_number),
                             values: &[],
                             rebuild: with.rebuild,
+                            seen_through: None,
                         },
                         Some(&mut probe),
                     );
@@ -4383,7 +4536,18 @@ fn comp_walk(
             three_d: layer.switches.three_d,
             ends_run: false,
             matte,
-            blend: blend_of(layer.blend),
+            // A layer showing only its shadows multiplies them into what is
+            // under it, so a coloured one tints it and never brightens it.
+            blend: match layer.blend {
+                lumit_core::model::BlendMode::Normal
+                    if layer.switches.three_d
+                        && layer.transform.material.accepts_shadows
+                            == lumit_core::model::ShadowMode::Only =>
+                {
+                    lumit_gpu::Blend::Multiply
+                }
+                b => blend_of(b),
+            },
             mask_cov: match &layer.kind {
                 // A comp has no pixels for a mask to be cut into, a
                 // composition clip's as much as a Precomp layer's.
@@ -4454,7 +4618,34 @@ fn comp_walk(
     if let Some((_, group, mark)) = open_unit {
         wrap_unit(&mut draws, mark, group);
     }
+    // A plain solid is a flat 8 x 8 tile stretched to size, with no outline
+    // for the camera's depth of field to blur, so a 3D one under it is drawn
+    // at its own size. A collapsed precomp's are done here once placed.
+    if !spliced && seen_through.dof.is_some() {
+        for d in draws.iter_mut().filter(|d| d.three_d) {
+            at_own_size(d);
+        }
+    }
     draws
+}
+
+/// A flat 8 x 8 tile at the layer's own size, as wide as the card takes.
+fn at_own_size(d: &mut CompLayerDraw) {
+    let max = crate::plan::MAX_TEXTURE_SIDE;
+    let (w, h) = (
+        (d.natural_size.0 as u32).min(max),
+        (d.natural_size.1 as u32).min(max),
+    );
+    if let DrawSource::Pixels {
+        rgba, tex_w, tex_h, ..
+    } = &mut d.source
+    {
+        let flat = rgba.len() == 256 && rgba.chunks(4).all(|p| p == &rgba[..4]);
+        if (*tex_w, *tex_h) == (8, 8) && (w, h) != (8, 8) && flat {
+            let px = [rgba[0], rgba[1], rgba[2], rgba[3]];
+            (*rgba, *tex_w, *tex_h) = (Arc::new(px_tile(&px, w, h)), w, h);
+        }
+    }
 }
 
 /// The content name of the picture a layer's effect stack runs on
@@ -5366,6 +5557,7 @@ impl GraphLower<'_> {
                             clone: self.clone,
                             values: &[],
                             rebuild: false,
+                            seen_through: None,
                         },
                         None,
                     ),
@@ -5441,6 +5633,7 @@ impl GraphLower<'_> {
                 clone: self.clone,
                 values: &[],
                 rebuild: false,
+                seen_through: None,
             },
             None,
         );
@@ -5726,6 +5919,7 @@ fn below_draws_cloned(
             clone,
             values: &[],
             rebuild: true,
+            seen_through: None,
         },
         None,
     );
@@ -6535,6 +6729,11 @@ mod parent_placement_tests {
         camera.transform.position_y = eased(50.0, 50.0, 0.0);
         camera.transform.position_z = eased(-500.0, -200.0, -100.0);
         camera.transform.rotation_y = keyed(0.0, 40.0);
+        camera.transform.orientation[0] = Property::fixed(10.0);
+        camera.transform.orientation[2] = Property {
+            animation: lumit_core::anim::Animation::Keyframed(vec![key(1, 0.0), key(3, 30.0)]),
+            ..Property::fixed(0.0)
+        };
         let poses = |c: &Composition| [0.0, 0.5, 1.0, 2.0].map(|t| c.camera_pose(t).unwrap());
         let before = poses(&comp(vec![camera.clone(), null.clone()]));
         let c = comp(vec![camera.clone(), null.clone()]);
@@ -6546,12 +6745,133 @@ mod parent_placement_tests {
         for (b, a) in before.iter().zip(&after) {
             let (pb, pa) = (b.position, a.position);
             let gap = (pb.0 - pa.0).abs() + (pb.1 - pa.1).abs() + (pb.2 - pa.2).abs();
-            let (fb, fa) = (
-                lumit_core::camera::forward(b.rotation_deg),
-                lumit_core::camera::forward(a.rotation_deg),
+            // Every axis, so a roll shows as well as where it looks.
+            let (ab, aa) = (
+                lumit_core::camera::axes(b.rotation_deg),
+                lumit_core::camera::axes(a.rotation_deg),
             );
-            let turn = (fb.0 - fa.0).abs() + (fb.1 - fa.1).abs() + (fb.2 - fa.2).abs();
+            let turn: f64 = ab
+                .iter()
+                .zip(&aa)
+                .map(|(u, v)| (u.0 - v.0).abs() + (u.1 - v.1).abs() + (u.2 - v.2).abs())
+                .sum();
             assert!(gap < 1e-2 && turn < 1e-6, "{b:?} became {a:?}");
+        }
+        // The rows keep their keys, and the Orientation keeps its own two
+        // rather than gaining one at every position key.
+        assert_eq!(camera.transform.rotation_y, keyed(0.0, 40.0));
+        for p in &camera.transform.orientation {
+            let times: Vec<_> = match &p.animation {
+                lumit_core::anim::Animation::Keyframed(keys) => {
+                    keys.iter().map(|k| k.time.to_f64()).collect()
+                }
+                _ => Vec::new(),
+            };
+            assert_eq!(times, [1.0, 3.0], "{p:?}");
+        }
+
+        // After Effects' own numbers: a 3D layer put under a turned null
+        // keeps its X, Y and Z Rotation, and Orientation takes the turn.
+        let mut rider = layer(1000.0, 600.0, None);
+        rider.switches.three_d = true;
+        rider.transform.after_effects_order = true;
+        rider.transform.anchor_x = Property::fixed(400.0);
+        rider.transform.anchor_y = Property::fixed(200.0);
+        rider.transform.rotation_x = Property::fixed(30.0);
+        rider.transform.rotation_y = Property::fixed(40.0);
+        let mut turner = layer(800.0, 500.0, None);
+        turner.switches.three_d = true;
+        turner.transform.position_z = Property::fixed(100.0);
+        turner.transform.orientation[0] = Property::fixed(20.0);
+        turner.transform.rotation_y = Property::fixed(25.0);
+        let before = world(&comp(vec![rider.clone()]), &rider);
+        let c = comp(vec![rider.clone(), turner.clone()]);
+        for (prop, animation) in reparented(&c, &rider, Some(turner.id), 0.0, ctx()) {
+            rider.transform.get_mut(prop).unwrap().animation = animation;
+        }
+        rider.parent = Some(turner.id);
+        let after = world(&comp(vec![rider.clone(), turner.clone()]), &rider);
+        for (b, a) in before.iter().flatten().zip(after.iter().flatten()) {
+            assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
+        }
+        let tr = &rider.transform;
+        let read = |p: &Property| p.value_at(0.0);
+        let turn = |a: f64, b: f64| ((a - b) % 360.0 + 360.0) % 360.0;
+        for (got, want) in [
+            (read(&tr.rotation_x), 30.0),
+            (read(&tr.rotation_y), 40.0),
+            (read(&tr.rotation), 0.0),
+            (read(&tr.orientation[0]), 338.1198),
+            (read(&tr.orientation[1]), 336.6010),
+            (read(&tr.orientation[2]), 350.9384),
+        ] {
+            let off = turn(got, want);
+            assert!(off.min(360.0 - off) < 1e-2, "{got} for {want}");
+        }
+        let at = (
+            read(&tr.position_x),
+            read(&tr.position_y),
+            read(&tr.position_z),
+        );
+        let want = (235.4291, 59.7672, -31.6390);
+        let gap = (at.0 - want.0).abs() + (at.1 - want.1).abs() + (at.2 - want.2).abs();
+        assert!(gap < 1e-2, "{at:?}");
+
+        // Under a mirrored parent with an Orientation of its own, there and
+        // back again.
+        let mut mirror = turner.clone();
+        mirror.id = uuid::Uuid::now_v7();
+        mirror.transform.scale_x = Property::fixed(-100.0);
+        mirror.transform.orientation = [15.0, -30.0, 10.0].map(Property::fixed);
+        let mut card = layer(1000.0, 600.0, None);
+        card.switches.three_d = true;
+        card.transform.anchor_x = Property::fixed(400.0);
+        card.transform.anchor_y = Property::fixed(200.0);
+        card.transform.rotation_x = Property::fixed(30.0);
+        card.transform.rotation_y = Property::fixed(40.0);
+        card.transform.orientation = [5.0, 0.0, 20.0].map(Property::fixed);
+        let before = world(&comp(vec![card.clone()]), &card);
+        for new_parent in [Some(mirror.id), None] {
+            let c = comp(vec![card.clone(), mirror.clone()]);
+            for (prop, animation) in reparented(&c, &card, new_parent, 0.0, ctx()) {
+                card.transform.get_mut(prop).unwrap().animation = animation;
+            }
+            card.parent = new_parent;
+            let after = world(&comp(vec![card.clone(), mirror.clone()]), &card);
+            for (b, a) in before.iter().flatten().zip(after.iter().flatten()) {
+                assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
+            }
+        }
+
+        // A keyed Orientation has every key turned, so the whole move stays.
+        let mut spun = layer(1000.0, 600.0, None);
+        spun.switches.three_d = true;
+        spun.transform.rotation_x = keyed(30.0, -10.0);
+        spun.transform.orientation = [keyed(0.0, 60.0), keyed(10.0, 80.0), keyed(0.0, 20.0)];
+        let worlds = |c: &Composition, l: &Layer| {
+            [0.0, 0.5, 1.0, 2.0].map(|t| {
+                let own = own_placement(l, t, &ctx());
+                match parent_world_placement(c, l, t, ctx()) {
+                    Some(pre) => lumit_gpu::concat_place(pre, own),
+                    None => own,
+                }
+            })
+        };
+        let before = worlds(&comp(vec![spun.clone()]), &spun);
+        let c = comp(vec![spun.clone(), turner.clone()]);
+        for (prop, animation) in reparented(&c, &spun, Some(turner.id), 1.0, ctx()) {
+            assert!(!matches!(prop, TransformProp::RotationX));
+            spun.transform.get_mut(prop).unwrap().animation = animation;
+        }
+        spun.parent = Some(turner.id);
+        let after = worlds(&comp(vec![spun.clone(), turner.clone()]), &spun);
+        for (b, a) in before
+            .iter()
+            .flatten()
+            .flatten()
+            .zip(after.iter().flatten().flatten())
+        {
+            assert!((b - a).abs() < 1e-2, "{before:?} became {after:?}");
         }
     }
 
@@ -6684,24 +7004,14 @@ mod parent_placement_tests {
         let pose = c.camera_pose(0.0).unwrap();
         let cam = crate::export::camera_mat(c.width, c.height, pose);
         let a = (cam * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d();
-        // The third number is the depth in the camera's own frame.
-        let frame = lumit_gpu::camera_frame(
-            c.width as f32,
-            c.height as f32,
-            pose.zoom as f32,
-            (
-                pose.position.0 as f32,
-                pose.position.1 as f32,
-                pose.position.2 as f32,
-            ),
-            (
-                pose.rotation_deg.0 as f32,
-                pose.rotation_deg.1 as f32,
-                pose.rotation_deg.2 as f32,
-            ),
-        );
-        let depth = (frame * lumit_gpu::Mat4::from_cols_array_2d(&world)).to_cols_array_2d()[3][2];
-        let drawn = [a[3][0] / a[3][3], a[3][1] / a[3][3], depth];
+        // After Effects' third number, zoom · (1 − 1/z), from the same divide:
+        // the compositor's w is z over the zoom.
+        let depth = pose.zoom - 1.0 / f64::from(a[3][3]);
+        let drawn = [
+            f64::from(a[3][0] / a[3][3]),
+            f64::from(a[3][1] / a[3][3]),
+            depth,
+        ];
         for (axis, want) in drawn.into_iter().enumerate() {
             let js = run(
                 Language::JavaScript,
@@ -6712,7 +7022,7 @@ mod parent_placement_tests {
                 &format!("layer(\"Marker\").to_comp([0, 0, 0])[{axis}]"),
             );
             for got in [js, rhai] {
-                assert!((got - f64::from(want)).abs() < 1e-2, "{got} is not {want}");
+                assert!((got - want).abs() < 1e-2, "{got} is not {want}");
             }
         }
         // A 2D layer is drawn flat, with no camera.
@@ -6768,6 +7078,152 @@ mod parent_placement_tests {
                 );
             }
         }
+    }
+
+    /// The rig of aecheck's tocomp-check.jsx, and After Effects' own numbers
+    /// for it: toComp's third number, fromComp off it, the Vec forms, a point
+    /// behind the eye, and the facing sign of toCompVec.
+    #[test]
+    #[allow(clippy::panic)]
+    fn to_comp_reads_what_after_effects_reads() {
+        use lumit_core::expression::{evaluate_value_in, ExprValue, Language};
+
+        let mut rig = layer(900.0, 500.0, None);
+        rig.switches.three_d = true;
+        rig.transform.position_z = Property::fixed(300.0);
+        rig.transform.anchor_x = Property::fixed(20.0);
+        rig.transform.rotation = Property::fixed(-12.0);
+        rig.transform.rotation_y = Property::fixed(35.0);
+        rig.transform.scale_x = Property::fixed(150.0);
+        rig.transform.scale_y = Property::fixed(80.0);
+        let mut marker = layer(120.0, -60.0, Some(rig.id));
+        marker.name = "Marker".into();
+        marker.switches.three_d = true;
+        marker.transform.position_z = Property::fixed(-80.0);
+        marker.transform.rotation_x = Property::fixed(20.0);
+        let mut face = layer(960.0, 540.0, None);
+        face.name = "Face".into();
+        face.switches.three_d = true;
+        let mut back = face.clone();
+        back.id = uuid::Uuid::now_v7();
+        back.name = "Back".into();
+        back.transform.rotation_y = Property::fixed(180.0);
+        let mut camera = layer(700.0, 450.0, None);
+        camera.kind = LayerKind::Camera {
+            zoom: Property::fixed(1400.0),
+            options: Box::default(),
+            solve_link: None,
+            correction_base: None,
+        };
+        camera.transform.position_z = Property::fixed(-1500.0);
+        camera.transform.rotation_y = Property::fixed(15.0);
+        camera.transform.rotation = Property::fixed(5.0);
+        let mut c = comp(vec![camera, rig, marker, face, back]);
+        (c.width, c.height) = (1920, 1080);
+        let pose = c.camera_pose(0.0).unwrap();
+        let mut doc = Document::new();
+        doc.items.push(ProjectItem::Composition(c.clone()));
+        let context = Arc::new(ExpressionContext {
+            document: Arc::new(doc),
+            comp: Some(c.id),
+            layer: None,
+            comp_time: 0.0,
+            current_depth: 0,
+            inputs: None,
+        });
+        let run = |language, text: &str| match evaluate_value_in(
+            language,
+            text,
+            Some(context.clone()),
+            &[],
+        ) {
+            Ok(ExprValue::Number(n)) => n,
+            other => panic!("{text}: {other:?}"),
+        };
+
+        // 100 px behind the eye, as the camera sees it.
+        let m = lumit_core::camera::rotation(pose.rotation_deg);
+        let a = (30.0, 20.0, -100.0);
+        let eye = [pose.position.0, pose.position.1, pose.position.2];
+        let at = |r: usize| eye[r] + m[r][0] * a.0 + m[r][1] * a.1 + m[r][2] * a.2;
+        let behind = format!("[{}, {}, {}]", at(0), at(1), at(2));
+        let behind_js = format!("toComp(thisComp.layer('Marker').fromWorld({behind}))");
+        let behind_rhai = format!("to_comp(layer(\"Marker\").from_world({behind}))");
+        for (in_js, in_rhai, want) in [
+            (
+                "toComp([0, 0, 0])",
+                "to_comp([0, 0, 0])",
+                [814.5410, 529.0258, 1399.1609],
+            ),
+            (
+                "toComp([30, -40, 25])",
+                "to_comp([30, -40, 25])",
+                [842.3415, 488.1836, 1399.1593],
+            ),
+            (
+                "fromComp([960, 540, 0])",
+                "from_comp([960, 540, 0])",
+                [473.1247, -304.8729, -1494.0807],
+            ),
+            (
+                "fromComp([960, 540])",
+                "from_comp([960, 540])",
+                [473.1247, -304.8729, -1494.0807],
+            ),
+            (
+                "fromComp([960, 540, -1400])",
+                "from_comp([960, 540, -1400])",
+                [473.2362, -304.9918, -1494.5374],
+            ),
+            (
+                "fromComp([100, 900, 1399])",
+                "from_comp([100, 900, 1399])",
+                [-422.4201, 46.1342, -546.0801],
+            ),
+            (
+                "toCompVec([10, 20, 30])",
+                "to_comp_vec([10, 20, 30])",
+                [20.9047, 7.2530, 46218.5615],
+            ),
+            (
+                "fromCompVec([10, 20, 30])",
+                "from_comp_vec([10, 20, 30])",
+                [-17.5206, 29.4023, 36.8613],
+            ),
+            (
+                "fromCompVec([10, 20])",
+                "from_comp_vec([10, 20])",
+                [-2.4660, 21.3642, 9.7869],
+            ),
+            (
+                behind_js.as_str(),
+                behind_rhai.as_str(),
+                [540.0, 260.0, 1414.0],
+            ),
+        ] {
+            for (axis, want) in want.into_iter().enumerate() {
+                let js = run(
+                    Language::JavaScript,
+                    &format!("thisComp.layer('Marker').{in_js}[{axis}]"),
+                );
+                let rhai = run(
+                    Language::Rhai,
+                    &format!("layer(\"Marker\").{in_rhai}[{axis}]"),
+                );
+                for got in [js, rhai] {
+                    assert!((got - want).abs() < 2e-3, "{in_js}: {got} is not {want}");
+                }
+            }
+        }
+        // The manual's promise: above nought while the front faces the camera.
+        let facing = |name: &str| {
+            run(
+                Language::JavaScript,
+                &format!("thisComp.layer('{name}').toCompVec([0, 0, 1])[2]"),
+            )
+        };
+        assert!(facing("Face") > 0.0);
+        assert!(facing("Back") < 0.0);
     }
 }
 
@@ -7205,8 +7661,10 @@ mod render_below_at_tests {
     }
 
     /// A card between a light and a floor shades the floor, Only keeps the
-    /// shadow without the card, and a floor that takes no shadows comes out
-    /// exactly as if nothing cast one.
+    /// shadow without the card, a floor that takes no shadows comes out
+    /// exactly as if nothing cast one, and one taking only shadows shows
+    /// the grey plate behind it, darkened red where the light comes through
+    /// a red card.
     #[test]
     fn a_card_casts_its_shadow_and_only_hides_the_card() {
         use lumit_core::model::{LightDef, LightKind, Material, ProjectItem, ShadowMode, SolidDef};
@@ -7235,19 +7693,22 @@ mod render_below_at_tests {
         };
         let (w, h) = (320u32, 180u32);
         let mut doc = Document::new();
-        let mut solid = |size: (u32, u32)| {
+        let mut solid = |size: (u32, u32), rgb: [f32; 3]| {
             let def = Uuid::now_v7();
             doc.items.push(ProjectItem::Solid(SolidDef {
                 id: def,
                 name: "grey".into(),
-                colour: LinearColour([0.5, 0.5, 0.5, 1.0]),
+                colour: LinearColour([rgb[0], rgb[1], rgb[2], 1.0]),
                 width: size.0,
                 height: size.1,
                 extra: serde_json::Map::new(),
             }));
             def
         };
-        let (floor_def, card_def) = (solid((w, h)), solid((80, 60)));
+        let (floor_def, card_def) = (
+            solid((w, h), [0.5, 0.5, 0.5]),
+            solid((80, 60), [0.9, 0.1, 0.05]),
+        );
         let doc = std::sync::Arc::new(doc);
         let mut light = text_layer(40.0);
         light.kind = LayerKind::Light {
@@ -7259,7 +7720,7 @@ mod render_below_at_tests {
         };
         light.transform.position_y = Property::fixed(90.0);
         light.transform.position_z = Property::fixed(-200.0);
-        let card_layer = |def: Uuid, size: (u32, u32), z: f64, casts, accepts| {
+        let card_layer = |def: Uuid, size: (u32, u32), z: f64, casts, accepts, through| {
             let mut l = text_layer(f64::from(w) / 2.0);
             l.kind = LayerKind::Solid { def };
             l.switches.three_d = true;
@@ -7270,11 +7731,12 @@ mod render_below_at_tests {
             l.transform.material = Box::new(Material {
                 casts_shadows: casts,
                 accepts_shadows: accepts,
+                light_transmission: Property::fixed(through),
                 ..Material::default()
             });
             l
         };
-        let render = |casts: ShadowMode, floor_takes: ShadowMode| {
+        let render = |casts: ShadowMode, floor_takes: ShadowMode, through: f64| {
             let comp = Composition {
                 graph: None,
                 master_volume_db: 0.0,
@@ -7288,12 +7750,12 @@ mod render_below_at_tests {
                 height: h,
                 frame_rate: FrameRate::new(30, 1).unwrap(),
                 duration: Duration(Rational::new(10, 1).unwrap()),
-                background: LinearColour([0.0, 0.0, 0.0, 1.0]),
+                background: LinearColour([0.2, 0.2, 0.2, 1.0]),
                 work_area: None,
                 layers: vec![
                     light.clone(),
-                    card_layer(card_def, (80, 60), -80.0, casts, ShadowMode::On),
-                    card_layer(floor_def, (w, h), 0.0, ShadowMode::Off, floor_takes),
+                    card_layer(card_def, (80, 60), -80.0, casts, ShadowMode::On, through),
+                    card_layer(floor_def, (w, h), 0.0, ShadowMode::Off, floor_takes, 0.0),
                 ],
                 markers: Vec::new(),
                 motion_blur: Default::default(),
@@ -7302,7 +7764,7 @@ mod render_below_at_tests {
             let pixels: HashMap<Uuid, &CompLayerPixels> = HashMap::new();
             let mut visited = vec![comp.id];
             let draws = build_comp_draws(&doc, &comp, 0.0, &pixels, &mut visited);
-            let tex = realiser.realise(None, w, h, [0.0, 0.0, 0.0, 1.0], &draws);
+            let tex = realiser.realise(None, w, h, [0.2, 0.2, 0.2, 1.0], &draws);
             engine
                 .readback8(
                     &ctx,
@@ -7311,9 +7773,9 @@ mod render_below_at_tests {
                 .unwrap()
         };
 
-        let none = render(ShadowMode::Off, ShadowMode::On);
-        let cast = render(ShadowMode::On, ShadowMode::On);
-        let only = render(ShadowMode::Only, ShadowMode::On);
+        let none = render(ShadowMode::Off, ShadowMode::On, 0.0);
+        let cast = render(ShadowMode::On, ShadowMode::On, 0.0);
+        let only = render(ShadowMode::Only, ShadowMode::On, 0.0);
         assert_ne!(none, cast, "the card's shadow falls on the floor");
         assert!(
             cast.iter().zip(&none).all(|(a, b)| a <= b),
@@ -7322,13 +7784,30 @@ mod render_below_at_tests {
         assert_ne!(only, cast, "Only hides the card");
         assert_eq!(
             cast,
-            render(ShadowMode::On, ShadowMode::On),
+            render(ShadowMode::On, ShadowMode::On, 0.0),
             "deterministic"
         );
         assert_eq!(
             none,
-            render(ShadowMode::On, ShadowMode::Off),
+            render(ShadowMode::On, ShadowMode::Off, 0.0),
             "a floor that takes no shadows is lit as if none were cast"
+        );
+        let tinted = render(ShadowMode::On, ShadowMode::Only, 100.0);
+        let at = |x: u32, y: u32| {
+            let i = ((y * w + x) * 4) as usize;
+            tinted[i..i + 4].to_vec()
+        };
+        // The grey plate behind the floor shows through it, and the red
+        // shadow only darkens it.
+        let plate = at(10, 170);
+        assert!(
+            plate[0] == plate[1] && plate[1] == plate[2] && plate[0] > 100,
+            "{plate:?}"
+        );
+        let red = at(260, 90);
+        assert!(
+            red[0] <= plate[0] && red[0] > red[1] + 60 && red[1] < 40 && red[2] < 40,
+            "red where the light comes through the card: {red:?} over {plate:?}"
         );
     }
 

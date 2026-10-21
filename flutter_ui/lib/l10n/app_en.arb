@@ -7196,7 +7196,7 @@
   "@panel3dViewport": {
     "description": "The name at the top of a 3D viewport: a Viewer panel looking through a camera of its own, moved with the mouse."
   },
-  "tipViewportProjection": "Perspective or orthographic",
+  "tipViewportProjection": "Projection",
   "@tipViewportProjection": {
     "description": "Tooltip on the switch under a 3D viewport's corner axes, which reads Persp or Ortho."
   },
@@ -9013,7 +9013,7 @@
   "@tipRotateSetsOrientation": {
     "description": "Tooltip on a Rotation tool option shown while the comp has a 3D layer: the rings and a free turn change the layer's Orientation. After Effects calls this Set: Orientation."
   },
-  "tipRotateSetsRotation": "Turn Rotation x, y and z",
+  "tipRotateSetsRotation": "Turn Rotation",
   "@tipRotateSetsRotation": {
     "description": "Tooltip on a Rotation tool option shown while the comp has a 3D layer: the rings and a free turn change the layer's Rotation x, y and z. After Effects calls this Set: Rotation."
   },
@@ -15027,6 +15027,10 @@
   },
   "histSetAxisMode": "Set axis mode",
   "@histSetAxisMode": {
+    "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
+  },
+  "histSetRotationOrder": "Set rotation order",
+  "@histSetRotationOrder": {
     "description": "A row of the Edit > History window: the name of one edit that was made. Sent by the engine as English and looked up here."
   },
   "histSetCameraSettings": "Set camera settings",

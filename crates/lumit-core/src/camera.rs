@@ -137,6 +137,38 @@ pub fn unoriented(
     }
 }
 
+/// [`unoriented`] the other way about: the Orientation that, outside these
+/// rotations, makes the whole of `turn`, the one nearest `near`.
+#[must_use]
+pub fn reoriented(
+    turn: (f64, f64, f64),
+    rotation: (f64, f64, f64),
+    ae_order: bool,
+    near: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let r = if ae_order {
+        rotation_ae(rotation)
+    } else {
+        self::rotation(rotation)
+    };
+    let back = [0, 1, 2].map(|row| [0, 1, 2].map(|c| r[c][row]));
+    nearest_xyz(euler_xyz(&mul(&self::rotation(turn), &back)), near)
+}
+
+/// Orientation `o` turned on by the turn that takes Orientation `from` to
+/// `to`, written the way nearest `o`.
+#[must_use]
+pub fn orientation_turned(
+    o: (f64, f64, f64),
+    from: (f64, f64, f64),
+    to: (f64, f64, f64),
+) -> (f64, f64, f64) {
+    let f = rotation_ae(from);
+    let back = [0, 1, 2].map(|row| [0, 1, 2].map(|c| f[c][row]));
+    let by = mul(&rotation_ae(to), &back);
+    nearest_xyz(euler_xyz(&mul(&by, &rotation_ae(o))), o)
+}
+
 /// X, Y and Z Rotation written in one order (`from_ae`) rewritten in the other
 /// (`to_ae`) for the same turn, the way of writing it nearest `near`.
 #[must_use]
@@ -182,8 +214,8 @@ pub fn from_after_effects(
 }
 
 /// The Orientation that turns a layer's z axis from `from` to look at `to`, as
-/// After Effects' `lookAt` gives it: no turn about z, and nought when the two
-/// points are the same.
+/// After Effects' `lookAt` gives it: rolled about z so the layer's x axis
+/// stays level, and nought when the two points are the same.
 #[must_use]
 pub fn look_at_orientation(from: (f64, f64, f64), to: (f64, f64, f64)) -> (f64, f64, f64) {
     let d = (to.0 - from.0, to.1 - from.1, to.2 - from.2);
@@ -192,11 +224,11 @@ pub fn look_at_orientation(from: (f64, f64, f64), to: (f64, f64, f64)) -> (f64, 
         return (0.0, 0.0, 0.0);
     }
     // Rx · Ry turns z to (sin y, -sin x cos y, cos x cos y).
-    (
-        (-d.1).atan2(d.2).to_degrees(),
-        (d.0 / len).clamp(-1.0, 1.0).asin().to_degrees(),
-        0.0,
-    )
+    let x = (-d.1).atan2(d.2);
+    let y = (d.0 / len).clamp(-1.0, 1.0).asin();
+    // The roll that brings the x axis back down to y = 0.
+    let z = (-x.sin() * y.sin()).atan2(x.cos());
+    (x.to_degrees(), y.to_degrees(), z.to_degrees())
 }
 
 /// How far apart two Orientations are, in degrees: the one turn that takes
@@ -479,12 +511,30 @@ impl Place {
         }
     }
 
-    /// A camera pose seen in this space, as the comp sees it.
+    /// A camera pose seen in this space, as the comp sees it. After Effects
+    /// works depth of field out in the camera's own units, so the space's
+    /// scale along the view stretches the focus distance, and the Blur Level
+    /// with it, since that sets how long the lens is. A camera under a doubled
+    /// parent focuses twice as far and blurs a card at twice the distance as
+    /// it would unparented.
     #[must_use]
     pub fn pose(&self, pose: CameraPose) -> CameraPose {
+        let ahead = self.vector(forward(pose.rotation_deg));
+        let along = (ahead.0 * ahead.0 + ahead.1 * ahead.1 + ahead.2 * ahead.2).sqrt();
+        // Rounding off an unscaled parent shouldn't move the focus.
+        let along = if (along - 1.0).abs() < 1e-9 {
+            1.0
+        } else {
+            along
+        };
         CameraPose {
             position: self.point(pose.position),
             rotation_deg: self.turn(pose.rotation_deg),
+            dof: pose.dof.map(|dof| crate::model::CameraDof {
+                focus_distance: dof.focus_distance * along,
+                blur_level: dof.blur_level * along,
+                ..dof
+            }),
             ..pose
         }
     }
@@ -578,12 +628,24 @@ pub fn aperture_for_f_stop(f_stop: f64, zoom: f64) -> f64 {
 /// behind the eye, or with nothing to focus on.
 #[must_use]
 pub fn coc_px(dof: &crate::model::CameraDof, zoom: f64, d: f64) -> f64 {
-    if d <= 0.0 || dof.focus_distance <= 0.0 || zoom <= 0.0 {
+    if d <= 0.0 {
         return 0.0;
     }
-    dof.aperture * (d - dof.focus_distance).abs() / d
-        * (zoom / dof.focus_distance)
-        * (dof.blur_level / 100.0).max(0.0)
+    coc_per_zoom(dof, zoom) * zoom * (d - dof.focus_distance).abs() / d
+}
+
+/// [`coc_px`] over zoom times how far off focus a point is over its distance.
+/// After Effects draws it through a thin lens whose focal length is a tenth of
+/// the zoom, the same ten as [`f_stop`], and Blur Level scales that focal
+/// length rather than the blur. Zero when focused nearer than the lens itself,
+/// which After Effects was never checked at.
+#[must_use]
+pub fn coc_per_zoom(dof: &crate::model::CameraDof, zoom: f64) -> f64 {
+    let lens = zoom * (dof.blur_level / 100.0).max(0.0) / 10.0;
+    if dof.focus_distance <= lens || zoom <= 0.0 {
+        return 0.0;
+    }
+    dof.aperture * lens / (zoom * (dof.focus_distance - lens))
 }
 
 /// The Viewer's fixed 3D views (docs/07 §2.2). Active camera is the absence of
@@ -646,10 +708,10 @@ pub fn nice(v: f64) -> f64 {
 }
 
 /// Project a comp-space point through a pose the way the compositor does:
-/// `x' = cx + a.x · zoom / (a.z + zoom)` with `a` the point in the camera's
-/// frame, the eye at `a.z = -zoom`. Returns the comp-pixel position and
-/// whether the point is in front of the eye; a point behind it still gets a
-/// number, but not one worth drawing.
+/// `x' = cx + a.x · zoom / a.z` with `a` the point in the camera's frame, the
+/// eye at its origin. Returns the comp-pixel position and whether the point is
+/// in front of the eye; a point behind it still gets a number, but not one
+/// worth drawing.
 #[must_use]
 pub fn project(
     pose: &CameraPose,
@@ -657,13 +719,41 @@ pub fn project(
     height: f64,
     p: (f64, f64, f64),
 ) -> ((f64, f64), bool) {
-    let (x, y, depth) = project_depth(pose, width, height, p);
-    ((x, y), depth + pose.zoom > 1e-6)
+    let (x, y, w) = seen(pose, width, height, p);
+    ((x, y), w * pose.zoom > 1e-6)
 }
 
-/// [`project`] with the depth kept as the third number: how far in front of
-/// the plane the camera sees 1:1 the point is. That is the point's own z when
-/// the camera sits where a fresh one does, and [`unproject`] takes it back.
+/// A comp-space point in the camera's own frame. Rotations invert by
+/// transposing, so this never fails.
+pub(crate) fn eye_frame(pose: &CameraPose) -> Place {
+    let m = rotation(pose.rotation_deg);
+    let back = Place {
+        m: [
+            [m[0][0], m[1][0], m[2][0]],
+            [m[0][1], m[1][1], m[2][1]],
+            [m[0][2], m[1][2], m[2][2]],
+        ],
+        t: (0.0, 0.0, 0.0),
+    };
+    let t = back.vector(pose.position);
+    Place {
+        t: (-t.0, -t.1, -t.2),
+        ..back
+    }
+}
+
+/// The picture position, and how far ahead of the eye over the zoom.
+fn seen(pose: &CameraPose, width: f64, height: f64, p: (f64, f64, f64)) -> (f64, f64, f64) {
+    let a = eye_frame(pose).point(p);
+    let w = a.2 / pose.zoom.max(1e-9);
+    let w = if w.abs() < 1e-9 { 1e-9 } else { w };
+    (width * 0.5 + a.0 / w, height * 0.5 + a.1 / w, w)
+}
+
+/// [`project`] with After Effects' third number from `toComp`:
+/// `zoom · (1 − 1/z)`, with `z` how far ahead of the eye the point is along
+/// the view. Nought one pixel ahead of the eye, nearing the zoom far off.
+/// [`unproject`] takes it back.
 #[must_use]
 pub fn project_depth(
     pose: &CameraPose,
@@ -671,31 +761,12 @@ pub fn project_depth(
     height: f64,
     p: (f64, f64, f64),
 ) -> (f64, f64, f64) {
-    let m = rotation(pose.rotation_deg);
-    let d = (
-        p.0 - pose.position.0,
-        p.1 - pose.position.1,
-        p.2 - pose.position.2,
-    );
-    // Rotation matrices invert by transposing: a = Rᵀ · d.
-    let a = (
-        m[0][0] * d.0 + m[1][0] * d.1 + m[2][0] * d.2,
-        m[0][1] * d.0 + m[1][1] * d.1 + m[2][1] * d.2,
-        m[0][2] * d.0 + m[1][2] * d.1 + m[2][2] * d.2,
-    );
-    // In the compositor's frame the eye is `zoom` behind the 1:1 plane, so a
-    // point `a.z` in front of the eye is at `a.z - zoom` there.
-    let w = a.2 / pose.zoom.max(1e-9);
-    let w = if w.abs() < 1e-9 { 1e-9 } else { w };
-    (
-        width * 0.5 + a.0 / w,
-        height * 0.5 + a.1 / w,
-        a.2 - pose.zoom,
-    )
+    let (x, y, w) = seen(pose, width, height, p);
+    (x, y, pose.zoom - 1.0 / w)
 }
 
 /// The comp-space point that [`project_depth`] puts at picture position
-/// `(x, y)` with that depth.
+/// `(x, y)` with that third number.
 #[must_use]
 pub fn unproject(
     pose: &CameraPose,
@@ -703,8 +774,10 @@ pub fn unproject(
     height: f64,
     p: (f64, f64, f64),
 ) -> (f64, f64, f64) {
-    let ahead = p.2 + pose.zoom;
-    let w = ahead / pose.zoom.max(1e-9);
+    // A third number of the zoom itself is infinitely far off.
+    let k = pose.zoom - p.2;
+    let w = 1.0 / if k.abs() < 1e-9 { 1e-9 } else { k };
+    let ahead = w * pose.zoom.max(1e-9);
     let a = ((p.0 - width * 0.5) * w, (p.1 - height * 0.5) * w, ahead);
     let m = rotation(pose.rotation_deg);
     let at = |r: usize| m[r][0] * a.0 + m[r][1] * a.1 + m[r][2] * a.2;
@@ -961,6 +1034,33 @@ mod tests {
         let z = (m[0][2], m[1][2], m[2][2]);
         let d: (f64, f64, f64) = (-300.0 / 538.516_48, 400.0 / 538.516_48, -200.0 / 538.516_48);
         assert!(close3(z, d), "{z:?}");
+        // And it gives After Effects' own numbers, roll and all.
+        for (from, to, want) in [
+            (
+                (10.0, 20.0, 30.0),
+                (-290.0, 420.0, -170.0),
+                (-116.5651, -33.8545, -131.9088),
+            ),
+            (
+                (960.0, 540.0, 0.0),
+                (1200.0, 300.0, 800.0),
+                (16.6992, 16.0319, -4.7362),
+            ),
+            ((0.0, 0.0, 0.0), (0.0, -500.0, 10.0), (88.8542, 0.0, 0.0)),
+        ] {
+            let got = look_at_orientation(from, to);
+            let off = (got.0 - want.0).abs() + (got.1 - want.1).abs() + (got.2 - want.2).abs();
+            assert!(off < 1e-3, "{got:?}");
+        }
+        // Looking back down z, where the roll's quarter matters, the x axis
+        // still comes out level and z still points the right way.
+        for d in [(300.0, -100.0, -400.0), (-50.0, 200.0, -10.0)] {
+            let m = rotation_ae(look_at_orientation((0.0, 0.0, 0.0), d));
+            let len = (d.0 * d.0 + d.1 * d.1 + d.2 * d.2).sqrt();
+            assert!(m[1][0].abs() < 1e-9, "{m:?}");
+            let z = (m[0][2], m[1][2], m[2][2]);
+            assert!(close3(z, (d.0 / len, d.1 / len, d.2 / len)), "{z:?}");
+        }
     }
 
     /// After Effects keys an Orientation as one turn, so a key written on one
@@ -1007,15 +1107,69 @@ mod tests {
             blur_level: 100.0,
         };
         assert_eq!(coc_px(&dof, 1000.0, 1000.0), 0.0);
-        assert!(close(coc_px(&dof, 1000.0, 2000.0), 10.0));
-        assert!(close(coc_px(&dof, 2000.0, 2000.0), 20.0));
+        assert!(coc_px(&dof, 1000.0, 2000.0) > 0.0);
         assert_eq!(coc_px(&dof, 1000.0, 0.0), 0.0);
         assert_eq!(coc_px(&dof, 1000.0, -5.0), 0.0);
-        let half = crate::model::CameraDof {
-            blur_level: 50.0,
-            ..dof
+        // After Effects 2026's own blur, read off white squares in a
+        // 1280 x 720 comp at zoom 1200, aperture 400: the half-width of its box
+        // blur at each focus, Blur Level and depth.
+        for (focus, level, d, half_width) in [
+            (1200.0, 100.0, 2200.0, 10.10),
+            (1200.0, 100.0, 600.0, 22.23),
+            (600.0, 100.0, 2200.0, 36.37),
+            (2400.0, 100.0, 1200.0, 10.53),
+            (3600.0, 100.0, 900.0, 20.68),
+            (1200.0, 50.0, 4200.0, 7.51),
+        ] {
+            let dof = crate::model::CameraDof {
+                focus_distance: focus,
+                aperture: 400.0,
+                blur_level: level,
+            };
+            let ours = coc_px(&dof, 1200.0, d) / 2.0;
+            assert!(
+                (ours / half_width - 1.0).abs() < 0.01,
+                "focus {focus}, level {level}, depth {d}: {ours} against {half_width}"
+            );
+        }
+
+        // After Effects' doubled rig: a camera turned -5 on Y, focused at 1500,
+        // on a null turned -10 on X and 30 on Y and scaled 200. After Effects
+        // keeps a card 3000 away sharp and blurs one 1500 away, as focus 3000
+        // and Blur Level 200 do.
+        let ae = |s: (f64, f64, f64)| {
+            let turn = from_after_effects((0.0, 0.0, 0.0), (-10.0, 30.0, 0.0), (0.0, 0.0, 0.0));
+            place((960.0, 540.0, 0.0), (0.0, 0.0, 0.0), s, turn)
         };
-        assert!(close(coc_px(&half, 1000.0, 2000.0), 5.0));
+        let seen = |null: Place, rotation_deg| {
+            let own = CameraPose {
+                zoom: 1500.0,
+                position: (100.0, -50.0, -1500.0),
+                rotation_deg,
+                dof: Some(crate::model::CameraDof {
+                    focus_distance: 1500.0,
+                    aperture: 150.0,
+                    blur_level: 100.0,
+                }),
+            };
+            let dof = null.pose(own).dof.unwrap();
+            (dof.focus_distance, dof.aperture, dof.blur_level)
+        };
+        let (focus, aperture, level) = seen(ae((200.0, 200.0, 200.0)), (0.0, -5.0, 0.0));
+        assert!(close(focus, 3000.0) && close(aperture, 150.0) && close(level, 200.0));
+        let twice = crate::model::CameraDof {
+            focus_distance: focus,
+            aperture,
+            blur_level: level,
+        };
+        let card = |d: f64| coc_px(&twice, 1500.0, d);
+        assert!(card(3000.0) == 0.0 && card(1415.48) > 0.0);
+        // Only the scale along the view counts: stretched on y, a camera
+        // looking down the null's y focuses twice as far, one looking down
+        // its z as far as it says.
+        let stretched = ae((100.0, 200.0, 100.0));
+        assert!(close(seen(stretched, (90.0, 0.0, 0.0)).0, 3000.0));
+        assert!(close(seen(stretched, (0.0, -5.0, 0.0)).0, 1500.0));
     }
 
     #[test]

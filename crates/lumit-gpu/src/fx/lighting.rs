@@ -23,6 +23,15 @@ pub const MAX_LIT_LIGHTS: usize = 8;
 /// `MAX_SHADOW_CASTERS`.
 pub const MAX_SHADOW_CASTERS: usize = 16;
 
+/// How wide a shadow's soft edge is on its caster per pixel of Shadow
+/// diffusion, were the caster at the light, as the oracle's
+/// `DIFFUSION_SPREAD`.
+pub const DIFFUSION_SPREAD: f32 = 0.85;
+
+/// How many times longer one way a soft edge on a caster turned from the
+/// light gets, as the oracle's `MAX_STRETCH`.
+pub const MAX_STRETCH: f32 = 2.0;
+
 /// One light, flattened for the kernel: the four comp-pixel corners of its
 /// emitting rectangle (all four equal for a point or a spot), its colour and
 /// falloff, its spot axis and cone, and which law shades it.
@@ -44,7 +53,7 @@ pub struct LightingLight {
     pub axis: [f32; 3],
     /// How much light its shadows take away, 0..1. Nought casts none.
     pub shadow_darkness: f32,
-    /// How many comp pixels their edges spread over.
+    /// How soft their edges are, as the light's size in comp pixels.
     pub shadow_diffusion: f32,
 }
 
@@ -262,6 +271,10 @@ pub fn may_shade(receiver: &[[f32; 3]; 4], light: &LightingLight, caster: &Caste
     }
     let mut lo = [f32::MAX; 2];
     let mut hi = [f32::MIN; 2];
+    // How far past the caster the shadow lands, in lengths from the light to
+    // the caster: its soft edge there is that many times the widest it gets
+    // on the caster.
+    let mut past = 1.0f32;
     for c in corners {
         let ray = if parallel {
             light.axis
@@ -276,6 +289,9 @@ pub fn may_shade(receiver: &[[f32; 3]; 4], light: &LightingLight, caster: &Caste
         if !s.is_finite() || s <= 0.0 {
             return true;
         }
+        if !parallel {
+            past = past.max(s);
+        }
         let x = sub3(
             [c[0] + ray[0] * s, c[1] + ray[1] * s, c[2] + ray[2] * s],
             r0,
@@ -286,10 +302,10 @@ pub fn may_shade(receiver: &[[f32; 3]; 4], light: &LightingLight, caster: &Caste
             hi[k] = hi[k].max(uv[k]);
         }
     }
-    // The soft edge reaches about the diffusion past the hard one; half as
-    // much again and a couple of pixels, to be safe.
+    // The soft edge reaches about its width past the hard one; half as much
+    // again and a couple of pixels, to be safe.
     let len = |v: [f32; 3]| dot3(v, v).sqrt().max(1e-6);
-    let pad = light.shadow_diffusion * 1.5 + 2.0;
+    let pad = light.shadow_diffusion * DIFFUSION_SPREAD * MAX_STRETCH * past * 1.5 + 2.0;
     let pad = [pad / len(a), pad / len(b)];
     (0..2).all(|k| hi[k] >= -pad[k] && lo[k] <= 1.0 + pad[k])
 }
@@ -309,8 +325,9 @@ struct GpuLight {
     /// x = kind (0 point, 1 area, 2 parallel, 3 ambient), y = falloff,
     /// z = radius px, w = cos of the feather's inner angle.
     flags: [f32; 4],
-    /// x = shadow darkness, y = shadow diffusion px, z = which casters can
-    /// shade this layer, one bit each.
+    /// x = shadow darkness, y = the widest soft edge on a caster px, z =
+    /// which casters can shade this layer, one bit each, w = how far it
+    /// stretches on a caster turned from the light.
     shadow: [f32; 4],
 }
 
@@ -662,7 +679,12 @@ impl FxEngine {
                     l.radius_px,
                     l.cone_inner,
                 ],
-                shadow: [l.shadow_darkness, l.shadow_diffusion, mask as f32, 0.0],
+                shadow: [
+                    l.shadow_darkness,
+                    l.shadow_diffusion * DIFFUSION_SPREAD,
+                    mask as f32,
+                    MAX_STRETCH,
+                ],
             };
         }
         let mut planes = [GpuCaster::default(); MAX_SHADOW_CASTERS];

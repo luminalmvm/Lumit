@@ -6142,6 +6142,7 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
         ("plastic", vec![spot, parallel]),
         ("after effects", vec![spot, ambient]),
         ("after effects encoded", vec![spot, ambient]),
+        ("shininess nought", vec![spot, ambient]),
     ] {
         // Two are seen through a shiny material, a metal one and then a
         // plastic one, and one lit from black as After Effects does; the rest
@@ -6178,6 +6179,14 @@ fn wgsl_lighting_matches_the_cpu_oracle() {
                 exponent: 6.0,
                 metal: 0.5,
                 encoded: true,
+                ..plain
+            },
+            // The one exponent a pow can trip on.
+            "shininess nought" => ShadingMaterial {
+                base: 0.0,
+                diffuse: 0.5,
+                specular: 0.5,
+                exponent: 0.0,
                 ..plain
             },
             _ => plain,
@@ -6270,8 +6279,9 @@ fn lighting_op(
 
 /// Shadows against the oracle: two cards between a spot and a floor, one
 /// letting coloured light through, hard and diffused, half and fully dark,
-/// with the floor taking them and showing only them, and a card lit with
-/// its own square among the casters.
+/// with the floor taking them and showing only them, display encoded too,
+/// and a card lit with its own square among the casters. The cards are
+/// turned from the light, so the soft edges stretch.
 #[test]
 fn wgsl_shadows_match_the_cpu_oracle() {
     use lumit_core::lighting::{
@@ -6280,6 +6290,11 @@ fn wgsl_shadows_match_the_cpu_oracle() {
     };
     use lumit_core::model::{LightFalloff, ShadowMode};
 
+    assert_eq!(
+        crate::fx::DIFFUSION_SPREAD,
+        lumit_core::lighting::DIFFUSION_SPREAD
+    );
+    assert_eq!(crate::fx::MAX_STRETCH, lumit_core::lighting::MAX_STRETCH);
     let Some(ctx) = crate::test_support::lease() else {
         crate::no_adapter();
         return;
@@ -6472,6 +6487,10 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         encoded: true,
         ..takes
     };
+    let encoded_only = ShadingMaterial {
+        accepts_shadows: ShadowMode::Only,
+        ..encoded
+    };
     for (name, surface, m, lights, own) in [
         ("hard", floor, takes, vec![spot], None),
         ("diffused", floor, takes, vec![diffused], None),
@@ -6484,6 +6503,14 @@ fn wgsl_shadows_match_the_cpu_oracle() {
         ("unlit", floor, unlit, vec![diffused, sun], None),
         ("unlit only", floor, unlit_only, vec![spot], None),
         ("encoded", floor, encoded, vec![diffused], None),
+        (
+            "encoded only",
+            floor,
+            encoded_only,
+            vec![diffused, sun],
+            None,
+        ),
+        ("far reaching only", floor, only, vec![wide], None),
         ("own", card_surface, takes, vec![spot, sun], Some(0)),
     ] {
         let (cpu_casters, casters) = &squares[usize::from(m.encoded)];

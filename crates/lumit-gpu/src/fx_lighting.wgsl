@@ -34,8 +34,9 @@ struct Light {
     // y = falloff (0 none, 1 smooth, 2 inverse square clamped),
     // z = radius px, w = cos of the feather's inner angle.
     flags: vec4<f32>,
-    // x = shadow darkness 0..1, y = shadow diffusion px, z = which casters
-    // can shade this layer, one bit each.
+    // x = shadow darkness 0..1, y = the widest soft edge on a caster px, z =
+    // which casters can shade this layer, one bit each, w = how far that
+    // edge can stretch on a caster turned from the light.
     shadow: vec4<f32>,
 };
 
@@ -179,7 +180,7 @@ fn reach(d: f32, l: Light) -> f32 {
             return select(0.0, 1.0, legacy && r <= 0.0);
         }
         let t = clamp(1.0 - (d - r) / falloff_px, 0.0, 1.0);
-        return select(t, t * t, legacy);
+        return select(t * t * (3.0 - 2.0 * t), t * t, legacy);
     }
     return (r / d) * (r / d);
 }
@@ -312,27 +313,36 @@ fn transmitted(pos: vec3<f32>, l: Light) -> vec3<f32> {
         }
         let uv = vec2<f32>(dot(rel, cu) / du, dot(rel, cv) / dv);
         let at = c.place.xy + uv * c.place.zw;
-        var spread = l.shadow.y;
-        if (bounded) {
-            spread = spread * (1.0 - t);
+        // As soft as the caster is far along from here to the light.
+        var along = t;
+        if (!bounded) {
+            along = min(t / max(length(light_centre(l) - pos), 1.0), 1.0);
         }
+        let spread = l.shadow.y * along;
+        // Stretched the way the caster turns from the light.
+        let facing = max(abs(den / (reach * length(n))), 1e-3);
+        let ku = dot(dir, c.u.xyz) / (reach * max(length(c.u.xyz), 1e-6) * facing);
+        let kv = dot(dir, c.v.xyz) / (reach * max(length(c.v.xyz), 1e-6) * facing);
+        let st = min(sqrt(1.0 + vec2<f32>(ku * ku, kv * kv)), vec2<f32>(l.shadow.w));
         let texels = spread * c.place.z * size / max(length(c.u.xyz), 1e-6);
-        let reach = texels / size;
-        if (any(at < vec2<f32>(-reach)) || any(at > vec2<f32>(1.0 + reach))) {
+        let edge = texels * st / size;
+        if (any(at < -edge) || any(at > 1.0 + edge)) {
             continue;
         }
         var s: vec4<f32>;
-        if (texels < 0.5) {
+        if (texels * max(st.x, st.y) < 0.5) {
             s = square_at(i, at, 0.0);
         } else {
-            // Never further apart than a texel of the level read.
-            let lod = log2(texels);
+            // Never further apart than a texel of the level read, the level
+            // for the radius between the two ways.
+            let g = sqrt(st.x * st.y);
+            let lod = log2(texels * g);
             let last = f32(textureNumLevels(squares) - 1u);
-            let off = min(texels, exp2(min(lod, last))) * 0.5 / size;
-            s = 0.25 * (square_at(i, at + vec2<f32>(-off, -off), lod)
-                + square_at(i, at + vec2<f32>(off, -off), lod)
-                + square_at(i, at + vec2<f32>(-off, off), lod)
-                + square_at(i, at + vec2<f32>(off, off), lod));
+            let off = min(texels * g, exp2(min(lod, last))) * 0.5 / (g * size) * st;
+            s = 0.25 * (square_at(i, at + vec2<f32>(-off.x, -off.y), lod)
+                + square_at(i, at + vec2<f32>(off.x, -off.y), lod)
+                + square_at(i, at + vec2<f32>(-off.x, off.y), lod)
+                + square_at(i, at + vec2<f32>(off.x, off.y), lod));
         }
         through = through * clamp(1.0 - s.a + c.origin.w * s.rgb, vec3<f32>(0.0), vec3<f32>(1.0));
         if (all(through < vec3<f32>(SHADOW_OPAQUE))) {
@@ -340,10 +350,6 @@ fn transmitted(pos: vec3<f32>, l: Light) -> vec3<f32> {
         }
     }
     return through;
-}
-
-fn luma(c: vec3<f32>) -> f32 {
-    return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
 }
 
 @compute @workgroup_size(8, 8)
@@ -364,9 +370,9 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
     let encoded = p.base.y > 0.5;
     let accepts = u32(p.base.z + 0.5);
     let takes = accepts != 0u && p.casters_head.x > 0.5;
-    if (p.casters_head.z > 0.5) {
-        // Unlit, so only the shadows touch it: each light that falls here
-        // dims it by what its casters stopped.
+    if (p.casters_head.z > 0.5 || accepts == 2u) {
+        // Unlit, or showing only its shadows, so only the shadows touch it:
+        // each light that falls here dims it by what its casters stopped.
         var dim = vec3<f32>(1.0);
         for (var i: u32 = 0u; i < MAX_LIT_LIGHTS; i = i + 1u) {
             if (i >= live) {
@@ -379,7 +385,10 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
             dim = dim * (1.0 - l.shadow.x * (1.0 - transmitted(pos, l)));
         }
         if (accepts == 2u) {
-            textureStore(dst, xy, vec4<f32>(0.0, 0.0, 0.0, o.a * clamp(1.0 - luma(dim), 0.0, 1.0)));
+            // Just the shadow, in the colour a caster lets through.
+            let d = select(dim, decode(dim), encoded);
+            let lo = clamp(min(d.x, min(d.y, d.z)), 0.0, 1.0);
+            textureStore(dst, xy, vec4<f32>((d - lo) * o.a, (1.0 - lo) * o.a));
         } else if (encoded) {
             if (o.a > 0.0) {
                 textureStore(dst, xy, vec4<f32>(decode(encode(o.rgb / o.a) * dim) * o.a, o.a));
@@ -392,7 +401,6 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     var gain = vec3<f32>(p.base.x);
-    var unshadowed = gain;
     var shine = vec3<f32>(0.0);
     let diffuse = p.material.y;
     for (var i: u32 = 0u; i < MAX_LIT_LIGHTS; i = i + 1u) {
@@ -403,7 +411,6 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
         let colour = l.colour.rgb;
         if (u32(l.flags.x + 0.5) == 3u) {
             gain = gain + p.material.x * colour;
-            unshadowed = unshadowed + p.material.x * colour;
             continue;
         }
         let lit = irradiance(pos, p.normal.xyz, l);
@@ -413,20 +420,9 @@ fn lighting(@builtin(global_invocation_id) gid: vec3<u32>) {
             left = 1.0 - l.shadow.x * (1.0 - transmitted(pos, l));
         }
         gain = gain + e * colour * left;
-        unshadowed = unshadowed + e * colour;
         if (p.material.z > 0.0) {
             shine = shine + p.material.z * highlight(pos, p.normal.xyz, l) * colour * left;
         }
-    }
-    if (accepts == 2u) {
-        // Black, as opaque as the share of light the shadows took.
-        let full = luma(unshadowed);
-        var taken = 0.0;
-        if (full > 1e-6) {
-            taken = clamp(1.0 - luma(gain) / full, 0.0, 1.0);
-        }
-        textureStore(dst, xy, vec4<f32>(0.0, 0.0, 0.0, o.a * taken));
-        return;
     }
     let metal = p.eye.w;
     let lit = max(shine, vec3<f32>(0.0));
