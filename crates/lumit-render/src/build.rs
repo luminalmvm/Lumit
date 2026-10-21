@@ -5294,7 +5294,28 @@ impl GraphLower<'_> {
         visited.pop();
         // An inner graph with nothing wired to its Output passes the picture
         // on, as the same graph applied to a layer does.
-        out.or(input)
+        let out = out.or(input);
+        let Some(matte) = socket(lumit_core::graph::MATTE_PORT.id) else {
+            return out;
+        };
+        let value = |id: &str| inst.params.iter().find(|p| p.id == id).map(|p| &p.value);
+        let channel = match value(lumit_core::fx::MATTE_CHANNEL_PARAM) {
+            Some(lumit_core::model::EffectValue::Choice(c)) => *c,
+            _ => 0,
+        };
+        let has_channel = lumit_core::fx::def(lumit_core::comp_graph::NODE_GRAPH)
+            .is_some_and(|d| d.schema().matte_channel());
+        plan.steps.push(GraphStep::Dissolve {
+            input,
+            output: out,
+            matte,
+            channel: has_channel.then_some(channel),
+            invert: matches!(
+                value(lumit_core::fx::MATTE_INVERT_PARAM),
+                Some(lumit_core::model::EffectValue::Bool(true))
+            ),
+        });
+        Some(plan.steps.len() - 1)
     }
 }
 

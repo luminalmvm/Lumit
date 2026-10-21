@@ -380,6 +380,17 @@ pub enum GraphStep {
         inputs: Vec<Option<usize>>,
         index: i64,
     },
+    /// A Node graph box's picture dissolved back to the one it was handed
+    /// where its Matte is dark, as the Matte row does on a layer. Every other
+    /// box runs as one op, which does this itself.
+    Dissolve {
+        input: Option<usize>,
+        output: Option<usize>,
+        matte: usize,
+        /// The Matte row's Channel pick, where the effect has one.
+        channel: Option<u32>,
+        invert: bool,
+    },
 }
 
 /// Where a draw's pixels come from: decoded/synthesised bytes, a nested

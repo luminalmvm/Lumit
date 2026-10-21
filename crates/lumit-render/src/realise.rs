@@ -1116,6 +1116,40 @@ impl Realiser<'_> {
                 // ground: B first at Normal and full opacity, then A with the
                 // mode and the opacity. An unwired A gives B; an unwired B
                 // gives A over nothing.
+                GraphStep::Dissolve {
+                    input,
+                    output,
+                    matte,
+                    channel,
+                    invert,
+                } => {
+                    let pictures = [
+                        held(&made, input),
+                        held(&made, output),
+                        held(&made, &Some(*matte)),
+                    ];
+                    let room = pictures
+                        .iter()
+                        .flatten()
+                        .fold(frame, |all, (_, at)| all.union(*at));
+                    let [input, output, matte] = pictures.map(|p| match p {
+                        Some(p) => place(p, room),
+                        None => self.transparent(room.w, room.h),
+                    });
+                    // The Channel pick and Invert as run_ops reads them.
+                    let matte = match channel {
+                        Some(c) if lumit_core::fx::cpu::matte_needs_prepare(*c, *invert) => self
+                            .fx
+                            .matte_prepare(&self.ctx, &matte, room.w, room.h, *c, *invert),
+                        _ => matte,
+                    };
+                    let invert = channel.is_none() && *invert;
+                    Some((
+                        self.fx
+                            .matte_mix(&self.ctx, &input, &output, &matte, room.w, room.h, invert),
+                        room,
+                    ))
+                }
                 GraphStep::Merge {
                     a,
                     b,

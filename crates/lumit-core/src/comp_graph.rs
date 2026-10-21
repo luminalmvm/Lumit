@@ -372,10 +372,11 @@ fn fx_ports(
                     }
                 }
             }
-            // No matte socket in v1: the walk binds `input` and the picture
-            // Inputs, so a wire into a matte here would change no pixel. The
-            // Node graph *effect* on a layer keeps its Matte row, which the
-            // stack's matte dissolve honours.
+            // The Matte, as every effect has, dissolving back to `input` where
+            // the matte is dark.
+            if crate::fx::def(NODE_GRAPH).is_some_and(|d| d.schema().matte.param().is_some()) {
+                ins.insert(1, GraphPort::of(MATTE_PORT));
+            }
             return (ins, out);
         }
         _ => {}
@@ -1451,10 +1452,8 @@ mod tests {
     }
 
     /// A Node graph box's sockets are the Inputs of the comp it names: the
-    /// first picture is its own `input`, every other Input a socket of its own.
-    ///
-    /// And no matte socket, because the walk has nothing to bind one to: a
-    /// wire into it is refused rather than accepted and ignored.
+    /// first picture is its own `input`, then its Matte, then every other
+    /// Input a socket of its own.
     #[test]
     fn a_node_graph_box_shows_the_inputs_of_the_comp_it_names() {
         let inner = built(
@@ -1481,15 +1480,14 @@ mod tests {
         );
 
         let (ins, outs) = ports_of(&outer, &node, Some(&doc));
-        assert_eq!(ids(&ins), vec!["input", "second", "amount"]);
-        assert_eq!(ins[1].ty, PortType::Image);
-        assert_eq!(ins[2].ty, PortType::Number);
+        assert_eq!(ids(&ins), vec!["input", "matte", "second", "amount"]);
+        assert_eq!(ins[2].ty, PortType::Image);
+        assert_eq!(ins[3].ty, PortType::Number);
         assert_eq!(ids(&outs), vec!["output"]);
 
-        // A wire into the matte it does not have is a wire to a socket that is
-        // not there.
+        // A picture wired into its Matte is taken.
         let source = read(Uuid::now_v7());
-        let mut matted = built(
+        let matted = built(
             vec![
                 source.clone(),
                 node.clone(),
@@ -1497,11 +1495,9 @@ mod tests {
             ],
             vec![wire(&source, OUTPUT_PORT.id, &node, MATTE_PORT.id)],
         );
-        assert_eq!(matted.validate(Some(&doc)), Err(GraphError::UnknownPort));
-        matted.edges[0].to_port = INPUT_PORT.id.to_owned();
         matted
             .validate(Some(&doc))
-            .expect("and the picture socket takes it");
+            .expect("the matte socket takes a picture");
     }
 
     // -- 2.2, the projection -------------------------------------------------
